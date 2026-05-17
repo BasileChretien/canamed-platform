@@ -88,12 +88,29 @@ const COHORTS = (currentOrgConfig && Array.isArray(currentOrgConfig.cohorts)
 /* Apply the org's primary/accent colours as CSS custom properties on the
    root element. style.css already references --primary / --accent in many
    places; non-default orgs override them here. Idempotent + safe in test
-   environments without a real DOM (guarded). */
+   environments without a real DOM (guarded).
+
+   Bug 4 follow-up (user-feedback-2): org primary tokens (e.g. #1763a6 for
+   the Caen × Nagoya partnership) are tuned for AA contrast on the LIGHT
+   palette's white card. In dark / high-contrast mode those values clash
+   with the dark surface (e.g. #1763a6 on #16202b → 2.42:1 for
+   `#scenario-line-name`). When a non-light theme is active we skip the
+   --primary / --primary-hover override so the theme's own accessible
+   palette (--nagoya-500 = #5cb8e8 in dark, #0033a0 in high-contrast)
+   wins. --accent is decorative only and stays. */
 function applyOrgTheme(orgCfg) {
   if (!orgCfg || typeof document === "undefined" || !document.documentElement) return;
   const root = document.documentElement;
-  if (orgCfg.primary) root.style.setProperty("--primary", orgCfg.primary);
-  if (orgCfg.primary) root.style.setProperty("--primary-hover", orgCfg.primary);
+  const theme = root.getAttribute("data-theme");
+  const skipPrimary = (theme === "dark" || theme === "high-contrast");
+  if (orgCfg.primary && !skipPrimary) {
+    root.style.setProperty("--primary", orgCfg.primary);
+    root.style.setProperty("--primary-hover", orgCfg.primary);
+  } else if (skipPrimary) {
+    // Clear any prior inline override so the stylesheet's themed value wins.
+    root.style.removeProperty("--primary");
+    root.style.removeProperty("--primary-hover");
+  }
   if (orgCfg.accent)  root.style.setProperty("--accent", orgCfg.accent);
   root.setAttribute("data-org", currentOrg);
 }
@@ -3479,6 +3496,10 @@ function setTheme(mode) {
     else localStorage.setItem(THEME_KEY, mode);
   } catch (e) {}
   document.documentElement.setAttribute("data-theme", mode);
+  // Bug 4 follow-up (user-feedback-2): re-apply org theme so the
+  // inline --primary / --primary-hover overrides are added (light) or
+  // removed (dark / high-contrast) for the new mode. See applyOrgTheme.
+  try { applyOrgTheme(currentOrgConfig); } catch (_) {}
   // Bug 6: keep every theme picker in the page in sync. The admin picker
   // (#admin-theme-select) and the participant settings picker
   // (#global-theme-select) both call setTheme — when one changes the

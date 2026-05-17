@@ -3481,7 +3481,15 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
     --meeting-50: #1a2830;
     /* semantic */
     --primary: var(--nagoya-500);
-    --primary-hover: var(--nagoya-700);
+    /* Bug 4 follow-up (user-feedback-2): the previous
+       --primary-hover: var(--nagoya-700) was #1e6fb6 which only hits
+       ~2.95:1 on the #16202b card surface — well under the 4.5:1 AA
+       floor anywhere it is used as text (e.g. .scenario-line strong
+       falls through to --primary-hover via certain hover/focus states,
+       and `var(--primary-hover, #0c3f6e)` literal fallbacks). Flip to
+       --nagoya-500 (#5cb8e8) so the hover/active text variant keeps
+       ~6.5:1 contrast against the dark card. */
+    --primary-hover: var(--nagoya-500);
     --key: #ff6b5a;
     --key-50: #2a1612;
     --ok: #4ec57f;
@@ -3523,7 +3531,8 @@ html[data-theme="dark"] {
   --meeting:    #74a2b3;
   --meeting-50: #1a2830;
   --primary: var(--nagoya-500);
-  --primary-hover: var(--nagoya-700);
+  /* See @media (prefers-color-scheme: dark) block above for contrast rationale. */
+  --primary-hover: var(--nagoya-500);
   --key: #ff6b5a;
   --key-50: #2a1612;
   --ok: #4ec57f;
@@ -3569,6 +3578,44 @@ html[data-theme="dark"] #splash-go-account:hover {
 html[data-theme="dark"] #splash-go-create:focus-visible,
 html[data-theme="dark"] #splash-go-account:focus-visible {
   outline-color: var(--nagoya-500);
+}
+
+/* Bug 4 follow-up (user-feedback-2): form controls have no explicit
+   text colour anywhere in the cascade, so they fall back to the UA
+   default (black on most platforms). On a dark surface (--card =
+   #16202b) that's #000 on #16202b = 1.27:1 — invisible. The lobby
+   `#name-input` typed-text was the worst offender. Force ink-on-card
+   on every native control under the dark theme; the same override is
+   mirrored inside the prefers-color-scheme media query for users on
+   data-theme="auto" with a dark OS. Light theme stays untouched
+   (controls keep --ink dark text on --card white). High-contrast
+   theme already pins its own border + colour rules, so we don't
+   touch it here. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) input,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) textarea,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) select {
+    color: var(--ink);
+    background-color: var(--card);
+    border-color: var(--line-strong);
+  }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) input::placeholder,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) textarea::placeholder {
+    color: var(--muted);
+    opacity: 1;
+  }
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  color: var(--ink);
+  background-color: var(--card);
+  border-color: var(--line-strong);
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
 }
 
 /* The theme selector control in admin prefs / nav */
