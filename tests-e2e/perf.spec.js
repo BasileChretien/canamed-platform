@@ -50,14 +50,27 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //   localdb.js (~2 KB), script-loader.js (~3 KB), orgs.js (~2 KB),
 //   theme-init.js (~1 KB), sw-register.js (~1 KB) = ~201 KB gzipped.
 //
-// Budget set to 220 KB gz: ~19 KB headroom for incremental growth on
-// top of the post-R2 baseline. Previously 200 KB; raised here to absorb
-// the legitimate feature payload of the Round-2 fix batch (es/pt/de/ko/
-// zh privacy backfill is required by GDPR for the new languages — it's
-// not optional). Any breach forces the next PR to either justify the
-// regression or split another chunk out via script-loader.js (lazy-load
-// i18n locale tables is the obvious next move once we hit ~240 KB).
-const FIRST_PARTY_BYTES_LIMIT_KB = 220;
+// Budget set to 230 KB gz: ~24 KB headroom for incremental growth on
+// top of the post-R2 baseline. History:
+//   - 200 KB original cap (pre-R2).
+//   - 220 KB after the R2 fix batch (es/pt/de/ko/zh privacy backfill,
+//     required by GDPR for the new languages — not optional).
+//   - 230 KB after the user-feedback-2 (Bug 1–6) batch. The +5 KB
+//     payload buys: (a) the student onboarding tour copy, translated
+//     across all 8 UI locales (~2.0 KB gz) — student-facing parity with
+//     the facilitator tour; (b) the participant accessibility settings
+//     panel (font-size + theme + reduced-motion controls reachable from
+//     every screen, ~1.6 KB gz); (c) the live i18n re-render path that
+//     wires every renderX() helper to canamed:langchange so dynamic
+//     content (findings, decisions, prompts, leaderboard, answers)
+//     updates without a reload (~1.4 KB gz). All three are operator-
+//     requested features from real Round-3 use; tour copy in particular
+//     cannot be lazy-loaded without breaking the first-paint trigger
+//     (enterRoom() launches the tour on first room entry).
+// Any breach forces the next PR to either justify the regression or
+// split another chunk out via script-loader.js (lazy-load i18n locale
+// tables is the obvious next move once we hit ~250 KB).
+const FIRST_PARTY_BYTES_LIMIT_KB = 230;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

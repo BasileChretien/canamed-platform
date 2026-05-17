@@ -3524,6 +3524,42 @@ html[data-theme="dark"] {
   --sh-md: 0 2px 4px rgba(0,0,0,.32), 0 10px 26px rgba(0,0,0,.30);
   --sh-lg: 0 4px 10px rgba(0,0,0,.36), 0 26px 60px rgba(0,0,0,.42);
 }
+/* Bug 4 follow-up (user-feedback-2): the splash footer links
+   `#splash-go-create` / `#splash-go-account` resolved to `var(--primary)`
+   which axe-core under the dark theme saw as #1763a6 on the #16202b
+   card background — 2.64:1, well under the 4.5:1 AA floor. Pinning the
+   colour to `--nagoya-500` (#5cb8e8 in dark mode) keeps the brand blue
+   identity and brings the contrast to ~7.4:1. The override is also
+   applied inside the prefers-color-scheme media query so users on
+   data-theme="auto" with a dark OS get the same accessible colour.
+   Light theme is untouched. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) #splash-go-create,
+  html:not([data-theme="light"]) #splash-go-account {
+    color: var(--nagoya-500);
+  }
+  html:not([data-theme="light"]) #splash-go-create:hover,
+  html:not([data-theme="light"]) #splash-go-account:hover {
+    color: #88cdee;
+  }
+  html:not([data-theme="light"]) #splash-go-create:focus-visible,
+  html:not([data-theme="light"]) #splash-go-account:focus-visible {
+    outline-color: var(--nagoya-500);
+  }
+}
+html[data-theme="dark"] #splash-go-create,
+html[data-theme="dark"] #splash-go-account {
+  color: var(--nagoya-500);
+}
+html[data-theme="dark"] #splash-go-create:hover,
+html[data-theme="dark"] #splash-go-account:hover {
+  color: #88cdee;
+}
+html[data-theme="dark"] #splash-go-create:focus-visible,
+html[data-theme="dark"] #splash-go-account:focus-visible {
+  outline-color: var(--nagoya-500);
+}
+
 /* The theme selector control in admin prefs / nav */
 .theme-toggle {
   display: inline-flex;
