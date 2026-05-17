@@ -37,7 +37,11 @@
   const VERSION = "v1";
   const STORAGE = {
     create: "canamed_tour_done",
-    admin: "canamed_tour_admin_done"
+    admin: "canamed_tour_admin_done",
+    // Bug 5 (user-feedback-2): students get a brief overlay tour on first
+    // room entry. Same versioned-localStorage gate as the facilitator
+    // tours; bump VERSION when the participant UI shifts meaningfully.
+    student: "canamed_tour_student_done"
   };
 
   /* ============================================================
@@ -80,6 +84,34 @@
       { anchor: "admin-close-btn",
         titleKey: "tour.admin.4.title", bodyKey: "tour.admin.4.body",
         placement: "top" }
+    ],
+    // Bug 5 (user-feedback-2): student-facing tour, triggered on first
+    // entry into a room (Welcome / stage 0). Each step anchors to a
+    // stable id from index.html. If an anchor is hidden on the current
+    // viewport (the right-column tabs collapse on mobile-stacked), the
+    // tour falls back to a centred bubble — see position() above.
+    student: [
+      { anchor: null,
+        titleKey: "tour.student.1.title", bodyKey: "tour.student.1.body",
+        placement: "center" },
+      { anchor: "team-name-input",
+        titleKey: "tour.student.2.title", bodyKey: "tour.student.2.body",
+        placement: "bottom" },
+      { anchor: "findings-log",
+        titleKey: "tour.student.3.title", bodyKey: "tour.student.3.body",
+        placement: "top" },
+      { anchor: "rcol-p-decisions",
+        titleKey: "tour.student.4.title", bodyKey: "tour.student.4.body",
+        placement: "top" },
+      { anchor: "answers-list-moduleA",
+        titleKey: "tour.student.5.title", bodyKey: "tour.student.5.body",
+        placement: "top" },
+      { anchor: "call-prof-btn",
+        titleKey: "tour.student.6.title", bodyKey: "tour.student.6.body",
+        placement: "bottom" },
+      { anchor: "global-lang-switcher",
+        titleKey: "tour.student.7.title", bodyKey: "tour.student.7.body",
+        placement: "bottom" }
     ]
   };
 

@@ -1209,6 +1209,104 @@ function wireLanguageSwitcher() {
   // landed past the splash (deep link, returning participant, admin
   // dashboard) can still change UI language.
   wireSelect("global-lang-select");
+
+  // Bug 6 (user-feedback-2): wire the participant settings widget. The cog
+  // toggles the panel; the theme picker calls setTheme(); the "restart
+  // tour" link clears every tour's localStorage marker and re-fires the
+  // student tour (or the create tour if the user is on the splash). Wires
+  // exactly once even if applyBranding() runs multiple times.
+  const settingsBtn = document.getElementById("global-settings-btn");
+  const settingsPanel = document.getElementById("global-settings-panel");
+  if (settingsBtn && settingsPanel && !settingsBtn.dataset.wired) {
+    settingsBtn.dataset.wired = "1";
+    const closeBtn = document.getElementById("global-settings-close");
+    const themeSel = document.getElementById("global-theme-select");
+    const restartBtn = document.getElementById("global-settings-restart-tour");
+    const setOpen = (open) => {
+      settingsPanel.hidden = !open;
+      settingsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    settingsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setOpen(settingsPanel.hidden);
+    });
+    if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
+    document.addEventListener("click", (e) => {
+      if (settingsPanel.hidden) return;
+      if (e.target === settingsBtn || settingsPanel.contains(e.target)) return;
+      setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !settingsPanel.hidden) setOpen(false);
+    });
+    if (themeSel) {
+      try { themeSel.value = (typeof getTheme === "function") ? getTheme() : "auto"; }
+      catch (_) {}
+      themeSel.addEventListener("change", () => {
+        if (typeof setTheme === "function") setTheme(themeSel.value);
+      });
+    }
+    if (restartBtn) {
+      restartBtn.addEventListener("click", () => {
+        setOpen(false);
+        // Clear every tour-done marker so the appropriate tour fires
+        // on the next opportunity. Pick the student tour if the user is
+        // currently in a room; the create tour otherwise.
+        try {
+          ["canamed_tour_done", "canamed_tour_admin_done",
+           "canamed_tour_student_done"].forEach(k => localStorage.removeItem(k));
+        } catch (_) {}
+        if (window.CanamedTour) {
+          try {
+            const inRoom = document.getElementById("app") &&
+              !document.getElementById("app").classList.contains("hidden");
+            window.CanamedTour.start(inRoom ? "student" : "create");
+          } catch (e) { /* tour module missing — best-effort */ }
+        }
+      });
+    }
+  }
+
+  // Bug 3 (user-feedback-2): every render function that consults the
+  // current language via `tc(value, lang)` is invoked only on state changes
+  // (firebase write, stage change, vote, etc.). After a user switches
+  // language mid-session, the data-i18n nodes update — but the dynamic
+  // content (revealed findings, decision options, prompts, group answers,
+  // objectives, leaderboard, the Module B body and the contrib tally) keeps
+  // its old language because no re-render was triggered. Wire a single
+  // global listener that calls the relevant render helpers. We guard each
+  // call with a typeof check so it works during early boot (before
+  // firebase wires) and in tests where the function may be absent.
+  if (!document._canamedLangchangeRerenderWired) {
+    document._canamedLangchangeRerenderWired = true;
+    document.addEventListener("canamed:langchange", () => {
+      const callIfFn = (name) => {
+        try {
+          const fn = window[name];
+          if (typeof fn === "function") fn();
+        } catch (_) { /* render functions are best-effort during boot */ }
+      };
+      // Re-build the request buttons FIRST — `buildButtons()` re-creates
+      // the button DOM and reads `tc(item.q, _curLang())`. `renderButtons`
+      // then re-attaches the .done / .warn state and re-populates the
+      // inline-reveal text (Bug 2) in the new language.
+      callIfFn("buildButtons");
+      callIfFn("renderButtons");
+      callIfFn("renderFindings");
+      callIfFn("renderPrompts");
+      callIfFn("renderDecisions");
+      callIfFn("renderObjectives");
+      callIfFn("renderLeaderboard");
+      callIfFn("renderScore");
+      callIfFn("renderStage");
+      callIfFn("renderContrib");
+      // renderAnswers takes a module key — call it for both Module A and B.
+      try {
+        const fn = window.renderAnswers;
+        if (typeof fn === "function") { fn("moduleA"); fn("moduleB"); }
+      } catch (_) {}
+    });
+  }
 }
 
 function applyBranding() {
@@ -2196,6 +2294,21 @@ function enterRoom(roomName, asAdmin) {
   setHeaderBadge();
   startRoom();
   focusHeading("room-main");
+  // Bug 5 (user-feedback-2): first-time participant onboarding tour.
+  // Only for real participants (admins viewing a room have their own
+  // admin tour). Gated by localStorage.canamed_tour_student_done so a
+  // returning student doesn't see it again. Deferred so the room
+  // chrome has had a frame to lay out (anchor elements need a non-zero
+  // bounding rect for the tour bubble positioning).
+  if (!asAdmin && window.CanamedTour && !window.CanamedTour.isDone("student")) {
+    setTimeout(() => {
+      try {
+        if (!window.CanamedTour.isDone("student")) {
+          window.CanamedTour.start("student");
+        }
+      } catch (e) { console.warn("student tour failed", e); }
+    }, 700);
+  }
 }
 
 function teardownRoom() {
@@ -3351,16 +3464,31 @@ const THEME_KEY = "canamed_theme";
 function getTheme() {
   try {
     const v = localStorage.getItem(THEME_KEY);
-    return (v === "dark" || v === "light") ? v : "auto";
+    // Bug 6 (user-feedback-2): "high-contrast" is now a first-class user-
+    // selectable theme alongside light/dark. Previously the constant was
+    // recognised by theme-init.js + CSS but never offered as a value the
+    // picker could set.
+    return (v === "dark" || v === "light" || v === "high-contrast") ? v : "auto";
   } catch (e) { return "auto"; }
 }
 function setTheme(mode) {
-  if (mode !== "dark" && mode !== "light" && mode !== "auto") return;
+  if (mode !== "dark" && mode !== "light" && mode !== "auto" &&
+      mode !== "high-contrast") return;
   try {
     if (mode === "auto") localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, mode);
   } catch (e) {}
   document.documentElement.setAttribute("data-theme", mode);
+  // Bug 6: keep every theme picker in the page in sync. The admin picker
+  // (#admin-theme-select) and the participant settings picker
+  // (#global-theme-select) both call setTheme — when one changes the
+  // value, mirror it into the other so neither shows a stale option.
+  try {
+    ["admin-theme-select", "global-theme-select"].forEach(id => {
+      const n = document.getElementById(id);
+      if (n && n.value !== mode) n.value = mode;
+    });
+  } catch (_) {}
 }
 if (typeof window !== "undefined") {
   window.getTheme = getTheme;
@@ -4911,7 +5039,12 @@ function renderButtons() {
     if (isImaging) {
       const warn = !gateOK && !revealed[id];
       btn.classList.toggle("warn", warn);
+      // Walk past any sibling req-inline-reveal to find the warn-note slot
+      // (the inline-reveal is unconditional; the warn-note follows it).
       let note = btn.nextElementSibling;
+      while (note && note.classList.contains("req-inline-reveal")) {
+        note = note.nextElementSibling;
+      }
       if (note && !note.classList.contains("req-warn-note")) note = null;
       if (warn) {
         if (!note) {
@@ -4920,7 +5053,11 @@ function renderButtons() {
           note.id = "warn-" + id.replace(":", "-");
           note.textContent = "Screen the red flags and examine the legs first — " +
             "ordering a scan now costs the 'safety first' points.";
-          btn.insertAdjacentElement("afterend", note);
+          // Insert AFTER the inline-reveal if present, else after the button.
+          const anchor = (btn.nextElementSibling &&
+            btn.nextElementSibling.classList.contains("req-inline-reveal"))
+              ? btn.nextElementSibling : btn;
+          anchor.insertAdjacentElement("afterend", note);
         }
         btn.setAttribute("aria-describedby", note.id);
         btn.title = "";
@@ -4929,6 +5066,34 @@ function renderButtons() {
         btn.removeAttribute("aria-describedby");
         if (!revealed[id]) btn.title = "";
       }
+    }
+    // Bug 2 (user-feedback-2): on stacked mobile layout (<=960px) the right-
+    // column findings log lives below the buttons, so the operator's tap and
+    // the patient's answer are separated by hundreds of pixels of scroll. Add
+    // an inline reveal that lives directly under each button on mobile only
+    // (CSS hides it on desktop, where the right-column log is still the
+    // canonical surface). Hidden on desktop via @media; populated whenever
+    // the finding becomes revealed. Idempotent against re-renders.
+    let inline = btn.nextElementSibling;
+    if (inline && !inline.classList.contains("req-inline-reveal")) inline = null;
+    if (revealed[id]) {
+      if (!inline) {
+        inline = document.createElement("div");
+        inline.className = "req-inline-reveal";
+        // Insert IMMEDIATELY after the button so DOM-adjacency matches the
+        // visual relationship "answer is under its button".
+        btn.insertAdjacentElement("afterend", inline);
+      }
+      const item = itemById(id);
+      if (item) {
+        const lang = (typeof _curLang === "function") ? _curLang() : "en";
+        // Use textContent (NOT innerHTML) — case content is author-controlled
+        // but we still keep the no-eval-by-default discipline.
+        inline.textContent = tc(item.a, lang);
+        inline.setAttribute("aria-live", "polite");
+      }
+    } else if (inline) {
+      inline.remove();
     }
   });
 }

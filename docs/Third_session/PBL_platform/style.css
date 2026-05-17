@@ -908,9 +908,25 @@ body.admin-room .columns { grid-template-columns: 1fr; }
 }
 #sidebar-dashboard-btn:hover { background: #000; }
 
-/* ---------- overflow safety ---------- */
-.answer-text, .chip, .sidebar-room-name, #findings-log .a, .dash-people {
-  overflow-wrap: anywhere;
+/* ---------- overflow safety ----------
+   Bug 1 (user-feedback-2): a team name with an emoji prefix (e.g. "🍣
+   Sakura") rendered with each grapheme on its own line on narrow phones.
+   Root cause: `overflow-wrap: anywhere` lets the browser break INSIDE
+   grapheme clusters when the parent flex track is squeezed, because
+   `anywhere` makes soft-wrap points participate in min-content sizing.
+   Switching to `break-word` keeps long single words wrappable at the
+   end of the available width (the original goal — preventing horizontal
+   overflow from a long unsegmentable string) WITHOUT making each
+   character its own min-content. `.lb-name` (leaderboard team name)
+   and `.sidebar-room-name` (admin sidebar) are the two team-name
+   surfaces — keep them on `break-word` only. */
+.answer-text, .chip, #findings-log .a, .dash-people {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.sidebar-room-name {
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .header-inner > div:first-child { min-width: 0; }
 
@@ -919,8 +935,12 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   border: 1px solid #ecd9a0;
   border-radius: var(--r-sm);
   padding: 8px 12px;
-  /* darkened from #7a5f29 to #5a4519 to clear WCAG-AA 4.5:1 contrast */
-  color: #5a4519;
+  /* Bug 4 (user-feedback-2): switched from hardcoded #5a4519 to
+     var(--caen-ink) so the colour follows the theme. In light mode the
+     token resolves to a near-identical brown (~#5a4519) keeping the
+     WCAG-AA 4.5:1 contrast against caen-50; in dark/HC themes the token
+     remaps to a value that stays readable on the dark caen-50 surface. */
+  color: var(--caen-ink);
   font-style: normal;
   font-size: 0.88rem;
 }
@@ -1047,7 +1067,18 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
   box-shadow: inset 3px 0 0 var(--primary);
 }
 .lb-rank { font-weight: 800; min-width: 2.2em; font-size: 0.95rem; }
-.lb-name { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+/* Bug 1 (user-feedback-2): team names render horizontally even with emoji
+   prefixes on narrow phones. `min-width: 0` lets the flex track shrink
+   below its content's min-content size; `overflow-wrap: break-word` only
+   breaks at character boundaries when no word break is available, which
+   prevents the per-grapheme vertical-stack render that `anywhere` caused. */
+.lb-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
 .lb-pts {
   font-weight: 800;
   color: var(--nagoya-700);
@@ -3059,6 +3090,30 @@ body.session-ended-shown { overflow: hidden; }
 }
 .req-warn-note::before { content: "\26A0  "; }   /* warning sign */
 
+/* --- Bug 2 (user-feedback-2): inline reveal under each button on mobile.
+   The right-column findings log is the canonical surface on desktop, but
+   on stacked-mobile layout the answers live below the viewport. We add a
+   per-button inline reveal here so the patient's answer appears DIRECTLY
+   under the tapped button. Hidden on desktop (>960px) to avoid duplicating
+   the right-column log. Hidden when prefers-reduced-motion isn't a factor
+   here — the inline reveal is text only. */
+.req-inline-reveal {
+  display: none;
+}
+@media (max-width: 960px) {
+  .req-inline-reveal {
+    display: block;
+    margin: 4px 0 8px;
+    padding: 8px 10px;
+    background: var(--surface-sunk, #f6f4ef);
+    border-left: 3px solid var(--ok, #2a9d8f);
+    border-radius: var(--r-sm, 6px);
+    font-size: 0.92rem;
+    color: var(--ink, #2a2a2a);
+    line-height: 1.4;
+  }
+}
+
 /* --- wrap-up "your team did well" recap --- */
 .team-recap-card {
   background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
@@ -4397,5 +4452,117 @@ body.locked .global-lang-switcher { display: none; }
 @media (max-width: 480px) {
   .global-lang-switcher { top: 6px; right: 6px; }
   .global-lang-select { font-size: 0.75rem; padding: 4px 22px 4px 8px; }
+}
+
+/* ----- Bug 6 (user-feedback-2): participant settings widget -----
+   A small cog button pinned next to the global language switcher; clicking
+   opens an inline panel with the theme picker and "Restart tour" link.
+   Hidden behind body.locked exactly like the language switcher so it
+   doesn't appear over the splash gate. */
+.global-settings {
+  position: fixed;
+  top: 8px;
+  right: 158px;            /* sit immediately left of the language pill */
+  z-index: 1500;
+  pointer-events: auto;
+}
+body.locked .global-settings { display: none; }
+.global-settings-btn {
+  appearance: none;
+  border: 1px solid var(--line, #d6d2c9);
+  background: var(--bg, #fff);
+  color: var(--ink, #2a2a2a);
+  padding: 5px 8px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.global-settings-btn:focus-visible {
+  outline: 2px solid var(--primary, #2e9fdf);
+  outline-offset: 2px;
+}
+.global-settings-btn:hover {
+  border-color: var(--ink, #2a2a2a);
+}
+.global-settings-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  max-width: calc(100vw - 24px);
+  background: var(--card, #fff);
+  border: 1px solid var(--line-strong, #c0bcb3);
+  border-radius: 10px;
+  padding: 14px 14px 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--ink, #2a2a2a);
+}
+.global-settings-panel[hidden] { display: none; }
+.global-settings-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.global-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+.global-settings-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  padding: 4px 24px 4px 10px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-height: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted, #6a665d) 50%),
+    linear-gradient(135deg, var(--muted, #6a665d) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 7px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.global-settings-link,
+.global-settings-close {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.global-settings-link:hover,
+.global-settings-close:hover {
+  border-color: var(--ink);
+  background: var(--surface-sunk, transparent);
+}
+.global-settings-close { align-self: flex-end; }
+@media (max-width: 480px) {
+  .global-settings { top: 6px; right: 140px; }
+  .global-settings-btn { min-width: 28px; min-height: 28px; padding: 4px 6px; }
+  .global-settings-panel { min-width: 220px; right: -6px; }
 }
 

@@ -81,6 +81,56 @@
     </select>
   </div>
 
+  <!-- Bug 6 (user-feedback-2): participant settings widget. A small cog
+       button pinned next to the global language switcher; opens an inline
+       panel with the theme picker (auto/light/dark/high-contrast) and a
+       "Restart introduction tour" link. The theme picker used to be
+       admin-only; surfacing it to participants lets low-vision students
+       switch to high-contrast without needing OS-level prefers-contrast.
+       Hidden while the splash is on screen via body.locked, same as the
+       language switcher. -->
+  <div class="global-settings" id="global-settings"
+       role="group" aria-label="Settings">
+    <button type="button" class="global-settings-btn"
+            id="global-settings-btn"
+            data-i18n="settings.btn" data-i18n-attr="aria-label"
+            aria-label="Settings" aria-haspopup="true" aria-expanded="false"
+            aria-controls="global-settings-panel">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round"
+           stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+      </svg>
+      <span class="sr-only" data-i18n="settings.btn">Settings</span>
+    </button>
+    <div class="global-settings-panel" id="global-settings-panel"
+         role="dialog" aria-labelledby="global-settings-title" hidden>
+      <h2 class="global-settings-title" id="global-settings-title"
+          data-i18n="settings.title">Settings</h2>
+      <label class="global-settings-row" for="global-theme-select">
+        <span data-i18n="admin.theme">Theme</span>
+        <select id="global-theme-select" class="global-settings-select">
+          <option value="auto" data-i18n="admin.theme.auto">Auto (system)</option>
+          <option value="light" data-i18n="admin.theme.light">Light</option>
+          <option value="dark" data-i18n="admin.theme.dark">Dark</option>
+          <option value="high-contrast"
+                  data-i18n="admin.theme.hc">
+            High contrast
+          </option>
+        </select>
+      </label>
+      <button type="button" class="global-settings-link"
+              id="global-settings-restart-tour"
+              data-i18n="settings.restart-tour">
+        Restart introduction tour
+      </button>
+      <button type="button" class="global-settings-close"
+              id="global-settings-close"
+              data-i18n="settings.close">Close</button>
+    </div>
+  </div>
+
   <!-- ============ CANAMED SPLASH (top-level gate) ============
        Hidden by default; the entry script either reveals the splash (when an
        access code is configured and not yet entered) or, if there is no code
@@ -1728,6 +1778,10 @@
             <option value="auto" data-i18n="admin.theme.auto">Auto (system)</option>
             <option value="light" data-i18n="admin.theme.light">Light</option>
             <option value="dark" data-i18n="admin.theme.dark">Dark</option>
+            <option value="high-contrast"
+                    data-i18n="admin.theme.hc">
+              High contrast
+            </option>
           </select>
         </label>
         <!-- Telemetry export — opens a download of the in-page
