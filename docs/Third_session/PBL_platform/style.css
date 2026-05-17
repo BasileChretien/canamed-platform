@@ -362,7 +362,7 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   border-radius: var(--r-sm);
   margin: var(--s-2) 0 var(--s-4);
 }
-.lobby-mode.shared { background: var(--ok-50); color: #176b3a; }
+.lobby-mode.shared { background: var(--ok-50); color: var(--ok-strong, #176b3a); }
 .lobby-mode.solo { background: var(--caen-50); color: var(--caen-ink); }
 .lobby-mode.broken {
   background: var(--key-50);
@@ -3486,6 +3486,15 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
     --key-50: #2a1612;
     --ok: #4ec57f;
     --ok-50: #102a1d;
+    /* Bug 4 follow-up (user-feedback-2): the light-mode --ok-strong
+       (#176b3a) is tuned for AA contrast on the LIGHT --ok-50 (#e7f4ec).
+       In dark mode --ok-50 flips to #102a1d, and #176b3a on it is only
+       2.33:1 — well below the 4.5:1 floor (seen on .session-badge,
+       #session-badge-code, .lobby-mode.shared, .obj-tally under the
+       dark theme axe sweep). Brighten --ok-strong to a pale mint so
+       it has ~9.5:1 contrast on #102a1d while still reading as the
+       "stronger" success-text variant relative to --ok (#4ec57f). */
+    --ok-strong: #7be0a4;
     --focus: #f6d973;
     /* shadows lose strength on dark backgrounds; use slightly darker
        blue-blacks so cards still float visibly */
@@ -3519,6 +3528,8 @@ html[data-theme="dark"] {
   --key-50: #2a1612;
   --ok: #4ec57f;
   --ok-50: #102a1d;
+  /* See dark @media block above for the contrast rationale. */
+  --ok-strong: #7be0a4;
   --focus: #f6d973;
   --sh-sm: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.20);
   --sh-md: 0 2px 4px rgba(0,0,0,.32), 0 10px 26px rgba(0,0,0,.30);
