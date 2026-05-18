@@ -494,6 +494,11 @@ var PENALTIES = [
  * ========================================================================== */
 var DECISIONS = [
   {
+    // Always available — this is a stance/communication choice about HOW to
+    // respond to the patient's name-brand request, not a clinical-plan
+    // decision. Pedagogist + student-persona agreed it should be reachable
+    // from t=0 because the right early behaviour ("explore the request")
+    // is exactly what students should commit to before doing any workup.
     id: "dec_opioid", module: "A", points: 25, penalty: 15,
     prompt: { en: "Mr Lefebvre asks for oxycodone by name. Before anything else, " +
                   "your team should…",
@@ -550,7 +555,14 @@ var DECISIONS = [
     ]
   },
   {
+    // PBL 7-jump scaffold (2026-05-18 specialist panel): the treatment
+    // plan must be downstream of the workup. Locked until the team has
+    // committed to ≥1 working hypothesis AND captured ≥1 history item
+    // AND ≥1 examination item. Without this, the platform was rewarding
+    // pattern-match-and-anchor behaviour ("oxycodone → addiction script")
+    // which is exactly the bias PBL is meant to prevent.
     id: "dec_plan", module: "A", points: 25, penalty: 15,
+    unlockWhen: { hypotheses: 1, historyRevealed: 1, examRevealed: 1 },
     prompt: { en: "Your team agrees this is non-specific low-back pain. What is the " +
                   "core of the management plan?",
               fr: "Votre équipe convient qu'il s'agit d'une lombalgie non spécifique. Quel est " +
@@ -1601,7 +1613,9 @@ var PENALTIES_C = [
    prescribing decision. */
 var DECISIONS_C = [
   {
+    // Sub-facet of the treatment plan — same gate as dec_plan.
     id: "dec_prescribe_or_not", module: "A", points: 25, penalty: 15,
+    unlockWhen: { hypotheses: 1, historyRevealed: 1, examRevealed: 1 },
     prompt: { en: "Mme Moreau is asking for a 5-day course of amoxicillin so she can " +
                   "give her client presentation in Frankfurt on Friday. Centor/McIsaac " +
                   "is 0. Your team should…",
@@ -1687,7 +1701,9 @@ var DECISIONS_C = [
     ]
   },
   {
+    // Refinement of the plan stance — same gate.
     id: "dec_delayed_script", module: "A", points: 20, penalty: 10,
+    unlockWhen: { hypotheses: 1, historyRevealed: 1, examRevealed: 1 },
     prompt: { en: "A team member suggests a compromise: give Mme Moreau a 'delayed' " +
                   "(back-pocket) amoxicillin prescription she fills only if she's worse " +
                   "in 48-72 hours. Your team's position is…",
@@ -1772,7 +1788,9 @@ var DECISIONS_C = [
     ]
   },
   {
+    // Contextual modifier on a chosen plan — same gate.
     id: "dec_business_trip", module: "A", points: 20, penalty: 0,
+    unlockWhen: { hypotheses: 1, historyRevealed: 1, examRevealed: 1 },
     prompt: { en: "Setting antibiotics aside: Mme Moreau still has a presentation in " +
                   "Frankfurt on Friday. What is the single most useful thing your team " +
                   "can offer her FOR THE TRIP?",
