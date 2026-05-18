@@ -5244,6 +5244,12 @@ function _seededShuffleIndexes(n, seedStr) {
   }
   return a;
 }
+// Expose for E2E tests so they can verify the shuffle directly without
+// having to override script-scoped sessionNum/myRoom (which `let` keeps
+// out of reach of window.X assignments).
+if (typeof window !== "undefined") {
+  window._seededShuffleIndexes = _seededShuffleIndexes;
+}
 
 function buildButtons() {
   ["history", "exam", "labs"].forEach(group => {

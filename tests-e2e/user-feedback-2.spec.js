@@ -511,33 +511,55 @@ test.describe("Random button order — shuffled display, stable IDs", () => {
         .toEqual(first);
     });
 
-  test("different rooms in the same session = different orders (anti-copying)",
+  test("different seeds produce different shuffled orders (helper unit test)",
     async ({ page }) => {
+      // Direct unit test of window._seededShuffleIndexes. Avoids the
+      // `let sessionNum` script-scope problem: top-level `let` bindings
+      // in script.js can't be overridden via window.X assignments, so
+      // the integration path of "set window.myRoom + call buildButtons"
+      // didn't actually change the buildButtons read. This pins the
+      // shuffle helper directly: 4 different seeds must yield ≥ 2
+      // distinct outputs (the room-component of the prod seed is the
+      // same kind of input).
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
       const orders = await page.evaluate(() => {
-        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
-        const splash = document.getElementById("splash");
-        if (splash) splash.classList.add("hidden");
-        document.getElementById("app").classList.remove("hidden");
-        document.getElementById("stage-1").classList.remove("hidden");
-        const captures = {};
-        ["room-1", "room-2", "room-3", "room-4"].forEach(r => {
-          window.sessionNum = "test-multi-room";
-          window.myRoom = r;
-          if (typeof window.buildButtons === "function") window.buildButtons();
-          captures[r] = Array.from(document.querySelectorAll(
-            '#group-history .req-btn')).map(b => b.dataset.id);
-        });
-        return captures;
+        if (typeof window._seededShuffleIndexes !== "function") return null;
+        const seeds = [
+          "test-multi:room-1:history",
+          "test-multi:room-2:history",
+          "test-multi:room-3:history",
+          "test-multi:room-4:history"
+        ];
+        const out = {};
+        seeds.forEach(s => { out[s] = window._seededShuffleIndexes(10, s); });
+        return out;
       });
-      // At least TWO of the four rooms must have different orders —
-      // otherwise the room-component of the seed isn't doing anything.
+      expect(orders,
+        "_seededShuffleIndexes must be exposed on window for E2E testability")
+        .not.toBeNull();
       const distinct = new Set(Object.values(orders).map(JSON.stringify));
       expect(distinct.size,
-        "different rooms in the same session must produce different orders " +
-        "to discourage cross-room copying. All 4 rooms produced: " +
-        JSON.stringify(orders))
+        "different seeds must yield different shuffled orders (so different " +
+        "rooms in the same session would get different button orders). " +
+        "Got: " + JSON.stringify(orders))
         .toBeGreaterThan(1);
+    });
+
+  test("same seed = same shuffled order (deterministic / replayable)",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const result = await page.evaluate(() => {
+        if (typeof window._seededShuffleIndexes !== "function") return null;
+        const a = window._seededShuffleIndexes(12, "session-A:room-1:history");
+        const b = window._seededShuffleIndexes(12, "session-A:room-1:history");
+        return { a: a, b: b };
+      });
+      expect(result, "_seededShuffleIndexes must be exposed on window").not.toBeNull();
+      expect(result.b,
+        "calling the helper twice with the same seed must yield the same " +
+        "shuffled order — otherwise reload would scramble the buttons")
+        .toEqual(result.a);
     });
 });
