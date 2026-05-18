@@ -721,8 +721,8 @@ test.describe("Progressive discussion prompts — one at a time + reply", () => 
             }
           }
         }
-        window.promptCursor = 0;
-        window.promptReplies = {};
+        if (window._test_setPromptCursor) window._test_setPromptCursor(0);
+        if (window._test_setPromptReplies) window._test_setPromptReplies({});
         if (typeof window.renderPrompts === "function") window.renderPrompts();
         const progressive = document.getElementById("prompt-progressive");
         const legacy = document.getElementById("prompts-list");
@@ -769,24 +769,29 @@ test.describe("Progressive discussion prompts — one at a time + reply", () => 
         if (splash) splash.classList.add("hidden");
         document.getElementById("app").classList.remove("hidden");
         document.getElementById("stage-1").classList.remove("hidden");
-        window.revealed = window.revealed || {};
-        if (window.ITEM_IDS && window.CASE) {
-          for (const id of window.ITEM_IDS) {
+        // Drive the script-scope `revealed` binding via the test hook —
+        // window.revealed = ... can't reach a top-level `let`.
+        const itemIds = window._test_getItemIds ? window._test_getItemIds() : [];
+        const cs = window._test_getCase ? window._test_getCase() : null;
+        const seed = {};
+        if (itemIds && cs) {
+          for (const id of itemIds) {
             const [g, i] = id.split(":");
-            if (window.CASE[g] && window.CASE[g][+i] && window.CASE[g][+i].key) {
-              window.revealed[id] = { by: "test", at: Date.now() };
+            if (cs[g] && cs[g][+i] && cs[g][+i].key) {
+              seed[id] = { by: "test", at: Date.now() };
               break;
             }
           }
         }
-        window.promptCursor = 0;
-        window.promptReplies = {};
+        if (window._test_setRevealed) window._test_setRevealed(seed);
+        if (window._test_setPromptCursor) window._test_setPromptCursor(0);
+        if (window._test_setPromptReplies) window._test_setPromptReplies({});
         if (typeof window.renderPrompts === "function") window.renderPrompts();
         const text = document.getElementById("prompt-text");
         const promptZero = text ? text.textContent : "";
         // Simulate the cursor advancement that refPromptCursor.set
         // would trigger (the Firebase listener calls renderPrompts).
-        window.promptCursor = 1;
+        if (window._test_setPromptCursor) window._test_setPromptCursor(1);
         if (typeof window.renderPrompts === "function") window.renderPrompts();
         const promptOne = text ? text.textContent : "";
         const currentNum = document.getElementById("prompt-progress-current");
@@ -818,19 +823,25 @@ test.describe("Progressive discussion prompts — one at a time + reply", () => 
         if (splash) splash.classList.add("hidden");
         document.getElementById("app").classList.remove("hidden");
         document.getElementById("stage-1").classList.remove("hidden");
-        window.revealed = window.revealed || {};
-        if (window.ITEM_IDS && window.CASE) {
-          for (const id of window.ITEM_IDS) {
+        // Drive the script-scope `revealed` binding via the test hook —
+        // window.revealed = ... can't reach a top-level `let`.
+        const itemIds = window._test_getItemIds ? window._test_getItemIds() : [];
+        const cs = window._test_getCase ? window._test_getCase() : null;
+        const seed = {};
+        if (itemIds && cs) {
+          for (const id of itemIds) {
             const [g, i] = id.split(":");
-            if (window.CASE[g] && window.CASE[g][+i] && window.CASE[g][+i].key) {
-              window.revealed[id] = { by: "test", at: Date.now() };
+            if (cs[g] && cs[g][+i] && cs[g][+i].key) {
+              seed[id] = { by: "test", at: Date.now() };
               break;
             }
           }
         }
-        const total = (window.CASE && window.CASE.prompts || []).length;
-        window.promptCursor = total;   // past the last prompt = done state
-        window.promptReplies = {};
+        if (window._test_setRevealed) window._test_setRevealed(seed);
+        const cs2 = window._test_getCase ? window._test_getCase() : null;
+        const total = (cs2 && cs2.prompts || []).length;
+        if (window._test_setPromptCursor) window._test_setPromptCursor(total);   // past last = done
+        if (window._test_setPromptReplies) window._test_setPromptReplies({});
         if (typeof window.renderPrompts === "function") window.renderPrompts();
         const done = document.getElementById("prompt-done");
         const progressive = document.getElementById("prompt-progressive");

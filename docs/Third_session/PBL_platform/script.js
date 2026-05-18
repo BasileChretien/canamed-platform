@@ -5531,6 +5531,21 @@ function keyRevealed() {
   return ITEM_IDS.some(id => revealed[id] && itemById(id).key);
 }
 
+/* Test hooks — top-level `let` bindings (revealed, promptCursor,
+ * promptReplies, ITEM_IDS, CASE) are script-scoped and can't be
+ * reached via `window.X = ...` assignments from E2E tests. These
+ * small setters mutate the bindings directly so Playwright tests
+ * can drive renderPrompts / renderButtons with deterministic state
+ * without needing the full Firebase round-trip. Production code
+ * never calls these; they're inert outside test runs. */
+if (typeof window !== "undefined") {
+  window._test_setRevealed = function (obj) { revealed = obj || {}; };
+  window._test_setPromptCursor = function (n) { promptCursor = (typeof n === "number") ? n : 0; };
+  window._test_setPromptReplies = function (obj) { promptReplies = obj || {}; };
+  window._test_getItemIds = function () { return ITEM_IDS.slice(); };
+  window._test_getCase = function () { return CASE; };
+}
+
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
  * can advance it; the cursor write triggers refPromptCursor.on for every
  * teammate, which re-renders renderPrompts with the new prompt. */
