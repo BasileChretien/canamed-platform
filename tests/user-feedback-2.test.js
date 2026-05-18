@@ -119,7 +119,7 @@ test("Bug 2 (JS): renderButtons populates .req-inline-reveal directly after each
   // be styled separately). Either assertion catches the regression.
   assert.match(scriptJs, /tc\(item\.a,\s*lang\)/,
     "the reveal must render the localised case answer (tc + item.a)");
-  assert.match(scriptJs, /class\s*=\s*"req-inline-answer"/,
+  assert.match(scriptJs, /className\s*=\s*"req-inline-answer"/,
     "the reveal must wrap the answer text in a .req-inline-answer span so the author byline can sit next to it");
 });
 
