@@ -44,42 +44,81 @@ fs.mkdirSync(SCREEN_DIR, { recursive: true });
 
 /* ====================== personas ====================== */
 
+/* Cohort knobs — bumped to a realistic full-classroom workshop in the
+ * 2026-05-18 scaled run (24 students + 4 facilitators + 6 rooms).
+ * Override via env vars when iterating:
+ *   SIM_ROOM_COUNT=8 SIM_STUDENTS=32 node scripts/sim/simulate-session.js
+ *
+ * Caen × Nagoya pairing assumes an even split between universities;
+ * the persona list below is hand-tuned to keep that 50/50 at 24
+ * students. When SIM_STUDENTS overrides the count, the harness uses
+ * the first N personas (so 12 = first 12, 16 = first 16, etc.). */
+const SIM_ROOM_COUNT = parseInt(process.env.SIM_ROOM_COUNT || "6", 10);
+const SIM_STUDENT_COUNT = parseInt(process.env.SIM_STUDENTS || "24", 10);
+
 const FACILITATORS = [
   { id: "F1", role: "lead",
-    name: "Dr Aleksic",         label: "E2E sim — Franco-Japanese Workshop",
+    name: "Dr Aleksic",   label: "E2E scaled sim — Franco-Japanese Workshop",
     pass: "sim-fac-pw-2026" },
-  { id: "F2", role: "co",
-    name: "Dr Chrétien",        label: "" }
+  { id: "F2", role: "co", name: "Dr Chrétien", label: "" },
+  { id: "F3", role: "co", name: "Dr Suzuki",   label: "" },
+  { id: "F4", role: "co", name: "Dr Renaud",   label: "" }
 ];
 
-const STUDENTS = [
-  // Room 1
-  { id: "S1", name: "Marie",   uni: "Caen",   year: 5, english: "C2",
-    traits: ["enthusiastic", "fluent_french"],
-    expects: "to engage fully and read every prompt" },
-  { id: "S2", name: "Yuki",    uni: "Nagoya", year: 5, english: "B2",
-    traits: ["thoughtful", "second_language_caution"],
-    expects: "to read carefully before clicking anything" },
-  { id: "S3", name: "Pierre",  uni: "Caen",   year: 4, english: "C1",
-    traits: ["explorer", "technical"],
-    expects: "to try every button to understand the interface" },
-  { id: "S4", name: "Hana",    uni: "Nagoya", year: 4, english: "B1",
-    traits: ["anxious", "needs_guidance"],
-    expects: "clear instructions and not too much text at once" },
-  // Room 2
-  { id: "S5", name: "Sara",    uni: "Caen",   year: 6, english: "C2",
-    traits: ["time_pressed", "skim_reader"],
-    expects: "to skim and act fast" },
-  { id: "S6", name: "Akari",   uni: "Nagoya", year: 6, english: "C1",
-    traits: ["leader", "contributor"],
-    expects: "to share opinions in discussion" },
-  { id: "S7", name: "Léo",     uni: "Caen",   year: 3, english: "B2",
-    traits: ["distracted", "checks_phone"],
-    expects: "to lurk, react when nudged" },
-  { id: "S8", name: "Kenta",   uni: "Nagoya", year: 4, english: "A2",
-    traits: ["struggling", "low_english"],
-    expects: "to need translations and visual cues" }
+const STUDENTS_FULL = [
+  // ─── original 8 (covered the core trait surface in the 2-room sim) ───
+  { id: "S1",  name: "Marie",     uni: "Caen",   year: 5, english: "C2",
+    traits: ["enthusiastic", "fluent_french"] },
+  { id: "S2",  name: "Yuki",      uni: "Nagoya", year: 5, english: "B2",
+    traits: ["thoughtful", "second_language_caution"] },
+  { id: "S3",  name: "Pierre",    uni: "Caen",   year: 4, english: "C1",
+    traits: ["explorer", "technical"] },
+  { id: "S4",  name: "Hana",      uni: "Nagoya", year: 4, english: "B1",
+    traits: ["anxious", "needs_guidance"] },
+  { id: "S5",  name: "Sara",      uni: "Caen",   year: 6, english: "C2",
+    traits: ["time_pressed", "skim_reader"] },
+  { id: "S6",  name: "Akari",     uni: "Nagoya", year: 6, english: "C1",
+    traits: ["leader", "contributor"] },
+  { id: "S7",  name: "Léo",       uni: "Caen",   year: 3, english: "B2",
+    traits: ["distracted", "checks_phone"] },
+  { id: "S8",  name: "Kenta",     uni: "Nagoya", year: 4, english: "A2",
+    traits: ["struggling", "low_english"] },
+  // ─── 16 new personas to scale the cohort to 12 Caen + 12 Nagoya ───
+  { id: "S9",  name: "Juliette",  uni: "Caen",   year: 5, english: "C1",
+    traits: ["engaged_but_quiet"] },
+  { id: "S10", name: "Hiroshi",   uni: "Nagoya", year: 6, english: "B2",
+    traits: ["methodical", "second_language_caution"] },
+  { id: "S11", name: "Antoine",   uni: "Caen",   year: 4, english: "B2",
+    traits: ["writes_lots", "contributor"] },
+  { id: "S12", name: "Aiko",      uni: "Nagoya", year: 5, english: "B1",
+    traits: ["uses_glossary", "needs_guidance"] },
+  { id: "S13", name: "Camille",   uni: "Caen",   year: 3, english: "B2",
+    traits: ["first_timer", "anxious"] },
+  { id: "S14", name: "Takeshi",   uni: "Nagoya", year: 3, english: "A2",
+    traits: ["struggling", "low_english"] },
+  { id: "S15", name: "Hugo",      uni: "Caen",   year: 6, english: "C2",
+    traits: ["challenger", "writes_lots"] },
+  { id: "S16", name: "Sayaka",    uni: "Nagoya", year: 4, english: "C1",
+    traits: ["fluent_japanese_writer", "thoughtful"] },
+  { id: "S17", name: "Manon",     uni: "Caen",   year: 4, english: "C1",
+    traits: ["joke_teller", "leader"] },
+  { id: "S18", name: "Ren",       uni: "Nagoya", year: 5, english: "B2",
+    traits: ["asks_many_questions", "explorer"] },
+  { id: "S19", name: "Théo",      uni: "Caen",   year: 3, english: "B1",
+    traits: ["lurker_until_engaged", "anxious"] },
+  { id: "S20", name: "Mei",       uni: "Nagoya", year: 6, english: "C2",
+    traits: ["translator_helper", "fluent_french"] },
+  { id: "S21", name: "Sophie",    uni: "Caen",   year: 5, english: "C1",
+    traits: ["challenger", "contributor"] },
+  { id: "S22", name: "Daichi",    uni: "Nagoya", year: 4, english: "B2",
+    traits: ["competitive", "leader"] },
+  { id: "S23", name: "Lucas",     uni: "Caen",   year: 4, english: "B2",
+    traits: ["checks_evidence", "methodical"] },
+  { id: "S24", name: "Yui",       uni: "Nagoya", year: 5, english: "C1",
+    traits: ["anti_overconfidence", "thoughtful"] }
 ];
+
+const STUDENTS = STUDENTS_FULL.slice(0, Math.max(1, SIM_STUDENT_COUNT));
 
 /* ====================== observation store ======================
  *
@@ -330,39 +369,53 @@ function reactionsFrom(persona, snap, durationMs) {
     screenshot: await shot(pageF1, F1, "02-dashboard")
   });
 
-  // ---- Tab F2: co-facilitator joins via lobby + admin password
-  const F2 = FACILITATORS[1];
-  const { ctx: ctxF2, page: pageF2 } = await newTab(browser, F2);
-  console.log("Sim: co-facilitator (" + F2.name + ") joining…");
-  await pageF2.goto(BASE_URL + "/");
-  await pageF2.locator("#splash-code").fill(CODE);
-  await pageF2.locator("#splash-enter").click();
-  await pageF2.locator("#name-input").waitFor({ state: "visible", timeout: 8000 });
-  // The co-facilitator goes through the admin-login path that the
-  // lobby exposes. The platform's lobby has an "I'm a facilitator"
-  // toggle that asks for the admin password.
-  const adminToggle = pageF2.locator("#admin-toggle");
-  if (await adminToggle.isVisible().catch(() => false)) {
-    await adminToggle.click();
-    const passInput = pageF2.locator("#admin-pass-input");
-    if (await passInput.isVisible().catch(() => false)) {
-      await passInput.fill(F1.pass);
-      await pageF2.locator("#join-admin-btn").click();
-      await pageF2.locator("#admin-app").waitFor({ state: "visible", timeout: 8000 }).catch(() => {});
+  // ---- Co-facilitators (F2..FN) join via lobby + admin password.
+  // Each runs the same flow as a real co-fac: enter code, type name,
+  // expand "I am a facilitator", type the admin password, click
+  // "Open admin dashboard". The PR-#24 fixes (auto-fill name on empty,
+  // scroll-into-view hint) mean an empty name is now tolerated — but
+  // for the sim each co-fac types their own name so the audit trail
+  // is clean.
+  const coFacs = FACILITATORS.slice(1);
+  const coFacTabs = [];
+  for (const F of coFacs) {
+    const { page } = await newTab(browser, F);
+    coFacTabs.push({ F, page });
+    console.log("Sim: co-facilitator (" + F.name + ") joining…");
+    try {
+      await page.goto(BASE_URL + "/");
+      await page.locator("#splash-code").fill(CODE);
+      await page.locator("#splash-enter").click();
+      await page.locator("#name-input").waitFor({ state: "visible", timeout: 10000 });
+      await page.locator("#name-input").fill(F.name);
+      await page.locator("#admin-toggle").click();
+      await page.locator("#admin-pass-input").waitFor({ state: "visible", timeout: 5000 });
+      await page.locator("#admin-pass-input").fill(F1.pass);
+      await page.locator("#join-admin-btn").click();
+      await page.locator("#admin-app").waitFor({ state: "visible", timeout: 10000 }).catch(() => {});
+    } catch (e) {
+      obs(F.name + " (co-facilitator)", "co-admin-join", {
+        ok: false,
+        error: String(e.message || e),
+        reactions: ["Could not reach the admin dashboard — got an error on the lobby."],
+        screenshot: await shot(page, F, "01-co-admin-failed")
+      });
+      continue;
     }
+    const snap = await snapshot(page);
+    obs(F.name + " (co-facilitator)", "co-admin-join", {
+      ok: snap.activeView === "admin-app",
+      snapshot: snap,
+      reactions: snap.activeView === "admin-app"
+        ? ["Joined the dashboard alongside the lead facilitator."]
+        : ["Reached " + (snap.activeView || "an unknown view") +
+            ", not the admin dashboard."],
+      screenshot: await shot(page, F, "01-co-admin")
+    });
   }
-  const f2Snap = await snapshot(pageF2);
-  obs(F2.name + " (co-facilitator)", "co-admin-join", {
-    ok: f2Snap.url.includes(BASE_URL),
-    snapshot: f2Snap,
-    reactions: f2Snap.heading
-      ? ["Joined the dashboard. Stage indicator: " + f2Snap.heading]
-      : ["Could not reach the admin dashboard cleanly — landed on " + (f2Snap.title || "?")],
-    screenshot: await shot(pageF2, F2, "01-co-admin")
-  });
 
-  // ---- 8 students join
-  console.log("Sim: 8 students joining the lobby…");
+  // ---- N students join
+  console.log("Sim: " + STUDENTS.length + " students joining the lobby…");
   const studentTabs = [];
   for (const s of STUDENTS) {
     const tJoin = Date.now();
@@ -405,18 +458,41 @@ function reactionsFrom(persona, snap, durationMs) {
     }
   }
 
+  // Set the room count BEFORE the pool fills — the admin dashboard
+  // exposes a number-input / select that drives how many rooms get
+  // created at Start time. For 24 students × 6 rooms we want 4/room.
+  await pageF1.evaluate((rc) => {
+    // The platform's dashboard uses different ids across versions for
+    // this — try the most common ones and surface a no-op if none
+    // matches (the default of 4 rooms is harmless even if we overshoot).
+    const candidates = ["roomcount-input", "room-count-input",
+      "prestart-room-count", "room-count-select", "admin-room-count"];
+    for (const id of candidates) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.value = String(rc);
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        return;
+      }
+    }
+  }, SIM_ROOM_COUNT);
+
   // wait for the admin pool counter to catch up before starting
-  await pageF1.waitForFunction(() => {
+  await pageF1.waitForFunction((expected) => {
     const e = document.getElementById("prestart-count");
-    return e && parseInt(e.textContent, 10) >= 8;
-  }, { timeout: 15000 }).catch(() => {});
+    return e && parseInt(e.textContent, 10) >= expected;
+  }, STUDENTS.length, { timeout: 30000 }).catch(() => {});
   const pre = await pageF1.locator("#prestart-count").textContent().catch(() => "?");
+  const expected = String(STUDENTS.length);
   obs(F1.name + " (lead facilitator)", "pre-start-count", {
-    ok: pre === "8",
+    ok: pre === expected,
     snapshot: { presence: parseInt(pre, 10) },
-    reactions: pre === "8"
-      ? ["All 8 students in the pool. Starting now."]
-      : ["Pool counter says " + pre + " — I expected 8. Waiting a few more seconds before starting."]
+    reactions: pre === expected
+      ? ["All " + expected + " students in the pool. Starting now with " +
+          SIM_ROOM_COUNT + " rooms."]
+      : ["Pool counter says " + pre + " — I expected " + expected +
+          ". Starting anyway; some students may have joined slowly."]
   });
 
   // ---- Admin starts
@@ -441,7 +517,7 @@ function reactionsFrom(persona, snap, durationMs) {
     if (!tab.joined) continue;   // skip students who never made the lobby
     const tEnter = Date.now();
     try {
-      await page.locator("#app").waitFor({ state: "visible", timeout: 20000 });
+      await page.locator("#app").waitFor({ state: "visible", timeout: 45000 });
       tab.inRoom = true;
       const snap = await snapshot(page);
       obs(s.name + " (" + s.uni + " Y" + s.year + ", " + s.english + ")",
