@@ -5030,6 +5030,33 @@ let myPendingReveal = null;
 function reveal(id) {
   if (revealed[id] || !refRevealed) return;
   if (id === SYNTH_ID && !prereqsMet()) return;   // must do the workup first
+
+  // ── Mobile feedback (user report 2026-05-18): on stacked-column
+  // layouts the findings log lives FAR below the case panels, so
+  // tapping "Ask the patient" / "Examine" / "Investigations" buttons
+  // feels like nothing happened — the user can't see the freshly-
+  // logged answer without scrolling. The existing scrollIntoView +
+  // tab-switch path (renderFindings, below) only fires once the
+  // Firebase round-trip completes, AND only helps when the user is
+  // already on the Findings tab.
+  //
+  // Fire an instant bottom-of-screen toast with the question + answer
+  // text so the user sees the result *at the button* (well, near it)
+  // without any scroll. The toast text matches what lands in the
+  // findings log so there's no risk of divergence; we don't include
+  // the revealer's name (it's "you" by definition) and we don't show
+  // a sub-toast on the duplicate-tap path (the early-return above
+  // means we never reach here twice).
+  const item = itemById(id);
+  if (item && typeof toast === "function") {
+    const lang = (typeof _curLang === "function") ? _curLang() : "en";
+    // tc() also passes plain strings through, so this is safe for
+    // both translated triplets and the legacy bare-string content.
+    const q = (typeof tc === "function") ? tc(item.q, lang) : item.q;
+    const a = (typeof tc === "function") ? tc(item.a, lang) : item.a;
+    toast("✓ " + q, a);
+  }
+
   const entry = { by: myName, at: Date.now() };
   myPendingReveal = id;
   // undefined aborts - if someone already revealed this item, do not re-write it
