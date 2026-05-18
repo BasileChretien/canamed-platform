@@ -4521,7 +4521,10 @@ function closeSession() {
     })
     .then(result => {
       if (result !== "written") return;
-      // write succeeded - update the button
+      // write succeeded - update the button + drop this session from the
+      // local "my open sessions" tracker (the reaper list won't show it
+      // anymore on next splash visit).
+      try { removeMySession(sessionNum); } catch (e) { /* non-fatal */ }
       resetBtn("Session closed ✓ — re-download archive");
       if (btn) btn.classList.add("done");
     })
@@ -7710,10 +7713,255 @@ function clearLastWorkshop() {
   try { localStorage.removeItem(LAST_WORKSHOP_KEY); } catch (e) {}
 }
 
+/* ============================================================
+ * "My open sessions" tracker — abandoned-session reaper.
+ *
+ * User-reported gap (2026-05-18): "I need a way to close ongoing
+ * sessions for which there are no more participants and the admin
+ * forgot to close them."
+ *
+ * The platform never persisted a list of sessions a given browser
+ * created, so a facilitator who closed their tab without clicking
+ * "End session" had no way to reach those sessions again later. They
+ * stayed OPEN forever, wasting Spark-plan quota and showing as live.
+ *
+ * We track them locally (per-browser localStorage list of code +
+ * label + openedAt) and surface a "My open sessions →" link on the
+ * splash entry view. The list view exposes a one-click "Close" that
+ * writes the closed marker directly (no archive download — the
+ * facilitator can re-open the dashboard later for that).
+ *
+ * Schema: [{ code, label, openedAt }, ...]   (most-recent last)
+ * ============================================================ */
+const MY_SESSIONS_KEY = "canamed_my_sessions";
+
+function _readMySessions() {
+  try {
+    const v = JSON.parse(localStorage.getItem(MY_SESSIONS_KEY)) || [];
+    return Array.isArray(v) ? v.filter(s => s && typeof s.code === "string") : [];
+  } catch (e) { return []; }
+}
+function _writeMySessions(list) {
+  try { localStorage.setItem(MY_SESSIONS_KEY, JSON.stringify(list || [])); }
+  catch (e) { /* full / disabled — non-fatal */ }
+}
+function addMySession(code, label) {
+  if (!code) return;
+  const c = String(code).toUpperCase();
+  const list = _readMySessions().filter(s => s.code !== c);
+  list.push({
+    code: c,
+    label: (label || "").toString().slice(0, 80),
+    openedAt: Date.now()
+  });
+  // Cap to a reasonable number — even an active facilitator rarely
+  // opens more than 20 unique sessions per device.
+  if (list.length > 50) list.splice(0, list.length - 50);
+  _writeMySessions(list);
+}
+function removeMySession(code) {
+  if (!code) return;
+  const c = String(code).toUpperCase();
+  _writeMySessions(_readMySessions().filter(s => s.code !== c));
+}
+function getMySessions() { return _readMySessions(); }
+
+/* Reveal / hide the "My open sessions (N) →" link on the splash entry
+ * view + update its count. Idempotent; called whenever the entry view is
+ * shown or the list changes. */
+function paintMySessionsLink() {
+  const row = el("splash-my-sessions-row");
+  const count = el("splash-my-sessions-count");
+  if (!row || !count) return;
+  const list = getMySessions();
+  if (!list.length) { row.hidden = true; return; }
+  count.textContent = String(list.length);
+  row.hidden = false;
+  const btn = el("splash-go-my-sessions");
+  if (btn && !btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", () => splashShowView("my-sessions"));
+  }
+}
+
+/* Format an absolute timestamp as a human-friendly "Opened 2h ago" /
+ * "Opened 3 days ago" / "Opened just now" string. Defensive: bad input
+ * returns a generic "Opened earlier". */
+function _formatOpenedAt(ms) {
+  if (!ms || typeof ms !== "number") return tFallback("splash.my-sessions.opened-earlier", "Opened earlier");
+  const dMs = Date.now() - ms;
+  if (dMs < 60_000) return tFallback("splash.my-sessions.opened-just-now", "Opened just now");
+  if (dMs < 3_600_000) {
+    const m = Math.round(dMs / 60_000);
+    return tFallback("splash.my-sessions.opened-mins", "Opened " + m + " min ago")
+      .replace("{n}", String(m));
+  }
+  if (dMs < 86_400_000) {
+    const h = Math.round(dMs / 3_600_000);
+    return tFallback("splash.my-sessions.opened-hours", "Opened " + h + "h ago")
+      .replace("{n}", String(h));
+  }
+  const d = Math.round(dMs / 86_400_000);
+  return tFallback("splash.my-sessions.opened-days", "Opened " + d + " day(s) ago")
+    .replace("{n}", String(d));
+}
+
+/* Render the splash "My open sessions" list. One row per tracked session
+ * (newest first), each with code, label, opened-when, and a "Close"
+ * button. The Close button writes the closed marker directly via
+ * closeMySession(code) — no archive download (the facilitator can
+ * re-enter the dashboard later for that). Closed/missing sessions are
+ * marked then auto-pruned on next render. */
+function renderMySessions() {
+  const list = el("splash-my-sessions-list");
+  const empty = el("splash-my-sessions-empty");
+  if (!list || !empty) return;
+  const entries = getMySessions().slice().reverse();   // newest first
+  list.innerHTML = "";
+  if (!entries.length) { empty.hidden = false; return; }
+  empty.hidden = true;
+
+  // Wire the back button once.
+  const back = el("splash-my-sessions-back");
+  if (back && !back.dataset.wired) {
+    back.dataset.wired = "1";
+    back.addEventListener("click", () => splashShowView("enter"));
+  }
+
+  entries.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "my-session-row";
+    row.setAttribute("role", "listitem");
+    row.dataset.code = s.code;
+
+    const code = document.createElement("p");
+    code.className = "my-session-code";
+    code.textContent = s.code;
+
+    const label = document.createElement("p");
+    label.className = "my-session-label";
+    label.textContent = s.label || tFallback("splash.my-sessions.no-label", "(no label)");
+
+    const when = document.createElement("p");
+    when.className = "my-session-when";
+    when.textContent = _formatOpenedAt(s.openedAt);
+
+    const status = document.createElement("p");
+    status.className = "my-session-status";
+    status.textContent = tFallback("splash.my-sessions.checking", "Checking status…");
+
+    const actions = document.createElement("div");
+    actions.className = "my-session-actions";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "my-session-close";
+    closeBtn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
+    closeBtn.addEventListener("click", () => closeMySession(s.code, closeBtn, status));
+
+    const forgetBtn = document.createElement("button");
+    forgetBtn.type = "button";
+    forgetBtn.className = "splash-link my-session-forget";
+    forgetBtn.textContent = tFallback("splash.my-sessions.forget-btn", "Remove from list");
+    forgetBtn.addEventListener("click", () => {
+      removeMySession(s.code);
+      renderMySessions();
+      paintMySessionsLink();
+    });
+
+    actions.appendChild(closeBtn);
+    actions.appendChild(forgetBtn);
+
+    row.appendChild(code);
+    row.appendChild(label);
+    row.appendChild(when);
+    row.appendChild(status);
+    row.appendChild(actions);
+    list.appendChild(row);
+
+    // Best-effort live status check: is the session already closed in the
+    // DB? If we can read it, update the status text + disable Close.
+    // Silently ignores read-permission errors (LOCAL mode or rules deny).
+    try {
+      if (db && typeof db.ref === "function") {
+        db.ref(oPath(s.code, "closed")).once("value")
+          .then(snap => {
+            if (snap.val()) {
+              status.textContent = tFallback("splash.my-sessions.already-closed",
+                "Already closed — will be removed");
+              closeBtn.disabled = true;
+              // Auto-prune the local entry after a short visible delay so
+              // the user notices the list shrank rather than items just
+              // silently vanishing.
+              setTimeout(() => {
+                removeMySession(s.code);
+                renderMySessions();
+                paintMySessionsLink();
+              }, 1200);
+            } else {
+              status.textContent = tFallback("splash.my-sessions.status-open",
+                "Open — click Close to end it");
+            }
+          })
+          .catch(() => {
+            status.textContent = tFallback("splash.my-sessions.status-unknown",
+              "Status unknown");
+          });
+      } else {
+        status.textContent = tFallback("splash.my-sessions.status-unknown", "Status unknown");
+      }
+    } catch (e) {
+      status.textContent = tFallback("splash.my-sessions.status-unknown", "Status unknown");
+    }
+  });
+}
+
+/* Click handler for the "Close session" button in the my-sessions list.
+ * Writes the closed marker directly — the close-write rule allows any
+ * authenticated user to close any open session that exists. No archive
+ * download is attempted here; the facilitator can re-open the admin
+ * dashboard later to grab the archive. Defensive: confirms before the
+ * write, then removes the local entry on success. */
+function closeMySession(code, btn, statusEl) {
+  if (!code) return;
+  const c = String(code).toUpperCase();
+  const ok = window.confirm(tFallback("splash.my-sessions.close-confirm",
+    "End session " + c + "? Participants will see the wrap-up screen and " +
+    "cannot interact further. The data stays in the database — you can " +
+    "re-open the admin dashboard later to download the archive."));
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = tFallback("splash.my-sessions.closing", "Closing…"); }
+
+  const write = () => db.ref(oPath(c, "closed")).set({
+    by: (myName || "Admin").toString().slice(0, 40),
+    at: Date.now()
+  });
+
+  // ensureSignedIn() is the platform's standard pre-write gate — the
+  // closed-write rule requires auth != null even though it doesn't
+  // require admin password verification (we trust the local UX gate
+  // since we only show sessions THIS browser created).
+  const auth = (typeof ensureSignedIn === "function") ? ensureSignedIn() : Promise.resolve();
+  auth.then(write).then(() => {
+    if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.closed-ok", "Closed ✓");
+    if (btn) btn.textContent = tFallback("splash.my-sessions.closed-btn", "Closed");
+    removeMySession(c);
+    setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 700);
+  }).catch(e => {
+    console.warn("Could not close session", c, e);
+    if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.close-failed",
+      "Could not close — check your connection and try again.");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
+    }
+  });
+}
+
 /* swap which splash view is visible. The card itself stays put, only the inner
    "view" changes - keeps the layout stable as the user moves between flows. */
 function splashShowView(name) {
-  ["enter", "create", "created", "account", "profile-setup"].forEach(v => {
+  ["enter", "create", "created", "account", "profile-setup", "my-sessions"].forEach(v => {
     const node = el("splash-view-" + v);
     if (node) node.hidden = (v !== name);
   });
@@ -7722,8 +7970,14 @@ function splashShowView(name) {
     "create": "splash-create-name",
     "created": "splash-copy-code",
     "account": "splash-account-email",
-    "profile-setup": "splash-prof-name"
+    "profile-setup": "splash-prof-name",
+    "my-sessions": "splash-my-sessions-back"
   }[name];
+  // When entering the my-sessions view, re-render the list (the data may
+  // have changed since the user last opened the splash). When returning
+  // to the entry view, refresh the link's count.
+  if (name === "my-sessions") { try { renderMySessions(); } catch (e) {} }
+  if (name === "enter")       { try { paintMySessionsLink(); } catch (e) {} }
   // a11y: when the splash swaps to a new view, push focus to that
   // view's main heading (so a screen-reader user hears the section
   // name on transition). The splash uses .splash-label-big paragraphs
@@ -7939,6 +8193,9 @@ function initEntry() {
     // before the next code-entry triggers a silent auto-rejoin (user-reported
     // regression 2026-05-18).
     paintSavedSessionBanner();
+    // Surface the "My open sessions (N) →" reaper link so a facilitator
+    // can find + close abandoned sessions they previously created.
+    paintMySessionsLink();
   }
 }
 
@@ -8165,6 +8422,10 @@ function wireSplash() {
       paintJoinQr(code);
       splashShowView("created");
       cHint.textContent = "";
+      // Track in localStorage so the facilitator can find + close this
+      // session later via the "My open sessions →" splash link even if
+      // they close the tab without clicking "End session".
+      addMySession(code, label || name || "");
       cName.value = ""; cLabel.value = ""; cPass.value = "";
       const ta = el("splash-create-custom"); if (ta) ta.value = "";
     }).catch(e => {

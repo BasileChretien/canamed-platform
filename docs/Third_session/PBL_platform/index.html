@@ -215,6 +215,16 @@
           </div>
           <p class="splash-hint" id="splash-hint" role="status" aria-live="polite"></p>
         </form>
+        <!-- Reaper-list link: shown only when the local "my sessions"
+             tracker is non-empty. Click → splashShowView("my-sessions").
+             Lets a facilitator close abandoned sessions they previously
+             created and forgot to end. -->
+        <p class="splash-my-sessions-row" id="splash-my-sessions-row" hidden>
+          <button type="button" class="splash-link" id="splash-go-my-sessions"
+                  data-i18n-html="splash.my-sessions.link">
+            My open sessions (<span id="splash-my-sessions-count">0</span>) &rarr;
+          </button>
+        </p>
         <p class="splash-foot">
           <span data-i18n="splash.enter.no-code">Don't have a code yet?</span>
           <button type="button" class="splash-link" id="splash-go-create"
@@ -226,6 +236,31 @@
                   data-i18n="splash.enter.go-account">
             Sign in with Google to save your profile &amp; history &rarr;
           </button>
+        </p>
+      </div>
+
+      <!-- VIEW 6: My open sessions — list of sessions this browser
+           created. Each row exposes a one-click "Close session" that
+           writes the closed marker without going through the full
+           archive-download flow (the dashboard remains the path for
+           that). Useful when an admin forgot to end the session and
+           wants to clean up later. Populated by renderMySessions(). -->
+      <div class="splash-view" id="splash-view-my-sessions" hidden>
+        <p class="splash-label splash-label-big"
+           data-i18n="splash.my-sessions.title">Sessions you created</p>
+        <p class="splash-sublabel" data-i18n="splash.my-sessions.subtitle">
+          These are sessions started from this browser. Close any that are
+          no longer in use to free quota and stop new students from joining.
+        </p>
+        <div class="splash-my-sessions-list" id="splash-my-sessions-list" role="list"></div>
+        <p class="splash-my-sessions-empty" id="splash-my-sessions-empty" hidden
+           data-i18n="splash.my-sessions.empty">
+          No sessions tracked on this browser. Sessions you create from here
+          will appear in this list.
+        </p>
+        <p class="splash-row">
+          <button type="button" id="splash-my-sessions-back" class="splash-back"
+                  data-i18n="splash.back">&larr; Back</button>
         </p>
       </div>
 

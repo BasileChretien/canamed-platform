@@ -3881,6 +3881,88 @@ body.session-ended-shown { overflow: hidden; }
   padding: 6px 10px;
 }
 
+/* --- "My open sessions" reaper UI ---
+   The link on the splash entry view + the list view that lets a
+   facilitator close sessions they created previously and forgot to end.
+   User-reported gap (2026-05-18): no way to close abandoned sessions. */
+.splash-my-sessions-row {
+  margin: 8px 0 4px;
+  text-align: center;
+}
+.splash-my-sessions-row[hidden] { display: none; }
+#splash-go-my-sessions {
+  font-weight: 600;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+.splash-my-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 12px;
+  text-align: left;
+}
+.splash-my-sessions-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+  margin: 16px 0;
+}
+.splash-my-sessions-empty[hidden] { display: none; }
+.my-session-row {
+  border: 1px solid var(--border, #e2dccf);
+  border-radius: var(--r-card, 10px);
+  padding: 10px 12px;
+  background: var(--surface-sunk, #f9f7f1);
+}
+.my-session-code {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 0 0 2px;
+  letter-spacing: 0.05em;
+}
+.my-session-label {
+  color: var(--ink, #1c1c1c);
+  font-size: 0.95rem;
+  margin: 0 0 2px;
+}
+.my-session-when, .my-session-status {
+  color: var(--muted);
+  font-size: 0.84rem;
+  margin: 0;
+}
+.my-session-status { margin-top: 4px; }
+.my-session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+.my-session-close {
+  /* Danger affordance — match the rest of the platform's "close session"
+     buttons (warm red border, clear visual weight). */
+  min-height: 44px;
+  padding: 6px 14px;
+  border: 1px solid #c0392b;
+  background: #fff5f3;
+  color: #8a2017;
+  border-radius: var(--r-pill, 999px);
+  font-weight: 600;
+  cursor: pointer;
+}
+.my-session-close:hover:not([disabled]) {
+  background: #ffe9e4;
+}
+.my-session-close[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.my-session-forget {
+  font-size: 0.84rem;
+  min-height: 44px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .splash-card { animation: none; }
   #splash-code.shake { animation: none; }
