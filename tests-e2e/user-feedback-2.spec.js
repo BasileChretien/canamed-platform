@@ -75,6 +75,80 @@ test.describe("Bug 1 — team name renders horizontally at narrow viewport", () 
         "If this is many lines tall, the per-grapheme vertical-stack regression is back.")
         .toBeLessThan(maxAllowed);
     });
+
+  // Round 2 — the original .lb-name rendered FINE in the 3-sibling
+  // configuration (rank + name + pts). The vertical-stack regression
+  // re-surfaced only when the user was in a non-#1 room: an extra
+  // `.lb-gap` ("+N to catch X") gets appended, and because `.lb-row`
+  // was missing `flex-wrap: wrap`, .lb-gap's `flex-basis: 100%`
+  // couldn't push it to its own line — it competed for the same
+  // horizontal track and squashed .lb-name to ~0 width. Pin the
+  // failing scenario explicitly so we don't regress again.
+  test("at desktop width with .lb-gap sibling present, .lb-name still renders horizontally",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 1024, height: 768 });
+      await page.goto("/");
+
+      const heightInfo = await page.evaluate(() => {
+        document.body.classList.remove("locked");
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+
+        const li = document.createElement("li");
+        li.className = "lb-row me";  // .me triggers the gap path in real UI
+
+        const rank = document.createElement("span");
+        rank.className = "lb-rank";
+        rank.textContent = "#2";
+
+        const name = document.createElement("span");
+        name.className = "lb-name";
+        // The exact string from the user-reported bug screenshot.
+        name.textContent = "Lala (your team)";
+
+        const pts = document.createElement("span");
+        pts.className = "lb-pts";
+        pts.textContent = "45 pts";
+
+        // The critical 4th child — its `flex-basis: 100%` was being
+        // ignored without flex-wrap on the parent.
+        const gap = document.createElement("span");
+        gap.className = "lb-gap";
+        gap.textContent = "+14 to catch Room 2";
+
+        li.appendChild(rank); li.appendChild(name);
+        li.appendChild(pts); li.appendChild(gap);
+
+        const list = document.createElement("ul");
+        list.id = "leaderboard";
+        list.style.maxWidth = "560px";  // matches the real card width in screenshot
+        list.appendChild(li);
+        document.body.appendChild(list);
+
+        const lineHeight = parseFloat(getComputedStyle(name).lineHeight) || 16;
+        return {
+          height: name.getBoundingClientRect().height,
+          width: name.getBoundingClientRect().width,
+          lineHeight: lineHeight
+        };
+      });
+
+      // Without the flex-wrap fix the user-reported screenshot showed
+      // .lb-name at ~16 lines tall (one per character of "Lala (your
+      // team)"). With it, it should sit on a single line.
+      const maxAllowed = heightInfo.lineHeight * 2 + 4;
+      expect(heightInfo.height,
+        `lb-name rendered ${heightInfo.height}px tall × ${heightInfo.width}px wide ` +
+        `(line-height ${heightInfo.lineHeight}px). If tall+narrow, the per-character ` +
+        `vertical stack is back — likely missing flex-wrap: wrap on .lb-row.`)
+        .toBeLessThan(maxAllowed);
+      // Also assert width: the squashed-to-zero failure mode renders
+      // .lb-name at < 20px wide; a healthy render should be well past
+      // that even on the narrowest practical leaderboard.
+      expect(heightInfo.width,
+        `lb-name width was ${heightInfo.width}px — squashed to zero means flex layout broke.`)
+        .toBeGreaterThan(60);
+    });
 });
 
 test.describe("Bug 2 — findings answer appears under the button on mobile", () => {
