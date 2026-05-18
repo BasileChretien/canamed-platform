@@ -3580,6 +3580,30 @@ html[data-theme="dark"] #splash-go-account:focus-visible {
   outline-color: var(--nagoya-500);
 }
 
+/* PR #3 follow-up: in dark mode, --primary is var(--nagoya-500) =
+   #5cb8e8 (bright cyan) so that text-on-dark links (e.g. .privacy-note
+   a, splash-go-create) hit ~6.5:1. But solid-primary BUTTONS like
+   #splash-enter — `color: #fff; background: var(--primary)` — invert
+   that pattern: white text on bright cyan = 2.21:1 (axe fail). Flip
+   the text colour to the dark page background so the contrast goes
+   the other way (#0e1620 on #5cb8e8 = ~9.5:1). Same fix applies to
+   #splash-create-submit / #splash-go-admin / #splash-copy-code:hover
+   which are also visible after the create-session step. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-enter,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-create-submit,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-go-admin,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-copy-code:hover {
+    color: #0e1620;
+  }
+}
+html[data-theme="dark"] #splash-enter,
+html[data-theme="dark"] #splash-create-submit,
+html[data-theme="dark"] #splash-go-admin,
+html[data-theme="dark"] #splash-copy-code:hover {
+  color: #0e1620;
+}
+
 /* Bug 4 follow-up (user-feedback-2): form controls have no explicit
    text colour anywhere in the cascade, so they fall back to the UA
    default (black on most platforms). On a dark surface (--card =
