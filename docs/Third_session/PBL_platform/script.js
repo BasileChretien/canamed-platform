@@ -5544,6 +5544,7 @@ if (typeof window !== "undefined") {
   window._test_setPromptReplies = function (obj) { promptReplies = obj || {}; };
   window._test_getItemIds = function () { return ITEM_IDS.slice(); };
   window._test_getCase = function () { return CASE; };
+  window._test_rebuildCaseDerived = function () { rebuildCaseDerived(); };
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room

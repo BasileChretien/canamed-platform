@@ -769,6 +769,16 @@ test.describe("Progressive discussion prompts — one at a time + reply", () => 
         if (splash) splash.classList.add("hidden");
         document.getElementById("app").classList.remove("hidden");
         document.getElementById("stage-1").classList.remove("hidden");
+        // case-content.js is lazy-loaded by script-loader.js — force-load
+        // it before driving renderPrompts, otherwise CASE/ITEM_IDS are
+        // still empty from the boot-time rebuildCaseDerived no-op call.
+        if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+          await window.CanamedLoader.ensureCaseContent();
+          // Re-derive ITEM_IDS now that CASE is populated.
+          if (typeof window._test_rebuildCaseDerived === "function") {
+            window._test_rebuildCaseDerived();
+          }
+        }
         // Drive the script-scope `revealed` binding via the test hook —
         // window.revealed = ... can't reach a top-level `let`.
         const itemIds = window._test_getItemIds ? window._test_getItemIds() : [];
@@ -817,12 +827,22 @@ test.describe("Progressive discussion prompts — one at a time + reply", () => 
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
-      const result = await page.evaluate(() => {
+      const result = await page.evaluate(async () => {
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
         const splash = document.getElementById("splash");
         if (splash) splash.classList.add("hidden");
         document.getElementById("app").classList.remove("hidden");
         document.getElementById("stage-1").classList.remove("hidden");
+        // case-content.js is lazy-loaded by script-loader.js — force-load
+        // it before driving renderPrompts, otherwise CASE/ITEM_IDS are
+        // still empty from the boot-time rebuildCaseDerived no-op call.
+        if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+          await window.CanamedLoader.ensureCaseContent();
+          // Re-derive ITEM_IDS now that CASE is populated.
+          if (typeof window._test_rebuildCaseDerived === "function") {
+            window._test_rebuildCaseDerived();
+          }
+        }
         // Drive the script-scope `revealed` binding via the test hook —
         // window.revealed = ... can't reach a top-level `let`.
         const itemIds = window._test_getItemIds ? window._test_getItemIds() : [];
