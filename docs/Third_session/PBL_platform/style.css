@@ -3713,6 +3713,45 @@ body.session-ended-shown { overflow: hidden; }
   background: rgba(255, 255, 255, 0.45);
   border-radius: var(--r-sm);
 }
+
+/* "Every click is a team decision" warning — pinned to the top of the
+   chart so it's visible the whole case-work phase. Caen-amber border
+   matches the chart's paper theme; strong colour pulls the eye without
+   being alarming. */
+.chart-team-warning {
+  margin: 12px 0 0;
+  padding: 10px 14px;
+  background: rgba(231, 184, 0, 0.16);
+  border-left: 4px solid var(--caen-line, #e7b800);
+  border-radius: var(--r-sm);
+  font-size: 0.93rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.chart-team-warning strong { color: var(--caen-ink, #5a3b14); }
+.chart-team-warning em { font-style: italic; color: var(--caen-ink, #5a3b14); }
+/* Dark-mode adjustment: warm amber goes too dim, use the brighter
+   meeting palette for readability. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .chart-team-warning {
+    background: rgba(116, 162, 179, 0.18);
+    border-left-color: var(--meeting, #74a2b3);
+    color: var(--ink);
+  }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .chart-team-warning strong,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .chart-team-warning em {
+    color: var(--ink);
+  }
+}
+html[data-theme="dark"] .chart-team-warning {
+  background: rgba(116, 162, 179, 0.18);
+  border-left-color: var(--meeting, #74a2b3);
+  color: var(--ink);
+}
+html[data-theme="dark"] .chart-team-warning strong,
+html[data-theme="dark"] .chart-team-warning em {
+  color: var(--ink);
+}
 @keyframes req-reveal-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }

@@ -473,6 +473,7 @@
 
       // Chart-metaphor framing (2026-05-18 pedagogist's strongest claim)
       "modA.chart.title": "Your consultation note — <em>M. Lefebvre</em>, today",
+      "modA.chart.team-click-warning": "👥 <strong>Every click is a team decision.</strong> Anything you ask, examine, investigate or decide is recorded for <em>everyone</em> in your room — and counts as the team's choice. <strong>Discuss first, then click together.</strong>",
       "modA.chart.subtitle": "You and your partners are the clinicians seeing M. Lefebvre. Everything you ask, examine, investigate or decide goes into <em>your shared chart</em>.",
       "modA.chart.hypotheses.title": "Working hypotheses",
       "modA.chart.hypotheses.hint": "Before you order tests, agree as a team: <strong>what do you suspect?</strong> List the differential diagnoses you want to rule in or rule out. (Investigations unlock once you have at least one.)",
@@ -999,6 +1000,7 @@
       "coach.dismiss": "Masquer ce guide pour le reste de la séance",
       "reference-section.title": "📚 Contexte & recommandations (à ouvrir au besoin)",
       "modA.chart.title": "Votre note de consultation — <em>M. Lefebvre</em>, aujourd'hui",
+      "modA.chart.team-click-warning": "👥 <strong>Chaque clic est une décision d'équipe.</strong> Tout ce que vous demandez, examinez, investiguez ou décidez est enregistré pour <em>toute la salle</em> — et compte comme le choix de l'équipe. <strong>Discutez d'abord, puis cliquez ensemble.</strong>",
       "modA.chart.subtitle": "Vous et vos partenaires êtes les médecins qui voient M. Lefebvre. Tout ce que vous demandez, examinez, investiguez ou décidez s'inscrit dans <em>votre dossier partagé</em>.",
       "modA.chart.hypotheses.title": "Hypothèses de travail",
       "modA.chart.hypotheses.hint": "Avant de commander des examens, mettez-vous d'accord en équipe : <strong>qu'est-ce que vous suspectez ?</strong> Listez les diagnostics différentiels à confirmer ou à éliminer. (Les investigations se débloquent dès que vous en avez au moins une.)",
@@ -1497,6 +1499,7 @@
       "coach.dismiss": "このガイドをこのセッションの間非表示にする",
       "reference-section.title": "📚 背景・ガイドライン (必要に応じて開いてください)",
       "modA.chart.title": "あなたのコンサルテーションノート — <em>ルフェーブル氏</em>、本日",
+      "modA.chart.team-click-warning": "👥 <strong>クリックはすべてチームの意思決定です。</strong> 問診・診察・検査・決定したことはすべて<em>ルームの全員</em>に記録され、チームの選択として扱われます。<strong>まず話し合ってから、一緒にクリックしてください。</strong>",
       "modA.chart.subtitle": "あなたとパートナーがルフェーブル氏を診る医師です。問診・診察・検査・決定したことはすべて<em>共有カルテ</em>に記録されます。",
       "modA.chart.hypotheses.title": "作業仮説",
       "modA.chart.hypotheses.hint": "検査を依頼する前に、チームで合意してください: <strong>何を疑いますか?</strong> 確定したいまたは除外したい鑑別診断を挙げましょう。(少なくとも1つあれば検査が解禁されます。)",
