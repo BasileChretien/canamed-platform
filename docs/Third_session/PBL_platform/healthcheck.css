@@ -1,0 +1,195 @@
+/* CaNaMED — Health check page-specific styles.
+ *
+ * Pulls colour tokens from style.css custom properties so light + dark
+ * palettes follow automatically. Nothing here overrides core styles —
+ * this file is additive and namespaced under `.hc-*`. */
+
+body {
+  background: var(--bg, #faf7f1);
+  color: var(--n-900, #1f262d);
+  font-family: var(--font-body, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif);
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+}
+
+.hc-header {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px 24px 16px;
+}
+
+.hc-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.hc-brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.hc-brand-text strong {
+  font-size: 18px;
+  letter-spacing: 0.04em;
+}
+
+.hc-brand-tag {
+  font-size: 13px;
+  color: var(--n-600, #5a6772);
+}
+
+.hc-lead {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--n-700, #38434f);
+  margin: 8px 0 0;
+}
+
+.hc-main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}
+
+.hc-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 24px;
+  border: 1px solid var(--n-200, #e0d9cb);
+  border-radius: 10px;
+  background: var(--card, #ffffff);
+}
+
+.hc-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--n-200, #ece6da);
+}
+
+.hc-row:last-child {
+  border-bottom: none;
+}
+
+.hc-row-body {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.hc-label {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.hc-detail {
+  font-size: 13px;
+  color: var(--n-600, #5a6772);
+  line-height: 1.45;
+}
+
+.hc-detail code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  background: var(--n-100, #f1ece0);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.hc-pill {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 86px;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+}
+
+.hc-pill-pending {
+  background: var(--n-100, #f1ece0);
+  color: var(--n-600, #5a6772);
+  border-color: var(--n-200, #e0d9cb);
+}
+
+.hc-pill-pass {
+  background: #e3f5e8;
+  color: #1e6b34;
+  border-color: #b6e0c2;
+}
+
+.hc-pill-fail {
+  background: #fbe3e3;
+  color: #962222;
+  border-color: #f3b9b9;
+}
+
+.hc-pill-warn {
+  background: #fdf1d8;
+  color: #7a5500;
+  border-color: #f0d590;
+}
+
+.hc-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hc-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.hc-btn {
+  font: inherit;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--caen-500, #e08a1e);
+  background: var(--caen-500, #e08a1e);
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.hc-btn:hover { filter: brightness(0.95); }
+.hc-btn:focus-visible { outline: 2px solid var(--nagoya-500, #2e9fdf); outline-offset: 2px; }
+
+.hc-btn-ghost {
+  background: transparent;
+  color: var(--n-800, #2a323b);
+  border-color: var(--n-300, #c9bfae);
+}
+
+.hc-copy-status {
+  font-size: 13px;
+  color: var(--n-600, #5a6772);
+}
+
+.hc-foot {
+  font-size: 12px;
+  color: var(--n-600, #5a6772);
+  margin: 8px 0 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  .hc-pill-pass { background: #1a3a25; color: #9fe0b0; border-color: #2e5c3e; }
+  .hc-pill-fail { background: #3a1a1a; color: #f0a8a8; border-color: #5c2e2e; }
+  .hc-pill-warn { background: #3a2e16; color: #f0d590; border-color: #5c4a2a; }
+}

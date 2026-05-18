@@ -1,0 +1,4349 @@
+/* ==========================================================================
+   CaNaMED Session 3 platform - stylesheet
+   Design system: deliberate Franco-Japanese blue + amber identity, a neutral
+   ramp, layered shadows, an 8px spacing scale, a type scale, and a small,
+   consistent motion language. System fonts only (a strict CSP blocks CDNs),
+   single file, no build step. Accessibility is designed in: WCAG-AA contrast,
+   a strong surface-independent focus ring, a 1rem text floor, a prose width
+   cap, and prefers-reduced-motion / prefers-contrast support.
+   ========================================================================== */
+
+:root {
+  /* ========================================================================
+     DESIGN v3 - "Two arcs, one circle"
+     Warm paper ground, confident ink, two saturated brand accents used as
+     fields (not hairlines), a third "meeting" accent for everything shared,
+     layered blue-tinted depth. Refactored: this is the single source of truth
+     - the old base values and the "WOW" overrides are reconciled here.
+     ======================================================================== */
+  /* --- Nagoya (Japan) blue --- */
+  --nagoya-700: #0c3f6e;
+  --nagoya-600: #1763a6;
+  --nagoya-500: #2e9fdf;
+  --nagoya-50:  #e9f4fb;
+  /* --- Caen (France) warm ochre - softened from a caution-yellow --- */
+  --caen-500:   #e08a1e;   /* decorative only (dots, art) */
+  --caen-ink:   #7a5d12;   /* amber as TEXT - passes AA on white */
+  --caen-line:  #b45309;   /* amber as a BORDER / strong accent - AA */
+  --caen-50:    #fbf3df;
+  /* --- the "meeting" accent: the blend of the two, for everything SHARED
+         (the cooperative goal bar, the mark's heart, cross-cultural UI) --- */
+  --meeting:    #4f7d8c;
+  --meeting-50: #eaf1f3;
+
+  /* --- warm neutral ramp --- */
+  --n-0:   #ffffff;
+  --n-25:  #fbf9f4;
+  --n-50:  #f1eee6;
+  --n-100: #e6e2d8;
+  --n-200: #d4cfc2;
+  --n-300: #b3ab99;
+  --n-500: #5b6b7a;
+  --n-700: #38434f;
+  --n-900: #16202b;
+
+  /* --- semantic --- */
+  --bg: #f6f4ef;             /* warm paper - instantly less clinical */
+  --card: var(--n-0);
+  --surface-sunk: #f3f0e8;
+  --line: var(--n-100);
+  --line-strong: var(--n-200);
+  --ink: var(--n-900);
+  --muted: var(--n-500);
+  --primary: var(--nagoya-600);
+  --primary-hover: var(--nagoya-700);
+  --key: #c0392b;
+  --key-50: #fdecea;
+  --ok: #1e8449;
+  --ok-strong: #176b3a;        /* WCAG-AA-conformant on --ok-50 (text use) */
+  --ok-50: #e7f4ec;
+  --focus: #11161b;
+
+  /* --- radius / shadow / spacing --- */
+  --r-sm: 9px;
+  --r-md: 13px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+  --r-pill: 999px;
+  /* layered, blue-tinted shadows - the single biggest "modern" lever */
+  --sh-sm: 0 1px 2px rgba(12,63,110,.07), 0 2px 6px rgba(12,63,110,.06);
+  --sh-md: 0 2px 4px rgba(12,63,110,.06), 0 10px 26px rgba(12,63,110,.11);
+  --sh-lg: 0 4px 10px rgba(12,63,110,.07), 0 26px 60px rgba(12,63,110,.17);
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
+  --s-5: 24px; --s-6: 32px; --s-7: 48px;
+
+  /* --- motion: one unified vocabulary ---
+     enters use --ease-out (translate <=14px); state changes use --ease-soft;
+     --ease-spring is reserved for EARNED-points moments so a bounce means
+     something. No infinite loops outside prefers-reduced-motion: no-preference. */
+  --dur-micro: 90ms;
+  --dur-fast:  160ms;
+  --dur-base:  260ms;
+  --dur-view:  380ms;
+  --dur-event: 1100ms;
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-soft:   cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* per-stage accent - set live on #room-main[data-stage]; default = Welcome */
+  --stage-accent: var(--nagoya-600);
+  --stage-accent-50: var(--nagoya-50);
+}
+/* the four workshop "chapters" each get their own accent colour */
+#room-main[data-stage="0"] { --stage-accent: var(--meeting);     --stage-accent-50: var(--meeting-50); }
+#room-main[data-stage="1"] { --stage-accent: var(--nagoya-600);  --stage-accent-50: var(--nagoya-50); }
+#room-main[data-stage="2"] { --stage-accent: var(--caen-line);   --stage-accent-50: var(--caen-50); }
+#room-main[data-stage="3"] { --stage-accent: var(--ok);          --stage-accent-50: var(--ok-50); }
+
+/* WCAG 2.4.1 (Bypass Blocks, Level A). Hidden off-screen at rest;
+   becomes visible the moment a keyboard user focuses it. Sits above the
+   header so the focus ring doesn't get cropped. */
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 8px;
+  z-index: 9999;
+  background: var(--ink, #2a2a2a);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+  transition: top 120ms;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 8px;
+  outline: 3px solid var(--focus, #f59e0b);
+  outline-offset: 2px;
+}
+
+/* a screen-reader-only utility (needed by the reworked lists / state labels) */
+.sr-only {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  /* a near-invisible blue+amber wash so the page never reads as flat grey */
+  background:
+    radial-gradient(900px 620px at 88% -12%, var(--nagoya-50) 0%, transparent 55%),
+    radial-gradient(700px 520px at 5% 108%, var(--caen-50) 0%, transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+  color: var(--ink);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.005em;
+}
+
+.hidden { display: none !important; }
+
+/* ---------- typography base ---------- */
+h1, h2, h3, h4 { letter-spacing: -0.015em; }
+p { margin: 0.6em 0; }
+/* cap prose width for second-language readers - long lines are hard to track */
+.vignette p, .instructions p, .instructions-open p, .info-list,
+.safety-note p, .privacy-note p, .micro-framework p {
+  max-width: 70ch;
+}
+
+/* ---------- header ---------- */
+header {
+  background: linear-gradient(105deg, var(--nagoya-600), var(--nagoya-700));
+  color: #fff;
+  box-shadow: inset 0 -3px 0 var(--caen-500), var(--sh-md);
+}
+.header-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s-4) var(--s-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+}
+header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+header .sub { margin: 4px 0 0; font-size: 0.9rem; opacity: 0.92; }
+
+.header-right-wrap {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-shrink: 0;
+}
+#header-right { flex-shrink: 0; }
+.mode-badge {
+  font-size: 0.78rem;
+  padding: 5px 10px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+.mode-badge.shared { background: rgba(0,0,0,.22); border: 1px solid rgba(255,255,255,.55); }
+.mode-badge.solo { background: rgba(0,0,0,.28); border: 1px solid rgba(255,255,255,.4); }
+
+.conn-badge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  white-space: nowrap;
+}
+.conn-ok { background: rgba(0,0,0,.3); color: #fff; border: 1px solid rgba(255,255,255,.6); }
+.conn-lost { background: var(--key); color: #fff; border: 1px solid var(--key); }
+
+/* ---------- layout ---------- */
+main {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s-5);
+}
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: var(--s-5);
+  margin-bottom: var(--s-4);
+  box-shadow: var(--sh-sm);
+}
+.card h2 { margin: 0 0 var(--s-2); font-size: 1.375rem; font-weight: 700; line-height: 1.25; }
+.card h3 {
+  margin: 0 0 var(--s-3);
+  font-size: 1.05rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+.card h4 { margin: var(--s-4) 0 var(--s-1); font-size: 0.98rem; color: var(--ink); }
+.ico { font-size: 1.15rem; }
+.hint { color: var(--muted); font-size: 0.92rem; }
+.empty { color: var(--muted); font-style: italic; font-size: 0.92rem; }
+
+.columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--s-4);
+}
+@media (max-width: 960px) { .columns { grid-template-columns: 1fr; } }
+
+/* ---------- buttons (3 roles: primary / secondary / danger) ---------- */
+/* primary */
+#join-btn, #start-session-btn, #prev-btn, #next-btn, .answer-add-btn,
+#save-teams-btn, #save-quiz-btn, #advance-all-btn, #admin-download-btn,
+#change-pass-btn, .dash-ctrl button, .sidebar-room-ctrl button,
+.admin-controls button {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 9px 16px;
+  cursor: pointer;
+  box-shadow: var(--sh-sm);
+  transition: background var(--dur-fast) var(--ease-soft),
+              box-shadow var(--dur-fast) var(--ease-soft),
+              transform var(--dur-fast) var(--ease-soft);
+}
+#join-btn:hover, #start-session-btn:hover, #prev-btn:hover, #next-btn:hover,
+.answer-add-btn:hover, #save-teams-btn:hover, #save-quiz-btn:hover,
+#advance-all-btn:hover, #admin-download-btn:hover, #change-pass-btn:hover,
+.dash-ctrl button:hover, .sidebar-room-ctrl button:hover,
+.admin-controls button:hover {
+  background: var(--primary-hover);
+}
+#prev-btn:disabled, #next-btn:disabled, .dash-ctrl button:disabled,
+.sidebar-room-ctrl button:disabled, .admin-controls button:disabled {
+  background: var(--n-100);
+  color: var(--muted);
+  border-color: var(--line-strong);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+#join-btn { width: 100%; padding: 12px; font-size: 0.95rem; margin-top: var(--s-1); }
+#start-session-btn { padding: 11px 20px; font-size: 0.95rem; }
+
+/* secondary */
+#leave-btn, .reset-btn, #admin-leave-btn, #waiting-leave {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              background var(--dur-fast) var(--ease-soft),
+              transform var(--dur-fast) var(--ease-soft);
+}
+#leave-btn:hover, .reset-btn:hover, #admin-leave-btn:hover, #waiting-leave:hover {
+  border-color: var(--n-300);
+  background: var(--n-25);
+}
+.reset-btn { width: 100%; color: var(--muted); }
+.reset-btn:hover { border-color: var(--key); color: var(--key); }
+#waiting-leave { max-width: 200px; }
+
+/* danger */
+#purge-session-btn {
+  background: var(--card);
+  border: 1px solid var(--key);
+  color: var(--key);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 9px 16px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+#purge-session-btn:hover { background: var(--key-50); }
+
+/* press feedback (respecting reduced motion, set below) */
+button:active:not(:disabled) { transform: translateY(1px); }
+
+/* ---------- inputs ---------- */
+input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom */
+.lobby-card input, .lobby-card select,
+.answer-add input, .teams-row input, #change-pass-input,
+.inline-label select, .answer-edit {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font: inherit;
+  background: var(--card);
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              box-shadow var(--dur-fast) var(--ease-soft);
+}
+.lobby-card input:focus, .lobby-card select:focus, .answer-add input:focus,
+.teams-row input:focus, #change-pass-input:focus, .inline-label select:focus,
+.answer-edit:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--nagoya-50);
+}
+.lobby-card input.err, input.err {
+  border-color: var(--key);
+  border-width: 2px;
+}
+
+/* ---------- lobby ---------- */
+#lobby {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s-7) var(--s-5);
+  display: flex;
+  justify-content: center;
+}
+.lobby-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--sh-lg);
+  padding: var(--s-6) var(--s-6);
+  width: 100%;
+  max-width: 440px;
+}
+.lobby-card h2 { margin: 0 0 6px; }
+.lobby-mode {
+  font-size: 0.9rem;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  margin: var(--s-2) 0 var(--s-4);
+}
+.lobby-mode.shared { background: var(--ok-50); color: #176b3a; }
+.lobby-mode.solo { background: var(--caen-50); color: var(--caen-ink); }
+.lobby-mode.broken {
+  background: var(--key-50);
+  color: #8a2a22;
+  border: 1px solid #f0b3ac;
+  font-weight: 600;
+}
+.lobby-card label {
+  display: block;
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin-bottom: var(--s-3);
+}
+.lobby-card input, .lobby-card select {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 10px 12px;
+  font-weight: 400;
+}
+.lobby-hint { font-size: 0.86rem; color: var(--muted); margin: var(--s-3) 0 0; }
+
+.lobby-section {
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+  padding-top: var(--s-4);
+}
+.lobby-section h3 { margin: 0 0 var(--s-3); font-size: 0.95rem; }
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.86rem;
+  cursor: pointer;
+  padding: 6px 0;
+  min-height: 40px;
+  text-decoration: underline;
+}
+#superadmin-panel { margin-top: var(--s-2); }
+
+/* ---------- presence / chips ---------- */
+.presence-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: var(--s-3);
+}
+.chip {
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 3px 11px 3px 8px;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.chip.me { border-color: var(--primary); background: var(--nagoya-50); font-weight: 600; }
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.mini-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-right: var(--s-2);
+}
+
+/* ---------- accent / vignette cards ---------- */
+.vignette { border-left: 4px solid var(--primary); }
+.vignette p { margin: var(--s-2) 0; }
+
+/* ---------- request buttons ---------- */
+.btn-group { display: flex; flex-direction: column; gap: var(--s-2); }
+.req-btn {
+  text-align: left;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  padding: 11px 13px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  min-height: 44px;
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              background var(--dur-fast) var(--ease-soft),
+              transform var(--dur-fast) var(--ease-soft);
+}
+.req-btn:hover { border-color: var(--primary); background: var(--nagoya-50); }
+.req-btn:active:not(:disabled):not(.done) {
+  transform: translateY(1px);
+  background: #ddeefb;
+}
+.req-btn.done {
+  background: var(--surface-sunk);
+  color: var(--muted);
+  cursor: default;
+  border-color: var(--line);
+}
+.req-btn.done:hover { border-color: var(--line); background: var(--surface-sunk); }
+.req-btn.done::before { content: "\2713  "; color: var(--ok); font-weight: 700; }
+.req-btn.key-btn { border-left: 3px solid var(--key); }
+.req-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ---------- findings ---------- */
+.count {
+  background: var(--primary);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+  margin-left: auto;
+}
+#findings-log { margin: 0; padding: 0; list-style: none; }
+#prompts-list { margin: 0; padding-left: 20px; }
+#findings-log li {
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  margin-bottom: var(--s-2);
+}
+#findings-log .q { font-weight: 600; }
+#findings-log .a { color: var(--ink); margin-top: 2px; }
+#findings-log .by {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+#findings-log li.key { border-left: 3px solid var(--key); }
+#findings-log li.key .q { color: var(--key); }
+#findings-log li.key .a { background: var(--key-50); border-radius: 6px; padding: 4px 8px; }
+
+/* ---------- prompts / compare ---------- */
+.prompts-card { border-left: 4px solid var(--caen-line); }
+#prompts-list li { margin-bottom: var(--s-3); }
+.compare-card { border-left: 4px solid var(--key); }
+.compare-card ul { margin: var(--s-2) 0; padding-left: 20px; }
+
+/* ---------- module content: guidelines, recap tables, roleplay aids ---------- */
+.guidelines-card, .recap-card { background: var(--surface-sunk); }
+.guidelines-card > summary, .recap-card > summary {
+  cursor: pointer;
+  font-size: 0.98rem;
+  list-style: none;
+}
+.guidelines-card > summary::-webkit-details-marker,
+.recap-card > summary::-webkit-details-marker { display: none; }
+.guidelines-card > summary::before, .recap-card > summary::before {
+  content: "\25B8  ";
+  color: var(--muted);
+}
+.guidelines-card[open] > summary::before, .recap-card[open] > summary::before {
+  content: "\25BE  ";
+}
+.ref-list { margin: var(--s-3) 0 0; padding-left: 20px; font-size: 0.92rem; }
+.ref-list li { margin-bottom: var(--s-2); }
+.ref-list a, .recap-table a { color: var(--nagoya-700); word-break: break-word; }
+
+.recap-card h4:first-of-type { margin-top: var(--s-3); }
+.recap-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  margin: var(--s-1) 0 var(--s-2);
+}
+.recap-table th, .recap-table td {
+  border: 1px solid var(--line-strong);
+  padding: 7px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+.recap-table th { background: var(--n-100); font-weight: 600; }
+.recap-table tbody tr:nth-child(even) { background: var(--n-25); }
+.recap-card { overflow-x: auto; }   /* tables stay readable on a phone */
+
+.safety-note { background: var(--nagoya-50); border-left: 4px solid var(--primary); }
+.safety-note p { margin: 6px 0; font-size: 0.95rem; }
+.safety-note p:first-child { margin-top: 0; }
+
+.spikes-strip {
+  background: var(--n-100);
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  margin: var(--s-3) 0;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.phrases-box {
+  background: var(--caen-50);
+  border: 1px solid #ecd9a0;
+  border-radius: var(--r-md);
+  padding: 11px 13px;
+  margin: var(--s-3) 0;
+  font-size: 0.92rem;
+}
+.micro-framework {
+  background: var(--surface-sunk);
+  border-left: 4px solid var(--ok);
+  border-radius: var(--r-md);
+  padding: 11px 15px;
+  margin: var(--s-3) 0;
+}
+.micro-framework p { margin: 0 0 4px; font-size: 0.95rem; }
+.micro-framework .info-list { margin-top: 4px; }
+
+/* ---------- saved confirmation ---------- */
+.copy-ok { color: var(--ok); font-size: 0.86rem; margin-left: 10px; font-weight: 600; }
+
+/* ---------- footer ---------- */
+footer {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: var(--s-4) var(--s-5) var(--s-6);
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+/* ---------- stage card / controls ---------- */
+.stage-card { border-left: 4px solid var(--ok); box-shadow: var(--sh-md); }
+.stage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  flex-wrap: wrap;
+}
+.stage-indicator { font-weight: 700; font-size: 1.05rem; }
+.stage-wait { color: var(--muted); font-size: 0.9rem; }
+.stage-controls { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; row-gap: 6px; }
+.admin-controls { display: flex; gap: 6px; }
+
+.presence-line {
+  margin-top: var(--s-3);
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+}
+.presence-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.info-list { margin: var(--s-2) 0; padding-left: 22px; }
+.info-list li { margin-bottom: 6px; }
+
+.instructions { background: var(--surface-sunk); }
+.instructions summary { cursor: pointer; font-size: 0.98rem; }
+.instructions p { margin: var(--s-2) 0; font-size: 0.95rem; }
+.instructions-open h3 { font-size: 1rem; margin: var(--s-4) 0 6px; }
+.instructions-open h3:first-child { margin-top: 0; }
+
+/* ---------- collaborative group-answers ---------- */
+.answers-card { border-left: 4px solid var(--caen-line); }
+.answers-list { list-style: none; margin: 0 0 var(--s-3); padding: 0; }
+.answers-empty { color: var(--muted); font-style: italic; font-size: 0.92rem; }
+.answer-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+.answer-entry .dot { align-self: center; }
+.answer-by { font-weight: 600; white-space: nowrap; }
+.answer-text { flex: 1; }
+.entry-act {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 4px 6px;
+  min-height: 40px;
+}
+.entry-act:hover { color: var(--key); }
+.answer-entry .entry-act + .entry-act { margin-left: var(--s-2); }
+.answer-add { display: flex; gap: var(--s-2); }
+.answer-add input { flex: 1; padding: 10px 12px; }
+.answer-edit { flex: 1; padding: 6px 9px; border-color: var(--primary); font-size: 0.95rem; }
+.typing-line { font-size: 0.82rem; color: var(--muted); font-style: italic; margin: 4px 0; }
+
+/* ---------- contribution tally ---------- */
+.contrib-tally {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+.contrib-tally:empty { display: none; }
+.contrib-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-right: 2px;
+}
+.contrib-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  padding: 3px 10px;
+  font-size: 0.8rem;
+}
+
+/* ---------- admin dashboard ---------- */
+#admin-app { max-width: 1100px; margin: 0 auto; padding: var(--s-5); }
+.dash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--s-3);
+}
+.dash-head h3 { margin: 0; }
+.dash-room {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: 14px 14px;
+  border-radius: var(--r-md);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+.dash-room:hover { background: var(--n-25); }
+.dash-room.calling { background: var(--key-50); box-shadow: inset 3px 0 0 var(--key); }
+.dash-info { flex: 1; min-width: 0; }
+.dash-title { font-weight: 600; }
+.dash-stage { font-size: 0.9rem; color: var(--nagoya-700); margin-top: 2px; }
+.dash-people { font-size: 0.84rem; color: var(--muted); margin-top: 2px; }
+.dash-timer { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+.dash-timer.over { color: var(--key); font-weight: 600; }
+.dash-progress { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+.dash-ctrl { display: flex; gap: 6px; flex-wrap: wrap; }
+.dash-ctrl button, .sidebar-room-ctrl button, .admin-controls button {
+  padding: 8px 13px;
+  min-height: 36px;
+  font-size: 0.82rem;
+}
+.sidebar-room-ctrl button { min-width: 40px; }
+.view-btn { background: var(--ink) !important; }
+.view-btn:hover { background: #000 !important; }
+.call-badge {
+  background: var(--key);
+  color: #fff;
+  font-size: 0.74rem;
+  font-weight: 700;
+  border-radius: var(--r-pill);
+  padding: 2px 9px;
+  margin-left: 10px;
+  box-shadow: var(--sh-sm);
+}
+.call-detail {
+  display: block;
+  font-size: 0.84rem;
+  color: #9a2a20;
+  font-weight: 600;
+  margin-top: 4px;
+}
+.call-detail .call-msg { font-weight: 400; font-style: italic; color: var(--ink); }
+
+/* ---------- room setup / waiting room / prestart ---------- */
+.inline-label { font-weight: 600; font-size: 0.92rem; margin-right: var(--s-3); }
+.inline-label select { padding: 9px 11px; margin-left: 6px; }
+.prestart-person {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.95rem;
+}
+.prestart-person:last-child { border-bottom: none; }
+
+/* ---------- stage nav / call-a-facilitator / teams ---------- */
+#prev-btn, #next-btn, .call-btn, #leave-btn, .teams-btn { min-height: 44px; }
+.call-btn {
+  background: var(--card);
+  border: 1px solid var(--caen-line);
+  color: var(--caen-ink);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 9px 14px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-soft),
+              transform var(--dur-fast) var(--ease-soft);
+}
+.call-btn:hover { background: var(--caen-50); }
+.call-btn.pending {
+  background: var(--caen-500);
+  color: #4a3a10;
+  border-color: var(--caen-line);
+  animation: call-pulse 1.8s var(--ease-soft) infinite;
+}
+.call-btn.pending:hover { background: var(--caen-500); }
+
+.teams-btn {
+  background: var(--card);
+  color: var(--nagoya-700);
+  border: 1px solid var(--primary);
+  border-radius: var(--r-sm);
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-block;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+.teams-btn:hover { background: var(--nagoya-50); }
+#teams-btn-waiting { margin-top: var(--s-3); }
+
+.teams-row {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--s-3);
+}
+.teams-row input { flex: 1; padding: 9px 11px; font-size: 0.9rem; }
+#change-pass-input { padding: 9px 11px; margin-right: var(--s-2); }
+
+/* ---------- super-admin: purge ---------- */
+.purge-row { margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line); }
+.purge-row .hint { margin-top: 6px; }
+
+/* ---------- privacy note / anon toggle ---------- */
+.privacy-note {
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 10px 13px;
+  margin: var(--s-4) 0 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.privacy-note summary { cursor: pointer; font-weight: 600; color: var(--ink); }
+.privacy-note p { margin: var(--s-2) 0 0; }
+.anon-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.anon-toggle input { width: auto; min-height: 0; }
+
+/* ---------- late-joiner banner ---------- */
+.late-banner {
+  background: var(--nagoya-50);
+  border: 1px solid #b9d8ee;
+  border-left: 4px solid var(--primary);
+  border-radius: var(--r-md);
+  padding: 13px 15px;
+  margin-bottom: var(--s-4);
+  font-size: 0.95rem;
+}
+.late-banner button {
+  background: none;
+  border: none;
+  color: var(--nagoya-700);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 0.88rem;
+  padding: 2px 0;
+  min-height: 40px;
+}
+
+/* ---------- wrap-up summary ---------- */
+.wrapup-mod { font-size: 0.98rem; margin: var(--s-4) 0 6px; }
+.wrapup-mod:first-child { margin-top: 0; }
+
+/* ---------- room view layout: main + admin sidebar ---------- */
+#app { display: flex; gap: var(--s-4); align-items: flex-start; }
+#room-main { flex: 1; min-width: 0; }
+#room-sidebar {
+  width: 290px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+body.admin-room #app { max-width: 1380px; }
+body.admin-room .columns { grid-template-columns: 1fr; }
+@media (max-width: 960px) {
+  #app { flex-direction: column; }
+  #room-sidebar { width: 100%; position: static; }
+}
+
+.sidebar-room { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.sidebar-room:last-child { border-bottom: none; }
+.sidebar-room.current { background: var(--nagoya-50); border-radius: var(--r-sm); padding: 10px 9px; }
+.sidebar-room.calling { background: var(--key-50); border-radius: var(--r-sm); padding: 10px 9px; }
+.sidebar-room-name {
+  background: none;
+  border: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  color: var(--nagoya-700);
+  text-align: left;
+  padding: 0;
+}
+.sidebar-room.current .sidebar-room-name { color: var(--ink); cursor: default; }
+.sidebar-room-name:hover { text-decoration: underline; }
+.sidebar-room.current .sidebar-room-name:hover { text-decoration: none; }
+.sidebar-room-meta { font-size: 0.82rem; color: var(--muted); margin: 3px 0 6px; }
+.sidebar-room-ctrl { display: flex; gap: 6px; }
+#sidebar-dashboard-btn {
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+#sidebar-dashboard-btn:hover { background: #000; }
+
+/* ---------- overflow safety ---------- */
+.answer-text, .chip, .sidebar-room-name, #findings-log .a, .dash-people {
+  overflow-wrap: anywhere;
+}
+.header-inner > div:first-child { min-width: 0; }
+
+.stage-wait:not(:empty) {
+  background: var(--caen-50);
+  border: 1px solid #ecd9a0;
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  /* darkened from #7a5f29 to #5a4519 to clear WCAG-AA 4.5:1 contrast */
+  color: #5a4519;
+  font-style: normal;
+  font-size: 0.88rem;
+}
+
+/* ==========================================================================
+   MOTION
+   ========================================================================== */
+/* view transitions: lobby -> waiting -> room -> admin */
+#waiting:not(.hidden), #app:not(.hidden), #admin-app:not(.hidden) {
+  animation: view-in var(--dur-view) var(--ease-out);
+}
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+/* stage navigation: the revealed .stage slides in */
+.stage:not(.hidden) { animation: stage-in var(--dur-base) var(--ease-out); }
+@keyframes stage-in {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+/* newly revealed findings flash in so the whole room notices */
+@keyframes finding-in {
+  from { background: #fff3cf; }
+  to   { background: var(--surface-sunk); }
+}
+#findings-log li.just-in { animation: finding-in 1.6s var(--ease-out); }
+/* "call a facilitator" pending: a calm steady pulse - it stays "live" */
+@keyframes call-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(231,184,0,0); }
+  50%      { box-shadow: 0 0 0 4px rgba(231,184,0,0.35); }
+}
+/* the "waiting for a facilitator" box breathes gently so it reads as alive */
+.stage-wait:not(:empty) { animation: breathe 2.6s var(--ease-soft) infinite; }
+/* breathe trough raised from 0.74 to 0.92 so rendered contrast stays >= 4.5:1
+   throughout the cycle on the darkened #5a4519 foreground (WCAG AA) */
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.92; } }
+/* connection lost: one short attention shake */
+.conn-badge.conn-lost { animation: shake 0.4s var(--ease-soft); }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* ==========================================================================
+   FOCUS - a single strong, surface-independent ring
+   ========================================================================== */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
+.view-btn:focus-visible, #sidebar-dashboard-btn:focus-visible {
+  outline-color: #fff;
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width: 680px) {
+  main, #lobby, footer { padding-left: 14px; padding-right: 14px; }
+  .header-inner { padding-left: 14px; padding-right: 14px; }
+  header h1 { font-size: 1.35rem; }
+  .card { padding: var(--s-4); }
+}
+@media (max-width: 520px) {
+  /* let the badges drop below the title instead of squeezing it on a phone */
+  .header-inner { flex-wrap: wrap; }
+  .header-right-wrap { width: 100%; }
+  .answer-add { flex-direction: column; align-items: stretch; }
+  .answer-add-btn { width: 100%; }
+}
+
+/* ==========================================================================
+   SCORING, LEADERBOARD, HISTORY CARDS & CELEBRATION
+   ========================================================================== */
+/* --- the room's score chip in the stage row --- */
+.score-chip {
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: var(--caen-50);
+  border: 1px solid #ecd9a0;
+  color: var(--caen-ink);
+  border-radius: var(--r-pill);
+  padding: 5px 12px;
+  white-space: nowrap;
+}
+.score-chip .score-num { font-weight: 800; color: var(--ink); }
+@keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.score-chip.pop { animation: pop 320ms var(--ease-out); }
+
+/* --- the live leaderboard --- */
+.leaderboard-card { background: var(--surface-sunk); }
+.leaderboard-card > summary {
+  cursor: pointer;
+  font-size: 0.98rem;
+  list-style: none;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.leaderboard-card > summary::-webkit-details-marker { display: none; }
+.leaderboard-card > summary::before { content: "\25B8  "; color: var(--muted); }
+.leaderboard-card[open] > summary::before { content: "\25BE  "; }
+.lb-hint { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+#leaderboard { margin-top: var(--s-3); display: flex; flex-direction: column; gap: 6px; }
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: 9px 12px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  transition: transform var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-fast) var(--ease-soft);
+}
+.lb-row.me {
+  border-color: var(--primary);
+  background: var(--nagoya-50);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+.lb-rank { font-weight: 800; min-width: 2.2em; font-size: 0.95rem; }
+.lb-name { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+.lb-pts {
+  font-weight: 800;
+  color: var(--nagoya-700);
+  white-space: nowrap;
+}
+.team-name-card { border-left: 4px solid var(--caen-line); }
+
+/* --- historical context cards --- */
+.history-card { background: var(--surface-sunk); }
+.history-card > summary {
+  cursor: pointer;
+  font-size: 0.98rem;
+  list-style: none;
+}
+.history-card > summary::-webkit-details-marker { display: none; }
+.history-card > summary::before { content: "\25B8  "; color: var(--muted); }
+.history-card[open] > summary::before { content: "\25BE  "; }
+.history-card p { font-size: 0.95rem; max-width: 70ch; }
+.didyouknow {
+  background: var(--caen-50);
+  border-left: 3px solid var(--caen-line);
+  border-radius: var(--r-sm);
+  padding: 8px 12px;
+  font-size: 0.92rem;
+}
+
+/* --- facilitator +points control on the dashboard --- */
+.dash-score {
+  font-size: 0.82rem;
+  color: var(--nagoya-700);
+  font-weight: 600;
+  margin-top: 4px;
+}
+.pts-btn {
+  background: var(--caen-50) !important;
+  color: var(--caen-ink) !important;
+  border: 1px solid var(--caen-line) !important;
+  box-shadow: none !important;
+}
+.pts-btn:hover { background: #fbeec4 !important; }
+.dash-points-panel {
+  flex-basis: 100%;
+  margin-top: var(--s-2);
+  padding: var(--s-3);
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.dash-points-panel .hint { flex-basis: 100%; margin: 0 0 4px; }
+.pts-tag {
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 7px 11px;
+  min-height: 36px;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+.pts-tag:hover:not(:disabled) { background: var(--nagoya-50); border-color: var(--primary); }
+.pts-tag:disabled { opacity: 0.5; cursor: not-allowed; }
+.pts-undo {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 36px;
+  margin-left: auto;
+}
+.pts-undo:hover { color: var(--key); }
+
+/* --- celebration: confetti burst --- */
+.burst {
+  position: fixed;
+  left: 50%;
+  top: 36%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 9999;
+}
+.confetti {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  opacity: 0;
+  animation: confetti-fly 1100ms var(--ease-out) forwards;
+  animation-delay: var(--d);
+}
+@keyframes confetti-fly {
+  0% { opacity: 1; transform: translate(0, 0) rotate(0); }
+  100% { opacity: 0; transform: translate(var(--x), 150px) rotate(var(--r)); }
+}
+
+/* --- toast --- */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translate(-50%, 140%);
+  background: var(--n-900);
+  color: #fff;
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 11px 18px;
+  border-radius: var(--r-pill);
+  box-shadow: var(--sh-lg);
+  z-index: 9998;
+  max-width: 90vw;
+  text-align: center;
+  transition: transform var(--dur-base) var(--ease-out);
+}
+.toast.show { transform: translate(-50%, 0); }
+
+/* --- a one-shot "stamp" when a finding button is completed --- */
+@keyframes done-stamp {
+  0% { transform: scale(1); }
+  45% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+.req-btn.done { animation: done-stamp 260ms var(--ease-out); }
+
+/* ==========================================================================
+   "WOW" REDESIGN LAYER  -  hero, glass surfaces, display type, SVG imagery,
+   richer light. Appended last so it overrides the base rules above.
+   ========================================================================== */
+
+/* --- a warm, visible blue+amber wash so the page never reads as flat grey --- */
+body {
+  background:
+    radial-gradient(1200px 780px at 88% -8%, rgba(46,159,223,.30), transparent 58%),
+    radial-gradient(900px 680px at -4% 108%, rgba(224,138,30,.24), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+/* --- dramatic dark gradient-mesh header --- */
+header {
+  background:
+    radial-gradient(620px 220px at 85% -70%, rgba(231,184,0,.24), transparent),
+    linear-gradient(135deg, #0f4e85, #08243f);
+  box-shadow:
+    inset 0 -1px 0 rgba(255,255,255,.08),
+    inset 0 -4px 0 var(--caen-500),
+    0 8px 26px rgba(8,36,63,.30);
+}
+header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
+
+/* --- the signature lobby hero (two columns: dark SVG aside + join card) --- */
+#lobby {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr;
+  gap: 0;
+  align-items: stretch;
+  max-width: 980px;
+  padding: var(--s-7) var(--s-5);
+}
+.hero-aside {
+  background:
+    radial-gradient(420px 300px at 18% 8%, rgba(46,159,223,.55), transparent 60%),
+    radial-gradient(360px 320px at 92% 96%, rgba(231,184,0,.30), transparent 62%),
+    linear-gradient(155deg, #0c2f52, #08243f);
+  border-radius: var(--r-lg) 0 0 var(--r-lg);
+  padding: var(--s-7) var(--s-6);
+  color: #fff;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s-2);
+}
+.hero-aside::after {
+  content: "";
+  position: absolute;
+  inset: -40%;
+  background: radial-gradient(closest-side, rgba(231,184,0,.16), transparent);
+  animation: drift 16s var(--ease-soft) infinite alternate;
+}
+.hero-aside > * { position: relative; }
+.fj-mark {
+  width: 96px;
+  height: 96px;
+  margin-bottom: var(--s-3);
+  filter: drop-shadow(0 6px 18px rgba(0,0,0,.4));
+  animation: mark-in 900ms var(--ease-out) both;
+}
+.fj-mark path:nth-of-type(1) { stroke-dasharray: 145; animation: draw 1100ms var(--ease-out) 200ms both; }
+.fj-mark path:nth-of-type(2) { stroke-dasharray: 145; animation: draw 1100ms var(--ease-out) 360ms both; }
+.fj-mark circle:nth-of-type(3) { transform-origin: center; animation: pop-disc 600ms var(--ease-out) 900ms both; }
+.hero-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--caen-500);
+  margin: 0;
+}
+.hero-title {
+  font-size: 2.6rem;
+  line-height: 1.04;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0.1em 0;
+}
+.hero-tag { font-size: 0.88rem; opacity: 0.82; margin: 0; }
+.lobby-card {
+  border-radius: 0 var(--r-lg) var(--r-lg) 0;
+  max-width: none;
+  box-shadow: var(--sh-lg);
+  animation: view-in var(--dur-view) var(--ease-out) 120ms both;
+}
+@media (max-width: 760px) {
+  #lobby { grid-template-columns: 1fr; max-width: 460px; }
+  .hero-aside { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--s-6); }
+  .hero-title { font-size: 2rem; }
+  .lobby-card { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+}
+
+/* --- material depth: SOLID surfaces (glass-on-white fails contrast + perf) --- */
+.stage-card, .leaderboard-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-md);
+}
+.card { transition: box-shadow var(--dur-base) var(--ease-soft),
+                    transform var(--dur-base) var(--ease-soft); }
+.card:hover { box-shadow: var(--sh-lg); }
+/* gradient accent bar on vignette cards (replaces the flat left border) */
+.vignette { border-left: none; position: relative; }
+.vignette::before {
+  content: "";
+  position: absolute;
+  left: 0; top: 10px; bottom: 10px;
+  width: 4px;
+  border-radius: 4px;
+  background: linear-gradient(var(--nagoya-500), var(--caen-500));
+}
+
+/* --- typography with more presence --- */
+.card h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.025em; line-height: 1.18; }
+.card h3 { font-size: 1.08rem; font-weight: 700; }
+.stage-indicator { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
+h2, h3 { text-wrap: balance; }
+
+/* --- gradient primary buttons + hover glow --- */
+#join-btn, #start-session-btn {
+  background: linear-gradient(135deg, #2e9fdf, #1763a6);
+  box-shadow: 0 4px 14px rgba(23,99,166,.32);
+}
+#join-btn:hover, #start-session-btn:hover {
+  background: linear-gradient(135deg, #3aa9e6, #1763a6);
+  box-shadow: 0 6px 20px rgba(23,99,166,.46);
+}
+.req-btn:hover {
+  box-shadow: 0 0 0 3px var(--nagoya-50), 0 4px 12px rgba(46,159,223,.18);
+}
+.lb-row.me {
+  box-shadow: inset 3px 0 0 var(--primary), 0 0 18px rgba(231,184,0,.22);
+}
+
+/* --- inline-SVG imagery --- */
+.ico { width: 1.3rem; height: 1.3rem; flex-shrink: 0; }
+.patient-av {
+  width: 56px; height: 56px;
+  float: right;
+  margin: 0 0 var(--s-2) var(--s-3);
+  filter: drop-shadow(var(--sh-sm));
+}
+.empty-art { width: 72px; height: 54px; display: block; margin: 0 auto 6px; }
+#findings-empty { text-align: center; }
+.wrap-art { width: 120px; height: 70px; display: block; margin: 0 0 var(--s-2); }
+
+/* --- "how points work" rubric inside the leaderboard card --- */
+.lb-rubric {
+  margin-top: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font-size: 0.9rem;
+}
+.lb-rubric p { margin: 0 0 var(--s-2); }
+.lb-rubric h4 {
+  margin: var(--s-3) 0 4px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.rubric-list { list-style: none; margin: 0; padding: 0; }
+.rubric-list li {
+  display: flex;
+  gap: var(--s-2);
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.rubric-list li:last-child { border-bottom: none; }
+.rubric-list .pts {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 0.82rem;
+  color: var(--ok);
+  background: var(--ok-50);
+  border-radius: var(--r-pill);
+  padding: 1px 8px;
+  min-width: 3em;
+  text-align: center;
+}
+
+/* --- "wow" motion --- */
+@keyframes mark-in {
+  from { opacity: 0; transform: scale(0.7) rotate(-12deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes draw {
+  from { stroke-dashoffset: 145; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes pop-disc {
+  0% { transform: scale(0); }
+  70% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+@keyframes drift {
+  from { transform: translate(-6%, -4%); }
+  to { transform: translate(6%, 5%); }
+}
+/* leaderboard rows rise + stagger when the card opens */
+.leaderboard-card[open] .lb-row { animation: lb-rise 420ms var(--ease-out) both; }
+.leaderboard-card[open] .lb-row:nth-child(1) { animation-delay: 40ms; }
+.leaderboard-card[open] .lb-row:nth-child(2) { animation-delay: 100ms; }
+.leaderboard-card[open] .lb-row:nth-child(3) { animation-delay: 160ms; }
+.leaderboard-card[open] .lb-row:nth-child(4) { animation-delay: 220ms; }
+.leaderboard-card[open] .lb-row:nth-child(n+5) { animation-delay: 280ms; }
+@keyframes lb-rise {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ==========================================================================
+   ACCESSIBILITY MEDIA QUERIES
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  /* "finished, not dead": kill movement & infinite loops, but keep gentle
+     opacity fades so views/stages still feel intentional, and keep instant
+     state colours so feedback still lands. */
+  *, *::before, *::after {
+    transition-duration: 0.001ms !important;
+    transition-delay: 0ms !important;
+  }
+  /* no looping background motion - vestibular safety */
+  .hero-aside::after, .stage-wait:not(:empty), .call-btn.pending,
+  .lb-bar span::after, .motif-drift {
+    animation: none !important;
+  }
+  /* one-shot enters become a short, still cross-fade */
+  #waiting:not(.hidden), #app:not(.hidden), #admin-app:not(.hidden),
+  .stage:not(.hidden), .leaderboard-card[open] .lb-row, .obj-row,
+  .card, .lobby-card {
+    animation: rm-fade 140ms ease both !important;
+  }
+  /* celebrations: no confetti / no transform spectacle, but the colour-state
+     change still happens instantly (handled by burst()/reducedMotion() in JS) */
+  .confetti, .score-chip.pop, .req-btn.done, .toast {
+    animation: none !important;
+  }
+  button:active:not(:disabled) { transform: none; }
+}
+@keyframes rm-fade { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-contrast: more) {
+  :root {
+    --line: #8a93a0;
+    --line-strong: #6b7682;
+    --muted: #3d4651;
+  }
+  .card, .req-btn, .recap-table th, .recap-table td { border-width: 2px; }
+}
+
+/* ==========================================================================
+   REWORKED SCORING UI  -  live objectives panel, cooperative leaderboard,
+   participation dots, formative toast, "order matters" cue, wrap-up recap.
+   Appended last so it overrides earlier scoring styles.
+   ========================================================================== */
+
+/* --- the live "how points work" objectives panel --- */
+.objectives {
+  margin-top: var(--s-3);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s-3) var(--s-4);
+}
+.obj-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  margin-bottom: var(--s-2);
+  font-size: 0.95rem;
+}
+.obj-head strong { letter-spacing: -0.01em; }
+.obj-tally {
+  font-weight: 800;
+  font-size: 0.82rem;
+  /* --ok on --ok-50 = 4.16:1, fails WCAG AA 4.5:1; use --ok-strong */
+  color: var(--ok-strong, #176b3a);
+  background: var(--ok-50);
+  border-radius: var(--r-pill);
+  padding: 2px 10px;
+  white-space: nowrap;
+}
+.obj-list { display: flex; flex-direction: column; }
+.obj-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.obj-row:last-child { border-bottom: none; }
+.obj-mark {
+  flex-shrink: 0;
+  width: 1.5em; height: 1.5em;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: var(--muted);
+  background: var(--surface-sunk);
+  border: 1px solid var(--line-strong);
+}
+.obj-row.done { color: var(--ink); }
+.obj-row.done .obj-mark {
+  color: #fff;
+  background: var(--ok);
+  border-color: var(--ok);
+  animation: obj-pop 320ms var(--ease-out);
+}
+@keyframes obj-pop { 0% { transform: scale(0.5); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+.obj-label { flex: 1; }
+.obj-row.done .obj-label { font-weight: 600; }
+.obj-pts {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.obj-row.done .obj-pts { color: var(--ok); }
+.obj-note {
+  margin: var(--s-2) 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.lb-rubric-note {
+  margin: var(--s-2) 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+/* --- cooperative shared goal --- */
+.lb-shared {
+  margin-top: var(--s-3);
+  padding: var(--s-3) var(--s-4);
+  background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+}
+.lb-shared-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+}
+.lb-shared-head span { font-weight: 700; color: var(--nagoya-700); }
+.lb-bar {
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: rgba(15,78,133,.12);
+  overflow: hidden;
+}
+.lb-bar span {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: linear-gradient(90deg, var(--nagoya-500), var(--caen-500));
+  transition: width var(--dur-view) var(--ease-out);
+}
+.lb-shared-note { margin: 6px 0 0; font-size: 0.82rem; color: var(--muted); }
+
+/* --- the gentle ranking --- */
+#leaderboard { margin-top: var(--s-3); }
+.lb-row.ranked { background: var(--card); }
+.lb-row:not(.ranked) {
+  background: transparent;
+  border-style: dashed;
+}
+.lb-row .lb-rank { color: var(--muted); }
+.lb-row.ranked .lb-rank { color: var(--ink); }
+.lb-gap {
+  flex-basis: 100%;
+  font-size: 0.8rem;
+  color: var(--caen-ink);
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* --- participation dots (no per-person numbers) --- */
+.contrib-dot {
+  width: 11px; height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+  background: transparent;
+  border: 2px solid var(--line-strong);
+  box-sizing: border-box;
+}
+.contrib-dot.on { border-color: transparent; }
+.contrib-chip.acted { border-color: var(--line-strong); font-weight: 600; }
+
+/* --- formative two-line toast --- */
+.toast-msg { font-weight: 800; }
+.toast-sub {
+  margin-top: 3px;
+  font-weight: 400;
+  font-size: 0.84rem;
+  opacity: 0.92;
+}
+/* the penalty toast - calm amber, never alarming red; a mistake is a lesson */
+.toast.loss {
+  background: #7c2d12;
+  color: #fff;
+  border: 1px solid #c2410c;
+}
+.toast.loss .toast-sub { opacity: 0.95; }
+
+/* --- "Points lost - why" section under the objectives panel --- */
+.obj-penalties {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line-strong, #d8c9b6);
+}
+.obj-pen-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+.obj-pen-head strong {
+  font-size: 0.92rem;
+  color: #9a3412;
+  letter-spacing: -0.01em;
+}
+.obj-pen-tally {
+  font-weight: 800;
+  color: #b91c1c;
+  font-variant-numeric: tabular-nums;
+}
+.obj-pen-list { display: flex; flex-direction: column; gap: 8px; }
+.obj-pen-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 10px;
+  padding: 8px 10px;
+  background: #fef3ec;
+  border: 1px solid #f0d2bf;
+  border-radius: var(--r-sm, 8px);
+}
+.obj-pen-title { font-weight: 700; color: #7c2d12; }
+.obj-pen-pts {
+  font-weight: 800;
+  color: #b91c1c;
+  font-variant-numeric: tabular-nums;
+}
+.obj-pen-why {
+  grid-column: 1 / -1;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--ink-soft, #5b4f40);
+}
+.recap-lessons { margin: 4px 0 0; padding-left: 18px; }
+.recap-lessons li { margin: 4px 0; font-size: 0.86rem; line-height: 1.45; }
+
+/* ===================== TEAM DECISIONS - Kahoot-style voting ================= */
+.decisions-card { border-left: 4px solid var(--nagoya-500, #2e9fdf); }
+.decisions-card.hidden { display: none; }
+.dec-head h3 { margin: 0 0 4px; }
+.dec-head .hint { margin: 0 0 4px; }
+.decision {
+  margin-top: 14px;
+  padding: 14px;
+  background: var(--surface-sunk, #f3f0e8);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+}
+.decision + .decision { margin-top: 12px; }
+.decision.committed.correct { border-color: var(--ok); background: var(--ok-50, #e7f4ec); }
+.decision.committed.wrong { border-color: #e0a86b; background: #fdf2e6; }
+.dec-prompt { margin: 0 0 10px; font-weight: 700; line-height: 1.4; }
+.dec-options { display: flex; flex-direction: column; gap: 7px; }
+
+/* an option button: a full-width row with a live "fill" bar behind the label */
+.dec-opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 13px;
+  text-align: left;
+  font: inherit;
+  font-size: 0.92rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
+              transform var(--dur-base, .18s) var(--ease-out, ease);
+}
+.dec-opt:hover:not(:disabled) { border-color: var(--primary); transform: translateY(-1px); }
+.dec-opt:disabled { cursor: default; }
+/* the live tally bar - grows with the share of ballots for this option */
+.dec-bar {
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 0;
+  background: linear-gradient(90deg, rgba(46,159,223,.30), rgba(46,159,223,.16));
+  transition: width var(--dur-slow, .4s) var(--ease-out, ease);
+  z-index: 0;
+}
+.dec-opt-label { position: relative; z-index: 1; flex: 1; line-height: 1.35; }
+.dec-opt-count {
+  position: relative;
+  z-index: 1;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  min-width: 1.2em;
+  text-align: right;
+}
+/* my own current choice */
+.dec-opt.mine {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1.5px var(--primary);
+}
+.dec-opt.mine .dec-opt-label { font-weight: 700; }
+/* after lock-in: the option the team committed, and (if different) the right one */
+.dec-opt.won { border-color: var(--n-700); }
+.dec-opt.won .dec-bar { background: rgba(56,67,79,.18); }
+.dec-opt.is-correct {
+  border-color: var(--ok);
+}
+.dec-opt.is-correct .dec-bar {
+  background: linear-gradient(90deg, rgba(30,132,73,.28), rgba(30,132,73,.14));
+}
+.dec-opt.is-correct .dec-opt-label::after {
+  content: " ✓";
+  color: var(--ok);
+  font-weight: 800;
+}
+
+/* the small coloured dots - who in the room chose each option */
+.dec-voters { display: flex; flex-wrap: wrap; gap: 3px; padding: 1px 4px 3px; }
+.dec-voter-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--n-300);
+  border: 1px solid rgba(0,0,0,.12);
+}
+
+/* not-yet-locked footer: the "X of Y voted" status + the lock-in button */
+.dec-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 11px;
+  flex-wrap: wrap;
+}
+.dec-status { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
+.dec-lock {
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--n-0, #fff);
+  background: var(--primary);
+  border: none;
+  padding: 9px 16px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  box-shadow: var(--sh-sm);
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              transform var(--dur-base, .18s) var(--ease-out, ease);
+}
+.dec-lock:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
+.dec-lock:disabled { background: var(--n-300); cursor: not-allowed; box-shadow: none; }
+
+/* the committed result + its teaching explanation */
+.dec-result {
+  position: relative;
+  margin-top: 11px;
+  padding: 11px 13px;
+  border-radius: var(--r-sm);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.dec-result.good { background: var(--ok-50, #e7f4ec); border: 1px solid var(--ok); }
+.dec-result.bad { background: #fdf2e6; border: 1px solid #e0a86b; }
+.dec-result strong { display: block; margin-bottom: 3px; }
+.dec-result.good strong { color: var(--ok); }
+.dec-result.bad strong { color: #9a3412; }
+.dec-result p { margin: 0; color: var(--ink-soft, #5b4f40); }
+.dec-result-pts {
+  position: absolute;
+  top: 10px; right: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.dec-result-pts.good { color: var(--ok); }
+.dec-result-pts.bad { color: #b91c1c; }
+@media (prefers-reduced-motion: reduce) {
+  .dec-bar { transition: none; }
+  .dec-opt:hover:not(:disabled), .dec-lock:hover:not(:disabled) { transform: none; }
+}
+
+/* ===================== STAGE 1: right-column tab bar ======================= */
+/* sticky so the user always sees what is available - one click per section */
+.rcol-tabs {
+  position: sticky;
+  top: 6px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 12px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-sm);
+}
+.rcol-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: 9px 12px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              border-color var(--dur-base, .18s) var(--ease-out, ease),
+              color var(--dur-base, .18s) var(--ease-out, ease);
+}
+.rcol-tab:hover { background: var(--surface-sunk, #f3f0e8); }
+.rcol-tab.is-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: var(--sh-sm);
+}
+.rcol-tab-icon { font-size: 1rem; line-height: 1; }
+.rcol-tab-label { white-space: nowrap; }
+.rcol-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  padding: 0 6px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  background: var(--surface-sunk, #f3f0e8);
+  border-radius: var(--r-pill);
+  line-height: 1;
+}
+.rcol-tab.is-active .rcol-tab-badge {
+  color: var(--primary);
+  background: #fff;
+}
+.rcol-tab[hidden] { display: none; }
+.rcol-tab-badge[hidden] { display: none; }
+/* a calm "something new" dot when content updates while a different tab is open */
+.rcol-tab.has-attention::after {
+  content: "";
+  position: absolute;
+  top: 4px; right: 6px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #e0a86b;
+  box-shadow: 0 0 0 2px var(--card);
+  animation: rcol-pulse 1.4s var(--ease-out, ease) infinite;
+}
+.rcol-tab.is-active.has-attention::after { display: none; }
+@keyframes rcol-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: 0.7; }
+}
+.rcol-panel[hidden] { display: none; }
+.rcol-panel.is-active { animation: rcol-fadein var(--dur-base, .18s) var(--ease-out, ease); }
+@keyframes rcol-fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .rcol-tab.has-attention::after { animation: none; }
+  .rcol-panel.is-active { animation: none; }
+}
+/* on narrow screens the tab labels shrink to icons to keep the bar one row */
+@media (max-width: 720px) {
+  .rcol-tab { padding: 9px 8px; }
+  .rcol-tab-label { display: none; }
+}
+
+/* ===================== CANAMED SPLASH (top-level gate) =====================
+   When body.locked is set, the partnership identity (header, lobby, footer)
+   is hidden and the generic CANAMED splash carries the page. This prevents a
+   pre-unlock flash of the partnership branding even if the JS is slow to run. */
+body.locked > header,
+body.locked > #lobby,
+body.locked > #waiting,
+body.locked > #app,
+body.locked > footer { display: none !important; }
+
+#splash.hidden { display: none; }
+#splash {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: clamp(40px, 9vh, 88px) 20px clamp(48px, 8vh, 80px);
+  gap: clamp(34px, 7vh, 68px);
+  background:
+    radial-gradient(1100px 600px at 20% -10%, rgba(46,159,223,0.18), transparent 60%),
+    radial-gradient(900px 700px at 110% 110%, rgba(224,138,30,0.16), transparent 60%),
+    var(--bg);
+}
+.splash-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl, 24px);
+  box-shadow: var(--sh-lg);
+  /* R2-35: at 320px viewport (iPhone SE) the splash row was getting
+     squeezed and the Enter button was wrapping under the input ugly. Shrink
+     horizontal padding on very narrow viewports to keep the form usable. */
+  padding: 38px 32px 28px;
+  text-align: center;
+  animation: splash-in .55s var(--ease-out, ease) both;
+  /* Defensive cap so no descendant (e.g. a long Spanish label or an
+     overflowing scenario name) forces the card to grow wider than the
+     viewport. min(100%, 520px) guarantees the card never exceeds the
+     screen width regardless of content. */
+  box-sizing: border-box;
+  max-width: min(520px, 100%);
+}
+@media (max-width: 360px) {
+  .splash-card { padding: 28px 16px 22px; border-radius: 16px; }
+}
+@keyframes splash-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+.splash-mark {
+  width: 84px; height: 84px;
+  margin: 0 auto 14px;
+  filter: drop-shadow(var(--sh-sm));
+}
+.splash-mark .arc-n { stroke: var(--nagoya-500, #2e9fdf); }
+.splash-mark .arc-c { stroke: var(--caen-500, #e08a1e); }
+.splash-mark .heart { fill: var(--n-700, #38434f); }
+.splash-title {
+  margin: 0 0 8px;
+  font-size: clamp(2.4rem, 6vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  color: var(--ink);
+}
+.splash-tag {
+  margin: 0 auto 26px;
+  max-width: 38ch;
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.5;
+}
+/* Compact language switcher under the splash tagline. R2-42 promoted
+   the EN/FR/JA pill buttons to a native <select> covering all 8 supported
+   languages, since the pill row was growing past the iPhone SE viewport
+   once we added es/pt/de/ko/zh. The select keeps the row to a single tap
+   target while still being keyboard- and screen-reader-friendly. The
+   legacy button styles below remain in case any view re-introduces them.*/
+.splash-lang-switcher {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin: -14px auto 22px;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+.splash-lang-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--line, #d6d2c9);
+  background: transparent;
+  color: var(--ink, #2a2a2a);
+  /* R2-36 / WCAG 2.5.8: 24px is the AA target-size floor, but for a
+     primary tap target in a coarse-pointer context we want 32-44px. */
+  padding: 6px 28px 6px 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-height: 32px;
+  max-width: 100%;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted, #6a665d) 50%),
+    linear-gradient(135deg, var(--muted, #6a665d) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 9px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.splash-lang-select:focus-visible {
+  outline: 2px solid var(--primary, #2e9fdf);
+  outline-offset: 2px;
+}
+/* Legacy pill-button switcher (kept for back-compat). */
+.splash-lang-switcher button {
+  appearance: none;
+  border: 1px solid var(--line, #d6d2c9);
+  background: transparent;
+  color: var(--muted, #6a665d);
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.splash-lang-switcher button:hover {
+  border-color: var(--ink, #2a2a2a);
+  color: var(--ink, #2a2a2a);
+}
+.splash-lang-switcher button.active {
+  background: var(--ink, #2a2a2a);
+  border-color: var(--ink, #2a2a2a);
+  color: #fff;
+}
+.splash-label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.splash-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+#splash-code {
+  flex: 1 1 220px;
+  /* R2-35: min-width 200px combined with the surrounding gap + button
+     overflows the splash-card at 320px viewports (iPhone SE). Lower the
+     minimum so the input shrinks to fit before forcing the row to wrap. */
+  min-width: 0;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
+              box-shadow var(--dur-base, .18s) var(--ease-out, ease);
+}
+#splash-code:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(46,159,223,0.18); }
+#splash-code.err { border-color: #b91c1c; box-shadow: 0 0 0 3px rgba(185,28,28,0.14); }
+#splash-code.shake { animation: splash-shake .35s var(--ease-out, ease); }
+@keyframes splash-shake {
+  10%,90% { transform: translateX(-2px); }
+  20%,80% { transform: translateX(3px); }
+  30%,50%,70% { transform: translateX(-5px); }
+  40%,60% { transform: translateX(5px); }
+}
+#splash-enter {
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  background: var(--primary);
+  border: none;
+  padding: 12px 22px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  box-shadow: var(--sh-sm);
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              transform var(--dur-base, .18s) var(--ease-out, ease);
+}
+#splash-enter:hover { background: var(--primary-hover); transform: translateY(-1px); }
+.splash-hint {
+  min-height: 1.4em;
+  margin: 10px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.splash-hint.err { color: #b91c1c; }
+.splash-hint.ok { color: var(--ok); }
+.splash-foot {
+  margin: 22px 0 0;
+  padding-top: 18px;
+  border-top: 1px dashed var(--line-strong);
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+.splash-view[hidden] { display: none; }
+
+/* --- the inline "link" button used as a low-emphasis text action (toggles) --- */
+.splash-link {
+  font: inherit;
+  font-size: 0.86rem;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  border-radius: var(--r-sm);
+}
+.splash-link:hover { color: var(--primary-hover); }
+.splash-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* --- the bigger "label" used by Create / Created views --- */
+.splash-label-big {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: -0.008em;
+  margin-bottom: 6px;
+}
+.splash-sublabel {
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin: 0 0 16px;
+}
+.splash-sublabel .opt { color: var(--muted); font-weight: 400; }
+
+/* --- create form fields --- */
+.splash-field {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  margin-bottom: 12px;
+}
+.splash-field label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: var(--ink);
+}
+.splash-field .opt {
+  font-weight: 400;
+  color: var(--muted);
+}
+.splash-field input {
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  outline: none;
+  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
+              box-shadow var(--dur-base, .18s) var(--ease-out, ease);
+}
+.splash-field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(46,159,223,0.18);
+}
+#splash-create-submit, #splash-go-admin {
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  background: var(--primary);
+  border: none;
+  padding: 11px 18px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  box-shadow: var(--sh-sm);
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              transform var(--dur-base, .18s) var(--ease-out, ease);
+}
+#splash-create-submit:hover, #splash-go-admin:hover {
+  background: var(--primary-hover); transform: translateY(-1px);
+}
+
+/* --- the big "your code is …" display in the Created view --- */
+.splash-code-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 16px 0 6px;
+  padding: 18px 20px;
+  background: linear-gradient(180deg, rgba(46,159,223,0.10), rgba(46,159,223,0.04));
+  border: 1.5px solid var(--primary);
+  border-radius: var(--r-md);
+}
+#splash-shown-code {
+  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--primary);
+  text-transform: uppercase;
+  user-select: all;
+}
+/* QR + caption beneath the code on the created-success view. The image
+   loads lazily from api.qrserver.com; an onerror in script.js hides the
+   wrapper if the request fails (network blocked / CSP mismatch). */
+.splash-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 14px 0 4px;
+}
+.splash-qr img {
+  width: 180px;
+  height: 180px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.splash-qr-caption {
+  font-size: 0.85rem;
+  color: var(--muted, #6a665d);
+  margin: 0;
+}
+#splash-copy-code {
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: var(--primary);
+  background: var(--card);
+  border: 1.5px solid var(--primary);
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              color var(--dur-base, .18s) var(--ease-out, ease);
+}
+#splash-copy-code:hover { background: var(--primary); color: #fff; }
+.splash-ok { color: var(--ok); margin-right: 6px; }
+
+/* --- the small "Session ABC-DEF" badge that appears on the lobby once
+       a session has been locked in via the splash --- */
+.session-badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--ok-50, #e7f4ec);
+  border: 1px solid var(--ok);
+  border-radius: var(--r-pill);
+  /* --ok on --ok-50 = 4.16:1, fails WCAG AA 4.5:1; use --ok-strong */
+  color: var(--ok-strong, #176b3a);
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+.session-badge #session-badge-code {
+  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ok-strong, #176b3a);
+}
+.session-badge[hidden] { display: none; }
+/* the [hidden] attribute can be overridden by stronger label/display rules -
+   force it here so the manual session-code input vanishes once the splash has
+   already locked in the code */
+#session-input-label[hidden] { display: none !important; }
+
+/* --- "Today's content: <scenario>" line on the lobby so the room knows
+       what they will work on before joining --- */
+.scenario-line {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  background: rgba(46,159,223,0.06);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.scenario-line strong { color: var(--primary); font-weight: 700; }
+.scenario-line-summary { color: var(--muted); }
+.scenario-line[hidden] { display: none; }
+
+/* --- the splash create form's scenario picker + custom-JSON textarea --- */
+.splash-field select {
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--card);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  outline: none;
+  cursor: pointer;
+  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
+              box-shadow var(--dur-base, .18s) var(--ease-out, ease);
+}
+.splash-field select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(46,159,223,0.18);
+}
+.splash-scenario-desc {
+  margin: 6px 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  line-height: 1.45;
+  text-align: left;
+}
+.splash-field textarea {
+  padding: 10px 12px;
+  font: 0.86rem ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  color: var(--ink);
+  background: var(--card);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  outline: none;
+  resize: vertical;
+  min-height: 120px;
+  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
+              box-shadow var(--dur-base, .18s) var(--ease-out, ease);
+}
+.splash-field textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(46,159,223,0.18);
+}
+.splash-field code {
+  font: 0.85rem ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  background: var(--surface-sunk, #f3f0e8);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.splash-field[hidden] { display: none !important; }
+
+/* --- session-code banner at the top of the admin dashboard ---
+   the facilitator can read the code aloud or copy it for late joiners without
+   having to remember it from the splash success screen --- */
+.admin-session-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(46,159,223,0.10), rgba(46,159,223,0.04));
+  border: 1.5px solid var(--primary);
+  border-radius: var(--r-md);
+}
+.admin-session-chip-label {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.admin-session-chip-code {
+  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font-size: clamp(1.2rem, 2.4vw, 1.6rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--primary);
+  text-transform: uppercase;
+  user-select: all;
+  padding: 2px 4px;
+}
+.admin-session-chip-copy {
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--primary);
+  background: var(--card);
+  border: 1.5px solid var(--primary);
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              color var(--dur-base, .18s) var(--ease-out, ease);
+}
+.admin-session-chip-copy:hover { background: var(--primary); color: #fff; }
+.admin-session-chip .copy-ok { color: var(--ok); font-weight: 700; font-size: 0.86rem; }
+
+/* --- "End session & download archive" admin button - calm, not alarming --- */
+#admin-close-btn {
+  background: #fff;
+  color: var(--ink);
+  border: 1.5px solid var(--line-strong);
+  box-shadow: none;
+}
+#admin-close-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+#admin-close-btn.done {
+  background: var(--ok-50, #e7f4ec);
+  color: var(--ok);
+  border-color: var(--ok);
+}
+#admin-close-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+/* --- the "session closed" banner participants see when an admin ends it ---
+   sticky at the top so it stays visible while students scroll through their
+   work; the room interactions stay readable (the data is saved either way) */
+.closed-banner {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  background: linear-gradient(180deg, #e7f4ec, #d3ecda);
+  border-bottom: 2px solid var(--ok);
+  box-shadow: 0 4px 12px rgba(30, 132, 73, 0.12);
+  animation: closed-banner-in .45s var(--ease-out, ease) both;
+}
+.closed-banner.hidden { display: none; }
+.closed-banner-inner {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 14px 22px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.closed-banner-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: #fff;
+  font-weight: 800;
+  flex: 0 0 30px;
+}
+.closed-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.closed-banner-text strong { color: var(--ok); font-size: 1rem; }
+.closed-banner-sub { color: var(--ink); font-size: 0.9rem; }
+@keyframes closed-banner-in {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .closed-banner { animation: none; }
+}
+body.session-closed .leaderboard-card[open] { /* no behaviour change yet */ }
+
+/* When the participant has been kicked to the "session ended" full-page
+   screen, hide the rest of the chrome (header, footer) so the screen is
+   undivided and unambiguous - the workshop is over. */
+body.session-ended-shown > header,
+body.session-ended-shown > footer { display: none !important; }
+body.session-ended-shown { overflow: hidden; }
+
+/* --- the full-page "Thank you for taking part" screen --- */
+.session-ended {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 18px;
+  background:
+    radial-gradient(900px 600px at 20% -10%, rgba(30,132,73,0.18), transparent 60%),
+    radial-gradient(900px 700px at 110% 110%, rgba(46,159,223,0.14), transparent 60%),
+    var(--bg);
+  animation: ended-fade .4s var(--ease-out, ease) both;
+}
+.session-ended.hidden { display: none; }
+@keyframes ended-fade {
+  from { opacity: 0; transform: scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.session-ended-card {
+  width: 100%;
+  max-width: 520px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl, 24px);
+  box-shadow: var(--sh-lg);
+  padding: 40px 32px 32px;
+  text-align: center;
+}
+.session-ended-mark {
+  width: 88px; height: 88px;
+  margin: 0 auto 18px;
+  display: block;
+}
+.session-ended-title {
+  margin: 0 0 12px;
+  font-size: clamp(1.7rem, 4vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -0.012em;
+  color: var(--ink);
+}
+.session-ended-msg {
+  margin: 0 auto 14px;
+  max-width: 38ch;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+.session-ended-by {
+  margin: 0 auto 22px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+#session-ended-leave {
+  margin-top: 8px;
+  padding: 12px 26px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--primary);
+  background: var(--card);
+  border: 1.5px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  box-shadow: none;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              border-color var(--dur-base, .18s) var(--ease-out, ease),
+              color var(--dur-base, .18s) var(--ease-out, ease);
+}
+#session-ended-leave:hover { border-color: var(--primary); }
+/* the end-of-session questionnaire link on the "session ended" screen -
+   this is the primary action (the workshop's last task), so it gets the
+   filled brand-blue treatment; "Return to CANAMED" is the secondary action */
+.ended-quiz-btn {
+  display: inline-block;
+  margin: 4px auto 14px;
+  padding: 12px 26px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  background: var(--primary);
+  border: none;
+  border-radius: var(--r-pill);
+  text-decoration: none;
+  box-shadow: var(--sh-sm);
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              transform var(--dur-base, .18s) var(--ease-out, ease);
+}
+.ended-quiz-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+.ended-quiz-btn.hidden { display: none; }
+
+/* the pre-session questionnaire card on the Welcome stage - calm but
+   visible, so the room fills it in before the workshop begins */
+.prequiz-card {
+  border-left: 4px solid var(--primary);
+  background: linear-gradient(180deg, rgba(46,159,223,0.04), transparent 60%), var(--card);
+}
+.prequiz-card.hidden { display: none; }
+.prequiz-card h3 { color: var(--primary); }
+#prequiz-btn {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 10px 22px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: #fff;
+  background: var(--primary);
+  border: none;
+  border-radius: var(--r-pill);
+  text-decoration: none;
+  box-shadow: var(--sh-sm);
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              transform var(--dur-base, .18s) var(--ease-out, ease);
+}
+#prequiz-btn:hover { background: var(--primary-hover); transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) {
+  .session-ended { animation: none; }
+}
+
+/* in-platform pre/post knowledge tests — calm cards, gentle highlight so the
+   student notices them in the Welcome / Wrap-up stages. The body is built
+   procedurally by render(Pre|Post)Test and shows one question at a time. */
+.pretest-card, .posttest-card {
+  border-left: 4px solid var(--secondary, #2e9fdf);
+  background: linear-gradient(180deg, rgba(46,159,223,0.04), transparent 60%), var(--card);
+}
+.pretest-card.hidden, .posttest-card.hidden { display: none; }
+/* primary on white = 2.94:1 (fails AA 4.5:1); use primary-hover for darker text */
+.pretest-card h3, .posttest-card h3 { color: var(--primary-hover, #0c3f6e); }
+.pretest-actions, .posttest-actions {
+  display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2);
+}
+.test-body { margin-top: var(--s-3); }
+.test-body.hidden { display: none; }
+.test-progress {
+  font-size: 0.9rem; color: var(--ink-muted, #5a6b7a); margin: 0 0 var(--s-2);
+}
+.test-question {
+  font-weight: 700; font-size: 1.04rem; margin: 0 0 var(--s-3); line-height: 1.4;
+}
+.test-options {
+  display: flex; flex-direction: column; gap: var(--s-2); margin-bottom: var(--s-3);
+}
+.test-option {
+  display: flex; align-items: flex-start; gap: var(--s-2);
+  padding: 10px 14px; border: 2px solid var(--border, #d5dde4);
+  border-radius: var(--r-md, 10px); background: var(--card-soft, #fff);
+  cursor: pointer; text-align: left; font: inherit; color: inherit;
+  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
+              background var(--dur-base, .18s) var(--ease-out, ease);
+}
+.test-option:hover:not(:disabled) { border-color: var(--secondary, #2e9fdf); }
+.test-option[aria-pressed="true"] {
+  border-color: var(--secondary, #2e9fdf);
+  background: rgba(46,159,223,0.07);
+}
+.test-option:disabled { cursor: default; opacity: 0.9; }
+.test-option.correct {
+  border-color: #1e8449; background: rgba(30,132,73,0.07);
+}
+.test-option.incorrect {
+  border-color: #c0392b; background: rgba(192,57,43,0.07);
+}
+.test-feedback {
+  margin: var(--s-2) 0 var(--s-3); padding: 10px 14px;
+  border-radius: var(--r-md, 10px); font-size: 0.96rem; line-height: 1.45;
+}
+.test-feedback.correct { background: rgba(30,132,73,0.10); color: #14532d; }
+.test-feedback.incorrect { background: rgba(192,57,43,0.10); color: #7a1d12; }
+.test-feedback strong { display: block; margin-bottom: 2px; }
+.test-controls {
+  display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: flex-end;
+}
+.test-result {
+  text-align: center; padding: var(--s-3) 0;
+}
+.test-result .score {
+  font-size: 1.5rem; font-weight: 800; color: var(--secondary, #2e9fdf);
+  margin: 0 0 var(--s-2);
+}
+.ghost-btn {
+  background: transparent; border: 1px solid var(--border, #d5dde4);
+  color: var(--ink, #1a2530); padding: 8px 16px; border-radius: var(--r-pill, 999px);
+  font: inherit; font-size: 0.9rem; cursor: pointer; min-height: 40px;
+}
+.ghost-btn:hover { background: rgba(0,0,0,0.04); }
+
+/* ===================== ACCOUNTS (Google sign-in) ============================ */
+
+/* --- "Continue with X" provider buttons on the splash account view --- */
+.splash-row-center { justify-content: center; }
+.splash-providers {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  margin: 16px auto 4px;
+  max-width: 320px;
+}
+.splash-provider-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 11px 22px 11px 14px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              border-color var(--dur-base, .18s) var(--ease-out, ease),
+              transform var(--dur-base, .18s) var(--ease-out, ease);
+}
+.splash-provider-btn:hover { transform: translateY(-1px); }
+.splash-provider-btn:active { transform: none; }
+.splash-provider-logo { width: 18px; height: 18px; flex: 0 0 18px; }
+.splash-provider-tip {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  text-align: center;
+}
+
+/* Google: white card per their brand guidelines */
+.splash-google-btn {
+  color: #3c4043;
+  background: #fff;
+  border: 1.5px solid #dadce0;
+}
+.splash-google-btn:hover { background: #f8f9fa; border-color: #c4c7c8; }
+
+/* Microsoft: white card with thin grey border per their brand guidelines */
+.splash-microsoft-btn {
+  color: #5e5e5e;
+  background: #fff;
+  border: 1.5px solid #8c8c8c;
+}
+.splash-microsoft-btn:hover { background: #f3f3f3; border-color: #6b6b6b; }
+
+/* Apple: black, per their brand guidelines */
+.splash-apple-btn {
+  color: #fff;
+  background: #000;
+  border: 1.5px solid #000;
+}
+.splash-apple-btn:hover { background: #1a1a1a; border-color: #1a1a1a; }
+
+/* --- header user chip (shown when signed in) --- */
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  max-width: 220px;
+  overflow: hidden;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              border-color var(--dur-base, .18s) var(--ease-out, ease);
+}
+.user-chip:hover { background: rgba(255, 255, 255, 0.2); border-color: rgba(255, 255, 255, 0.3); }
+.user-chip.hidden { display: none; }
+.user-chip-initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: #fff;
+  font-weight: 800;
+  font-size: 0.78rem;
+  flex: 0 0 26px;
+}
+.user-chip-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+}
+@media (max-width: 720px) {
+  .user-chip-name { display: none; }
+  .user-chip { padding: 4px; }
+}
+
+/* --- My-account dialog --- */
+.account-dialog {
+  width: min(560px, 92vw);
+  max-height: 88vh;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-lg);
+  background: var(--card);
+  box-shadow: var(--sh-lg);
+  color: var(--ink);
+}
+.account-dialog::backdrop {
+  background: rgba(12, 22, 32, 0.55);
+  backdrop-filter: blur(2px);
+}
+.account-dialog-inner {
+  display: flex;
+  flex-direction: column;
+  max-height: 88vh;
+  overflow: auto;
+  padding: 22px 26px 26px;
+}
+.account-dialog-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.account-dialog-head h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+}
+.account-dialog-close {
+  font-size: 1.6rem;
+  line-height: 1;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+}
+.account-dialog-close:hover { color: var(--ink); background: var(--surface-sunk, #f3f0e8); }
+.account-email-row {
+  margin: 0 0 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.account-email-row strong {
+  color: var(--ink);
+  font-family: ui-monospace, "JetBrains Mono", "Consolas", monospace;
+  font-size: 0.86rem;
+}
+.account-fieldset {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  padding: 14px 16px 16px;
+  margin: 0 0 14px;
+  background: var(--card);
+}
+.account-fieldset legend {
+  padding: 0 6px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+.account-fieldset .hint { margin: 0 0 10px; }
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.account-actions button {
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: var(--primary);
+  background: var(--card);
+  border: 1.5px solid var(--primary);
+  padding: 7px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+}
+.account-actions button:hover { background: var(--primary); color: #fff; }
+.account-actions #account-save-btn {
+  color: #fff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.account-actions #account-save-btn:hover { background: var(--primary-hover); }
+.account-danger-zone { border-color: #f0d2bf; background: #fef9f4; }
+.account-danger-zone legend { color: #9a3412; }
+.account-danger-btn {
+  color: #9a3412 !important;
+  border-color: #f0d2bf !important;
+  background: #fff !important;
+}
+.account-danger-btn:hover {
+  background: #9a3412 !important;
+  color: #fff !important;
+  border-color: #9a3412 !important;
+}
+
+/* --- history list inside the dialog --- */
+.account-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.account-history-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.account-history-row:last-child { border-bottom: none; }
+.account-history-code {
+  font-family: ui-monospace, "JetBrains Mono", "Consolas", monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  font-weight: 800;
+}
+.account-history-meta { color: var(--muted); font-size: 0.84rem; }
+
+/* --- splash-foot extra link --- */
+.splash-foot-or { color: var(--muted); }
+
+/* --- consent block in the join form: two checkboxes (workshop + research)
+       persisted with the notice version. The Join button stays disabled
+       until the workshop box is ticked. --- */
+.consent-block {
+  margin: 16px 0 12px;
+  padding: 14px 16px;
+  background: rgba(46, 159, 223, 0.04);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+}
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.consent-row:last-of-type { margin-bottom: 4px; }
+/* R2-36 / WCAG 2.5.8 (Target Size — Minimum, 24x24 CSS px): the consent
+   checkboxes were 17px which fails AA on touch devices. Bumped to 24px
+   with an enlarged label hit-area (padding on .consent-row below) so the
+   tap target meets the 24x24 floor with comfortable margins. The native
+   checkbox itself is now 24x24; the surrounding label adds extra padding
+   for an even more forgiving tap target on small screens (R2-34 / R2-37). */
+.consent-row input[type="checkbox"] {
+  margin-top: 2px;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  cursor: pointer;
+  /* Modern browsers respect accent-color for native form controls. */
+  accent-color: var(--primary, #2e9fdf);
+}
+.consent-row strong { color: var(--ink); }
+.consent-version {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.consent-version a { color: var(--primary); }
+
+/* --- anti-coercion / fairness banner on the Welcome stage --- */
+.grade-note {
+  border-left: 4px solid var(--ok);
+  background: linear-gradient(180deg, rgba(30, 132, 73, 0.06), transparent 60%), var(--card);
+}
+.grade-note p { margin: 0; }
+.grade-note strong { color: var(--ok); }
+
+/* --- "Your vote" indicator on team decisions: replaces the old per-voter
+       dots which the research-ethics audit flagged as peer-shaming surface --- */
+.dec-voter-mine-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-left: 2px;
+}
+#join-btn:disabled {
+  background: var(--n-300);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* --- in-splash signed-in indicator (chip is hidden behind body.locked) --- */
+.splash-signed-in {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 6px 14px;
+  font-size: 0.84rem;
+  color: var(--muted);
+  background: var(--surface-sunk, #f3f0e8);
+  border-radius: var(--r-pill);
+}
+.splash-signed-in[hidden] { display: none; }
+.splash-signed-in strong { color: var(--ink); font-weight: 700; }
+@media (prefers-reduced-motion: reduce) {
+  .splash-card { animation: none; }
+  #splash-code.shake { animation: none; }
+}
+
+/* ---------- the "what is CANAMED" panel under the entry card ---------- */
+.splash-about {
+  width: 100%;
+  max-width: 880px;
+  margin: 0;
+  text-align: center;
+  color: var(--ink);
+  animation: splash-fade .8s var(--ease-out, ease) .2s both;
+}
+@keyframes splash-fade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.splash-mission {
+  margin: 0 0 14px;
+  font-size: clamp(1.25rem, 2.4vw, 1.55rem);
+  font-weight: 700;
+  letter-spacing: -0.012em;
+  line-height: 1.3;
+  color: var(--ink);
+}
+.splash-lede {
+  margin: 0 auto clamp(28px, 5vh, 48px);
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1.65;
+}
+.splash-pillars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(24px, 4vw, 48px);
+  text-align: left;
+}
+@media (max-width: 760px) {
+  .splash-pillars {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    text-align: center;
+  }
+}
+.splash-pillar { padding: 0; }
+.splash-pillar-ico {
+  width: 30px;
+  height: 30px;
+  color: var(--primary);
+  margin-bottom: 14px;
+  display: block;
+}
+@media (max-width: 760px) {
+  .splash-pillar-ico { margin-left: auto; margin-right: auto; }
+}
+.splash-pillar h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+.splash-pillar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+.splash-credits {
+  margin: clamp(32px, 5vh, 48px) 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  letter-spacing: 0.02em;
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash-about { animation: none; }
+}
+
+/* --- "order matters" cue on imaging buttons --- */
+.req-btn.warn {
+  border-color: var(--caen-line);
+  border-left-width: 4px;
+  background: var(--caen-50);
+}
+/* the warning is a REAL DOM node (a sibling), not ::after content - generated
+   content is not reliably read by screen readers, and this is a key learning cue */
+.req-warn-note {
+  display: block;
+  margin: -2px 0 2px;
+  padding: 0 2px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--caen-ink);
+}
+.req-warn-note::before { content: "\26A0  "; }   /* warning sign */
+
+/* --- wrap-up "your team did well" recap --- */
+.team-recap-card {
+  background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
+  border: 1px solid var(--line);
+}
+#team-recap h3 { margin: 0 0 var(--s-2); font-size: 1.2rem; }
+.recap-total { font-size: 1rem; margin: 0 0 var(--s-2); }
+.recap-wins {
+  list-style: none;
+  margin: var(--s-1) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.recap-wins li {
+  padding: 6px 12px;
+  background: var(--card);
+  border-radius: var(--r-sm);
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+.recap-wins li::before { content: "✓ "; color: var(--ok); font-weight: 800; }
+
+/* ==========================================================================
+   DESIGN v3  -  "Two arcs, one circle". The cohesive modern layer: brand mark,
+   per-stage chapters, editorial type, inline-SVG imagery, the meeting motif,
+   animated disclosure, a sticky command bar, tiered celebration. Appended last.
+   ========================================================================== */
+
+/* --- editorial typography: real weight contrast + a dramatic scale --- */
+h1, h2, h3, h4 { text-wrap: balance; }
+header h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; }
+.card h2 { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.025em; line-height: 1.16; }
+.card h3 { font-size: 1.1rem; font-weight: 700; }
+.card h4 { font-weight: 700; }
+.stage-indicator { font-size: 1.18rem; font-weight: 800; letter-spacing: -0.02em; }
+/* numbers as a graphic device - tabular, heavier */
+.score-num, .obj-tally, .lb-pts, .lb-rank, .count, .findings-count,
+.lb-shared-head span { font-variant-numeric: tabular-nums; }
+
+/* --- the brand mark "Meeting Ring" --- */
+.brand-mark { display: block; }
+.brand-lockup {
+  display: flex; align-items: center; gap: 10px;
+}
+.brand-lockup .brand-mark { width: 38px; height: 38px; flex-shrink: 0; }
+.brand-lockup h1 { line-height: 1.05; }
+.brand-mark .arc-c { stroke: var(--caen-500); }
+.brand-mark .arc-n { stroke: var(--nagoya-500); }
+.brand-mark .heart { fill: var(--caen-500); }
+/* on dark surfaces (header, lobby hero) the arcs read brighter */
+header .brand-mark .arc-c, .hero-aside .brand-mark .arc-c { stroke: #f0ad3c; }
+header .brand-mark .arc-n, .hero-aside .brand-mark .arc-n { stroke: #5cb8ea; }
+header .brand-mark .heart, .hero-aside .brand-mark .heart { fill: #fff; }
+/* draw-on: both arcs arrive together, then the heart fades in */
+.brand-mark .arc-c, .brand-mark .arc-n {
+  stroke-dasharray: 150;
+  animation: mark-draw 760ms var(--ease-out) 120ms both;
+}
+.brand-mark .heart { animation: mark-heart 420ms var(--ease-spring) 760ms both; }
+@keyframes mark-draw { from { stroke-dashoffset: 150; } to { stroke-dashoffset: 0; } }
+@keyframes mark-heart { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
+
+/* --- header: a crossing blue->meeting->amber underline --- */
+header {
+  background: radial-gradient(620px 220px at 85% -70%, rgba(224,138,30,.22), transparent),
+              linear-gradient(135deg, var(--nagoya-700), #08243f);
+  border-bottom: 3px solid transparent;
+  border-image: linear-gradient(90deg, var(--nagoya-500), var(--meeting), var(--caen-500)) 1;
+  box-shadow: 0 8px 26px rgba(8,36,63,.28);
+}
+
+/* --- the warm-paper card system: solid, real depth, no glass --- */
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  box-shadow: var(--sh-sm);
+}
+/* the vignette accent bar now carries the CURRENT STAGE's colour */
+.vignette::before { background: linear-gradient(var(--stage-accent), var(--caen-500)); }
+
+/* --- per-stage "chapter" identity --- */
+.stage-card {
+  border-top: 4px solid var(--stage-accent);
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  padding: var(--s-3) var(--s-5);
+}
+.stage-indicator { color: var(--stage-accent); }
+#stage-now {
+  margin: 6px 0 0;
+  font-size: 0.96rem;
+  font-weight: 600;
+  color: var(--ink);
+  display: flex; align-items: baseline; gap: 7px;
+}
+#stage-now::before {
+  content: "▸";
+  color: var(--stage-accent);
+  font-weight: 800;
+}
+#stage-now:empty { display: none; }
+/* the stage section heading picks up the chapter colour too */
+.stage > .vignette h2 { color: var(--ink); }
+@media (max-width: 680px) { .stage-card { position: static; } }
+
+/* --- inline-SVG spot illustrations (the answer to "should we add images?") --- */
+.spot-illustration {
+  display: block;
+  width: 100%;
+  max-width: 200px;
+  height: auto;
+  margin: 0 0 var(--s-3);
+  float: right;
+  margin-left: var(--s-4);
+}
+@media (max-width: 520px) {
+  .spot-illustration { float: none; margin: 0 auto var(--s-3); }
+}
+
+/* --- the "meeting arc" motif: a quiet divider derived from the mark --- */
+.motif-divider {
+  display: block;
+  width: 100%;
+  max-width: 180px;
+  height: 16px;
+  margin: var(--s-4) auto;
+  opacity: 0.55;
+}
+/* a faint corner watermark on key surfaces */
+.vignette, .team-recap-card {
+  position: relative;
+  overflow: hidden;
+}
+.vignette::after, .team-recap-card::after {
+  content: "";
+  position: absolute;
+  right: -36px; bottom: -36px;
+  width: 150px; height: 150px;
+  background:
+    radial-gradient(closest-side, transparent 64%, var(--stage-accent) 65%, var(--stage-accent) 70%, transparent 71%);
+  opacity: 0.07;
+  pointer-events: none;
+}
+
+/* --- reference cards read as a quiet library, not as task steps --- */
+.history-card, .guidelines-card, .recap-card {
+  background: var(--surface-sunk);
+  border-color: var(--line-strong);
+  box-shadow: none;
+}
+.history-card > summary, .guidelines-card > summary, .recap-card > summary {
+  color: var(--muted);
+}
+
+/* --- animated disclosure: content eases in when a <details> opens --- */
+details.card[open] > *:not(summary) {
+  animation: detail-open var(--dur-base) var(--ease-out);
+}
+@keyframes detail-open {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* --- room cards populate top-down on entry (a tasteful stagger) --- */
+#app:not(.hidden) #room-main > * { animation: card-rise var(--dur-base) var(--ease-out) both; }
+#app:not(.hidden) #room-main > *:nth-child(1) { animation-delay: 40ms; }
+#app:not(.hidden) #room-main > *:nth-child(2) { animation-delay: 100ms; }
+#app:not(.hidden) #room-main > *:nth-child(3) { animation-delay: 160ms; }
+#app:not(.hidden) #room-main > *:nth-child(n+4) { animation-delay: 210ms; }
+@keyframes card-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* --- cooperative goal bar: darker fill (AA on the track) + a moving sheen --- */
+.lb-bar {
+  border: 1px solid var(--line-strong);
+  background: var(--n-100);
+}
+.lb-bar span {
+  background: linear-gradient(90deg, var(--nagoya-600), var(--meeting), var(--caen-line));
+  position: relative;
+  overflow: hidden;
+}
+.lb-bar span::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.45) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: bar-sheen 2.8s var(--ease-soft) 1s infinite;
+}
+@keyframes bar-sheen { to { transform: translateX(100%); } }
+
+/* --- objectives + leaderboard rendered as real lists (a11y) --- */
+.obj-list[role="list"], #leaderboard[role="list"] { list-style: none; margin: 0; padding: 0; }
+
+/* --- richer confetti: shape variety --- */
+.confetti.c-circle { border-radius: 50%; }
+.confetti.c-tri {
+  border-radius: 0;
+  background: none !important;
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid var(--cf, #2e9fdf);
+}
+
+/* --- the sound toggle in the header --- */
+.sound-toggle {
+  background: rgba(255,255,255,.14);
+  border: 1px solid rgba(255,255,255,.4);
+  color: #fff;
+  border-radius: var(--r-pill);
+  width: 34px; height: 34px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.sound-toggle:hover { background: rgba(255,255,255,.24); }
+
+/* --- touch targets: facilitator + scoring controls to 44px (WCAG good practice) --- */
+.pts-tag, .pts-undo, .dash-ctrl button, .sidebar-room-ctrl button { min-height: 44px; }
+
+/* --- request-finding buttons: a touch more presence --- */
+.req-btn { font-weight: 600; }
+.req-btn:hover { transform: translateY(-1px); }
+.req-btn.done { color: var(--ink); }
+
+/* --- gradient primary buttons stay, but unify the press feel --- */
+button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
+  transform: scale(0.97);
+}
+
+/* --- footer: small mark + tagline --- */
+.footer-brand {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 6px;
+}
+.footer-brand .brand-mark { width: 28px; height: 28px; }
+.footer-brand strong { color: var(--ink); }
+.footer-tag { font-style: italic; }
+
+/* --- lobby hero: make the mark the showpiece --- */
+.hero-aside .brand-mark { width: 104px; height: 104px; margin-bottom: var(--s-3); }
+
+@media (max-width: 680px) {
+  header h1 { font-size: 1.4rem; }
+  .card h2 { font-size: 1.35rem; }
+}
+
+/* WCAG 2.5.5 / 2.5.8 (Target Size, Minimum). On touch-primary devices,
+   guarantee a 44×44 CSS-pixel touch target on every primary interactive
+   element. We don't expand inline `.splash-link` (those are inline text
+   nuggets where 44px would visually break the layout) — they keep an
+   adequate hit area via padding alone. */
+@media (pointer: coarse), (max-width: 680px) {
+  button:not(.splash-link):not(.splash-lang-switcher button),
+  input[type="text"]:not(.no-min-touch),
+  input[type="password"]:not(.no-min-touch),
+  select,
+  .lobby-card label { min-height: 44px; }
+  /* Comfortable checkbox hit-area: the label wraps the box and is the
+     real tap target, so making the row at least 44px high covers it. */
+  .consent-row { min-height: 44px; padding: 4px 0; }
+}
+
+/* "Clone last workshop" row at the top of the create-session view.
+   Only shown when localStorage holds a prior workshop summary. */
+.splash-clone-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  margin: 0 0 12px;
+  background: rgba(46,159,223,0.06);
+  border: 1px dashed var(--primary, #2e9fdf);
+  border-radius: 8px;
+  font-size: 0.92rem;
+}
+.splash-clone-meta {
+  color: var(--muted, #6a665d);
+  font-size: 0.85rem;
+}
+
+/* GDPR Art. 15 self-export row in the waiting room footer. Discreet
+   underline-link look — present but never competing with the workshop
+   chrome. Visible to ALL participants (anonymous + identified). */
+.data-rights-row {
+  margin: 14px 0 4px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--muted, #6a665d);
+}
+
+/* Admin dashboard preferences row — mute-alerts checkbox + Download
+   error log button. Small, low-visual-weight; sits just under the
+   stage-controls bar so it's discoverable without competing for
+   attention with the main admin actions. */
+.admin-prefs-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted, #6a665d);
+}
+.admin-pref {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.admin-pref-btn {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--line, #d6d2c9);
+  color: var(--muted, #6a665d);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.admin-pref-btn:hover {
+  border-color: var(--ink, #2a2a2a);
+  color: var(--ink, #2a2a2a);
+}
+
+/* ==========================================================================
+   DARK THEME — palette and overrides
+   ==========================================================================
+   Activates in three ways:
+   1. <html data-theme="dark"> forced by user pref in localStorage canamed_theme
+   2. <html data-theme="auto"> (or no attribute) → @media (prefers-color-scheme: dark)
+   3. <html data-theme="light"> forces light regardless of OS
+   The dark palette is a deeper, blue-tinted ink-on-graphite reinterpretation
+   of the warm-paper light palette — same brand accents (Nagoya blue, Caen
+   amber, meeting teal) tuned for dark backgrounds, same WCAG-AA contrast
+   floor on body text and interactive controls. Surfaces are kept distinct
+   (bg < surface-sunk < card) so the layered-shadow system still reads.
+   ========================================================================== */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    /* warm paper -> warm graphite */
+    --bg: #0e1620;
+    --surface-sunk: #0a1119;
+    --card: #16202b;
+    --line: #243245;
+    --line-strong: #324760;
+    --ink: #f1eee6;
+    --muted: #b3ab99;
+    /* brand: a touch brighter so they pop against dark surfaces */
+    --nagoya-700: #1e6fb6;
+    --nagoya-600: #2e9fdf;
+    --nagoya-500: #5cb8e8;
+    --nagoya-50:  #102a3f;
+    --caen-500:   #f0a040;
+    --caen-ink:   #d5a55c;
+    --caen-line:  #ef9a3a;
+    --caen-50:    #2a2114;
+    --meeting:    #74a2b3;
+    --meeting-50: #1a2830;
+    /* semantic */
+    --primary: var(--nagoya-500);
+    --primary-hover: var(--nagoya-700);
+    --key: #ff6b5a;
+    --key-50: #2a1612;
+    --ok: #4ec57f;
+    --ok-50: #102a1d;
+    --focus: #f6d973;
+    /* shadows lose strength on dark backgrounds; use slightly darker
+       blue-blacks so cards still float visibly */
+    --sh-sm: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.20);
+    --sh-md: 0 2px 4px rgba(0,0,0,.32), 0 10px 26px rgba(0,0,0,.30);
+    --sh-lg: 0 4px 10px rgba(0,0,0,.36), 0 26px 60px rgba(0,0,0,.42);
+  }
+}
+/* Forced dark — same overrides as the media query, but unconditional. */
+html[data-theme="dark"] {
+  --bg: #0e1620;
+  --surface-sunk: #0a1119;
+  --card: #16202b;
+  --line: #243245;
+  --line-strong: #324760;
+  --ink: #f1eee6;
+  --muted: #b3ab99;
+  --nagoya-700: #1e6fb6;
+  --nagoya-600: #2e9fdf;
+  --nagoya-500: #5cb8e8;
+  --nagoya-50:  #102a3f;
+  --caen-500:   #f0a040;
+  --caen-ink:   #d5a55c;
+  --caen-line:  #ef9a3a;
+  --caen-50:    #2a2114;
+  --meeting:    #74a2b3;
+  --meeting-50: #1a2830;
+  --primary: var(--nagoya-500);
+  --primary-hover: var(--nagoya-700);
+  --key: #ff6b5a;
+  --key-50: #2a1612;
+  --ok: #4ec57f;
+  --ok-50: #102a1d;
+  --focus: #f6d973;
+  --sh-sm: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.20);
+  --sh-md: 0 2px 4px rgba(0,0,0,.32), 0 10px 26px rgba(0,0,0,.30);
+  --sh-lg: 0 4px 10px rgba(0,0,0,.36), 0 26px 60px rgba(0,0,0,.42);
+}
+/* The theme selector control in admin prefs / nav */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.theme-toggle select {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   CSP-hardening helpers (PR sec/csp-tighten-no-unsafe-inline)
+   Classes that replaced inline style="..." attributes so the CSP can drop
+   style-src 'unsafe-inline'. Behaviour-preserving — purely a security
+   refactor.
+   ========================================================================== */
+.splash-qr-img { width: 180px; height: 180px; }
+.placeholder-inline { font-style: italic; }
+.hint-block-small { display: block; font-size: 0.78rem; margin-top: 2px; }
+
+/* ==========================================================================
+   HIGH-CONTRAST THEME — for low-vision users + prefers-contrast: more
+   ==========================================================================
+   Activates two ways:
+   1. <html data-theme="high-contrast"> set by the theme picker
+   2. @media (prefers-contrast: more) html:not([data-theme="auto"]) overrides
+   The high-contrast palette is high-saturation black/white/yellow on a clean
+   white surface, with text strictly black and interactive states explicit.
+   Pure WCAG-AAA-targeted (7:1 minimum text contrast). Loses brand colour
+   identity intentionally — accessibility first.
+   ========================================================================== */
+@media (prefers-contrast: more) {
+  html:not([data-theme="light"]):not([data-theme="dark"]) {
+    --bg: #ffffff;
+    --surface-sunk: #f5f5f5;
+    --card: #ffffff;
+    --line: #000000;
+    --line-strong: #000000;
+    --ink: #000000;
+    --muted: #1f1f1f;
+    --primary: #0033a0;
+    --primary-hover: #001f5c;
+    --key: #c00000;
+    --key-50: #ffe5e5;
+    --ok: #006400;
+    --ok-50: #e5ffe5;
+    --focus: #b75d00;
+    --nagoya-700: #001f5c;
+    --nagoya-600: #0033a0;
+    --nagoya-50:  #e6ecf7;
+    --caen-line:  #8b4500;
+    --caen-ink:   #5a2c00;
+    --caen-50:    #fff3e0;
+    --meeting:    #1f1f1f;
+    --meeting-50: #f5f5f5;
+    /* Shadows replaced by hairline borders — flat, predictable */
+    --sh-sm: 0 0 0 1px #000000;
+    --sh-md: 0 0 0 1px #000000;
+    --sh-lg: 0 0 0 2px #000000;
+  }
+}
+html[data-theme="high-contrast"] {
+  --bg: #ffffff;
+  --surface-sunk: #f5f5f5;
+  --card: #ffffff;
+  --line: #000000;
+  --line-strong: #000000;
+  --ink: #000000;
+  --muted: #1f1f1f;
+  --primary: #0033a0;
+  --primary-hover: #001f5c;
+  --key: #c00000;
+  --key-50: #ffe5e5;
+  --ok: #006400;
+  --ok-50: #e5ffe5;
+  --focus: #b75d00;
+  --nagoya-700: #001f5c;
+  --nagoya-600: #0033a0;
+  --nagoya-50:  #e6ecf7;
+  --caen-line:  #8b4500;
+  --caen-ink:   #5a2c00;
+  --caen-50:    #fff3e0;
+  --meeting:    #1f1f1f;
+  --meeting-50: #f5f5f5;
+  --sh-sm: 0 0 0 1px #000000;
+  --sh-md: 0 0 0 1px #000000;
+  --sh-lg: 0 0 0 2px #000000;
+}
+/* In high-contrast: every button/input gets a visible 2px black border so
+   keyboard-only and low-vision users can clearly see hit-targets without
+   relying on shadow or colour fills. */
+html[data-theme="high-contrast"] button,
+html[data-theme="high-contrast"] input,
+html[data-theme="high-contrast"] select,
+html[data-theme="high-contrast"] textarea {
+  border: 2px solid #000000 !important;
+  outline-offset: 2px;
+}
+html[data-theme="high-contrast"] :focus-visible {
+  outline: 3px solid #b75d00 !important;
+  outline-offset: 2px !important;
+}
+
+/* ==========================================================================
+   POST-SESSION DEBRIEF DASHBOARD (PR feat/debrief-and-per-student)
+   Pure HTML/CSS aggregates — no chart library. Bars and grids use design
+   tokens so light / dark / cohort theming follows automatically.
+   ========================================================================== */
+.debrief-card { margin-top: var(--s-3); }
+.debrief-section {
+  margin: var(--s-4) 0;
+  padding: var(--s-3) 0;
+  border-top: 1px dashed var(--line);
+}
+.debrief-section:first-child { border-top: 0; padding-top: 0; }
+.debrief-section h4 {
+  margin: 0 0 var(--s-2);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.debrief-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.92rem;
+  padding: var(--s-3) 0;
+}
+
+/* Generic horizontal bar — used by ranking, concept coverage, time-on-stage. */
+.debrief-bar-row {
+  display: grid;
+  grid-template-columns: minmax(80px, 24%) 1fr auto;
+  align-items: center;
+  gap: var(--s-2);
+  margin-bottom: 6px;
+  font-size: 0.88rem;
+}
+.debrief-bar-row .lbl { color: var(--ink); min-width: 0; word-break: break-word; }
+.debrief-bar-row .val { color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.debrief-bar-track {
+  position: relative;
+  background: var(--n-25);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  height: 14px;
+  overflow: hidden;
+}
+.debrief-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: linear-gradient(90deg, var(--caen-500, #2e9fdf), var(--nagoya-500, #e08a1e));
+  border-radius: 5px;
+}
+.debrief-bar-fill.ok   { background: var(--ok); }
+.debrief-bar-fill.warn { background: #d4a017; }
+.debrief-bar-fill.bad  { background: var(--key); }
+
+/* Decision breakdown: per-option mini-bars under each decision card. */
+.debrief-decision {
+  margin-bottom: var(--s-3);
+  padding: var(--s-2) var(--s-3);
+  background: var(--n-25);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.debrief-decision-prompt {
+  font-size: 0.92rem;
+  margin: 0 0 var(--s-1);
+  font-weight: 600;
+}
+.debrief-decision-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: var(--s-2);
+}
+.debrief-decision-option {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--s-2);
+  align-items: center;
+  margin-bottom: 4px;
+  font-size: 0.86rem;
+}
+.debrief-decision-option .opt-text { color: var(--ink); }
+.debrief-decision-option .opt-text.correct {
+  color: var(--ok);
+  font-weight: 600;
+}
+.debrief-decision-option .opt-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.debrief-option-bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  background: var(--n-25);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.debrief-option-bar > i {
+  display: block;
+  height: 100%;
+  background: var(--muted);
+}
+.debrief-option-bar > i.correct { background: var(--ok); }
+
+/* Penalty heatmap: a CSS grid of cells (penalty rows × room cols). */
+.debrief-heat-wrap { overflow-x: auto; }
+.debrief-heat {
+  display: grid;
+  gap: 2px;
+  font-size: 0.78rem;
+  min-width: max-content;
+}
+.debrief-heat-h {
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+.debrief-heat-rowlbl {
+  padding: 4px 8px 4px 0;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.debrief-heat-cell {
+  background: var(--n-25);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  min-height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.debrief-heat-cell.fired {
+  background: var(--key-50);
+  border-color: var(--key);
+  color: var(--key);
+  font-weight: 600;
+}
+
+/* Funnel: stacked stages with descending counts. */
+.debrief-funnel-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--s-2);
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.debrief-funnel-row:last-child { border-bottom: 0; }
+.debrief-funnel-row .pct {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Time-on-stage: horizontal stacked bar per room. */
+.debrief-time-room { margin-bottom: var(--s-2); }
+.debrief-time-room .lbl {
+  font-size: 0.86rem;
+  color: var(--ink);
+  margin-bottom: 3px;
+}
+.debrief-time-stack {
+  display: flex;
+  height: 18px;
+  background: var(--n-25);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.debrief-time-seg {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  color: #fff;
+  white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+.debrief-time-seg.s0 { background: #4f7d8c; }
+.debrief-time-seg.s1 { background: #2e9fdf; }
+.debrief-time-seg.s2 { background: #e08a1e; }
+.debrief-time-seg.s3 { background: var(--ok); }
+.debrief-time-legend {
+  display: flex;
+  gap: var(--s-3);
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-top: var(--s-2);
+  flex-wrap: wrap;
+}
+.debrief-time-legend i {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+/* Per-student debrief card (inside session-ended). */
+.student-debrief {
+  text-align: left;
+  margin-top: var(--s-4);
+  padding: var(--s-3);
+  background: var(--n-25);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  font-size: 0.92rem;
+}
+.student-debrief h2 {
+  margin: 0 0 var(--s-2);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.student-debrief .sd-score {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ok);
+  margin: 0 0 var(--s-2);
+}
+.student-debrief .sd-row {
+  margin: var(--s-2) 0;
+}
+.student-debrief .sd-row strong {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+.student-debrief .sd-row ul {
+  margin: 0;
+  padding-left: var(--s-3);
+}
+.student-debrief .sd-row li { margin: 2px 0; }
+.student-debrief .sd-closing {
+  margin-top: var(--s-3);
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* ==========================================================================
+   First-time facilitator onboarding tour
+   - dimmed overlay + spotlight punch-out on the anchor element
+   - speech-bubble next to the anchor (flipped if it would clip)
+   - vanilla DOM, no external library; respects prefers-reduced-motion
+   ========================================================================== */
+.canamed-tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  pointer-events: none;  /* children opt back in */
+}
+.canamed-tour-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(12, 32, 43, 0.42);
+  backdrop-filter: blur(1.5px);
+  pointer-events: auto;
+  cursor: pointer;
+  animation: canamedTourFade var(--dur-base, 260ms) var(--ease-soft, ease-out);
+}
+.canamed-tour-spotlight {
+  position: absolute;
+  pointer-events: none;
+  border-radius: var(--r-md, 12px);
+  box-shadow:
+    0 0 0 3px rgba(46, 159, 223, 0.85),
+    0 0 0 9999px rgba(12, 32, 43, 0.42);
+  transition: left var(--dur-base, 260ms) var(--ease-soft, ease-out),
+              top var(--dur-base, 260ms) var(--ease-soft, ease-out),
+              width var(--dur-base, 260ms) var(--ease-soft, ease-out),
+              height var(--dur-base, 260ms) var(--ease-soft, ease-out);
+}
+.canamed-tour-spotlight--hidden { display: none; }
+.canamed-tour-bubble {
+  position: absolute;
+  pointer-events: auto;
+  max-width: 340px;
+  min-width: 240px;
+  background: var(--card, #fff);
+  color: var(--ink, #16202b);
+  border: 1px solid var(--line-strong, #d4cfc2);
+  border-radius: var(--r-md, 12px);
+  box-shadow: var(--sh-lg, 0 4px 10px rgba(0,0,0,.12), 0 26px 60px rgba(0,0,0,.2));
+  padding: 18px 20px 14px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  animation: canamedTourPop var(--dur-base, 260ms) var(--ease-out, ease-out);
+}
+.canamed-tour-bubble--center { /* no arrow */ }
+/* triangular arrows pointing at the anchor */
+.canamed-tour-bubble::before {
+  content: "";
+  position: absolute;
+  width: 0; height: 0;
+  border: 8px solid transparent;
+}
+.canamed-tour-bubble--top::before {
+  bottom: -16px; left: 50%; transform: translateX(-50%);
+  border-top-color: var(--card, #fff);
+}
+.canamed-tour-bubble--bottom::before {
+  top: -16px; left: 50%; transform: translateX(-50%);
+  border-bottom-color: var(--card, #fff);
+}
+.canamed-tour-bubble--left::before {
+  right: -16px; top: 50%; transform: translateY(-50%);
+  border-left-color: var(--card, #fff);
+}
+.canamed-tour-bubble--right::before {
+  left: -16px; top: 50%; transform: translateY(-50%);
+  border-right-color: var(--card, #fff);
+}
+.canamed-tour-bubble--center::before { display: none; }
+.canamed-tour-title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--primary, #1763a6);
+}
+.canamed-tour-body {
+  margin: 0 0 10px;
+  color: var(--ink, #16202b);
+}
+.canamed-tour-progress {
+  margin: 0 0 12px;
+  font-size: 0.78rem;
+  color: var(--muted, #5b6b7a);
+}
+.canamed-tour-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.canamed-tour-spacer { flex: 1 1 auto; }
+.canamed-tour-btn {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--r-sm, 9px);
+  padding: 7px 14px;
+  border: 1px solid var(--line-strong, #d4cfc2);
+  background: var(--n-25, #fbf9f4);
+  color: var(--ink, #16202b);
+  transition: background var(--dur-fast, 160ms) var(--ease-soft, ease),
+              border-color var(--dur-fast, 160ms) var(--ease-soft, ease);
+}
+.canamed-tour-btn:hover {
+  background: var(--n-50, #f1eee6);
+  border-color: var(--n-300, #b3ab99);
+}
+.canamed-tour-btn:focus-visible {
+  outline: 2px solid var(--focus, #11161b);
+  outline-offset: 2px;
+}
+.canamed-tour-btn--skip {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted, #5b6b7a);
+  padding-left: 4px;
+  padding-right: 4px;
+}
+.canamed-tour-btn--skip:hover {
+  background: transparent;
+  color: var(--ink, #16202b);
+  text-decoration: underline;
+}
+.canamed-tour-btn--next {
+  background: var(--primary, #1763a6);
+  color: #fff;
+  border-color: var(--primary, #1763a6);
+}
+.canamed-tour-btn--next:hover {
+  background: var(--primary-hover, #0c3f6e);
+  border-color: var(--primary-hover, #0c3f6e);
+}
+@keyframes canamedTourFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes canamedTourPop {
+  from { opacity: 0; transform: translateY(4px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .canamed-tour-overlay,
+  .canamed-tour-bubble { animation: none; }
+  .canamed-tour-spotlight { transition: none; }
+}
+/* tiny "Show tour again" link inside the create-session form */
+.canamed-tour-reopen {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--primary, #1763a6);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.canamed-tour-reopen:hover { color: var(--primary-hover, #0c3f6e); }
+.canamed-tour-reopen:focus-visible {
+  outline: 2px solid var(--focus, #11161b);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Admin dashboard search / filter
+   - shown only when roomCount > 5 (toggled via .hidden on the wrapper)
+   - matches against room name + any participant name within the room
+   - filter state survives re-renders (kept in script.js module scope)
+   ========================================================================== */
+.dashboard-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.dashboard-filter-input {
+  flex: 1 1 auto;
+  font: inherit;
+  padding: 7px 12px;
+  border: 1px solid var(--line-strong, #d4cfc2);
+  border-radius: var(--r-sm, 9px);
+  background: var(--card, #fff);
+  color: var(--ink, #16202b);
+  min-width: 0;  /* allow shrink in flex parent */
+}
+.dashboard-filter-input:focus-visible {
+  outline: 2px solid var(--focus, #11161b);
+  outline-offset: 1px;
+  border-color: var(--primary, #1763a6);
+}
+.dashboard-filter-clear {
+  font: inherit;
+  cursor: pointer;
+  padding: 6px 12px;
+  border: 1px solid var(--line-strong, #d4cfc2);
+  border-radius: var(--r-sm, 9px);
+  background: var(--n-25, #fbf9f4);
+  color: var(--ink, #16202b);
+}
+.dashboard-filter-clear:hover {
+  background: var(--n-50, #f1eee6);
+}
+.dashboard-filter-clear:focus-visible {
+  outline: 2px solid var(--focus, #11161b);
+  outline-offset: 2px;
+}
+.dashboard-filtered-out { display: none !important; }
+.dashboard-empty-filter {
+  padding: 14px;
+  text-align: center;
+  color: var(--muted, #5b6b7a);
+  font-style: italic;
+}
+
+/* ==========================================================================
+   Service Worker offline banner
+   ==========================================================================
+   Shown when navigator.onLine flips to false (browser detects no network).
+   aria-live="polite" so screen readers announce reconnect events without
+   interrupting the user. Positioned at the very top of the page so it's
+   immediately visible without scrolling.
+   ========================================================================== */
+.canamed-offline-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9500;
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  background: var(--key, #c0392b);
+  color: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.2);
+  pointer-events: none;          /* don't block underlying clicks */
+}
+.canamed-offline-banner[hidden] { display: none; }
+.canamed-offline-banner.offline { animation: canamedOfflineSlide var(--dur-base, 260ms) var(--ease-out, ease-out); }
+@keyframes canamedOfflineSlide {
+  from { transform: translateY(-100%); }
+  to   { transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .canamed-offline-banner.offline { animation: none; }
+}
+
+/* ------------------------------------------------------------------
+ * Facilitator UX batch — additions from SIMULATION_FACILITATOR.md
+ * ------------------------------------------------------------------ */
+
+/* Required-field marker on the create-session form. The asterisk is
+   visual-only (aria-hidden) — screen readers receive aria-required="true"
+   on the input itself, which is the canonical, redundant signal. */
+.splash-field .req {
+  color: var(--err, #b91c1c);
+  font-weight: 700;
+  margin-left: 4px;
+}
+
+/* Inline help text below a field — same colour as splash-sublabel but
+   tighter margin so it sits under the input visually attached to it. */
+.splash-field-hint {
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 6px 0 0;
+}
+
+/* "Create new content (advanced) ↓" toggle below the scenario picker.
+   Small, left-aligned link styled like the existing splash-link but with
+   a touch more breathing room. */
+.splash-create-advanced-toggle {
+  margin-top: 8px;
+  text-align: left;
+  align-self: flex-start;
+}
+.splash-create-advanced-toggle[aria-expanded="true"]::after {
+  content: " ▲";
+  font-size: 0.8em;
+}
+
+/* Per-cohort live count chips in the waiting-room card. Visible as soon
+   as the prestart panel renders; chips are coloured from the COHORTS
+   registry (orgs.js) so a Lyon × Tokyo deployment gets two purple/blue
+   chips automatically. The list is empty (and hidden via :empty) when
+   no one has joined yet. */
+.prestart-cohort-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 0 0 10px;
+}
+.prestart-cohort-row:empty { display: none; }
+.prestart-cohort-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line-strong, #cbd5e1);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.prestart-cohort-chip-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--primary);
+}
+.prestart-cohort-chip-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Expected-total input next to the live count.  */
+.prestart-expected-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin: 4px 0 12px;
+}
+.prestart-expected-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.prestart-expected-input {
+  width: 72px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 0.9rem;
+  border: 1px solid var(--line-strong, #cbd5e1);
+  border-radius: var(--r-sm, 4px);
+  background: var(--card);
+  color: var(--ink);
+}
+.prestart-expected-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.count-expected {
+  margin-left: 8px;
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.count-expected.full {
+  color: var(--ok, #1e8449);
+  font-weight: 700;
+}
+
+/* Pre-start "Test alerts" button row. Sits below the Start button so the
+   eye-flow is: "Start button (primary), then test alerts hint, then
+   waiting room". */
+.prestart-test-alerts-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-top: 10px;
+}
+.prestart-test-alerts-btn {
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--line-strong, #cbd5e1);
+  border-radius: var(--r-sm, 4px);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+}
+.prestart-test-alerts-btn:hover {
+  border-color: var(--primary);
+  background: rgba(46,159,223,0.06);
+}
+.prestart-test-alerts-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex: 1 1 240px;
+}
+.prestart-test-alerts-status {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ok, #1e8449);
+}
+.prestart-test-alerts-status.err {
+  color: var(--err, #b91c1c);
+}
+
+/* ----- Branded in-page modal (replaces native confirm) ----- */
+.canamed-modal {
+  width: min(520px, 92vw);
+  border: none;
+  border-radius: var(--r-md, 10px);
+  padding: 0;
+  background: transparent;
+  color: var(--ink);
+}
+.canamed-modal::backdrop {
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+}
+.canamed-modal-form {
+  background: var(--card, #ffffff);
+  border-radius: var(--r-md, 10px);
+  padding: 22px 24px 18px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.canamed-modal-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.canamed-modal-message {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+.canamed-modal-detail {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--card-alt, #f1f5f9);
+  border: 1px solid var(--line, #e2e8f0);
+  border-radius: var(--r-sm, 4px);
+  font-family: ui-monospace, "JetBrains Mono", "Consolas", monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+.canamed-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+.canamed-modal-cancel,
+.canamed-modal-confirm {
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: var(--r-sm, 4px);
+  cursor: pointer;
+}
+.canamed-modal-cancel {
+  background: var(--card, #ffffff);
+  color: var(--ink);
+  border: 1px solid var(--line-strong, #cbd5e1);
+}
+.canamed-modal-cancel:hover { background: var(--card-alt, #f1f5f9); }
+.canamed-modal-confirm {
+  background: var(--primary, #2e9fdf);
+  color: #fff;
+  border: 1px solid var(--primary, #2e9fdf);
+}
+.canamed-modal-confirm:hover {
+  background: var(--primary-hover, #1c87c2);
+}
+.canamed-modal-confirm.danger {
+  background: var(--err, #b91c1c);
+  border-color: var(--err, #b91c1c);
+}
+.canamed-modal-confirm.danger:hover {
+  background: #991b1b;
+}
+
+/* ============================================================
+ * <dialog> polyfill (R2-34) — applied by dialogShow() in script.js
+ * when the native showModal() method is missing (iOS Safari 15.0-15.3).
+ *
+ * Strategy: when .dialog-polyfill is on the element, force position:fixed,
+ * centred, on top of everything, with a dark backdrop drawn via a
+ * pseudo-element on the body. We can't use ::backdrop here (it only fires
+ * with showModal()), so the backdrop is rendered as a fixed pseudo on
+ * the body.dialog-polyfill-open container. Scrolling the body is locked
+ * while at least one polyfill dialog is open, matching native semantics.
+ * ============================================================ */
+body.dialog-polyfill-open {
+  overflow: hidden;
+}
+body.dialog-polyfill-open::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.55);
+  z-index: 9998;
+  pointer-events: none;
+}
+dialog.dialog-polyfill {
+  /* Cancel browser-default <dialog> display:none even without [open] */
+  display: block;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  z-index: 9999;
+  max-height: 90vh;
+  overflow: auto;
+  /* The element already carries its own .account-dialog / .canamed-modal
+     styling for width + padding + border-radius, so we don't double-style
+     it here — we only handle positioning + stacking. */
+}
+

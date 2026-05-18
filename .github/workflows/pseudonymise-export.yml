@@ -1,0 +1,77 @@
+# Daily pseudonymised export of /sessions for research use.
+#
+# Pairs with backup-sessions.yml (which keeps the FULL identified copy
+# under 90-day retention). This workflow produces TWO artefacts:
+#   - canamed-pseudonymised-DATE.json — long retention (90 days), real
+#     names replaced by Student-A/B/... codes per session. Researchers
+#     consume this.
+#   - canamed-linkage-DATE.json       — SHORT retention (14 days), maps
+#     pseudonyms back to real names. Used only to honour GDPR Art. 17
+#     erasure requests on a closed session. Auto-deleted to match the
+#     privacy-policy 6-month linkage-destruction commitment.
+#
+# Only closed sessions are exported (open sessions could still receive
+# writes that would not be pseudonymised in the export).
+#
+# Scheduled for 03:47 UTC daily — after cleanup (03:17) so we don't
+# export stale data, well before the next backup (02:47 next day).
+
+name: Pseudonymised export
+
+on:
+  schedule:
+    - cron: "47 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: pseudonymised-export
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Pseudonymise + export /sessions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install firebase-admin (one-shot)
+        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+
+      - name: Write service-account credentials
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Run pseudonymised export
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+          EXPORT_OUT_DIR: ${{ runner.temp }}
+        run: node scripts/pseudonymise-export.js
+
+      - name: Compute date stamp
+        id: stamp
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload pseudonymised export (long retention)
+        uses: actions/upload-artifact@v7
+        with:
+          name: canamed-pseudonymised-${{ steps.stamp.outputs.date }}
+          path: ${{ runner.temp }}/canamed-pseudonymised-*.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Upload linkage table (short retention)
+        uses: actions/upload-artifact@v7
+        with:
+          name: canamed-linkage-${{ steps.stamp.outputs.date }}
+          path: ${{ runner.temp }}/canamed-linkage-*.json
+          retention-days: 14
+          if-no-files-found: error

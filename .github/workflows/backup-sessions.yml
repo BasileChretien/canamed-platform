@@ -1,0 +1,78 @@
+# Daily snapshot of /sessions from the live Realtime Database.
+#
+# Pairs with .github/workflows/cleanup-stale-sessions.yml:
+#   - cleanup PURGES sessions older than the retention window
+#   - this workflow ARCHIVES a snapshot before they're purged
+#
+# A research-data-loss scenario (DB bug, fat-finger purge, malicious
+# wipe of /sessions) is recoverable from the latest artifact: download,
+# extract, re-import via firebase database:set /sessions backup.json.
+#
+# Runs daily at 04:03 UTC. Off-:00 by design (cron-stampede avoidance)
+# and OFFSET from the cleanup workflow (which fires at 03:17 UTC) so
+# the backup captures the state BEFORE the cleanup runs that day.
+#
+# Manual workflow_dispatch is also exposed for an immediate snapshot
+# (e.g., right before a risky migration or after a live session ends).
+
+name: Backup sessions
+
+on:
+  schedule:
+    # 02:47 UTC daily — 30 min BEFORE the cleanup workflow (03:17 UTC)
+    # so the snapshot captures the state IMMEDIATELY before any deletes
+    # land that day. (Code-review audit caught the original 04:03 UTC
+    # schedule running AFTER cleanup; on the rare day where cleanup
+    # actually purges sessions, the backup would have missed them.)
+    - cron: "47 2 * * *"
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: "Artifact retention (days, 1-90; default 90)"
+        type: string
+        required: false
+        default: "90"
+
+concurrency:
+  group: backup-sessions
+  cancel-in-progress: false  # never kill an in-flight backup
+
+jobs:
+  backup:
+    name: Snapshot /sessions to an artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install firebase-admin (one-shot, not added to package.json)
+        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+
+      - name: Write service-account credentials to a temp file
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Dump /sessions to JSON
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+        run: node scripts/backup-sessions.js
+
+      - name: Compute date stamp for artifact name
+        id: stamp
+        run: echo "date=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload backup as a workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: canamed-sessions-backup-${{ steps.stamp.outputs.date }}
+          path: ${{ runner.temp }}/canamed-backup-*.json
+          retention-days: ${{ github.event.inputs.retention_days || '90' }}
+          if-no-files-found: error

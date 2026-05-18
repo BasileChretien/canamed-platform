@@ -1,0 +1,22 @@
+{
+  "name": "CaNaMED",
+  "short_name": "CaNaMED",
+  "description": "Franco-Japanese medical-education PBL platform for live cross-cultural workshops.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f6f4ef",
+  "theme_color": "#1763a6",
+  "categories": ["education", "medical"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M32 18.8 A36 36 0 0 1 68 81.2' fill='none' stroke='%232e9fdf' stroke-width='11' stroke-linecap='round'/%3E%3Cpath d='M32 81.2 A36 36 0 0 1 68 18.8' fill='none' stroke='%23e08a1e' stroke-width='11' stroke-linecap='round'/%3E%3Ccircle cx='50' cy='14' r='7.5' fill='%234f7d8c'/%3E%3C/svg%3E",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

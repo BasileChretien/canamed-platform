@@ -1,0 +1,435 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+
+        "profile": {
+          ".validate": "newData.val() == null || (newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('updatedAt').isNumber())"
+        },
+
+        "history": {
+          "$code": {
+            ".validate": "newData.val() == null || (newData.child('code').isString() && newData.child('code').val().length <= 30 && newData.child('joinedAt').isNumber() && (!newData.hasChild('workshopName') || (newData.child('workshopName').isString() && newData.child('workshopName').val().length <= 80)) && (!newData.hasChild('scenarioName') || (newData.child('scenarioName').isString() && newData.child('scenarioName').val().length <= 80)))"
+          }
+        }
+      }
+    },
+
+    "sessions": {
+      "$sessionId": {
+        ".read": "auth != null && data.child('members').hasChild(auth.uid)",
+
+        "members": {
+          "$uid": {
+            ".read": "auth != null && auth.uid == $uid",
+            ".write": "auth != null && auth.uid == $uid && !root.child('sessions').child($sessionId).child('closed').exists()",
+            ".validate": "newData.val() == null || (newData.hasChildren(['at']) && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000 && (!newData.hasChild('role') || (newData.child('role').isString() && newData.child('role').val().length <= 20)))"
+          }
+        },
+
+        "adminPasswordHash": {
+          ".read": "auth != null",
+          ".write": "auth != null && (!data.exists() || (root.child('sessions').child($sessionId).child('_superadminReset').exists() && root.child('sessions').child($sessionId).child('_superadminReset').child('requestedAt').isNumber() && root.child('sessions').child($sessionId).child('_superadminReset').child('requestedAt').val() >= now - 30000 && root.child('sessions').child($sessionId).child('_superadminReset').child('requestedAt').val() <= now + 5000))",
+          ".validate": "newData.isString() && (newData.val().matches(/^[0-9a-f]{64}$/) || newData.val().matches(/^v2[$][0-9]+[$][0-9a-f]+$/))"
+        },
+
+        "_superadminReset": {
+          ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (newData.val() == null || (newData.child('requestedAt').isNumber() && newData.child('requestedAt').val() >= now - 5000 && newData.child('requestedAt').val() <= now + 5000))",
+          ".validate": "newData.val() == null || (newData.hasChildren(['requestedAt','by']) && newData.child('requestedAt').isNumber() && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40)"
+        },
+
+        "_adminPresence": {
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+          ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)"
+        },
+
+        "created": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+        },
+        "workshopLabel": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 80)"
+        },
+
+        "scenarioId": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 60 && newData.val().matches(/^[a-z0-9_-]+$/))"
+        },
+        "scenarioCustomJson": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32000)"
+        },
+
+        "started": {
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+          ".validate": "newData.isBoolean()"
+        },
+        "closed": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
+          ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+        },
+        "roomCount": {
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('started').val() != true",
+          ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 20"
+        },
+        "teamsLink": {
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+          ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() == '' || newData.val().matches(/^https:[/][/][^\\s]+$/))"
+        },
+        "questionnaireLink": {
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+          ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() == '' || newData.val().matches(/^https:[/][/][^\\s]+$/))"
+        },
+        "preQuestionnaireLink": {
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+          ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() == '' || newData.val().matches(/^https:[/][/][^\\s]+$/))"
+        },
+
+        "pool": {
+          "$clientId": {
+            ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+            ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)",
+            "room": {
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 30)"
+            },
+            "consent": {
+              ".validate": "newData.val() == null || (newData.hasChildren(['workshop','research','version','at']) && newData.child('workshop').isBoolean() && newData.child('research').isBoolean() && newData.child('version').isString() && newData.child('version').val().length <= 40 && newData.child('at').isNumber())"
+            }
+          }
+        },
+
+        "rooms": {
+          "$roomId": {
+            "events": {
+              "$pushId": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
+                ".validate": "newData.hasChildren(['kind','by','at']) && newData.child('kind').isString() && newData.child('kind').val().length > 0 && newData.child('kind').val().length <= 30 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 60000 && (!newData.hasChild('payload') || (newData.child('payload').isString() && newData.child('payload').val().length <= 500))"
+              }
+            },
+            "stage": {
+              ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"
+            },
+            "teamName": {
+              ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 40)"
+            },
+            "score": {
+              "auto": {
+                "$eventId": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
+                }
+              },
+              "penalties": {
+                "$eventId": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
+                }
+              },
+              "manual": {
+                "$pushId": {
+                  ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.hasChildren(['points','tag','by','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 50 && newData.child('tag').isString() && newData.child('tag').val().length <= 60 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+                }
+              }
+            },
+            "stageAt": {
+              ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.isNumber()"
+            },
+            "callForHelp": {
+              ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!data.exists() || data.child('ack').val() == true || newData.val() == null || newData.child('at').val() >= data.child('at').val() + 30000)",
+              ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 60000)",
+              "ack": {
+                ".validate": "newData.val() == null || newData.isBoolean()"
+              },
+              "msg": {
+                ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 200)"
+              }
+            },
+            "presence": {
+              "$clientId": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.hasChildren(['name','at']) && newData.child('name').isString() && newData.child('name').val().length <= 40 && newData.child('at').isNumber())"
+              }
+            },
+            "typing": {
+              "$clientId": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 20)"
+              }
+            },
+            "moduleA": {
+              "revealed": {
+                "$itemId": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+                }
+              }
+            },
+            "answers": {
+              "moduleA": {
+                "$entryId": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                }
+              },
+              "moduleB": {
+                "$entryId": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                }
+              }
+            },
+            "votes": {
+              "$voteId": {
+                "ballots": {
+                  "$clientId": {
+                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                    ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
+                  }
+                },
+                "committed": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
+                }
+              }
+            },
+            "tests": {
+              "$cid": {
+                "pre": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('score') || (newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100)))",
+                  "answers": {
+                    "$qid": {
+                      ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
+                    }
+                  }
+                },
+                "post": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('score') || (newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100)))",
+                  "answers": {
+                    "$qid": {
+                      ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "orgs": {
+      "$orgSlug": {
+        ".validate": "$orgSlug.matches(/^[a-z0-9-]+$/)",
+        "sessions": {
+          "$sessionId": {
+            ".read": "auth != null && data.child('members').hasChild(auth.uid)",
+
+            "members": {
+              "$uid": {
+                ".read": "auth != null && auth.uid == $uid",
+                ".write": "auth != null && auth.uid == $uid && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.hasChildren(['at']) && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000 && (!newData.hasChild('role') || (newData.child('role').isString() && newData.child('role').val().length <= 20)))"
+              }
+            },
+
+            "adminPasswordHash": {
+              ".read": "auth != null",
+              ".write": "auth != null && (!data.exists() || (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('_superadminReset').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('_superadminReset').child('requestedAt').isNumber() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('_superadminReset').child('requestedAt').val() >= now - 30000 && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('_superadminReset').child('requestedAt').val() <= now + 5000))",
+              ".validate": "newData.isString() && (newData.val().matches(/^[0-9a-f]{64}$/) || newData.val().matches(/^v2[$][0-9]+[$][0-9a-f]+$/))"
+            },
+
+            "_superadminReset": {
+              ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (newData.val() == null || (newData.child('requestedAt').isNumber() && newData.child('requestedAt').val() >= now - 5000 && newData.child('requestedAt').val() <= now + 5000))",
+              ".validate": "newData.val() == null || (newData.hasChildren(['requestedAt','by']) && newData.child('requestedAt').isNumber() && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40)"
+            },
+
+            "_adminPresence": {
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)"
+            },
+
+            "created": {
+              ".read": "auth != null",
+              ".write": "auth != null && !data.exists()",
+              ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+            },
+            "workshopLabel": {
+              ".read": "auth != null",
+              ".write": "auth != null && !data.exists()",
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 80)"
+            },
+
+            "scenarioId": {
+              ".read": "auth != null",
+              ".write": "auth != null && !data.exists()",
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 60 && newData.val().matches(/^[a-z0-9_-]+$/))"
+            },
+            "scenarioCustomJson": {
+              ".read": "auth != null",
+              ".write": "auth != null && !data.exists()",
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32000)"
+            },
+
+            "started": {
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.isBoolean()"
+            },
+            "closed": {
+              ".read": "auth != null",
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
+              ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+            },
+            "roomCount": {
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('started').val() != true",
+              ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 20"
+            },
+            "teamsLink": {
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() == '' || newData.val().matches(/^https:[/][/][^\\s]+$/))"
+            },
+            "questionnaireLink": {
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() == '' || newData.val().matches(/^https:[/][/][^\\s]+$/))"
+            },
+            "preQuestionnaireLink": {
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() == '' || newData.val().matches(/^https:[/][/][^\\s]+$/))"
+            },
+
+            "pool": {
+              "$clientId": {
+                ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)",
+                "room": {
+                  ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 30)"
+                },
+                "consent": {
+                  ".validate": "newData.val() == null || (newData.hasChildren(['workshop','research','version','at']) && newData.child('workshop').isBoolean() && newData.child('research').isBoolean() && newData.child('version').isString() && newData.child('version').val().length <= 40 && newData.child('at').isNumber())"
+                }
+              }
+            },
+
+            "audit": {
+              "$entryId": {
+                ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
+                ".validate": "newData.hasChildren(['kind','by','at']) && newData.child('kind').isString() && newData.child('kind').val().length > 0 && newData.child('kind').val().length <= 30 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 60000 && (!newData.hasChild('payload') || (newData.child('payload').isString() && newData.child('payload').val().length <= 500))"
+              }
+            },
+
+            "rooms": {
+              "$roomId": {
+                "stage": {
+                  ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 3"
+                },
+                "teamName": {
+                  ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 40)"
+                },
+                "score": {
+                  "auto": {
+                    "$eventId": {
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
+                    }
+                  },
+                  "penalties": {
+                    "$eventId": {
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
+                    }
+                  },
+                  "manual": {
+                    "$pushId": {
+                      ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".validate": "newData.val() == null || (newData.hasChildren(['points','tag','by','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 50 && newData.child('tag').isString() && newData.child('tag').val().length <= 60 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+                    }
+                  }
+                },
+                "stageAt": {
+                  ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.isNumber()"
+                },
+                "callForHelp": {
+                  ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!data.exists() || data.child('ack').val() == true || newData.val() == null || newData.child('at').val() >= data.child('at').val() + 30000)",
+                  ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 60000)",
+                  "ack": {
+                    ".validate": "newData.val() == null || newData.isBoolean()"
+                  },
+                  "msg": {
+                    ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 200)"
+                  }
+                },
+                "presence": {
+                  "$clientId": {
+                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                    ".validate": "newData.val() == null || (newData.hasChildren(['name','at']) && newData.child('name').isString() && newData.child('name').val().length <= 40 && newData.child('at').isNumber())"
+                  }
+                },
+                "typing": {
+                  "$clientId": {
+                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                    ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 20)"
+                  }
+                },
+                "moduleA": {
+                  "revealed": {
+                    "$itemId": {
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+                    }
+                  }
+                },
+                "answers": {
+                  "moduleA": {
+                    "$entryId": {
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                    }
+                  },
+                  "moduleB": {
+                    "$entryId": {
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                    }
+                  }
+                },
+                "votes": {
+                  "$voteId": {
+                    "ballots": {
+                      "$clientId": {
+                        ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                        ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
+                      }
+                    },
+                    "committed": {
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

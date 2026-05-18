@@ -1,0 +1,75 @@
+# Runs the Node-based unit test suite (tests/*.test.js) on every push and
+# every pull request. Tests cover the pure-function library in
+# docs/Third_session/PBL_platform/lib.js: safeHref, sanitizeResume,
+# password hashing/verification, session-code generation, etc. — the
+# security-sensitive core. No browser, no Firebase, no fixtures.
+#
+# Required to pass before merging (set up via branch-protection rules in
+# the GitHub repo settings — see README).
+
+name: Unit tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: node --test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Show node + npm versions
+        run: |
+          node --version
+          npm --version
+      - name: Install dev dependencies (c8 for coverage)
+        # No package-lock.json yet → npm install. Switch to `npm ci` once
+        # a lock is committed.
+        run: npm install --no-audit --no-fund
+      - name: Syntax-check every JS / JSON config file
+        run: |
+          node --check docs/Third_session/PBL_platform/lib.js
+          node --check docs/Third_session/PBL_platform/i18n.js
+          node --check docs/Third_session/PBL_platform/localdb.js
+          node --check docs/Third_session/PBL_platform/telemetry.js
+          node --check docs/Third_session/PBL_platform/qrcode.js
+          node --check docs/Third_session/PBL_platform/script.js
+          node --check docs/Third_session/PBL_platform/case-content.js
+          node --check docs/Third_session/PBL_platform/platform-config.js
+          node --check docs/Third_session/PBL_platform/orgs.js
+          node --check docs/Third_session/PBL_platform/firebase-config.js
+          node -e "JSON.parse(require('fs').readFileSync('docs/Third_session/PBL_platform/database.rules.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('docs/Third_session/PBL_platform/firebase.json','utf8'))"
+      - name: Run the unit tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        # Codecov is optional — if no CODECOV_TOKEN is configured the action
+        # still posts a public-repo coverage report via the tokenless flow.
+        # The if: always() ensures we still get a report even if a single
+        # test flaked (coverage is computed from the runs that did execute).
+        if: always()
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/lcov.info
+          flags: unit
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14

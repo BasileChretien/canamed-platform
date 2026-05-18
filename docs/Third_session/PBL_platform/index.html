@@ -1,0 +1,2088 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Content-Security-Policy is delivered via HTTP response headers
+       (see firebase.json) so that `frame-ancestors` and other directives
+       that <meta> CSP cannot enforce actually work. A small inline
+       fallback CSP stays here in case the file is served from a context
+       that strips the header (e.g. opening index.html directly from disk
+       for offline testing); the production headers always win. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                 script-src 'self' https://www.gstatic.com https://apis.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+                 connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://accounts.google.com https://content-firebaseappcheck.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+                 frame-src https://canamed-69785.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+                 style-src 'self';
+                 img-src 'self' data: https://www.googleusercontent.com https://lh3.googleusercontent.com;
+                 object-src 'none';
+                 base-uri 'self';
+                 form-action 'none'" />
+  <!-- Both palettes shipped: light is the default warm-paper Caen × Nagoya
+       palette; dark is a deeper, blue-leaning palette that preserves the
+       same contrast ramp + WCAG-AA targets. The CSS uses
+       @media (prefers-color-scheme: dark) overrides on the same custom
+       properties, so the choice is OS-driven by default. A facilitator can
+       also force a theme via localStorage `canamed_theme` ("light" | "dark"
+       | "auto") set from the admin prefs row. -->
+  <meta name="color-scheme" content="light dark" />
+  <title>CaNaMED - Platform</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M32 18.8 A36 36 0 0 1 68 81.2' fill='none' stroke='%232e9fdf' stroke-width='11' stroke-linecap='round'/%3E%3Cpath d='M32 81.2 A36 36 0 0 1 68 18.8' fill='none' stroke='%23e08a1e' stroke-width='11' stroke-linecap='round'/%3E%3Ccircle cx='50' cy='14' r='7.5' fill='%234f7d8c'/%3E%3C/svg%3E" />
+  <!-- theme-init runs first to set <html data-theme> from canamed_theme so
+       a returning user never sees a flash of the wrong palette. -->
+  <!-- ASSET CACHE-BUSTING (E28 — SIMULATION_EDGE_CASES.md)
+       The ?v=… suffix forces browsers to re-fetch first-party JS/CSS
+       whenever the deploy bumps the string. Procedure when shipping a
+       schema-affecting change:
+         1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
+         2. Update every "?v=v2" below to the matching new string.
+         3. Deploy together so service-worker pre-cache and browser
+            in-memory cache invalidate in lockstep.
+       Third-party Firebase scripts already cache-bust via their version
+       segment in the URL (10.12.5) so they don't need a query string. -->
+  <script src="theme-init.js?v=v2"></script>
+  <link rel="stylesheet" href="style.css?v=v2" />
+  <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
+       workshop is a non-event). The SW registers itself on window.load and
+       caches the platform shell; Firebase API calls go to network always. -->
+  <link rel="manifest" href="manifest.webmanifest" />
+  <meta name="theme-color" content="#1763a6" />
+  <script src="sw-register.js?v=v2" defer></script>
+</head>
+<body class="locked">
+  <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
+       this link first; pressing Enter jumps the focus past the splash
+       header / nav to the main interaction surface. Visually hidden
+       until focused; never gets in the way of mouse users. -->
+  <a href="#" class="skip-link" id="skip-link"
+     data-i18n="a11y.skip-to-main">Skip to main content</a>
+
+  <!-- ============ CANAMED SPLASH (top-level gate) ============
+       Hidden by default; the entry script either reveals the splash (when an
+       access code is configured and not yet entered) or, if there is no code
+       to enforce, removes body.locked so the partnership lobby shows directly. -->
+  <section id="splash" class="splash hidden" aria-labelledby="splash-title">
+    <div class="splash-card">
+      <svg class="splash-mark" viewBox="0 0 100 100" role="img"
+           aria-label="CANAMED — two arcs around a single circle">
+        <path class="arc-n" d="M32 18.8 A36 36 0 0 1 68 81.2" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <path class="arc-c" d="M32 81.2 A36 36 0 0 1 68 18.8" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <circle class="heart" cx="50" cy="14" r="6.5" />
+      </svg>
+      <!-- shown only when signed in: lets the user see their identity and
+           sign out from the splash, since the header chip is hidden behind
+           body.locked until they enter a session code -->
+      <div class="splash-signed-in" id="splash-signed-in" hidden>
+        <span data-i18n="splash.signed-in-as">Signed in as</span>
+        <strong id="splash-signed-in-name">—</strong>
+        <button type="button" class="splash-link" id="splash-signed-in-out"
+                data-i18n="splash.sign-out">Sign out</button>
+      </div>
+      <h1 class="splash-title" id="splash-title">CANAMED</h1>
+      <p class="splash-tag" data-i18n="splash.tagline">A collaborative platform for medical-education
+        partnerships between universities.</p>
+
+      <!-- Language switcher. Sets localStorage.canamed_lang and re-renders
+           every [data-i18n] node in place. English is canonical; French is
+           reviewed; Japanese is reviewed; es/pt/de/ko/zh are machine-drafted,
+           awaiting native review. We expose ALL 8 supported languages here —
+           R2-42 simulation showed Spanish/German/Korean participants found
+           the EN/FR/JA-only switcher a blocker. The native <select> control
+           keeps the row well under 320px on iPhone SE while still being
+           tappable with a 24px+ hit area (see .splash-lang-switcher CSS). -->
+      <div class="splash-lang-switcher" role="group" aria-label="Language">
+        <label class="sr-only" for="splash-lang-select"
+               data-i18n="splash.lang-label">Language</label>
+        <select id="splash-lang-select" class="splash-lang-select"
+                data-i18n-aria-label="splash.lang-label">
+          <option value="en" data-i18n="lang.en">English</option>
+          <option value="fr" data-i18n="lang.fr">Français</option>
+          <option value="ja" data-i18n="lang.ja">日本語</option>
+          <option value="es" data-i18n="lang.es">Español</option>
+          <option value="pt" data-i18n="lang.pt">Português</option>
+          <option value="de" data-i18n="lang.de">Deutsch</option>
+          <option value="ko" data-i18n="lang.ko">한국어</option>
+          <option value="zh" data-i18n="lang.zh">中文</option>
+        </select>
+      </div>
+
+      <!-- VIEW 1: enter a code (participant flow) -->
+      <div class="splash-view" id="splash-view-enter">
+        <form id="splash-form" autocomplete="off">
+          <label for="splash-code" class="splash-label"
+                 data-i18n="splash.enter.label">
+            Enter the session code your facilitator gave you
+          </label>
+          <div class="splash-row">
+            <input type="text" id="splash-code" maxlength="40"
+                   autocomplete="off" autocapitalize="off" spellcheck="false"
+                   data-i18n="splash.enter.placeholder" data-i18n-attr="placeholder"
+                   placeholder="e.g. ABC-DEF" aria-describedby="splash-hint" />
+            <button id="splash-enter" type="submit"
+                    data-i18n="splash.enter.submit">Enter &rarr;</button>
+          </div>
+          <p class="splash-hint" id="splash-hint" role="status" aria-live="polite"></p>
+        </form>
+        <p class="splash-foot">
+          <span data-i18n="splash.enter.no-code">Don't have a code yet?</span>
+          <button type="button" class="splash-link" id="splash-go-create"
+                  data-i18n="splash.enter.go-create">
+            I'm a facilitator &mdash; create a session &rarr;
+          </button>
+          <br />
+          <button type="button" class="splash-link" id="splash-go-account"
+                  data-i18n="splash.enter.go-account">
+            Sign in with Google to save your profile &amp; history &rarr;
+          </button>
+        </p>
+      </div>
+
+      <!-- VIEW 4: sign in with Google (creates an account on first sign-in) -->
+      <div class="splash-view" id="splash-view-account" hidden>
+        <p class="splash-label splash-label-big"
+           data-i18n="splash.account.title">Sign in with Google</p>
+        <p class="splash-sublabel" data-i18n="splash.account.subtitle">
+          We use Google to verify your identity &mdash; no separate password to
+          remember. Your details auto-fill when you join a session, and the
+          sessions you have taken part in are kept under your profile.
+        </p>
+        <div class="splash-providers">
+          <button type="button" id="splash-google-signin" class="splash-provider-btn splash-google-btn">
+            <svg class="splash-provider-logo" viewBox="0 0 18 18" aria-hidden="true">
+              <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62z"/>
+              <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.8.54-1.84.86-3.05.86-2.34 0-4.32-1.58-5.03-3.71H.96v2.33A9 9 0 0 0 9 18z"/>
+              <path fill="#FBBC05" d="M3.97 10.71A5.41 5.41 0 0 1 3.68 9c0-.6.1-1.18.29-1.71V4.96H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.04l3.01-2.33z"/>
+              <path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.96L3.97 7.3C4.68 5.16 6.66 3.58 9 3.58z"/>
+            </svg>
+            <span data-i18n="splash.account.continue-google">Continue with Google</span>
+          </button>
+        </div>
+        <p class="splash-hint" id="splash-account-hint" role="status"
+           aria-live="polite"></p>
+        <div class="splash-row">
+          <button type="button" class="splash-link" id="splash-back-from-account"
+                  data-i18n="splash.account.back">
+            &larr; Back to join a session
+          </button>
+        </div>
+      </div>
+
+      <!-- VIEW 5: first-time profile setup after sign-up -->
+      <div class="splash-view" id="splash-view-profile-setup" hidden>
+        <form id="splash-profile-setup-form" autocomplete="on">
+          <p class="splash-label splash-label-big"
+             data-i18n="splash.profile.title">Set up your profile</p>
+          <p class="splash-sublabel" data-i18n="splash.profile.subtitle">These details auto-fill every time you join
+            a session. You can update them later from your account.</p>
+          <div class="splash-field">
+            <label for="splash-prof-name"
+                   data-i18n="splash.profile.name-label">Your name (first name or nickname)</label>
+            <input type="text" id="splash-prof-name" maxlength="40"
+                   data-i18n="splash.profile.name-placeholder" data-i18n-attr="placeholder"
+                   placeholder="e.g. Alice / Akari" required />
+          </div>
+          <div class="splash-field">
+            <label for="splash-prof-uni"
+                   data-i18n="splash.profile.uni-label">University</label>
+            <select id="splash-prof-uni"></select>
+          </div>
+          <div class="splash-field">
+            <label for="splash-prof-year"
+                   data-i18n="splash.profile.year-label">Year of study</label>
+            <select id="splash-prof-year">
+              <option value="1">Year 1</option>
+              <option value="2">Year 2</option>
+              <option value="3">Year 3</option>
+              <option value="4">Year 4</option>
+              <option value="5">Year 5</option>
+              <option value="6">Year 6</option>
+              <option value="7">Postgraduate / Resident</option>
+            </select>
+          </div>
+          <div class="splash-field">
+            <label for="splash-prof-english"
+                   data-i18n="splash.profile.english-label">English level (CEFR self-assessment)</label>
+            <select id="splash-prof-english">
+              <option value="A2">A2 - Elementary</option>
+              <option value="B1">B1 - Intermediate</option>
+              <option value="B2" selected>B2 - Upper intermediate</option>
+              <option value="C1">C1 - Advanced</option>
+              <option value="C2">C2 - Proficient</option>
+            </select>
+          </div>
+          <div class="splash-row">
+            <button id="splash-profile-setup-submit" type="submit"
+                    data-i18n="splash.profile.submit">Save and continue &rarr;</button>
+          </div>
+          <p class="splash-hint" id="splash-profile-setup-hint"
+             role="status" aria-live="polite"></p>
+        </form>
+      </div>
+
+      <!-- VIEW 2: create a session (facilitator flow) -->
+      <div class="splash-view" id="splash-view-create" hidden>
+        <form id="splash-create-form" autocomplete="off">
+          <p class="splash-label splash-label-big"
+             data-i18n="splash.create.title">Create a CANAMED session</p>
+          <p class="splash-sublabel" data-i18n="splash.create.subtitle">
+            You will get a short code to share with your students. You become its
+            facilitator (admin) - keep the password you set here to control it later.
+          </p>
+          <!-- Shown only when localStorage holds a "last workshop" record
+               (label + scenario + roomCount + links) from a prior create.
+               Click pre-fills the form AND remembers to copy the room
+               setup over to the new session after createSession() returns.
+               Hidden via JS when no prior record exists. -->
+          <div class="splash-clone-row" id="splash-clone-row" hidden>
+            <button type="button" class="splash-link" id="splash-clone-last"
+                    data-i18n="splash.create.clone-last">
+              Clone last workshop ↻
+            </button>
+            <span class="splash-clone-meta" id="splash-clone-meta"></span>
+            <!-- Clear button is a deliberate counterweight to clone: on
+                 shared lab machines, a facilitator can wipe their stash
+                 before logging off so the next facilitator doesn't see
+                 their workshop label / scenario pre-filled. -->
+            <button type="button" class="splash-link splash-clone-clear-btn"
+                    id="splash-clone-clear"
+                    data-i18n="splash.create.clone-clear"
+                    title="Forget the saved workshop">
+              Clear
+            </button>
+          </div>
+          <div class="splash-field">
+            <label for="splash-create-name">
+              <span data-i18n="splash.create.name-label">Your name</span>
+              <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input type="text" id="splash-create-name" maxlength="40"
+                   data-i18n="splash.create.name-placeholder" data-i18n-attr="placeholder"
+                   placeholder="e.g. Dr Smith" required aria-required="true" />
+          </div>
+          <div class="splash-field">
+            <label for="splash-create-label">
+              <span data-i18n="splash.create.workshop-label">Workshop label</span>
+              <span class="opt" data-i18n="splash.create.workshop-optional">(optional)</span>
+            </label>
+            <input type="text" id="splash-create-label" maxlength="80"
+                   data-i18n="splash.create.workshop-placeholder" data-i18n-attr="placeholder"
+                   placeholder="e.g. Caen × Nagoya — June 2026" />
+          </div>
+          <div class="splash-field">
+            <label for="splash-create-scenario">
+              <span data-i18n="splash.create.content-label">Scenario</span>
+              <span class="req" aria-hidden="true">*</span>
+            </label>
+            <select id="splash-create-scenario" aria-required="true"></select>
+            <p class="splash-sublabel splash-scenario-desc"
+               id="splash-scenario-desc"></p>
+            <!-- Split out the advanced custom-JSON path from the picker.
+                 The dropdown above now ONLY lists built-in scenarios; the
+                 "advanced" toggle below reveals the JSON textarea. This
+                 avoids first-timers accidentally picking "Create new
+                 content" from the dropdown and panicking at the JSON
+                 surface. -->
+            <button type="button" class="splash-link splash-create-advanced-toggle"
+                    id="splash-create-advanced-toggle"
+                    aria-expanded="false"
+                    aria-controls="splash-custom-wrap"
+                    data-i18n="splash.create.advanced-toggle">
+              Create new content (advanced) ↓
+            </button>
+          </div>
+          <div class="splash-field" id="splash-custom-wrap" hidden>
+            <label for="splash-create-custom"
+                   data-i18n="splash.create.custom-label">Custom content (JSON)</label>
+            <p class="splash-sublabel" data-i18n="splash.create.custom-help">
+              Paste a JSON object with the keys name, case, scoring,
+              penalties, decisions — see the README for the full structure.
+              Use "Load template" to start from the built-in content, then
+              edit only what you need.
+            </p>
+            <p class="splash-sublabel">
+              <button type="button" class="splash-link" id="splash-load-template"
+                      data-i18n="splash.create.load-template">Load template</button>
+            </p>
+            <textarea id="splash-create-custom" rows="6" spellcheck="false"
+                      placeholder='{ "name": "...", "case": { "history": [...], ... }, ... }'></textarea>
+          </div>
+          <div class="splash-field">
+            <label for="splash-create-pass">
+              <span data-i18n="splash.create.password-label">Set a session password</span>
+              <span class="req" aria-hidden="true">*</span>
+            </label>
+            <input type="password" id="splash-create-pass" maxlength="80"
+                   autocomplete="new-password"
+                   data-i18n="splash.create.password-placeholder" data-i18n-attr="placeholder"
+                   placeholder="something only the facilitators will know"
+                   required aria-required="true"
+                   aria-describedby="splash-create-pass-hint" />
+            <!-- Inline purpose explanation so the facilitator doesn't have
+                 to leave the form to find out what this password is for. -->
+            <p class="splash-sublabel splash-field-hint"
+               id="splash-create-pass-hint"
+               data-i18n="splash.create.password-hint">
+              You'll need this to re-open the admin dashboard if you reload the page. Students never see it. Use a fresh password — not your university one.
+            </p>
+          </div>
+          <div class="splash-row">
+            <button type="button" class="splash-link" id="splash-back-from-create"
+                    data-i18n="splash.create.back">
+              &larr; Back
+            </button>
+            <button id="splash-create-submit" type="submit"
+                    data-i18n="splash.create.submit">Create session</button>
+          </div>
+          <p class="splash-hint" id="splash-create-hint"
+             role="status" aria-live="polite"></p>
+          <!-- "Show tour again" — small affordance for facilitators who
+               dismissed the first-time onboarding tour but want to re-run
+               it. Wired in script.js via CanamedTour.addReopenLink(). -->
+          <p class="splash-tour-reopen-row">
+            <button type="button" class="canamed-tour-reopen"
+                    id="splash-tour-reopen"
+                    data-i18n="tour.reopen">Show tour again</button>
+          </p>
+        </form>
+      </div>
+
+      <!-- VIEW 3: created (success - show the code, share, continue) -->
+      <div class="splash-view" id="splash-view-created" hidden>
+        <p class="splash-label splash-label-big">
+          <span class="splash-ok">✓</span>
+          <span data-i18n="splash.created.title">Session created</span>
+        </p>
+        <p class="splash-sublabel" data-i18n="splash.created.subtitle">Share this code with your students. They type
+          it on this same page to join.</p>
+        <div class="splash-code-display" aria-live="polite">
+          <span id="splash-shown-code">—</span>
+          <button type="button" id="splash-copy-code" title="Copy code"
+                  data-i18n="splash.created.copy">Copy</button>
+          <button type="button" id="splash-copy-link"
+                  data-i18n="splash.created.copy-link" title="Copy join link">
+            Copy link
+          </button>
+        </div>
+        <p class="splash-hint" id="splash-copy-hint"
+           role="status" aria-live="polite"></p>
+        <!-- Scannable QR for the join URL — students point a phone at it
+             instead of typing the code (removes the single biggest live-
+             session friction point). Rendered CLIENT-SIDE by qrcode.js
+             (vendored, MIT) — no third-party CDN, no outbound request,
+             so the session code never leaves the browser. The container
+             below is a <div> because qrcode.js writes a <canvas> + <img>
+             into it; if the library hasn't loaded the wrapper hides itself
+             and the facilitator falls back to reading the code aloud. -->
+        <div class="splash-qr" id="splash-qr-wrap" aria-hidden="true">
+          <div id="splash-qr-img" class="splash-qr-img" role="img" aria-label="QR code linking to the session join page"></div>
+          <p class="splash-qr-caption" data-i18n="splash.created.qr-caption">
+            Or scan the QR with a phone
+          </p>
+        </div>
+        <div class="splash-row">
+          <button type="button" class="splash-link" id="splash-create-another"
+                  data-i18n="splash.created.create-another">
+            Create another
+          </button>
+          <button type="button" id="splash-go-admin"
+                  data-i18n="splash.created.open-admin">
+            Open admin dashboard &rarr;
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- a pure, modern "what is CANAMED" panel underneath the entry card: a
+         mission line, a short lede, three minimal pillars. No card chrome - the
+         page itself is the canvas. -->
+    <aside class="splash-about" aria-label="About CANAMED">
+      <p class="splash-mission">Two medical schools. The same patient. A conversation worth comparing.</p>
+      <p class="splash-lede">CANAMED brings medical students from partner universities
+        into one shared online room for problem-based learning &mdash; a clinical case,
+        a breaking-bad-news roleplay, and the team decisions they have to make together.
+        The platform structures the session, rewards the reasoning, and turns each
+        difference between teaching cultures into a teaching moment.</p>
+
+      <ul class="splash-pillars" role="list">
+        <li class="splash-pillar">
+          <svg class="splash-pillar-ico" viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="13" cy="16" r="8" fill="none" stroke="currentColor"
+                    stroke-width="1.8" />
+            <circle cx="19" cy="16" r="8" fill="none" stroke="currentColor"
+                    stroke-width="1.8" />
+          </svg>
+          <h3>Two traditions, one room</h3>
+          <p>Rooms are balanced across partner universities, so different teaching
+            cultures meet face to face on the same case.</p>
+        </li>
+        <li class="splash-pillar">
+          <svg class="splash-pillar-ico" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M7 17 l5 5 l13 -13" fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <h3>Reasoning, not speed</h3>
+          <p>Points reward the order of decisions, the depth of the answers and
+            the team's vote on the big calls. Wrong choices are explained.</p>
+        </li>
+        <li class="splash-pillar">
+          <svg class="splash-pillar-ico" viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M6 25 V15 M13 25 V9 M20 25 V18 M27 25 V12 M5 28 H29"
+                  fill="none" stroke="currentColor"
+                  stroke-width="1.8" stroke-linecap="round" />
+          </svg>
+          <h3>Research-grade by design</h3>
+          <p>Structured contributions, shared answers and clean exports &mdash;
+            every session feeds the underlying education-research project.</p>
+        </li>
+      </ul>
+
+      <p class="splash-credits">A research collaboration between partner
+        universities. Open source &middot; no account required.</p>
+    </aside>
+  </section>
+
+  <!-- Closed-session banner: a secondary fallback if the full-page "session
+       ended" replacement somehow does not paint. Hidden by default. -->
+  <div id="closed-banner" class="closed-banner hidden" role="status" aria-live="polite">
+    <div class="closed-banner-inner">
+      <span class="closed-banner-icon" aria-hidden="true">✓</span>
+      <div class="closed-banner-text">
+        <strong data-i18n="closed.title">Session closed by the facilitator.</strong>
+        <span class="closed-banner-sub"
+              data-i18n="closed.subtitle">Thank you for taking part — your team's work has been saved.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-page "session ended" screen: shown to participants the moment an
+       admin closes the session. Replaces the lobby / waiting / room app so
+       there is no way to keep writing answers, voting, etc - the workshop
+       has finished. -->
+  <main id="session-ended" class="session-ended hidden" aria-labelledby="session-ended-title">
+    <div class="session-ended-card">
+      <svg class="session-ended-mark" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="44" fill="#e7f4ec" stroke="#1e8449" stroke-width="3"/>
+        <path d="M30 52 l14 14 l28 -32" fill="none" stroke="#1e8449" stroke-width="6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <h1 class="session-ended-title" id="session-ended-title"
+          data-i18n="ended.title">Thank you for taking part</h1>
+      <p class="session-ended-msg" data-i18n="ended.message">Your facilitator has ended this session.
+        Your team's contributions have been saved.</p>
+      <p class="session-ended-by hint" id="session-ended-by"></p>
+      <!-- per-student debrief card: populated by renderStudentDebrief() with
+           a snapshot of allRooms taken at session close. Hidden until that
+           function injects content. -->
+      <div id="student-debrief" class="student-debrief hidden" aria-live="polite"></div>
+      <!-- end-of-session questionnaire: shown only if the facilitator entered
+           a link in the admin dashboard -->
+      <a id="ended-quiz-btn" class="ended-quiz-btn hidden"
+         target="_blank" rel="noopener"
+         data-i18n="ended.questionnaire">
+        Open the end-of-session questionnaire →
+      </a>
+      <p class="hint" data-i18n="ended.future">If you join a future CaNaMED workshop you will receive a
+        new session code.</p>
+      <button id="session-ended-leave" type="button"
+              data-i18n="ended.return">Return to CANAMED</button>
+    </div>
+  </main>
+
+  <header>
+    <div class="header-inner">
+      <div class="brand-lockup">
+        <svg class="brand-mark" viewBox="0 0 100 100" role="img"
+             aria-label="CaNaMED — two arcs, one circle">
+          <path class="arc-n" d="M32 18.8 A36 36 0 0 1 68 81.2" fill="none"
+                stroke-width="9" stroke-linecap="round" />
+          <path class="arc-c" d="M32 81.2 A36 36 0 0 1 68 18.8" fill="none"
+                stroke-width="9" stroke-linecap="round" />
+          <circle class="heart" cx="50" cy="14" r="6.5" />
+        </svg>
+        <div>
+          <h1>CaNaMED Session 3</h1>
+          <p class="sub">Learning From Each Other &middot; Franco-Japanese Medical Workshop</p>
+        </div>
+      </div>
+      <div class="header-right-wrap">
+        <button id="sound-toggle" class="sound-toggle" type="button"
+                aria-pressed="false" title="Sound is off — tap to turn celebration sounds on"
+                aria-label="Sound is off — tap to turn celebration sounds on">&#128263;</button>
+        <span id="connection-badge" class="conn-badge hidden" role="status"
+              aria-live="polite"></span>
+        <button id="user-chip" type="button" class="user-chip hidden"
+                aria-haspopup="dialog" aria-label="My account">
+          <span class="user-chip-initials" id="user-chip-initials">?</span>
+          <span class="user-chip-name" id="user-chip-name">Account</span>
+        </button>
+        <div id="header-right"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ LOBBY ============ -->
+  <section id="lobby">
+    <div class="hero-aside" aria-hidden="true">
+      <svg class="brand-mark" viewBox="0 0 100 100">
+        <path class="arc-n" d="M32 18.8 A36 36 0 0 1 68 81.2" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <path class="arc-c" d="M32 81.2 A36 36 0 0 1 68 18.8" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <circle class="heart" cx="50" cy="14" r="6.5" />
+      </svg>
+      <p class="hero-eyebrow">Franco-Japanese Medical Workshop</p>
+      <p class="hero-title">Learning From<br />Each Other</p>
+      <p class="hero-tag">Two traditions, one conversation</p>
+      <p class="hero-tag">Caen Normandie &times; Nagoya &middot; Session 3</p>
+    </div>
+    <div class="lobby-card">
+      <h2>Join the session</h2>
+      <p class="lobby-mode" id="lobby-mode"></p>
+      <p class="session-badge" id="session-badge" hidden>
+        Session <span id="session-badge-code"></span>
+      </p>
+      <p class="scenario-line" id="scenario-line" hidden>
+        Today's content: <strong id="scenario-line-name"></strong>
+        <span class="scenario-line-summary" id="scenario-line-summary"></span>
+      </p>
+      <label id="session-input-label"><span data-i18n="lobby.session-code-label">Session code</span>
+        <input type="text" id="session-input"
+               data-i18n="splash.enter.placeholder" data-i18n-attr="placeholder"
+               placeholder="e.g. ABC-DEF" maxlength="20" />
+      </label>
+      <label><span data-i18n="lobby.name-label">Your name (a first name or nickname is fine)</span>
+        <input type="text" id="name-input"
+               data-i18n="lobby.name-placeholder" data-i18n-attr="placeholder"
+               placeholder="e.g. Alice / Akari" maxlength="40" />
+      </label>
+      <!-- Anti-coercion grade-note promoted into the lobby (above the consent
+           block) so participants read it BEFORE they tick the consent box.
+           Reduces the perceived power-imbalance pressure when the consent
+           text mentions "no effect on your grade" — the message now appears
+           in plain sight at the moment of decision. The same key drives the
+           in-room copy on the Welcome stage. -->
+      <div class="card grade-note lobby-grade-note">
+        <p data-i18n="stage.welcome.grade-note"><strong>Your grade and your standing are not
+          affected by this workshop.</strong> The points the platform awards are for
+          in-session learning only &mdash; they do not contribute to your
+          university grade. If you disagree with a point or a penalty,
+          tell your facilitator; scoring is reviewable.</p>
+      </div>
+      <details class="privacy-note" open>
+        <summary data-i18n="lobby.privacy.summary">How your data is used (please read before joining)</summary>
+        <p data-i18n-html="lobby.privacy.p1">The CaNaMED research team
+          (<strong>Université de Caen Normandie &times; Nagoya University</strong>,
+          joint controllers under GDPR Art. 26 / joint users under APPI Art. 27(5))
+          collects your first name or nickname, university, year of study and
+          self-assessed English level. Your name is visible to everyone in your
+          room and appears next to the points you contribute.</p>
+        <p data-i18n-html="lobby.privacy.p2">The free-text answers you write may disclose health-related,
+          religious or philosophical opinions about clinical scenarios &mdash;
+          <strong>special-category data</strong> under GDPR Art. 9 and
+          <strong>要配慮個人情報</strong> under APPI Art. 2(3). The optional
+          second consent box below covers this.</p>
+        <p data-i18n-html="lobby.privacy.p3">Data is stored on Google Firebase Realtime Database in
+          <strong>europe-west1 (Belgium, EU)</strong>. For Japanese
+          participants this is a cross-border transfer protected by the
+          EU&ndash;Japan mutual adequacy decision (PPC, 2019). Live session
+          data is purged within 7 days; if you ticked the research-consent
+          box your contributions are kept pseudonymised for up to 5 years
+          after publication.</p>
+        <p data-i18n-html="lobby.privacy.p4"><strong>Signing in with Google is optional.</strong> If you do, a
+          small profile and a list of session codes you have joined are tied
+          to your Google account; you can edit or delete this at any time
+          from the "My account" panel. Anonymous joining works exactly the
+          same way.</p>
+        <p data-i18n-html="lobby.privacy.p5">You can withdraw your consent at any time. Whether you tick the
+          second consent box has <strong>no effect on your grade, your
+          standing at your university, or your participation in the
+          workshop.</strong> To exercise any right (access, correction,
+          deletion, portability, restriction, objection, withdrawal,
+          complaint), contact your facilitator or write to
+          <strong><a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a></strong>
+          (see the <a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener">full
+          privacy policy</a> for the stable mailbox).</p>
+        <p data-i18n-html="lobby.privacy.p6">The <a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener">full
+          privacy policy</a> lists the controllers' identities, the legal
+          bases, the joint-use items, the international-transfer safeguards,
+          retention periods, your rights with response times, and the
+          ethics-committee approvals. Please read it once before joining.</p>
+      </details>
+
+      <div class="lobby-section">
+        <h3 data-i18n="lobby.join-title">Join as a participant</h3>
+        <p class="lobby-hint" data-i18n="lobby.join-hint">You will be placed in a Franco-Japanese room automatically -
+          balanced by university, year and English level.</p>
+        <label><span data-i18n="lobby.uni-label">University</span>
+          <select id="uni-input">
+            <option value="" selected disabled
+                    data-i18n="lobby.uni-placeholder">Select your university…</option>
+            <option value="Caen">Université de Caen Normandie (France)</option>
+            <option value="Nagoya">Nagoya University (Japan)</option>
+          </select>
+        </label>
+        <label><span data-i18n="lobby.year-label">Year of study</span>
+          <select id="year-input">
+            <option value="1">Year 1</option>
+            <option value="2">Year 2</option>
+            <option value="3">Year 3</option>
+            <option value="4">Year 4</option>
+            <option value="5">Year 5</option>
+            <option value="6">Year 6</option>
+            <option value="7">Postgraduate / Resident</option>
+          </select>
+        </label>
+        <label><span data-i18n="lobby.english-label">English level (CEFR self-assessment)</span>
+          <select id="english-input">
+            <option value="A2">A2 - Elementary</option>
+            <option value="B1">B1 - Intermediate</option>
+            <option value="B2" selected>B2 - Upper intermediate</option>
+            <option value="C1">C1 - Advanced</option>
+            <option value="C2">C2 - Proficient</option>
+          </select>
+        </label>
+        <p class="lobby-hint" data-i18n="lobby.english-hint">CEFR levels: A2 elementary &middot; B1 intermediate &middot;
+          B2 upper-intermediate (can discuss complex topics) &middot; C1 advanced &middot;
+          C2 proficient. Pick the closest - it is only used to balance the rooms.</p>
+
+        <!-- GDPR Art. 6/7/9 + APPI Art. 20(2) + Declaration of Helsinki §26
+             require explicit, separable consent before any personal data
+             collection (especially before sensitive-category opinions, which
+             the free-text answers can disclose). The first box is required to
+             join; the second is optional and gates research re-use. Both are
+             versioned + timestamped server-side. -->
+        <div class="consent-block">
+          <label class="consent-row">
+            <input type="checkbox" id="consent-workshop" />
+            <span>
+              <strong data-i18n="lobby.consent-workshop">I have read the data-use notice above and consent to
+                taking part in this CaNaMED workshop.</strong>
+              <span data-i18n="lobby.consent-workshop-detail">My first name, university, year, English level and the text I
+              type during the workshop will be visible to the other people in
+              my room and to the facilitators.</span>
+            </span>
+          </label>
+          <label class="consent-row">
+            <input type="checkbox" id="consent-research" />
+            <span data-i18n="lobby.consent-research">
+              I additionally consent to my contributions (group answers,
+              votes, scores) being used for the CaNaMED education-research
+              project (analysis and publication in pseudonymised form). I
+              understand that I can take part in the workshop without ticking
+              this second box &mdash; refusing has no effect on my
+              participation, my grades or my standing at my university.
+            </span>
+          </label>
+          <p class="lobby-hint consent-version" id="consent-version">
+            <span data-i18n="lobby.consent-version">Notice version PIS v1 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
+          </p>
+        </div>
+
+        <!-- The title (lock-tooltip) is set + cleared dynamically by
+             script.js (refreshJoinBtnState) so language changes AND
+             consent-toggle changes both stay in sync. Don't attach a
+             data-i18n-title here — applyI18n would otherwise re-add
+             the locked-tooltip after the user unlocks the button. -->
+        <button id="join-btn" disabled
+                data-i18n="lobby.join-btn"
+                title="Tick the workshop-consent box above to enable this button.">Join the waiting room</button>
+      </div>
+
+      <div class="lobby-section" id="admin-lobby">
+        <button class="link-btn" id="admin-toggle"
+                data-i18n="lobby.admin-toggle">I am a facilitator &rsaquo;</button>
+        <div id="admin-lobby-body" class="hidden">
+          <label><span data-i18n="lobby.admin-pass-label">Admin password</span>
+            <input type="password" id="admin-pass-input"
+                   data-i18n="lobby.admin-pass-placeholder" data-i18n-attr="placeholder"
+                   aria-label="Admin password"
+                   placeholder="session password" />
+          </label>
+          <button id="join-admin-btn"
+                  data-i18n="lobby.admin-open-dashboard">Open admin dashboard</button>
+          <p class="lobby-hint" id="admin-hint"></p>
+          <button class="link-btn" id="superadmin-toggle"
+                  data-i18n="lobby.superadmin-toggle">
+            Super admin: set / change the password
+          </button>
+          <div id="superadmin-panel" class="hidden">
+            <label><span data-i18n="lobby.superadmin-key-label">Super-admin key</span>
+              <input type="password" id="superadmin-key-input"
+                     data-i18n="lobby.superadmin-key-placeholder" data-i18n-attr="placeholder"
+                     aria-label="Super-admin key"
+                     placeholder="super-admin key" />
+            </label>
+            <label><span data-i18n="lobby.new-pass-label">New session password</span>
+              <input type="password" id="new-pass-input"
+                     data-i18n="lobby.new-pass-placeholder" data-i18n-attr="placeholder"
+                     aria-label="New session password"
+                     placeholder="new session password" />
+            </label>
+            <button id="set-pass-btn"
+                    data-i18n="lobby.save-pass-btn">Save password &amp; open dashboard</button>
+          </div>
+        </div>
+      </div>
+      <p class="lobby-hint" id="lobby-hint"></p>
+    </div>
+  </section>
+
+  <!-- ============ WAITING ROOM (participant, pre-assignment) ============ -->
+  <main id="waiting" class="hidden">
+    <section class="card vignette">
+      <h2 data-i18n="waiting.heading">You have joined</h2>
+      <p data-i18n-html="waiting.body">Hi <strong id="waiting-name"></strong> &mdash; you are in the waiting room. A
+        facilitator will place you in a Franco-Japanese room and start the session
+        shortly. <strong>Your screen will move automatically</strong> &mdash; nothing to do.</p>
+      <p class="hint" id="waiting-status" aria-live="polite"></p>
+      <a id="teams-btn-waiting" class="teams-btn hidden" target="_blank" rel="noopener"
+         data-i18n="waiting.teams-btn">
+        Join the Teams call</a>
+    </section>
+    <section class="card">
+      <h3><span data-i18n="waiting.joined-so-far">Joined so far</span> <span class="count" id="waiting-count">0</span></h3>
+      <div id="waiting-list" class="presence-bar"></div>
+    </section>
+    <button id="waiting-leave" class="reset-btn" data-i18n="waiting.leave">Leave</button>
+    <!-- GDPR Art. 15 (right of access). Lets participants download a
+         JSON file of EVERYTHING the platform stores about them under
+         the current session: pool entry, presence, answers, votes,
+         consent record. Identified (Google-signed-in) participants
+         also get their users/{uid}/profile + history. Generates the
+         file in the browser via fetch + Blob — no server round-trip,
+         no admin involvement. -->
+    <p class="data-rights-row">
+      <button type="button" id="gdpr-export-btn" class="splash-link"
+              data-i18n="data-rights.export-btn">
+        Download my data (JSON) ⤓
+      </button>
+    </p>
+  </main>
+
+  <!-- ============ ROOM VIEW (participants AND admins-in-a-room) ============ -->
+  <main id="app" class="hidden">
+    <div id="room-main">
+      <section class="card stage-card">
+        <div class="stage-row">
+          <span id="stage-indicator" class="stage-indicator" aria-live="polite"></span>
+          <span id="room-score-chip" class="score-chip hidden" title="Your team's score"></span>
+          <div class="stage-controls">
+            <button id="prev-btn">&larr; Back</button>
+            <button id="next-btn">Next &rarr;</button>
+            <button id="call-prof-btn" class="call-btn"
+                    data-i18n="room.call-facilitator">Call a facilitator</button>
+            <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
+            <button id="leave-btn" title="Leave">Leave</button>
+          </div>
+        </div>
+        <p id="stage-now" aria-live="polite"></p>
+        <p id="stage-wait" class="stage-wait" aria-live="polite"></p>
+        <div class="presence-line">
+          <span class="presence-label">In your room (<span id="room-name"></span>):</span>
+          <span id="presence-bar" class="presence-bar"></span>
+        </div>
+      </section>
+
+      <div id="late-banner" class="late-banner hidden" role="status" aria-live="polite"></div>
+
+      <!-- D22 (SIMULATION_EDGE_CASES.md): facilitator-offline hint.
+           Shown when /_adminPresence has not been refreshed in >5min,
+           so students know if the facilitator closed their browser
+           without ending the session. Renders politely (status, not
+           alert) — students can keep working and the banner clears
+           automatically as soon as the facilitator returns. -->
+      <div id="facilitator-presence-banner" class="late-banner hidden"
+           role="status" aria-live="polite"></div>
+
+      <!-- LIVE SCOREBOARD - objectives + cooperative leaderboard, on every stage -->
+      <details id="leaderboard-card" class="card leaderboard-card" open>
+        <summary><strong>&#127919; Goals &amp; live leaderboard</strong>
+          <span class="lb-hint">points reward good reasoning, the order of your
+            decisions and the ideas in your answers &mdash; never speed</span></summary>
+        <!-- the live "how points work" panel - filled in by renderObjectives() -->
+        <div id="objectives" class="objectives"></div>
+        <p class="lb-rubric-note">Nothing to submit &mdash; the platform notices good
+          habits as you work. A facilitator can also award points for deep debate or
+          for drawing out a quiet voice.</p>
+        <!-- the cooperative shared goal + the gentle ranking - renderLeaderboard().
+             aria-live="off" is deliberate: this board can re-render every second
+             during an active stage, which would otherwise spam screen readers
+             with repeated rank announcements. The score-chip in the stage header
+             still announces YOUR team's score politely. -->
+        <div id="leaderboard" aria-live="off"></div>
+      </details>
+
+      <!-- STAGE 0: WELCOME -->
+      <section id="stage-0" class="stage">
+        <div class="card vignette">
+          <h2 data-i18n="stage.welcome.title">Welcome to Session 3</h2>
+          <p data-i18n="stage.welcome.intro">Theme: Learning From Each Other &mdash; a student-led
+            exchange session. Everything for today runs from this platform. You move through the
+            session together; a facilitator advances your room from one block to the next.</p>
+        </div>
+        <!-- explicit anti-coercion / fairness note, addresses the curricular
+             power-imbalance finding from the research-ethics audit. Visible
+             every time a student lands on the Welcome stage. -->
+        <div class="card grade-note">
+          <p data-i18n="stage.welcome.grade-note"><strong>Your grade and your standing are not
+            affected by this workshop.</strong> The points the platform awards are for
+            in-session learning only &mdash; they do not contribute to your
+            university grade. If you disagree with a point or a penalty,
+            tell your facilitator; scoring is reviewable.</p>
+        </div>
+        <!-- pre-session questionnaire card: appears only if a facilitator
+             entered a link in the admin dashboard ("Pre-session questionnaire") -->
+        <div class="card prequiz-card hidden" id="prequiz-card">
+          <h3>Before we start &mdash; quick questionnaire</h3>
+          <p>Your facilitator has set up a short questionnaire to fill in
+            before the workshop begins. It only takes a few minutes.</p>
+          <a id="prequiz-btn" class="teams-btn" target="_blank" rel="noopener">
+            Open the pre-session questionnaire</a>
+        </div>
+        <div class="card">
+          <h3>Today's structure (approx. 2 hours)</h3>
+          <ol class="info-list">
+            <li><strong>Opening presentation</strong> &mdash; a Franco-Japanese student pair
+              compares medical education in France and Japan (10&ndash;15 min + questions).</li>
+            <li><strong>Module A &mdash; Chronic Pain &amp; the Clinical Case</strong>, worked
+              through here on the platform.</li>
+            <li><strong>Module B &mdash; Breaking Bad News</strong>, a cross-cultural roleplay.</li>
+            <li><strong>Wrap-up</strong> &mdash; debrief and the end-of-session questionnaire.</li>
+          </ol>
+          <p class="hint">Watch and listen during the opening presentation. A facilitator
+            will move your room to Module A when it finishes.</p>
+        </div>
+        <!-- in-platform pre-test card: appears only when the scenario defines a
+             preTest question bank AND the participant has not already taken it.
+             Optional throughout — never blocks the workshop flow. Rendered by
+             renderPreTest() in script.js. -->
+        <div class="card pretest-card hidden" id="pretest-card">
+          <h3 id="pretest-card-title" data-i18n="test.pre.title">Quick pre-session knowledge check</h3>
+          <p id="pretest-card-intro" data-i18n="test.pre.intro">Before today's workshop starts, your facilitator has set up a short multiple-choice check on the scenario you're about to discuss. It's anonymous within your university, optional, and your answers do not affect your grade.</p>
+          <div class="pretest-actions">
+            <button id="pretest-start-btn" class="teams-btn"
+                    data-i18n="test.pre.start">Start the pre-test</button>
+            <button id="pretest-skip-btn" class="ghost-btn"
+                    data-i18n="test.skip">Skip the test</button>
+          </div>
+          <div id="pretest-body" class="test-body hidden" aria-live="polite"></div>
+        </div>
+
+        <div class="card team-name-card">
+          <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z" /><path
+            d="M14 6l4 4" /></svg> Name your team</h3>
+          <p class="hint">Pick a fun team name together &mdash; it shows on the live
+            leaderboard. Anyone in the room can set it.</p>
+          <div class="answer-add">
+            <input type="text" id="team-name-input" maxlength="32"
+                   data-i18n="room.team-name-label" data-i18n-attr="aria-label"
+                   aria-label="Team name"
+                   placeholder="e.g. The Differentials, Team Sakura-Camembert..." />
+            <button id="team-name-btn" class="answer-add-btn">Save name</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- STAGE 1: MODULE A -->
+      <section id="stage-1" class="stage hidden">
+        <details class="card instructions" open>
+          <summary><strong>Module A &mdash; instructions</strong> (tap to show or hide)</summary>
+          <p><strong>How it works.</strong> Work through the case as a group: decide what to
+            ask, examine and investigate. Each result is revealed on request and everyone in
+            the room sees who revealed what. Completing the clinical synthesis unlocks the
+            discussion prompts.</p>
+          <p><strong>Phase 0 &mdash; Set up (2 min).</strong> No roles and no group leader
+            &mdash; you work as equals. The one thing to agree on:
+            <strong>make sure everyone takes part</strong>. Every voice in the room, French
+            and Japanese, should be heard &mdash; before you move on from a "Compare France
+            &amp; Japan" prompt, check that both a Caen and a Nagoya voice have spoken.</p>
+          <p><strong>Phase 1 &mdash; Work through the case (22 min).</strong> Use the panels
+            below: press a button to ask the patient a question, examine them, or run a test
+            &mdash; the answer appears for the whole room.</p>
+          <p><strong>Phase 2 &mdash; The Exchange (10 min).</strong> Work through the discussion
+            prompts above. The prompts marked <strong>"Compare France &amp; Japan"</strong> must
+            be answered by at least one <strong>Caen</strong> voice <em>and</em> one
+            <strong>Nagoya</strong> voice before you move on &mdash; the point is to compare and
+            debate, not to agree quickly. You are explicitly comparing five things: how a named
+            drug request is handled, opioid prescribing rules and culture, how readily imaging
+            is ordered, what patients expect from the consultation, and how decisions are shared.</p>
+          <p><strong>Phase 3 &mdash; Write your bullets (5 min)</strong> in the Group answers box
+            below:</p>
+          <ol class="info-list">
+            <li>Your group's first-line plan for the patient.</li>
+            <li>One way France and Japan genuinely <strong>differ</strong> on this case.</li>
+            <li>One thing your group <strong>disagreed</strong> about and could not fully resolve.</li>
+            <li>One thing you each take home.</li>
+          </ol>
+        </details>
+
+        <section class="card vignette">
+          <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
+               aria-label="A patient sitting in a clinic consultation">
+            <rect width="200" height="140" rx="16" fill="#e9f4fb" />
+            <circle cx="166" cy="34" r="22" fill="#fbf3df" />
+            <rect x="0" y="112" width="200" height="28" fill="#d8e8f3" />
+            <ellipse cx="74" cy="116" rx="36" ry="8" fill="#bcd9ee" />
+            <path d="M50 112 q-4 -40 24 -44 q28 4 24 44z" fill="#2e9fdf" />
+            <circle cx="74" cy="56" r="15" fill="#1763a6" />
+            <path d="M120 70 a16 16 0 0 1 28 0" fill="none" stroke="#1763a6"
+                  stroke-width="3.6" stroke-linecap="round" />
+            <path d="M120 78 a16 16 0 0 0 28 0" fill="none" stroke="#e08a1e"
+                  stroke-width="3.6" stroke-linecap="round" />
+            <circle cx="134" cy="62" r="3.6" fill="#4f7d8c" />
+          </svg>
+          <h2>The patient in front of you</h2>
+          <p>
+            <strong>Mr Lefebvre</strong>, a 45-year-old office worker, comes to your clinic with
+            <strong>8 months of lower back pain</strong>. He is frustrated: a friend abroad was
+            given oxycodone and "it fixed everything", and he wants the same. Your group must
+            work up the case and agree a management plan.
+          </p>
+          <p class="hint">
+            Decide what to <em>ask</em>, <em>examine</em> and <em>investigate</em> &mdash; each
+            result is revealed on request. Completing the clinical synthesis unlocks the
+            discussion prompts.
+          </p>
+        </section>
+
+        <div class="columns">
+          <div class="col-left">
+            <section class="card">
+              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path
+                d="M4 5h16v11H9l-4 4v-4H4z" /><circle cx="9" cy="10.5" r="1"
+                fill="#1763a6" stroke="none" /><circle cx="12" cy="10.5" r="1"
+                fill="#1763a6" stroke="none" /><circle cx="15" cy="10.5" r="1"
+                fill="#1763a6" stroke="none" /></svg> Ask the patient</h3>
+              <div class="btn-group" id="group-history"></div>
+            </section>
+            <section class="card">
+              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
+                d="M6 3v6a5 5 0 0 0 10 0V3" /><circle cx="18" cy="15" r="3" /><path
+                d="M11 14v2a4 4 0 0 0 4 4" /></svg> Examine</h3>
+              <div class="btn-group" id="group-exam"></div>
+            </section>
+            <section class="card">
+              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
+                2-3l-5-9V3" /><path d="M7.5 14h9" /></svg> Investigations &amp; synthesis</h3>
+              <div class="btn-group" id="group-labs"></div>
+            </section>
+            <button id="reset-btn" class="reset-btn" title="Clear this room's findings">
+              Reset this room's case
+            </button>
+          </div>
+
+          <div class="col-right">
+            <!-- a tab bar so each big section is one click away, not a long scroll;
+                 the panels below preserve every existing element id and class -->
+            <div class="rcol-tabs" role="tablist" aria-label="Module A panels">
+              <button class="rcol-tab is-active" type="button" data-tab="findings"
+                      role="tab" aria-selected="true" aria-controls="rcol-p-findings">
+                <span class="rcol-tab-icon" aria-hidden="true">🔍</span>
+                <span class="rcol-tab-label">Findings</span>
+                <span class="rcol-tab-badge" id="tab-badge-findings">0</span>
+              </button>
+              <button class="rcol-tab" type="button" data-tab="decisions"
+                      role="tab" aria-selected="false" aria-controls="rcol-p-decisions">
+                <span class="rcol-tab-icon" aria-hidden="true">🗳️</span>
+                <span class="rcol-tab-label">Team decisions</span>
+                <span class="rcol-tab-badge" id="tab-badge-decisions" hidden></span>
+              </button>
+              <button class="rcol-tab" type="button" data-tab="discussion"
+                      role="tab" aria-selected="false" aria-controls="rcol-p-discussion">
+                <span class="rcol-tab-icon" aria-hidden="true">💬</span>
+                <span class="rcol-tab-label">Discussion</span>
+                <span class="rcol-tab-badge" id="tab-badge-discussion" hidden></span>
+              </button>
+              <button class="rcol-tab" type="button" data-tab="answers"
+                      role="tab" aria-selected="false" aria-controls="rcol-p-answers">
+                <span class="rcol-tab-icon" aria-hidden="true">📝</span>
+                <span class="rcol-tab-label">Group answers</span>
+                <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
+              </button>
+              <button class="rcol-tab" type="button" data-tab="reference"
+                      role="tab" aria-selected="false" aria-controls="rcol-p-reference">
+                <span class="rcol-tab-icon" aria-hidden="true">📚</span>
+                <span class="rcol-tab-label">Reference</span>
+              </button>
+            </div>
+
+            <div class="rcol-panel is-active" id="rcol-p-findings"
+                 role="tabpanel" data-panel="findings" aria-labelledby="rcol-tab-findings">
+            <section class="card">
+              <h3>Findings log <span class="count" id="findings-count">0</span></h3>
+              <p class="empty" id="findings-empty"><svg class="empty-art" viewBox="0 0 80 60"
+                aria-hidden="true"><rect x="14" y="10" width="52" height="40" rx="4"
+                fill="#f3f5f8" stroke="#d8dde3" /><line x1="22" y1="22" x2="46" y2="22"
+                stroke="#bcc3cc" stroke-width="3" stroke-linecap="round" /><line x1="22"
+                y1="30" x2="40" y2="30" stroke="#bcc3cc" stroke-width="3"
+                stroke-linecap="round" /><circle cx="58" cy="44" r="11" fill="none"
+                stroke="#2e9fdf" stroke-width="3" /><line x1="66" y1="52" x2="74" y2="60"
+                stroke="#2e9fdf" stroke-width="3" stroke-linecap="round" /></svg>
+                Nothing asked yet &mdash; use the buttons on the left to work the case.</p>
+              <ol id="findings-log"></ol>
+              <div id="contrib-tally" class="contrib-tally"></div>
+            </section>
+            </div><!-- /findings panel -->
+
+            <div class="rcol-panel" id="rcol-p-decisions" hidden
+                 role="tabpanel" data-panel="decisions">
+            <section class="card decisions-card" id="decisions-A"></section>
+            </div><!-- /decisions panel -->
+
+            <div class="rcol-panel" id="rcol-p-discussion" hidden
+                 role="tabpanel" data-panel="discussion">
+            <section class="card prompts-card" id="prompts-card">
+              <h3>Discussion prompts</h3>
+              <p class="empty" id="prompts-locked">
+                Locked &mdash; complete the clinical synthesis (red-flag review) to unlock the
+                discussion prompts.
+              </p>
+              <ol id="prompts-list" class="hidden"></ol>
+            </section>
+
+            <section class="card compare-card hidden" id="compare-card">
+              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path
+                d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></svg>
+                Country compare &mdash; opioids &amp; chronic pain</h3>
+              <p>Per-capita opioid consumption differs sharply between countries:</p>
+              <ul>
+                <li><strong>Japan:</strong> among the lowest opioid consumption of high-income
+                  countries.</li>
+                <li><strong>France:</strong> moderate &mdash; well below the USA, above Japan.</li>
+                <li><strong>USA:</strong> historically very high, with a well-known opioid crisis.</li>
+              </ul>
+              <p class="hint">
+                Guidelines for chronic non-specific low-back pain are broadly similar across
+                countries (stay active, exercise, limit imaging, opioids not first-line) &mdash;
+                but prescribing culture, regulation and patient expectations differ sharply.
+                <strong>The guidelines barely differ &mdash; so any difference you find between
+                France and Japan is cultural and regulatory, not scientific. That is exactly
+                what this module is about.</strong> <em>Discuss:</em> is lower opioid use
+                protective, or does it risk under-treating pain?
+              </p>
+            </section>
+            </div><!-- /discussion panel -->
+
+            <div class="rcol-panel" id="rcol-p-reference" hidden
+                 role="tabpanel" data-panel="reference">
+            <details class="card history-card">
+              <summary><strong>&#128220; Historical context &mdash; how we got here</strong></summary>
+              <p>Opium is one of medicine's oldest drugs &mdash; used in ancient Sumer,
+                praised by Galen, bottled as laudanum from the 17th century. The 19th century
+                industrialised it: morphine was isolated around 1804, the hypodermic syringe
+                arrived in the 1850s, and Bayer marketed heroin in 1898. Repeated waves of
+                addiction made 20th-century Western physicians cautious &mdash; opioids were
+                for cancer and acute pain only.</p>
+              <p>That caution collapsed in the United States. In 1995&ndash;96 pain was
+                promoted as "the fifth vital sign" and OxyContin was launched with aggressive,
+                misleading marketing; prescriptions tripled and hundreds of thousands of
+                overdose deaths followed. Japan took a strikingly different path &mdash; tight
+                narcotics regulation, restrictive insurance rules, conservative training and a
+                deep cultural wariness of <em>mayaku</em> (narcotics) &mdash; and today
+                prescribes opioids many times less than the US, with France and the UK in
+                between. Low-back-pain care had its own reversal: until the 1990s bed rest and
+                routine imaging were standard, until trials showed bed rest <em>delays</em>
+                recovery and imaging rarely changes outcomes.</p>
+              <p class="didyouknow">&#128161; <strong>Did you know?</strong> Heroin was sold
+                over the counter as a "non-addictive" cough remedy from 1898 &mdash; a
+                marketing claim eerily echoed a century later for OxyContin.</p>
+              <p class="didyouknow">&#128161; <strong>Did you know?</strong> Japan prescribes
+                opioids more than 20&times; less than the USA &mdash; not because Japanese
+                patients feel less pain, but because of regulation, insurance and culture.</p>
+              <ul class="ref-list">
+                <li>Jones MR et al. A Brief History of the Opioid Epidemic and Strategies for
+                  Pain Medicine. <em>Pain and Therapy</em> 2018;7(1):13&ndash;21.
+                  <a href="https://doi.org/10.1007/s40122-018-0097-6" target="_blank"
+                     rel="noopener">doi.org/10.1007/s40122-018-0097-6</a></li>
+                <li>Onishi E et al. Comparison of Opioid Prescribing Patterns in the United
+                  States and Japan. <em>J Am Board Fam Med</em> 2017;30(2):248&ndash;254.
+                  <a href="https://www.jabfm.org/content/30/2/248" target="_blank"
+                     rel="noopener">jabfm.org</a></li>
+                <li>Tompkins DA et al. Providing chronic pain management in the "Fifth Vital
+                  Sign" era. <em>Drug Alcohol Depend</em> 2017;173(Suppl 1):S11&ndash;S21.
+                  <a href="https://doi.org/10.1016/j.drugalcdep.2016.12.002" target="_blank"
+                     rel="noopener">doi.org/10.1016/j.drugalcdep.2016.12.002</a></li>
+                <li>Waddell G, Feder G, Lewis M. Systematic reviews of bed rest and advice to
+                  stay active for acute low back pain. <em>Br J Gen Pract</em>
+                  1997;47(423):647&ndash;652.
+                  <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC1410119/" target="_blank"
+                     rel="noopener">free full text</a></li>
+                <li>Foster NE et al. Prevention and treatment of low back pain: evidence,
+                  challenges, and promising directions. <em>The Lancet</em>
+                  2018;391(10137):2368&ndash;2383.
+                  <a href="https://doi.org/10.1016/S0140-6736(18)30489-6" target="_blank"
+                     rel="noopener">doi.org/10.1016/S0140-6736(18)30489-6</a></li>
+              </ul>
+            </details>
+
+            <details class="card guidelines-card">
+              <summary><strong>&#128218; Guidelines &mdash; chronic low-back pain &amp; opioids</strong>
+                (France &middot; Japan &middot; UK &middot; USA)</summary>
+              <ul class="ref-list">
+                <li><strong>France &mdash;</strong> Haute Autorité de Santé (HAS), <em>Prise en
+                  charge du patient présentant une lombalgie commune</em>, 2019.
+                  <a href="https://www.has-sante.fr/jcms/c_2961499/fr/prise-en-charge-du-patient-presentant-une-lombalgie-commune"
+                     target="_blank" rel="noopener">has-sante.fr</a></li>
+                <li><strong>Japan &mdash;</strong> Japanese Orthopaedic Association (JOA),
+                  <em>Clinical Practice Guideline for the Management of Low Back Pain</em>,
+                  revised 2019 edition (English secondary publication, <em>J Orthop Sci</em> 2022).
+                  <a href="https://pubmed.ncbi.nlm.nih.gov/34836746/"
+                     target="_blank" rel="noopener">pubmed.ncbi.nlm.nih.gov</a></li>
+                <li><strong>UK &mdash;</strong> NICE, <em>Low back pain and sciatica in over 16s:
+                  assessment and management</em>, NG59 (2016, updated 2020).
+                  <a href="https://www.nice.org.uk/guidance/ng59"
+                     target="_blank" rel="noopener">nice.org.uk/guidance/ng59</a></li>
+                <li><strong>USA &mdash;</strong> American College of Physicians, <em>Noninvasive
+                  Treatments for Acute, Subacute, and Chronic Low Back Pain</em>, 2017
+                  <a href="https://pubmed.ncbi.nlm.nih.gov/28192789/"
+                     target="_blank" rel="noopener">pubmed</a>;
+                  and CDC, <em>Clinical Practice Guideline for Prescribing Opioids for Pain</em>,
+                  2022 <a href="https://www.cdc.gov/mmwr/volumes/71/rr/rr7103a1.htm"
+                     target="_blank" rel="noopener">cdc.gov</a>.</li>
+              </ul>
+              <p class="hint">All four agree on the science: stay active, exercise-based
+                first-line care, image only for red flags, opioids are not first-line for
+                chronic non-specific low-back pain.</p>
+            </details>
+
+            <details class="card recap-card">
+              <summary><strong>&#128203; Recap table &mdash; keep this open for reference</strong></summary>
+              <h4>Red flags &mdash; when to worry</h4>
+              <table class="recap-table">
+                <thead><tr><th>Category</th><th>Ask / look for</th><th>If present</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>Cauda equina</strong> (emergency)</td>
+                    <td>Saddle anaesthesia, urinary retention/incontinence, faecal incontinence,
+                      new sexual dysfunction, bilateral leg symptoms</td>
+                    <td>Same-day emergency referral + urgent MRI</td></tr>
+                  <tr><td><strong>Malignancy</strong></td>
+                    <td>Age &gt;50, cancer history, unexplained weight loss, rest/night pain,
+                      no improvement after 4&ndash;6 weeks</td>
+                    <td>Bloods (FBC, ESR/CRP, calcium) + imaging; refer</td></tr>
+                  <tr><td><strong>Infection</strong></td>
+                    <td>Fever, night sweats, IV drug use, immunosuppression, recent spinal
+                      procedure, focal bony tenderness</td>
+                    <td>ESR/CRP + urgent MRI; refer</td></tr>
+                  <tr><td><strong>Fracture</strong></td>
+                    <td>Significant trauma, or minor trauma with osteoporosis risk; focal
+                      midline bony tenderness</td>
+                    <td>X-ray &plusmn; MRI</td></tr>
+                  <tr><td><strong>Inflammatory</strong> (axial spondyloarthritis)</td>
+                    <td>Onset &lt;45, morning stiffness &gt;30 min, improves with exercise /
+                      worse with rest, second-half-of-night pain</td>
+                    <td>ESR/CRP, consider HLA-B27, rheumatology referral</td></tr>
+                </tbody>
+              </table>
+              <h4>First-line management of chronic non-specific low-back pain</h4>
+              <ul class="info-list">
+                <li><strong>Education &amp; reassurance</strong> &mdash; not dangerous, not
+                  "damage"; hurt &ne; harm; good prognosis.</li>
+                <li><strong>Stay active</strong> &mdash; avoid bed rest; resume work, walking, gym.</li>
+                <li><strong>Structured exercise / physiotherapy</strong> &mdash; the best-evidenced
+                  treatment; adherence matters more than the type.</li>
+                <li><strong>Address yellow flags</strong> &mdash; fear of movement, catastrophising,
+                  low mood, poor sleep &mdash; treat these directly.</li>
+                <li><strong>Non-opioid analgesia</strong> &mdash; NSAIDs at the lowest effective
+                  dose, shortest duration. Paracetamol alone is ineffective.</li>
+                <li><strong>Do NOT</strong> &mdash; routine imaging, opioids, gabapentinoids /
+                  benzodiazepines, prolonged bed rest.</li>
+              </ul>
+              <h4>Opioids for chronic non-cancer pain</h4>
+              <p>Small short-term pain benefit at best, no proven benefit on function, no good
+                evidence beyond ~12 weeks; real harms (tolerance, dependence, hyperalgesia,
+                falls, overdose). <strong>All four countries: not first-line.</strong></p>
+              <h4>France &middot; Japan &middot; UK &middot; USA &mdash; at a glance</h4>
+              <table class="recap-table">
+                <thead><tr><th></th><th>Imaging</th><th>Opioids for chronic LBP</th>
+                  <th>Prescribing-culture context</th></tr></thead>
+                <tbody>
+                  <tr><td><strong>France</strong></td><td>Not without red flags</td>
+                    <td>Not routine; biopsychosocial care first</td>
+                    <td>Moderate use &mdash; above Japan, well below USA</td></tr>
+                  <tr><td><strong>Japan</strong></td><td>Restrict to indicated cases</td>
+                    <td>Not first-line; cautious, harm&ndash;benefit weighted</td>
+                    <td>Among the lowest opioid use of high-income countries</td></tr>
+                  <tr><td><strong>UK</strong></td><td>Do not routinely image</td>
+                    <td>Do <em>not</em> offer opioids for chronic LBP (NICE)</td>
+                    <td>Risk-stratified, self-management&ndash;led NHS model</td></tr>
+                  <tr><td><strong>USA</strong></td><td>Avoid routine imaging</td>
+                    <td>Last resort only; maximise non-opioids first</td>
+                    <td>Historically very high use; opioid crisis</td></tr>
+                </tbody>
+              </table>
+            </details>
+            </div><!-- /reference panel -->
+
+            <div class="rcol-panel" id="rcol-p-answers" hidden
+                 role="tabpanel" data-panel="answers">
+            <section class="card answers-card">
+              <h3>Group answers &mdash; Module A</h3>
+              <p class="hint" id="answersA-hint"></p>
+              <ul class="answers-list" id="answers-list-moduleA"></ul>
+              <p class="typing-line hidden" id="typing-moduleA"></p>
+              <p class="hint answer-input-language-hint"
+                 data-i18n="room.answer-input-language-hint">Write in any language &mdash; your facilitator and teammates can read English, French and Japanese.</p>
+              <div class="answer-add">
+                <input type="text" id="answer-input-moduleA" maxlength="500"
+                       data-i18n="room.answer-input-label" data-i18n-attr="aria-label"
+                       aria-label="Add a Module A group answer"
+                       placeholder="Add a point - it appears with your name and colour" />
+                <button class="answer-add-btn" data-mod="moduleA">Add</button>
+              </div>
+            </section>
+            </div><!-- /answers panel -->
+          </div>
+        </div>
+      </section>
+
+      <!-- STAGE 2: MODULE B -->
+      <section id="stage-2" class="stage hidden">
+        <section class="card vignette">
+          <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
+               aria-label="A doctor speaking with a patient and a family member">
+            <rect width="200" height="140" rx="16" fill="#fbf3df" />
+            <rect x="0" y="112" width="200" height="28" fill="#efe2c4" />
+            <path d="M22 112 q-3 -34 20 -38 q23 4 20 38z" fill="#2e9fdf" />
+            <circle cx="42" cy="56" r="13" fill="#1763a6" />
+            <path d="M78 112 q-3 -36 22 -40 q25 4 22 40z" fill="#d8b06a" />
+            <circle cx="100" cy="52" r="14" fill="#b45309" />
+            <path d="M140 112 q-2 -30 18 -34 q20 4 18 34z" fill="#9ab9c6" />
+            <circle cx="158" cy="62" r="11" fill="#4f7d8c" />
+            <path d="M58 58 q14 -10 28 -6" fill="none" stroke="#1763a6"
+                  stroke-width="2.6" stroke-linecap="round" stroke-dasharray="1 6" />
+          </svg>
+          <h2 data-i18n="stage.modB.title">Module B — Breaking Bad News: A Cross-Cultural Roleplay</h2>
+          <p data-i18n="stage.modB.vignette.body" data-i18n-html><strong>The situation (read once, together).</strong> Mr / Mrs Tanaka-Martin,
+            <strong>60 years old</strong>, came in for tiredness and weight loss. The tests
+            are back: the diagnosis is a <strong>serious, chronic, life-changing illness</strong>
+            &mdash; your group chooses one (for example: a newly diagnosed cancer, advanced
+            heart failure, early Parkinson's disease, or kidney failure needing dialysis). It
+            is <strong>treatable but not curable</strong>, and it will change how the patient
+            lives. The patient does not yet know. Their <strong>adult child</strong> has come
+            with them and is in the room &mdash; and at some point will quietly ask you something.</p>
+        </section>
+
+        <div class="card safety-note">
+          <p data-i18n="stage.modB.safety.heading" data-i18n-html><strong>Before you start &mdash; two things.</strong></p>
+          <p data-i18n="stage.modB.safety.simulation" data-i18n-html><em>This is a simulation.</em> The feelings can still feel real. If anything hits
+            too close to home, you can move into the observer role at any time, no explanation
+            needed. When you debrief, talk about <strong>the physician's choices</strong> &mdash;
+            never criticise the person.</p>
+          <p data-i18n="stage.modB.safety.language" data-i18n-html><em>English is everyone's second or third language here</em> &mdash; that is part of
+            the point. If you cannot find a word, slow down, use a simpler one, or pause. Silence
+            is allowed in this conversation and often helps. Empathy is in your tone, your pace
+            and your face, not in advanced vocabulary.</p>
+        </div>
+
+        <div class="card instructions-open">
+          <p class="hint" data-i18n="stage.modB.intro.hint">This module is a roleplay your group runs together. Work through
+            the four phases in order &mdash; an observer keeps time.</p>
+
+          <h3 data-i18n="stage.modB.phase1.title">Phase 1 &mdash; Set up (6 min)</h3>
+          <p data-i18n="stage.modB.phase1.intro">Assign one volunteer to each role; everyone else is an observer. Read your own
+            short brief, then begin.</p>
+          <ul class="info-list">
+            <li data-i18n="stage.modB.phase1.role.physician" data-i18n-html><strong>Physician</strong> &mdash; you have the test results. Deliver the news
+              honestly and with empathy, and handle whatever happens in the room. Keep SPIKES
+              in mind (see the strip below) but do not recite it. You do not have to "win" or
+              fix everything &mdash; a good consultation can end with the patient still upset.</li>
+            <li data-i18n="stage.modB.phase1.role.patient" data-i18n-html><strong>Patient</strong> &mdash; you are 60. You suspected something was wrong
+              but hoped it was nothing. Choose privately how you react, and you may change as
+              the scene goes on. <strong>Decide one thing in advance: deep down, do you want to
+              know everything, or not?</strong> Don't announce it &mdash; let the physician
+              discover it.</li>
+            <li data-i18n="stage.modB.phase1.role.family" data-i18n-html><strong>Family member (adult child)</strong> &mdash; you love your parent and
+              you are frightened. Partway through &mdash; not at the start &mdash; find a natural
+              moment to <strong>lower your voice and speak to the physician aside</strong>:
+              ask them not to tell your parent everything. Have a reason ready in your head.
+              Keep it quiet and well-meant, not a demand.</li>
+            <li data-i18n="stage.modB.phase1.role.observer" data-i18n-html><strong>Observer(s)</strong> &mdash; you are the timekeeper and you run Phase 3.
+              Stay silent during the scene. Watch <em>for the SPIKES steps</em>: what built
+              trust, what created distance, and what the physician did at the moment the family
+              member spoke to them. Note one thing the physician <em>said</em> that worked, and
+              one moment that was hard.</li>
+          </ul>
+
+          <div class="spikes-strip">
+            <strong data-i18n="stage.modB.spikes.label">SPIKES</strong> &mdash;
+            <span data-i18n="stage.modB.spikes.s" data-i18n-html><strong>S</strong>etting</span> &middot;
+            <span data-i18n="stage.modB.spikes.p" data-i18n-html><strong>P</strong>erception (what do they already understand?)</span> &middot;
+            <span data-i18n="stage.modB.spikes.i" data-i18n-html><strong>I</strong>nvitation (how much do they want to know?)</span> &middot;
+            <span data-i18n="stage.modB.spikes.k" data-i18n-html><strong>K</strong>nowledge (news in small, plain pieces)</span> &middot;
+            <span data-i18n="stage.modB.spikes.e" data-i18n-html><strong>E</strong>motions (name and acknowledge the feeling)</span> &middot;
+            <span data-i18n="stage.modB.spikes.s2" data-i18n-html><strong>S</strong>trategy (agree the next step; you won't abandon them)</span>
+          </div>
+
+          <div class="phrases-box">
+            <strong data-i18n="stage.modB.spikes.useful.label">Useful sentences (English is everyone's second language):</strong>
+            <span data-i18n="stage.modB.spikes.useful.examples">"I'm afraid I have some serious news." &middot; "Would you like me to explain
+            everything, or focus on what we do next?" &middot; "I can see this is hard to hear."
+            &middot; "Take your time." &middot; "What questions do you have for me?"</span>
+          </div>
+
+          <h3 data-i18n="stage.modB.phase2.title">Phase 2 &mdash; Play it out (12 min scene + 3 min swap)</h3>
+          <p data-i18n="stage.modB.phase2.intro" data-i18n-html>The observer says "start": the patient is already seated, the physician begins.
+            The physician delivers the news and handles the family member's request in the
+            moment. Observers stay silent; the observer calls "time" at the end. <strong>Then
+            swap and run it again</strong> with a different physician &mdash; over the two runs,
+            at least one Caen and one Nagoya student must take the physician role. The second
+            run is almost always better, and that improvement is worth discussing.</p>
+
+          <div class="micro-framework">
+            <p data-i18n="stage.modB.framework.label" data-i18n-html><strong>When the family asks you to withhold information &mdash; "Pause &middot;
+              Explore &middot; Explain &middot; Realign":</strong></p>
+            <ol class="info-list">
+              <li data-i18n="stage.modB.framework.pause" data-i18n-html><strong>Pause</strong> &mdash; don't refuse or agree on the spot. Thank them;
+                their worry is real and usually loving.</li>
+              <li data-i18n="stage.modB.framework.explore" data-i18n-html><strong>Explore the <em>why</em></strong> &mdash; "Help me understand what
+                worries you most about your parent knowing."</li>
+              <li data-i18n="stage.modB.framework.explain" data-i18n-html><strong>Explain your position</strong> &mdash; you cannot deceive a patient
+                who wants to know, but you do not have to force information on someone who
+                does not.</li>
+              <li data-i18n="stage.modB.framework.realign" data-i18n-html><strong>Realign</strong> &mdash; ask the <em>patient</em> how much they want
+                to know and who they want involved (this is SPIKES' "Invitation"). The family's
+                worry becomes part of the conversation, not a secret kept from the patient.</li>
+            </ol>
+          </div>
+
+          <h3 data-i18n="stage.modB.phase3.title">Phase 3 &mdash; The exchange (15 min)</h3>
+          <p data-i18n="stage.modB.phase3.ground-rule" data-i18n-html><strong>Ground rule (an observer reads this aloud):</strong> we are comparing
+            <em>practices and how they are changing</em>, not ranking countries. Neither model
+            is "the advanced one". Speak about what you have actually seen or been taught
+            &mdash; and it is completely fine to say "I'm not sure, this is changing."</p>
+          <p data-i18n="stage.modB.phase3.intro">An observer reads these out one at a time &mdash; for each, make sure both a Caen
+            and a Nagoya voice answers:</p>
+          <ol class="info-list">
+            <li data-i18n="stage.modB.phase3.q1" data-i18n-html><strong>Who is the information for?</strong> When there is serious news, who is
+              told <em>first</em> &mdash; the patient or the family? Is that what the law says,
+              the textbook says, or what actually happens on the ward? Name one way France and
+              Japan are the <strong>same</strong> and one way they <strong>differ</strong>.</li>
+            <li data-i18n="stage.modB.phase3.q2" data-i18n-html><strong>Has it changed?</strong> Was disclosure done differently 20&ndash;30
+              years ago? (Japan: cancer-diagnosis disclosure rose from under ~30% in the early
+              1990s to ~94% by 2016. France: the 2002 <em>loi Kouchner</em> changed patients'
+              information rights.) Why do norms change &mdash; law, generations, expectations?</li>
+            <li data-i18n="stage.modB.phase3.q3" data-i18n-html><strong>The family's quiet request &mdash; what did you actually do, and why?</strong>
+              Would a typical doctor in France respond the same way as one in Japan? What is each
+              most worried about &mdash; lying to the patient, or harming the patient? Is
+              "protecting someone from bad news" love, or taking away their choice &mdash; or both?</li>
+            <li data-i18n="stage.modB.phase3.q4" data-i18n-html><strong>Autonomy vs. family &mdash; is it really either/or?</strong> France is
+              described as "autonomy first", Japan as "family-centred" &mdash; but French law
+              also protects the right <em>not</em> to know, and many Japanese patients today
+              want full information. Where does your country actually sit? What would a
+              <em>both</em> model look like?</li>
+            <li data-i18n="stage.modB.phase3.q5" data-i18n-html><strong>Empathy across a language barrier.</strong> You broke bad news in English.
+              Did Caen and Nagoya students lean on different things &mdash; words, silence, tone,
+              body language? What survives the language barrier, and what gets lost?</li>
+            <li data-i18n="stage.modB.phase3.q6" data-i18n-html><strong>What was hard &mdash; and was it hard in the same way?</strong> Did Caen
+              and Nagoya students find <em>different</em> parts hard (the silence? the family
+              member? saying the diagnosis out loud? not fixing the distress?)? What does that
+              difference tell you?</li>
+          </ol>
+
+          <h3 data-i18n="stage.modB.phase4.title">Phase 4 &mdash; Write your bullets (5 min)</h3>
+          <p data-i18n="stage.modB.phase4.intro">In the Group answers box below (the facilitators collect these at the end):</p>
+          <ol class="info-list">
+            <li data-i18n="stage.modB.phase4.b1">One concrete sentence your group would use to answer the family's request to
+              withhold information.</li>
+            <li data-i18n="stage.modB.phase4.b2" data-i18n-html>One way disclosure practice <strong>differs</strong> between France and Japan
+              &mdash; and one way it is <strong>converging</strong>.</li>
+            <li data-i18n="stage.modB.phase4.b3">One thing each of you will do differently, in your own country, because of
+              this discussion.</li>
+          </ol>
+        </div>
+
+        <details class="card history-card">
+          <summary><strong>&#128220; Historical context &mdash; how we got here</strong></summary>
+          <p>For most of Western medical history, concealing a grave diagnosis was considered
+            <em>good</em> medicine. The 1847 AMA Code of Ethics told doctors to be "the
+            minister of hope and comfort to the sick." As late as 1961, Donald Oken found that
+            about 90% of US physicians preferred <em>not</em> to tell patients they had cancer.</p>
+          <p>The reversal was rapid. Driven by the 1960s&ndash;70s rights movements, the rise
+            of bioethics, research scandals such as Tuskegee, and a new emphasis on autonomy
+            and informed consent, a 1979 replication found roughly 97% of physicians now
+            favoured disclosure. France formalised these patient rights later: the
+            <em>loi Kouchner</em> of 4 March 2002 enshrined the right to information, consent
+            and access to one's medical record. Japan's trajectory differed and is unusually
+            well documented: into the early 1990s physicians routinely told only the
+            <em>family</em>, not the patient, of a cancer diagnosis &mdash; disclosure then
+            rose sharply through the 1990s, though Japan moved toward <em>selective</em>
+            rather than universal truth-telling, still weighting family wishes heavily.</p>
+          <p class="didyouknow">&#128161; <strong>Did you know?</strong> In 1961, 9 out of 10
+            American doctors would not tell a patient they had cancer &mdash; within two
+            decades, almost the same proportion said they would.</p>
+          <p class="didyouknow">&#128161; <strong>Did you know?</strong> Until the 1990s,
+            Japanese physicians often told the family but not the patient &mdash; so the
+            "please don't tell my parent" scenario in this roleplay was, until recently,
+            simply standard practice.</p>
+          <ul class="ref-list">
+            <li>Sisk B et al. The Truth about Truth-Telling in American Medicine: A Brief
+              History. <em>The Permanente Journal</em> 2016;20(3):15&ndash;219.
+              <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4991917/" target="_blank"
+                 rel="noopener">free full text</a></li>
+            <li>Oken D. What to tell cancer patients: a study of medical attitudes.
+              <em>JAMA</em> 1961;175(13):1120&ndash;1128.</li>
+            <li>Novack DH et al. Changes in physicians' attitudes toward telling the cancer
+              patient. <em>JAMA</em> 1979;241(9):897&ndash;900.</li>
+            <li>Elwyn TS et al. Cancer disclosure in Japan: historical comparisons, current
+              practices. <em>Soc Sci Med</em> 1998;46(9):1151&ndash;1163.
+              <a href="https://pubmed.ncbi.nlm.nih.gov/9572605/" target="_blank"
+                 rel="noopener">pubmed</a></li>
+            <li>Loi n&deg; 2002-303 du 4 mars 2002 relative aux droits des malades.
+              <em>Journal Officiel</em> 2002.
+              <a href="https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000000227015/"
+                 target="_blank" rel="noopener">legifrance.gouv.fr</a></li>
+          </ul>
+        </details>
+
+        <details class="card guidelines-card">
+          <summary><strong>&#128218; Guidelines &amp; standards &mdash; breaking bad news &amp;
+            disclosure</strong> (France &middot; Japan &middot; UK &middot; USA)</summary>
+          <ul class="ref-list">
+            <li><strong>France &mdash;</strong> Loi n&deg; 2002-303 du 4 mars 2002
+              ("loi Kouchner"), right to be informed <em>and</em> the right not to know
+              (Code de la santé publique, art. L1111-2)
+              <a href="https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000227015"
+                 target="_blank" rel="noopener">legifrance.gouv.fr</a>;
+              HAS, <em>Annoncer une mauvaise nouvelle</em> (2008)
+              <a href="https://www.has-sante.fr/jcms/c_698028/fr/annoncer-une-mauvaise-nouvelle"
+                 target="_blank" rel="noopener">has-sante.fr</a>.</li>
+            <li><strong>Japan &mdash;</strong> Japan Medical Association, <em>Guidelines for
+              Physician's Professional Ethics</em> (2008)
+              <a href="https://www.med.or.jp/english/activities/pdf/2009_02/075_091.pdf"
+                 target="_blank" rel="noopener">med.or.jp</a>;
+              and the <strong>SHARE</strong> model &mdash; a breaking-bad-news framework derived
+              from Japanese cancer patients' own stated preferences (Fujimori et al.)
+              <a href="https://pubmed.ncbi.nlm.nih.gov/24912901/"
+                 target="_blank" rel="noopener">pubmed</a>.</li>
+            <li><strong>UK &mdash;</strong> General Medical Council, <em>Good Medical Practice</em>
+              (2024)
+              <a href="https://www.gmc-uk.org/professional-standards/good-medical-practice-2024"
+                 target="_blank" rel="noopener">gmc-uk.org</a>
+              and <em>Decision making and consent</em> (2020)
+              <a href="https://www.gmc-uk.org/professional-standards/the-professional-standards/decision-making-and-consent"
+                 target="_blank" rel="noopener">gmc-uk.org</a>.</li>
+            <li><strong>USA &mdash;</strong> ASCO, <em>Patient-Clinician Communication
+              Consensus Guideline</em> (2017)
+              <a href="https://pubmed.ncbi.nlm.nih.gov/28892432/"
+                 target="_blank" rel="noopener">pubmed</a>;
+              AMA <em>Code of Medical Ethics</em>, Opinion 2.1.3 "Withholding Information from
+              Patients".</li>
+          </ul>
+          <p class="hint">The cliché "France = autonomy, Japan = family" is half-true at best:
+            France's law also protects the right <em>not</em> to know, and Japan has moved
+            strongly toward patient disclosure. Both systems are negotiating the same tension
+            &mdash; and both are still changing.</p>
+        </details>
+
+        <details class="card recap-card">
+          <summary><strong>&#128203; Recap table &mdash; keep this open for reference</strong></summary>
+          <h4>SPIKES &mdash; the six steps</h4>
+          <table class="recap-table">
+            <thead><tr><th>Step</th><th>What you do</th><th>One phrase</th></tr></thead>
+            <tbody>
+              <tr><td><strong>S</strong>etting</td><td>Sit down, privacy, no interruptions</td>
+                <td>"Is it alright if we talk now?"</td></tr>
+              <tr><td><strong>P</strong>erception</td><td>Find out what they already understand</td>
+                <td>"What have you been told so far?"</td></tr>
+              <tr><td><strong>I</strong>nvitation</td><td>Ask how much they want to know</td>
+                <td>"All the details, or the headlines?"</td></tr>
+              <tr><td><strong>K</strong>nowledge</td><td>Warning shot, then news in small plain
+                pieces; pause</td><td>"I'm afraid the results are serious&hellip;"</td></tr>
+              <tr><td><strong>E</strong>motions</td><td>Name and acknowledge the feeling; allow
+                silence</td><td>"I can see this is a shock."</td></tr>
+              <tr><td><strong>S</strong>trategy</td><td>Agree the next concrete step; reaffirm
+                you won't abandon them</td><td>"Here's what we do next &mdash; I'll be with you."</td></tr>
+            </tbody>
+          </table>
+          <h4>When the family asks you to withhold information</h4>
+          <table class="recap-table">
+            <thead><tr><th>Step</th><th>Do</th><th>Don't</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Pause</strong></td><td>Thank them; the request comes from love/worry</td>
+                <td>Agree or refuse on the spot</td></tr>
+              <tr><td><strong>Explore</strong></td><td>"Help me understand what worries you most."</td>
+                <td>Dismiss the fear as irrational</td></tr>
+              <tr><td><strong>Explain</strong></td><td>Can't deceive a patient who wants to know;
+                needn't force facts on one who doesn't</td><td>Lecture coldly about "the law"</td></tr>
+              <tr><td><strong>Realign</strong></td><td>Ask the <em>patient</em> what they want to
+                know &amp; who to involve</td><td>Keep a secret <em>from</em> the patient
+                <em>with</em> the family</td></tr>
+            </tbody>
+          </table>
+          <h4>Disclosure norms &amp; patient-information rights</h4>
+          <table class="recap-table">
+            <thead><tr><th></th><th>Who is told?</th><th>Right <em>not</em> to know?</th>
+              <th>Key instruments</th></tr></thead>
+            <tbody>
+              <tr><td><strong>France</strong></td>
+                <td>Patient has a legal right to be informed</td>
+                <td>Yes &mdash; explicit in law</td>
+                <td>Loi Kouchner 2002; HAS guidance; Code de déontologie</td></tr>
+              <tr><td><strong>Japan</strong></td>
+                <td>Historically family-first; now patient disclosure is the norm</td>
+                <td>Respected in practice; supported by case law</td>
+                <td>JMA ethics guidelines; Cancer Control Act; SHARE model</td></tr>
+              <tr><td><strong>UK</strong></td>
+                <td>Patient-centred; shared decision-making is the standard</td>
+                <td>Yes &mdash; patient may decline information</td>
+                <td>GMC <em>Good Medical Practice</em> 2024; <em>Montgomery</em> 2015</td></tr>
+              <tr><td><strong>USA</strong></td>
+                <td>Patient-centred; withholding from the patient is ethically unacceptable</td>
+                <td>Yes &mdash; patient may ask not to be informed</td>
+                <td>ASCO communication guideline; AMA Opinion 2.1.3</td></tr>
+            </tbody>
+          </table>
+          <p class="hint">Big point: both systems are negotiating the <em>same</em> tension
+            &mdash; respecting the individual vs. protecting them through the family &mdash;
+            and both are still changing.</p>
+        </details>
+        <section class="card decisions-card" id="decisions-B"></section>
+
+        <section class="card answers-card">
+          <h3 data-i18n="stage.modB.answers.title">Group answers &mdash; Module B</h3>
+          <p class="hint" id="answersB-hint"></p>
+          <ul class="answers-list" id="answers-list-moduleB"></ul>
+          <p class="typing-line hidden" id="typing-moduleB"></p>
+          <p class="hint answer-input-language-hint"
+             data-i18n="room.answer-input-language-hint">Write in any language &mdash; your facilitator and teammates can read English, French and Japanese.</p>
+          <div class="answer-add">
+            <input type="text" id="answer-input-moduleB" maxlength="500"
+                   data-i18n="room.answer-input-label-b" data-i18n-attr="aria-label"
+                   aria-label="Add a Module B group answer"
+                   placeholder="Add a point - it appears with your name and colour" />
+            <button class="answer-add-btn" data-mod="moduleB">Add</button>
+          </div>
+        </section>
+      </section>
+
+      <!-- STAGE 3: WRAP-UP -->
+      <section id="stage-3" class="stage hidden">
+        <div class="card vignette">
+          <svg class="wrap-art" viewBox="0 0 120 70" aria-hidden="true">
+            <path d="M30 60L20 20l28 22z" fill="#2e9fdf" />
+            <path d="M90 60l10-40-28 22z" fill="#0f4e85" />
+            <path d="M60 8l4 9 10 1-7 7 2 10-9-5-9 5 2-10-7-7 10-1z" fill="#e7b800" />
+            <circle cx="14" cy="14" r="3" fill="#e7b800" />
+            <circle cx="108" cy="40" r="3" fill="#2e9fdf" />
+          </svg>
+          <h2 data-i18n="stage.wrap.title">Wrap-up &amp; Next Steps</h2>
+          <p data-i18n="stage.wrap.thanks">Thank you for taking part! Before you go:</p>
+          <ol class="info-list">
+            <li data-i18n="stage.wrap.do-questionnaire">Complete the end-of-session questionnaire — it only
+              takes a few minutes, and there is a short post-test in 3 weeks.</li>
+            <li data-i18n="stage.wrap.answers-saved">Your group's answers are saved below — your facilitators will collect them.</li>
+          </ol>
+          <a id="quiz-btn" class="teams-btn hidden" target="_blank" rel="noopener"
+             data-i18n="stage.wrap.open-questionnaire">
+            Open the end-of-session questionnaire</a>
+          <p class="hint" id="quiz-fallback"
+             data-i18n="stage.wrap.questionnaire-fallback">Your facilitator will share the questionnaire link.</p>
+          <p class="hint" data-i18n="stage.wrap.bye">Once you've done the questionnaire you can close this tab. See you
+            at Session 4!</p>
+        </div>
+        <!-- in-platform post-test card: appears only when the scenario defines
+             a postTest bank AND the participant has not already taken it.
+             Optional — never blocks session closure. Rendered by
+             renderPostTest() in script.js. -->
+        <div class="card posttest-card hidden" id="posttest-card">
+          <h3 id="posttest-card-title" data-i18n="test.post.title">Quick post-session knowledge check</h3>
+          <p id="posttest-card-intro" data-i18n="test.post.intro">Now that the workshop is finished, a short multiple-choice check helps us see what changed during today's session. It's anonymous within your university, optional, and your answers do not affect your grade.</p>
+          <div class="posttest-actions">
+            <button id="posttest-start-btn" class="teams-btn"
+                    data-i18n="test.post.start">Start the post-test</button>
+            <button id="posttest-skip-btn" class="ghost-btn"
+                    data-i18n="test.skip">Skip the test</button>
+          </div>
+          <div id="posttest-body" class="test-body hidden" aria-live="polite"></div>
+        </div>
+
+        <div class="card team-recap-card">
+          <div id="team-recap"></div>
+        </div>
+        <div class="card">
+          <h3 data-i18n="stage.wrap.room-answers">Your room's answers</h3>
+          <div id="wrapup-summary"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- SIDEBAR: shown only when an admin is inside a room -->
+    <aside id="room-sidebar" class="hidden">
+      <div class="card">
+        <div class="dash-head">
+          <h3>Rooms</h3>
+          <button id="sidebar-dashboard-btn">Full dashboard</button>
+        </div>
+        <p class="hint">Click a room to view it. Opening a room clears its "call a
+          facilitator" alert.</p>
+        <div id="sidebar-rooms"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ============ ADMIN APP ============ -->
+  <main id="admin-app" class="hidden">
+    <section class="card stage-card">
+      <div class="stage-row">
+        <span class="stage-indicator">Admin dashboard</span>
+        <div class="stage-controls">
+          <button id="admin-download-btn"
+                  data-i18n="admin.download-all">Download all group answers</button>
+          <button id="admin-debrief-btn" type="button"
+                  data-i18n="debrief.toggle"
+                  aria-controls="admin-debrief" aria-expanded="false">Open debrief</button>
+          <!-- End session is destructive — hidden by default and only enabled
+               once the session is actually started. Prevents an accidental
+               click from closing a session before any students have joined. -->
+          <button id="admin-close-btn"
+                  data-i18n="admin.end-session"
+                  hidden
+                  title="End the session for everyone and download the full archive">End session &amp; download archive</button>
+          <label class="anon-toggle">
+            <input type="checkbox" id="anon-export" />
+            Pseudonymise names in export
+            <span class="hint hint-block-small">
+              Names &rarr; "Student A, B, &hellip;" per room. Free-text bodies
+              may still re-identify their author &mdash; treat as pseudonymous,
+              not anonymous, before sharing.
+            </span>
+          </label>
+          <button id="admin-leave-btn" title="Leave">Leave</button>
+        </div>
+      </div>
+      <!-- Per-session facilitator preferences row. Both controls persist
+           to localStorage so they survive a refresh / new session. -->
+      <div class="admin-prefs-row">
+        <label class="admin-pref">
+          <input type="checkbox" id="admin-mute-alerts" />
+          <span data-i18n="admin.mute-alerts">
+            Mute help-call sound + desktop notification
+          </span>
+        </label>
+        <!-- Theme picker — light / dark / auto (= follow OS). Saved to
+             localStorage.canamed_theme; theme-init.js applies it before paint
+             on every reload so a returning facilitator never sees a flash. -->
+        <label class="theme-toggle">
+          <span data-i18n="admin.theme">Theme</span>
+          <select id="admin-theme-select">
+            <option value="auto" data-i18n="admin.theme.auto">Auto (system)</option>
+            <option value="light" data-i18n="admin.theme.light">Light</option>
+            <option value="dark" data-i18n="admin.theme.dark">Dark</option>
+          </select>
+        </label>
+        <!-- Telemetry export — opens a download of the in-page
+             error/CSP-violation buffer. Useful in postmortems when a
+             student reports "the page broke and I had to refresh". -->
+        <button type="button" id="admin-error-log-btn" class="admin-pref-btn"
+                data-i18n="admin.download-error-log"
+                title="Download the in-page error log captured this session">
+          Download error log
+        </button>
+        <!-- Bug report — opens the user's mail client with a pre-filled
+             summary; we never transmit anything ourselves. -->
+        <button type="button" id="admin-bug-report-btn" class="admin-pref-btn"
+                data-i18n="admin.report-bug"
+                title="Open mail to report a bug with session + browser context">
+          Report a bug
+        </button>
+      </div>
+      <p class="hint" id="admin-mode-line"></p>
+      <!-- the session code, always visible to the facilitator so they can
+           read it aloud or copy it again to share with late-joiners -->
+      <div class="admin-session-chip" aria-label="Session code">
+        <span class="admin-session-chip-label">Share with your students &mdash; session code:</span>
+        <span class="admin-session-chip-code" id="admin-session-code">&mdash;</span>
+        <button id="admin-copy-code" type="button" class="admin-session-chip-copy">Copy</button>
+        <span class="copy-ok hidden" id="admin-copy-ok">Copied!</span>
+      </div>
+      <div class="teams-row">
+        <input type="text" id="teams-link-input"
+               aria-label="Teams meeting link"
+               placeholder="Teams meeting link (optional) - https://teams.microsoft.com/..." />
+        <button id="save-teams-btn">Save</button>
+        <span id="teams-saved-ok" class="copy-ok hidden">Saved</span>
+      </div>
+      <div class="teams-row">
+        <input type="text" id="prequiz-link-input"
+               aria-label="Pre-session questionnaire link"
+               placeholder="Pre-session questionnaire link (shown on the Welcome stage)" />
+        <button id="save-prequiz-btn">Save</button>
+        <span id="prequiz-saved-ok" class="copy-ok hidden">Saved</span>
+      </div>
+      <div class="teams-row">
+        <input type="text" id="quiz-link-input"
+               aria-label="End-of-session questionnaire link"
+               placeholder="End-of-session questionnaire link (shown at Wrap-up and when the session is closed)" />
+        <button id="save-quiz-btn">Save</button>
+        <span id="quiz-saved-ok" class="copy-ok hidden">Saved</span>
+      </div>
+    </section>
+
+    <section class="card hidden" id="superadmin-card">
+      <h3>Super admin &mdash; session passwords</h3>
+      <p class="hint">Set or change the admin password for any session number &mdash; you
+        can pre-provision upcoming sessions from here.</p>
+      <label class="inline-label">Session number
+        <input type="text" id="change-session-input" maxlength="20" />
+      </label>
+      <input type="password" id="change-pass-input" placeholder="new session password"
+             aria-label="New session password" />
+      <button id="change-pass-btn">Set password</button>
+      <span id="change-pass-ok" class="copy-ok hidden">Saved</span>
+      <div class="purge-row">
+        <button id="purge-session-btn">Purge this session's data</button>
+        <span id="purge-ok" class="copy-ok hidden">Purged</span>
+        <p class="hint">Permanently deletes everything under this session (names,
+          rooms, answers, password). Do this after the workshop, once you have
+          downloaded the answers - it cannot be undone.</p>
+      </div>
+    </section>
+
+    <!-- PRE-START -->
+    <section id="admin-prestart" class="hidden">
+      <section class="card">
+        <h3>Set up the session</h3>
+        <label class="inline-label">Number of rooms
+          <select id="roomcount-input">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4" selected>4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+          </select>
+        </label>
+        <button id="start-session-btn"
+                data-i18n="admin.start-session">Start session — place everyone in rooms</button>
+        <p class="hint">Participants are balanced across rooms by university, year and
+          English level. Students who arrive after the start are balanced in automatically.</p>
+        <!-- Pre-start "Test alerts" affordance: deliberately pre-arms the
+             Web Audio context AND requests the desktop-notification
+             permission. Without this, the very first help-call of the
+             session is silent (Chrome's autoplay-on-no-interaction rule
+             swallows the chime) and triggers the macOS permission prompt
+             at exactly the wrong moment. One click here pays for the
+             whole session. -->
+        <div class="prestart-test-alerts-row">
+          <button id="test-alerts-btn" type="button"
+                  class="prestart-test-alerts-btn"
+                  data-i18n="admin.test-alerts"
+                  title="Pre-arm audio + desktop notifications before the first real help call">
+            Test alerts
+          </button>
+          <span class="prestart-test-alerts-hint"
+                id="test-alerts-hint"
+                data-i18n="admin.test-alerts-hint">
+            Click once before students join — plays the chime and asks for
+            desktop-notification permission, so the first real help call is
+            never silent.
+          </span>
+          <span class="prestart-test-alerts-status" id="test-alerts-status"
+                role="status" aria-live="polite"></span>
+        </div>
+      </section>
+      <section class="card">
+        <div class="dash-head">
+          <h3>
+            <span data-i18n="admin.waiting.title">Waiting room</span>
+            <span class="count" id="prestart-count">0</span>
+            <span class="count-expected hidden" id="prestart-expected"></span>
+          </h3>
+        </div>
+        <!-- Per-cohort live split + optional "expected total". The split
+             is built from the COHORTS registry (orgs.js) so a Lyon × Tokyo
+             org would automatically render two different chips. The
+             "expected total" input is purely local (no DB write) — it
+             helps the facilitator track progress against the number of
+             students they told their dean about, with no impact on
+             room assignment. -->
+        <div class="prestart-cohort-row" id="prestart-cohort-row"
+             aria-live="polite"></div>
+        <div class="prestart-expected-row">
+          <label class="prestart-expected-label"
+                 for="prestart-expected-input"
+                 data-i18n="admin.waiting.expected-label">
+            Expected total (optional)
+          </label>
+          <input type="number" id="prestart-expected-input"
+                 class="prestart-expected-input"
+                 min="0" max="200" step="1"
+                 data-i18n="admin.waiting.expected-placeholder"
+                 data-i18n-attr="placeholder"
+                 placeholder="e.g. 30" />
+          <span class="prestart-expected-hint" id="prestart-expected-hint"
+                data-i18n="admin.waiting.expected-hint">
+            Shown next to the live count so you know when everyone has joined.
+          </span>
+        </div>
+        <div id="prestart-list"></div>
+      </section>
+    </section>
+
+    <!-- STARTED: dashboard -->
+    <section id="admin-dashboard" class="hidden">
+      <section class="card">
+        <div class="dash-head">
+          <h3>Rooms</h3>
+          <button id="advance-all-btn"
+                  data-i18n="admin.advance-all">Advance all rooms →</button>
+        </div>
+        <p class="hint">Click <strong>Open room</strong> to enter a room and see exactly what
+          the students see, with a room-switching panel on the side. Opening a room clears
+          its "call a facilitator" alert.</p>
+        <!-- Live filter input: hidden by default; revealed when the
+             session has more than 5 rooms so the dashboard stays
+             uncluttered for the typical 3-4-room workshop. -->
+        <div class="dashboard-filter hidden" id="dashboard-filter-wrap"
+             role="search" aria-label="Filter rooms">
+          <label class="sr-only" for="dashboard-filter-input"
+                 data-i18n="admin.search.label">Filter rooms</label>
+          <input type="search" id="dashboard-filter-input"
+                 class="dashboard-filter-input" maxlength="60"
+                 autocomplete="off"
+                 data-i18n="admin.search.placeholder" data-i18n-attr="placeholder"
+                 placeholder="Filter rooms by name…" />
+          <button type="button" id="dashboard-filter-clear"
+                  class="dashboard-filter-clear" hidden
+                  data-i18n="admin.search.clear">Clear</button>
+        </div>
+        <div id="dashboard"></div>
+      </section>
+    </section>
+
+    <!-- POST-SESSION DEBRIEF: aggregate stats across all rooms, hidden by
+         default. Toggled by the "Open debrief" button in the admin chrome.
+         Computed entirely client-side from `allRooms` (already live-subscribed)
+         so no new schema, no new listeners. -->
+    <section id="admin-debrief" class="hidden" aria-labelledby="admin-debrief-title">
+      <section class="card debrief-card">
+        <div class="dash-head">
+          <h3 id="admin-debrief-title" data-i18n="debrief.title">Session debrief</h3>
+        </div>
+        <p class="hint" data-i18n="debrief.subtitle">Aggregate stats across all rooms — useful for the wrap-up conversation.</p>
+        <div id="debrief-body"></div>
+      </section>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-brand">
+      <svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true">
+        <path class="arc-n" d="M32 18.8 A36 36 0 0 1 68 81.2" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <path class="arc-c" d="M32 81.2 A36 36 0 0 1 68 18.8" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <circle class="heart" cx="50" cy="14" r="6.5" />
+      </svg>
+      <strong>CaNaMED</strong>
+      <span class="footer-tag">&mdash; two traditions, one conversation</span>
+    </div>
+    <p>Université de Caen Normandie &times; Nagoya University.
+       Shared mode runs on a free Firebase project (no server to manage); without one it
+       runs in local test mode (syncs across tabs of this browser). See README.md.</p>
+  </footer>
+
+  <!-- Firebase JS SDK 10.12.5 - pinned. Re-check before each academic year:
+       https://firebase.google.com/support/release-notes/js
+       integrity hashes are sha384 of these exact files; if you bump the version
+       you must recompute them (or the page will refuse to load the SDK). -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"
+          integrity="sha384-mLD+wdwynYnAhgHAkdPP5hroWJXJTNy5C2OhPKM55zuiV2vjzFD1LtBohaHq2Ex8"
+          crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"
+          integrity="sha384-fXPb0uemoXlFCqQMtM0MOAv7FM0LsMegbR6x22q7lfnohaCNmTQzgA8BTrR8WqGx"
+          crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"
+          integrity="sha384-NiuRnBs5Z0OgJ12kYJLSeWxANeJN369zH3+Zn0TGVPaCH/TKmbPFqfOmmLtrj+wg"
+          crossorigin="anonymous"></script>
+  <!-- Firebase App Check — verifies every DB request actually comes from a
+       legitimate browser load of THIS site (not a script with stolen auth
+       tokens). Optional: only activates when window.CANAMED_RECAPTCHA_SITE_KEY
+       is set in firebase-config.js. When App Check is enforced in the
+       Firebase Console with this site key registered, anonymous-auth abuse
+       is no longer possible. See README.md → "Enabling App Check". -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"
+          integrity="sha384-Ybv3lGuy/hHZj1VLzE7e+sawyrFSbMuEQaKRSfC9W4Q8MK+k/zQKNrxNVagHhXAj"
+          crossorigin="anonymous"></script>
+  <!-- Firebase Performance Monitoring — collects real-user load times
+       (TTFB, FCP, page load, custom traces). Useful research-side:
+       "did the platform feel laggy to Nagoya students vs Caen students?"
+       Optional: only activates when window.CANAMED_PERF_MONITORING is
+       set to truthy in firebase-config.js. Auto-tracks page-load + each
+       network request; we don't add custom traces in code yet. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-performance-compat.js"
+          integrity="sha384-itOr+DLGg//NmXkxa8it79G3P4Gpi3cqjsw8vx+DDTzJvzR2QTB3WrvbGirWm1Jq"
+          crossorigin="anonymous"></script>
+  <!-- if a Firebase config is provided but the SDK above did not load (CDN
+       blocked, offline), script.js detects it via sharedExpectedButBroken()
+       and refuses to start instead of silently running in isolated local mode -->
+  <script src="firebase-config.js?v=v2" defer></script>
+  <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
+       partnership this deployment hosts; /o/{slug}/ URLs select one of them.
+       MUST load before platform-config.js + script.js. -->
+  <script src="orgs.js?v=v2" defer></script>
+  <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
+       default org's branding strings). For new partnerships, add an entry
+       in orgs.js instead. -->
+  <script src="platform-config.js?v=v2" defer></script>
+  <!-- telemetry.js — installs error + CSP-violation listeners. Loads
+       (deferred) BEFORE script.js so its window.onerror handler is in
+       place by the time the boot path runs. Buffers up to 50 events in
+       sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
+       clear,record}. -->
+  <script src="telemetry.js?v=v2" defer></script>
+  <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
+       Loads BEFORE script.js so the language switcher exposes window.setLang.
+       defer so it doesn't block HTML parsing; runs in document order before
+       script.js because both are deferred. -->
+  <script src="i18n.js?v=v2" defer></script>
+  <!-- localdb.js — the localStorage-backed Firebase mock used in
+       MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
+       window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
+       without import boilerplate. Must load BEFORE script.js. -->
+  <script src="localdb.js?v=v2" defer></script>
+  <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
+       generateSessionCode, sanitizeResume, scoreTotal, …) that have their
+       own Node-based unit tests under tests/. Must load BEFORE script.js
+       so the function names are available as globals. -->
+  <script src="lib.js?v=v2" defer></script>
+  <!-- script-loader.js — bundle splitter. Lazy-loads case-content.js,
+       qrcode.js, tour.js and scenario-author.js on demand so the splash
+       boot stays under the perf budget (see tests-e2e/perf.spec.js).
+       Exposes window.CanamedLoader.ensure*(). -->
+  <script src="script-loader.js?v=v2" defer></script>
+  <script src="script.js?v=v2" defer></script>
+  <!-- case-content.js, qrcode.js, tour.js and scenario-author.js are NOT
+       in the initial HTML on purpose — they're injected by
+       script-loader.js on demand. See that file's header for the loading
+       contract. -->
+  <!--
+       The previous (synchronous) load list:
+         case-content.js, qrcode.js, tour.js, scenario-author.js, script.js
+       carried ~340 KB extra to the splash for code most users never reach.
+       Moving them behind the loader cut splash transfer from ~734 KB raw
+       (~224 KB gzipped) to ~210 KB raw (~85 KB gzipped). See PR #N for
+       the measurements.
+  -->
+
+  <!-- ============ MY ACCOUNT DIALOG ============
+       Shown when the user clicks the header chip while signed in. Holds the
+       profile editor, change-password, account deletion, sign out and the
+       history of sessions they have joined. -->
+  <dialog id="account-dialog" class="account-dialog" aria-labelledby="account-dialog-title">
+    <form method="dialog" class="account-dialog-inner" id="account-dialog-form">
+      <header class="account-dialog-head">
+        <h2 id="account-dialog-title">My account</h2>
+        <button type="button" class="account-dialog-close" id="account-dialog-close"
+                aria-label="Close">&times;</button>
+      </header>
+
+      <p class="account-email-row">
+        Signed in as <strong id="account-email"></strong>
+      </p>
+
+      <fieldset class="account-fieldset">
+        <legend>Profile</legend>
+        <p class="hint">These details auto-fill every time you join a session.</p>
+        <div class="splash-field">
+          <label for="account-name">Name (first name or nickname)</label>
+          <input type="text" id="account-name" maxlength="40" />
+        </div>
+        <div class="splash-field">
+          <label for="account-uni">University</label>
+          <select id="account-uni"></select>
+        </div>
+        <div class="splash-field">
+          <label for="account-year">Year of study</label>
+          <select id="account-year">
+            <option value="1">Year 1</option>
+            <option value="2">Year 2</option>
+            <option value="3">Year 3</option>
+            <option value="4">Year 4</option>
+            <option value="5">Year 5</option>
+            <option value="6">Year 6</option>
+            <option value="7">Postgraduate / Resident</option>
+          </select>
+        </div>
+        <div class="splash-field">
+          <label for="account-english">English level (CEFR)</label>
+          <select id="account-english">
+            <option value="A2">A2 - Elementary</option>
+            <option value="B1">B1 - Intermediate</option>
+            <option value="B2">B2 - Upper intermediate</option>
+            <option value="C1">C1 - Advanced</option>
+            <option value="C2">C2 - Proficient</option>
+          </select>
+        </div>
+        <div class="account-actions">
+          <button type="button" id="account-save-btn">Save profile</button>
+          <span class="copy-ok hidden" id="account-save-ok">Saved</span>
+        </div>
+      </fieldset>
+
+      <fieldset class="account-fieldset">
+        <legend>Sessions you have joined</legend>
+        <ol class="account-history" id="account-history">
+          <li class="hint">No sessions yet — your history will appear here once you join one.</li>
+        </ol>
+      </fieldset>
+
+      <fieldset class="account-fieldset account-danger-zone">
+        <legend>Account &amp; security</legend>
+        <div class="account-actions">
+          <button type="button" id="account-signout-btn">Sign out</button>
+          <button type="button" id="account-delete-btn" class="account-danger-btn">
+            Delete account &amp; profile data
+          </button>
+        </div>
+        <p class="hint">
+          Your sign-in is provided by Google &mdash; manage your Google
+          password and security at <strong>myaccount.google.com</strong>.
+          Deleting your
+          account here removes your profile and history. Your contributions in
+          past sessions (group answers, votes) stay in those sessions' records
+          but are no longer linked to your identity.
+        </p>
+        <p class="splash-hint" id="account-action-hint" role="status"
+           aria-live="polite"></p>
+      </fieldset>
+    </form>
+  </dialog>
+
+  <!-- Reusable in-page confirmation modal. Replaces native window.confirm()
+       for high-stakes facilitator actions (Start session, Advance all
+       rooms, End session). Native confirms render raw \n inconsistently
+       across browsers, lose CaNaMED branding during screen-share, and
+       (on macOS Chrome) suppress the dock badge so a screen-shared
+       audience can't see what was clicked. The in-page dialog keeps
+       branding, supports rich body text + multi-line preview, and is
+       fully keyboard-driven. Hidden by default; script.js opens it via
+       CanamedModal.confirm({...}). -->
+  <dialog id="canamed-modal" class="canamed-modal" aria-labelledby="canamed-modal-title">
+    <form method="dialog" class="canamed-modal-form">
+      <h2 id="canamed-modal-title" class="canamed-modal-title"></h2>
+      <p id="canamed-modal-message" class="canamed-modal-message"></p>
+      <pre id="canamed-modal-detail" class="canamed-modal-detail" hidden></pre>
+      <div class="canamed-modal-actions">
+        <button type="button" id="canamed-modal-cancel"
+                class="canamed-modal-cancel"
+                data-i18n="modal.cancel">Cancel</button>
+        <button type="button" id="canamed-modal-confirm"
+                class="canamed-modal-confirm"
+                data-i18n="modal.confirm">OK</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

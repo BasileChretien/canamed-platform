@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <title>CaNaMED — Scenario Authoring Tool</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="scenario-author.css" />
+</head>
+<body>
+  <a class="skip-link" href="#author-main">Skip to authoring form</a>
+
+  <header>
+    <div class="header-inner">
+      <div class="brand-lockup">
+        <svg class="brand-mark" viewBox="0 0 100 100" role="img"
+             aria-label="CaNaMED — two arcs, one circle">
+          <path class="arc-n" d="M32 18.8 A36 36 0 0 1 68 81.2" fill="none"
+                stroke-width="9" stroke-linecap="round" />
+          <path class="arc-c" d="M32 81.2 A36 36 0 0 1 68 18.8" fill="none"
+                stroke-width="9" stroke-linecap="round" />
+          <circle class="heart" cx="50" cy="14" r="6.5" />
+        </svg>
+        <div>
+          <h1>CaNaMED — Scenario Authoring Tool</h1>
+          <p class="sub">Offline editor for content packs (CASE + SCORING + PENALTIES + DECISIONS)</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main id="author-main" class="author">
+
+    <section class="author-intro">
+      <p class="meta">
+        <a href="index.html">&larr; Back to the platform</a>
+        &nbsp;&middot;&nbsp;
+        Tool UI in English; the scenarios it produces have <code>{ en, fr, ja }</code> fields.
+      </p>
+      <details class="author-help">
+        <summary>How to use this tool</summary>
+        <ol>
+          <li>Fill in the form below. Every text field that the platform shows to learners
+            is split into <strong>English / French / Japanese</strong> — English is the
+            canonical fallback when fr/ja are empty, so partial translations are safe.</li>
+          <li>Use the <em>Add row</em> buttons to grow the history / exam / labs / prompts
+            / scoring / penalties / decisions lists. Use the &times; on each row to remove.</li>
+          <li>The <strong>Live JSON preview</strong> updates as you type. Click
+            <strong>Validate</strong> to check ids are unique and the synthesis
+            prerequisites resolve.</li>
+          <li>Click <strong>Copy JSON snippet</strong> to copy a
+            <code>window.CANAMED_SCENARIOS["your-id"] = { &hellip; }</code> block, ready to
+            paste into <code>case-content.js</code>. Or <strong>Download .json</strong>
+            for a standalone file. <strong>Load JSON</strong> round-trips an
+            existing scenario back into the form for editing.</li>
+        </ol>
+      </details>
+    </section>
+
+    <form id="author-form" class="author-form" autocomplete="off">
+
+      <!-- ============= Scenario meta ============= -->
+      <fieldset class="author-section">
+        <legend>1. Scenario metadata</legend>
+        <div class="field-row">
+          <label class="field-label" for="meta-id">Scenario id <span class="required">*</span></label>
+          <input type="text" id="meta-id" name="meta.id"
+                 placeholder="kebab-case-id, e.g. acute-asthma-er"
+                 pattern="^[a-z0-9][a-z0-9-]*$" required />
+          <p class="field-hint">Lowercase, hyphenated. Used as the database key; cannot collide
+            with existing scenarios in <code>case-content.js</code>.</p>
+        </div>
+        <div class="trio-block" data-trio="meta.name" data-label="Display name"></div>
+        <div class="trio-block" data-trio="meta.summary" data-label="Summary (1&ndash;2 sentences)" data-multiline="true"></div>
+        <div class="trio-block" data-trio="meta.moduleAName" data-label="Module A name"></div>
+        <div class="trio-block" data-trio="meta.moduleBName" data-label="Module B name"></div>
+      </fieldset>
+
+      <!-- ============= CASE.history ============= -->
+      <fieldset class="author-section">
+        <legend>2. CASE.history &mdash; questions the team can ask the patient</legend>
+        <p class="field-hint">Each row is a clickable button (q) revealing the patient&rsquo;s answer (a).
+          Order matters: index 0 is shown first. Indices are referenced by <code>synthPrereqs</code>
+          and <code>PENALTIES.item</code> below as <code>history:N</code>.</p>
+        <div id="list-history" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="history">+ Add history item</button>
+      </fieldset>
+
+      <!-- ============= CASE.exam ============= -->
+      <fieldset class="author-section">
+        <legend>3. CASE.exam &mdash; physical examination items</legend>
+        <p class="field-hint">Same shape as history. Referenced as <code>exam:N</code>.</p>
+        <div id="list-exam" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="exam">+ Add exam item</button>
+      </fieldset>
+
+      <!-- ============= CASE.labs ============= -->
+      <fieldset class="author-section">
+        <legend>4. CASE.labs &mdash; investigations &amp; clinical synthesis</legend>
+        <p class="field-hint">Tick the <strong>key</strong> box on exactly one row &mdash; that
+          is the gated synthesis item. Its index becomes <code>synthId = "labs:N"</code>
+          below. Referenced as <code>labs:N</code>.</p>
+        <div id="list-labs" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="labs">+ Add lab item</button>
+      </fieldset>
+
+      <!-- ============= CASE.prompts ============= -->
+      <fieldset class="author-section">
+        <legend>5. CASE.prompts &mdash; discussion questions revealed after synthesis</legend>
+        <div id="list-prompts" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="prompts">+ Add prompt</button>
+      </fieldset>
+
+      <!-- ============= Synthesis gate ============= -->
+      <fieldset class="author-section">
+        <legend>6. Synthesis gate</legend>
+        <div class="field-row">
+          <label class="field-label" for="synth-id">synthId <span class="required">*</span></label>
+          <input type="text" id="synth-id" name="synthId"
+                 placeholder="e.g. labs:0" required />
+          <p class="field-hint">Auto-populated from the lab row whose <strong>key</strong>
+            checkbox is ticked. You can override manually if needed.</p>
+        </div>
+        <div class="field-row">
+          <label class="field-label" for="synth-prereqs">synthPrereqs (comma-separated)</label>
+          <input type="text" id="synth-prereqs" name="synthPrereqs"
+                 placeholder="e.g. history:1, history:2, exam:3" />
+          <p class="field-hint">The items that must be revealed before the synthesis unlocks.
+            Each must resolve to an existing <code>history:N</code>, <code>exam:N</code> or
+            <code>labs:N</code>.</p>
+        </div>
+      </fieldset>
+
+      <!-- ============= SCORING.moduleA ============= -->
+      <fieldset class="author-section">
+        <legend>7. SCORING.moduleA &mdash; concept families for stage 1</legend>
+        <p class="field-hint">For each family pick EITHER <em>any</em> keyword stems (English
+          only; comma-separated) OR tick <em>cohorts</em> for the &ldquo;named two partner
+          universities&rdquo; family. If both are filled, <em>cohorts</em> wins.</p>
+        <div id="list-scoringA" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="scoringA">+ Add moduleA family</button>
+      </fieldset>
+
+      <!-- ============= SCORING.moduleB ============= -->
+      <fieldset class="author-section">
+        <legend>8. SCORING.moduleB &mdash; concept families for stage 2</legend>
+        <div id="list-scoringB" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="scoringB">+ Add moduleB family</button>
+      </fieldset>
+
+      <!-- ============= PENALTIES ============= -->
+      <fieldset class="author-section">
+        <legend>9. PENALTIES &mdash; deductions for revealing the wrong item</legend>
+        <p class="field-hint">Each penalty fires when the team reveals the item referenced.
+          <code>item</code> takes the form <code>group:index</code>, e.g. <code>labs:4</code>.</p>
+        <div id="list-penalties" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="penalties">+ Add penalty</button>
+      </fieldset>
+
+      <!-- ============= DECISIONS ============= -->
+      <fieldset class="author-section">
+        <legend>10. DECISIONS &mdash; team votes</legend>
+        <p class="field-hint">Each decision belongs to module A or B, has a prompt, and 2+
+          options. Tick the correct option(s). <code>penalty: 0</code> = wrong vote costs
+          nothing (useful for low-stakes roleplays).</p>
+        <div id="list-decisions" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="decisions">+ Add decision</button>
+      </fieldset>
+
+    </form>
+
+    <!-- ============= Action bar ============= -->
+    <div class="author-actions">
+      <button type="button" id="btn-validate" class="primary-btn">Validate</button>
+      <button type="button" id="btn-copy" class="primary-btn">Copy JSON snippet</button>
+      <button type="button" id="btn-download" class="primary-btn">Download .json</button>
+      <button type="button" id="btn-load" class="secondary-btn">Load JSON&hellip;</button>
+      <button type="button" id="btn-reset" class="secondary-btn">Reset form</button>
+    </div>
+    <div id="validation-output" class="validation-output" aria-live="polite"></div>
+
+    <!-- ============= Live JSON preview ============= -->
+    <section class="author-section">
+      <h2>Live JSON preview</h2>
+      <p class="field-hint">Updated on every change. The <strong>Copy</strong> button wraps
+        this in <code>window.CANAMED_SCENARIOS["id"] = { &hellip; };</code>.</p>
+      <textarea id="json-preview" class="json-preview" spellcheck="false" readonly></textarea>
+    </section>
+
+    <!-- ============= Load-JSON modal ============= -->
+    <div id="load-modal" class="load-modal hidden" role="dialog" aria-labelledby="load-title">
+      <div class="load-modal-inner">
+        <h3 id="load-title">Load scenario JSON</h3>
+        <p class="field-hint">Paste a scenario object (either bare
+          <code>{ id, name, &hellip; }</code> or a full
+          <code>window.CANAMED_SCENARIOS["id"] = { &hellip; }</code> snippet). The form will
+          be populated for editing.</p>
+        <textarea id="load-textarea" class="json-preview" spellcheck="false"
+                  placeholder="Paste JSON here&hellip;"></textarea>
+        <div class="load-modal-actions">
+          <button type="button" id="btn-load-apply" class="primary-btn">Apply</button>
+          <button type="button" id="btn-load-cancel" class="secondary-btn">Cancel</button>
+        </div>
+        <p id="load-error" class="validation-output"></p>
+      </div>
+    </div>
+
+  </main>
+
+  <script src="scenario-author.js"></script>
+</body>
+</html>

@@ -1,0 +1,93 @@
+# Auto-deploy the CANAMED platform to Firebase on every push to main that
+# touches the platform folder. Uses the service-account JSON the Firebase init
+# wizard already put into the repo as a GitHub Actions secret.
+#
+# Manual `firebase deploy` from a developer machine continues to work; this
+# workflow just keeps the live site in sync with `main` automatically.
+
+name: Deploy CANAMED to Firebase
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/Third_session/PBL_platform/**'
+      - '.github/workflows/firebase-deploy.yml'
+  # let us trigger a deploy by hand from the Actions tab when needed
+  workflow_dispatch:
+
+# only one deploy at a time - cancel any in-flight run if a new push lands
+concurrency:
+  group: firebase-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Deploy hosting + database rules
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install the Firebase CLI
+        run: npm install -g firebase-tools
+
+      - name: Write service-account credentials to a temp file
+        # the JSON is held in GitHub Secrets; we materialise it on disk and
+        # point Google Application Default Credentials at it for the CLI.
+        # NOTE: the missing-secret guard uses `printf` rather than a literal
+        # `echo "::error::…"` string because GitHub Actions parses the
+        # workflow-command lines from the LOG OUTPUT, including any time
+        # the runner prints the script source. A literal `::error::` in
+        # the source therefore creates an error annotation on EVERY run
+        # (and turns the otherwise-green run red in the UI) even when the
+        # branch isn't taken. printf composed at runtime sidesteps this.
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            printf '%s%s%s\n' '::' 'error::' "FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 secret is missing"
+            exit 1
+          fi
+          echo "$SA_JSON" > "$RUNNER_TEMP/sa.json"
+
+      # Step 1: hosting ALWAYS ships. Firebase deploys are atomic - bundling
+      # database into the same step makes hosting fail when database rules
+      # can't be deployed (e.g. service-account lacks RTDB Admin). PR #16
+      # and #17 both got stuck this way: hosting never shipped because
+      # database rules couldn't.
+      - name: Deploy hosting
+        working-directory: docs/Third_session/PBL_platform
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          firebase deploy \
+            --project canamed-69785 \
+            --only hosting \
+            --non-interactive
+
+      # Step 2: database rules — best-effort. The service account needs the
+      # Firebase Realtime Database Admin role granted in Firebase Console →
+      # Project settings → Service accounts → github-action-... → IAM
+      # permissions. While it doesn't have that role, this step fails
+      # gracefully with a clear annotation telling the operator to grant it
+      # (or to deploy rules manually with `firebase deploy --only database`).
+      - name: Deploy database rules (best-effort)
+        working-directory: docs/Third_session/PBL_platform
+        continue-on-error: true
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: |
+          if firebase deploy \
+            --project canamed-69785 \
+            --only database \
+            --non-interactive; then
+            echo "Database rules deployed."
+          else
+            echo "::warning title=Database rules NOT deployed::The service account lacks Firebase Realtime Database Admin. Grant it in Firebase Console → Project settings → Service accounts, or run 'firebase deploy --only database' manually from the platform folder. Hosting was deployed successfully; only the rule changes did not ship."
+          fi

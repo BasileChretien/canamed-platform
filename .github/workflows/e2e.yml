@@ -1,0 +1,116 @@
+# Playwright end-to-end tests for the CaNaMED PBL platform.
+#
+# Runs the suite under tests-e2e/ — splash render, facilitator create-session,
+# admin dashboard, participant join — against a hermetic local server that
+# serves docs/Third_session/PBL_platform/ with production-equivalent
+# Content-Security-Policy headers. No real Firebase, no production database,
+# no shared state between runs.
+#
+# A matrix runs the suite under chromium, firefox and webkit so cross-browser
+# regressions are caught at PR time. Each browser is its own job so failures
+# are reported per browser in the PR Checks tab.
+#
+# Required to pass before merging once branch protection picks it up. The
+# existing Unit tests workflow (.github/workflows/test.yml) covers
+# fast-feedback pure-function tests; this workflow covers end-to-end UI
+# flows that pure-function tests cannot catch.
+
+name: E2E tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Desktop cross-browser matrix + mobile (iPhone + iPad device
+        # emulation against the splash + privacy pages). The "visual"
+        # project (snapshot diffs, chromium only) is wired up but skipped
+        # in CI by default — see tests-e2e/visual.spec.js for the
+        # RUN_VISUAL=1 escape hatch used after baselines are committed.
+        project: [chromium, firefox, webkit, mobile-iphone, mobile-ipad, a11y, perf]
+        include:
+          - project: chromium
+            browser: chromium
+          - project: firefox
+            browser: firefox
+          - project: webkit
+            browser: webkit
+          # iPhone/iPad device descriptors in Playwright default to webkit
+          # (mobile Safari), not mobile chromium. Install the webkit browser
+          # so the launcher can find it.
+          - project: mobile-iphone
+            browser: webkit
+          - project: mobile-ipad
+            browser: webkit
+          # axe-core accessibility suite runs against Desktop Chrome
+          # (Chromium engine). Asserts zero serious/critical WCAG 2.1 AA
+          # violations; moderate/minor are surfaced as annotations only.
+          - project: a11y
+            browser: chromium
+          # Performance budget — splash FCP/TTI and first-party JS+CSS
+          # bytes. Runs as its own job so a regression here is a distinct
+          # red dot in the PR Checks tab (rather than being mixed in with
+          # functional failures). See tests-e2e/perf.spec.js for the
+          # thresholds — the CI thresholds intentionally relax the local
+          # ones because the ubuntu-latest runner is a 2-core 7 GB VM.
+          - project: perf
+            browser: chromium
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+          # cache: npm requires a committed package-lock.json. We don't
+          # commit a lock yet to keep the diff lean; the
+          # ~/.cache/ms-playwright cache below covers the heavy artefact.
+
+      - name: Install npm dependencies
+        # No package-lock.json yet → use npm install. Once we commit a lock,
+        # switch to `npm ci` and re-enable cache: npm above.
+        run: npm install --no-audit --no-fund
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          # cache key bumps automatically when @playwright/test version changes
+          # and is scoped per BROWSER engine so a chromium cache hit doesn't
+          # claim to satisfy firefox/webkit. matrix.browser is the actual
+          # Playwright browser engine (chromium for mobile-* projects too,
+          # since iPhone/iPad emulate via mobile chromium).
+          key: pw-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('package.json', 'package-lock.json') }}
+
+      - name: Install Playwright browser (${{ matrix.browser }})
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Install Playwright system deps (cache hit path)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps ${{ matrix.browser }}
+
+      - name: Run E2E suite (${{ matrix.project }})
+        run: npx playwright test --project=${{ matrix.project }}
+        env:
+          CI: "1"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 14

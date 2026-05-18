@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- Same CSP family as index.html. style-src 'self' means no inline
+       styles; healthcheck.css carries the page-specific rules. -->
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self';
+                 script-src 'self' https://www.gstatic.com;
+                 connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com;
+                 style-src 'self';
+                 img-src 'self' data:;
+                 object-src 'none';
+                 base-uri 'self';
+                 form-action 'none'" />
+  <meta name="color-scheme" content="light dark" />
+  <title>CaNaMED — Health check</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M32 18.8 A36 36 0 0 1 68 81.2' fill='none' stroke='%232e9fdf' stroke-width='11' stroke-linecap='round'/%3E%3Cpath d='M32 81.2 A36 36 0 0 1 68 18.8' fill='none' stroke='%23e08a1e' stroke-width='11' stroke-linecap='round'/%3E%3Ccircle cx='50' cy='14' r='7.5' fill='%234f7d8c'/%3E%3C/svg%3E" />
+  <script src="theme-init.js"></script>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="healthcheck.css" />
+</head>
+<body>
+  <header class="hc-header">
+    <div class="hc-brand">
+      <svg class="brand-mark" viewBox="0 0 100 100" aria-hidden="true"
+           width="40" height="40">
+        <path class="arc-n" d="M32 18.8 A36 36 0 0 1 68 81.2" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <path class="arc-c" d="M32 81.2 A36 36 0 0 1 68 18.8" fill="none"
+              stroke-width="9" stroke-linecap="round" />
+        <circle class="heart" cx="50" cy="14" r="6.5" />
+      </svg>
+      <div class="hc-brand-text">
+        <strong>CaNaMED</strong>
+        <span class="hc-brand-tag">platform health check</span>
+      </div>
+    </div>
+    <p class="hc-lead">
+      Bookmark this page and open it ~30 minutes before each live session.
+      Each row below is a quick check. Green is good. Red needs attention
+      before you start handing out the session code — see
+      <a href="OPERATOR_INCIDENT_RUNBOOK.md">OPERATOR_INCIDENT_RUNBOOK.md</a>
+      for first-line fixes.
+    </p>
+  </header>
+
+  <main class="hc-main">
+    <ol class="hc-list" id="hc-list" aria-label="Health checks">
+      <li class="hc-row" data-check="page-loaded">
+        <div class="hc-row-body">
+          <span class="hc-label">HTTPS load + brand mark renders</span>
+          <span class="hc-detail">If you can see this page, the host is up
+            and the bundle was served end-to-end.</span>
+        </div>
+        <span class="hc-pill hc-pill-pending" data-pill aria-live="polite">…</span>
+      </li>
+      <li class="hc-row" data-check="local-storage">
+        <div class="hc-row-body">
+          <span class="hc-label">localStorage write / read / delete</span>
+          <span class="hc-detail">Used for session unlock + theme +
+            language + telemetry buffer.</span>
+        </div>
+        <span class="hc-pill hc-pill-pending" data-pill aria-live="polite">…</span>
+      </li>
+      <li class="hc-row" data-check="session-storage">
+        <div class="hc-row-body">
+          <span class="hc-label">sessionStorage write / read / delete</span>
+          <span class="hc-detail">Holds the per-tab clientId. Required for
+            presence semantics.</span>
+        </div>
+        <span class="hc-pill hc-pill-pending" data-pill aria-live="polite">…</span>
+      </li>
+      <li class="hc-row" data-check="firebase-config">
+        <div class="hc-row-body">
+          <span class="hc-label">Firebase config loaded</span>
+          <span class="hc-detail"><code>window.CANAMED_FIREBASE</code> must be
+            set for shared mode. Empty = local-test only.</span>
+        </div>
+        <span class="hc-pill hc-pill-pending" data-pill aria-live="polite">…</span>
+      </li>
+      <li class="hc-row" data-check="firebase-db">
+        <div class="hc-row-body">
+          <span class="hc-label">Firebase Realtime DB reachable</span>
+          <span class="hc-detail">Pings <code>/.info/connected</code> with
+            a 5 second timeout. Red here usually means a network or DB
+            outage.</span>
+        </div>
+        <span class="hc-pill hc-pill-pending" data-pill aria-live="polite">…</span>
+      </li>
+      <li class="hc-row" data-check="app-check">
+        <div class="hc-row-body">
+          <span class="hc-label">App Check provider available</span>
+          <span class="hc-detail">Checks that
+            <code>window.CANAMED_RECAPTCHA_SITE_KEY</code> is set and the
+            reCAPTCHA script is reachable.</span>
+        </div>
+        <span class="hc-pill hc-pill-pending" data-pill aria-live="polite">…</span>
+      </li>
+    </ol>
+
+    <section class="hc-summary" aria-live="polite">
+      <div class="hc-actions">
+        <button type="button" id="hc-rerun" class="hc-btn">Re-run all</button>
+        <button type="button" id="hc-copy" class="hc-btn hc-btn-ghost">
+          Copy report
+        </button>
+        <span id="hc-copy-status" class="hc-copy-status" role="status"
+              aria-live="polite"></span>
+      </div>
+      <p class="hc-foot">
+        This page does not require a session password — it is intentionally
+        open so any facilitator can run it pre-flight from any device.
+      </p>
+    </section>
+  </main>
+
+  <!-- firebase-config sets window.CANAMED_FIREBASE / RECAPTCHA_SITE_KEY -->
+  <script src="firebase-config.js"></script>
+  <!-- Firebase SDK is loaded lazily by healthcheck.js so the page renders
+       fast even if Firebase itself is down. -->
+  <script src="healthcheck.js"></script>
+</body>
+</html>

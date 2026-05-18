@@ -1,0 +1,40 @@
+# Synthetic uptime probe for the CaNaMED platform.
+#
+# Runs every 15 minutes from outside Firebase's network so we know the
+# production splash + privacy pages are reachable. If the probe fails,
+# the job goes red and the operator gets an email (GitHub default
+# notification for failed workflows on the default branch).
+#
+# 15 minutes was chosen as a balance between detection latency (a session
+# usually has 20+ minutes of setup before students arrive) and GitHub
+# Actions minute budget (15min cadence = 96 runs/day = ~10 min/day, well
+# under the 2000 min/month free tier even with the rest of CI).
+#
+# Run manually:
+#   gh workflow run synthetic-uptime.yml
+
+name: Synthetic uptime probe
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 minutes
+  workflow_dispatch:
+
+concurrency:
+  group: synthetic-uptime
+  cancel-in-progress: false   # let each tick complete; don't piggyback
+
+jobs:
+  probe:
+    name: probe canamed-69785.web.app
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+      - name: Run synthetic probe
+        run: node scripts/synthetic-uptime-check.js
+        env:
+          PROBE_URL: https://canamed-69785.web.app

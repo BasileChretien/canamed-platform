@@ -1,0 +1,57 @@
+# Dependabot config — keeps npm + GitHub Actions dependencies fresh
+# without manual chasing. Free for public + private GitHub repos.
+#
+# Scope today:
+#   - npm: the dev-dependency tree (currently @playwright/test). Used by
+#     the E2E suite; updates land as PRs we can review on the existing
+#     CI gates (Unit tests + Playwright E2E).
+#   - github-actions: the workflows themselves (actions/checkout,
+#     actions/setup-node, actions/upload-artifact, actions/cache,
+#     microsoft/playwright-github-action if/when added). Updates here
+#     keep the runners on current Node + cache-format versions.
+#
+# NOT covered:
+#   - The Firebase JS SDK (loaded from gstatic with SRI hashes pinned
+#     in index.html / firebase-deploy headers). Dependabot can't see
+#     CDN-loaded scripts. Use scripts/update-firebase-sri.sh to bump
+#     the version + recompute the integrity hashes when Firebase
+#     publishes a new SDK — schedule a quarterly reminder.
+#   - firebase-admin (used by scripts/cleanup-stale-sessions.js and
+#     scripts/backup-sessions.js). Installed one-shot via `npm i
+#     --no-save` in the workflows, not added to package.json — so
+#     Dependabot has nothing to grab. The pinned major (`@13`) keeps
+#     it predictable; bump in the workflow files when needed.
+#
+# Schedule: weekly Mondays, 04:18 UTC. Off-:00 minute and offset from
+# the daily cleanup/backup crons to avoid runner contention.
+# Open-PR cap: 4 — enough breathing room without flooding.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:18"
+    open-pull-requests-limit: 4
+    labels:
+      - "dependencies"
+      - "npm"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:18"
+    open-pull-requests-limit: 4
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+      include: "scope"

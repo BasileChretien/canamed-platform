@@ -1,0 +1,386 @@
+/* scenario-author.css — page-specific styles for scenario-author.html.
+ *
+ * Sister stylesheet to style.css (which provides the design tokens —
+ * --bg, --ink, --primary, --r-md, etc.); this file does not redefine any
+ * of those. CSP-safe: no inline styles in the HTML, no @import, no
+ * webfont fetches — system fonts only.
+ *
+ * Layout intent: a dense, form-heavy authoring page. Two visual modes —
+ * the FORM (left/top) and the JSON PREVIEW (sticky-ish, below) — the form
+ * itself is a vertical stack of fieldsets, each fieldset a card. Dynamic
+ * lists (history rows, decisions, etc.) are rendered as inset sub-cards
+ * with a tiny trash button on the right.
+ */
+
+main.author {
+  max-width: 1100px;
+  margin: 32px auto;
+  padding: 0 clamp(12px, 3vw, 32px) 80px;
+}
+
+.author-intro {
+  margin-bottom: 24px;
+}
+.author-intro .meta {
+  color: var(--muted);
+  font-size: 0.86rem;
+  margin: 0 0 12px;
+}
+.author-intro .meta a { color: var(--primary); }
+
+.author-help {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 12px 16px;
+  box-shadow: var(--sh-sm);
+}
+.author-help > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--primary);
+}
+.author-help ol {
+  margin: 12px 0 4px;
+  padding-left: 22px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+.author-help li { margin-bottom: 6px; }
+.author-help code {
+  background: var(--surface-sunk);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.88em;
+}
+
+/* ---------- form scaffolding ---------- */
+
+.author-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+fieldset.author-section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 18px 20px 22px;
+  margin: 0;
+  box-shadow: var(--sh-sm);
+}
+fieldset.author-section > legend {
+  font-weight: 700;
+  font-size: 1.02rem;
+  padding: 4px 10px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+}
+.field-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  margin: 4px 0 12px;
+  line-height: 1.5;
+}
+.field-hint code {
+  background: var(--surface-sunk);
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 14px;
+}
+.field-label {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--n-700);
+}
+.required { color: var(--key); }
+
+input[type="text"],
+input[type="number"],
+textarea {
+  font: inherit;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 0.92rem;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--ink);
+  width: 100%;
+}
+input[type="number"] { width: auto; min-width: 100px; }
+textarea { line-height: 1.5; resize: vertical; min-height: 60px; }
+input:focus, textarea:focus, select:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+/* ---------- trio block (en / fr / ja triplet) ---------- */
+
+.trio-block {
+  margin-bottom: 14px;
+  border-left: 3px solid var(--meeting);
+  padding: 4px 0 4px 12px;
+}
+.trio-block > .trio-label {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--n-700);
+  margin-bottom: 6px;
+  display: block;
+}
+.trio-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+.trio-grid > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.trio-grid label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.trio-grid textarea { min-height: 48px; }
+@media (max-width: 720px) {
+  .trio-grid { grid-template-columns: 1fr; }
+}
+
+/* ---------- dynamic list rows ---------- */
+
+.dyn-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.dyn-row {
+  position: relative;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 12px 14px 14px;
+}
+.dyn-row .row-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+.dyn-row .row-title {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 700;
+}
+.dyn-row .remove-btn {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--muted);
+  border-radius: var(--r-sm);
+  padding: 2px 9px;
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+.dyn-row .remove-btn:hover {
+  color: var(--key);
+  border-color: var(--key);
+  background: var(--key-50);
+}
+
+.row-flex {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: end;
+}
+.row-flex > .field-row {
+  margin-bottom: 0;
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.row-flex .narrow { flex: 0 0 110px; }
+.row-flex .check-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.88rem;
+  padding-bottom: 8px;
+}
+.row-flex .check-cell input { width: auto; }
+
+.module-select {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--card);
+}
+
+/* ---------- decision options (nested dynamic list) ---------- */
+
+.decision-options {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--card);
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-sm);
+}
+.decision-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.opt-row {
+  border-left: 3px solid var(--caen-line);
+  padding: 4px 0 4px 10px;
+}
+.opt-row .row-header {
+  margin-bottom: 6px;
+}
+
+/* ---------- buttons ---------- */
+
+.add-btn {
+  font: inherit;
+  background: var(--meeting-50);
+  color: var(--meeting);
+  border: 1px dashed var(--meeting);
+  border-radius: var(--r-sm);
+  padding: 7px 14px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.add-btn:hover {
+  background: var(--meeting);
+  color: #fff;
+}
+
+.author-actions {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+  padding: 14px 0 10px;
+  margin-top: 24px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  z-index: 10;
+}
+.primary-btn,
+.secondary-btn {
+  font: inherit;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  padding: 9px 16px;
+  cursor: pointer;
+  font-size: 0.92rem;
+  border: 1px solid transparent;
+}
+.primary-btn {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.primary-btn:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
+.secondary-btn {
+  background: var(--card);
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+.secondary-btn:hover { background: var(--surface-sunk); }
+
+/* ---------- validation output ---------- */
+
+.validation-output {
+  margin: 14px 0;
+  padding: 0;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+.validation-output.success {
+  background: var(--ok-50);
+  color: var(--ok);
+  border: 1px solid var(--ok);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+}
+.validation-output.error {
+  background: var(--key-50);
+  color: var(--key);
+  border: 1px solid var(--key);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+}
+.validation-output ul {
+  margin: 6px 0 0;
+  padding-left: 22px;
+}
+.validation-output li { margin-bottom: 2px; }
+
+/* ---------- JSON preview ---------- */
+
+.json-preview {
+  width: 100%;
+  min-height: 320px;
+  max-height: 60vh;
+  font-family: "Consolas", "SF Mono", "Menlo", "Liberation Mono", monospace;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  background: #1c2533;
+  color: #e6e2d8;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+/* ---------- load-JSON modal ---------- */
+
+.load-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 22, 32, 0.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.load-modal-inner {
+  background: var(--card);
+  border-radius: var(--r-md);
+  padding: 20px 24px;
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--sh-lg);
+}
+.load-modal-inner h3 { margin: 0 0 6px; }
+.load-modal-inner textarea { min-height: 240px; color: #e6e2d8; }
+.load-modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}

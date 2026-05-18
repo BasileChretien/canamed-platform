@@ -1,0 +1,15 @@
+MIT License
+
+Copyright (c) 2026 Université de Caen Normandie x Nagoya University and contributors
+
+This project is licensed under the MIT License.
+Full canonical text: https://opensource.org/licenses/MIT
+Plain-language summary: https://choosealicense.com/licenses/mit/
+
+TODO (operator): attach the canonical full MIT text via GitHub's
+"Choose a license" helper, either by running
+  gh repo edit --license MIT
+or by copying the full text from https://choosealicense.com/licenses/mit/
+into this file. GitHub will not auto-detect the license until the full
+text is present, so the repo will show "License: Other" in the sidebar
+until then.

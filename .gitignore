@@ -1,0 +1,30 @@
+# Claude Code worktree-local config — not part of the project
+.claude/
+.agents/
+
+# Firebase CLI local state
+.firebase/
+firebase-debug.log
+*.log
+
+# Node / Playwright build artefacts (E2E suite)
+node_modules/
+playwright-report/
+test-results/
+playwright/.cache/
+
+# Credentials — local-only reference copies of API keys, service-account
+# JSONs, and similar. NEVER commit. The git-tracked counterparts hold only
+# the public values (e.g., Firebase web apiKey + reCAPTCHA site key in
+# firebase-config.js — both designed to be public per Firebase docs); the
+# real secrets live ONLY in:
+#   - GitHub repo secrets (FIREBASE_SERVICE_ACCOUNT_CANAMED_69785)
+#   - Firebase Console (App Check → reCAPTCHA secret key)
+.secrets/
+*.sa.json
+service-account*.json
+recaptcha-*.txt
+
+# OS junk
+.DS_Store
+Thumbs.db

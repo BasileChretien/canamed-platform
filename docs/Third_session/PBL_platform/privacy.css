@@ -1,0 +1,71 @@
+/* privacy.css — shared layout/typography for the privacy policy pages.
+ *
+ * Previously inlined as <style> blocks inside privacy.html / privacy-fr.html /
+ * privacy-ja.html. Extracted to an external file so the CSP can drop
+ * style-src 'unsafe-inline' (defence in depth — script-src already excludes
+ * unsafe-inline, this closes the same hole on the style side).
+ *
+ * Sister stylesheet to style.css (which provides the design tokens —
+ * --bg, --muted, --primary, etc.); privacy.css depends on those tokens.
+ */
+main.privacy {
+  max-width: 780px;
+  margin: 40px auto;
+  padding: 24px clamp(16px, 4vw, 32px) 64px;
+  line-height: 1.6;
+}
+main.privacy h1 { margin: 0 0 8px; }
+main.privacy h2 { margin-top: 36px; font-size: 1.2rem; }
+main.privacy h3 { margin-top: 22px; font-size: 1.0rem; }
+main.privacy p, main.privacy li { font-size: 0.95rem; }
+main.privacy .meta { color: var(--muted); margin: 0 0 24px; font-size: 0.86rem; }
+main.privacy .placeholder { background: #fef3ec; padding: 2px 6px; border-radius: 4px; font-style: italic; }
+main.privacy a { color: var(--primary); }
+
+/* The language switcher (English | Français | 日本語) at the top of each
+ * privacy page. Previously had inline style="margin:0 0 16px; font-size:
+ * 0.86rem; color: var(--muted);" — that's now a class so the CSP can
+ * drop 'unsafe-inline' from style-src.
+ */
+main.privacy .lang-switcher {
+  margin: 0 0 16px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+/* The bottom-meta line ("← Back to the platform · canamed-69785.web.app")
+ * previously had inline style="margin-top: 48px;" — now a class.
+ */
+main.privacy .meta-bottom { margin-top: 48px; }
+
+/* R2-47 banner: shown to es/pt/de/ko/zh users on privacy.html (English
+ * page) explaining that the full translation isn't ready and pointing at
+ * the reviewed FR / JA texts. Hidden by default; the inline script in
+ * privacy.html unhides it when the stored UI language has no static
+ * full-translation page. */
+main.privacy .privacy-lang-banner {
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  background: rgba(46, 159, 223, 0.08);
+  border-left: 4px solid var(--primary, #2e9fdf);
+  border-radius: 6px;
+  font-size: 0.92rem;
+  color: var(--ink, #2a2a2a);
+}
+main.privacy .privacy-lang-banner a { color: var(--primary, #2e9fdf); }
+
+/* Dark-theme tweak: lighten the placeholder background so it stays
+ * visible against the dark surfaces. The light variant above remains the
+ * default; this only applies when <html data-theme="dark"> is set or the
+ * OS reports prefers-color-scheme: dark and the user hasn't forced light.
+ */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) main.privacy .placeholder {
+    background: #3a2a14;
+    color: var(--ink);
+  }
+}
+html[data-theme="dark"] main.privacy .placeholder {
+  background: #3a2a14;
+  color: var(--ink);
+}
