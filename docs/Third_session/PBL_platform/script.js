@@ -2929,6 +2929,10 @@ function checkCallAlerts() {
 }
 
 function startAdmin() {
+  // Reset the sticky-presence view (otherwise an admin re-entering the
+  // dashboard after switching sessions would see students from the
+  // previous session as "gone").
+  adminSeenPool = {};
   refStarted = db.ref(sPath("started"));
   refRoomCount = db.ref(sPath("roomCount"));
   refPool = db.ref(sPath("pool"));
@@ -3097,8 +3101,90 @@ function setExpectedTotalFor(code, n) {
   }
 }
 
+/* ── Admin sticky-presence view (2026-05-18 user report:
+ * "Frequently as an admin I cannot see which students are connected.
+ *  I think that this is caused by how the website checks it.")
+ *
+ * Root cause: Firebase's onDisconnect().remove() fires after a 60-90s
+ * WebSocket silence. On a typical workshop where students are on phones,
+ * normal events — screen lock, tab background, cellular handoff,
+ * brief network drop — trigger that disconnect handler. The student's
+ * pool entry is removed, the admin's refPool listener fires with the
+ * updated pool (student missing), and renderPrestart shows the student
+ * VANISHED. When the student reconnects 20s later they re-appear.
+ *
+ * From the admin's viewpoint the waiting list FLICKERS — students
+ * appear and disappear with no clear signal whether they actually left
+ * or just had a brief network hiccup.
+ *
+ * Fix: smooth the admin's view client-side. We keep a per-session
+ * "ever-seen" map of every cid that has been in the pool at any point.
+ * Each entry carries (a) the LATEST data snapshot, (b) when we last
+ * saw them in a live pool snapshot, (c) a status — online / blip /
+ * gone — derived from that age. The admin's waiting list shows ALL
+ * ever-seen entries with a colour-coded status dot, plus a manual
+ * remove button for entries that are truly gone. */
+const ADMIN_PRESENCE_BLIP_MS = 30_000;    // ≤30s gap = probably a network blip
+const ADMIN_PRESENCE_GONE_MS = 120_000;   // >2min gap = treat as truly gone
+let adminSeenPool = {};                   // cid → { entry, lastSeenAt }
+let _adminPresenceRefreshTimer = null;
+
+function adminPresenceStatus(cid) {
+  const seen = adminSeenPool[cid];
+  if (!seen) return "gone";
+  if (pool[cid]) return "online";   // present in the current live snapshot
+  const age = Date.now() - seen.lastSeenAt;
+  if (age < ADMIN_PRESENCE_BLIP_MS) return "online";   // tolerant of micro-gaps
+  if (age < ADMIN_PRESENCE_GONE_MS) return "blip";
+  return "gone";
+}
+
+function adminRemoveStudent(cid) {
+  if (!cid) return;
+  const seen = adminSeenPool[cid];
+  const nm = (seen && seen.entry && seen.entry.name) || cid;
+  if (typeof confirm === "function" && !confirm(
+    "Remove " + nm + " from the waiting list? They'll have to rejoin if they come back."
+  )) return;
+  // Best-effort: clear from Firebase if their entry still exists, AND
+  // wipe the local sticky record so the admin's view stops showing them.
+  if (refPool) refPool.child(cid).remove().catch(e => console.error("admin remove failed", e));
+  delete adminSeenPool[cid];
+  renderPrestart();
+}
+
+/* Periodically re-render the prestart list so age-based status
+ * transitions (online→blip→gone) happen even when no new Firebase
+ * snapshot has arrived. */
+function _scheduleAdminPresenceRefresh() {
+  if (_adminPresenceRefreshTimer) return;
+  _adminPresenceRefreshTimer = setInterval(() => {
+    if (typeof renderPrestart === "function" && el("prestart-list")) renderPrestart();
+  }, 15_000);
+}
+
 function renderPrestart() {
-  const waiting = Object.keys(pool).map(cid => pool[cid]);
+  // Update the sticky "ever-seen" map from the current pool snapshot,
+  // BEFORE we compute the visible list. Every cid present in pool[]
+  // refreshes its lastSeenAt; cids present in adminSeenPool but absent
+  // from pool[] keep their old lastSeenAt and age into blip/gone.
+  const now = Date.now();
+  Object.keys(pool || {}).forEach(cid => {
+    if (!pool[cid]) return;
+    const prev = adminSeenPool[cid];
+    adminSeenPool[cid] = {
+      entry: pool[cid],
+      lastSeenAt: now,
+      firstSeenAt: (prev && prev.firstSeenAt) || now
+    };
+  });
+  _scheduleAdminPresenceRefresh();
+
+  // The "live count" in the header is the count of TRULY-ONLINE
+  // students (pool snapshot intersection); the visible list below
+  // includes blip + gone so the admin doesn't lose sight of who joined.
+  const onlineNow = Object.keys(pool || {}).filter(cid => !!pool[cid]);
+  const waiting = onlineNow.map(cid => pool[cid]);
   el("prestart-count").textContent = waiting.length;
   // expected-total chip "(of 30)" — read from localStorage, updated by
   // the input change handler in wireExpectedTotal()
@@ -3154,19 +3240,65 @@ function renderPrestart() {
   }
   const list = el("prestart-list");
   list.innerHTML = "";
-  if (waiting.length === 0) {
+  // Render every cid we've EVER seen during this session, not just the
+  // ones in the current live pool snapshot. This is the sticky-presence
+  // view that prevents the admin from losing sight of students during
+  // network blips.
+  const allCids = Object.keys(adminSeenPool);
+  if (allCids.length === 0) {
     const p = document.createElement("p");
     p.className = "empty";
     p.textContent = "No one has joined yet.";
     list.appendChild(p);
     return;
   }
-  waiting.sort((a, b) => (a.name || "").localeCompare(b.name || "")).forEach(person => {
-    list.appendChild(makeChip(person.name,
-      person.name + "  ·  " + person.university +
-      "  ·  Year " + person.year + "  ·  English " + person.english,
-      "prestart-person"));
-  });
+  allCids
+    .map(cid => ({ cid: cid, entry: adminSeenPool[cid].entry,
+                    seen: adminSeenPool[cid] }))
+    .sort((a, b) => (a.entry.name || "").localeCompare(b.entry.name || ""))
+    .forEach(({ cid, entry, seen }) => {
+      const status = adminPresenceStatus(cid);
+      const chip = makeChip(entry.name,
+        entry.name + "  ·  " + entry.university +
+        "  ·  Year " + entry.year + "  ·  English " + entry.english,
+        "prestart-person prestart-person-" + status);
+      // Status dot — colour-coded by online/blip/gone state.
+      const dot = document.createElement("span");
+      dot.className = "prestart-status-dot prestart-status-dot-" + status;
+      dot.setAttribute("aria-hidden", "true");
+      chip.insertBefore(dot, chip.firstChild);
+      // Status label for screen readers + a small visible age tag for
+      // blip/gone states so the admin knows HOW long someone's been
+      // missing without having to click them.
+      if (status !== "online") {
+        const ageMs = Date.now() - seen.lastSeenAt;
+        const ageS = Math.round(ageMs / 1000);
+        const ageStr = ageS < 60 ? ageS + "s" : Math.round(ageS / 60) + "m";
+        const ageEl = document.createElement("span");
+        ageEl.className = "prestart-status-age";
+        ageEl.textContent = (status === "blip" ? "away " : "offline ") + ageStr;
+        chip.appendChild(ageEl);
+        // Manual remove button — only shown on truly-gone entries so
+        // the admin doesn't accidentally drop someone whose phone just
+        // blipped.
+        if (status === "gone") {
+          const rm = document.createElement("button");
+          rm.type = "button";
+          rm.className = "prestart-remove-btn";
+          rm.title = "Remove this student from the waiting list";
+          rm.setAttribute("aria-label", "Remove " + entry.name);
+          rm.textContent = "×";
+          rm.addEventListener("click", e => {
+            e.stopPropagation();
+            adminRemoveStudent(cid);
+          });
+          chip.appendChild(rm);
+        }
+      }
+      const aria = chip.getAttribute("aria-label") || entry.name;
+      chip.setAttribute("aria-label", aria + " — " + status);
+      list.appendChild(chip);
+    });
 }
 
 /* Wire the "Expected total" input on first render. Local-only (per-browser
