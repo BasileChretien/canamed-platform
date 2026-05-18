@@ -1255,7 +1255,21 @@ function wireLanguageSwitcher() {
     if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
     document.addEventListener("click", (e) => {
       if (settingsPanel.hidden) return;
-      if (e.target === settingsBtn || settingsPanel.contains(e.target)) return;
+      // User report (2026-05-18): "The setting button on the phone
+      // does not work." Root cause: the original check used reference
+      // equality `e.target === settingsBtn` which FAILS on mobile —
+      // tapping the cog SVG sets e.target to the <svg> or one of its
+      // child <path>/<circle> elements, NOT the button itself. The
+      // button's own click handler called stopPropagation, but on
+      // some mobile WebKit/Android Chrome versions stopPropagation
+      // around synthetic touch→click events can be missed, and the
+      // document handler then fires AFTER the button handler, closing
+      // the panel that was just opened.
+      //
+      // Defensive fix: use .contains() so the WHOLE button subtree
+      // (the SVG icon + every child path) is treated as "inside" the
+      // button. Same approach as the panel check on the next clause.
+      if (settingsBtn.contains(e.target) || settingsPanel.contains(e.target)) return;
       setOpen(false);
     });
     document.addEventListener("keydown", (e) => {

@@ -330,4 +330,78 @@ test.describe("Bug 6 — participant settings cog + theme picker", () => {
         "the chosen theme must persist to localStorage so theme-init.js applies it on reload")
         .toEqual("high-contrast");
     });
+
+  /* User report (2026-05-18): "The setting button on the phone does
+   * not work. You have to add unit tests every time for all devices."
+   *
+   * Two regression tests pinning the mobile-specific failure mode.
+   * Together they ensure that tapping the cog ANYWHERE (on the SVG
+   * icon or on the button chrome) opens the panel AND that the panel
+   * STAYS open afterwards (the previous code closed it immediately
+   * because the document-click handler used reference equality on
+   * e.target and failed when e.target was the SVG/path child of the
+   * button). */
+  test("Bug 6 (mobile): tapping the cog SVG opens the settings panel and it stays open",
+    async ({ page }) => {
+      // Force a mobile-sized viewport regardless of the project this
+      // test happens to run under, so the assertion is meaningful on
+      // every profile (chromium/firefox/webkit + mobile-*).
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      // Splash gate hides the global widgets via body.locked — peel it
+      // off so the cog is in the layout tree and tappable.
+      await page.evaluate(() => document.body.classList.remove("locked"));
+
+      // Tap the SVG element INSIDE the button, NOT the button itself.
+      // This is the exact mobile path that was broken: e.target is the
+      // <svg> (or one of its <path>/<circle> children), not the button.
+      const svgInsideButton = page.locator("#global-settings-btn svg");
+      await expect(svgInsideButton).toBeVisible();
+      await svgInsideButton.click();
+
+      // Panel must be visible after the click.
+      const panel = page.locator("#global-settings-panel");
+      await expect(panel).toBeVisible();
+
+      // CRITICAL — wait 200ms and re-check. The previous bug closed
+      // the panel synchronously via the document-click handler firing
+      // after the button handler. If THAT regression returns, the
+      // panel would be visible for one frame then flip back to hidden.
+      await page.waitForTimeout(200);
+      await expect(panel,
+        "the settings panel must STAY open after the tap — if this " +
+        "fails, the document-click handler is closing it immediately " +
+        "(reference-equality regression on e.target check)")
+        .toBeVisible();
+
+      // Tap a child path inside the SVG (the gear teeth) to cover the
+      // case where the tap lands on a specific path element, not the
+      // <svg> root. Closes + reopens.
+      await page.locator("#global-settings-btn").click();   // close
+      await expect(panel).toBeHidden();
+      const path = page.locator("#global-settings-btn svg path").first();
+      await path.click();
+      await page.waitForTimeout(200);
+      await expect(panel,
+        "tapping a child SVG path must also open and keep the panel open")
+        .toBeVisible();
+    });
+
+  test("Bug 6 (mobile): tapping outside the panel still closes it",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      await page.evaluate(() => document.body.classList.remove("locked"));
+
+      await page.locator("#global-settings-btn").click();
+      const panel = page.locator("#global-settings-panel");
+      await expect(panel).toBeVisible();
+
+      // Tap on the body far from the panel — should close the panel.
+      await page.mouse.click(20, 600);
+      await expect(panel,
+        "tapping outside the settings widget must close the panel " +
+        "(close-on-outside-click behaviour preserved by the defensive fix)")
+        .toBeHidden();
+    });
 });
