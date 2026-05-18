@@ -9,7 +9,9 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "serve:platform": "node scripts/serve-platform.js",
-    "i18n:coverage": "node scripts/i18n-coverage-report.js"
+    "i18n:coverage": "node scripts/i18n-coverage-report.js",
+    "emulator": "npx firebase emulators:start --only=database,auth --config docs/Third_session/PBL_platform/firebase.json --project canamed-sim",
+    "sim:emulator": "node scripts/sim/sim-with-emulator.js"
   },
   "engines": {
     "node": ">=20"

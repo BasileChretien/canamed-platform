@@ -1109,6 +1109,42 @@ function initPerfMonitoring() {
   }
 }
 
+/* Firebase-emulator wiring (sim + integration-test use).
+ *
+ * When window.CANAMED_EMULATOR is set to
+ *   { host: "127.0.0.1", dbPort: 9000, authPort: 9099 }
+ * dbInit() points the Realtime Database + Auth SDKs at the local Firebase
+ * emulator suite (launched by `npm run emulator` or by the sim harness).
+ * That lets us drive 28-tab classroom simulations through the same
+ * Firebase code path production uses — without the LocalDB cross-tab
+ * storage-event drops we hit at scale.
+ *
+ * The flag is gated to MODE === "shared" only; in LOCAL mode the engine
+ * still rides LocalDB. The flag is a NO-OP in production (the global is
+ * never set on a real deploy). */
+function _isEmulatorMode() {
+  return !!(typeof window !== "undefined" && window.CANAMED_EMULATOR);
+}
+function _maybeWireEmulators(databaseInstance) {
+  const cfg = (typeof window !== "undefined") && window.CANAMED_EMULATOR;
+  if (!cfg || !databaseInstance || typeof databaseInstance.useEmulator !== "function") return;
+  try {
+    databaseInstance.useEmulator(cfg.host || "127.0.0.1", parseInt(cfg.dbPort, 10) || 9000);
+  } catch (e) { console.warn("DB emulator hookup failed", e); }
+}
+function _maybeWireAuthEmulator(authInstance) {
+  const cfg = (typeof window !== "undefined") && window.CANAMED_EMULATOR;
+  if (!cfg || !authInstance || typeof authInstance.useEmulator !== "function") return;
+  try {
+    const host = cfg.host || "127.0.0.1";
+    const port = parseInt(cfg.authPort, 10) || 9099;
+    // disableWarnings:true hides the "running in emulator" yellow banner
+    // the Web Auth SDK normally renders — fine for sim, fine for tests.
+    authInstance.useEmulator("http://" + host + ":" + port,
+      { disableWarnings: true });
+  } catch (e) { console.warn("Auth emulator hookup failed", e); }
+}
+
 function dbInit() {
   if (db) return;
   if (MODE === "shared") {
@@ -1116,12 +1152,22 @@ function dbInit() {
     // App Check must be activated AFTER initializeApp but BEFORE any other
     // Firebase service is used (auth, database). Idempotent and a no-op when
     // window.CANAMED_RECAPTCHA_SITE_KEY isn't configured.
-    initAppCheck();
+    //
+    // Emulator mode skips App Check: the local emulator doesn't enforce it
+    // and reCAPTCHA can't reach the Google verification endpoint in tests
+    // (which would otherwise spam the console with appCheck/recaptcha-error).
+    if (!_isEmulatorMode()) initAppCheck();
     // Performance Monitoring is similarly opt-in via the firebase-config
     // flag. Safe to activate before database/auth — it just attaches to
     // the global window.fetch / XMLHttpRequest for timing capture.
     initPerfMonitoring();
     db = firebase.database();
+    // Emulator hookup: when window.CANAMED_EMULATOR is set to
+    // { host: "127.0.0.1", dbPort: 9000, authPort: 9099 }, point the
+    // database + auth SDKs at the local Firebase emulator suite. Used by
+    // scripts/sim/simulate-session.js so the sim no longer relies on
+    // LocalDB's flaky cross-tab storage events. No-op in production.
+    _maybeWireEmulators(db);
     // live connection indicator - a silent write failure mid-workshop is worse
     // than a visible "Reconnecting" badge
     try {
@@ -1139,6 +1185,9 @@ function dbInit() {
     try {
       if (firebase.auth) {
         auth = firebase.auth();
+        // Emulator hookup must run BEFORE any auth call (setPersistence,
+        // onAuthStateChanged, etc.) so the SDK routes to localhost.
+        _maybeWireAuthEmulator(auth);
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
         // create the authReady promise BEFORE wiring the listener so the
         // first auth-state change can resolve it

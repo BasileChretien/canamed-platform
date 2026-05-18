@@ -142,13 +142,39 @@ async function getCtx(browser) {
   _ctx = await browser.newContext({
     viewport: { width: 1280, height: 800 }
   });
-  await _ctx.addInitScript(() => {
+  // Emulator-mode wiring: when sim-with-emulator.js launches us with
+  // SIM_EMULATOR_MODE=1, pin a Firebase web config that targets the
+  // local emulator + a CANAMED_EMULATOR descriptor that dbInit() reads
+  // to call useEmulator on the database + auth SDKs. This switches the
+  // sim off LocalDB and onto the real Firebase code path (reliable
+  // cross-tab sync via WebSocket).
+  const useEmulator = process.env.SIM_EMULATOR_MODE === "1";
+  const emuHost = process.env.SIM_EMULATOR_HOST || "127.0.0.1";
+  const emuDbPort = parseInt(process.env.SIM_DB_PORT   || "9000", 10);
+  const emuAuthPort = parseInt(process.env.SIM_AUTH_PORT || "9099", 10);
+
+  await _ctx.addInitScript((cfg) => {
     function pin(name, value) {
       Object.defineProperty(window, name, {
         get: () => value, set: () => {}, configurable: true, enumerable: true
       });
     }
-    pin("CANAMED_FIREBASE", null);
+    if (cfg.useEmulator) {
+      // Minimal config — apiKey + databaseURL are enough for the SDK to
+      // initialise; useEmulator() reroutes traffic to localhost.
+      pin("CANAMED_FIREBASE", {
+        apiKey: "fake-emulator-key",
+        authDomain: cfg.host + ":" + cfg.authPort,
+        databaseURL: "http://" + cfg.host + ":" + cfg.dbPort + "?ns=canamed-sim",
+        projectId: "canamed-sim",
+        appId: "1:0:web:sim"
+      });
+      pin("CANAMED_EMULATOR", {
+        host: cfg.host, dbPort: cfg.dbPort, authPort: cfg.authPort
+      });
+    } else {
+      pin("CANAMED_FIREBASE", null);
+    }
     pin("CANAMED_RECAPTCHA_SITE_KEY", null);
     pin("CANAMED_PERF_MONITORING", false);
     window.CANAMED_SUPERADMIN_KEY = "sim-super-admin";
@@ -158,7 +184,11 @@ async function getCtx(browser) {
       localStorage.setItem("canamed_tour_admin_done", "v1");
       localStorage.setItem("canamed_tour_student_done", "v1");
     } catch (e) {}
-  });
+  }, { useEmulator, host: emuHost, dbPort: emuDbPort, authPort: emuAuthPort });
+  if (useEmulator) {
+    console.log("Sim: emulator mode ON (db=" + emuHost + ":" + emuDbPort +
+      ", auth=" + emuHost + ":" + emuAuthPort + ")");
+  }
   return _ctx;
 }
 
@@ -346,12 +376,31 @@ function reactionsFrom(persona, snap, durationMs) {
   await pageF1.locator("#splash-create-label").fill(F1.label);
   await pageF1.locator("#splash-create-pass").fill(F1.pass);
   await pageF1.locator("#splash-create-submit").click();
-  // wait for the code to appear
-  await pageF1.locator("#splash-shown-code").waitFor({ timeout: 10000 });
-  await pageF1.waitForFunction(() =>
-    /^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(
-      (document.getElementById("splash-shown-code").textContent || "").trim()
-    ), { timeout: 10000 });
+  // wait for the code to appear; on failure dump the page state + console
+  // errors so the emulator wiring is debuggable.
+  try {
+    await pageF1.waitForFunction(() =>
+      /^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(
+        (document.getElementById("splash-shown-code").textContent || "").trim()
+      ), { timeout: 15000 });
+  } catch (e) {
+    const debug = await pageF1.evaluate(() => ({
+      MODE: typeof MODE !== "undefined" ? MODE : "?",
+      hasFb: typeof firebase !== "undefined",
+      fbApps: typeof firebase !== "undefined" && firebase.apps ? firebase.apps.length : null,
+      fbConfig: window.CANAMED_FIREBASE,
+      emuConfig: window.CANAMED_EMULATOR,
+      splashCode: document.getElementById("splash-shown-code")?.textContent,
+      hint: document.getElementById("splash-create-hint")?.textContent,
+      currentView: Array.from(document.querySelectorAll(".splash-view"))
+        .find(v => !v.hidden)?.id
+    }));
+    console.error("Sim debug: createSession never produced a code. State:",
+      JSON.stringify(debug, null, 2));
+    console.error("Sim debug: F1 captured errors:");
+    (pageF1.__errors || []).slice(0, 20).forEach(s => console.error("  " + s));
+    throw e;
+  }
   const CODE = (await pageF1.locator("#splash-shown-code").textContent()).trim();
   console.log("Sim: session code = " + CODE);
   obs(F1.name + " (lead facilitator)", "create-session",

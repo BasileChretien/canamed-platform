@@ -22,8 +22,19 @@ const PORT = parseInt(process.env.PORT || "8765", 10);
 
 // Mirror the headers in docs/Third_session/PBL_platform/firebase.json so
 // tests get the same CSP / framing / cache behaviour as production.
+//
+// SIM_EMULATOR_MODE=1 (set by scripts/sim/sim-with-emulator.js) extends
+// the CSP to allow http/ws://127.0.0.1:* and ://localhost:*. Both
+// connect-src AND script-src need the relaxation — Firebase's RTDB
+// long-polling fallback loads scripts from /lp on the database
+// emulator port, so a connect-src-only relaxation would still get
+// "Refused to load the script" CSP errors silently breaking writes.
+const _EMU_HOSTS = " http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*";
+const _EMU_HOSTS_SCRIPT = " http://127.0.0.1:* http://localhost:*";
+const _EMU_CONNECT = process.env.SIM_EMULATOR_MODE === "1" ? _EMU_HOSTS : "";
+const _EMU_SCRIPT  = process.env.SIM_EMULATOR_MODE === "1" ? _EMU_HOSTS_SCRIPT : "";
 const SECURITY_HEADERS = {
-  "Content-Security-Policy": "default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://accounts.google.com https://content-firebaseappcheck.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; frame-src https://canamed-69785.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; frame-ancestors 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.googleusercontent.com https://lh3.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'none'",
+  "Content-Security-Policy": "default-src 'self'; script-src 'self' https://www.gstatic.com https://apis.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/" + _EMU_SCRIPT + "; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://accounts.google.com https://content-firebaseappcheck.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/" + _EMU_CONNECT + "; frame-src https://canamed-69785.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/; frame-ancestors 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://www.googleusercontent.com https://lh3.googleusercontent.com; object-src 'none'; base-uri 'self'; form-action 'none'",
   "X-Frame-Options": "SAMEORIGIN",
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "strict-origin-when-cross-origin"
@@ -53,6 +64,25 @@ const server = http.createServer((req, res) => {
   fs.readFile(filePath, (err, body) => {
     if (err) { res.writeHead(404); res.end("Not Found: " + urlPath); return; }
     const ext = path.extname(filePath).toLowerCase();
+    // Emulator mode: index.html ships an inline <meta http-equiv
+    // "Content-Security-Policy"> tag with the production rules. Browsers
+    // apply the INTERSECTION of header + meta CSPs, so the meta blocks
+    // localhost even when the response header allows it. Rewrite the
+    // meta to add the same localhost extras whenever we serve HTML in
+    // emulator mode. Production hosting never sees this branch.
+    if (process.env.SIM_EMULATOR_MODE === "1" && ext === ".html") {
+      const src = body.toString("utf8");
+      const patched = src
+        .replace(
+          /(script-src[^;]*)(;)/,
+          "$1 http://127.0.0.1:* http://localhost:*$2"
+        )
+        .replace(
+          /(connect-src[^;]*)(;)/,
+          "$1 http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*$2"
+        );
+      body = Buffer.from(patched, "utf8");
+    }
     res.writeHead(200, Object.assign({
       "Content-Type": MIME[ext] || "application/octet-stream",
       "Cache-Control": "no-cache, max-age=0"
