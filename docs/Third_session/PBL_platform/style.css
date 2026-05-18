@@ -2269,6 +2269,46 @@ h2, h3 { text-wrap: balance; }
 .decision + .decision { margin-top: 12px; }
 .decision.committed.correct { border-color: var(--ok); background: var(--ok-50, #e7f4ec); }
 .decision.committed.wrong { border-color: #e0a86b; background: #fdf2e6; }
+
+/* Locked decision (per 2026-05-18 specialist panel — students must
+   gather case info BEFORE the platform reveals the vote menu, to
+   prevent premature closure / pattern-match-and-anchor). Renders as
+   a slim placeholder: title + 🔒 + "ready when…" hint. NO vote
+   controls — locked decisions cannot be voted on, only previewed. */
+.decision.decision-locked {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line);
+  opacity: 0.85;
+  padding: 10px 14px;
+}
+.decision-locked-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.decision-locked-icon {
+  flex: 0 0 auto;
+  font-size: 1.05rem;
+  line-height: 1.3;
+  opacity: 0.7;
+}
+.decision-locked-title {
+  margin: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.decision-locked-hint {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  font-style: italic;
+  padding-left: 26px;
+  line-height: 1.45;
+}
 .dec-prompt { margin: 0 0 10px; font-weight: 700; line-height: 1.4; }
 .dec-options { display: flex; flex-direction: column; gap: 7px; }
 

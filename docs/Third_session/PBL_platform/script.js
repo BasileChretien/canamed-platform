@@ -5810,6 +5810,76 @@ function votablePresentCount() {
 
 /* render the team-decision cards for Module A and Module B */
 let lastDecisionBallotCount = 0;
+/* Count revealed items per case group (history / exam / labs). Used by
+ * decisionUnlocked() to evaluate per-decision unlockWhen gates.
+ * Mirrors the structure case content uses: id format is "group:index". */
+function revealedCountByGroup(group) {
+  let n = 0;
+  Object.keys(revealed || {}).forEach(id => {
+    if (typeof id === "string" && id.indexOf(group + ":") === 0) n++;
+  });
+  return n;
+}
+
+/* Evaluate whether a decision is currently unlocked. A decision without
+ * an `unlockWhen` field is always unlocked (back-compat for content
+ * that doesn't opt in to gating). The schema is a plain object of
+ * threshold names → minimum counts. Returns { unlocked, unmet } where
+ * unmet is the list of requirements still missing (used to build the
+ * "ready when…" hint). */
+function decisionUnlocked(d) {
+  if (!d || !d.unlockWhen) return { unlocked: true, unmet: [] };
+  const w = d.unlockWhen;
+  const have = {
+    hypotheses: (typeof hypothesisCount === "function") ? hypothesisCount() : 0,
+    historyRevealed: revealedCountByGroup("history"),
+    examRevealed: revealedCountByGroup("exam"),
+    labsRevealed: revealedCountByGroup("labs"),
+    synthesis: (typeof keyRevealed === "function" && keyRevealed()) ? 1 : 0
+  };
+  const unmet = [];
+  Object.keys(w).forEach(key => {
+    const need = w[key] || 0;
+    if ((have[key] || 0) < need) unmet.push({ key: key, need: need, have: have[key] || 0 });
+  });
+  return { unlocked: unmet.length === 0, unmet: unmet };
+}
+
+/* Build the human-readable "ready when…" hint for a locked decision.
+ * Goes through the unmet requirements and renders each one in the
+ * active UI language. Falls back to English wording when i18n is
+ * unavailable. */
+function decisionUnlockHint(unmet) {
+  const t = (key, fallback) => {
+    if (typeof window !== "undefined" && typeof window.t === "function") {
+      const v = window.t(key);
+      if (v && v !== key) return v;
+    }
+    return fallback;
+  };
+  const parts = unmet.map(u => {
+    switch (u.key) {
+      case "hypotheses":
+        return t("modA.decision.unlock.hypotheses", "add a working hypothesis");
+      case "historyRevealed":
+        return t("modA.decision.unlock.history", "ask the patient");
+      case "examRevealed":
+        return t("modA.decision.unlock.exam", "examine");
+      case "labsRevealed":
+        return t("modA.decision.unlock.labs", "investigate");
+      case "synthesis":
+        return t("modA.decision.unlock.synthesis", "complete the clinical synthesis");
+      default:
+        return u.key;
+    }
+  });
+  return parts.join(" · ");
+}
+
+/* Track which Module A decisions were previously unlocked so we can
+ * fire a coach-card "🗳️ A new decision opened" nudge on transitions. */
+let lastUnlockedDecisionIds = new Set();
+
 function renderDecisions() {
   ["A", "B"].forEach(mod => {
     const box = el("decisions-" + mod);
@@ -5833,6 +5903,31 @@ function renderDecisions() {
         if (ballots > lastDecisionBallotCount) nudgeRcolTab("decisions");
         lastDecisionBallotCount = ballots;
       }
+      // Coach nudge on unlock transitions (locked → unlocked) for any
+      // Module A decision. Surfaces a one-liner via toast() so the team
+      // sees that a new decision just opened without auto-stealing focus.
+      const nowUnlocked = new Set();
+      list.forEach(d => {
+        if (decisionUnlocked(d).unlocked) nowUnlocked.add(d.id);
+      });
+      nowUnlocked.forEach(id => {
+        if (!lastUnlockedDecisionIds.has(id) && lastUnlockedDecisionIds.size > 0) {
+          // Only nudge on a real transition (not on initial paint where
+          // lastUnlockedDecisionIds is still empty). Find the decision
+          // title for the toast.
+          const d = list.find(x => x.id === id);
+          if (d && typeof toast === "function") {
+            const lang = _curLang();
+            toast("🗳️ " + (typeof window.t === "function" ?
+                  (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
+                    ? window.t("modA.decision.unlocked")
+                    : "A new team decision just opened")
+                  : "A new team decision just opened"),
+                  tc(d.prompt, lang));
+          }
+        }
+      });
+      lastUnlockedDecisionIds = nowUnlocked;
     }
     const head = document.createElement("div");
     head.className = "dec-head";
@@ -5844,8 +5939,50 @@ function renderDecisions() {
       "the bars show how your room is leaning — then lock in one answer together.";
     head.appendChild(h); head.appendChild(hint);
     box.appendChild(head);
-    list.forEach(d => box.appendChild(buildDecision(d)));
+    list.forEach(d => {
+      const gate = (mod === "A") ? decisionUnlocked(d) : { unlocked: true, unmet: [] };
+      if (gate.unlocked) {
+        box.appendChild(buildDecision(d));
+      } else {
+        box.appendChild(buildLockedDecision(d, gate.unmet));
+      }
+    });
   });
+}
+
+/* Slim locked-state placeholder for a decision that hasn't yet met its
+ * unlockWhen gate. Shows the prompt title (so students see the menu of
+ * what's coming) + a 🔒 + a "ready when…" hint built from the unmet
+ * requirements. No vote controls — students cannot anchor on a vote
+ * before they've earned the information that should drive it. */
+function buildLockedDecision(d, unmet) {
+  const wrap = document.createElement("div");
+  wrap.className = "decision decision-locked";
+  const lang = _curLang();
+
+  const head = document.createElement("div");
+  head.className = "decision-locked-head";
+  const lock = document.createElement("span");
+  lock.className = "decision-locked-icon";
+  lock.setAttribute("aria-hidden", "true");
+  lock.textContent = "🔒";
+  const title = document.createElement("p");
+  title.className = "decision-locked-title";
+  title.textContent = tc(d.prompt, lang);
+  head.appendChild(lock);
+  head.appendChild(title);
+  wrap.appendChild(head);
+
+  const hintLine = document.createElement("p");
+  hintLine.className = "decision-locked-hint";
+  const prefix = (typeof window !== "undefined" && typeof window.t === "function" &&
+                  window.t("modA.decision.ready-when") !== "modA.decision.ready-when")
+    ? window.t("modA.decision.ready-when")
+    : "Ready when:";
+  hintLine.textContent = prefix + " " + decisionUnlockHint(unmet);
+  wrap.appendChild(hintLine);
+
+  return wrap;
 }
 
 /* one decision block: the prompt, the option bars with a live tally, who voted,
