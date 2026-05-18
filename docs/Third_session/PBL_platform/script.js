@@ -5202,12 +5202,63 @@ function renderCallProf() {
 }
 
 /* ===================== ROOM VIEW: INTERACTIVE CASE ===================== */
+/* Seeded shuffle helpers for the case-action button display order.
+ * User request (2026-05-18): "the ask the patients, examination,
+ * investigations sections button must be in a random order. Not always
+ * the same one." Goal: prevent students from memorising a fixed
+ * sequence (or copying "what to click" verbatim from a previous
+ * cohort). Constraints:
+ *   - All teammates in the SAME ROOM must see the SAME order so
+ *     discussion ("let's tap the third one") stays coherent.
+ *   - Reloading the page must give the same order (so a student
+ *     mid-conversation doesn't lose their cursor position).
+ *   - The underlying item IDs (group:index) MUST NOT change, because
+ *     they key Firebase writes that other teammates already saw.
+ *
+ * Solution: deterministic seeded shuffle of the DISPLAY ORDER only.
+ * Seed = sessionNum + room + group. Same room + same session always
+ * yields the same order; different rooms / different sessions get
+ * different orders. IDs stay tied to the original CASE[group][i]
+ * indexes so refRevealed entries remain consistent. */
+function _csHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0;
+  return h;
+}
+function _csRng(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function _seededShuffleIndexes(n, seedStr) {
+  const a = []; for (let i = 0; i < n; i++) a.push(i);
+  const rand = _csRng(_csHash(seedStr));
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    const tmp = a[i]; a[i] = a[j]; a[j] = tmp;
+  }
+  return a;
+}
+
 function buildButtons() {
   ["history", "exam", "labs"].forEach(group => {
     const container = el("group-" + group);
     container.innerHTML = "";
-    CASE[group].forEach((item, i) => {
-      const id = group + ":" + i;
+    // Per-room+session deterministic shuffle of display order.
+    // Seed components: sessionNum (cohort) + myRoom (so different rooms
+    // in the same session don't share an order) + group (so the three
+    // sections are shuffled independently).
+    const seedStr = (sessionNum || "default") + ":" +
+                    (myRoom || "lobby") + ":" + group;
+    const order = _seededShuffleIndexes(CASE[group].length, seedStr);
+    order.forEach(i => {
+      const item = CASE[group][i];
+      const id = group + ":" + i;   // ← ORIGINAL index, not the shuffled position
       const btn = document.createElement("button");
       btn.className = "req-btn" + (item.key ? " key-btn" : "");
       btn.dataset.id = id;

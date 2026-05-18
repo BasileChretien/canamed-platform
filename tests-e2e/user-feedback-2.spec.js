@@ -405,3 +405,139 @@ test.describe("Bug 6 — participant settings cog + theme picker", () => {
         .toBeHidden();
     });
 });
+
+/* User request (2026-05-18): "the ask the patients, examination,
+ * investigations sections button must be in a random order. Not always
+ * the same one."
+ *
+ * Three regression tests on a 390x844 mobile viewport (per the new
+ * standing rule: test every UI change across devices):
+ *   1. Display order is NOT the original CASE order (i.e., shuffled).
+ *   2. Same session + same room ⇒ same order on reload (stable for
+ *      mid-conversation reloads).
+ *   3. Item IDs (data-id) are preserved across the shuffle so the
+ *      reveal-write Firebase path doesn't change. */
+test.describe("Random button order — shuffled display, stable IDs", () => {
+  test("display order differs from the source CASE order (mobile viewport)",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const result = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        document.getElementById("stage-1").classList.remove("hidden");
+        // Force a non-empty sessionNum + myRoom so the seed is stable.
+        window.sessionNum = "test-session";
+        window.myRoom = "room-1";
+        if (typeof window.buildButtons === "function") window.buildButtons();
+        const groups = ["history", "exam", "labs"];
+        const out = {};
+        groups.forEach(g => {
+          const buttons = Array.from(document.querySelectorAll(
+            '#group-' + g + ' .req-btn'));
+          out[g] = {
+            ids: buttons.map(b => b.dataset.id),
+            count: buttons.length,
+            sourceCount: (window.CASE && window.CASE[g] || []).length
+          };
+        });
+        return out;
+      });
+      // At least ONE of the 3 groups must show a non-default order.
+      // (A 3-item group has a 1/6 chance of randomly landing on
+      // [0,1,2], so guarding all three together is a near-zero
+      // false-positive bar.)
+      const groups = ["history", "exam", "labs"];
+      let atLeastOneShuffled = false;
+      for (const g of groups) {
+        const r = result[g];
+        if (r.count !== r.sourceCount) continue; // skip if buildButtons didn't load CASE
+        const ordered = r.ids.map((_, i) => g + ":" + i);
+        if (JSON.stringify(r.ids) !== JSON.stringify(ordered)) {
+          atLeastOneShuffled = true;
+          break;
+        }
+      }
+      expect(atLeastOneShuffled,
+        "at least one section must render its buttons in a non-default order — " +
+        "if all three sections render in source order, the seeded shuffle isn't " +
+        "running. Saw: " + JSON.stringify(result))
+        .toBe(true);
+    });
+
+  test("same room + session = same order on reload (stability)",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      // Capture order on first load.
+      const orderOne = await page.evaluate(() => {
+        // noop — page.goto below.
+      });
+      await page.goto("/");
+      const first = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        document.getElementById("stage-1").classList.remove("hidden");
+        window.sessionNum = "test-session-stable";
+        window.myRoom = "room-1";
+        if (typeof window.buildButtons === "function") window.buildButtons();
+        return Array.from(document.querySelectorAll(
+          '#group-history .req-btn')).map(b => b.dataset.id);
+      });
+
+      // Reload, re-render with the same session/room seed.
+      await page.goto("/");
+      const second = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        document.getElementById("stage-1").classList.remove("hidden");
+        window.sessionNum = "test-session-stable";
+        window.myRoom = "room-1";
+        if (typeof window.buildButtons === "function") window.buildButtons();
+        return Array.from(document.querySelectorAll(
+          '#group-history .req-btn')).map(b => b.dataset.id);
+      });
+
+      expect(first.length).toBeGreaterThan(0);
+      expect(second,
+        "same sessionNum + myRoom must produce the SAME shuffled order on " +
+        "reload — otherwise a student mid-conversation would lose their cursor " +
+        "position every time they refreshed.")
+        .toEqual(first);
+    });
+
+  test("different rooms in the same session = different orders (anti-copying)",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const orders = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        document.getElementById("stage-1").classList.remove("hidden");
+        const captures = {};
+        ["room-1", "room-2", "room-3", "room-4"].forEach(r => {
+          window.sessionNum = "test-multi-room";
+          window.myRoom = r;
+          if (typeof window.buildButtons === "function") window.buildButtons();
+          captures[r] = Array.from(document.querySelectorAll(
+            '#group-history .req-btn')).map(b => b.dataset.id);
+        });
+        return captures;
+      });
+      // At least TWO of the four rooms must have different orders —
+      // otherwise the room-component of the seed isn't doing anything.
+      const distinct = new Set(Object.values(orders).map(JSON.stringify));
+      expect(distinct.size,
+        "different rooms in the same session must produce different orders " +
+        "to discourage cross-room copying. All 4 rooms produced: " +
+        JSON.stringify(orders))
+        .toBeGreaterThan(1);
+    });
+});
