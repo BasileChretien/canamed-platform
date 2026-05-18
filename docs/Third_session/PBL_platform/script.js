@@ -6556,16 +6556,66 @@ function initRolePicker() {
   });
 }
 
-/* save the room's chosen team name (any room member may set it) */
+/* Save the room's chosen team name (any room member may set it).
+ * Idempotent: protected by _wired so repeated wireRoomUI calls don't
+ * stack handlers. User-visible feedback for EVERY failure path —
+ * the previous version silently returned when the input was empty,
+ * when refTeamName wasn't ready yet, or when the Firebase write
+ * failed, so clicking "Save name" felt like "nothing happens"
+ * (user report 2026-05-18). */
 function initTeamName() {
   const btn = el("team-name-btn"), inp = el("team-name-input");
-  if (!btn || !inp) return;
+  if (!btn || !inp || btn._wired) return;
+  btn._wired = true;
+  const _t = (key, fallback) => {
+    if (typeof window !== "undefined" && typeof window.t === "function") {
+      const v = window.t(key);
+      if (v && v !== key) return v;
+    }
+    return fallback;
+  };
   const save = () => {
     const v = (inp.value || "").trim().slice(0, 32);
-    if (!v || !refTeamName) return;
+    if (!v) {
+      // Empty input — flash the input + toast a hint. No silent return.
+      inp.focus();
+      inp.classList.add("input-empty-flash");
+      setTimeout(() => inp.classList.remove("input-empty-flash"), 600);
+      if (typeof toast === "function") {
+        toast(_t("room.team-name.empty", "Type a team name first."));
+      }
+      return;
+    }
+    if (!refTeamName) {
+      // Not in a room yet (rare race) — tell the user instead of silently
+      // dropping the save.
+      if (typeof toast === "function") {
+        toast(_t("room.team-name.not-ready", "Not ready yet — try again in a second."));
+      }
+      return;
+    }
+    // Optimistic UX: dim the button + show a "saving…" state so the
+    // user knows the click was registered before the round-trip completes.
+    btn.disabled = true;
+    const origLabel = btn.textContent;
+    btn.textContent = _t("room.team-name.saving", "Saving…");
     refTeamName.set(v)
-      .then(() => toast("Team name saved — " + v))
-      .catch(e => console.error("Team name save failed", e));
+      .then(() => {
+        btn.disabled = false;
+        btn.textContent = origLabel;
+        if (typeof toast === "function") {
+          toast(_t("room.team-name.saved", "Team name saved —") + " " + v);
+        }
+      })
+      .catch(e => {
+        btn.disabled = false;
+        btn.textContent = origLabel;
+        console.error("Team name save failed", e);
+        if (typeof toast === "function") {
+          toast(_t("room.team-name.error",
+            "Could not save the team name — check your connection and try again."));
+        }
+      });
   };
   btn.addEventListener("click", save);
   inp.addEventListener("keydown", e => { if (e.key === "Enter") save(); });
