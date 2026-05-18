@@ -54,17 +54,16 @@ jobs:
         run: npm run test:coverage
 
       - name: Upload coverage to Codecov
-        # Codecov is optional — if no CODECOV_TOKEN is configured the action
-        # still posts a public-repo coverage report via the tokenless flow.
-        # The if: always() ensures we still get a report even if a single
-        # test flaked (coverage is computed from the runs that did execute).
+        # Public-repo tokenless flow — Codecov uses GitHub OIDC, no secret
+        # required (see https://docs.codecov.com/docs/codecov-tokens). The
+        # if: always() ensures we still get a report even if a single test
+        # flaked (coverage is computed from the runs that did execute).
         if: always()
         uses: codecov/codecov-action@v5
         with:
           files: ./coverage/lcov.info
           flags: unit
           fail_ci_if_error: false
-          token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Upload coverage report artifact
         if: always()

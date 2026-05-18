@@ -1,0 +1,11 @@
+# CaNaMED platform — code ownership.
+#
+# Every change requires review by the listed owner before merge to main.
+# Combined with branch-protection rules on main (require PR, require
+# review, no force-push, no direct push), this ensures only the named
+# maintainer can merge platform changes — important because main is
+# the deploy source for canamed-69785.web.app.
+#
+# Contributors: open a PR; @BasileChretien will review.
+
+* @BasileChretien
