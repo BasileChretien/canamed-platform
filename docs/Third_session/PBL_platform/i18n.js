@@ -469,6 +469,7 @@
       // the deleted instruction walls with state-aware, single-line
       // guidance. State machine in updateModANextStep / updateModBNextStep.
       "coach.dismiss": "Hide this guidance for the rest of the session",
+      "reference-section.title": "📚 Background & guidelines (open when you need them)",
       "modA.coach.read-case": "Read the case below, then tap any button on the left (Ask the patient / Examine / Investigations) to start gathering info.",
       "modA.coach.gather": "Keep gathering case info — when you're ready, complete the clinical synthesis (red-flag review) to unlock the Discussion prompts.",
       "modA.coach.open-discussion": "✓ Synthesis done! Open Discussion to start the Exchange. Make sure both Caen and Nagoya voices speak on each compare prompt.",
@@ -640,11 +641,24 @@
       // these as the most visible English-only strings once the user has
       // joined a room. Pinned per language so a translator catches a
       // missing key in CI rather than at runtime.
-      "rcol.tab.findings": "Findings",
-      "rcol.tab.decisions": "Team decisions",
-      "rcol.tab.discussion": "Discussion",
-      "rcol.tab.answers": "Group answers",
+      // Tab labels are activity verbs (per UX/pedagogy review 2026-05-18):
+      // "what you DO in this section" beats "the name of the artefact",
+      // so students don't have to guess what an empty tab is for.
+      "rcol.tab.findings": "What we're finding",
+      "rcol.tab.decisions": "Decide together",
+      "rcol.tab.discussion": "Debate",
+      "rcol.tab.answers": "Our final answers",
       "rcol.tab.reference": "Reference",
+      // Lock-state suffix shown on tabs that aren't yet unlocked. The
+      // unlock condition is named so students know exactly what to do
+      // (specialist panel: "Discussion lies about being available" —
+      // explicit lock + unlock condition fixes that).
+      "rcol.tab.discussion.locked": "🔒 finish synthesis to unlock",
+      // Synthesis prerequisites progress — shown above the disabled
+      // "Clinical synthesis" button so students don't have to guess
+      // when it'll unlock.
+      "modA.synthesis.progress": "{done} / {total} red flags screened",
+      "modA.synthesis.unlocked": "✓ Red-flag screen complete — synthesis is unlocked.",
 
       // Findings + discussion panel chrome (in-room, high-visibility).
       "findings.title": "Findings log",
@@ -969,6 +983,7 @@
       "modB.answers.bullet.unsorted.label": "Autres points (non encore rattachés à une bullet)",
       "room.answer.add": "Ajouter",
       "coach.dismiss": "Masquer ce guide pour le reste de la séance",
+      "reference-section.title": "📚 Contexte & recommandations (à ouvrir au besoin)",
       "modA.coach.read-case": "Lisez le cas ci-dessous, puis appuyez sur un bouton à gauche (Interroger / Examiner / Investiguer) pour commencer à recueillir des informations.",
       "modA.coach.gather": "Continuez à recueillir des informations — quand vous serez prêt·e·s, complétez la synthèse clinique (revue des drapeaux rouges) pour débloquer les questions de discussion.",
       "modA.coach.open-discussion": "✓ Synthèse faite ! Ouvrez Discussion pour commencer l'échange. Assurez-vous qu'une voix de Caen et une de Nagoya s'expriment sur chaque question de comparaison.",
@@ -1122,11 +1137,14 @@
       "admin.search.label": "Filtrer les salles",
       "admin.search.empty": "Aucune salle ne correspond à ce filtre.",
 
-      "rcol.tab.findings": "Résultats",
-      "rcol.tab.decisions": "Décisions d'équipe",
-      "rcol.tab.discussion": "Discussion",
-      "rcol.tab.answers": "Réponses du groupe",
+      "rcol.tab.findings": "Ce qu'on trouve",
+      "rcol.tab.decisions": "Décider ensemble",
+      "rcol.tab.discussion": "Débat",
+      "rcol.tab.answers": "Nos réponses finales",
       "rcol.tab.reference": "Référence",
+      "rcol.tab.discussion.locked": "🔒 finir la synthèse pour débloquer",
+      "modA.synthesis.progress": "{done} / {total} drapeaux rouges criblés",
+      "modA.synthesis.unlocked": "✓ Criblage des drapeaux rouges complet — synthèse débloquée.",
 
       "findings.title": "Journal des résultats",
       "findings.empty": "Rien demandé pour l'instant — utilisez les boutons à gauche pour avancer dans le cas.",
@@ -1451,6 +1469,7 @@
       "modB.answers.bullet.unsorted.label": "その他の項目 (まだ要点に紐付いていないもの)",
       "room.answer.add": "追加",
       "coach.dismiss": "このガイドをこのセッションの間非表示にする",
+      "reference-section.title": "📚 背景・ガイドライン (必要に応じて開いてください)",
       "modA.coach.read-case": "下の症例を読んでから、左のボタン (問診 / 診察 / 検査) のいずれかをタップして情報収集を始めてください。",
       "modA.coach.gather": "症例情報の収集を続けてください — 準備ができたら臨床総合判断 (レッドフラッグ確認) を完了してディスカッション項目を解放しましょう。",
       "modA.coach.open-discussion": "✓ 総合判断完了! ディスカッションを開いて意見交換を始めましょう。各比較項目では、Caenと名古屋の両方の声が発言する必要があります。",
@@ -1604,11 +1623,14 @@
       "admin.search.label": "ルームを絞り込み",
       "admin.search.empty": "条件に一致するルームはありません。",
 
-      "rcol.tab.findings": "所見",
-      "rcol.tab.decisions": "チームの意思決定",
-      "rcol.tab.discussion": "ディスカッション",
-      "rcol.tab.answers": "グループの回答",
+      "rcol.tab.findings": "分かったこと",
+      "rcol.tab.decisions": "一緒に決める",
+      "rcol.tab.discussion": "議論",
+      "rcol.tab.answers": "最終回答",
       "rcol.tab.reference": "参考資料",
+      "rcol.tab.discussion.locked": "🔒 総合判断を完了して解除",
+      "modA.synthesis.progress": "{done} / {total} のレッドフラッグを確認済み",
+      "modA.synthesis.unlocked": "✓ レッドフラッグの確認完了 — 総合判断が解除されました。",
 
       "findings.title": "所見ログ",
       "findings.empty": "まだ何も尋ねていません。左のボタンを使って症例を進めてください。",

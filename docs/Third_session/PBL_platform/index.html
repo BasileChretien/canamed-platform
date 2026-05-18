@@ -1103,6 +1103,16 @@
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                 aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
                 2-3l-5-9V3" /><path d="M7.5 14h9" /></svg> Investigations &amp; synthesis</h3>
+              <!-- "X / Y red flags screened" progress chip — answers the
+                   student-persona's #1 complaint: "no progress bar, no
+                   '3 of 6 needed'… this is the moment I would message
+                   my facilitator." updateSynthesisProgress() in
+                   script.js drives the text and toggles .is-done when
+                   the prereqs are met. -->
+              <p class="synthesis-progress" id="synthesis-progress"
+                 data-i18n="modA.synthesis.progress" aria-live="polite">
+                0 / 3 red flags screened
+              </p>
               <div class="btn-group" id="group-labs"></div>
             </section>
             <button id="reset-btn" class="reset-btn"
@@ -1114,37 +1124,43 @@
           </div>
 
           <div class="col-right">
-            <!-- a tab bar so each big section is one click away, not a long scroll;
-                 the panels below preserve every existing element id and class -->
+            <!-- Activity-verb tab labels (per UX/pedagogy review
+                 2026-05-18): noun labels like "Findings" / "Reference"
+                 made students guess what each tab was FOR. Verbs say
+                 what they DO here. Reference was demoted out of the
+                 tab strip into a standalone <details> card below
+                 (specialist verdict: "Reference is utility not
+                 activity, shouldn't compete with workflow tabs").
+                 The Discussion tab carries a visible 🔒 lock label
+                 spelling out the unlock condition so students don't
+                 wonder whether it's "really" available. -->
             <div class="rcol-tabs" role="tablist" aria-label="Module A panels">
               <button class="rcol-tab is-active" type="button" data-tab="findings"
                       role="tab" aria-selected="true" aria-controls="rcol-p-findings">
                 <span class="rcol-tab-icon" aria-hidden="true">🔍</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.findings">Findings</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.findings">What we're finding</span>
                 <span class="rcol-tab-badge" id="tab-badge-findings">0</span>
               </button>
               <button class="rcol-tab" type="button" data-tab="decisions"
                       role="tab" aria-selected="false" aria-controls="rcol-p-decisions">
                 <span class="rcol-tab-icon" aria-hidden="true">🗳️</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.decisions">Team decisions</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.decisions">Decide together</span>
                 <span class="rcol-tab-badge" id="tab-badge-decisions" hidden></span>
               </button>
-              <button class="rcol-tab" type="button" data-tab="discussion"
-                      role="tab" aria-selected="false" aria-controls="rcol-p-discussion">
+              <button class="rcol-tab is-locked" type="button" data-tab="discussion"
+                      role="tab" aria-selected="false" aria-controls="rcol-p-discussion"
+                      id="rcol-tab-discussion">
                 <span class="rcol-tab-icon" aria-hidden="true">💬</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.discussion">Discussion</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.discussion">Debate</span>
+                <span class="rcol-tab-locked-hint" id="rcol-tab-discussion-locked"
+                      data-i18n="rcol.tab.discussion.locked">🔒 finish synthesis to unlock</span>
                 <span class="rcol-tab-badge" id="tab-badge-discussion" hidden></span>
               </button>
               <button class="rcol-tab" type="button" data-tab="answers"
                       role="tab" aria-selected="false" aria-controls="rcol-p-answers">
                 <span class="rcol-tab-icon" aria-hidden="true">📝</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Group answers</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
                 <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
-              </button>
-              <button class="rcol-tab" type="button" data-tab="reference"
-                      role="tab" aria-selected="false" aria-controls="rcol-p-reference">
-                <span class="rcol-tab-icon" aria-hidden="true">📚</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.reference">Reference</span>
               </button>
             </div>
 
@@ -1223,155 +1239,6 @@
             </section>
             </div><!-- /discussion panel -->
 
-            <div class="rcol-panel" id="rcol-p-reference" hidden
-                 role="tabpanel" data-panel="reference">
-            <details class="card history-card">
-              <summary><strong>&#128220; Historical context &mdash; how we got here</strong></summary>
-              <p>Opium is one of medicine's oldest drugs &mdash; used in ancient Sumer,
-                praised by Galen, bottled as laudanum from the 17th century. The 19th century
-                industrialised it: morphine was isolated around 1804, the hypodermic syringe
-                arrived in the 1850s, and Bayer marketed heroin in 1898. Repeated waves of
-                addiction made 20th-century Western physicians cautious &mdash; opioids were
-                for cancer and acute pain only.</p>
-              <p>That caution collapsed in the United States. In 1995&ndash;96 pain was
-                promoted as "the fifth vital sign" and OxyContin was launched with aggressive,
-                misleading marketing; prescriptions tripled and hundreds of thousands of
-                overdose deaths followed. Japan took a strikingly different path &mdash; tight
-                narcotics regulation, restrictive insurance rules, conservative training and a
-                deep cultural wariness of <em>mayaku</em> (narcotics) &mdash; and today
-                prescribes opioids many times less than the US, with France and the UK in
-                between. Low-back-pain care had its own reversal: until the 1990s bed rest and
-                routine imaging were standard, until trials showed bed rest <em>delays</em>
-                recovery and imaging rarely changes outcomes.</p>
-              <p class="didyouknow">&#128161; <strong>Did you know?</strong> Heroin was sold
-                over the counter as a "non-addictive" cough remedy from 1898 &mdash; a
-                marketing claim eerily echoed a century later for OxyContin.</p>
-              <p class="didyouknow">&#128161; <strong>Did you know?</strong> Japan prescribes
-                opioids more than 20&times; less than the USA &mdash; not because Japanese
-                patients feel less pain, but because of regulation, insurance and culture.</p>
-              <ul class="ref-list">
-                <li>Jones MR et al. A Brief History of the Opioid Epidemic and Strategies for
-                  Pain Medicine. <em>Pain and Therapy</em> 2018;7(1):13&ndash;21.
-                  <a href="https://doi.org/10.1007/s40122-018-0097-6" target="_blank"
-                     rel="noopener">doi.org/10.1007/s40122-018-0097-6</a></li>
-                <li>Onishi E et al. Comparison of Opioid Prescribing Patterns in the United
-                  States and Japan. <em>J Am Board Fam Med</em> 2017;30(2):248&ndash;254.
-                  <a href="https://www.jabfm.org/content/30/2/248" target="_blank"
-                     rel="noopener">jabfm.org</a></li>
-                <li>Tompkins DA et al. Providing chronic pain management in the "Fifth Vital
-                  Sign" era. <em>Drug Alcohol Depend</em> 2017;173(Suppl 1):S11&ndash;S21.
-                  <a href="https://doi.org/10.1016/j.drugalcdep.2016.12.002" target="_blank"
-                     rel="noopener">doi.org/10.1016/j.drugalcdep.2016.12.002</a></li>
-                <li>Waddell G, Feder G, Lewis M. Systematic reviews of bed rest and advice to
-                  stay active for acute low back pain. <em>Br J Gen Pract</em>
-                  1997;47(423):647&ndash;652.
-                  <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC1410119/" target="_blank"
-                     rel="noopener">free full text</a></li>
-                <li>Foster NE et al. Prevention and treatment of low back pain: evidence,
-                  challenges, and promising directions. <em>The Lancet</em>
-                  2018;391(10137):2368&ndash;2383.
-                  <a href="https://doi.org/10.1016/S0140-6736(18)30489-6" target="_blank"
-                     rel="noopener">doi.org/10.1016/S0140-6736(18)30489-6</a></li>
-              </ul>
-            </details>
-
-            <details class="card guidelines-card">
-              <summary><strong>&#128218; Guidelines &mdash; chronic low-back pain &amp; opioids</strong>
-                (France &middot; Japan &middot; UK &middot; USA)</summary>
-              <ul class="ref-list">
-                <li><strong>France &mdash;</strong> Haute Autorité de Santé (HAS), <em>Prise en
-                  charge du patient présentant une lombalgie commune</em>, 2019.
-                  <a href="https://www.has-sante.fr/jcms/c_2961499/fr/prise-en-charge-du-patient-presentant-une-lombalgie-commune"
-                     target="_blank" rel="noopener">has-sante.fr</a></li>
-                <li><strong>Japan &mdash;</strong> Japanese Orthopaedic Association (JOA),
-                  <em>Clinical Practice Guideline for the Management of Low Back Pain</em>,
-                  revised 2019 edition (English secondary publication, <em>J Orthop Sci</em> 2022).
-                  <a href="https://pubmed.ncbi.nlm.nih.gov/34836746/"
-                     target="_blank" rel="noopener">pubmed.ncbi.nlm.nih.gov</a></li>
-                <li><strong>UK &mdash;</strong> NICE, <em>Low back pain and sciatica in over 16s:
-                  assessment and management</em>, NG59 (2016, updated 2020).
-                  <a href="https://www.nice.org.uk/guidance/ng59"
-                     target="_blank" rel="noopener">nice.org.uk/guidance/ng59</a></li>
-                <li><strong>USA &mdash;</strong> American College of Physicians, <em>Noninvasive
-                  Treatments for Acute, Subacute, and Chronic Low Back Pain</em>, 2017
-                  <a href="https://pubmed.ncbi.nlm.nih.gov/28192789/"
-                     target="_blank" rel="noopener">pubmed</a>;
-                  and CDC, <em>Clinical Practice Guideline for Prescribing Opioids for Pain</em>,
-                  2022 <a href="https://www.cdc.gov/mmwr/volumes/71/rr/rr7103a1.htm"
-                     target="_blank" rel="noopener">cdc.gov</a>.</li>
-              </ul>
-              <p class="hint">All four agree on the science: stay active, exercise-based
-                first-line care, image only for red flags, opioids are not first-line for
-                chronic non-specific low-back pain.</p>
-            </details>
-
-            <details class="card recap-card">
-              <summary><strong>&#128203; Recap table &mdash; keep this open for reference</strong></summary>
-              <h4>Red flags &mdash; when to worry</h4>
-              <table class="recap-table">
-                <thead><tr><th>Category</th><th>Ask / look for</th><th>If present</th></tr></thead>
-                <tbody>
-                  <tr><td><strong>Cauda equina</strong> (emergency)</td>
-                    <td>Saddle anaesthesia, urinary retention/incontinence, faecal incontinence,
-                      new sexual dysfunction, bilateral leg symptoms</td>
-                    <td>Same-day emergency referral + urgent MRI</td></tr>
-                  <tr><td><strong>Malignancy</strong></td>
-                    <td>Age &gt;50, cancer history, unexplained weight loss, rest/night pain,
-                      no improvement after 4&ndash;6 weeks</td>
-                    <td>Bloods (FBC, ESR/CRP, calcium) + imaging; refer</td></tr>
-                  <tr><td><strong>Infection</strong></td>
-                    <td>Fever, night sweats, IV drug use, immunosuppression, recent spinal
-                      procedure, focal bony tenderness</td>
-                    <td>ESR/CRP + urgent MRI; refer</td></tr>
-                  <tr><td><strong>Fracture</strong></td>
-                    <td>Significant trauma, or minor trauma with osteoporosis risk; focal
-                      midline bony tenderness</td>
-                    <td>X-ray &plusmn; MRI</td></tr>
-                  <tr><td><strong>Inflammatory</strong> (axial spondyloarthritis)</td>
-                    <td>Onset &lt;45, morning stiffness &gt;30 min, improves with exercise /
-                      worse with rest, second-half-of-night pain</td>
-                    <td>ESR/CRP, consider HLA-B27, rheumatology referral</td></tr>
-                </tbody>
-              </table>
-              <h4>First-line management of chronic non-specific low-back pain</h4>
-              <ul class="info-list">
-                <li><strong>Education &amp; reassurance</strong> &mdash; not dangerous, not
-                  "damage"; hurt &ne; harm; good prognosis.</li>
-                <li><strong>Stay active</strong> &mdash; avoid bed rest; resume work, walking, gym.</li>
-                <li><strong>Structured exercise / physiotherapy</strong> &mdash; the best-evidenced
-                  treatment; adherence matters more than the type.</li>
-                <li><strong>Address yellow flags</strong> &mdash; fear of movement, catastrophising,
-                  low mood, poor sleep &mdash; treat these directly.</li>
-                <li><strong>Non-opioid analgesia</strong> &mdash; NSAIDs at the lowest effective
-                  dose, shortest duration. Paracetamol alone is ineffective.</li>
-                <li><strong>Do NOT</strong> &mdash; routine imaging, opioids, gabapentinoids /
-                  benzodiazepines, prolonged bed rest.</li>
-              </ul>
-              <h4>Opioids for chronic non-cancer pain</h4>
-              <p>Small short-term pain benefit at best, no proven benefit on function, no good
-                evidence beyond ~12 weeks; real harms (tolerance, dependence, hyperalgesia,
-                falls, overdose). <strong>All four countries: not first-line.</strong></p>
-              <h4>France &middot; Japan &middot; UK &middot; USA &mdash; at a glance</h4>
-              <table class="recap-table">
-                <thead><tr><th></th><th>Imaging</th><th>Opioids for chronic LBP</th>
-                  <th>Prescribing-culture context</th></tr></thead>
-                <tbody>
-                  <tr><td><strong>France</strong></td><td>Not without red flags</td>
-                    <td>Not routine; biopsychosocial care first</td>
-                    <td>Moderate use &mdash; above Japan, well below USA</td></tr>
-                  <tr><td><strong>Japan</strong></td><td>Restrict to indicated cases</td>
-                    <td>Not first-line; cautious, harm&ndash;benefit weighted</td>
-                    <td>Among the lowest opioid use of high-income countries</td></tr>
-                  <tr><td><strong>UK</strong></td><td>Do not routinely image</td>
-                    <td>Do <em>not</em> offer opioids for chronic LBP (NICE)</td>
-                    <td>Risk-stratified, self-management&ndash;led NHS model</td></tr>
-                  <tr><td><strong>USA</strong></td><td>Avoid routine imaging</td>
-                    <td>Last resort only; maximise non-opioids first</td>
-                    <td>Historically very high use; opioid crisis</td></tr>
-                </tbody>
-              </table>
-            </details>
-            </div><!-- /reference panel -->
 
             <div class="rcol-panel" id="rcol-p-answers" hidden
                  role="tabpanel" data-panel="answers">
@@ -1470,6 +1337,164 @@
             </div><!-- /answers panel -->
           </div>
         </div>
+
+        <!-- Reference materials (moved out of the rcol tab strip per
+             UX/pedagogy review 2026-05-18). These are utility lookups,
+             not activities — they sit below the workflow as collapsed
+             cards so students can dip in when they want background but
+             they don't compete with the tab choices above. -->
+        <section class="reference-section" aria-labelledby="reference-section-h">
+          <h3 class="reference-section-h" id="reference-section-h"
+              data-i18n="reference-section.title">
+            📚 Background &amp; guidelines (open when you need them)
+          </h3>
+          <details class="card history-card">
+            <summary><strong>&#128220; Historical context &mdash; how we got here</strong></summary>
+            <p>Opium is one of medicine's oldest drugs &mdash; used in ancient Sumer,
+              praised by Galen, bottled as laudanum from the 17th century. The 19th century
+              industrialised it: morphine was isolated around 1804, the hypodermic syringe
+              arrived in the 1850s, and Bayer marketed heroin in 1898. Repeated waves of
+              addiction made 20th-century Western physicians cautious &mdash; opioids were
+              for cancer and acute pain only.</p>
+            <p>That caution collapsed in the United States. In 1995&ndash;96 pain was
+              promoted as "the fifth vital sign" and OxyContin was launched with aggressive,
+              misleading marketing; prescriptions tripled and hundreds of thousands of
+              overdose deaths followed. Japan took a strikingly different path &mdash; tight
+              narcotics regulation, restrictive insurance rules, conservative training and a
+              deep cultural wariness of <em>mayaku</em> (narcotics) &mdash; and today
+              prescribes opioids many times less than the US, with France and the UK in
+              between. Low-back-pain care had its own reversal: until the 1990s bed rest and
+              routine imaging were standard, until trials showed bed rest <em>delays</em>
+              recovery and imaging rarely changes outcomes.</p>
+            <p class="didyouknow">&#128161; <strong>Did you know?</strong> Heroin was sold
+              over the counter as a "non-addictive" cough remedy from 1898 &mdash; a
+              marketing claim eerily echoed a century later for OxyContin.</p>
+            <p class="didyouknow">&#128161; <strong>Did you know?</strong> Japan prescribes
+              opioids more than 20&times; less than the USA &mdash; not because Japanese
+              patients feel less pain, but because of regulation, insurance and culture.</p>
+            <ul class="ref-list">
+              <li>Jones MR et al. A Brief History of the Opioid Epidemic and Strategies for
+                Pain Medicine. <em>Pain and Therapy</em> 2018;7(1):13&ndash;21.
+                <a href="https://doi.org/10.1007/s40122-018-0097-6" target="_blank"
+                   rel="noopener">doi.org/10.1007/s40122-018-0097-6</a></li>
+              <li>Onishi E et al. Comparison of Opioid Prescribing Patterns in the United
+                States and Japan. <em>J Am Board Fam Med</em> 2017;30(2):248&ndash;254.
+                <a href="https://www.jabfm.org/content/30/2/248" target="_blank"
+                   rel="noopener">jabfm.org</a></li>
+              <li>Tompkins DA et al. Providing chronic pain management in the "Fifth Vital
+                Sign" era. <em>Drug Alcohol Depend</em> 2017;173(Suppl 1):S11&ndash;S21.
+                <a href="https://doi.org/10.1016/j.drugalcdep.2016.12.002" target="_blank"
+                   rel="noopener">doi.org/10.1016/j.drugalcdep.2016.12.002</a></li>
+              <li>Waddell G, Feder G, Lewis M. Systematic reviews of bed rest and advice to
+                stay active for acute low back pain. <em>Br J Gen Pract</em>
+                1997;47(423):647&ndash;652.
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC1410119/" target="_blank"
+                   rel="noopener">free full text</a></li>
+              <li>Foster NE et al. Prevention and treatment of low back pain: evidence,
+                challenges, and promising directions. <em>The Lancet</em>
+                2018;391(10137):2368&ndash;2383.
+                <a href="https://doi.org/10.1016/S0140-6736(18)30489-6" target="_blank"
+                   rel="noopener">doi.org/10.1016/S0140-6736(18)30489-6</a></li>
+            </ul>
+          </details>
+
+          <details class="card guidelines-card">
+            <summary><strong>&#128218; Guidelines &mdash; chronic low-back pain &amp; opioids</strong>
+              (France &middot; Japan &middot; UK &middot; USA)</summary>
+            <ul class="ref-list">
+              <li><strong>France &mdash;</strong> Haute Autorité de Santé (HAS), <em>Prise en
+                charge du patient présentant une lombalgie commune</em>, 2019.
+                <a href="https://www.has-sante.fr/jcms/c_2961499/fr/prise-en-charge-du-patient-presentant-une-lombalgie-commune"
+                   target="_blank" rel="noopener">has-sante.fr</a></li>
+              <li><strong>Japan &mdash;</strong> Japanese Orthopaedic Association (JOA),
+                <em>Clinical Practice Guideline for the Management of Low Back Pain</em>,
+                revised 2019 edition (English secondary publication, <em>J Orthop Sci</em> 2022).
+                <a href="https://pubmed.ncbi.nlm.nih.gov/34836746/"
+                   target="_blank" rel="noopener">pubmed.ncbi.nlm.nih.gov</a></li>
+              <li><strong>UK &mdash;</strong> NICE, <em>Low back pain and sciatica in over 16s:
+                assessment and management</em>, NG59 (2016, updated 2020).
+                <a href="https://www.nice.org.uk/guidance/ng59"
+                   target="_blank" rel="noopener">nice.org.uk/guidance/ng59</a></li>
+              <li><strong>USA &mdash;</strong> American College of Physicians, <em>Noninvasive
+                Treatments for Acute, Subacute, and Chronic Low Back Pain</em>, 2017
+                <a href="https://pubmed.ncbi.nlm.nih.gov/28192789/"
+                   target="_blank" rel="noopener">pubmed</a>;
+                and CDC, <em>Clinical Practice Guideline for Prescribing Opioids for Pain</em>,
+                2022 <a href="https://www.cdc.gov/mmwr/volumes/71/rr/rr7103a1.htm"
+                   target="_blank" rel="noopener">cdc.gov</a>.</li>
+            </ul>
+            <p class="hint">All four agree on the science: stay active, exercise-based
+              first-line care, image only for red flags, opioids are not first-line for
+              chronic non-specific low-back pain.</p>
+          </details>
+
+          <details class="card recap-card">
+            <summary><strong>&#128203; Recap table &mdash; keep this open for reference</strong></summary>
+            <h4>Red flags &mdash; when to worry</h4>
+            <table class="recap-table">
+              <thead><tr><th>Category</th><th>Ask / look for</th><th>If present</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Cauda equina</strong> (emergency)</td>
+                  <td>Saddle anaesthesia, urinary retention/incontinence, faecal incontinence,
+                    new sexual dysfunction, bilateral leg symptoms</td>
+                  <td>Same-day emergency referral + urgent MRI</td></tr>
+                <tr><td><strong>Malignancy</strong></td>
+                  <td>Age &gt;50, cancer history, unexplained weight loss, rest/night pain,
+                    no improvement after 4&ndash;6 weeks</td>
+                  <td>Bloods (FBC, ESR/CRP, calcium) + imaging; refer</td></tr>
+                <tr><td><strong>Infection</strong></td>
+                  <td>Fever, night sweats, IV drug use, immunosuppression, recent spinal
+                    procedure, focal bony tenderness</td>
+                  <td>ESR/CRP + urgent MRI; refer</td></tr>
+                <tr><td><strong>Fracture</strong></td>
+                  <td>Significant trauma, or minor trauma with osteoporosis risk; focal
+                    midline bony tenderness</td>
+                  <td>X-ray &plusmn; MRI</td></tr>
+                <tr><td><strong>Inflammatory</strong> (axial spondyloarthritis)</td>
+                  <td>Onset &lt;45, morning stiffness &gt;30 min, improves with exercise /
+                    worse with rest, second-half-of-night pain</td>
+                  <td>ESR/CRP, consider HLA-B27, rheumatology referral</td></tr>
+              </tbody>
+            </table>
+            <h4>First-line management of chronic non-specific low-back pain</h4>
+            <ul class="info-list">
+              <li><strong>Education &amp; reassurance</strong> &mdash; not dangerous, not
+                "damage"; hurt &ne; harm; good prognosis.</li>
+              <li><strong>Stay active</strong> &mdash; avoid bed rest; resume work, walking, gym.</li>
+              <li><strong>Structured exercise / physiotherapy</strong> &mdash; the best-evidenced
+                treatment; adherence matters more than the type.</li>
+              <li><strong>Address yellow flags</strong> &mdash; fear of movement, catastrophising,
+                low mood, poor sleep &mdash; treat these directly.</li>
+              <li><strong>Non-opioid analgesia</strong> &mdash; NSAIDs at the lowest effective
+                dose, shortest duration. Paracetamol alone is ineffective.</li>
+              <li><strong>Do NOT</strong> &mdash; routine imaging, opioids, gabapentinoids /
+                benzodiazepines, prolonged bed rest.</li>
+            </ul>
+            <h4>Opioids for chronic non-cancer pain</h4>
+            <p>Small short-term pain benefit at best, no proven benefit on function, no good
+              evidence beyond ~12 weeks; real harms (tolerance, dependence, hyperalgesia,
+              falls, overdose). <strong>All four countries: not first-line.</strong></p>
+            <h4>France &middot; Japan &middot; UK &middot; USA &mdash; at a glance</h4>
+            <table class="recap-table">
+              <thead><tr><th></th><th>Imaging</th><th>Opioids for chronic LBP</th>
+                <th>Prescribing-culture context</th></tr></thead>
+              <tbody>
+                <tr><td><strong>France</strong></td><td>Not without red flags</td>
+                  <td>Not routine; biopsychosocial care first</td>
+                  <td>Moderate use &mdash; above Japan, well below USA</td></tr>
+                <tr><td><strong>Japan</strong></td><td>Restrict to indicated cases</td>
+                  <td>Not first-line; cautious, harm&ndash;benefit weighted</td>
+                  <td>Among the lowest opioid use of high-income countries</td></tr>
+                <tr><td><strong>UK</strong></td><td>Do not routinely image</td>
+                  <td>Do <em>not</em> offer opioids for chronic LBP (NICE)</td>
+                  <td>Risk-stratified, self-management&ndash;led NHS model</td></tr>
+                <tr><td><strong>USA</strong></td><td>Avoid routine imaging</td>
+                  <td>Last resort only; maximise non-opioids first</td>
+                  <td>Historically very high use; opioid crisis</td></tr>
+              </tbody>
+            </table>
+          </details>
+        </section>
       </section>
 
       <!-- STAGE 2: MODULE B -->

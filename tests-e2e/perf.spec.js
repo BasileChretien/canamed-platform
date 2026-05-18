@@ -80,13 +80,18 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     (updateModANextStep, updateModBNextStep, setPhaseStepperState,
 //     initCoachDismiss — ~2 KB gz), ~16 new i18n strings across en+fr+ja
 //     for the coach state-machine messages (~3 KB gz), CSS for the
-//     coach card + synthesis-unlocked banner (~1 KB gz). Headroom for
-//     the second-wave coach translations is still in the +5 KB pool
-//     from the previous bump.
+//     coach card + synthesis-unlocked banner (~1 KB gz).
+//   - 260 KB after the tab-clarity refactor: activity-verb tab labels,
+//     Reference relocated below columns as a <details> stack, lock
+//     state on the Discussion tab, "X / Y red flags screened" progress
+//     chip, sticky-bottom coach on mobile. NET +5 KB gz: small CSS
+//     (~1 KB), 2 new JS helpers (updateSynthesisProgress,
+//     updateDiscussionTabLock — ~0.5 KB), ~6 new i18n keys × 3 langs
+//     (~1.5 KB), reworded tab labels + Reference wrapper HTML (~2 KB).
 // Any breach forces the next PR to either justify the regression or
 // split another chunk out via script-loader.js (lazy-load i18n locale
 // tables is the obvious next move once we hit ~280 KB).
-const FIRST_PARTY_BYTES_LIMIT_KB = 255;
+const FIRST_PARTY_BYTES_LIMIT_KB = 260;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
