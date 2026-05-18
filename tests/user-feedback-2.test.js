@@ -82,18 +82,24 @@ test("Bug 1 (CSS): the overflow-safety helper no longer applies overflow-wrap: a
 
 /* ===================== Bug 2 — findings under question on mobile ===================== */
 
-test("Bug 2 (CSS): .req-inline-reveal exists with mobile-only visibility", () => {
-  // The new inline reveal lives under each finding button on phones,
-  // and is hidden on desktop where the right-column findings log is
-  // the canonical surface.
+test("Bug 2 (CSS): .req-inline-reveal exists and is visible on all viewports", () => {
+  // The inline reveal lives DIRECTLY under each finding button — on
+  // every viewport. Originally mobile-only (the right-column log was
+  // assumed to be the canonical surface on desktop), but per the
+  // 2026-05-18 specialist panel even desktop students lose the action-
+  // result connection when the log is in a separate column, so the
+  // inline reveal was promoted to all viewports.
   assert.match(styleCss, /\.req-inline-reveal\s*\{/,
     ".req-inline-reveal class must be defined");
-  // The mobile breakpoint matches the existing column-stack breakpoint
-  // (960px) so the inline reveal appears exactly when the right column
-  // drops below the left column.
-  assert.match(styleCss,
-    /@media\s*\(\s*max-width:\s*960px\s*\)\s*\{[^}]*\.req-inline-reveal\s*\{[^}]*display:\s*block/s,
-    ".req-inline-reveal must be display:block on <=960px");
+  // Pin that the rule sets display:block at the top level (no
+  // surrounding @media), so the inline reveal renders on every
+  // viewport — the action/result spatial coupling matters everywhere.
+  // We assert by extracting the rule block and confirming display:block
+  // appears in it.
+  const m = styleCss.match(/\.req-inline-reveal\s*\{([^}]+)\}/);
+  assert.ok(m, ".req-inline-reveal must have a top-level rule block");
+  assert.match(m[1], /display:\s*block/,
+    ".req-inline-reveal top-level rule must include display:block (universal visibility)");
 });
 
 test("Bug 2 (JS): renderButtons populates .req-inline-reveal directly after each revealed button", () => {

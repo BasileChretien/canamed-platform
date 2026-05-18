@@ -216,8 +216,14 @@ test.describe("Bug 2 — findings answer appears under the button on mobile", ()
       expect(layout.top - layout.buttonBottom).toBeLessThan(40);
     });
 
-  test("at desktop width (>960px), the inline reveal is hidden",
+  test("at desktop width (>960px), the inline reveal is ALSO visible",
     async ({ page }) => {
+      // Updated 2026-05-18 after the specialist panel: the inline
+      // reveal was promoted from mobile-only to all-viewports. Action
+      // and result must fuse spatially on every screen size — desktop
+      // students lose the connection too when the right-column log is
+      // far from the button (especially in deeper case-work where
+      // there's a lot of vertical scrolling).
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto("/");
       const display = await page.evaluate(() => {
@@ -231,11 +237,11 @@ test.describe("Bug 2 — findings answer appears under the button on mobile", ()
           '.req-btn[data-id="history:0"]');
         const inline = document.createElement("div");
         inline.className = "req-inline-reveal";
-        inline.textContent = "Hidden on desktop.";
+        inline.textContent = "Visible on desktop too.";
         firstBtn.insertAdjacentElement("afterend", inline);
         return getComputedStyle(inline).display;
       });
-      expect(display, "the inline reveal must NOT render on desktop").toEqual("none");
+      expect(display, "the inline reveal must render on desktop now").toEqual("block");
     });
 });
 
