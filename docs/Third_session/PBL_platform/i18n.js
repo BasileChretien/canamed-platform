@@ -193,6 +193,11 @@
       "splash.created.copy-link": "Copy link",
       "splash.created.qr-caption": "Or scan the QR with a phone",
       "splash.qr.loading": "Generating QR code…",
+      // Reject-closed-session messages (2026-05-18 user report: "It
+      // should not be possible for a student to join a finished
+      // session anyway"). Surface at splash before the lobby flow.
+      "splash.enter.session-ended": "This session has already ended. Ask your facilitator for a new session code.",
+      "splash.enter.previous-session-ended": "Your previous session has ended. Enter a new code from your facilitator.",
       "splash.created.create-another": "Create another",
       "splash.created.open-admin": "Open admin dashboard →",
 
@@ -796,6 +801,8 @@
       "splash.created.copy-link": "Copier le lien",
       "splash.created.qr-caption": "Ou scannez le QR avec un téléphone",
       "splash.qr.loading": "Génération du QR code…",
+      "splash.enter.session-ended": "Cette séance est déjà terminée. Demandez un nouveau code de session à votre encadrant·e.",
+      "splash.enter.previous-session-ended": "Votre séance précédente est terminée. Saisissez un nouveau code fourni par votre encadrant·e.",
       "splash.created.create-another": "Créer une autre séance",
       "splash.created.open-admin": "Ouvrir le tableau de bord →",
 
@@ -1309,6 +1316,8 @@
       "splash.created.copy-link": "リンクをコピー",
       "splash.created.qr-caption": "またはスマートフォンでQRコードを読み取ってください",
       "splash.qr.loading": "QRコードを生成中…",
+      "splash.enter.session-ended": "このセッションは既に終了しています。ファシリテーターに新しいセッションコードを求めてください。",
+      "splash.enter.previous-session-ended": "前回のセッションは終了しています。ファシリテーターから新しいコードを入力してください。",
       "splash.created.create-another": "別のセッションを作成",
       "splash.created.open-admin": "管理ダッシュボードを開く →",
 
