@@ -298,6 +298,12 @@
       // accessible labels for inputs that otherwise rely on placeholder text
       // only (insufficient for screen readers — placeholders are not labels)
       "room.team-name-label": "Team name",
+      // Team-name save feedback (user-visible instead of silent failures)
+      "room.team-name.empty": "Type a team name first.",
+      "room.team-name.not-ready": "Not ready yet — try again in a second.",
+      "room.team-name.saving": "Saving…",
+      "room.team-name.saved": "Team name saved —",
+      "room.team-name.error": "Could not save the team name — check your connection and try again.",
       "room.answer-input-label": "Add a Module A group answer",
       "room.answer-input-label-b": "Add a Module B group answer",
       // call-a-facilitator throttle messages (when a student spam-clicks
@@ -877,6 +883,11 @@
 
       "room.call-facilitator": "Appeler un·e encadrant·e",
       "room.team-name-label": "Nom de l'équipe",
+      "room.team-name.empty": "Saisissez d'abord un nom d'équipe.",
+      "room.team-name.not-ready": "Pas encore prêt — réessayez dans une seconde.",
+      "room.team-name.saving": "Enregistrement…",
+      "room.team-name.saved": "Nom d'équipe enregistré —",
+      "room.team-name.error": "Impossible d'enregistrer le nom — vérifiez votre connexion et réessayez.",
       "room.answer-input-label": "Ajouter une réponse de groupe pour le Module A",
       "room.answer-input-label-b": "Ajouter une réponse de groupe pour le Module B",
       "room.call.throttle-recall": "Veuillez patienter {seconds}s avant de rappeler un·e encadrant·e.",
@@ -1383,6 +1394,11 @@
 
       "room.call-facilitator": "ファシリテーターを呼ぶ",
       "room.team-name-label": "チーム名",
+      "room.team-name.empty": "先にチーム名を入力してください。",
+      "room.team-name.not-ready": "まだ準備ができていません — 数秒後にもう一度お試しください。",
+      "room.team-name.saving": "保存中…",
+      "room.team-name.saved": "チーム名を保存しました —",
+      "room.team-name.error": "チーム名を保存できませんでした — 接続を確認してもう一度お試しください。",
       "room.answer-input-label": "モジュールAのグループ回答を追加",
       "room.answer-input-label-b": "モジュールBのグループ回答を追加",
       "room.call.throttle-recall": "ファシリテーターを再度呼ぶまで{seconds}秒お待ちください。",
