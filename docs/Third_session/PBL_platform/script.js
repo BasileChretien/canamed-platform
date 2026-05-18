@@ -985,6 +985,10 @@ let presence = {};
 let typingState = {};      // who is typing - kept off the presence node so a
                            // keystroke does not force a presence re-render for everyone
 let answers = { moduleA: {}, moduleB: {} };
+let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees on
+                      // BEFORE running investigations. Cross-room synced via
+                      // refHypotheses. Keyed by Firebase push id; value is
+                      // { by, cid, university, text, at }.
 let callForHelp = null;
 let teamsLink = "";
 let quizLink = "";          // end-of-session questionnaire link
@@ -1029,6 +1033,7 @@ let refPool = null, refMyPool = null, refStarted = null, refRoomCount = null,
     refTeams = null, refQuiz = null, refPreQuiz = null;
 let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
+    refHypotheses = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
     refClosed = null;
 
@@ -2204,6 +2209,7 @@ function wireRoomUI() {
   initTeamName();
   initRolePicker();
   initCoachDismiss();
+  initHypotheses();
   // Initial coach paint — set the text + stepper-state from current
   // platform state on entry. Subsequent updates fire from the render
   // paths (renderFindings / renderPrompts / renderAnswers / switchRcolTab).
@@ -2346,6 +2352,7 @@ function teardownRoom() {
     clearTimeout(typingTimer);
     if (refStage) refStage.off();
     if (refRevealed) refRevealed.off();
+    if (refHypotheses) refHypotheses.off();
     if (refPresence) refPresence.off();
     if (refTyping) refTyping.off();
     if (refAnswers.moduleA) refAnswers.moduleA.off();
@@ -2366,6 +2373,7 @@ function startRoom() {
   const base = sPath("rooms/" + myRoom);
   refStage = db.ref(base + "/stage");
   refRevealed = db.ref(base + "/moduleA/revealed");
+  refHypotheses = db.ref(base + "/moduleA/hypotheses");
   refPresence = db.ref(base + "/presence");
   refTyping = db.ref(base + "/typing");
   refAnswers.moduleA = db.ref(base + "/answers/moduleA");
@@ -2405,6 +2413,12 @@ function startRoom() {
     renderStage();
   });
   refRevealed.on("value", snap => { revealed = snap.val() || {}; renderCase(); });
+  refHypotheses.on("value", snap => {
+    hypotheses = snap.val() || {};
+    if (typeof renderHypotheses === "function") renderHypotheses();
+    if (typeof renderButtons === "function") renderButtons();
+    if (typeof updateModANextStep === "function") updateModANextStep();
+  });
   refPresence.on("value", snap => {
     presence = snap.val() || {};
     renderPresence();
@@ -5080,9 +5094,27 @@ function reveal(id) {
 }
 function renderButtons() {
   const gateOK = prereqsMet();
+  // PBL 7-jump scaffold (2026-05-18 specialist panel): Investigations
+  // are locked until the team has at least one working hypothesis.
+  // Hypotheses come BEFORE data gathering — that's the missing
+  // pedagogical step. History + Examination stay open (you gather
+  // information to FORM hypotheses); Investigations is where you
+  // test them.
+  const hypoOK = (typeof hypothesesUnlocked === "function")
+    ? hypothesesUnlocked() : true;
   document.querySelectorAll(".req-btn").forEach(btn => {
     const id = btn.dataset.id;
     btn.classList.toggle("done", !!revealed[id]);
+    // Investigations panel — disable EVERY button (not just SYNTH_ID)
+    // when no hypothesis is recorded yet. The .chart-investigations
+    // .is-locked class handles the visual fade; we also disable the
+    // buttons here so the click doesn't fire even with keyboard focus.
+    const isInv = id && id.indexOf("labs:") === 0;
+    if (isInv && !hypoOK && !revealed[id]) {
+      btn.disabled = true;
+      btn.title = "Add a working hypothesis above to unlock Investigations.";
+      return;   // skip the SYNTH-specific + isImaging branches below
+    }
     if (id === SYNTH_ID) {
       const locked = !gateOK && !revealed[id];
       btn.disabled = locked;
@@ -6113,6 +6145,11 @@ function updateModANextStep() {
   const allBulletsCovered = ["plan", "differ", "disagree", "takehome"]
     .every(k => bulletsCovered.has(k));
 
+  // Hypothesis-first scaffold: if the team has gathered enough info
+  // to form a hypothesis (≥3 findings) but hasn't recorded one yet,
+  // nudge them to add one. Investigations are gated on this.
+  const hypoCount = (typeof hypothesisCount === "function") ? hypothesisCount() : 0;
+
   // State machine (highest-priority match wins).
   if (revealedCount === 0) {
     textEl.textContent = _coachT("modA.coach.read-case",
@@ -6120,6 +6157,12 @@ function updateModANextStep() {
       "Examine / Investigations) to start gathering info.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "setup", []);
+  } else if (revealedCount >= 2 && hypoCount === 0) {
+    textEl.textContent = _coachT("modA.coach.add-hypothesis",
+      "You've gathered some info — now agree on at least one working hypothesis " +
+      "above (what do you suspect?). Investigations unlock once you have one.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-1", "case", ["setup"]);
   } else if (!keyDone) {
     textEl.textContent = _coachT("modA.coach.gather",
       "Keep gathering case info — when you're ready, complete the clinical " +
@@ -6228,6 +6271,91 @@ function initCoachDismiss() {
   };
   wire("modA-next-step-dismiss", COACH_DISMISS_KEY_A, "modA-next-step");
   wire("modB-next-step-dismiss", COACH_DISMISS_KEY_B, "modB-next-step");
+}
+
+/* ===================== WORKING HYPOTHESES (PBL 7-jump scaffold) ===================== */
+/* Cross-room synced (refHypotheses). Students MUST agree on at least
+ * one hypothesis before Investigations unlock — this enforces the
+ * classical PBL "brainstorm BEFORE data gathering" step, the missing
+ * pedagogical move the 2026-05-18 specialist panel flagged. */
+
+function hypothesisCount() {
+  return Object.keys(hypotheses || {}).length;
+}
+function hypothesesUnlocked() {
+  return hypothesisCount() > 0;
+}
+
+function initHypotheses() {
+  const input = el("hypothesis-input");
+  const btn = el("hypothesis-add-btn");
+  if (!input || !btn || btn._wired) return;
+  btn._wired = true;
+  const submit = () => {
+    const text = (input.value || "").trim().slice(0, 160);
+    if (!text || !refHypotheses) return;
+    refHypotheses.push({
+      by: myName, cid: clientId,
+      university: myUniversity || "",
+      text: text, at: Date.now()
+    })
+      .then(() => { input.value = ""; })
+      .catch(e => console.error("hypothesis push failed", e));
+    if (typeof logEvent === "function") {
+      logEvent(myRoom, "hypothesis", {
+        by: myName, university: myUniversity || "", len: text.length
+      });
+    }
+  };
+  btn.addEventListener("click", submit);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); submit(); }
+  });
+}
+
+function deleteHypothesis(id) {
+  if (!refHypotheses) return;
+  refHypotheses.child(id).remove().catch(e => {
+    console.error("hypothesis delete failed", e);
+  });
+}
+
+function renderHypotheses() {
+  const list = el("hypothesis-list");
+  const empty = el("hypothesis-empty");
+  if (!list) return;
+  list.innerHTML = "";
+  const ids = Object.keys(hypotheses || {}).sort((a, b) =>
+    (hypotheses[a].at || 0) - (hypotheses[b].at || 0));
+  if (empty) empty.classList.toggle("hidden", ids.length > 0);
+  ids.forEach(id => {
+    const h = hypotheses[id];
+    if (!h) return;
+    const li = document.createElement("li");
+    const txt = document.createElement("span");
+    txt.textContent = h.text || "";
+    li.appendChild(txt);
+    const by = document.createElement("span");
+    by.className = "by";
+    by.textContent = "— " + (h.by || "?");
+    li.appendChild(by);
+    if (h.cid === clientId) {
+      const del = document.createElement("button");
+      del.type = "button";
+      del.className = "del";
+      del.textContent = "×";
+      del.setAttribute("aria-label", "Remove this hypothesis");
+      del.addEventListener("click", () => deleteHypothesis(id));
+      li.appendChild(del);
+    }
+    list.appendChild(li);
+  });
+  // Investigations gate — visible lock state on the panel.
+  const inv = el("chart-investigations");
+  const hint = el("investigations-locked-hint");
+  const unlocked = hypothesesUnlocked();
+  if (inv) inv.classList.toggle("is-locked", !unlocked);
+  if (hint) hint.classList.toggle("hidden", unlocked);
 }
 
 /* Module B role picker (local-only). The HTML chips are radio buttons;

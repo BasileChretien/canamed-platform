@@ -88,10 +88,23 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     (~1 KB), 2 new JS helpers (updateSynthesisProgress,
 //     updateDiscussionTabLock — ~0.5 KB), ~6 new i18n keys × 3 langs
 //     (~1.5 KB), reworded tab labels + Reference wrapper HTML (~2 KB).
+//   - 272 KB after the chart-metaphor + inline-reveal + hypothesis-
+//     first scaffold PR (the three specialist follow-ups landed
+//     together). NET +12 KB gz: chart wrapper + hypothesis HTML
+//     (~2 KB), chart CSS + hypothesis chip styles (~3 KB), new JS
+//     (initHypotheses, addHypothesis, renderHypotheses, deleteHypothesis,
+//     hypothesisCount, hypothesesUnlocked, Investigations gate in
+//     renderButtons, refHypotheses Firebase listener, coach add-
+//     hypothesis state — ~2 KB), ~13 new i18n keys × 3 langs (~5 KB).
+//     Inline-reveal was already in the bundle (Bug 2 mobile-only);
+//     promoting it to all viewports is a CSS-only change so no JS
+//     growth there. We are getting close to the 280 KB "lazy-load
+//     i18n locale tables" threshold; that refactor is next when we
+//     blow this budget.
 // Any breach forces the next PR to either justify the regression or
 // split another chunk out via script-loader.js (lazy-load i18n locale
 // tables is the obvious next move once we hit ~280 KB).
-const FIRST_PARTY_BYTES_LIMIT_KB = 260;
+const FIRST_PARTY_BYTES_LIMIT_KB = 272;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
