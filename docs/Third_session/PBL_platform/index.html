@@ -893,16 +893,19 @@
       <div id="facilitator-presence-banner" class="late-banner hidden"
            role="status" aria-live="polite"></div>
 
-      <!-- LIVE SCOREBOARD - objectives + cooperative leaderboard, on every stage -->
+      <!-- LIVE SCOREBOARD - cooperative leaderboard only (the rubric
+           breakdown "Module X — how your team earns points" was removed
+           per user request 2026-05-18 — it was a wall of point-values
+           that the user judged unnecessary and distracting). The
+           scoring engine still runs and the leaderboard still reflects
+           it; renderObjectives() now early-returns harmlessly because
+           its target #objectives element is gone. The score-chip in
+           the stage header continues to announce the user's team
+           score politely. -->
       <details id="leaderboard-card" class="card leaderboard-card" open>
-        <summary><strong>&#127919; Goals &amp; live leaderboard</strong>
-          <span class="lb-hint">points reward good reasoning, the order of your
-            decisions and the ideas in your answers &mdash; never speed</span></summary>
-        <!-- the live "how points work" panel - filled in by renderObjectives() -->
-        <div id="objectives" class="objectives"></div>
-        <p class="lb-rubric-note">Nothing to submit &mdash; the platform notices good
-          habits as you work. A facilitator can also award points for deep debate or
-          for drawing out a quiet voice.</p>
+        <summary><strong>&#127919; Live leaderboard</strong>
+          <span class="lb-hint">all rooms add to a shared cohort goal &mdash;
+            every contribution counts</span></summary>
         <!-- the cooperative shared goal + the gentle ranking - renderLeaderboard().
              aria-live="off" is deliberate: this board can re-render every second
              during an active stage, which would otherwise spam screen readers
