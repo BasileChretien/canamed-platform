@@ -2203,6 +2203,12 @@ function wireRoomUI() {
   initLeave();
   initTeamName();
   initRolePicker();
+  initCoachDismiss();
+  // Initial coach paint — set the text + stepper-state from current
+  // platform state on entry. Subsequent updates fire from the render
+  // paths (renderFindings / renderPrompts / renderAnswers / switchRcolTab).
+  if (typeof updateModANextStep === "function") updateModANextStep();
+  if (typeof updateModBNextStep === "function") updateModBNextStep();
   initRightColumnTabs();
 }
 
@@ -2247,6 +2253,10 @@ function switchRcolTab(tab) {
     p.classList.toggle("is-active", on);
     p.hidden = !on;
   });
+  // The Module A coach text depends on which tab the user is on
+  // (e.g. "open Discussion" vs "you're in Discussion — when ready,
+  // open Group answers"). Refresh on every tab change.
+  if (typeof updateModANextStep === "function") updateModANextStep();
 }
 /* a small attention nudge: when content changes while the user is on a different
    tab, dot that tab so they know there is something new. Always safe to call. */
@@ -5147,6 +5157,9 @@ function renderButtons() {
   });
 }
 function renderFindings() {
+  // Coach updates whenever the findings count changes (revealed items
+  // drive the Module A phase stepper from setup → case → exchange).
+  if (typeof updateModANextStep === "function") updateModANextStep();
   const log = el("findings-log");
   log.innerHTML = "";
   const ids = ITEM_IDS.filter(id => revealed[id])
@@ -5226,9 +5239,35 @@ function renderPrompts() {
   if (unlocked && !promptsWereUnlocked) {
     promptsWereUnlocked = true;
     nudgeRcolTab("discussion");
+    // Auto-switch the local user to the Discussion panel + show the
+    // "synthesis unlocked" banner. Only when the synthesis was just
+    // revealed (this is the !promptsWereUnlocked branch) so it doesn't
+    // re-fire on subsequent renders. Skipped if the user has already
+    // navigated to Discussion (no surprise scroll) or is on Group
+    // answers / another tab they actively chose to be on. Safer to
+    // switch only when the user is on the default Findings tab — most
+    // users haven't actively navigated away yet.
+    if (activeRcolTab === "findings" && typeof switchRcolTab === "function") {
+      switchRcolTab("discussion");
+    }
+    const banner = el("synthesis-unlocked-banner");
+    if (banner) {
+      banner.classList.remove("hidden");
+      // Trigger the 6-second auto-fade-out after a tick so the
+      // enter animation finishes first.
+      requestAnimationFrame(() => banner.classList.add("auto-fade"));
+    }
   } else if (!unlocked) {
     promptsWereUnlocked = false;
+    const banner = el("synthesis-unlocked-banner");
+    if (banner) {
+      banner.classList.add("hidden");
+      banner.classList.remove("auto-fade");
+    }
   }
+  // Coach update — runs on every renderPrompts pass so the text stays
+  // in sync as state changes (e.g., when the user opens Discussion).
+  if (typeof updateModANextStep === "function") updateModANextStep();
 }
 /* "everyone taking part" - a non-numeric participation indicator. Each name in
    the room shows a filled dot once they have done ANYTHING (revealed a finding
@@ -5944,6 +5983,211 @@ function renderLeaderboard() {
   box.appendChild(list);
 }
 
+/* ===================== "What to do next" coach ===================== */
+/* Persistent (but dismissible) guidance card under each module's phase
+ * stepper. Reads observable platform state — findings count, synthesis
+ * unlock status, group-answers per bullet, role-picker selection — and
+ * updates the coach text + optional action buttons accordingly. Also
+ * drives the live highlight of the phase stepper (is-current / is-done
+ * per chip). Wired from every render path that changes the state the
+ * coach reads from. */
+
+const COACH_DISMISS_KEY_A = "canamed_coach_dismissed_modA";
+const COACH_DISMISS_KEY_B = "canamed_coach_dismissed_modB";
+
+function _coachDismissed(key) {
+  try { return localStorage.getItem(key) === "1"; } catch (e) { return false; }
+}
+function _coachSetDismissed(key) {
+  try { localStorage.setItem(key, "1"); } catch (e) {}
+}
+
+/* i18n fallback for translator that may not be loaded yet (very early
+ * boot). Returns the EN default string if window.t isn't available. */
+function _coachT(key, fallback) {
+  if (typeof window.t === "function") {
+    const v = window.t(key);
+    // t() returns the key itself when missing — use fallback in that case
+    if (v && v !== key) return v;
+  }
+  return fallback;
+}
+
+/* Apply the is-current / is-done classes to the phase stepper chips
+ * under the given stage. `currentPhase` is the data-phase value of
+ * the active chip; `donePhases` is an array of data-phase values
+ * already complete. Both can be null/empty. */
+function setPhaseStepperState(stageId, currentPhase, donePhases) {
+  const root = document.getElementById(stageId);
+  if (!root) return;
+  const chips = root.querySelectorAll(".phase-step");
+  const doneSet = new Set(donePhases || []);
+  chips.forEach(chip => {
+    const phase = chip.getAttribute("data-phase");
+    chip.classList.toggle("is-current", phase === currentPhase);
+    chip.classList.toggle("is-done", doneSet.has(phase));
+  });
+}
+
+/* Render an optional action button inside the coach actions slot.
+ * Resets the slot first so repeated calls don't accumulate buttons. */
+function _coachSetAction(actionsEl, labelKey, fallbackLabel, onClick) {
+  if (!actionsEl) return;
+  actionsEl.innerHTML = "";
+  if (!labelKey) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.textContent = _coachT(labelKey, fallbackLabel);
+  btn.addEventListener("click", onClick);
+  actionsEl.appendChild(btn);
+}
+
+/* Compute current state for Module A and update the coach card +
+ * phase stepper accordingly. Called from renderFindings, renderPrompts,
+ * renderAnswers, switchRcolTab, and on first room entry. */
+function updateModANextStep() {
+  const coach = el("modA-next-step");
+  if (!coach) return;
+  if (_coachDismissed(COACH_DISMISS_KEY_A)) {
+    coach.classList.add("hidden");
+    // The phase stepper update still happens — students who dismiss
+    // the verbose coach still benefit from the live stepper highlight.
+  } else {
+    coach.classList.remove("hidden");
+  }
+  const textEl = el("modA-next-step-text");
+  const actionsEl = el("modA-next-step-actions");
+
+  // Read observable state.
+  const revealedCount = ITEM_IDS.filter(id => revealed[id]).length;
+  const keyDone = (typeof keyRevealed === "function") ? keyRevealed() : false;
+  const onDiscussion = activeRcolTab === "discussion";
+  const onAnswers = activeRcolTab === "answers";
+  const modAAnswerEntries = Object.keys(answers.moduleA || {})
+    .map(k => answers.moduleA[k]).filter(Boolean);
+  const bulletsCovered = new Set(
+    modAAnswerEntries.map(e => e.bulletKey).filter(Boolean)
+  );
+  const allBulletsCovered = ["plan", "differ", "disagree", "takehome"]
+    .every(k => bulletsCovered.has(k));
+
+  // State machine (highest-priority match wins).
+  if (revealedCount === 0) {
+    textEl.textContent = _coachT("modA.coach.read-case",
+      "Read the case below, then tap any button on the left (Ask the patient / " +
+      "Examine / Investigations) to start gathering info.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-1", "setup", []);
+  } else if (!keyDone) {
+    textEl.textContent = _coachT("modA.coach.gather",
+      "Keep gathering case info — when you're ready, complete the clinical " +
+      "synthesis (red-flag review) to unlock the Discussion prompts.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-1", "case", ["setup"]);
+  } else if (!onDiscussion && !onAnswers && modAAnswerEntries.length === 0) {
+    textEl.textContent = _coachT("modA.coach.open-discussion",
+      "✓ Synthesis done! Open Discussion to start the Exchange. " +
+      "Make sure both Caen and Nagoya voices speak on each compare prompt.");
+    _coachSetAction(actionsEl, "modA.coach.btn.open-discussion", "Open Discussion →",
+      () => { if (typeof switchRcolTab === "function") switchRcolTab("discussion"); });
+    setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
+  } else if (onDiscussion && modAAnswerEntries.length === 0) {
+    textEl.textContent = _coachT("modA.coach.in-discussion",
+      "Debate the prompts with your group — when you're ready, open Group answers " +
+      "to capture your 4 bullets.");
+    _coachSetAction(actionsEl, "modA.coach.btn.open-answers", "Open Group answers →",
+      () => { if (typeof switchRcolTab === "function") switchRcolTab("answers"); });
+    setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
+  } else if (modAAnswerEntries.length > 0 && !allBulletsCovered) {
+    const remaining = 4 - bulletsCovered.size;
+    const tpl = _coachT("modA.coach.bullets-partial",
+      "Capturing bullets — {n} still to add to cover all 4.");
+    textEl.textContent = tpl.replace("{n}", String(remaining));
+    _coachSetAction(actionsEl, onAnswers ? null : "modA.coach.btn.open-answers", "Open Group answers →",
+      () => { if (typeof switchRcolTab === "function") switchRcolTab("answers"); });
+    setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
+  } else if (allBulletsCovered) {
+    textEl.textContent = _coachT("modA.coach.bullets-complete",
+      "✓ All 4 bullets covered. Add more refinements or wait for your facilitator.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
+  } else {
+    // catch-all: fall back to the generic next-step text
+    textEl.textContent = _coachT("modA.coach.gather",
+      "Keep gathering case info — when you're ready, complete the clinical " +
+      "synthesis to unlock the Discussion prompts.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-1", "case", ["setup"]);
+  }
+}
+
+function updateModBNextStep() {
+  const coach = el("modB-next-step");
+  if (!coach) return;
+  if (_coachDismissed(COACH_DISMISS_KEY_B)) {
+    coach.classList.add("hidden");
+  } else {
+    coach.classList.remove("hidden");
+  }
+  const textEl = el("modB-next-step-text");
+  const actionsEl = el("modB-next-step-actions");
+
+  let rolePicked = null;
+  try {
+    rolePicked = localStorage.getItem("canamed_modB_role");
+  } catch (e) { /* private mode — treat as not picked */ }
+
+  const modBAnswerEntries = Object.keys(answers.moduleB || {})
+    .map(k => answers.moduleB[k]).filter(Boolean);
+  const bulletsCovered = new Set(
+    modBAnswerEntries.map(e => e.bulletKey).filter(Boolean)
+  );
+  const allBulletsCovered = ["family-sentence", "differ-converge", "practice-change"]
+    .every(k => bulletsCovered.has(k));
+
+  if (!rolePicked) {
+    textEl.textContent = _coachT("modB.coach.pick-role",
+      "Pick your role below before starting the roleplay. The observer keeps time.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-2", "setup", []);
+  } else if (modBAnswerEntries.length === 0) {
+    textEl.textContent = _coachT("modB.coach.roleplay",
+      "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion " +
+      "with the prompts below. The observer reads them aloud.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-2", "play", ["setup"]);
+  } else if (!allBulletsCovered) {
+    const remaining = 3 - bulletsCovered.size;
+    const tpl = _coachT("modB.coach.bullets-partial",
+      "Capturing bullets — {n} still to add to cover all 3.");
+    textEl.textContent = tpl.replace("{n}", String(remaining));
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-2", "bullets", ["setup", "play", "exchange"]);
+  } else {
+    textEl.textContent = _coachT("modB.coach.bullets-complete",
+      "✓ All 3 bullets covered. Add more refinements or wait for your facilitator.");
+    _coachSetAction(actionsEl, null);
+    setPhaseStepperState("stage-2", "bullets", ["setup", "play", "exchange"]);
+  }
+}
+
+/* Wire the × dismiss buttons on both coach cards. Idempotent (uses
+ * a _wired flag) so repeated wireRoomUI calls don't stack handlers. */
+function initCoachDismiss() {
+  const wire = (btnId, key, coachId) => {
+    const btn = el(btnId);
+    if (!btn || btn._wired) return;
+    btn._wired = true;
+    btn.addEventListener("click", () => {
+      _coachSetDismissed(key);
+      const c = el(coachId);
+      if (c) c.classList.add("hidden");
+    });
+  };
+  wire("modA-next-step-dismiss", COACH_DISMISS_KEY_A, "modA-next-step");
+  wire("modB-next-step-dismiss", COACH_DISMISS_KEY_B, "modB-next-step");
+}
+
 /* Module B role picker (local-only). The HTML chips are radio buttons;
  * clicking one toggles its aria-checked=true and unsets all siblings.
  * Local state persists in localStorage so a refresh during the roleplay
@@ -5969,6 +6213,8 @@ function initRolePicker() {
       chips.forEach(c => c.setAttribute("aria-checked", "false"));
       chip.setAttribute("aria-checked", "true");
       try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
+      // Coach updates: role-picked drives Module B's setup→play transition.
+      if (typeof updateModBNextStep === "function") updateModBNextStep();
     });
     // arrow-key navigation inside the radiogroup
     chip.addEventListener("keydown", e => {
@@ -6063,6 +6309,9 @@ function renderAnswers(moduleKey) {
   renderContrib();
   renderAnswerHints(moduleKey);
   checkScoreEvents();
+  // Coach updates: answers drive the module's "bullets" phase highlight.
+  if (moduleKey === "moduleA" && typeof updateModANextStep === "function") updateModANextStep();
+  if (moduleKey === "moduleB" && typeof updateModBNextStep === "function") updateModBNextStep();
   // tab badge for the Module A "Group answers" tab in the right column
   if (moduleKey === "moduleA") {
     const n = Object.keys(answers.moduleA || {}).length;
