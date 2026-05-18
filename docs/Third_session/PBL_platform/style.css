@@ -1324,6 +1324,72 @@ footer {
 }
 .prestart-person:last-child { border-bottom: none; }
 
+/* Sticky-presence status dot — replaces the previous binary "in
+   pool/not in pool" with a 3-state online / blip / gone signal so the
+   admin sees who's actually in the room despite Firebase onDisconnect
+   firing on every micro network gap (2026-05-18 user report). */
+.prestart-status-dot {
+  flex: 0 0 auto;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--muted);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.06);
+}
+.prestart-status-dot-online {
+  background: var(--ok, #2a9d8f);
+  box-shadow: 0 0 0 2px rgba(42, 157, 143, 0.18);
+}
+.prestart-status-dot-blip {
+  background: var(--caen-line, #e7b800);
+  box-shadow: 0 0 0 2px rgba(231, 184, 0, 0.18);
+  animation: prestart-blip-pulse 1.6s ease-in-out infinite;
+}
+.prestart-status-dot-gone {
+  background: transparent;
+  border: 1.5px dashed var(--muted);
+}
+@keyframes prestart-blip-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.prestart-person.prestart-person-blip { color: var(--ink); opacity: 0.92; }
+.prestart-person.prestart-person-gone {
+  color: var(--muted);
+  font-style: italic;
+}
+.prestart-status-age {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.prestart-remove-btn {
+  flex: 0 0 auto;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.prestart-remove-btn:hover {
+  border-color: var(--key, #c47a5a);
+  color: var(--key, #c47a5a);
+  background: rgba(196, 122, 90, 0.06);
+}
+.prestart-remove-btn:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
 /* ---------- stage nav / call-a-facilitator / teams ---------- */
 #prev-btn, #next-btn, .call-btn, #leave-btn, .teams-btn { min-height: 44px; }
 .call-btn {
