@@ -198,16 +198,22 @@ test.describe("Bug 2b — new high-impact i18n keys", () => {
     await page.waitForSelector(".splash", { state: "visible" });
     await page.evaluate(() => window.setLang("fr"));
 
+    // Tab labels were renamed to activity verbs per the 2026-05-18
+    // UX/pedagogy specialist panel ("Findings"→"What we're finding",
+    // "Team decisions"→"Decide together"). The PANEL/log titles
+    // (findings.title, prompts.title) and the reset button stayed,
+    // so the test keeps asserting those. Tab keys assert the new
+    // verb labels.
     const t = (k) => page.evaluate((key) => window.t(key), k);
-    expect(await t("rcol.tab.findings")).toEqual("Résultats");
-    expect(await t("rcol.tab.decisions")).toEqual("Décisions d'équipe");
+    expect(await t("rcol.tab.findings")).toEqual("Ce qu'on trouve");
+    expect(await t("rcol.tab.decisions")).toEqual("Décider ensemble");
     expect(await t("findings.title")).toEqual("Journal des résultats");
     expect(await t("prompts.title")).toEqual("Questions de discussion");
     expect(await t("reset.btn")).toEqual("Réinitialiser le cas de cette salle");
 
     // And in Japanese.
     await page.evaluate(() => window.setLang("ja"));
-    expect(await page.evaluate(() => window.t("rcol.tab.findings"))).toEqual("所見");
+    expect(await page.evaluate(() => window.t("rcol.tab.findings"))).toEqual("分かったこと");
     expect(await page.evaluate(() => window.t("findings.title"))).toEqual("所見ログ");
   });
 });
