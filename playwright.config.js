@@ -48,17 +48,17 @@ module.exports = defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$/
+      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$/
     },
     {
       name: "firefox",
       use: { ...devices["Desktop Firefox"] },
-      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$/
+      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$/
     },
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
-      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$/
+      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$/
     },
     // ---- perf budget — splash FCP/TTI and first-party JS+CSS bytes,
     // chromium only (Chrome's PerformanceNavigationTiming is the most
@@ -97,6 +97,17 @@ module.exports = defineConfig({
       name: "mobile-ipad",
       use: { ...devices["iPad Pro 11"] },
       testMatch: /mobile\.spec\.js$/
+    },
+    // Pixel 7 (Android Chrome) emulation pass — user feedback (Bug 3)
+    // reported the Module A findings reveal was invisible on Android
+    // Chrome because the stacked-column mobile layout left the new
+    // answer below the fold. The android-findings spec exercises the
+    // reveal flow on a Pixel 7 viewport and asserts the freshly-revealed
+    // answer is both in the DOM AND scrolled into the viewport.
+    {
+      name: "mobile-android",
+      use: { ...devices["Pixel 7"] },
+      testMatch: /android-findings\.spec\.js$/
     }
   ],
   // Auto-start the static server before the suite runs; auto-shut down after.

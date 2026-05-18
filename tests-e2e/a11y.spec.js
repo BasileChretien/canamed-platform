@@ -140,16 +140,25 @@ test.describe("Accessibility (axe-core)", () => {
     logWarnings(testInfo, page, v);
   });
 
-  test("privacy policy (fr)", async ({ page }, testInfo) => {
-    await page.goto("/privacy-fr.html");
-    await expect(page).toHaveURL(/privacy-fr\.html$/);
+  test("privacy policy (fr) — single dynamic page via ?lang=fr", async ({ page }, testInfo) => {
+    // R3 deep-i18n: privacy.html is the single source; /privacy-fr.html
+    // redirects to ?lang=fr for bookmark back-compat (covered by a
+    // dedicated test elsewhere). This a11y check exercises the
+    // canonical URL.
+    await page.goto("/privacy.html?lang=fr");
+    await expect(page).toHaveURL(/privacy\.html\?lang=fr$/);
+    // Wait for privacy-lang.js to surface the FR body section.
+    await page.waitForSelector('section[data-priv-lang="fr"]:not([hidden])',
+      { state: "attached" });
     const v = await runAxe(page);
     logWarnings(testInfo, page, v);
   });
 
-  test("privacy policy (ja)", async ({ page }, testInfo) => {
-    await page.goto("/privacy-ja.html");
-    await expect(page).toHaveURL(/privacy-ja\.html$/);
+  test("privacy policy (ja) — single dynamic page via ?lang=ja", async ({ page }, testInfo) => {
+    await page.goto("/privacy.html?lang=ja");
+    await expect(page).toHaveURL(/privacy\.html\?lang=ja$/);
+    await page.waitForSelector('section[data-priv-lang="ja"]:not([hidden])',
+      { state: "attached" });
     const v = await runAxe(page);
     logWarnings(testInfo, page, v);
   });

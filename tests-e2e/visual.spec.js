@@ -58,16 +58,21 @@ test.describe("visual regression", () => {
   });
 
   test("privacy page (Français)", async ({ page }) => {
-    await page.goto("/privacy-fr.html");
+    // R3 deep-i18n: single dynamic page; hit it via the ?lang= URL.
+    await page.goto("/privacy.html?lang=fr");
     await page.waitForSelector("main.privacy", { state: "visible" });
+    await page.waitForSelector('section[data-priv-lang="fr"]:not([hidden])',
+      { state: "attached" });
     await expect(page).toHaveScreenshot("privacy-fr.png", {
       ...SNAP_OPTS, fullPage: false
     });
   });
 
   test("privacy page (日本語)", async ({ page }) => {
-    await page.goto("/privacy-ja.html");
+    await page.goto("/privacy.html?lang=ja");
     await page.waitForSelector("main.privacy", { state: "visible" });
+    await page.waitForSelector('section[data-priv-lang="ja"]:not([hidden])',
+      { state: "attached" });
     await expect(page).toHaveScreenshot("privacy-ja.png", {
       ...SNAP_OPTS, fullPage: false
     });

@@ -4347,3 +4347,55 @@ dialog.dialog-polyfill {
      it here — we only handle positioning + stacking. */
 }
 
+/* ----- Global language switcher (always-visible) -----
+   A small fixed-position language picker pinned to the top-right of every
+   screen (lobby, waiting room, in-room, admin dashboard, session-ended).
+   User feedback: a participant who already passed the splash had no way to
+   change the UI language. The splash still has its own larger switcher; we
+   hide this one while splash is on screen so the two don't compete. */
+.global-lang-switcher {
+  position: fixed;
+  top: 8px;
+  right: 10px;
+  z-index: 1500;
+  pointer-events: auto;
+}
+/* When splash is the visible top-level surface, the splash's own dropdown
+   is the obvious tap target — hide the floating one to avoid duplication.
+   Splash flips body.locked off when dismissed; we use that as the signal. */
+body.locked .global-lang-switcher { display: none; }
+/* If JS hasn't yet decided whether splash should show (or the page boots
+   directly into the lobby), reveal the switcher as soon as the splash is
+   hidden. The check above is sufficient. */
+.global-lang-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--line, #d6d2c9);
+  background: var(--bg, #fff);
+  color: var(--ink, #2a2a2a);
+  padding: 5px 24px 5px 10px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 32px;
+  max-width: 140px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted, #6a665d) 50%),
+    linear-gradient(135deg, var(--muted, #6a665d) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 7px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.global-lang-select:focus-visible {
+  outline: 2px solid var(--primary, #2e9fdf);
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .global-lang-switcher { top: 6px; right: 6px; }
+  .global-lang-select { font-size: 0.75rem; padding: 4px 22px 4px 8px; }
+}
+

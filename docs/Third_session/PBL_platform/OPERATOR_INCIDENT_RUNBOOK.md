@@ -23,6 +23,7 @@ technical lifecycle (deploys, key rotation, retention), see
 | Total outage (Firebase down, network gone) | §7 Fall back to Google Form + verbal |
 | Need to capture state for a postmortem | §8 Download in-page error log |
 | Need to escalate | §9 Contacts |
+| You forgot the admin password mid-session | §10 Super-admin password recovery |
 
 ---
 
@@ -223,6 +224,53 @@ the **Incident-Response plan** referenced in `README.md` →
 "Operations / retention / breach response". Notification clocks start
 the moment you realise: **72 h to CNIL** under GDPR Art. 33, **3–5
 days preliminary report to PPC** under APPI Art. 26.
+
+---
+
+## §10 Super-admin password recovery
+
+You forgot the session admin password while a live workshop is running.
+The Round-2 super-admin recovery flow is the supported path.
+
+1. **Confirm the deployment has a super-admin key.** If
+   `SUPERADMIN_KEY` is unset in `firebase-config.js` / your deployment
+   config, recovery is impossible — proceed to §9 escalation.
+2. **Open the lobby** (`canamed-69785.web.app/` or your deployment
+   URL). Expand "I am a facilitator", then click
+   **"Forgot the password? Reset with super-admin key →"**. The
+   discoverability link added in Round 3 takes you straight to the
+   recovery panel.
+3. **Enter the super-admin key + the new session password TWICE** (the
+   confirm field added in Round 3 catches typos). Submit. You should
+   land in the admin dashboard with `role = "superadmin"`.
+
+### Known constraints
+
+- **Client-clock skew** — the database rule allows the
+  `_superadminReset` write only when `requestedAt` is within ±5 s of
+  the Firebase server clock. A laptop with a clock drifted by more than
+  5 s will fail with `PERMISSION_DENIED`. Sync the operator's clock
+  (Settings → Date & Time → "Set automatically") and retry.
+- **Audit trail** — every recovery writes a `_superadminReset` node
+  with `{ requestedAt, by }`. Multiple recoveries during a single
+  session produce multiple entries; this is **expected** and **not** a
+  sign of compromise. The `by` field is the operator's display name;
+  it is automatically stripped from the JSON archive before download
+  (R3-D4 defence-in-depth).
+- **30-second window** — after the `_superadminReset` write, the rule
+  allows a single `adminPasswordHash` overwrite within 30 s. The flag
+  is removed by the client after the overwrite; if the removal step
+  fails, the rule self-expires.
+
+### When recovery itself doesn't work
+
+If the recovery flow returns `PERMISSION_DENIED` repeatedly even after
+clock sync:
+
+1. Re-deploy the rules (`firebase deploy --only database`) — older
+   sessions created before the R2-D21 rules were deployed lack the
+   `_superadminReset` carve-out.
+2. As a last resort, escalate to §9.
 
 ---
 

@@ -58,6 +58,29 @@
   <a href="#" class="skip-link" id="skip-link"
      data-i18n="a11y.skip-to-main">Skip to main content</a>
 
+  <!-- Global language switcher. Fixed top-right; visible from every
+       screen so a Spanish/German/Korean participant who landed past the
+       splash (deep link, returning user, admin dashboard) can always
+       change UI language. Hidden while the splash is on screen to avoid
+       duplicating the splash's own (larger) switcher. JS wires the
+       <select> exactly like the splash one. -->
+  <div class="global-lang-switcher" id="global-lang-switcher"
+       role="group" aria-label="Language">
+    <label class="sr-only" for="global-lang-select"
+           data-i18n="splash.lang-label">Language</label>
+    <select id="global-lang-select" class="global-lang-select"
+            data-i18n-aria-label="splash.lang-label">
+      <option value="en" data-i18n="lang.en">English</option>
+      <option value="fr" data-i18n="lang.fr">Français</option>
+      <option value="ja" data-i18n="lang.ja">日本語</option>
+      <option value="es" data-i18n="lang.es">Español</option>
+      <option value="pt" data-i18n="lang.pt">Português</option>
+      <option value="de" data-i18n="lang.de">Deutsch</option>
+      <option value="ko" data-i18n="lang.ko">한국어</option>
+      <option value="zh" data-i18n="lang.zh">中文</option>
+    </select>
+  </div>
+
   <!-- ============ CANAMED SPLASH (top-level gate) ============
        Hidden by default; the entry script either reveals the splash (when an
        access code is configured and not yet entered) or, if there is no code
@@ -704,6 +727,18 @@
           <button id="join-admin-btn"
                   data-i18n="lobby.admin-open-dashboard">Open admin dashboard</button>
           <p class="lobby-hint" id="admin-hint"></p>
+          <!-- R3-D2 (Renaud): "Forgot password?" link sits directly under
+               the regular admin-pass hint. Round 2 added the super-admin
+               reset flow but didn't surface it on the regular admin login;
+               a facilitator who had just typed the wrong password had no
+               cue to look for the recovery path. The link opens the same
+               superadmin-panel the existing "Super admin: set / change the
+               password" toggle opens — but framed as recovery, not setup. -->
+          <button class="link-btn" id="forgot-pass-link"
+                  data-i18n="lobby.forgot-pass-link"
+                  type="button">
+            Forgot the password? Reset with super-admin key &rsaquo;
+          </button>
           <button class="link-btn" id="superadmin-toggle"
                   data-i18n="lobby.superadmin-toggle">
             Super admin: set / change the password
@@ -720,6 +755,17 @@
                      data-i18n="lobby.new-pass-placeholder" data-i18n-attr="placeholder"
                      aria-label="New session password"
                      placeholder="new session password" />
+            </label>
+            <!-- R3-D3 (Renaud): confirm-password field. The old single-input
+                 path silently accepted a typo and the operator only discovered
+                 it the next time they tried to log in with the new password.
+                 The confirm field is checked client-side in joinSuperAdmin
+                 before any DB write happens. -->
+            <label><span data-i18n="lobby.new-pass-confirm-label">Confirm new password</span>
+              <input type="password" id="new-pass-confirm-input"
+                     data-i18n="lobby.new-pass-confirm-placeholder" data-i18n-attr="placeholder"
+                     aria-label="Confirm new session password"
+                     placeholder="confirm new password" />
             </label>
             <button id="set-pass-btn"
                     data-i18n="lobby.save-pass-btn">Save password &amp; open dashboard</button>
@@ -975,7 +1021,10 @@
                 2-3l-5-9V3" /><path d="M7.5 14h9" /></svg> Investigations &amp; synthesis</h3>
               <div class="btn-group" id="group-labs"></div>
             </section>
-            <button id="reset-btn" class="reset-btn" title="Clear this room's findings">
+            <button id="reset-btn" class="reset-btn"
+                    data-i18n="reset.btn"
+                    data-i18n-title="reset.btn-title"
+                    title="Clear this room's findings">
               Reset this room's case
             </button>
           </div>
@@ -987,38 +1036,39 @@
               <button class="rcol-tab is-active" type="button" data-tab="findings"
                       role="tab" aria-selected="true" aria-controls="rcol-p-findings">
                 <span class="rcol-tab-icon" aria-hidden="true">🔍</span>
-                <span class="rcol-tab-label">Findings</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.findings">Findings</span>
                 <span class="rcol-tab-badge" id="tab-badge-findings">0</span>
               </button>
               <button class="rcol-tab" type="button" data-tab="decisions"
                       role="tab" aria-selected="false" aria-controls="rcol-p-decisions">
                 <span class="rcol-tab-icon" aria-hidden="true">🗳️</span>
-                <span class="rcol-tab-label">Team decisions</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.decisions">Team decisions</span>
                 <span class="rcol-tab-badge" id="tab-badge-decisions" hidden></span>
               </button>
               <button class="rcol-tab" type="button" data-tab="discussion"
                       role="tab" aria-selected="false" aria-controls="rcol-p-discussion">
                 <span class="rcol-tab-icon" aria-hidden="true">💬</span>
-                <span class="rcol-tab-label">Discussion</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.discussion">Discussion</span>
                 <span class="rcol-tab-badge" id="tab-badge-discussion" hidden></span>
               </button>
               <button class="rcol-tab" type="button" data-tab="answers"
                       role="tab" aria-selected="false" aria-controls="rcol-p-answers">
                 <span class="rcol-tab-icon" aria-hidden="true">📝</span>
-                <span class="rcol-tab-label">Group answers</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Group answers</span>
                 <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
               </button>
               <button class="rcol-tab" type="button" data-tab="reference"
                       role="tab" aria-selected="false" aria-controls="rcol-p-reference">
                 <span class="rcol-tab-icon" aria-hidden="true">📚</span>
-                <span class="rcol-tab-label">Reference</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.reference">Reference</span>
               </button>
             </div>
 
             <div class="rcol-panel is-active" id="rcol-p-findings"
                  role="tabpanel" data-panel="findings" aria-labelledby="rcol-tab-findings">
             <section class="card">
-              <h3>Findings log <span class="count" id="findings-count">0</span></h3>
+              <h3><span data-i18n="findings.title">Findings log</span>
+                  <span class="count" id="findings-count">0</span></h3>
               <p class="empty" id="findings-empty"><svg class="empty-art" viewBox="0 0 80 60"
                 aria-hidden="true"><rect x="14" y="10" width="52" height="40" rx="4"
                 fill="#f3f5f8" stroke="#d8dde3" /><line x1="22" y1="22" x2="46" y2="22"
@@ -1027,7 +1077,7 @@
                 stroke-linecap="round" /><circle cx="58" cy="44" r="11" fill="none"
                 stroke="#2e9fdf" stroke-width="3" /><line x1="66" y1="52" x2="74" y2="60"
                 stroke="#2e9fdf" stroke-width="3" stroke-linecap="round" /></svg>
-                Nothing asked yet &mdash; use the buttons on the left to work the case.</p>
+                <span data-i18n="findings.empty">Nothing asked yet &mdash; use the buttons on the left to work the case.</span></p>
               <ol id="findings-log"></ol>
               <div id="contrib-tally" class="contrib-tally"></div>
             </section>
@@ -1041,8 +1091,8 @@
             <div class="rcol-panel" id="rcol-p-discussion" hidden
                  role="tabpanel" data-panel="discussion">
             <section class="card prompts-card" id="prompts-card">
-              <h3>Discussion prompts</h3>
-              <p class="empty" id="prompts-locked">
+              <h3 data-i18n="prompts.title">Discussion prompts</h3>
+              <p class="empty" id="prompts-locked" data-i18n="prompts.locked">
                 Locked &mdash; complete the clinical synthesis (red-flag review) to unlock the
                 discussion prompts.
               </p>
@@ -1754,6 +1804,7 @@
         <h3>Set up the session</h3>
         <label class="inline-label">Number of rooms
           <select id="roomcount-input">
+            <option value="1">1</option>
             <option value="2">2</option>
             <option value="3">3</option>
             <option value="4" selected>4</option>

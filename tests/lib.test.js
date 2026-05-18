@@ -243,6 +243,163 @@ test("tc returns '' for null/undefined/non-object/empty-object/unknown input", (
 });
 
 // =============================================================
+// tc — R3 deep-i18n strict fallback priority (documented chain)
+// =============================================================
+// The documented priority chain in lib.js (PRIORITY 1..7) is the
+// public contract; the cases below pin each step so a future "small
+// refactor" can't silently change behaviour.
+
+test("tc PRIORITY 1: defensive type guard — Array input always returns ''", () => {
+  // Array is a typeof 'object' but a translation triplet is never an
+  // array; treat as malformed (don't iterate elements as if they were
+  // language keys).
+  assert.equal(lib.tc(["en", "fr"], "en"), "");
+  assert.equal(lib.tc([{ en: "Hello" }], "en"), "");
+});
+
+test("tc PRIORITY 1: defensive type guard — symbol/function input returns ''", () => {
+  assert.equal(lib.tc(Symbol("x"), "en"), "");
+  assert.equal(lib.tc(() => "Hello", "en"), "");
+});
+
+test("tc PRIORITY 2 vs 3: empty-string value at requested lang falls through to en", () => {
+  // The critical distinction: value[lang] === "" means "translator
+  // deliberately left this blank" => fall through, do NOT return "".
+  // Only `value` itself being the string "" triggers PRIORITY 2.
+  assert.equal(lib.tc("", "fr"), "");                                      // PRIORITY 2 — plain string
+  assert.equal(lib.tc({ en: "Hello", fr: "" }, "fr"), "Hello");            // PRIORITY 3 falls through to 4
+  assert.equal(lib.tc({ en: "Hello", fr: null }, "fr"), "Hello");          // non-string fr also falls through
+});
+
+test("tc PRIORITY 3 vs 4: requested lang wins over en when both non-empty", () => {
+  const v = { en: "Hello", fr: "Bonjour", ja: "こんにちは" };
+  assert.equal(lib.tc(v, "fr"), "Bonjour");
+  assert.equal(lib.tc(v, "ja"), "こんにちは");
+  // missing lang argument => only PRIORITY 4 (en) can fire
+  assert.equal(lib.tc(v), "Hello");
+  assert.equal(lib.tc(v, undefined), "Hello");
+  assert.equal(lib.tc(v, null), "Hello");
+});
+
+test("tc PRIORITY 5: iterates known SUPPORTED languages when en is missing", () => {
+  // Order across SUPPORTED is en, fr, ja, es, pt, de, ko, zh — once en
+  // is gone, fr wins over ja, ja over es, etc.
+  assert.equal(lib.tc({ fr: "Bonjour", ja: "こんにちは" }, "es"), "Bonjour");
+  assert.equal(lib.tc({ ja: "こんにちは", es: "Hola" }, "fr"), "こんにちは");
+  // also when the requested lang has an empty string
+  assert.equal(lib.tc({ de: "", ko: "안녕", zh: "你好" }, "de"), "안녕");
+});
+
+test("tc PRIORITY 6: falls through to first non-empty string-valued key for exotic shapes", () => {
+  // language not yet in SUPPORTED (e.g. Arabic) must still render
+  // rather than vanish.
+  assert.equal(lib.tc({ ar: "مرحبا" }, "fr"), "مرحبا");
+  // mix of known-empty + exotic-populated
+  assert.equal(lib.tc({ en: "", fr: "", ar: "مرحبا" }, "fr"), "مرحبا");
+});
+
+test("tc PRIORITY 7: ignores non-string values when looking for a fallback", () => {
+  // A future extension might use { en: "...", meta: { ... } } — meta is
+  // not a string and must not be returned as if it were a translation.
+  assert.equal(lib.tc({ en: "", meta: { reviewed: true } }, "fr"), "");
+  assert.equal(lib.tc({ en: "", count: 5 }, "fr"), "");
+  assert.equal(lib.tc({ en: "", flag: true }, "fr"), "");
+});
+
+// =============================================================
+// localCountryName + buildCohortPair — cohort-aware string templates
+// =============================================================
+// R3 deep-i18n fix: replace per-language "Franco-Japanese" / "deutsch-
+// japanisch" hardcodes with a {cohortPair} placeholder rendered from
+// COHORTS[].country at i18n-render time.
+
+test("localCountryName: returns localised name for known country+lang pair", () => {
+  assert.equal(lib.localCountryName("France", "ja"), "フランス");
+  assert.equal(lib.localCountryName("Japan", "fr"), "Japon");
+  assert.equal(lib.localCountryName("Germany", "ja"), "ドイツ");
+  assert.equal(lib.localCountryName("Germany", "de"), "Deutschland");
+  assert.equal(lib.localCountryName("Korea", "zh"), "韩国");
+});
+
+test("localCountryName: falls back to English when lang is unknown or missing", () => {
+  assert.equal(lib.localCountryName("France", "ar"), "France");     // unknown lang
+  assert.equal(lib.localCountryName("France", undefined), "France");
+  assert.equal(lib.localCountryName("France", null), "France");
+});
+
+test("localCountryName: returns the input verbatim when the country is unknown", () => {
+  // safer than "" — operator still sees something readable in the UI
+  assert.equal(lib.localCountryName("Atlantis", "fr"), "Atlantis");
+  assert.equal(lib.localCountryName("", "fr"), "");
+});
+
+test("buildCohortPair: renders Caen-Nagoya in every supported language", () => {
+  const COHORTS = [
+    { id: "Caen", country: "France", short: "Caen" },
+    { id: "Nagoya", country: "Japan", short: "Nagoya" }
+  ];
+  assert.equal(lib.buildCohortPair(COHORTS, "en"), "France-Japan");
+  assert.equal(lib.buildCohortPair(COHORTS, "fr"), "France-Japon");
+  assert.equal(lib.buildCohortPair(COHORTS, "ja"), "フランス-日本");
+  assert.equal(lib.buildCohortPair(COHORTS, "de"), "Frankreich-Japan");
+  assert.equal(lib.buildCohortPair(COHORTS, "ko"), "프랑스-일본");
+  assert.equal(lib.buildCohortPair(COHORTS, "zh"), "法国-日本");
+});
+
+test("buildCohortPair: renders Berlin-Tokyo without any code change beyond COHORTS", () => {
+  // The single most-important Müller fix: a future Berlin-Tokyo
+  // partnership must render "deutsch-japanisch" in DE and "ドイツ-日本"
+  // in JA purely from editing the COHORTS list.
+  const COHORTS = [
+    { id: "Berlin", country: "Germany", short: "Berlin" },
+    { id: "Tokyo",  country: "Japan",   short: "Tokyo" }
+  ];
+  assert.equal(lib.buildCohortPair(COHORTS, "en"), "Germany-Japan");
+  assert.equal(lib.buildCohortPair(COHORTS, "de"), "Deutschland-Japan");
+  assert.equal(lib.buildCohortPair(COHORTS, "ja"), "ドイツ-日本");
+  assert.equal(lib.buildCohortPair(COHORTS, "fr"), "Allemagne-Japon");
+});
+
+test("buildCohortPair: supports 3+ cohorts and a custom separator", () => {
+  const TRI = [
+    { id: "Caen",   country: "France" },
+    { id: "Nagoya", country: "Japan" },
+    { id: "Seoul",  country: "Korea" }
+  ];
+  assert.equal(lib.buildCohortPair(TRI, "en"), "France-Japan-Korea");
+  assert.equal(lib.buildCohortPair(TRI, "en", " × "), "France × Japan × Korea");
+});
+
+test("buildCohortPair: falls back to cohort.short / .id when country is missing", () => {
+  const C = [{ id: "Lyon", short: "Lyon" }, { id: "Tokyo", country: "Japan" }];
+  // Lyon has no country -> uses "Lyon"; Tokyo has country -> "Japan"
+  assert.equal(lib.buildCohortPair(C, "en"), "Lyon-Japan");
+  assert.equal(lib.buildCohortPair(C, "ja"), "Lyon-日本");
+});
+
+test("buildCohortPair: defensive — empty/null/malformed inputs return 'International'", () => {
+  assert.equal(lib.buildCohortPair(null, "en"), "International");
+  assert.equal(lib.buildCohortPair(undefined, "en"), "International");
+  assert.equal(lib.buildCohortPair([], "en"), "International");
+  assert.equal(lib.buildCohortPair([null, undefined, {}], "en"), "International");
+});
+
+test("applyTemplate: substitutes {cohortPair} and leaves unknown placeholders untouched", () => {
+  assert.equal(
+    lib.applyTemplate("Join a {cohortPair} room.", { cohortPair: "France-Japan" }),
+    "Join a France-Japan room."
+  );
+  // unknown placeholder stays visible so the gap is greppable
+  assert.equal(
+    lib.applyTemplate("Join {cohortPair} - {unknown}.", { cohortPair: "X" }),
+    "Join X - {unknown}."
+  );
+  // defensive
+  assert.equal(lib.applyTemplate(null, { x: 1 }), "");
+  assert.equal(lib.applyTemplate("no vars", null), "no vars");
+});
+
+// =============================================================
 // decisionShort
 // =============================================================
 test("decisionShort returns the prompt verbatim if short", () => {
