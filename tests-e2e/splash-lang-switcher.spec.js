@@ -108,9 +108,58 @@ test.describe("Privacy page i18n fallback — R2-47", () => {
       await expect(banner).toBeVisible({ timeout: 5_000 });
       const html = await banner.innerHTML();
       expect(html.length).toBeGreaterThan(20);
-      expect(html).toMatch(/privacy-fr\.html|privacy-ja\.html/);
+      // R3 deep-i18n: banner links now point at the canonical dynamic
+      // URL with ?lang= rather than the legacy stubs (which still
+      // exist as redirects but shouldn't be the primary call-to-action).
+      expect(html).toMatch(/privacy\.html\?lang=(fr|ja)/);
       await tab.close();
     }
+  });
+});
+
+test.describe("Privacy page — R3 deep-i18n single dynamic page + back-compat", () => {
+  // R3 deep-i18n: privacy.html is now the single source for all
+  // languages, with reviewed EN / FR / JA bodies inline as
+  // <section data-priv-lang="...">. The two legacy files redirect
+  // here so bookmarks survive.
+
+  test("privacy.html?lang=fr renders the reviewed FR body", async ({ page }) => {
+    await page.goto("/privacy.html?lang=fr");
+    await page.waitForSelector('section[data-priv-lang="fr"]:not([hidden])',
+      { state: "attached" });
+    // The EN and JA sections must be hidden when FR is active.
+    const enHidden = await page.locator('section[data-priv-lang="en"]').isHidden();
+    const jaHidden = await page.locator('section[data-priv-lang="ja"]').isHidden();
+    expect(enHidden).toBe(true);
+    expect(jaHidden).toBe(true);
+    // Body must contain a known FR string from §1.
+    const body = await page.locator('section[data-priv-lang="fr"]').textContent();
+    expect(body).toMatch(/responsable du traitement/i);
+  });
+
+  test("privacy.html?lang=ja renders the reviewed JA body", async ({ page }) => {
+    await page.goto("/privacy.html?lang=ja");
+    await page.waitForSelector('section[data-priv-lang="ja"]:not([hidden])',
+      { state: "attached" });
+    const enHidden = await page.locator('section[data-priv-lang="en"]').isHidden();
+    const frHidden = await page.locator('section[data-priv-lang="fr"]').isHidden();
+    expect(enHidden).toBe(true);
+    expect(frHidden).toBe(true);
+    const body = await page.locator('section[data-priv-lang="ja"]').textContent();
+    expect(body).toMatch(/個人情報取扱事業者/);
+  });
+
+  test("legacy privacy-fr.html redirects to privacy.html?lang=fr", async ({ page }) => {
+    await page.goto("/privacy-fr.html");
+    // privacy-redirect.js calls location.replace immediately on load.
+    await page.waitForURL(/privacy\.html\?lang=fr/, { timeout: 5_000 });
+    await expect(page).toHaveURL(/privacy\.html\?lang=fr$/);
+  });
+
+  test("legacy privacy-ja.html redirects to privacy.html?lang=ja", async ({ page }) => {
+    await page.goto("/privacy-ja.html");
+    await page.waitForURL(/privacy\.html\?lang=ja/, { timeout: 5_000 });
+    await expect(page).toHaveURL(/privacy\.html\?lang=ja$/);
   });
 });
 

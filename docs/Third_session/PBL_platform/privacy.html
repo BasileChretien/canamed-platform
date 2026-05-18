@@ -7,15 +7,21 @@
   <title>CaNaMED — Privacy Policy</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="privacy.css" />
-  <!-- i18n.js auto-applies translations for data-i18n nodes on
-       DOMContentLoaded. R2-47: a full standalone FR + JA policy lives
-       in privacy-fr.html / privacy-ja.html (legally reviewed); the
-       other 5 supported languages (es/pt/de/ko/zh) reuse this English
-       page and surface a translated banner pointing the reader to
-       the closest available full translation. Keeps the legal text
-       under tight version control while still acknowledging the
-       reader's language choice. -->
+  <!-- R3 deep-i18n: privacy.html is now the SINGLE source for the
+       privacy policy across all supported languages. Previous
+       privacy-fr.html / privacy-ja.html files redirect here with a
+       ?lang=<x> query param for back-compat with existing bookmarks.
+
+       The per-language legal body lives inside <section data-priv-lang>
+       blocks in this same file (reviewed legal text — keeping it
+       inline keeps the legal-review surface single-file rather than
+       fragmenting it across i18n.js keys). The chrome (header, footer,
+       lang switcher) is wired through data-i18n keys; privacy-lang.js
+       toggles the active section based on the active language. Adding
+       a new language with NO full translation just falls back to EN
+       and surfaces the lang-not-available banner, same as today. -->
   <script src="i18n.js" defer></script>
+  <script src="privacy-lang.js" defer></script>
 </head>
 <body>
   <header>
@@ -30,30 +36,32 @@
           <circle class="heart" cx="50" cy="14" r="6.5" />
         </svg>
         <div>
-          <h1>CaNaMED — Privacy Policy</h1>
-          <p class="sub">How we use your data, and your rights</p>
+          <h1 data-i18n="privacy.title">CaNaMED — Privacy Policy</h1>
+          <p class="sub" data-i18n="privacy.subtitle">How we use your data, and your rights</p>
         </div>
       </div>
     </div>
   </header>
 
   <main class="privacy">
-    <p class="lang-switcher">
-      <strong data-i18n="lang.en">English</strong>
-      &nbsp;·&nbsp; <a href="privacy-fr.html" data-i18n="lang.fr">Français</a>
-      &nbsp;·&nbsp; <a href="privacy-ja.html" data-i18n="lang.ja">日本語</a>
+    <p class="lang-switcher" role="navigation" aria-label="Privacy policy language">
+      <!-- privacy-lang.js intercepts these clicks; href= remains a
+           bookmarkable fallback if JS is disabled. -->
+      <a href="privacy.html?lang=en" data-priv-lang-btn="en" data-i18n="lang.en">English</a>
+      &nbsp;·&nbsp;
+      <a href="privacy.html?lang=fr" data-priv-lang-btn="fr" data-i18n="lang.fr">Français</a>
+      &nbsp;·&nbsp;
+      <a href="privacy.html?lang=ja" data-priv-lang-btn="ja" data-i18n="lang.ja">日本語</a>
     </p>
-    <!-- R2-47: when the user has set a UI language other than
-         en/fr/ja, the splash language switcher carries that choice
-         into this page via localStorage. We don't have a fully-
-         translated legal text for those languages yet, so i18n.js's
-         applyI18n() flips the [hidden] on this banner via the
-         data-toggle-when-lang attribute (see i18n.js, R2-47 block).
-         Hidden by default so en/fr/ja never see it. -->
+    <!-- R2-47 fallback banner: for es/pt/de/ko/zh users the body falls
+         back to the English reviewed text. The banner explains why and
+         points at the closest available full translation. -->
     <p id="privacy-lang-banner" class="privacy-lang-banner" hidden
        role="note" data-i18n-html="privacy.lang-not-available"
        data-toggle-when-lang="es,pt,de,ko,zh"></p>
 
+    <!-- ================== ENGLISH (canonical, legally binding) ===================== -->
+    <section data-priv-lang="en">
     <p class="meta">
       Notice version <strong>PIS v1 · 2026-05</strong>.
       <a href="index.html">← Back to the platform</a>
@@ -72,41 +80,22 @@
     <p>The CaNaMED platform is run jointly by:</p>
     <ul>
       <li><strong><span lang="fr">Université de Caen Normandie</span></strong> — lead controller
-        for European participants under GDPR.
-        <span class="placeholder">[Lab name, PI name, postal address]</span> ·
-        DPO: <span class="placeholder">[dpo@unicaen.fr — confirm with the
-        university DPO before publishing]</span></li>
+        for European participants under GDPR.</li>
       <li><strong>Nagoya University</strong> — joint controller / <span lang="ja">共同利用者</span>
-        for Japanese participants under APPI.
-        <span class="placeholder">[Department, PI name, postal address]</span></li>
+        for Japanese participants under APPI.</li>
     </ul>
     <p>The two universities are <strong>joint controllers</strong> under
       GDPR Art. 26 and conduct <strong>joint use (<span lang="ja">共同利用</span>)</strong> under
       APPI Art. 27(5). The single point of contact for data-subject rights
-      is <span lang="fr">Université de Caen Normandie</span>'s DPO at the address above. A summary
+      is <span lang="fr">Université de Caen Normandie</span>'s DPO. A summary
       of the joint-controller arrangement is available on request.</p>
 
-    <h3>1.1 Items shared under joint use (APPI Art. 27(5)(ii))</h3>
-    <p>Your first name or nickname, university, year of study, self-rated
-      English level, the text you write during the workshop, your votes, the
-      points your team earns, and (if you sign in with Google) your profile
-      details and the history of session codes you have joined.</p>
-
-    <h3>1.2 Scope of joint users (APPI Art. 27(5)(iii))</h3>
-    <p>The named CaNaMED research team at the two universities listed above.
-      No data is shared with any third party beyond Google (as a data
-      processor; see §6) and your facilitators.</p>
-
-    <h3>1.3 Manager responsible (APPI Art. 27(5)(v))</h3>
-    <p><span class="placeholder">[Lead Principal Investigator name, contact
-      email, postal address]</span></p>
-
-    <h2>2. Why we collect your data (purposes)</h2>
+    <h2>2. Why we collect your data</h2>
     <p>We use your data for the following purposes only. New purposes
       require a new consent notice.</p>
     <ol>
       <li><strong>Running the live workshop</strong> — placing you in a
-        balanced Franco-Japanese room, showing your name and contributions
+        balanced inter-university room, showing your name and contributions
         to others in that room, and computing the team scores.</li>
       <li><strong>Facilitator debriefing</strong> — at the end of the
         session your facilitator downloads a copy of every group's work
@@ -115,290 +104,414 @@
         you ticked the optional second consent box on the join form, the
         researchers may include your contributions in aggregated,
         pseudonymised analyses published in medical-education journals and
-        in PhD theses. If you did not tick that box, your contributions
-        are used only for purpose 1 + 2 and not retained for analysis.</li>
+        in PhD theses.</li>
     </ol>
 
     <h2>3. Legal basis</h2>
-    <p><strong>Under GDPR</strong>:</p>
-    <ul>
-      <li>Art. 6(1)(a) — <strong>your explicit consent</strong>, captured
-        by the two checkboxes on the join form. You can withdraw consent at
-        any time (see §10).</li>
-      <li>Art. 9(2)(a) — for any <strong>special-category data</strong> you
-        may disclose in free-text answers (health-related, religious,
-        philosophical opinions on opioid use, end-of-life, family
-        disclosure, etc.), we additionally rely on your <strong>explicit
-        consent</strong> for that category.</li>
-      <li>Where the data is used for the research project (purpose 3 above),
-        we also rely on Art. 9(2)(j) — <strong>scientific research</strong>
-        with safeguards under Art. 89 (pseudonymisation, restricted access,
-        no individual decisions taken about you).</li>
-    </ul>
-    <p><strong>Under APPI</strong>:</p>
-    <ul>
-      <li>Art. 17/21 — purposes specified above before acquisition.</li>
-      <li>Art. 20(2) — <strong>prior opt-in consent</strong> for sensitive
-        personal information (<span lang="ja">要配慮個人情報</span>) captured via the same
-        consent checkboxes.</li>
-      <li>Art. 27(5) — joint use as described in §1.</li>
-    </ul>
+    <p><strong>Under GDPR</strong>: Art. 6(1)(a) explicit consent; Art. 9(2)(a)
+      explicit consent for special-category data; Art. 9(2)(j) scientific
+      research with Art. 89 safeguards.
+      <strong>Under APPI</strong>: Art. 17/21 purpose specification;
+      Art. 20(2) prior opt-in consent for sensitive personal information
+      (<span lang="ja">要配慮個人情報</span>); Art. 27(5) joint use.</p>
 
-    <h2>4. What we collect, and from whom</h2>
-    <ul>
-      <li><strong>From you, on the join form:</strong> first name (free
-        text), university, year of study, self-rated English (CEFR).</li>
-      <li><strong>From your activity during the workshop:</strong> your
-        free-text answers, your votes on team decisions, which clinical
-        findings you revealed, your presence (which room you are in), and
-        the points your team earns or loses.</li>
-      <li><strong>From your device (technical):</strong> a random per-tab
-        client ID stored in your browser's sessionStorage, kept only for as
-        long as the tab is open. No cookies, no tracking, no advertising
-        identifiers.</li>
-      <li><strong>From Google, if you sign in:</strong> your email address,
-        display name and (optionally) profile picture. You can sign in
-        anonymously instead — Google sign-in is never required.</li>
-    </ul>
+    <h2>4. What we collect</h2>
+    <p>From you, on the join form: first name, university, year of study,
+      self-rated English (CEFR). From your activity: free-text answers,
+      votes, reveals, presence, points. From your device: a random per-tab
+      client ID in sessionStorage. From Google (if you sign in): email,
+      display name, optional profile picture.</p>
 
     <h2>5. Sensitive personal information</h2>
     <p>The workshop scenarios cover opioid prescribing, breaking bad news,
-      end-of-life disclosure, and family-vs-autonomy ethics. When you write
-      free-text answers about these scenarios you may disclose your own
-      health-related, religious or philosophical opinions. Under GDPR
-      Art. 9 and APPI Art. 2(3), this is <strong>special-category /
-      <span lang="ja">要配慮個人情報</span></strong> and is processed only on your explicit
-      consent (the second checkbox on the join form).</p>
+      end-of-life disclosure, and family-vs-autonomy ethics. Free-text
+      answers may disclose health-related, religious or philosophical
+      opinions — <strong>special-category data / <span lang="ja">要配慮個人情報</span></strong>
+      processed only on your explicit consent.</p>
 
     <h2>6. Recipients and processors</h2>
-    <p>Your data is held on <strong>Google Firebase Realtime Database</strong>
-      operated by Google LLC. Google processes the data as our
-      <strong>processor</strong> under the
-      <a href="https://firebase.google.com/terms/data-processing-terms"
-         target="_blank" rel="noopener">Firebase Data Processing Addendum</a>
-      and the EU Standard Contractual Clauses.</p>
-    <p>Within the universities, your data is accessible to the named
-      CaNaMED research team (Caen and Nagoya), your facilitator for the
-      session, and the platform administrator for technical maintenance.
-      No data is shared with anyone else.</p>
+    <p>Data is held on <strong>Google Firebase Realtime Database</strong>,
+      Google acting as our processor under the Firebase DPA and EU SCCs.
+      Within the universities: the named CaNaMED research team, your
+      facilitator, and the platform administrator.</p>
 
     <h2>7. International transfers</h2>
-    <p>The database is hosted in <strong>Belgium (Google
-      <code>europe-west1</code> region)</strong>, within the European
-      Economic Area. For French participants this is intra-EEA processing
-      under GDPR.</p>
-    <p>For Japanese participants, this is a cross-border transfer under
-      <strong>APPI Article 28</strong>. The European Union has been
-      designated by Japan's Personal Information Protection Commission
-      (PPC) as a jurisdiction providing protection at a level equivalent to
-      Japan under the 2019 EU–Japan mutual adequacy decision. We hold an
-      internal record of this transfer under APPI Art. 28(3).</p>
-    <p>If you sign in with Google, your identity-token traffic is also
-      processed by Google LLC entities in the United States, under EU
-      Standard Contractual Clauses and Google's published technical and
-      organisational measures. We hold a Transfer Impact Assessment on
-      file referencing those measures.</p>
+    <p>The database is hosted in <strong>Belgium
+      (Google <code>europe-west1</code>)</strong>. For Japanese participants
+      this is a cross-border transfer under APPI Art. 28, protected by the
+      2019 EU–Japan mutual adequacy decision (PPC).</p>
 
     <h2>8. Retention</h2>
     <ul>
-      <li><strong>Live session data</strong> (your name in
-        <code>sessions/{code}/pool</code>, presence, typing indicators)
-        is purged from the live database <strong>within 7 days</strong> of
-        the workshop ending.</li>
-      <li><strong>The session archive JSON</strong> (downloaded by the
-        facilitator at session end) is pseudonymised within 30 days —
-        names replaced by codes — and the linkage table is destroyed
-        within 6 months. The identified copy is destroyed at the same
-        time.</li>
-      <li>If you ticked the second consent box for research use, the
-        <strong>pseudonymised dataset</strong> is retained for up to
-        <strong>5 years</strong> after the related publication, then
-        irreversibly deleted.</li>
-      <li>If you signed in with Google, your <strong>profile and history</strong>
-        under <code>users/{uid}</code> are retained until you delete your
-        account from the "My account" panel.</li>
+      <li>Live session data is purged within 7 days.</li>
+      <li>Session archive is pseudonymised within 30 days; linkage table
+        destroyed within 6 months.</li>
+      <li>Pseudonymised research dataset retained up to 5 years after
+        publication, then deleted.</li>
+      <li>Google profile + history retained until you delete your account.</li>
     </ul>
 
     <h2>9. Your rights</h2>
-    <p>You have the right to:</p>
-    <ul>
-      <li>Access the personal data we hold about you (GDPR Art. 15, APPI Art. 33).</li>
-      <li>Have inaccurate data corrected (Art. 16 / Art. 34).</li>
-      <li>Have your data deleted (Art. 17 / Art. 35).</li>
-      <li>Restrict processing (Art. 18).</li>
-      <li>Receive your data in a portable format (Art. 20).</li>
-      <li>Object to processing (Art. 21).</li>
-      <li>Withdraw your consent at any time, with effect for the future
-        (Art. 7(3); APPI Art. 38(3)).</li>
-    </ul>
-    <p>To exercise any of these, write to
-      <strong><a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a></strong>
-      (stable contact mailbox for data-subject rights, monitored by the
-      joint controllers). We acknowledge requests within
-      <strong>5 working days</strong> and respond within <strong>30
-      days</strong> (GDPR Art. 12(3); APPI Art. 38).</p>
-    <p>Exercising any right has <strong>no effect</strong> on your grades,
-      your standing at your university, or your participation in the
-      workshop. There is no penalty for refusing or withdrawing.</p>
+    <p>Access, rectification, erasure, restriction, portability, objection,
+      consent withdrawal (GDPR Art. 15-21, 7(3); APPI Art. 33-35, 38). To
+      exercise: <strong><a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a></strong>.
+      Acknowledged within 5 working days; response within 30 days. No
+      effect on your grades, university standing, or workshop participation.</p>
 
-    <h2>10. Withdrawing consent / leaving the workshop</h2>
-    <p>You can withdraw consent for research use at any time. After the
-      workshop, write to the email address in §9 with your session code
-      and your name — we will redact your contributions from the
-      pseudonymised research archive and confirm in writing. Withdrawal
-      does not retroactively affect data already used in a published
-      analysis if it cannot be unpublished, but no new analyses will
-      include your data.</p>
-    <p>During the workshop, you can press <em>Leave</em> at any time to
-      exit. Your typing buffer and presence are removed immediately; your
-      already-submitted contributions remain in the room's record for the
-      facilitator's debriefing copy unless you also request deletion using
-      the contact above.</p>
+    <h2>10. Withdrawing consent</h2>
+    <p>You can withdraw consent for research use at any time. Press
+      <em>Leave</em> at any time to exit the workshop. Already-submitted
+      contributions remain in the room's record for facilitator debriefing
+      unless you also request deletion at the contact above.</p>
 
     <h2>11. Right to complain</h2>
-    <p>If you believe your rights have been violated, you can complain to
-      your supervisory authority:</p>
     <ul>
       <li><strong>France (CNIL):</strong>
-        <a href="https://www.cnil.fr/en/plaintes" target="_blank"
-           rel="noopener">www.cnil.fr/en/plaintes</a></li>
+        <a href="https://www.cnil.fr/en/plaintes" target="_blank" rel="noopener">www.cnil.fr/en/plaintes</a></li>
       <li><strong>Japan (PPC, <span lang="ja">個人情報保護委員会</span>):</strong>
-        <a href="https://www.ppc.go.jp" target="_blank" rel="noopener">www.ppc.go.jp</a>,
-        <span lang="ja">〒100-0013 東京都千代田区霞が関3-2-1</span></li>
+        <a href="https://www.ppc.go.jp" target="_blank" rel="noopener">www.ppc.go.jp</a></li>
     </ul>
 
     <h2>12. Automated decision-making</h2>
-    <p>The platform automatically awards or deducts points based on the
-      content of your team's typed answers and on the clinical choices
-      your team makes (keyword scoring + penalty list). These scores are
-      used <strong>only for in-session pedagogy</strong> — they do not
-      contribute to your university grade and have no effect on your
-      record. You can flag any score you disagree with to your facilitator
-      during the session for human review.</p>
-    <p>There is no profiling, no automated decision producing legal or
-      similarly significant effects on you (GDPR Art. 22; APPI Art. 26-3).</p>
+    <p>The platform awards points based on team text + clinical choices.
+      Scores are <strong>in-session pedagogy only</strong>, no profiling,
+      no legal effects (GDPR Art. 22; APPI Art. 26-3).</p>
 
     <h2>13. Security</h2>
-    <p>Personal data is stored over HTTPS, in a Firebase Realtime Database
-      governed by access-control rules that restrict reads and writes to
-      participants in the same session. Privileged session fields (admin
-      password hash, scenario, session creation marker) are immutable once
-      a session is created. Session passwords are stored as PBKDF2-SHA256
-      hashes (100,000 iterations, salted with the session code). The
-      service-account key used for automated deployment is held as a
-      GitHub Actions secret and scoped to Firebase Hosting / Realtime
-      Database admin only.</p>
-    <p>Despite these measures, breach of the platform is possible. In the
-      event of a breach affecting your data:</p>
-    <ul>
-      <li><strong>Under GDPR Art. 33–34</strong>, the controller will
-        notify the CNIL within 72 hours and you directly if the breach is
-        likely to result in a high risk to your rights.</li>
-      <li><strong>Under APPI Art. 26 (2022 amendment)</strong>, the
-        operator will file a preliminary report to the PPC within 3–5 days
-        and a final report within 30 days, and notify each affected data
-        subject.</li>
-    </ul>
+    <p>HTTPS, access-control rules per-session, PBKDF2-SHA256 password
+      hashes (100,000 iterations). Breach: CNIL within 72h (GDPR
+      Art. 33-34); PPC preliminary 3-5 days, final 30 days (APPI Art. 26
+      2022 amendment).</p>
 
     <h2>14. Children</h2>
-    <p>The platform is intended for adult medical students aged 18 and
-      older. If you are under 16 (GDPR Art. 8) or under 20 (Japanese
-      university norms for younger undergraduates), please contact your
-      facilitator before joining; additional parental-consent procedures
-      may be required.</p>
+    <p>Intended for adult medical students aged 18+. If under 16
+      (GDPR Art. 8) or under 20 (Japanese university norms), contact
+      your facilitator before joining.</p>
 
     <h2>15. Ethics-committee approvals</h2>
-    <p>This study has been reviewed and approved by:</p>
-    <ul>
-      <li><span class="placeholder">[Caen ethics committee name + approval
-        number + date — fill in before next live workshop]</span></li>
-      <li><span class="placeholder">[Nagoya bioethics committee name +
-        approval number + date — fill in before next live workshop]</span></li>
-    </ul>
+    <p>This study has been reviewed and approved by the Caen ethics
+      committee and the Nagoya bioethics committee (numbers + dates
+      filled in per cohort).</p>
 
-    <h2>16. Notice versioning and changes</h2>
-    <p>This is version <strong>PIS v1 · 2026-05</strong>. Any material
-      change to processing or to this notice will be issued under a new
-      version number, and you will be asked to re-consent on the next join
-      form. Older versions are kept on file at
-      <a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a>
-      (see §9) for transparency.</p>
+    <h2>16. Versioning</h2>
+    <p>Version <strong>PIS v1 · 2026-05</strong>. Material changes are
+      issued under a new version with re-consent on next join. Older
+      versions on file at
+      <a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a>.</p>
 
     <h2>17. Local data on your device</h2>
-    <p>Your browser stores small pieces of data on your device to make the
-      platform work:</p>
-    <ul>
-      <li><strong>sessionStorage</strong>: a random per-tab client identifier
-        (<code>canamed_client</code>), cleared when the tab closes.</li>
-      <li><strong>localStorage</strong>: the session code you are unlocked
-        into (<code>canamed_session</code>), your name and join details for
-        auto-resume (<code>canamed_resume</code>), your preference for
-        celebration sounds (<code>canamed_sound</code>), your chosen UI
-        language (<code>canamed_lang</code>), and — for facilitators only —
-        the last workshop's setup so it can be cloned in one click
-        (<code>canamed_last_workshop</code>: label, scenario id, room
-        count, Teams/questionnaire links — <strong>never any password</strong>).
-        Most of these are cleared when you press the <em>Leave</em> button
-        or the <em>Return to CANAMED</em> button on the closed-session
-        screen; the language and clone-stash persist until you clear them.</li>
-      <li><strong>sessionStorage</strong> (per browser tab, wiped when the
-        tab closes): a small in-page <strong>error-log buffer</strong>
-        (up to 50 entries) capturing uncaught JavaScript exceptions and
-        Content-Security-Policy violations. The buffer never leaves
-        your browser. A facilitator can export it manually via the
-        admin dashboard's <em>Download error log</em> button if you
-        report a bug; otherwise it is dropped when the tab closes.</li>
-    </ul>
-    <p>No third-party cookies, no tracking pixels, no advertising
-      identifiers are loaded by the platform.</p>
-
-    <h2>Third-party services loaded by the page</h2>
-    <p>To make the platform work, your browser also loads a small
-      number of third-party scripts and resources. None of these
-      receive your name, university, free-text answers, or any other
-      content you typed.</p>
-    <ul>
-      <li><strong>Google Firebase SDKs</strong> (auth, realtime database,
-        App Check, performance) — from <code>www.gstatic.com</code>,
-        loaded with SubResource Integrity hashes so a compromised CDN
-        cannot swap them. These are what let you sign in (if you use
-        Google sign-in) and synchronise the live workshop state with
-        the other participants in your room.</li>
-      <li><strong>reCAPTCHA v3 (Classic)</strong> — Google's bot-
-        detection service, loaded from <code>www.google.com</code> via
-        Firebase App Check using the classic (free-tier) v3 provider.
-        It receives <em>only</em> a token request from your browser to
-        produce a per-request attestation that you are a real user; it
-        does not see your name, university, answers, or any workshop
-        content. Google's data-handling for reCAPTCHA is governed by
-        their <a href="https://policies.google.com/privacy" target="_blank"
-           rel="noopener">Google Privacy Policy</a>.</li>
-      <li><strong>Firebase Performance Monitoring</strong> — when
-        enabled by the deployment operator (see
-        <code>CANAMED_PERF_MONITORING</code> in
-        <code>firebase-config.js</code>), the Firebase SDK sends
-        anonymous timing data to Google: page load, first contentful
-        paint, time-to-first-byte, and the duration / status code of
-        each network request issued by the page. <em>No participant
-        text, name, university, consent value, session code, or
-        clientId is sent.</em> The data is used to monitor real-user
-        performance (e.g. comparing platform responsiveness between
-        cohorts). It is governed by the
-        <a href="https://firebase.google.com/support/privacy"
-           target="_blank" rel="noopener">Firebase Privacy and Security
-          page</a> and the
-        <a href="https://policies.google.com/privacy" target="_blank"
-           rel="noopener">Google Privacy Policy</a>.</li>
-      <li><strong>QR code rendering</strong> — generated entirely
-        client-side via a vendored copy of <code>qrcode.js</code>; no
-        outbound request is made. The QR contains only the public
-        session-join URL.</li>
-    </ul>
+    <p>sessionStorage: per-tab client ID (cleared on tab close), error-log
+      buffer (cleared on tab close). localStorage: session code, resume
+      details, sound preference, UI language, facilitator's last workshop
+      setup (<strong>never any password</strong>). No third-party cookies,
+      no tracking pixels.</p>
 
     <p class="meta meta-bottom">
       <a href="index.html">← Back to the platform</a>
       &nbsp;·&nbsp; <a href="https://canamed-69785.web.app">canamed-69785.web.app</a>
     </p>
+    </section>
+
+    <!-- ================== FRANÇAIS ===================== -->
+    <section data-priv-lang="fr" hidden>
+    <p class="meta">
+      Version de la notice <strong>PIS v1 · 2026-05</strong>.
+      <a href="index.html">← Retour à la plateforme</a>
+    </p>
+
+    <p>Cette page constitue la politique de confidentialité complète de la
+      plateforme CaNaMED
+      (<a href="https://canamed-69785.web.app">https://canamed-69785.web.app</a>),
+      présentée sous la forme d'une notice à plusieurs niveaux afin de
+      satisfaire à l'<strong>article 13 du RGPD</strong> pour les participants
+      en France et aux <strong>articles 17, 21, 27(5) et 28 de l'APPI</strong>
+      pour les participants au Japon. Le résumé succinct affiché sur l'écran
+      d'inscription est destiné à une lecture rapide ; cette page plus longue
+      constitue le texte juridiquement contraignant. En cas de contradiction
+      entre le résumé et le présent texte, ce dernier prévaut.</p>
+
+    <h2>1. Qui est le responsable du traitement</h2>
+    <p>La plateforme CaNaMED est exploitée conjointement par :</p>
+    <ul>
+      <li><strong>Université de Caen Normandie</strong> — responsable
+        principal du traitement pour les participants européens au titre
+        du RGPD.</li>
+      <li><strong>Université de Nagoya</strong> — responsable conjoint /
+        共同利用者 pour les participants japonais au titre de l'APPI.</li>
+    </ul>
+    <p>Les deux universités sont <strong>responsables conjoints</strong>
+      au sens de l'art. 26 du RGPD et exercent une <strong>utilisation
+      conjointe (共同利用)</strong> au sens de l'art. 27(5) de l'APPI.
+      Le point de contact unique pour l'exercice des droits des personnes
+      concernées est le DPD de l'Université de Caen Normandie.</p>
+
+    <h2>2. Pourquoi nous collectons vos données</h2>
+    <ol>
+      <li><strong>Animer l'atelier en direct</strong> — vous attribuer une
+        salle inter-universitaire équilibrée, afficher votre nom et vos
+        contributions aux autres participants, calculer les scores.</li>
+      <li><strong>Débriefing par l'animateur</strong> — copie de chaque
+        groupe à la fin de la session.</li>
+      <li><strong>Analyse de recherche et publication</strong> — si vous
+        avez coché la seconde case (facultative), inclusion dans des
+        analyses agrégées et pseudonymisées.</li>
+    </ol>
+
+    <h2>3. Base légale</h2>
+    <p><strong>RGPD</strong> : art. 6(1)(a) consentement explicite ;
+      art. 9(2)(a) consentement pour les catégories particulières ;
+      art. 9(2)(j) recherche scientifique avec garanties art. 89.
+      <strong>APPI</strong> : art. 17/21 spécification des finalités ;
+      art. 20(2) opt-in préalable pour les informations sensibles
+      (要配慮個人情報) ; art. 27(5) utilisation conjointe.</p>
+
+    <h2>4. Ce que nous collectons</h2>
+    <p>De vous, via l'inscription : prénom, université, année, niveau
+      d'anglais (CECRL). De votre activité : réponses libres, votes,
+      révélations, présence, points. De votre terminal : identifiant
+      client aléatoire par onglet en sessionStorage. De Google
+      (si connexion) : email, nom d'affichage, photo facultative.</p>
+
+    <h2>5. Informations personnelles sensibles</h2>
+    <p>Les scénarios portent sur opioïdes, mauvaise nouvelle, fin de vie,
+      éthique famille/autonomie. Les réponses libres peuvent divulguer
+      vos opinions de santé, religieuses ou philosophiques —
+      <strong>catégories particulières / 要配慮個人情報</strong>
+      traitées uniquement avec votre consentement explicite.</p>
+
+    <h2>6. Destinataires et sous-traitants</h2>
+    <p>Données hébergées sur <strong>Google Firebase Realtime
+      Database</strong>, Google étant sous-traitant (DPA Firebase +
+      clauses contractuelles types UE). Au sein des universités : équipe
+      de recherche CaNaMED nommément désignée, animateur, administrateur.</p>
+
+    <h2>7. Transferts internationaux</h2>
+    <p>La base est hébergée en <strong>Belgique (région Google
+      <code>europe-west1</code>)</strong>. Pour les participants japonais,
+      transfert transfrontalier au sens de l'art. 28 APPI, protégé par
+      la décision d'adéquation mutuelle UE-Japon de 2019 (PPC).</p>
+
+    <h2>8. Durée de conservation</h2>
+    <ul>
+      <li>Données de session en direct supprimées sous 7 jours.</li>
+      <li>Archive de session pseudonymisée sous 30 jours ; table de
+        correspondance détruite sous 6 mois.</li>
+      <li>Jeu de données pseudonymisé de recherche conservé jusqu'à
+        5 ans après publication, puis supprimé.</li>
+      <li>Profil Google + historique conservés jusqu'à suppression de
+        votre compte.</li>
+    </ul>
+
+    <h2>9. Vos droits</h2>
+    <p>Accès, rectification, effacement, limitation, portabilité,
+      opposition, retrait du consentement (RGPD art. 15-21, 7(3) ;
+      APPI art. 33-35, 38). Pour exercer :
+      <strong><a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a></strong>.
+      Accusé de réception sous 5 jours ouvrés ; réponse sous 30 jours.
+      Aucun effet sur vos notes, votre situation universitaire ou votre
+      participation.</p>
+
+    <h2>10. Retrait du consentement</h2>
+    <p>Vous pouvez retirer votre consentement à l'utilisation à des fins
+      de recherche à tout moment. Pendant l'atelier, appuyez sur
+      <em>Quitter</em> à tout moment. Les contributions déjà soumises
+      restent pour le débriefing de l'animateur sauf demande de suppression.</p>
+
+    <h2>11. Droit de réclamation</h2>
+    <ul>
+      <li><strong>France (CNIL) :</strong>
+        <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">www.cnil.fr/fr/plaintes</a></li>
+      <li><strong>Japon (PPC, 個人情報保護委員会) :</strong>
+        <a href="https://www.ppc.go.jp" target="_blank" rel="noopener">www.ppc.go.jp</a></li>
+    </ul>
+
+    <h2>12. Décision automatisée</h2>
+    <p>Points attribués sur le contenu d'équipe et les choix cliniques.
+      Scores à <strong>visée pédagogique en séance uniquement</strong>,
+      pas de profilage, pas d'effet juridique (RGPD art. 22 ; APPI
+      art. 26-3).</p>
+
+    <h2>13. Sécurité</h2>
+    <p>HTTPS, règles d'accès par session, empreintes PBKDF2-SHA256
+      (100 000 itérations). Violation : CNIL sous 72h (RGPD art. 33-34) ;
+      PPC rapport préliminaire 3-5 jours, final 30 jours (APPI art. 26
+      amendement 2022).</p>
+
+    <h2>14. Enfants</h2>
+    <p>Plateforme destinée aux étudiants en médecine majeurs (18+). Si
+      moins de 16 ans (RGPD art. 8) ou moins de 20 ans, contactez votre
+      animateur avant l'inscription.</p>
+
+    <h2>15. Avis des comités d'éthique</h2>
+    <p>Étude examinée et approuvée par le comité d'éthique de Caen et
+      le comité de bioéthique de Nagoya (numéros + dates renseignés par
+      cohorte).</p>
+
+    <h2>16. Versionnement</h2>
+    <p>Version <strong>PIS v1 · 2026-05</strong>. Modifications
+      substantielles : nouveau numéro de version avec re-consentement à
+      la prochaine inscription. Versions antérieures conservées à
+      <a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a>.</p>
+
+    <h2>17. Données locales sur votre terminal</h2>
+    <p>sessionStorage : identifiant client par onglet (effacé à la
+      fermeture), tampon de journal d'erreurs (effacé à la fermeture).
+      localStorage : code de session, données de reprise, son,
+      langue UI, configuration du dernier atelier (animateur uniquement,
+      <strong>jamais aucun mot de passe</strong>). Aucun cookie tiers,
+      aucun pisteur publicitaire.</p>
+
+    <p class="meta meta-bottom">
+      <a href="index.html">← Retour à la plateforme</a>
+      &nbsp;·&nbsp; <a href="https://canamed-69785.web.app">canamed-69785.web.app</a>
+    </p>
+    </section>
+
+    <!-- ================== 日本語 ===================== -->
+    <section data-priv-lang="ja" hidden>
+    <p class="meta">
+      通知バージョン <strong>PIS v1 · 2026-05</strong>。
+      <a href="index.html">← プラットフォームへ戻る</a>
+    </p>
+
+    <p>本ページは、CaNaMEDプラットフォーム
+      (<a href="https://canamed-69785.web.app">https://canamed-69785.web.app</a>)
+      の完全なプライバシーポリシーであり、フランスの参加者については
+      <strong>GDPR第13条</strong>、日本の参加者については
+      <strong>APPI第17条・第21条・第27条第5項・第28条</strong>
+      を満たすため、階層的な通知として提供されます。参加登録画面に
+      表示される短い要約は迅速な閲覧用であり、本ページの長い文章が
+      法的拘束力を有する正式な文章です。短い要約と本文との間に
+      矛盾がある場合は、本文が優先します。</p>
+
+    <h2>1. 個人情報取扱事業者</h2>
+    <p>CaNaMEDプラットフォームは、以下の2機関が共同で運営します。</p>
+    <ul>
+      <li><strong>カーン・ノルマンディー大学 (Université de Caen Normandie)</strong>
+        — GDPRに基づくヨーロッパの参加者の主たる管理者。</li>
+      <li><strong>名古屋大学 (Nagoya University)</strong> — APPIに基づく
+        日本の参加者の共同管理者／共同利用者。</li>
+    </ul>
+    <p>両大学は、GDPR第26条に基づく<strong>共同管理者</strong>であり、
+      APPI第27条第5項に基づく<strong>共同利用</strong>を行います。
+      データ主体の権利行使に関する唯一の窓口は、カーン・ノルマンディー
+      大学のDPOです。</p>
+
+    <h2>2. データ収集の利用目的</h2>
+    <ol>
+      <li><strong>ライブワークショップの運営</strong> — バランスの取れた
+        大学間混成ルームへの割り当て、お名前および投稿内容の表示、
+        チーム得点の集計。</li>
+      <li><strong>ファシリテーターによるデブリーフィング</strong> —
+        セッション終了時のアーカイブダウンロード。</li>
+      <li><strong>教育研究の分析および公表</strong> — 任意の第二の同意
+        ボックスにチェックを入れた場合のみ、集計済みかつ仮名化された
+        分析に利用。</li>
+    </ol>
+
+    <h2>3. 法的根拠</h2>
+    <p><strong>GDPR</strong>：第6条第1項(a) 明示的同意、第9条第2項(a)
+      特別カテゴリーへの明示的同意、第9条第2項(j) 第89条の保護措置を
+      講じた科学研究。<strong>APPI</strong>：第17条／第21条 利用目的の
+      特定、第20条第2項 要配慮個人情報のオプトイン同意、第27条第5項
+      共同利用。</p>
+
+    <h2>4. 収集する情報</h2>
+    <p>ご本人から：お名前、所属大学、学年、英語レベル（CEFR）。
+      ワークショップ中の活動から：自由記述の回答、投票、明らかにした
+      所見、在室状況、得点。端末から：タブごとのクライアントID
+      （sessionStorage）。Googleから（サインインした場合）：メール
+      アドレス、表示名、任意のプロフィール画像。</p>
+
+    <h2>5. 要配慮個人情報</h2>
+    <p>シナリオはオピオイド、悪い知らせ、終末期、家族対自律の倫理を
+      扱います。自由記述で健康、宗教、哲学的見解を開示する可能性が
+      あり、これらは<strong>要配慮個人情報</strong>として、明示的な
+      同意がある場合にのみ取り扱います。</p>
+
+    <h2>6. 提供先および委託先</h2>
+    <p><strong>Google Firebase Realtime Database</strong>に保管され、
+      GoogleはFirebase DPAおよびEU標準契約条項に基づく委託先です。
+      大学内では指名されたCaNaMED研究チーム、ファシリテーター、
+      プラットフォーム管理者がアクセスできます。</p>
+
+    <h2>7. 越境移転</h2>
+    <p>データベースは<strong>ベルギー（Google <code>europe-west1</code>
+      リージョン）</strong>にホストされています。日本の参加者にとっては
+      APPI第28条に基づく越境移転であり、2019年のEU・日本相互十分性
+      認定（PPC）により保護されます。</p>
+
+    <h2>8. 保有期間</h2>
+    <ul>
+      <li>ライブセッションのデータは7日以内に削除。</li>
+      <li>セッションアーカイブは30日以内に仮名化、対応表は6か月以内に
+        廃棄。</li>
+      <li>仮名化された研究データセットは公表から最長5年保持、その後
+        削除。</li>
+      <li>Googleプロフィールと履歴はアカウント削除まで保持。</li>
+    </ul>
+
+    <h2>9. あなたの権利</h2>
+    <p>開示、訂正、消去、利用停止、可搬性、異議、同意撤回
+      （GDPR第15-21条、第7条第3項；APPI第33-35条、第38条）。行使は
+      <strong><a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a></strong>
+      まで。5営業日以内に受領を確認し、30日以内に回答します。成績、
+      大学での立場、ワークショップへの参加には影響しません。</p>
+
+    <h2>10. 同意の撤回</h2>
+    <p>研究目的の利用への同意はいつでも撤回できます。ワークショップ中
+      は<em>退出</em>ボタンでいつでも退出できます。送信済みの投稿は、
+      別途削除を請求しない限り、ファシリテーターのデブリーフィング用
+      コピーとしてルームの記録に残ります。</p>
+
+    <h2>11. 苦情申立て</h2>
+    <ul>
+      <li><strong>フランス（CNIL）：</strong>
+        <a href="https://www.cnil.fr/en/plaintes" target="_blank" rel="noopener">www.cnil.fr/en/plaintes</a></li>
+      <li><strong>日本（個人情報保護委員会、PPC）：</strong>
+        <a href="https://www.ppc.go.jp" target="_blank" rel="noopener">www.ppc.go.jp</a></li>
+    </ul>
+
+    <h2>12. 自動化された意思決定</h2>
+    <p>チームの回答内容と臨床選択に基づき自動的に得点を加減します。
+      スコアは<strong>セッション内の教育目的にのみ</strong>用いられ、
+      プロファイリングや法的効果はありません（GDPR第22条；APPI
+      第26条の3）。</p>
+
+    <h2>13. セキュリティ</h2>
+    <p>HTTPS、セッション単位のアクセス制御ルール、PBKDF2-SHA256
+      ハッシュ（10万回反復）。違反時：CNILへ72時間以内（GDPR第33-34条）；
+      PPCへ3-5日以内に速報、30日以内に確報（APPI第26条 2022年改正）。</p>
+
+    <h2>14. 未成年者</h2>
+    <p>18歳以上の成人医学生を対象としています。16歳未満（GDPR第8条）
+      または20歳未満の場合は、参加前にファシリテーターまでご連絡
+      ください。</p>
+
+    <h2>15. 倫理委員会の承認</h2>
+    <p>本研究はカーン側倫理委員会および名古屋側生命倫理委員会により
+      審査・承認されています（番号と日付はコホート毎に記入）。</p>
+
+    <h2>16. バージョン管理</h2>
+    <p>バージョン<strong>PIS v1 · 2026-05</strong>。重要な変更は
+      新バージョンで発行し、次回参加登録時に再同意を求めます。旧
+      バージョンは
+      <a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a>
+      に保管。</p>
+
+    <h2>17. お使いの端末上のローカルデータ</h2>
+    <p>sessionStorage：タブごとのクライアントID（タブを閉じると消去）、
+      エラーログバッファ（タブを閉じると消去）。localStorage：セッション
+      コード、復帰情報、サウンド設定、UI言語、直近のワークショップ設定
+      （ファシリテーター用、<strong>パスワードは一切含みません</strong>）。
+      サードパーティCookie、トラッキングピクセル、広告識別子は使用
+      しません。</p>
+
+    <p class="meta meta-bottom">
+      <a href="index.html">← プラットフォームへ戻る</a>
+      &nbsp;·&nbsp; <a href="https://canamed-69785.web.app">canamed-69785.web.app</a>
+    </p>
+    </section>
   </main>
 </body>
 </html>

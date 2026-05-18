@@ -103,9 +103,14 @@
       "splash.sign-out": "Sign out",
       "splash.lang-label": "Language",
 
-      // privacy page — a full standalone translation exists for fr/ja;
-      // es/pt/de/ko/zh see this banner pointing them to the closest text
-      "privacy.lang-not-available": "A full translation of this privacy policy in your selected language is not yet available. The English text below is the legally binding version. A reviewed <a href=\"privacy-fr.html\">French</a> or <a href=\"privacy-ja.html\">Japanese</a> version is also available.",
+      // privacy page — R3 deep-i18n: privacy.html is a single dynamic
+      // page; reviewed body copy lives inline as <section data-priv-lang>.
+      // privacy.title / privacy.subtitle wire the page chrome.
+      "privacy.title": "CaNaMED — Privacy Policy",
+      "privacy.subtitle": "How we use your data, and your rights",
+      // Banner shown when the active UI lang has no reviewed body
+      // (es/pt/de/ko/zh fall back to the EN body).
+      "privacy.lang-not-available": "A full translation of this privacy policy in your selected language is not yet available. The English text below is the legally binding version. A reviewed <a href=\"privacy.html?lang=fr\">French</a> or <a href=\"privacy.html?lang=ja\">Japanese</a> version is also available.",
 
       // splash — enter-code view (participants)
       "splash.enter.label": "Enter the session code your facilitator gave you",
@@ -162,7 +167,7 @@
       "modal.start.too-many-rooms-title": "More rooms than participants",
       "modal.start.too-many-rooms-message": "You have fewer participants than the number of rooms you selected. Some rooms will be empty or very small. Start anyway?",
       "modal.start.weak-rooms-title": "Some rooms are unbalanced",
-      "modal.start.weak-rooms-message": "Some rooms are small or single-university. The goal is mixed Franco-Japanese groups. Start anyway?",
+      "modal.start.weak-rooms-message": "Some rooms are small or single-university. The goal is mixed {cohortPair} groups. Start anyway?",
       "modal.start.ok": "Start anyway",
       "modal.close.title": "End session and download archive?",
       "modal.close.message": "This will download a JSON file with every group's answers, votes, reveals, scores, contributions and presence, and mark the session as closed — participants see a thanks-for-taking-part banner and cannot type any more text.\n\nThe students' data stays in the database — you can re-download the archive any time. The marker cannot easily be undone.",
@@ -192,7 +197,7 @@
 
       // lobby — participant join form (after entering a code)
       "lobby.join-title": "Join as a participant",
-      "lobby.join-hint": "You will be placed in a Franco-Japanese room automatically — balanced by university, year and English level.",
+      "lobby.join-hint": "You will be placed in a mixed {cohortPair} room automatically — balanced by university, year and English level.",
       "lobby.uni-label": "University",
       "lobby.uni-placeholder": "Select your university…",
       "lobby.year-label": "Year of study",
@@ -227,6 +232,14 @@
       "lobby.superadmin-key-placeholder": "super-admin key",
       "lobby.new-pass-label": "New session password",
       "lobby.new-pass-placeholder": "new session password",
+      // R3-D3: confirm-password label/placeholder + R3-D2: forgot link.
+      "lobby.new-pass-confirm-label": "Confirm new password",
+      "lobby.new-pass-confirm-placeholder": "confirm new password",
+      "lobby.forgot-pass-link": "Forgot the password? Reset with super-admin key ›",
+      "lobby.superadmin.disabled": "Super-admin is disabled on this deployment.",
+      "lobby.superadmin.bad-key": "Incorrect super-admin key.",
+      "lobby.superadmin.no-new-pass": "Enter a new session password to set.",
+      "lobby.superadmin.confirm-mismatch": "The two password fields do not match — please re-type the new password.",
       "lobby.save-pass-btn": "Save password & open dashboard",
       // join-form validation messages (shown in the lobby hint line)
       "lobby.err.name-required": "Enter your name.",
@@ -253,9 +266,15 @@
       "waiting.status-not-started": "You have joined. Waiting for a facilitator to start the session…",
       "waiting.status-starting": "The session has started — placing you in a room…",
       "waiting.heading": "You have joined",
-      "waiting.body": "Hi <strong id=\"waiting-name\"></strong> — you are in the waiting room. A facilitator will place you in a Franco-Japanese room and start the session shortly. <strong>Your screen will move automatically</strong> — nothing to do.",
+      "waiting.body": "Hi <strong id=\"waiting-name\"></strong> — you are in the waiting room. A facilitator will place you in a mixed {cohortPair} room and start the session shortly. <strong>Your screen will move automatically</strong> — nothing to do.",
       "waiting.teams-btn": "Join the Teams call",
       "waiting.joined-so-far": "Joined so far",
+
+      // late-join banner (R3-C1). Shown when a participant lands in a room
+      // that has already advanced past stage 0. {stage} is replaced at
+      // runtime with the current stage's localised name via stageLabel(i).
+      "waiting.late-join.banner": "You joined while your room is already on “{stage}”. Earlier stages happened before you arrived — use “← Review previous stage” at any time to read them.  ",
+      "waiting.late-join.dismiss": "Got it",
 
       // data-rights — GDPR Art. 15 (right of access) participant self-export
       "data-rights.export-btn": "Download my data (JSON) ⤓",
@@ -411,6 +430,10 @@
       "test.skipped": "You skipped the test. You can take it now if you change your mind.",
       "test.already-done": "You have already taken this test today. Thank you!",
       "test.error-save": "We could not save your answer right now — your in-session points are not affected.",
+      // R3-C4 (Akari late-join): the pre-test card replaces its start / skip
+      // buttons with this notice when a late-joiner views "Welcome" after
+      // their room has already entered Module A. The post-test still runs.
+      "test.late-join-closed": "The pre-test closed when your room started. It's only meaningful when taken before the workshop begins — your post-test at the end of the session will still count.",
 
       // closed banner (interim, before the full session-ended screen takes over)
       "closed.title": "Session closed by the facilitator.",
@@ -501,11 +524,52 @@
       "tour.admin.4.title": "End and archive",
       "tour.admin.4.body": "When you're done, end the session and download the archive. Group answers, votes and scores are exported as a single JSON file.",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "Settings",
+      "settings.title": "Settings",
+      "settings.restart-tour": "Show introduction tour again",
+      "settings.close": "Close",
+      "tour.student.1.title": "Welcome to the room",
+      "tour.student.1.body": "This is your team's space for the whole session. A quick tour to show the controls you'll use most.",
+      "tour.student.2.title": "Name your team",
+      "tour.student.2.body": "Pick a fun team name together — anyone in the room can set it. It shows on the live leaderboard.",
+      "tour.student.3.title": "Findings log",
+      "tour.student.3.body": "When you ask, examine or order a test, the patient's response appears here. On phones it also shows up directly under the button you tapped.",
+      "tour.student.4.title": "Team decisions",
+      "tour.student.4.body": "When a decision card appears, everyone taps their choice. Once enough teammates vote, lock in the team's answer together.",
+      "tour.student.5.title": "Group answers",
+      "tour.student.5.body": "Use this box to add short bullet points your team agreed on. Everyone sees them update live.",
+      "tour.student.6.title": "Call a facilitator",
+      "tour.student.6.body": "Tap here at any time to ask for help. The facilitator sees your room flagged on their dashboard.",
+      "tour.student.7.title": "Language and settings",
+      "tour.student.7.body": "Use this dropdown to switch languages at any moment. The cog next to it opens theme and accessibility settings.",
+
       // admin dashboard search/filter (appears when roomCount > 5)
       "admin.search.placeholder": "Filter rooms by name…",
       "admin.search.clear": "Clear",
       "admin.search.label": "Filter rooms",
-      "admin.search.empty": "No rooms match this filter."
+      "admin.search.empty": "No rooms match this filter.",
+
+      // Right-column tab labels (Module A panels). User feedback flagged
+      // these as the most visible English-only strings once the user has
+      // joined a room. Pinned per language so a translator catches a
+      // missing key in CI rather than at runtime.
+      "rcol.tab.findings": "Findings",
+      "rcol.tab.decisions": "Team decisions",
+      "rcol.tab.discussion": "Discussion",
+      "rcol.tab.answers": "Group answers",
+      "rcol.tab.reference": "Reference",
+
+      // Findings + discussion panel chrome (in-room, high-visibility).
+      "findings.title": "Findings log",
+      "findings.empty": "Nothing asked yet — use the buttons on the left to work the case.",
+      "prompts.title": "Discussion prompts",
+      "prompts.locked": "Locked — complete the clinical synthesis (red-flag review) to unlock the discussion prompts.",
+
+      // Reset button (in-room, destructive — must be discoverable in
+      // every UI language so a participant doesn't tap it by mistake).
+      "reset.btn": "Reset this room's case",
+      "reset.btn-title": "Clear this room's findings"
     },
 
     fr: {
@@ -524,7 +588,9 @@
       "splash.signed-in-as": "Connecté·e en tant que",
       "splash.sign-out": "Se déconnecter",
       "splash.lang-label": "Langue",
-      "privacy.lang-not-available": "Une traduction complète de cette politique de confidentialité dans la langue que vous avez choisie n'est pas encore disponible. Le texte anglais ci-dessous est la version juridiquement contraignante. Une version révisée en <a href=\"privacy-fr.html\">français</a> ou en <a href=\"privacy-ja.html\">japonais</a> est également disponible.",
+      "privacy.title": "CaNaMED — Politique de confidentialité",
+      "privacy.subtitle": "Comment nous utilisons vos données, et vos droits",
+      "privacy.lang-not-available": "Une traduction complète de cette politique de confidentialité dans la langue que vous avez choisie n'est pas encore disponible. Le texte anglais ci-dessous est la version juridiquement contraignante. Une version révisée en <a href=\"privacy.html?lang=fr\">français</a> ou en <a href=\"privacy.html?lang=ja\">japonais</a> est également disponible.",
 
       "splash.enter.label": "Entrez le code de séance fourni par votre encadrant·e",
       "splash.enter.placeholder": "ex. ABC-DEF",
@@ -576,7 +642,7 @@
       "modal.start.too-many-rooms-title": "Plus de salles que de participant·e·s",
       "modal.start.too-many-rooms-message": "Vous avez moins de participant·e·s que de salles. Certaines salles seront vides ou très petites. Démarrer quand même ?",
       "modal.start.weak-rooms-title": "Salles déséquilibrées",
-      "modal.start.weak-rooms-message": "Certaines salles sont petites ou mono-université. L'objectif est de former des groupes mixtes franco-japonais. Démarrer quand même ?",
+      "modal.start.weak-rooms-message": "Certaines salles sont petites ou mono-université. L'objectif est de former des groupes mixtes {cohortPair}. Démarrer quand même ?",
       "modal.start.ok": "Démarrer quand même",
       "modal.close.title": "Clôturer la séance et télécharger l'archive ?",
       "modal.close.message": "Cette action téléchargera un fichier JSON contenant toutes les réponses, votes, révélations, scores, contributions et présences, puis marquera la séance comme close — les participant·e·s verront une bannière de remerciement et ne pourront plus saisir de texte.\n\nLes données restent dans la base — vous pouvez retélécharger l'archive à tout moment. Le marquage n'est pas facilement réversible.",
@@ -603,7 +669,7 @@
       "splash.created.open-admin": "Ouvrir le tableau de bord →",
 
       "lobby.join-title": "Rejoindre en tant que participant·e",
-      "lobby.join-hint": "Vous serez automatiquement placé·e dans une salle franco-japonaise — équilibrée par université, année et niveau d'anglais.",
+      "lobby.join-hint": "Vous serez automatiquement placé·e dans une salle mixte {cohortPair} — équilibrée par université, année et niveau d'anglais.",
       "lobby.uni-label": "Université",
       "lobby.uni-placeholder": "Choisissez votre université…",
       "lobby.year-label": "Année d'études",
@@ -636,6 +702,14 @@
       "lobby.superadmin-key-placeholder": "clé super-admin",
       "lobby.new-pass-label": "Nouveau mot de passe de séance",
       "lobby.new-pass-placeholder": "nouveau mot de passe de séance",
+      // R3-D3 (Renaud): confirm-password label/placeholder + R3-D2: forgot link.
+      "lobby.new-pass-confirm-label": "Confirmer le nouveau mot de passe",
+      "lobby.new-pass-confirm-placeholder": "confirmer le nouveau mot de passe",
+      "lobby.forgot-pass-link": "Mot de passe oublié ? Réinitialiser avec la clé super-admin ›",
+      "lobby.superadmin.disabled": "Le mode super-admin est désactivé sur ce déploiement.",
+      "lobby.superadmin.bad-key": "Clé super-admin incorrecte.",
+      "lobby.superadmin.no-new-pass": "Saisissez un nouveau mot de passe de séance à définir.",
+      "lobby.superadmin.confirm-mismatch": "Les deux champs de mot de passe ne correspondent pas — merci de retaper le nouveau mot de passe.",
       "lobby.save-pass-btn": "Enregistrer le mot de passe & ouvrir le tableau de bord",
       "lobby.err.name-required": "Saisissez votre prénom.",
       "lobby.err.session-required": "Saisissez le code de la séance.",
@@ -656,9 +730,13 @@
       "waiting.status-not-started": "Vous avez rejoint la séance. En attente de son démarrage par l'encadrant·e…",
       "waiting.status-starting": "La séance a commencé — vous êtes en cours d'attribution à une salle…",
       "waiting.heading": "Vous avez rejoint la séance",
-      "waiting.body": "Bonjour <strong id=\"waiting-name\"></strong> — vous êtes dans la salle d'attente. Un·e encadrant·e va vous placer dans une salle franco-japonaise et démarrer la séance dans un instant. <strong>Votre écran avancera automatiquement</strong> — vous n'avez rien à faire.",
+      "waiting.body": "Bonjour <strong id=\"waiting-name\"></strong> — vous êtes dans la salle d'attente. Un·e encadrant·e va vous placer dans une salle mixte {cohortPair} et démarrer la séance dans un instant. <strong>Votre écran avancera automatiquement</strong> — vous n'avez rien à faire.",
       "waiting.teams-btn": "Rejoindre l'appel Teams",
       "waiting.joined-so-far": "Présent·e·s pour l'instant",
+
+      // R3-C1 — bandeau d'arrivée tardive
+      "waiting.late-join.banner": "Vous avez rejoint la séance alors que votre salle est déjà à l'étape « {stage} ». Les étapes précédentes se sont déroulées avant votre arrivée — utilisez « ← Revoir l'étape précédente » à tout moment pour les consulter.  ",
+      "waiting.late-join.dismiss": "Compris",
 
       "data-rights.export-btn": "Télécharger mes données (JSON) ⤓",
       "data-rights.err.no-session": "Rejoignez d'abord une séance — il n'y a rien à exporter pour l'instant.",
@@ -790,6 +868,7 @@
       "test.skipped": "Vous avez passé le test. Vous pouvez encore le faire si vous changez d'avis.",
       "test.already-done": "Vous avez déjà fait ce test aujourd'hui. Merci !",
       "test.error-save": "Impossible d'enregistrer votre réponse pour le moment — vos points en séance ne sont pas affectés.",
+      "test.late-join-closed": "Le pré-test s'est clôturé au démarrage de votre salle. Il n'a de sens que s'il est rempli avant le début du workshop — votre post-test en fin de séance comptera, lui.",
 
       "closed.title": "Séance clôturée par l'encadrant·e.",
       "closed.subtitle": "Merci d'avoir participé — le travail de votre équipe a été sauvegardé.",
@@ -874,10 +953,44 @@
       "tour.admin.4.title": "Clôturer et archiver",
       "tour.admin.4.body": "Quand c'est fini, clôturez la séance et téléchargez l'archive. Réponses de groupe, votes et scores sont exportés dans un unique fichier JSON.",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "Paramètres",
+      "settings.title": "Paramètres",
+      "settings.restart-tour": "Revoir la visite d'introduction",
+      "settings.close": "Fermer",
+      "tour.student.1.title": "Bienvenue dans votre salle",
+      "tour.student.1.body": "Voici l'espace de votre équipe pour toute la séance. Petite visite des contrôles que vous utiliserez le plus.",
+      "tour.student.2.title": "Nommer votre équipe",
+      "tour.student.2.body": "Choisissez ensemble un nom d'équipe — n'importe qui dans la salle peut le saisir. Il apparaît sur le classement en direct.",
+      "tour.student.3.title": "Journal des observations",
+      "tour.student.3.body": "Quand vous posez une question, examinez ou demandez un examen, la réponse du patient apparaît ici. Sur téléphone, elle s'affiche aussi juste sous le bouton.",
+      "tour.student.4.title": "Décisions d'équipe",
+      "tour.student.4.body": "Quand une carte de décision apparaît, chacun·e vote pour son choix. Une fois assez de votes, verrouillez la réponse de l'équipe ensemble.",
+      "tour.student.5.title": "Réponses de groupe",
+      "tour.student.5.body": "Utilisez ce cadre pour ajouter de courts points sur lesquels votre équipe est d'accord. Tout le monde les voit en direct.",
+      "tour.student.6.title": "Appeler un·e encadrant·e",
+      "tour.student.6.body": "Touchez ici à tout moment pour demander de l'aide. L'encadrant·e voit votre salle signalée sur son tableau de bord.",
+      "tour.student.7.title": "Langue et paramètres",
+      "tour.student.7.body": "Utilisez ce menu pour changer de langue à tout moment. Le bouton roue dentée ouvre les paramètres de thème et d'accessibilité.",
+
       "admin.search.placeholder": "Filtrer les salles par nom…",
       "admin.search.clear": "Effacer",
       "admin.search.label": "Filtrer les salles",
-      "admin.search.empty": "Aucune salle ne correspond à ce filtre."
+      "admin.search.empty": "Aucune salle ne correspond à ce filtre.",
+
+      "rcol.tab.findings": "Résultats",
+      "rcol.tab.decisions": "Décisions d'équipe",
+      "rcol.tab.discussion": "Discussion",
+      "rcol.tab.answers": "Réponses du groupe",
+      "rcol.tab.reference": "Référence",
+
+      "findings.title": "Journal des résultats",
+      "findings.empty": "Rien demandé pour l'instant — utilisez les boutons à gauche pour avancer dans le cas.",
+      "prompts.title": "Questions de discussion",
+      "prompts.locked": "Verrouillé — complétez la synthèse clinique (revue des signes d'alerte) pour débloquer les questions de discussion.",
+
+      "reset.btn": "Réinitialiser le cas de cette salle",
+      "reset.btn-title": "Effacer les résultats de cette salle"
     },
 
     // Japanese strings: machine-drafted, then taken through a deeper
@@ -900,7 +1013,9 @@
       "splash.signed-in-as": "ログイン中:",
       "splash.sign-out": "ログアウト",
       "splash.lang-label": "言語",
-      "privacy.lang-not-available": "選択された言語によるプライバシーポリシー全文の翻訳はまだご用意できていません。下記の英文が法的拘束力を持つ版です。レビュー済みの<a href=\"privacy-fr.html\">フランス語</a>版または<a href=\"privacy-ja.html\">日本語</a>版もご利用いただけます。",
+      "privacy.title": "CaNaMED — プライバシーポリシー",
+      "privacy.subtitle": "あなたのデータの使い方と、あなたの権利",
+      "privacy.lang-not-available": "選択された言語によるプライバシーポリシー全文の翻訳はまだご用意できていません。下記の英文が法的拘束力を持つ版です。レビュー済みの<a href=\"privacy.html?lang=fr\">フランス語</a>版または<a href=\"privacy.html?lang=ja\">日本語</a>版もご利用いただけます。",
 
       "splash.enter.label": "ファシリテーターから配布されたセッションコードを入力してください",
       "splash.enter.placeholder": "例: ABC-DEF",
@@ -952,7 +1067,7 @@
       "modal.start.too-many-rooms-title": "参加者よりルーム数が多いです",
       "modal.start.too-many-rooms-message": "選択したルーム数より参加者が少ないため、空または少人数のルームができます。それでも開始しますか?",
       "modal.start.weak-rooms-title": "ルームのバランスが取れていません",
-      "modal.start.weak-rooms-message": "一部のルームは少人数または単一大学のみです。日仏混成グループを目指しています。それでも開始しますか?",
+      "modal.start.weak-rooms-message": "一部のルームは少人数または単一大学のみです。{cohortPair} の混成グループを目指しています。それでも開始しますか?",
       "modal.start.ok": "それでも開始",
       "modal.close.title": "セッションを終了してアーカイブをダウンロードしますか?",
       "modal.close.message": "すべてのグループの回答・投票・公開・スコア・コントリビューション・参加状況を含む JSON ファイルがダウンロードされ、セッションは終了済みとしてマークされます — 参加者には「ご参加ありがとうございました」のバナーが表示され、それ以上の入力はできなくなります。\n\nデータはデータベースに残ります — アーカイブはいつでも再ダウンロードできます。終了マークは簡単には元に戻せません。",
@@ -979,7 +1094,7 @@
       "splash.created.open-admin": "管理ダッシュボードを開く →",
 
       "lobby.join-title": "参加者として参加",
-      "lobby.join-hint": "大学・学年・英語レベルに応じて、日仏混成のルームへ自動的に振り分けられます。",
+      "lobby.join-hint": "大学・学年・英語レベルに応じて、{cohortPair} の混成ルームへ自動的に振り分けられます。",
       "lobby.uni-label": "大学",
       "lobby.uni-placeholder": "大学を選択してください…",
       "lobby.year-label": "学年",
@@ -1012,6 +1127,13 @@
       "lobby.superadmin-key-placeholder": "スーパー管理者キー",
       "lobby.new-pass-label": "新しいセッションのパスワード",
       "lobby.new-pass-placeholder": "新しいセッションのパスワード",
+      "lobby.new-pass-confirm-label": "新しいパスワードの確認",
+      "lobby.new-pass-confirm-placeholder": "新しいパスワード（確認）",
+      "lobby.forgot-pass-link": "パスワードをお忘れですか? スーパー管理者キーでリセットする ›",
+      "lobby.superadmin.disabled": "この環境ではスーパー管理者機能は無効になっています。",
+      "lobby.superadmin.bad-key": "スーパー管理者キーが正しくありません。",
+      "lobby.superadmin.no-new-pass": "設定する新しいセッションパスワードを入力してください。",
+      "lobby.superadmin.confirm-mismatch": "二つのパスワード欄が一致しません — 新しいパスワードを入力し直してください。",
       "lobby.save-pass-btn": "パスワードを保存して管理画面を開く",
       "lobby.err.name-required": "お名前を入力してください。",
       "lobby.err.session-required": "セッションコードを入力してください。",
@@ -1032,9 +1154,13 @@
       "waiting.status-not-started": "参加が完了しました。ファシリテーターがセッションを開始するまでお待ちください…",
       "waiting.status-starting": "セッションが開始されました — ルームへの割り当てを行っています…",
       "waiting.heading": "参加が完了しました",
-      "waiting.body": "<strong id=\"waiting-name\"></strong> さん、待合室にご案内しています。ファシリテーターが日仏混成のルームへ振り分け、まもなくセッションを開始します。<strong>画面は自動的に切り替わります</strong> — 何も操作する必要はありません。",
+      "waiting.body": "<strong id=\"waiting-name\"></strong> さん、待合室にご案内しています。ファシリテーターが {cohortPair} の混成ルームへ振り分け、まもなくセッションを開始します。<strong>画面は自動的に切り替わります</strong> — 何も操作する必要はありません。",
       "waiting.teams-btn": "Teams通話に参加",
       "waiting.joined-so-far": "現在の参加者",
+
+      // R3-C1 — 途中参加バナー
+      "waiting.late-join.banner": "あなたが参加した時点で、ルームはすでに「{stage}」に進んでいます。前のステージはあなたが到着する前に終了しました — いつでも「← 前のステージを確認」ボタンから読み返せます。  ",
+      "waiting.late-join.dismiss": "了解しました",
 
       "data-rights.export-btn": "自分のデータをダウンロード (JSON) ⤓",
       "data-rights.err.no-session": "まずセッションに参加してください — エクスポートするデータがまだありません。",
@@ -1166,6 +1292,7 @@
       "test.skipped": "テストをスキップしました。気が変わった場合は今からでも受けられます。",
       "test.already-done": "本日のテストはすでに完了しています。ありがとうございました!",
       "test.error-save": "現在ご回答を保存できません — セッション中のポイントには影響しません。",
+      "test.late-join-closed": "プレテストはあなたのルームが開始した時点で締め切られました。ワークショップ開始前に受験して初めて意味があるためです — セッション終了時のポストテストは引き続きカウントされます。",
 
       "closed.title": "ファシリテーターによりセッションが終了されました。",
       "closed.subtitle": "ご参加ありがとうございました — チームの成果は保存されています。",
@@ -1250,10 +1377,44 @@
       "tour.admin.4.title": "終了とアーカイブ",
       "tour.admin.4.body": "終了時には、セッションをクローズしてアーカイブをダウンロードしてください。グループの回答・投票・スコアが1つのJSONファイルにエクスポートされます。",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "設定",
+      "settings.title": "設定",
+      "settings.restart-tour": "はじめてのご案内をもう一度",
+      "settings.close": "閉じる",
+      "tour.student.1.title": "ルームへようこそ",
+      "tour.student.1.body": "ここはセッション中、皆さんのチーム専用の場所です。よく使う操作を簡単にご案内します。",
+      "tour.student.2.title": "チーム名を決めましょう",
+      "tour.student.2.body": "チームで楽しい名前を考えてみてください。ルームの誰でも設定でき、ライブのリーダーボードに表示されます。",
+      "tour.student.3.title": "所見ログ",
+      "tour.student.3.body": "質問・診察・検査を選ぶと、患者さんの応答がここに表示されます。スマートフォンでは、タップしたボタンの直下にも表示されます。",
+      "tour.student.4.title": "チームでの意思決定",
+      "tour.student.4.body": "決定カードが表示されたら、それぞれが選択肢をタップします。十分な人数が投票したら、チームの回答を一緒にロックインしてください。",
+      "tour.student.5.title": "グループの回答",
+      "tour.student.5.body": "チームで合意した要点をここに短く書き加えてください。皆さんに同時に表示されます。",
+      "tour.student.6.title": "ファシリテーターを呼ぶ",
+      "tour.student.6.body": "助けが必要な時はいつでもここをタップしてください。ファシリテーターのダッシュボードにルームが表示されます。",
+      "tour.student.7.title": "言語と設定",
+      "tour.student.7.body": "このドロップダウンでいつでも言語を切り替えられます。隣の歯車ボタンから、テーマやアクセシビリティの設定を開けます。",
+
       "admin.search.placeholder": "ルーム名で絞り込み…",
       "admin.search.clear": "クリア",
       "admin.search.label": "ルームを絞り込み",
-      "admin.search.empty": "条件に一致するルームはありません。"
+      "admin.search.empty": "条件に一致するルームはありません。",
+
+      "rcol.tab.findings": "所見",
+      "rcol.tab.decisions": "チームの意思決定",
+      "rcol.tab.discussion": "ディスカッション",
+      "rcol.tab.answers": "グループの回答",
+      "rcol.tab.reference": "参考資料",
+
+      "findings.title": "所見ログ",
+      "findings.empty": "まだ何も尋ねていません。左のボタンを使って症例を進めてください。",
+      "prompts.title": "ディスカッションの設問",
+      "prompts.locked": "ロック中 — 臨床的総合（レッドフラッグの確認）を完了するとディスカッションの設問が解放されます。",
+
+      "reset.btn": "このルームの症例をリセット",
+      "reset.btn-title": "このルームの所見を消去します"
     },
 
     // Spanish — neutral Latin American Spanish (no voseo). Medical
@@ -1276,7 +1437,9 @@
       "splash.signed-in-as": "Sesión iniciada como",
       "splash.sign-out": "Cerrar sesión",
       "splash.lang-label": "Idioma",
-      "privacy.lang-not-available": "Aún no se encuentra disponible una traducción completa de esta política de privacidad en el idioma seleccionado. El texto en inglés que aparece a continuación es la versión jurídicamente vinculante. También están disponibles las versiones revisadas en <a href=\"privacy-fr.html\">francés</a> y en <a href=\"privacy-ja.html\">japonés</a>.",
+      "privacy.title": "CaNaMED — Política de privacidad",
+      "privacy.subtitle": "Cómo utilizamos sus datos y sus derechos",
+      "privacy.lang-not-available": "Aún no se encuentra disponible una traducción completa de esta política de privacidad en el idioma seleccionado. El texto en inglés que aparece a continuación es la versión jurídicamente vinculante. También están disponibles las versiones revisadas en <a href=\"privacy.html?lang=fr\">francés</a> y en <a href=\"privacy.html?lang=ja\">japonés</a>.",
 
       "splash.enter.label": "Ingrese el código de sesión que le entregó su facilitador/a",
       "splash.enter.placeholder": "p. ej. ABC-DEF",
@@ -1323,7 +1486,7 @@
       "splash.created.open-admin": "Abrir panel de administración →",
 
       "lobby.join-title": "Unirse como participante",
-      "lobby.join-hint": "Será asignado/a automáticamente a una sala franco-japonesa — equilibrada por universidad, año y nivel de inglés.",
+      "lobby.join-hint": "Será asignado/a automáticamente a una sala mixta {cohortPair} — equilibrada por universidad, año y nivel de inglés.",
       "lobby.uni-label": "Universidad",
       "lobby.uni-placeholder": "Seleccione su universidad…",
       "lobby.year-label": "Año de estudio",
@@ -1352,6 +1515,9 @@
       "waiting.leave": "Salir",
       "waiting.status-not-started": "Se ha unido. Esperando a que un/a facilitador/a inicie la sesión…",
       "waiting.status-starting": "La sesión ha comenzado — se le está asignando a una sala…",
+      // R3-C1
+      "waiting.late-join.banner": "Se unió cuando su sala ya estaba en «{stage}». Las etapas anteriores ocurrieron antes de su llegada — use «← Revisar etapa anterior» en cualquier momento para leerlas.  ",
+      "waiting.late-join.dismiss": "Entendido",
 
       "data-rights.export-btn": "Descargar mis datos (JSON) ⤓",
 
@@ -1472,6 +1638,26 @@
       "tour.admin.4.title": "Finalizar y archivar",
       "tour.admin.4.body": "Cuando termine, finalice la sesión y descargue el archivo. Respuestas grupales, votos y puntuaciones se exportan en un único archivo JSON.",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "Ajustes",
+      "settings.title": "Ajustes",
+      "settings.restart-tour": "Ver de nuevo la visita de introducción",
+      "settings.close": "Cerrar",
+      "tour.student.1.title": "Bienvenido/a a la sala",
+      "tour.student.1.body": "Este es el espacio de su equipo durante toda la sesión. Una visita breve a los controles que más usará.",
+      "tour.student.2.title": "Nombre del equipo",
+      "tour.student.2.body": "Elijan juntos un nombre divertido — cualquiera en la sala puede ponerlo. Aparece en la clasificación en vivo.",
+      "tour.student.3.title": "Registro de hallazgos",
+      "tour.student.3.body": "Cuando pregunta, examina o pide una prueba, la respuesta del paciente aparece aquí. En móvil también aparece justo debajo del botón.",
+      "tour.student.4.title": "Decisiones del equipo",
+      "tour.student.4.body": "Cuando aparezca una tarjeta de decisión, cada persona toca su opción. Cuando voten suficientes, bloqueen juntos la respuesta del equipo.",
+      "tour.student.5.title": "Respuestas del grupo",
+      "tour.student.5.body": "Use este cuadro para añadir puntos breves acordados por el equipo. Todos los ven en vivo.",
+      "tour.student.6.title": "Llamar a un facilitador",
+      "tour.student.6.body": "Toque aquí cuando necesite ayuda. El facilitador verá su sala marcada en su panel.",
+      "tour.student.7.title": "Idioma y ajustes",
+      "tour.student.7.body": "Use este desplegable para cambiar de idioma cuando quiera. La rueda dentada abre los ajustes de tema y accesibilidad.",
+
       "admin.search.placeholder": "Filtrar salas por nombre…",
       "admin.search.clear": "Borrar",
       "admin.search.label": "Filtrar salas",
@@ -1496,7 +1682,9 @@
       "splash.signed-in-as": "Conectado como",
       "splash.sign-out": "Sair",
       "splash.lang-label": "Idioma",
-      "privacy.lang-not-available": "Ainda não está disponível uma tradução completa desta política de privacidade no idioma selecionado. O texto em inglês abaixo é a versão juridicamente vinculante. Também estão disponíveis versões revisadas em <a href=\"privacy-fr.html\">francês</a> e em <a href=\"privacy-ja.html\">japonês</a>.",
+      "privacy.title": "CaNaMED — Política de privacidade",
+      "privacy.subtitle": "Como usamos seus dados e seus direitos",
+      "privacy.lang-not-available": "Ainda não está disponível uma tradução completa desta política de privacidade no idioma selecionado. O texto em inglês abaixo é a versão juridicamente vinculante. Também estão disponíveis versões revisadas em <a href=\"privacy.html?lang=fr\">francês</a> e em <a href=\"privacy.html?lang=ja\">japonês</a>.",
 
       "splash.enter.label": "Digite o código de sessão fornecido pelo(a) seu(sua) facilitador(a)",
       "splash.enter.placeholder": "ex.: ABC-DEF",
@@ -1543,7 +1731,7 @@
       "splash.created.open-admin": "Abrir painel de administração →",
 
       "lobby.join-title": "Entrar como participante",
-      "lobby.join-hint": "Você será colocado(a) automaticamente em uma sala franco-japonesa — equilibrada por universidade, ano e nível de inglês.",
+      "lobby.join-hint": "Você será colocado(a) automaticamente em uma sala mista {cohortPair} — equilibrada por universidade, ano e nível de inglês.",
       "lobby.uni-label": "Universidade",
       "lobby.uni-placeholder": "Selecione sua universidade…",
       "lobby.year-label": "Ano do curso",
@@ -1572,6 +1760,9 @@
       "waiting.leave": "Sair",
       "waiting.status-not-started": "Você entrou. Aguardando o(a) facilitador(a) iniciar a sessão…",
       "waiting.status-starting": "A sessão começou — você está sendo alocado(a) em uma sala…",
+      // R3-C1
+      "waiting.late-join.banner": "Você entrou enquanto sua sala já estava em «{stage}». As etapas anteriores ocorreram antes de você chegar — use «← Rever etapa anterior» a qualquer momento para lê-las.  ",
+      "waiting.late-join.dismiss": "Entendi",
 
       "data-rights.export-btn": "Baixar meus dados (JSON) ⤓",
 
@@ -1692,6 +1883,26 @@
       "tour.admin.4.title": "Encerrar e arquivar",
       "tour.admin.4.body": "Quando terminar, encerre a sessão e baixe o arquivo. Respostas de grupo, votos e pontuações são exportados em um único arquivo JSON.",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "Configurações",
+      "settings.title": "Configurações",
+      "settings.restart-tour": "Ver novamente o tour de introdução",
+      "settings.close": "Fechar",
+      "tour.student.1.title": "Bem-vindo(a) à sala",
+      "tour.student.1.body": "Este é o espaço da sua equipe durante toda a sessão. Um tour rápido pelos controles que você mais vai usar.",
+      "tour.student.2.title": "Nome do time",
+      "tour.student.2.body": "Escolham juntos um nome divertido — qualquer pessoa na sala pode definir. Aparece na classificação ao vivo.",
+      "tour.student.3.title": "Registro de achados",
+      "tour.student.3.body": "Quando você pergunta, examina ou pede um exame, a resposta do paciente aparece aqui. No celular também aparece logo abaixo do botão.",
+      "tour.student.4.title": "Decisões da equipe",
+      "tour.student.4.body": "Quando surgir uma carta de decisão, cada pessoa toca a sua opção. Quando houver votos suficientes, travem juntos a resposta da equipe.",
+      "tour.student.5.title": "Respostas do grupo",
+      "tour.student.5.body": "Use esta caixa para adicionar pontos curtos que sua equipe combinou. Todos veem em tempo real.",
+      "tour.student.6.title": "Chamar um facilitador",
+      "tour.student.6.body": "Toque aqui quando precisar de ajuda. O facilitador verá sua sala marcada no painel.",
+      "tour.student.7.title": "Idioma e configurações",
+      "tour.student.7.body": "Use este menu para trocar o idioma a qualquer momento. A engrenagem abre as configurações de tema e acessibilidade.",
+
       "admin.search.placeholder": "Filtrar salas pelo nome…",
       "admin.search.clear": "Limpar",
       "admin.search.label": "Filtrar salas",
@@ -1718,7 +1929,9 @@
       "splash.signed-in-as": "Angemeldet als",
       "splash.sign-out": "Abmelden",
       "splash.lang-label": "Sprache",
-      "privacy.lang-not-available": "Eine vollständige Übersetzung dieser Datenschutzerklärung in die von Ihnen gewählte Sprache ist noch nicht verfügbar. Der nachstehende englische Text ist die rechtlich verbindliche Fassung. Geprüfte Fassungen auf <a href=\"privacy-fr.html\">Französisch</a> und <a href=\"privacy-ja.html\">Japanisch</a> stehen ebenfalls zur Verfügung.",
+      "privacy.title": "CaNaMED — Datenschutzerklärung",
+      "privacy.subtitle": "Wie wir Ihre Daten verwenden und Ihre Rechte",
+      "privacy.lang-not-available": "Eine vollständige Übersetzung dieser Datenschutzerklärung in die von Ihnen gewählte Sprache ist noch nicht verfügbar. Der nachstehende englische Text ist die rechtlich verbindliche Fassung. Geprüfte Fassungen auf <a href=\"privacy.html?lang=fr\">Französisch</a> und <a href=\"privacy.html?lang=ja\">Japanisch</a> stehen ebenfalls zur Verfügung.",
 
       "splash.enter.label": "Geben Sie den Sitzungscode ein, den Ihre Lehrperson Ihnen mitgeteilt hat",
       "splash.enter.placeholder": "z. B. ABC-DEF",
@@ -1765,7 +1978,14 @@
       "splash.created.open-admin": "Admin-Dashboard öffnen →",
 
       "lobby.join-title": "Als Teilnehmer/in beitreten",
-      "lobby.join-hint": "Sie werden automatisch einem deutsch-japanisch gemischten Raum zugewiesen — ausgewogen nach Universität, Studienjahr und Englischniveau.",
+      // R3-G1 / R3 deep-i18n fix: the original text hardcoded "deutsch-
+      // japanisch", which is factually wrong on a Caen-Nagoya deployment.
+      // R3 interim fix used a generic "international" wording; the deep
+      // fix now interpolates {cohortPair} from the active COHORTS via
+      // buildCohortPair(COHORTS, "de") — renders "Frankreich-Japan" for
+      // Caen-Nagoya and "Deutschland-Japan" for a future Berlin-Tokyo
+      // deployment, with NO change to this i18n entry.
+      "lobby.join-hint": "Sie werden automatisch einem gemischten {cohortPair}-Raum zugewiesen — ausgewogen nach Universität, Studienjahr und Englischniveau.",
       "lobby.uni-label": "Universität",
       "lobby.uni-placeholder": "Wählen Sie Ihre Universität…",
       "lobby.year-label": "Studienjahr",
@@ -1794,6 +2014,9 @@
       "waiting.leave": "Verlassen",
       "waiting.status-not-started": "Sie sind beigetreten. Es wird gewartet, bis eine Lehrperson die Sitzung startet…",
       "waiting.status-starting": "Die Sitzung hat begonnen — Sie werden einem Raum zugewiesen…",
+      // R3-C1
+      "waiting.late-join.banner": "Sie sind beigetreten, während Ihr Raum bereits bei „{stage}\" ist. Frühere Phasen fanden vor Ihrer Ankunft statt — verwenden Sie jederzeit „← Vorherige Phase ansehen\", um sie zu lesen.  ",
+      "waiting.late-join.dismiss": "Verstanden",
 
       "data-rights.export-btn": "Meine Daten herunterladen (JSON) ⤓",
 
@@ -1817,7 +2040,10 @@
       "admin.theme.hc": "Hoher Kontrast",
       "admin.report-bug": "Fehler melden",
 
-      "admin.start-session": "Sitzung starten — alle Räumen zuweisen",
+      // R3-G3: was "alle Räumen" (nom/acc plural mixed with dative plural —
+      // ungrammatical Hochdeutsch). Accusative "alle Räume zuweisen" is the
+      // correct form when the rooms are the direct object being assigned.
+      "admin.start-session": "Sitzung starten — alle Räume zuweisen",
       "admin.advance-all": "Alle Räume weiterschalten →",
       "admin.download-all": "Alle Gruppenantworten herunterladen",
       "admin.end-session": "Sitzung beenden & Archiv herunterladen",
@@ -1914,6 +2140,26 @@
       "tour.admin.4.title": "Beenden und archivieren",
       "tour.admin.4.body": "Wenn Sie fertig sind, beenden Sie die Sitzung und laden Sie das Archiv herunter. Gruppenantworten, Abstimmungen und Punkte werden als eine einzelne JSON-Datei exportiert.",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "Einstellungen",
+      "settings.title": "Einstellungen",
+      "settings.restart-tour": "Einführungstour erneut anzeigen",
+      "settings.close": "Schließen",
+      "tour.student.1.title": "Willkommen im Raum",
+      "tour.student.1.body": "Das ist der Raum Ihres Teams für die gesamte Sitzung. Eine kurze Tour zu den Bedienelementen, die Sie am häufigsten brauchen.",
+      "tour.student.2.title": "Teamname",
+      "tour.student.2.body": "Wählen Sie gemeinsam einen Teamnamen — jede Person im Raum kann ihn setzen. Er erscheint in der Live-Rangliste.",
+      "tour.student.3.title": "Befund-Log",
+      "tour.student.3.body": "Wenn Sie fragen, untersuchen oder einen Test anfordern, erscheint die Antwort der Patientin / des Patienten hier. Auf dem Handy zusätzlich direkt unter der Schaltfläche.",
+      "tour.student.4.title": "Team-Entscheidungen",
+      "tour.student.4.body": "Wenn eine Entscheidungskarte erscheint, tippt jede Person ihre Wahl. Sobald genug abgestimmt haben, legen Sie die Team-Antwort gemeinsam fest.",
+      "tour.student.5.title": "Gruppenantworten",
+      "tour.student.5.body": "Hier fügen Sie kurze, von Ihrem Team vereinbarte Punkte ein. Alle sehen sie live.",
+      "tour.student.6.title": "Lehrperson rufen",
+      "tour.student.6.body": "Tippen Sie hier, wenn Sie Hilfe brauchen. Die Lehrperson sieht Ihren Raum auf dem Dashboard markiert.",
+      "tour.student.7.title": "Sprache und Einstellungen",
+      "tour.student.7.body": "Mit diesem Auswahlmenü wechseln Sie jederzeit die Sprache. Das Zahnrad daneben öffnet Theme- und Barrierefreiheits-Einstellungen.",
+
       "admin.search.placeholder": "Räume nach Namen filtern…",
       "admin.search.clear": "Löschen",
       "admin.search.label": "Räume filtern",
@@ -1939,7 +2185,9 @@
       "splash.signed-in-as": "로그인:",
       "splash.sign-out": "로그아웃",
       "splash.lang-label": "언어",
-      "privacy.lang-not-available": "선택하신 언어로 된 개인정보 처리방침 전문 번역본은 아직 제공되지 않습니다. 아래의 영문이 법적 효력을 가지는 정식 버전입니다. 검토 완료된 <a href=\"privacy-fr.html\">프랑스어</a> 및 <a href=\"privacy-ja.html\">일본어</a> 버전도 제공됩니다.",
+      "privacy.title": "CaNaMED — 개인정보 처리방침",
+      "privacy.subtitle": "당사가 귀하의 데이터를 사용하는 방식과 귀하의 권리",
+      "privacy.lang-not-available": "선택하신 언어로 된 개인정보 처리방침 전문 번역본은 아직 제공되지 않습니다. 아래의 영문이 법적 효력을 가지는 정식 버전입니다. 검토 완료된 <a href=\"privacy.html?lang=fr\">프랑스어</a> 및 <a href=\"privacy.html?lang=ja\">일본어</a> 버전도 제공됩니다.",
 
       "splash.enter.label": "진행자가 알려준 세션 코드를 입력하세요",
       "splash.enter.placeholder": "예: ABC-DEF",
@@ -1986,7 +2234,7 @@
       "splash.created.open-admin": "관리 대시보드 열기 →",
 
       "lobby.join-title": "참가자로 참여하기",
-      "lobby.join-hint": "대학, 학년, 영어 수준에 따라 균형 잡힌 프랑스-일본 혼성 룸에 자동으로 배정됩니다.",
+      "lobby.join-hint": "대학, 학년, 영어 수준에 따라 균형 잡힌 {cohortPair} 혼성 룸에 자동으로 배정됩니다.",
       "lobby.uni-label": "대학",
       "lobby.uni-placeholder": "대학을 선택하세요…",
       "lobby.year-label": "학년",
@@ -2015,6 +2263,9 @@
       "waiting.leave": "나가기",
       "waiting.status-not-started": "참여가 완료되었습니다. 진행자가 세션을 시작할 때까지 기다려 주세요…",
       "waiting.status-starting": "세션이 시작되었습니다 — 룸 배정 중입니다…",
+      // R3-C1
+      "waiting.late-join.banner": "참가하셨을 때 룸은 이미 「{stage}」 단계에 있습니다. 이전 단계는 도착 전에 진행되었습니다 — 언제든지 「← 이전 단계 보기」 버튼으로 확인할 수 있습니다.  ",
+      "waiting.late-join.dismiss": "확인",
 
       "data-rights.export-btn": "내 데이터 다운로드 (JSON) ⤓",
 
@@ -2135,6 +2386,26 @@
       "tour.admin.4.title": "종료 및 아카이브",
       "tour.admin.4.body": "마치실 때 세션을 종료하고 아카이브를 다운로드하세요. 그룹 답변, 투표, 점수가 하나의 JSON 파일로 내보내집니다.",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "설정",
+      "settings.title": "설정",
+      "settings.restart-tour": "안내 투어 다시 보기",
+      "settings.close": "닫기",
+      "tour.student.1.title": "방에 오신 것을 환영합니다",
+      "tour.student.1.body": "이 공간은 세션 동안 팀 전용입니다. 가장 자주 사용하는 컨트롤을 짧게 안내합니다.",
+      "tour.student.2.title": "팀 이름",
+      "tour.student.2.body": "함께 재미있는 팀 이름을 정하세요. 방의 누구나 설정할 수 있고 실시간 리더보드에 표시됩니다.",
+      "tour.student.3.title": "소견 로그",
+      "tour.student.3.body": "질문, 진찰, 검사를 요청하면 환자의 응답이 여기에 표시됩니다. 모바일에서는 누른 버튼 바로 아래에도 표시됩니다.",
+      "tour.student.4.title": "팀 의사결정",
+      "tour.student.4.body": "결정 카드가 나타나면 각자 선택지를 누릅니다. 충분한 인원이 투표하면 팀의 답을 함께 확정하세요.",
+      "tour.student.5.title": "그룹 답변",
+      "tour.student.5.body": "팀이 합의한 짧은 항목을 여기에 적습니다. 모두에게 실시간으로 보입니다.",
+      "tour.student.6.title": "퍼실리테이터 호출",
+      "tour.student.6.body": "도움이 필요할 때 언제든 누르세요. 퍼실리테이터의 대시보드에 방이 표시됩니다.",
+      "tour.student.7.title": "언어 및 설정",
+      "tour.student.7.body": "이 드롭다운으로 언제든 언어를 바꿀 수 있습니다. 옆의 톱니바퀴는 테마와 접근성 설정을 엽니다.",
+
       "admin.search.placeholder": "룸 이름으로 필터…",
       "admin.search.clear": "지우기",
       "admin.search.label": "룸 필터",
@@ -2161,7 +2432,9 @@
       "splash.signed-in-as": "已登录:",
       "splash.sign-out": "退出登录",
       "splash.lang-label": "语言",
-      "privacy.lang-not-available": "本隐私政策尚未提供您所选语言的完整翻译版本。下方英文文本为具有法律效力的版本。亦提供已审校的<a href=\"privacy-fr.html\">法文</a>和<a href=\"privacy-ja.html\">日文</a>版本。",
+      "privacy.title": "CaNaMED — 隐私政策",
+      "privacy.subtitle": "我们如何使用您的数据,以及您的权利",
+      "privacy.lang-not-available": "本隐私政策尚未提供您所选语言的完整翻译版本。下方英文文本为具有法律效力的版本。亦提供已审校的<a href=\"privacy.html?lang=fr\">法文</a>和<a href=\"privacy.html?lang=ja\">日文</a>版本。",
 
       "splash.enter.label": "请输入主持人发给您的会话代码",
       "splash.enter.placeholder": "例如:ABC-DEF",
@@ -2208,7 +2481,7 @@
       "splash.created.open-admin": "打开管理面板 →",
 
       "lobby.join-title": "以参与者身份加入",
-      "lobby.join-hint": "系统将自动把您分配到一个法日混合房间——按大学、年级和英语水平进行平衡。",
+      "lobby.join-hint": "系统将自动把您分配到一个 {cohortPair} 混合房间——按大学、年级和英语水平进行平衡。",
       "lobby.uni-label": "大学",
       "lobby.uni-placeholder": "请选择您的大学…",
       "lobby.year-label": "年级",
@@ -2237,6 +2510,9 @@
       "waiting.leave": "离开",
       "waiting.status-not-started": "您已加入。正在等待主持人开始会话…",
       "waiting.status-starting": "会话已开始——正在为您分配房间…",
+      // R3-C1
+      "waiting.late-join.banner": "您加入时房间已经在「{stage}」。之前的阶段在您到达之前已经发生——您可以随时点击「← 查看上一阶段」来回顾。  ",
+      "waiting.late-join.dismiss": "知道了",
 
       "data-rights.export-btn": "下载我的数据(JSON) ⤓",
 
@@ -2357,6 +2633,26 @@
       "tour.admin.4.title": "结束与归档",
       "tour.admin.4.body": "结束时请关闭会话并下载归档。小组回答、投票与得分将导出为一个 JSON 文件。",
 
+      // Bug 5/6 (user-feedback-2): student onboarding tour + participant settings widget
+      "settings.btn": "设置",
+      "settings.title": "设置",
+      "settings.restart-tour": "再次查看入门导览",
+      "settings.close": "关闭",
+      "tour.student.1.title": "欢迎进入小组房间",
+      "tour.student.1.body": "在整场会话中，这里是您团队的专属空间。下面快速介绍最常用的几个操作。",
+      "tour.student.2.title": "为团队取名",
+      "tour.student.2.body": "一起想一个有趣的团队名称——房间里任何人都可以填写。它会显示在实时排行榜上。",
+      "tour.student.3.title": "发现记录",
+      "tour.student.3.body": "当您询问、检查或开检查时，患者的回应会出现在这里。在手机上，回应也会显示在所点按钮的正下方。",
+      "tour.student.4.title": "团队决策",
+      "tour.student.4.body": "出现决策卡时，每位成员点选自己的选项。当投票人数达到要求时，一起锁定团队的答案。",
+      "tour.student.5.title": "小组答案",
+      "tour.student.5.body": "在此输入团队达成共识的简短要点。所有成员都会实时看到。",
+      "tour.student.6.title": "呼叫指导老师",
+      "tour.student.6.body": "需要帮助时随时点击这里。指导老师的仪表盘上会标记您的房间。",
+      "tour.student.7.title": "语言与设置",
+      "tour.student.7.body": "用此下拉菜单可随时切换语言。旁边的齿轮按钮可打开主题与无障碍设置。",
+
       "admin.search.placeholder": "按名称筛选房间…",
       "admin.search.clear": "清空",
       "admin.search.label": "筛选房间",
@@ -2386,9 +2682,31 @@
   function t(key) {
     const lang = _currentLang || detectLang();
     const table = T[lang] || T.en;
-    if (Object.prototype.hasOwnProperty.call(table, key)) return table[key];
-    if (Object.prototype.hasOwnProperty.call(T.en, key)) return T.en[key];
-    return key;  // last-ditch: return the key so the missing translation is visible
+    let raw;
+    if (Object.prototype.hasOwnProperty.call(table, key)) raw = table[key];
+    else if (Object.prototype.hasOwnProperty.call(T.en, key)) raw = T.en[key];
+    else return key;  // last-ditch: return the key so the missing translation is visible
+    // R3 deep-i18n: substitute {cohortPair} from the active COHORTS via
+    // lib.js's buildCohortPair, so a Berlin-Tokyo partnership renders
+    // "Deutschland-Japan" in DE and "ドイツ-日本" in JA without any
+    // i18n.js edit. The substitution is opt-in (only fires when the
+    // template contains the placeholder) and gated on lib.js being
+    // present so the existing tests/i18n.test.js direct-table reads
+    // still pin the raw template form.
+    if (typeof raw === "string" && raw.indexOf("{cohortPair}") >= 0) {
+      const tplFn = (typeof root !== "undefined" && root.applyTemplate) ||
+        (typeof window !== "undefined" && window.applyTemplate) ||
+        (typeof global !== "undefined" && global.applyTemplate);
+      const pairFn = (typeof root !== "undefined" && root.buildCohortPair) ||
+        (typeof window !== "undefined" && window.buildCohortPair) ||
+        (typeof global !== "undefined" && global.buildCohortPair);
+      const cohorts = (typeof window !== "undefined" && window.COHORTS) ||
+        (typeof global !== "undefined" && global.COHORTS) || null;
+      if (typeof tplFn === "function" && typeof pairFn === "function") {
+        return tplFn(raw, { cohortPair: pairFn(cohorts, lang) });
+      }
+    }
+    return raw;
   }
 
   function getLang() {
@@ -2397,8 +2715,28 @@
 
   function setLang(lang) {
     if (SUPPORTED.indexOf(lang) < 0) return;
-    _currentLang = lang;
+    // R3 (Léa step 11): persist + sync the dropdown unconditionally so a
+    // user who picks their already-active language still records the
+    // choice in localStorage (matters when detection picked the wrong
+    // default and the user re-selects the same option to confirm). The
+    // expensive DOM re-walk is skipped only when the language is
+    // genuinely unchanged.
+    const sameAsCurrent = (lang === _currentLang);
+    if (!sameAsCurrent) _currentLang = lang;
     try { localStorage.setItem(STORAGE_KEY, lang); } catch (e) {}
+    if (sameAsCurrent) {
+      // applyI18n + canamed:langchange would be no-ops; still emit the
+      // event so listeners that rely on it (e.g. the lobby join-btn
+      // tooltip) can re-sync defensively.
+      if (typeof document !== "undefined" && typeof CustomEvent === "function") {
+        try {
+          document.dispatchEvent(new CustomEvent("canamed:langchange", {
+            detail: { lang: lang }
+          }));
+        } catch (e) {}
+      }
+      return;
+    }
     if (typeof document !== "undefined" && document.documentElement) {
       document.documentElement.setAttribute("lang", lang);
     }
@@ -2416,15 +2754,17 @@
     }
   }
 
-  // Map a named link to a language-specific file. Currently only the
-  // privacy policy is translated into per-language standalone HTML pages;
-  // add more entries here if we ever do the same for terms/about/etc.
+  // Map a named link to a language-specific URL. R3 deep-i18n: privacy.html
+  // is now a single dynamic page; the language is selected by the
+  // ?lang=<x> query param (privacy-lang.js reads it on first paint and
+  // persists it via localStorage). The legacy privacy-fr.html /
+  // privacy-ja.html files redirect to the new URL for bookmark back-compat.
   function localizedHref(name, lang) {
     const l = lang || getLang();
     if (name === "privacy") {
-      return l === "fr" ? "privacy-fr.html"
-           : l === "ja" ? "privacy-ja.html"
-           : "privacy.html";
+      // Always return the canonical URL; pass ?lang only when needed so
+      // that an EN user lands on a clean URL.
+      return l && l !== "en" ? "privacy.html?lang=" + l : "privacy.html";
     }
     return null;
   }

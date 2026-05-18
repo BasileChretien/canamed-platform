@@ -362,7 +362,7 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   border-radius: var(--r-sm);
   margin: var(--s-2) 0 var(--s-4);
 }
-.lobby-mode.shared { background: var(--ok-50); color: #176b3a; }
+.lobby-mode.shared { background: var(--ok-50); color: var(--ok-strong, #176b3a); }
 .lobby-mode.solo { background: var(--caen-50); color: var(--caen-ink); }
 .lobby-mode.broken {
   background: var(--key-50);
@@ -908,9 +908,25 @@ body.admin-room .columns { grid-template-columns: 1fr; }
 }
 #sidebar-dashboard-btn:hover { background: #000; }
 
-/* ---------- overflow safety ---------- */
-.answer-text, .chip, .sidebar-room-name, #findings-log .a, .dash-people {
-  overflow-wrap: anywhere;
+/* ---------- overflow safety ----------
+   Bug 1 (user-feedback-2): a team name with an emoji prefix (e.g. "🍣
+   Sakura") rendered with each grapheme on its own line on narrow phones.
+   Root cause: `overflow-wrap: anywhere` lets the browser break INSIDE
+   grapheme clusters when the parent flex track is squeezed, because
+   `anywhere` makes soft-wrap points participate in min-content sizing.
+   Switching to `break-word` keeps long single words wrappable at the
+   end of the available width (the original goal — preventing horizontal
+   overflow from a long unsegmentable string) WITHOUT making each
+   character its own min-content. `.lb-name` (leaderboard team name)
+   and `.sidebar-room-name` (admin sidebar) are the two team-name
+   surfaces — keep them on `break-word` only. */
+.answer-text, .chip, #findings-log .a, .dash-people {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.sidebar-room-name {
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 .header-inner > div:first-child { min-width: 0; }
 
@@ -919,8 +935,12 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   border: 1px solid #ecd9a0;
   border-radius: var(--r-sm);
   padding: 8px 12px;
-  /* darkened from #7a5f29 to #5a4519 to clear WCAG-AA 4.5:1 contrast */
-  color: #5a4519;
+  /* Bug 4 (user-feedback-2): switched from hardcoded #5a4519 to
+     var(--caen-ink) so the colour follows the theme. In light mode the
+     token resolves to a near-identical brown (~#5a4519) keeping the
+     WCAG-AA 4.5:1 contrast against caen-50; in dark/HC themes the token
+     remaps to a value that stays readable on the dark caen-50 surface. */
+  color: var(--caen-ink);
   font-style: normal;
   font-size: 0.88rem;
 }
@@ -1047,7 +1067,18 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
   box-shadow: inset 3px 0 0 var(--primary);
 }
 .lb-rank { font-weight: 800; min-width: 2.2em; font-size: 0.95rem; }
-.lb-name { flex: 1; font-weight: 600; overflow-wrap: anywhere; }
+/* Bug 1 (user-feedback-2): team names render horizontally even with emoji
+   prefixes on narrow phones. `min-width: 0` lets the flex track shrink
+   below its content's min-content size; `overflow-wrap: break-word` only
+   breaks at character boundaries when no word break is available, which
+   prevents the per-grapheme vertical-stack render that `anywhere` caused. */
+.lb-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
 .lb-pts {
   font-weight: 800;
   color: var(--nagoya-700);
@@ -3059,6 +3090,30 @@ body.session-ended-shown { overflow: hidden; }
 }
 .req-warn-note::before { content: "\26A0  "; }   /* warning sign */
 
+/* --- Bug 2 (user-feedback-2): inline reveal under each button on mobile.
+   The right-column findings log is the canonical surface on desktop, but
+   on stacked-mobile layout the answers live below the viewport. We add a
+   per-button inline reveal here so the patient's answer appears DIRECTLY
+   under the tapped button. Hidden on desktop (>960px) to avoid duplicating
+   the right-column log. Hidden when prefers-reduced-motion isn't a factor
+   here — the inline reveal is text only. */
+.req-inline-reveal {
+  display: none;
+}
+@media (max-width: 960px) {
+  .req-inline-reveal {
+    display: block;
+    margin: 4px 0 8px;
+    padding: 8px 10px;
+    background: var(--surface-sunk, #f6f4ef);
+    border-left: 3px solid var(--ok, #2a9d8f);
+    border-radius: var(--r-sm, 6px);
+    font-size: 0.92rem;
+    color: var(--ink, #2a2a2a);
+    line-height: 1.4;
+  }
+}
+
 /* --- wrap-up "your team did well" recap --- */
 .team-recap-card {
   background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
@@ -3426,11 +3481,28 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
     --meeting-50: #1a2830;
     /* semantic */
     --primary: var(--nagoya-500);
-    --primary-hover: var(--nagoya-700);
+    /* Bug 4 follow-up (user-feedback-2): the previous
+       --primary-hover: var(--nagoya-700) was #1e6fb6 which only hits
+       ~2.95:1 on the #16202b card surface — well under the 4.5:1 AA
+       floor anywhere it is used as text (e.g. .scenario-line strong
+       falls through to --primary-hover via certain hover/focus states,
+       and `var(--primary-hover, #0c3f6e)` literal fallbacks). Flip to
+       --nagoya-500 (#5cb8e8) so the hover/active text variant keeps
+       ~6.5:1 contrast against the dark card. */
+    --primary-hover: var(--nagoya-500);
     --key: #ff6b5a;
     --key-50: #2a1612;
     --ok: #4ec57f;
     --ok-50: #102a1d;
+    /* Bug 4 follow-up (user-feedback-2): the light-mode --ok-strong
+       (#176b3a) is tuned for AA contrast on the LIGHT --ok-50 (#e7f4ec).
+       In dark mode --ok-50 flips to #102a1d, and #176b3a on it is only
+       2.33:1 — well below the 4.5:1 floor (seen on .session-badge,
+       #session-badge-code, .lobby-mode.shared, .obj-tally under the
+       dark theme axe sweep). Brighten --ok-strong to a pale mint so
+       it has ~9.5:1 contrast on #102a1d while still reading as the
+       "stronger" success-text variant relative to --ok (#4ec57f). */
+    --ok-strong: #7be0a4;
     --focus: #f6d973;
     /* shadows lose strength on dark backgrounds; use slightly darker
        blue-blacks so cards still float visibly */
@@ -3459,16 +3531,135 @@ html[data-theme="dark"] {
   --meeting:    #74a2b3;
   --meeting-50: #1a2830;
   --primary: var(--nagoya-500);
-  --primary-hover: var(--nagoya-700);
+  /* See @media (prefers-color-scheme: dark) block above for contrast rationale. */
+  --primary-hover: var(--nagoya-500);
   --key: #ff6b5a;
   --key-50: #2a1612;
   --ok: #4ec57f;
   --ok-50: #102a1d;
+  /* See dark @media block above for the contrast rationale. */
+  --ok-strong: #7be0a4;
   --focus: #f6d973;
   --sh-sm: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.20);
   --sh-md: 0 2px 4px rgba(0,0,0,.32), 0 10px 26px rgba(0,0,0,.30);
   --sh-lg: 0 4px 10px rgba(0,0,0,.36), 0 26px 60px rgba(0,0,0,.42);
 }
+/* Bug 4 follow-up (user-feedback-2): the splash footer links
+   `#splash-go-create` / `#splash-go-account` resolved to `var(--primary)`
+   which axe-core under the dark theme saw as #1763a6 on the #16202b
+   card background — 2.64:1, well under the 4.5:1 AA floor. Pinning the
+   colour to `--nagoya-500` (#5cb8e8 in dark mode) keeps the brand blue
+   identity and brings the contrast to ~7.4:1. The override is also
+   applied inside the prefers-color-scheme media query so users on
+   data-theme="auto" with a dark OS get the same accessible colour.
+   Light theme is untouched. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) #splash-go-create,
+  html:not([data-theme="light"]) #splash-go-account {
+    color: var(--nagoya-500);
+  }
+  html:not([data-theme="light"]) #splash-go-create:hover,
+  html:not([data-theme="light"]) #splash-go-account:hover {
+    color: #88cdee;
+  }
+  html:not([data-theme="light"]) #splash-go-create:focus-visible,
+  html:not([data-theme="light"]) #splash-go-account:focus-visible {
+    outline-color: var(--nagoya-500);
+  }
+}
+html[data-theme="dark"] #splash-go-create,
+html[data-theme="dark"] #splash-go-account {
+  color: var(--nagoya-500);
+}
+html[data-theme="dark"] #splash-go-create:hover,
+html[data-theme="dark"] #splash-go-account:hover {
+  color: #88cdee;
+}
+html[data-theme="dark"] #splash-go-create:focus-visible,
+html[data-theme="dark"] #splash-go-account:focus-visible {
+  outline-color: var(--nagoya-500);
+}
+
+/* PR #3 follow-up: in dark mode, --primary is var(--nagoya-500) =
+   #5cb8e8 (bright cyan) so that text-on-dark links (e.g. .privacy-note
+   a, splash-go-create) hit ~6.5:1. But solid-primary BUTTONS like
+   #splash-enter — `color: #fff; background: var(--primary)` — invert
+   that pattern: white text on bright cyan = 2.21:1 (axe fail). Flip
+   the text colour to the dark page background so the contrast goes
+   the other way (#0e1620 on #5cb8e8 = ~9.5:1). Same fix applies to
+   #splash-create-submit / #splash-go-admin / #splash-copy-code:hover
+   which are also visible after the create-session step. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-enter,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-create-submit,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-go-admin,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) #splash-copy-code:hover {
+    color: #0e1620;
+  }
+}
+html[data-theme="dark"] #splash-enter,
+html[data-theme="dark"] #splash-create-submit,
+html[data-theme="dark"] #splash-go-admin,
+html[data-theme="dark"] #splash-copy-code:hover {
+  color: #0e1620;
+}
+
+/* Bug 4 follow-up (user-feedback-2): form controls have no explicit
+   text colour anywhere in the cascade, so they fall back to the UA
+   default (black on most platforms). On a dark surface (--card =
+   #16202b) that's #000 on #16202b = 1.27:1 — invisible. The lobby
+   `#name-input` typed-text was the worst offender. Force ink-on-card
+   on every native control under the dark theme; the same override is
+   mirrored inside the prefers-color-scheme media query for users on
+   data-theme="auto" with a dark OS. Light theme stays untouched
+   (controls keep --ink dark text on --card white). High-contrast
+   theme already pins its own border + colour rules, so we don't
+   touch it here. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) input,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) textarea,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) select {
+    color: var(--ink);
+    background-color: var(--card);
+    border-color: var(--line-strong);
+  }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) input::placeholder,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) textarea::placeholder {
+    color: var(--muted);
+    opacity: 1;
+  }
+}
+html[data-theme="dark"] input,
+html[data-theme="dark"] textarea,
+html[data-theme="dark"] select {
+  color: var(--ink);
+  background-color: var(--card);
+  border-color: var(--line-strong);
+}
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+/* Bug 4 follow-up (PR #3 follow-up): the lobby's privacy disclosure
+   (`.privacy-note`) contains inline <a> links (lobby.privacy.p5 + p6)
+   injected via data-i18n-html. Because the i18n payload uses bare
+   <a href> without a class, the links fall through to the browser
+   default link colour #0000ee, which only hits ~2.01:1 contrast on
+   the dark `--surface-sunk` background (#0a1119) — well under the
+   4.5:1 AA floor (axe-core fail). Force `--primary` (= --nagoya-500
+   = #5cb8e8 = ~6.5:1) in dark + high-contrast. Mirrored in the
+   prefers-color-scheme block for data-theme="auto" with dark OS. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .privacy-note a {
+    color: var(--primary);
+  }
+}
+html[data-theme="dark"] .privacy-note a {
+  color: var(--primary);
+}
+
 /* The theme selector control in admin prefs / nav */
 .theme-toggle {
   display: inline-flex;
@@ -4345,5 +4536,169 @@ dialog.dialog-polyfill {
   /* The element already carries its own .account-dialog / .canamed-modal
      styling for width + padding + border-radius, so we don't double-style
      it here — we only handle positioning + stacking. */
+}
+
+/* ----- Global language switcher (always-visible) -----
+   A small fixed-position language picker pinned to the top-right of every
+   screen (lobby, waiting room, in-room, admin dashboard, session-ended).
+   User feedback: a participant who already passed the splash had no way to
+   change the UI language. The splash still has its own larger switcher; we
+   hide this one while splash is on screen so the two don't compete. */
+.global-lang-switcher {
+  position: fixed;
+  top: 8px;
+  right: 10px;
+  z-index: 1500;
+  pointer-events: auto;
+}
+/* When splash is the visible top-level surface, the splash's own dropdown
+   is the obvious tap target — hide the floating one to avoid duplication.
+   Splash flips body.locked off when dismissed; we use that as the signal. */
+body.locked .global-lang-switcher { display: none; }
+/* If JS hasn't yet decided whether splash should show (or the page boots
+   directly into the lobby), reveal the switcher as soon as the splash is
+   hidden. The check above is sufficient. */
+.global-lang-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--line, #d6d2c9);
+  background: var(--bg, #fff);
+  color: var(--ink, #2a2a2a);
+  padding: 5px 24px 5px 10px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  min-height: 32px;
+  max-width: 140px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted, #6a665d) 50%),
+    linear-gradient(135deg, var(--muted, #6a665d) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 7px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.global-lang-select:focus-visible {
+  outline: 2px solid var(--primary, #2e9fdf);
+  outline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .global-lang-switcher { top: 6px; right: 6px; }
+  .global-lang-select { font-size: 0.75rem; padding: 4px 22px 4px 8px; }
+}
+
+/* ----- Bug 6 (user-feedback-2): participant settings widget -----
+   A small cog button pinned next to the global language switcher; clicking
+   opens an inline panel with the theme picker and "Restart tour" link.
+   Hidden behind body.locked exactly like the language switcher so it
+   doesn't appear over the splash gate. */
+.global-settings {
+  position: fixed;
+  top: 8px;
+  right: 158px;            /* sit immediately left of the language pill */
+  z-index: 1500;
+  pointer-events: auto;
+}
+body.locked .global-settings { display: none; }
+.global-settings-btn {
+  appearance: none;
+  border: 1px solid var(--line, #d6d2c9);
+  background: var(--bg, #fff);
+  color: var(--ink, #2a2a2a);
+  padding: 5px 8px;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.global-settings-btn:focus-visible {
+  outline: 2px solid var(--primary, #2e9fdf);
+  outline-offset: 2px;
+}
+.global-settings-btn:hover {
+  border-color: var(--ink, #2a2a2a);
+}
+.global-settings-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  max-width: calc(100vw - 24px);
+  background: var(--card, #fff);
+  border: 1px solid var(--line-strong, #c0bcb3);
+  border-radius: 10px;
+  padding: 14px 14px 12px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--ink, #2a2a2a);
+}
+.global-settings-panel[hidden] { display: none; }
+.global-settings-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.global-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: var(--ink);
+}
+.global-settings-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  padding: 4px 24px 4px 10px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-height: 28px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted, #6a665d) 50%),
+    linear-gradient(135deg, var(--muted, #6a665d) 50%, transparent 50%);
+  background-position:
+    calc(100% - 12px) 50%,
+    calc(100% - 7px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.global-settings-link,
+.global-settings-close {
+  appearance: none;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.global-settings-link:hover,
+.global-settings-close:hover {
+  border-color: var(--ink);
+  background: var(--surface-sunk, transparent);
+}
+.global-settings-close { align-self: flex-end; }
+@media (max-width: 480px) {
+  .global-settings { top: 6px; right: 140px; }
+  .global-settings-btn { min-width: 28px; min-height: 28px; padding: 4px 6px; }
+  .global-settings-panel { min-width: 220px; right: -6px; }
 }
 

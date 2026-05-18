@@ -140,16 +140,25 @@ test.describe("Accessibility (axe-core)", () => {
     logWarnings(testInfo, page, v);
   });
 
-  test("privacy policy (fr)", async ({ page }, testInfo) => {
-    await page.goto("/privacy-fr.html");
-    await expect(page).toHaveURL(/privacy-fr\.html$/);
+  test("privacy policy (fr) — single dynamic page via ?lang=fr", async ({ page }, testInfo) => {
+    // R3 deep-i18n: privacy.html is the single source; /privacy-fr.html
+    // redirects to ?lang=fr for bookmark back-compat (covered by a
+    // dedicated test elsewhere). This a11y check exercises the
+    // canonical URL.
+    await page.goto("/privacy.html?lang=fr");
+    await expect(page).toHaveURL(/privacy\.html\?lang=fr$/);
+    // Wait for privacy-lang.js to surface the FR body section.
+    await page.waitForSelector('section[data-priv-lang="fr"]:not([hidden])',
+      { state: "attached" });
     const v = await runAxe(page);
     logWarnings(testInfo, page, v);
   });
 
-  test("privacy policy (ja)", async ({ page }, testInfo) => {
-    await page.goto("/privacy-ja.html");
-    await expect(page).toHaveURL(/privacy-ja\.html$/);
+  test("privacy policy (ja) — single dynamic page via ?lang=ja", async ({ page }, testInfo) => {
+    await page.goto("/privacy.html?lang=ja");
+    await expect(page).toHaveURL(/privacy\.html\?lang=ja$/);
+    await page.waitForSelector('section[data-priv-lang="ja"]:not([hidden])',
+      { state: "attached" });
     const v = await runAxe(page);
     logWarnings(testInfo, page, v);
   });
@@ -381,4 +390,66 @@ test.describe("Accessibility (axe-core)", () => {
     const v = await runAxe(tab2);
     logWarnings(testInfo, tab2, v);
   });
+
+  // Bug 4 (user-feedback-2): the live a11y suite only exercises the light
+  // (default) palette. Operator feedback noted readability issues for
+  // participants using dark / high-contrast themes — e.g. amber text on
+  // dark surfaces and decision-option hover states. We extend coverage by
+  // forcing each theme via localStorage.canamed_theme (read by
+  // theme-init.js before first paint) and re-running axe on the splash
+  // + lobby. We pick splash+lobby (not the deep room view) because they
+  // exercise the same design-token primitives (cards, buttons, links,
+  // form controls, focus rings) without needing the multi-tab join
+  // orchestration — the same primitives are reused across every screen.
+  for (const theme of ["dark", "high-contrast"]) {
+    test(`Bug 4 — splash passes axe under ${theme} theme`,
+      async ({ page }, testInfo) => {
+        await page.addInitScript((t) => {
+          try { localStorage.setItem("canamed_theme", t); } catch (e) {}
+        }, theme);
+        await page.goto("/");
+        await expect(page.getByRole("heading", { name: "CANAMED" })).toBeVisible();
+        const v = await runAxe(page);
+        logWarnings(testInfo, page, v);
+      });
+
+    test(`Bug 4 — lobby passes axe under ${theme} theme`,
+      async ({ page, context }, testInfo) => {
+        // Step A — facilitator creates a session (default theme is fine).
+        await page.goto("/");
+        await page.locator("#splash-go-create").click();
+        await page.locator("#splash-create-name").fill("Theme A11y Fac");
+        await page.locator("#splash-create-label").fill("Theme " + theme + " check");
+        await page.locator("#splash-create-pass").fill("theme-a11y-pw");
+        await page.locator("#splash-create-submit").click();
+        const codeNode = page.locator("#splash-shown-code");
+        await expect(codeNode).toHaveText(/^[A-Z0-9]{3}-[A-Z0-9]{3}$/i, { timeout: 10_000 });
+        const code = (await codeNode.textContent()).trim();
+
+        // Step B — participant in tab 2 with the theme pinned BEFORE first paint.
+        const tab2 = await context.newPage();
+        await tab2.addInitScript((t) => {
+          function pin(name, value) {
+            Object.defineProperty(window, name, {
+              get: () => value,
+              set: () => {},
+              configurable: true,
+              enumerable: true
+            });
+          }
+          pin("CANAMED_FIREBASE", null);
+          pin("CANAMED_RECAPTCHA_SITE_KEY", null);
+          pin("CANAMED_PERF_MONITORING", false);
+          window.CANAMED_SUPERADMIN_KEY = "theme-a11y-super-admin";
+          try { localStorage.setItem("canamed_theme", t); } catch (e) {}
+        }, theme);
+        await tab2.goto("/");
+        await tab2.locator("#splash-code").fill(code);
+        await tab2.locator("#splash-enter").click();
+        await expect(tab2.locator("#name-input")).toBeVisible({ timeout: 10_000 });
+
+        const v = await runAxe(tab2);
+        logWarnings(testInfo, tab2, v);
+      });
+  }
 });

@@ -325,7 +325,7 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 | applyScenario() | 81–103 | Scenario load | Swap global CASE/SCORING/PENALTIES/DECISIONS objects |
 | rebuildCaseDerived() | 66–75 | applyScenario() | Rebuild ITEM_IDS from new CASE structure |
 | itemById() | 76 | Finding/button lookup | Get case item by "group:index" ID (e.g. "history:1") |
-| stageLabel() | 140–149 | UI rendering | Get translated stage label, fallback to English |
+| stageLabel() | 140–149 | UI rendering | Get translated stage label. R3-G2: stages 1 & 2 prefer `CURRENT_SCENARIO_META.{moduleAName,moduleBName}` (per-scenario, via `tc()`) over the static i18n `stage.label.1/2` keys, so antibiotic-stewardship etc. render the correct module names instead of the chronic-pain placeholders. Falls back to i18n key, then English. |
 | roomNames() | 153–169 | Room assignment | Generate room names from count (e.g. "Room A", "Room B") |
 | cohortColor() | 52–55 | Theming | Look up color for a cohort ID |
 

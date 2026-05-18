@@ -8,7 +8,8 @@
     "test:coverage": "c8 --reporter=text --reporter=lcov --reporter=html --include='docs/Third_session/PBL_platform/lib.js' --include='docs/Third_session/PBL_platform/i18n.js' --include='docs/Third_session/PBL_platform/localdb.js' --include='docs/Third_session/PBL_platform/telemetry.js' node --test tests/*.test.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "serve:platform": "node scripts/serve-platform.js"
+    "serve:platform": "node scripts/serve-platform.js",
+    "i18n:coverage": "node scripts/i18n-coverage-report.js"
   },
   "engines": {
     "node": ">=20"

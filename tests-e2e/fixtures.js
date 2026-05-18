@@ -43,6 +43,9 @@ async function forceLocalMode(page) {
     try {
       localStorage.setItem("canamed_tour_done", "v1");
       localStorage.setItem("canamed_tour_admin_done", "v1");
+      // Bug 5 (user-feedback-2): student tour pinned-done in tests so it
+      // doesn't cover room-view controls and break unrelated assertions.
+      localStorage.setItem("canamed_tour_student_done", "v1");
     } catch (e) {}
     // Override super-admin key so the super-admin set-password flow can be
     // tested without secrets leaking. This one we want WRITEABLE because

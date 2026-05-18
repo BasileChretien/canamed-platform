@@ -88,12 +88,29 @@ const COHORTS = (currentOrgConfig && Array.isArray(currentOrgConfig.cohorts)
 /* Apply the org's primary/accent colours as CSS custom properties on the
    root element. style.css already references --primary / --accent in many
    places; non-default orgs override them here. Idempotent + safe in test
-   environments without a real DOM (guarded). */
+   environments without a real DOM (guarded).
+
+   Bug 4 follow-up (user-feedback-2): org primary tokens (e.g. #1763a6 for
+   the Caen × Nagoya partnership) are tuned for AA contrast on the LIGHT
+   palette's white card. In dark / high-contrast mode those values clash
+   with the dark surface (e.g. #1763a6 on #16202b → 2.42:1 for
+   `#scenario-line-name`). When a non-light theme is active we skip the
+   --primary / --primary-hover override so the theme's own accessible
+   palette (--nagoya-500 = #5cb8e8 in dark, #0033a0 in high-contrast)
+   wins. --accent is decorative only and stays. */
 function applyOrgTheme(orgCfg) {
   if (!orgCfg || typeof document === "undefined" || !document.documentElement) return;
   const root = document.documentElement;
-  if (orgCfg.primary) root.style.setProperty("--primary", orgCfg.primary);
-  if (orgCfg.primary) root.style.setProperty("--primary-hover", orgCfg.primary);
+  const theme = root.getAttribute("data-theme");
+  const skipPrimary = (theme === "dark" || theme === "high-contrast");
+  if (orgCfg.primary && !skipPrimary) {
+    root.style.setProperty("--primary", orgCfg.primary);
+    root.style.setProperty("--primary-hover", orgCfg.primary);
+  } else if (skipPrimary) {
+    // Clear any prior inline override so the stylesheet's themed value wins.
+    root.style.removeProperty("--primary");
+    root.style.removeProperty("--primary-hover");
+  }
   if (orgCfg.accent)  root.style.setProperty("--accent", orgCfg.accent);
   root.setAttribute("data-org", currentOrg);
 }
@@ -164,6 +181,13 @@ function applyScenario(id, customContent) {
   // wants a ready-to-render string without recomputing.
   window.CURRENT_SCENARIO_NAME = sc.name || id || "";
   window.CURRENT_SCENARIO_SUMMARY = sc.summary || "";
+  // R3-G2 — expose Module A/B names + stable id so stageLabel() and the
+  // archive can render them scenario-aware. moduleAName/moduleBName are
+  // translatable { en, fr, ja } trios; CURRENT_SCENARIO_ID is the stable
+  // kebab-case key that pipelines should dispatch on (see archive header).
+  window.CURRENT_SCENARIO_MODULE_A_NAME = sc.moduleAName || null;
+  window.CURRENT_SCENARIO_MODULE_B_NAME = sc.moduleBName || null;
+  window.CURRENT_SCENARIO_ID = (sc && (sc.id || (sc.meta && sc.meta.id))) || id || "";
   rebuildCaseDerived();
   return true;
 }
@@ -216,6 +240,23 @@ const STAGE_COUNT = 4;
 const STAGE_LABELS = ["Welcome", "Module A - Chronic Pain", "Module B - Breaking Bad News",
                       "Wrap-up"];
 function stageLabel(i) {
+  // R3-G2 fix: stages 1 and 2 are scenario-specific (Module A / Module B
+  // names depend on the chosen clinical case). Prefer the active scenario's
+  // moduleAName / moduleBName (translatable { en, fr, ja } trios) so a
+  // future antibiotic-stewardship case does not still display "Chronic
+  // Pain" in every language. Fall back to the i18n bag, then to the
+  // English STAGE_LABELS.
+  if (typeof window !== "undefined" && typeof window.tc === "function") {
+    let trio = null;
+    if (i === 1) trio = window.CURRENT_SCENARIO_MODULE_A_NAME || null;
+    else if (i === 2) trio = window.CURRENT_SCENARIO_MODULE_B_NAME || null;
+    if (trio) {
+      const lang = (typeof window.getLang === "function")
+        ? window.getLang() : "en";
+      const v = window.tc(trio, lang);
+      if (v) return v;
+    }
+  }
   const key = "stage.label." + i;
   if (typeof window !== "undefined" && typeof window.t === "function") {
     const v = window.t(key);
@@ -806,16 +847,41 @@ function assignRooms(pool, roomCount) {
   });
   return assignment;
 }
+/* R3-C3 fix — late-joiner room cap.
+   A facilitator who carefully balanced 4 rooms of 5 each at start time can
+   end up with one room of 7 after three late-joiners arrive. The original
+   cost function `sameUni * 100 + members.length * 10` softly biases against
+   bigger rooms but lets a same-uni penalty dominate, so all three latecomers
+   from the same university can land in the same already-full room.
+   This adds a hard "soft cap" at `ceil(pool.length / roomCount) + 2` (the
+   target balanced size plus a 2-person tolerance) — anyone hitting it pays a
+   massive cost penalty so the next-best (smaller) room wins. Falls back to
+   the original placement if EVERY room is at or above the cap (so the engine
+   never refuses a placement). */
 function bestRoomFor(person, assignedPool, roomCount) {
   const names = roomNames(roomCount);
   const rooms = {};
   names.forEach(n => rooms[n] = []);
   assignedPool.forEach(p => { if (p.room && rooms[p.room]) rooms[p.room].push(p); });
+  const total = assignedPool.length;
+  // target balanced size; +2 tolerance so late-joiners don't ping-pong
+  // between rooms at exact balance.
+  const cap = Math.max(1, Math.ceil(total / Math.max(1, roomCount)) + 2);
+  // hard absolute cap (defence-in-depth — keeps even pathological inputs
+  // from creating a 12-person room).
+  const ABSOLUTE_CAP = 8;
   let best = names[0], bestCost = Infinity;
   names.forEach(n => {
     const members = rooms[n];
     const sameUni = members.filter(m => m.university === person.university).length;
-    const cost = sameUni * 100 + members.length * 10;
+    const size = members.length;
+    let cost = sameUni * 100 + size * 10;
+    if (size >= ABSOLUTE_CAP || size >= cap) {
+      // overflow penalty dwarfs every other term so the smallest under-cap
+      // room is picked first; ties between over-cap rooms still resolve to
+      // the smallest one (via the cost above).
+      cost += 100000;
+    }
     if (cost < bestCost) { bestCost = cost; best = n; }
   });
   return best;
@@ -1073,6 +1139,14 @@ function dbInit() {
     } catch (e) { console.warn("Auth init failed", e); }
   } else {
     db = new LocalDB();
+    // E2E hook: expose the LocalDB instance so tests can seed / write
+    // directly through the same subscription tree the platform listens
+    // on (live-leaderboard.spec.js asserts <500ms render after a score
+    // write — only reachable via the platform's own db handle, because
+    // LocalDB's storage-event broadcast does not fire in the writing
+    // tab). LOCAL mode only; never attached to the production Firebase
+    // handle so there's no added attack surface in shared mode.
+    try { window.db = db; } catch (_) {}
   }
 }
 
@@ -1128,19 +1202,126 @@ function wireLanguageSwitcher() {
   // Splash <select> switcher (R2-42 — exposes all 8 supported languages
   // without overflowing 320px viewports). Sync the option to the current
   // language so the dropdown reflects the user's choice on first paint.
-  const sel = document.getElementById("splash-lang-select");
-  if (sel && !sel.dataset.langWired) {
-    sel.dataset.langWired = "1";
+  // We wire the splash switcher and the always-visible global switcher
+  // through the same helper — both are <select> elements that drive
+  // setLang() on change, sync to the active lang on load, and stay in
+  // sync via the canamed:langchange event.
+  const wireSelect = (id) => {
+    const node = document.getElementById(id);
+    if (!node || node.dataset.langWired) return;
+    node.dataset.langWired = "1";
     if (typeof window.getLang === "function") {
-      try { sel.value = window.getLang(); } catch (e) {}
+      try { node.value = window.getLang(); } catch (e) {}
     }
-    sel.addEventListener("change", () => {
-      window.setLang(sel.value);
+    node.addEventListener("change", () => {
+      window.setLang(node.value);
     });
-    // Keep the dropdown in sync if some other UI (or test) switches lang.
     document.addEventListener("canamed:langchange", e => {
-      try { sel.value = (e && e.detail && e.detail.lang) || window.getLang(); }
+      try { node.value = (e && e.detail && e.detail.lang) || window.getLang(); }
       catch (_) {}
+    });
+  };
+  wireSelect("splash-lang-select");
+  // Global switcher — visible from every post-splash screen so a user who
+  // landed past the splash (deep link, returning participant, admin
+  // dashboard) can still change UI language.
+  wireSelect("global-lang-select");
+
+  // Bug 6 (user-feedback-2): wire the participant settings widget. The cog
+  // toggles the panel; the theme picker calls setTheme(); the "restart
+  // tour" link clears every tour's localStorage marker and re-fires the
+  // student tour (or the create tour if the user is on the splash). Wires
+  // exactly once even if applyBranding() runs multiple times.
+  const settingsBtn = document.getElementById("global-settings-btn");
+  const settingsPanel = document.getElementById("global-settings-panel");
+  if (settingsBtn && settingsPanel && !settingsBtn.dataset.wired) {
+    settingsBtn.dataset.wired = "1";
+    const closeBtn = document.getElementById("global-settings-close");
+    const themeSel = document.getElementById("global-theme-select");
+    const restartBtn = document.getElementById("global-settings-restart-tour");
+    const setOpen = (open) => {
+      settingsPanel.hidden = !open;
+      settingsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    settingsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      setOpen(settingsPanel.hidden);
+    });
+    if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
+    document.addEventListener("click", (e) => {
+      if (settingsPanel.hidden) return;
+      if (e.target === settingsBtn || settingsPanel.contains(e.target)) return;
+      setOpen(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !settingsPanel.hidden) setOpen(false);
+    });
+    if (themeSel) {
+      try { themeSel.value = (typeof getTheme === "function") ? getTheme() : "auto"; }
+      catch (_) {}
+      themeSel.addEventListener("change", () => {
+        if (typeof setTheme === "function") setTheme(themeSel.value);
+      });
+    }
+    if (restartBtn) {
+      restartBtn.addEventListener("click", () => {
+        setOpen(false);
+        // Clear every tour-done marker so the appropriate tour fires
+        // on the next opportunity. Pick the student tour if the user is
+        // currently in a room; the create tour otherwise.
+        try {
+          ["canamed_tour_done", "canamed_tour_admin_done",
+           "canamed_tour_student_done"].forEach(k => localStorage.removeItem(k));
+        } catch (_) {}
+        if (window.CanamedTour) {
+          try {
+            const inRoom = document.getElementById("app") &&
+              !document.getElementById("app").classList.contains("hidden");
+            window.CanamedTour.start(inRoom ? "student" : "create");
+          } catch (e) { /* tour module missing — best-effort */ }
+        }
+      });
+    }
+  }
+
+  // Bug 3 (user-feedback-2): every render function that consults the
+  // current language via `tc(value, lang)` is invoked only on state changes
+  // (firebase write, stage change, vote, etc.). After a user switches
+  // language mid-session, the data-i18n nodes update — but the dynamic
+  // content (revealed findings, decision options, prompts, group answers,
+  // objectives, leaderboard, the Module B body and the contrib tally) keeps
+  // its old language because no re-render was triggered. Wire a single
+  // global listener that calls the relevant render helpers. We guard each
+  // call with a typeof check so it works during early boot (before
+  // firebase wires) and in tests where the function may be absent.
+  if (!document._canamedLangchangeRerenderWired) {
+    document._canamedLangchangeRerenderWired = true;
+    document.addEventListener("canamed:langchange", () => {
+      const callIfFn = (name) => {
+        try {
+          const fn = window[name];
+          if (typeof fn === "function") fn();
+        } catch (_) { /* render functions are best-effort during boot */ }
+      };
+      // Re-build the request buttons FIRST — `buildButtons()` re-creates
+      // the button DOM and reads `tc(item.q, _curLang())`. `renderButtons`
+      // then re-attaches the .done / .warn state and re-populates the
+      // inline-reveal text (Bug 2) in the new language.
+      callIfFn("buildButtons");
+      callIfFn("renderButtons");
+      callIfFn("renderFindings");
+      callIfFn("renderPrompts");
+      callIfFn("renderDecisions");
+      callIfFn("renderObjectives");
+      callIfFn("renderLeaderboard");
+      callIfFn("renderScore");
+      callIfFn("renderStage");
+      callIfFn("renderContrib");
+      // renderAnswers takes a module key — call it for both Module A and B.
+      try {
+        const fn = window.renderAnswers;
+        if (typeof fn === "function") { fn("moduleA"); fn("moduleB"); }
+      } catch (_) {}
     });
   }
 }
@@ -2088,6 +2269,7 @@ function enterRoom(roomName, asAdmin) {
   roomStage = 0; viewStage = 0;
   firstStageFire = true;
   revealed = {}; presence = {}; typingState = {}; seenFindingIds = {};
+  myPendingReveal = null;
   answers = { moduleA: {}, moduleB: {} }; callForHelp = null;
   roomScore = {}; teamName = ""; celebratedEvents = {}; penalisedEvents = {};
   roomVotes = {}; committedDecisions = {}; firstVoteFire = true;
@@ -2129,6 +2311,21 @@ function enterRoom(roomName, asAdmin) {
   setHeaderBadge();
   startRoom();
   focusHeading("room-main");
+  // Bug 5 (user-feedback-2): first-time participant onboarding tour.
+  // Only for real participants (admins viewing a room have their own
+  // admin tour). Gated by localStorage.canamed_tour_student_done so a
+  // returning student doesn't see it again. Deferred so the room
+  // chrome has had a frame to lay out (anchor elements need a non-zero
+  // bounding rect for the tour bubble positioning).
+  if (!asAdmin && window.CanamedTour && !window.CanamedTour.isDone("student")) {
+    setTimeout(() => {
+      try {
+        if (!window.CanamedTour.isDone("student")) {
+          window.CanamedTour.start("student");
+        }
+      } catch (e) { console.warn("student tour failed", e); }
+    }, 700);
+  }
 }
 
 function teardownRoom() {
@@ -2203,8 +2400,22 @@ function startRoom() {
     renderDecisions();   // voter dots + the "X of Y voted" status depend on presence
   });
   refTyping.on("value", snap => { typingState = snap.val() || {}; renderTyping(); });
-  refAnswers.moduleA.on("value", snap => { answers.moduleA = snap.val() || {}; renderAnswers("moduleA"); });
-  refAnswers.moduleB.on("value", snap => { answers.moduleB = snap.val() || {}; renderAnswers("moduleB"); });
+  // Refresh the "objectives / goals" tally too: renderAnswers writes any
+  // newly-earned auto-scores via a transaction and then the refScore
+  // listener re-renders objectives — but that roundtrip is visible (an
+  // answer arrives, the counter waits a tick to tick up). Re-rendering
+  // objectives directly off the answer event makes the goal counter feel
+  // live for every teammate, not just the writer.
+  refAnswers.moduleA.on("value", snap => {
+    answers.moduleA = snap.val() || {};
+    renderAnswers("moduleA");
+    renderObjectives();
+  });
+  refAnswers.moduleB.on("value", snap => {
+    answers.moduleB = snap.val() || {};
+    renderAnswers("moduleB");
+    renderObjectives();
+  });
   refCallForHelp.on("value", snap => { callForHelp = snap.val(); renderCallProf(); });
 
   refScore.on("value", snap => {
@@ -2383,8 +2594,19 @@ function joinSuperAdmin() {
         // overwrite path — write the freshness-bounded flag, set the hash,
         // then clear the flag. If any step fails, the catch below surfaces
         // a generic "could not reach" hint and the operator can retry.
+        //
+        // R3-D1 fix: use firebase.database.ServerValue.TIMESTAMP rather than
+        // Date.now() so a client clock that is skewed beyond ±5 s of server
+        // time still passes the rule's freshness window. The rule compares
+        // requestedAt against the server `now` — Date.now() reads the local
+        // wall-clock, which routinely drifts on unplugged laptops, after
+        // long sleeps, or with a dead CMOS battery. Falling back to
+        // Date.now() preserves behaviour in non-Firebase test contexts.
         const refReset = db.ref(sPath("_superadminReset"));
-        return refReset.set({ requestedAt: Date.now(), by: myName })
+        const TS = (typeof firebase !== "undefined" &&
+          firebase.database && firebase.database.ServerValue &&
+          firebase.database.ServerValue.TIMESTAMP) || Date.now();
+        return refReset.set({ requestedAt: TS, by: myName })
           .then(() => refHash.set(h))
           .then(() => refReset.remove())
           .catch(err => {
@@ -2705,16 +2927,51 @@ function startAdmin() {
   // the rooms subtree changes on every presence / answer / stage write across
   // every room - debounce the (heavy) dashboard rebuild so a burst of writes
   // collapses into one render; call alerts stay immediate (a missed beep is
-  // worse than a 400ms-stale badge)
+  // worse than a 400ms-stale badge).
+  //
+  // BUT: facilitators reported that the per-room score chip and the cohort
+  // leaderboard felt sluggish ("not updating in real time"). The 400ms
+  // debounce was kicked further every time presence / typing churned, so a
+  // score event could be hidden for far longer than 400ms in a busy room.
+  // Fix: compute a cheap score signature on every snapshot; when it changes
+  // we bypass the debounce and render immediately. Non-score churn still
+  // collapses into the debounced render.
   let dashRenderTimer = null;
+  let prevScoreSig = "";
+  function _scoreSignature(rooms) {
+    // Stable string of (room → auto/manual/penalty totals). Cheap enough to
+    // run on every refRooms tick — O(rooms * scoreKeys) — and changes iff
+    // any score node was added / removed / re-pointed.
+    const out = [];
+    Object.keys(rooms || {}).sort().forEach(r => {
+      const s = (rooms[r] && rooms[r].score) || {};
+      let a = 0, m = 0, p = 0;
+      const sa = s.auto || {}, sm = s.manual || {}, sp = s.penalties || {};
+      Object.keys(sa).forEach(k => { a += (sa[k] && sa[k].points) || 0; });
+      Object.keys(sm).forEach(k => { m += (sm[k] && sm[k].points) || 0; });
+      Object.keys(sp).forEach(k => { p += (sp[k] && sp[k].points) || 0; });
+      out.push(r + ":" + a + "/" + m + "/" + p);
+    });
+    return out.join("|");
+  }
+  function _flushDashRender() {
+    clearTimeout(dashRenderTimer); dashRenderTimer = null;
+    renderDashboard(); renderSidebar(); renderLeaderboard();
+    if (debriefVisible) renderDebrief();
+  }
   refRooms.on("value", snap => {
     allRooms = snap.val() || {};
     checkCallAlerts();
+    const sig = _scoreSignature(allRooms);
+    if (sig !== prevScoreSig) {
+      // A score (auto / manual / penalty) changed somewhere — operators
+      // expect the leaderboard chip to move instantly. Skip the debounce.
+      prevScoreSig = sig;
+      _flushDashRender();
+      return;
+    }
     clearTimeout(dashRenderTimer);
-    dashRenderTimer = setTimeout(() => {
-      renderDashboard(); renderSidebar(); renderLeaderboard();
-      if (debriefVisible) renderDebrief();
-    }, 400);
+    dashRenderTimer = setTimeout(_flushDashRender, 400);
   });
   // keep the "minutes in stage" timers fresh even when nothing changes
   setInterval(() => {
@@ -3224,16 +3481,35 @@ const THEME_KEY = "canamed_theme";
 function getTheme() {
   try {
     const v = localStorage.getItem(THEME_KEY);
-    return (v === "dark" || v === "light") ? v : "auto";
+    // Bug 6 (user-feedback-2): "high-contrast" is now a first-class user-
+    // selectable theme alongside light/dark. Previously the constant was
+    // recognised by theme-init.js + CSS but never offered as a value the
+    // picker could set.
+    return (v === "dark" || v === "light" || v === "high-contrast") ? v : "auto";
   } catch (e) { return "auto"; }
 }
 function setTheme(mode) {
-  if (mode !== "dark" && mode !== "light" && mode !== "auto") return;
+  if (mode !== "dark" && mode !== "light" && mode !== "auto" &&
+      mode !== "high-contrast") return;
   try {
     if (mode === "auto") localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, mode);
   } catch (e) {}
   document.documentElement.setAttribute("data-theme", mode);
+  // Bug 4 follow-up (user-feedback-2): re-apply org theme so the
+  // inline --primary / --primary-hover overrides are added (light) or
+  // removed (dark / high-contrast) for the new mode. See applyOrgTheme.
+  try { applyOrgTheme(currentOrgConfig); } catch (_) {}
+  // Bug 6: keep every theme picker in the page in sync. The admin picker
+  // (#admin-theme-select) and the participant settings picker
+  // (#global-theme-select) both call setTheme — when one changes the
+  // value, mirror it into the other so neither shows a stale option.
+  try {
+    ["admin-theme-select", "global-theme-select"].forEach(id => {
+      const n = document.getElementById(id);
+      if (n && n.value !== mode) n.value = mode;
+    });
+  } catch (_) {}
 }
 if (typeof window !== "undefined") {
   window.getTheme = getTheme;
@@ -4072,10 +4348,15 @@ function downloadMyData() {
   }
   const stamp = new Date();
   const out = {
+    // R3-E2 — keep canamedDataExport for back-compat; mirror the archive's
+    // schema fields so a single pipeline can validate both shapes.
+    canamedSchema: "https://canamed.web.app/schema/participant-export-v1.json",
+    canamedSchemaVersion: "1.0.0",
     canamedDataExport: 1,
     type: "participant-self-export-art-15-gdpr",
     exportedAt: stamp.toISOString(),
     sessionCode: sessionNum,
+    scenarioId: window.CURRENT_SCENARIO_ID || "",
     clientId: clientId,
     user: {
       uid: (currentUser && currentUser.uid) || null,
@@ -4088,6 +4369,15 @@ function downloadMyData() {
     typing: {},
     answers: { moduleA: [], moduleB: [] },
     votes: [],
+    // R3-A2 — pre/post-test answers belong to the participant and must be
+    // exported under GDPR Art. 15. Keyed by room then by 'pre'/'post' so a
+    // researcher can correlate test scores with the same room's discussion.
+    tests: {},
+    // R3-A2 — manual score entries the admin awarded to me, plus help calls
+    // I raised. Both reference the participant by name (`by`) so we filter
+    // post-hoc against myName.
+    manualScoresAboutMe: [],
+    helpCallsByMe: [],
     profile: null,
     history: null
   };
@@ -4122,6 +4412,31 @@ function downloadMyData() {
           out.votes.push({ room: roomName, voteId: voteId, ballot: ballot });
         }
       });
+      // R3-A2 — pre/post-test answers under tests/{cid}/{pre|post}/...
+      const tests = (r.tests && r.tests[clientId]) || null;
+      if (tests) {
+        out.tests[roomName] = {
+          pre:  tests.pre  || null,
+          post: tests.post || null
+        };
+      }
+      // R3-A2 — manual scores the admin awarded that name the participant.
+      // The rule layer requires `by` to be the participant's name (string,
+      // <=40 chars), so a name match is the canonical filter. We also keep
+      // the room name so the participant knows which group it referred to.
+      const manual = (r.score && r.score.manual) || {};
+      Object.keys(manual).forEach(pid => {
+        const m = manual[pid];
+        if (m && typeof m.by === "string" && myName && m.by === myName) {
+          out.manualScoresAboutMe.push(Object.assign({ room: roomName, id: pid }, m));
+        }
+      });
+      // R3-A2 — help calls I raised. Same name-match rationale as manual
+      // scores; the room rule stores `by` as the participant's name.
+      const cfh = r.callForHelp;
+      if (cfh && typeof cfh.by === "string" && myName && cfh.by === myName) {
+        out.helpCallsByMe.push(Object.assign({ room: roomName }, cfh));
+      }
     });
   }));
   // identified-user data — only if Google-signed-in
@@ -4170,10 +4485,26 @@ function downloadFullArchive(tree, code) {
     linkage = result.linkage;
   }
   const archive = {
+    // R3-E1/E2/E4/E5 — explicit schema metadata so Tariq's R-pipeline (and
+    // any downstream consumer) can detect drift between archives.
+    //
+    //   canamedSchema:        the canonical JSON-Schema document URL — bump
+    //                         this when fields are added / removed / renamed.
+    //   canamedSchemaVersion: human-readable semver. Pre-1.0 means the schema
+    //                         is still in flux; pipelines should pin to a
+    //                         minor and tolerate patch bumps.
+    //   canamedVersion:       legacy integer kept for back-compat with
+    //                         pre-R3 readers; will be removed at v2.0.
+    //   scenarioId:           stable kebab-case id (e.g. "chronic-pain-opioids")
+    //                         — pipelines should dispatch on this, NOT on
+    //                         scenarioName which is a localised display string.
+    canamedSchema: "https://canamed.web.app/schema/archive-v1.json",
+    canamedSchemaVersion: "1.0.0",
     canamedVersion: 1,
     exportedAt: stamp.toISOString(),
     sessionCode: code,
     workshopName: (window.CFG && window.CFG.workshopName) || "",
+    scenarioId: window.CURRENT_SCENARIO_ID || "",
     scenarioName: tc(window.CURRENT_SCENARIO_NAME, "en") || "",
     pseudonymised: !!anon,
     cohorts: (window.COHORTS || []).map(c => ({
@@ -4472,15 +4803,22 @@ function downloadAllAnswers() {
 }
 
 /* ===================== ROOM VIEW: STAGE & NAVIGATION ===================== */
+/* Late-join banner. R3-C1 fix: every visible string flows through tFallback()
+   so a Japanese / French / German late-joiner sees a localised message at the
+   exact moment the platform is most disorienting. stageLabel(stage) already
+   handles per-language stage names — re-using it keeps the banner consistent
+   with the rest of the chrome. */
 function showLateBanner(stage) {
   const b = el("late-banner");
   b.innerHTML = "";
   const txt = document.createElement("span");
-  txt.textContent = "You joined while your room is already on “" +
-    STAGE_LABELS[stage] + "”. Earlier stages happened before you arrived - " +
-    "use “← Review previous stage” at any time to read them.  ";
+  const tmpl = tFallback("waiting.late-join.banner",
+    "You joined while your room is already on “{stage}”. Earlier stages " +
+    "happened before you arrived — use “← Review previous stage” at any " +
+    "time to read them.  ");
+  txt.textContent = tmpl.replace("{stage}", stageLabel(stage));
   const dismiss = document.createElement("button");
-  dismiss.textContent = "Got it";
+  dismiss.textContent = tFallback("waiting.late-join.dismiss", "Got it");
   dismiss.addEventListener("click", () => b.classList.add("hidden"));
   b.appendChild(txt); b.appendChild(dismiss);
   b.classList.remove("hidden");
@@ -4678,10 +5016,21 @@ function buildButtons() {
 function prereqsMet() {
   return SYNTH_PREREQS.every(id => revealed[id]);
 }
+/* When THIS participant taps a finding button we remember the id so the
+   next renderFindings() pass can switch to the Findings tab and scroll
+   the new <li> into view. User feedback: on Android Chrome the buttons
+   live in the left column and the findings log in the right column —
+   on mobile the columns stack and the freshly-revealed answer lands
+   below the viewport with no visible feedback that anything happened.
+   We only do this for the local revealer (not for every teammate's
+   reveal) so we don't yank everyone's scroll position when someone
+   else clicks. Cleared on consumption. */
+let myPendingReveal = null;
 function reveal(id) {
   if (revealed[id] || !refRevealed) return;
   if (id === SYNTH_ID && !prereqsMet()) return;   // must do the workup first
   const entry = { by: myName, at: Date.now() };
+  myPendingReveal = id;
   // undefined aborts - if someone already revealed this item, do not re-write it
   refRevealed.child(id).transaction(cur => (cur == null ? entry : undefined))
     .then(res => {
@@ -4711,7 +5060,12 @@ function renderButtons() {
     if (isImaging) {
       const warn = !gateOK && !revealed[id];
       btn.classList.toggle("warn", warn);
+      // Walk past any sibling req-inline-reveal to find the warn-note slot
+      // (the inline-reveal is unconditional; the warn-note follows it).
       let note = btn.nextElementSibling;
+      while (note && note.classList.contains("req-inline-reveal")) {
+        note = note.nextElementSibling;
+      }
       if (note && !note.classList.contains("req-warn-note")) note = null;
       if (warn) {
         if (!note) {
@@ -4720,7 +5074,11 @@ function renderButtons() {
           note.id = "warn-" + id.replace(":", "-");
           note.textContent = "Screen the red flags and examine the legs first — " +
             "ordering a scan now costs the 'safety first' points.";
-          btn.insertAdjacentElement("afterend", note);
+          // Insert AFTER the inline-reveal if present, else after the button.
+          const anchor = (btn.nextElementSibling &&
+            btn.nextElementSibling.classList.contains("req-inline-reveal"))
+              ? btn.nextElementSibling : btn;
+          anchor.insertAdjacentElement("afterend", note);
         }
         btn.setAttribute("aria-describedby", note.id);
         btn.title = "";
@@ -4729,6 +5087,34 @@ function renderButtons() {
         btn.removeAttribute("aria-describedby");
         if (!revealed[id]) btn.title = "";
       }
+    }
+    // Bug 2 (user-feedback-2): on stacked mobile layout (<=960px) the right-
+    // column findings log lives below the buttons, so the operator's tap and
+    // the patient's answer are separated by hundreds of pixels of scroll. Add
+    // an inline reveal that lives directly under each button on mobile only
+    // (CSS hides it on desktop, where the right-column log is still the
+    // canonical surface). Hidden on desktop via @media; populated whenever
+    // the finding becomes revealed. Idempotent against re-renders.
+    let inline = btn.nextElementSibling;
+    if (inline && !inline.classList.contains("req-inline-reveal")) inline = null;
+    if (revealed[id]) {
+      if (!inline) {
+        inline = document.createElement("div");
+        inline.className = "req-inline-reveal";
+        // Insert IMMEDIATELY after the button so DOM-adjacency matches the
+        // visual relationship "answer is under its button".
+        btn.insertAdjacentElement("afterend", inline);
+      }
+      const item = itemById(id);
+      if (item) {
+        const lang = (typeof _curLang === "function") ? _curLang() : "en";
+        // Use textContent (NOT innerHTML) — case content is author-controlled
+        // but we still keep the no-eval-by-default discipline.
+        inline.textContent = tc(item.a, lang);
+        inline.setAttribute("aria-live", "polite");
+      }
+    } else if (inline) {
+      inline.remove();
     }
   });
 }
@@ -4740,6 +5126,11 @@ function renderFindings() {
   el("findings-count").textContent = ids.length + " / " + ITEM_IDS.length;
   el("findings-empty").classList.toggle("hidden", ids.length > 0);
   setTabBadge("tab-badge-findings", ids.length);
+  // Track the <li> we just created for the local revealer's tap so we
+  // can scroll it into view AFTER the loop (Bug 3 — Android: on stacked
+  // mobile layout the new finding lands far below the buttons and the
+  // user doesn't see it appear).
+  let scrollTarget = null;
   ids.forEach(id => {
     const item = itemById(id), meta = revealed[id];
     const li = document.createElement("li");
@@ -4748,6 +5139,7 @@ function renderFindings() {
       li.classList.add("just-in"); seenFindingIds[id] = true;
       nudgeRcolTab("findings");
     }
+    if (id === myPendingReveal) scrollTarget = li;
     const lang = _curLang();
     const q = document.createElement("div"); q.className = "q"; q.textContent = tc(item.q, lang);
     const a = document.createElement("div"); a.className = "a"; a.textContent = tc(item.a, lang);
@@ -4760,6 +5152,28 @@ function renderFindings() {
     li.appendChild(q); li.appendChild(a); li.appendChild(by);
     log.appendChild(li);
   });
+  if (scrollTarget) {
+    // Switch to the Findings tab in case the user was on Decisions /
+    // Discussion / Reference when the patient response landed (otherwise
+    // the panel is display:none and scrollIntoView is a no-op).
+    if (typeof switchRcolTab === "function") switchRcolTab("findings");
+    // rAF gives the layout engine a tick to apply the tab switch before
+    // we ask the browser to scroll — without it the panel is still
+    // hidden when scrollIntoView runs and the call is a no-op on Android
+    // Chrome.
+    const doScroll = () => {
+      try {
+        scrollTarget.scrollIntoView({ behavior: "smooth", block: "center" });
+      } catch (_) {
+        // Older Android Chrome doesn't support the options object —
+        // fall back to the no-arg form which still scrolls.
+        try { scrollTarget.scrollIntoView(); } catch (__) {}
+      }
+    };
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(doScroll);
+    else doScroll();
+    myPendingReveal = null;
+  }
 }
 function keyRevealed() {
   return ITEM_IDS.some(id => revealed[id] && itemById(id).key);
@@ -5142,12 +5556,36 @@ function renderObjectives() {
    answer together. A correct lock-in earns points; a wrong one costs points
    (and always shows WHY). Votes live at rooms/{room}/votes/{decisionId}. */
 
-/* cast (or change) my ballot for a decision */
+/* cast (or change) my ballot for a decision.
+   R3-F1 fix: key ballots by `stableId`, not the per-tab `clientId`. A refresh
+   used to rotate clientId, leaving the old ballot in the tally AND letting
+   the new tab cast a fresh one — the same participant could double-count.
+   stableId is localStorage-backed for anonymous users and bound to auth.uid
+   for Google-signed-in users, so a refresh / new-tab on the same browser
+   resolves to the same key and the ballot is overwritten in place. */
+function ballotKey() {
+  // Defence: in test contexts stableId may be unset; fall back to clientId
+  // so the function never writes under `undefined`.
+  return (typeof stableId === "string" && stableId) ? stableId : clientId;
+}
 function castVote(decisionId, choiceIndex) {
   if (isRoomAdmin || !refVotes) return;
   const v = roomVotes[decisionId] || {};
   if (v.committed) return;                         // locked - no more voting
-  refVotes.child(decisionId).child("ballots").child(clientId)
+  const bkey = ballotKey();
+  // R3-F1 — opportunistic cleanup: if a legacy ballot exists under our old
+  // per-tab clientId AND the new stableId-keyed ballot is empty, the move
+  // is automatic. Otherwise the old ballot is overwritten by the new write
+  // below (and the stale clientId-keyed entry — from a previous tab whose
+  // clientId we no longer hold — will linger only until the room rebuilds).
+  if (bkey !== clientId) {
+    const stale = (v.ballots && v.ballots[clientId]);
+    if (stale) {
+      refVotes.child(decisionId).child("ballots").child(clientId).remove()
+        .catch(e => console.warn("Stale ballot cleanup failed", e));
+    }
+  }
+  refVotes.child(decisionId).child("ballots").child(bkey)
     .set({ choice: choiceIndex, at: Date.now() })
     .catch(e => console.error("Vote write failed", e));
   logEvent(myRoom, "vote.cast", { voteId: decisionId, choice: choiceIndex });
@@ -5255,8 +5693,15 @@ function buildDecision(d) {
   const ballots = v.ballots || {};
   const committed = (v.committed && typeof v.committed.choice === "number")
     ? v.committed.choice : null;
-  const myChoice = (ballots[clientId] && typeof ballots[clientId].choice === "number")
-    ? ballots[clientId].choice : null;
+  // R3-F1 — read my ballot under stableId first (the canonical key now),
+  // fall back to the legacy clientId-keyed entry so a refresh during an
+  // open ballot still shows my prior choice in the UI.
+  const _bk = ballotKey();
+  const myBallot = (ballots[_bk] && typeof ballots[_bk].choice === "number")
+    ? ballots[_bk]
+    : (ballots[clientId] && typeof ballots[clientId].choice === "number"
+        ? ballots[clientId] : null);
+  const myChoice = myBallot ? myBallot.choice : null;
 
   // tally + the voters behind each option (name via presence, for the dots)
   const tally = d.options.map(() => []);

@@ -38,7 +38,7 @@ test("i18n: English is the canonical key set", () => {
   assert.ok(enKeys.length > 30, "English should have a meaningful number of keys");
   // every key starts with a section prefix
   for (const k of enKeys) {
-    assert.match(k, /^(lang|a11y|splash|lobby|waiting|data-rights|stage|room|admin|closed|ended|debrief|tour|test|offline|modal|privacy)\./, `key ${k} should be section.prefixed`);
+    assert.match(k, /^(lang|a11y|splash|lobby|waiting|data-rights|stage|room|admin|closed|ended|debrief|tour|test|offline|modal|privacy|rcol|findings|prompts|reset|settings)\./, `key ${k} should be section.prefixed`);
   }
 });
 
@@ -309,4 +309,54 @@ test("i18n: privacy.lang-not-available exists in every language (R2-47)", () => 
       `${lang}.privacy.lang-not-available should be a real translation (R2-47)`
     );
   }
+});
+
+// ----- R3 deep-i18n: privacy.html is the single dynamic privacy page;
+// privacy.title / privacy.subtitle wire the page chrome under data-i18n
+// keys. Every supported language MUST carry both keys non-empty so a
+// user landing on privacy.html?lang=<x> sees the localised page title
+// even when the body falls back to the EN reviewed text.
+test("i18n: privacy.* page-chrome keys cover all 8 supported languages (R3 deep-i18n)", () => {
+  const required = ["privacy.title", "privacy.subtitle", "privacy.lang-not-available"];
+  for (const k of required) {
+    for (const lang of langs) {
+      assert.ok(
+        Object.prototype.hasOwnProperty.call(T[lang], k),
+        `${lang} is missing required privacy chrome key ${k} (R3 deep-i18n)`
+      );
+      assert.ok(
+        typeof T[lang][k] === "string" && T[lang][k].length > 5,
+        `${lang}.${k} should be a real translation (R3 deep-i18n)`
+      );
+    }
+  }
+});
+
+// ----- R3 deep-i18n: the privacy.lang-not-available banner used to link
+// to privacy-fr.html / privacy-ja.html (now redirect stubs). The links
+// must now point at privacy.html?lang=<x> in every supported language so
+// new clicks land on the canonical dynamic page rather than bouncing
+// through a meta-refresh redirect stub.
+test("i18n: privacy.lang-not-available links use ?lang= query param, not legacy stubs (R3)", () => {
+  for (const lang of langs) {
+    const v = T[lang]["privacy.lang-not-available"];
+    assert.doesNotMatch(v, /privacy-fr\.html/,
+      `${lang}.privacy.lang-not-available still links to legacy privacy-fr.html`);
+    assert.doesNotMatch(v, /privacy-ja\.html/,
+      `${lang}.privacy.lang-not-available still links to legacy privacy-ja.html`);
+    assert.match(v, /privacy\.html\?lang=fr/,
+      `${lang}.privacy.lang-not-available should link to privacy.html?lang=fr`);
+    assert.match(v, /privacy\.html\?lang=ja/,
+      `${lang}.privacy.lang-not-available should link to privacy.html?lang=ja`);
+  }
+});
+
+// ----- R3 deep-i18n: localizedHref('privacy', lang) now returns
+// privacy.html?lang=<x> rather than the legacy per-language stub.
+test("i18n: localizedHref('privacy') returns the canonical ?lang= URL (R3 deep-i18n)", () => {
+  assert.equal(i18n.localizedHref("privacy", "en"), "privacy.html");
+  assert.equal(i18n.localizedHref("privacy", "fr"), "privacy.html?lang=fr");
+  assert.equal(i18n.localizedHref("privacy", "ja"), "privacy.html?lang=ja");
+  assert.equal(i18n.localizedHref("privacy", "de"), "privacy.html?lang=de");
+  assert.equal(i18n.localizedHref("privacy", "es"), "privacy.html?lang=es");
 });
