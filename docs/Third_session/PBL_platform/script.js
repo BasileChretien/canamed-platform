@@ -5160,6 +5160,8 @@ function renderFindings() {
   // Coach updates whenever the findings count changes (revealed items
   // drive the Module A phase stepper from setup → case → exchange).
   if (typeof updateModANextStep === "function") updateModANextStep();
+  // Synthesis progress chip — fed by the same revealed[] state.
+  if (typeof updateSynthesisProgress === "function") updateSynthesisProgress();
   const log = el("findings-log");
   log.innerHTML = "";
   const ids = ITEM_IDS.filter(id => revealed[id])
@@ -5219,6 +5221,43 @@ function renderFindings() {
 function keyRevealed() {
   return ITEM_IDS.some(id => revealed[id] && itemById(id).key);
 }
+
+/* Synthesis progress chip — shows "X / Y red flags screened" above
+ * the Investigations button group. Driven from renderFindings()
+ * (where prereq state can change). When all prereqs are met the chip
+ * flips to ✓ and the green palette. */
+function updateSynthesisProgress() {
+  const node = el("synthesis-progress");
+  if (!node) return;
+  const total = SYNTH_PREREQS.length;
+  const done = SYNTH_PREREQS.filter(id => revealed[id]).length;
+  const allDone = done === total;
+  node.classList.toggle("is-done", allDone);
+  if (typeof window !== "undefined" && typeof window.t === "function") {
+    const key = allDone ? "modA.synthesis.unlocked" : "modA.synthesis.progress";
+    const tpl = window.t(key);
+    if (tpl && tpl !== key) {
+      node.textContent = tpl.replace("{done}", String(done)).replace("{total}", String(total));
+      return;
+    }
+  }
+  node.textContent = allDone
+    ? "✓ Red-flag screen complete — synthesis is unlocked."
+    : done + " / " + total + " red flags screened";
+}
+
+/* Visible lock state on the Discussion tab — driven from renderPrompts()
+ * via the same `unlocked` computation. Tab stays clickable but the
+ * .is-locked class greys it out so students don't think it's
+ * "available but uninteresting" (specialist quote: "Discussion lies
+ * about being available"). */
+function updateDiscussionTabLock(unlocked) {
+  const tab = el("rcol-tab-discussion");
+  if (!tab) return;
+  tab.classList.toggle("is-locked", !unlocked);
+  tab.setAttribute("aria-disabled", unlocked ? "false" : "true");
+}
+
 let promptsWereUnlocked = false;
 function renderPrompts() {
   const unlocked = keyRevealed();
@@ -5236,6 +5275,9 @@ function renderPrompts() {
     });
   }
   setTabBadge("tab-badge-discussion", unlocked ? "🔓" : "");
+  // Visible lock state on the tab itself — driven by the same `unlocked`
+  // computation as the panel content.
+  if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(unlocked);
   if (unlocked && !promptsWereUnlocked) {
     promptsWereUnlocked = true;
     nudgeRcolTab("discussion");

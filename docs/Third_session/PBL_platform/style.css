@@ -826,6 +826,89 @@ html[data-theme="dark"] .next-step-coach {
   border-left-color: var(--meeting);
 }
 
+/* Locked tab state (per UX/pedagogy panel 2026-05-18): the Discussion
+   tab is technically clickable while the synthesis is incomplete, but
+   the panel inside is empty/locked. Without a visible lock cue on the
+   tab itself, students think it's "available but uninteresting" and
+   lose trust in the navigation. The .is-locked styling dims the tab
+   and surfaces the unlock condition inline (.rcol-tab-locked-hint). */
+.rcol-tab.is-locked {
+  opacity: 0.65;
+}
+.rcol-tab.is-locked .rcol-tab-icon { filter: grayscale(0.4); }
+.rcol-tab-locked-hint {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 500;
+  margin-top: 1px;
+}
+.rcol-tab:not(.is-locked) .rcol-tab-locked-hint { display: none; }
+.rcol-tab.is-locked.is-active {
+  opacity: 0.85;
+}
+
+/* Synthesis progress chip — sits above the Investigations button
+   group; turns green when prereqsMet() returns true. Tiny but
+   information-dense. */
+.synthesis-progress {
+  margin: 4px 0 8px;
+  padding: 4px 10px;
+  background: var(--surface-sunk);
+  border-radius: var(--r-pill);
+  display: inline-block;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.synthesis-progress.is-done {
+  background: var(--ok-50);
+  color: var(--ok-strong);
+}
+.synthesis-progress.is-done::before {
+  content: "\2713\00A0";
+  font-weight: 800;
+}
+
+/* Reference section — the relocated "Reference" tab content. Sits
+   below the columns block, clearly framed as a utility lookup
+   (background, guidelines, recap) separate from the workflow above. */
+.reference-section {
+  margin-top: var(--s-4);
+  padding-top: var(--s-3);
+  border-top: 1px dashed var(--line);
+}
+.reference-section-h {
+  font-size: 0.95rem;
+  color: var(--muted);
+  margin: 0 0 var(--s-2);
+  font-weight: 600;
+}
+
+/* Sticky-bottom coach card on mobile (per mobile-first specialist
+   review 2026-05-18): on small viewports the coach lived at the top
+   and disappeared as soon as the student scrolled to tap a button —
+   exactly the moment they most needed it. Pin it to the bottom of
+   the viewport on narrow screens so 'what to do next' is always
+   thumb-reachable. Desktop layout keeps the inline placement. */
+@media (max-width: 720px) {
+  .next-step-coach {
+    position: sticky;
+    bottom: 0;
+    z-index: 50;
+    margin-left: -1px;
+    margin-right: -1px;
+    border-radius: var(--r-md) var(--r-md) 0 0;
+    box-shadow: 0 -2px 12px rgba(0,0,0,.10);
+  }
+  /* Add a touch of bottom padding to stage content so the sticky
+     coach doesn't obscure the last items. */
+  .stage:not(.hidden) {
+    padding-bottom: 100px;
+  }
+}
+
 /* A brief "synthesis unlocked — Discussion is open" banner that
    appears at the top of the Discussion panel when the platform
    auto-switches there after the clinical synthesis is revealed. It
