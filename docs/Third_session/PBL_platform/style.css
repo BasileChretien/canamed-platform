@@ -2334,7 +2334,15 @@ h2, h3 { text-wrap: balance; }
 }
 .decision + .decision { margin-top: 12px; }
 .decision.committed.correct { border-color: var(--ok); background: var(--ok-50, #e7f4ec); }
-.decision.committed.wrong { border-color: #e0a86b; background: #fdf2e6; }
+/* User request 2026-05-18: wrong committed decisions must be visibly
+   RED, not the previous neutral amber. The amber was hard to read as
+   'wrong' — students saw a slightly different background and didn't
+   register it as a fail signal. Switching to a clear red (matches
+   the existing --key palette for negative actions). */
+.decision.committed.wrong {
+  border-color: #c0392b;
+  background: #fdecea;
+}
 
 /* Locked decision (per 2026-05-18 specialist panel — students must
    gather case info BEFORE the platform reveals the vote menu, to
@@ -2437,6 +2445,22 @@ h2, h3 { text-wrap: balance; }
 .dec-opt.is-correct .dec-opt-label::after {
   content: " ✓";
   color: var(--ok);
+  font-weight: 800;
+}
+/* The committed-but-WRONG option (user request 2026-05-18: 'When
+   clicking wrong questions or assessment, they must be coloured in
+   red, not in green'). Mirrors .is-correct's prominence — clear red
+   border, red bar fill, and a ✗ suffix on the label — so students
+   immediately register their team picked the wrong call. */
+.dec-opt.is-wrong {
+  border-color: #c0392b;
+}
+.dec-opt.is-wrong .dec-bar {
+  background: linear-gradient(90deg, rgba(192,57,43,.30), rgba(192,57,43,.14));
+}
+.dec-opt.is-wrong .dec-opt-label::after {
+  content: " ✗";
+  color: #c0392b;
   font-weight: 800;
 }
 

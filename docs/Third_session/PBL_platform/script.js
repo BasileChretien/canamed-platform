@@ -6268,7 +6268,13 @@ function buildDecision(d) {
     btn.className = "dec-opt"
       + (myChoice === i ? " mine" : "")
       + (committed === i ? " won" : "")
-      + (committed != null && opt.correct ? " is-correct" : "");
+      + (committed != null && opt.correct ? " is-correct" : "")
+      // The committed option that turned out to be WRONG (user request
+      // 2026-05-18: 'When clicking wrong questions or assessment, they
+      // must be coloured in red, not in green'). Distinct from
+      // .is-correct so styling can scream 'this is the choice the team
+      // locked in but it's wrong' rather than the previous neutral amber.
+      + (committed === i && !opt.correct ? " is-wrong" : "");
     btn.disabled = isRoomAdmin || committed != null;
     btn.setAttribute("aria-pressed", String(myChoice === i));
     // the live bar (proportion of ballots cast so far)
