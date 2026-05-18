@@ -563,3 +563,127 @@ test.describe("Random button order — shuffled display, stable IDs", () => {
         .toEqual(result.a);
     });
 });
+
+/* User request (2026-05-18): 'When clicking wrong questions or
+ * assessment, they must be coloured in red, not in green.'
+ *
+ * The committed option on a decision used to share its neutral-amber
+ * 'committed' styling whether it was right or wrong — students didn't
+ * register the colour as 'this is wrong'. We added a .is-wrong class
+ * (parallel to the existing .is-correct) so a committed-wrong option
+ * gets a clear red border + red bar + ✗ suffix. The parent
+ * .decision.committed.wrong also switched from amber to red. Tests
+ * pin both pieces of the contract, on a mobile viewport per the new
+ * standing rule. */
+test.describe("Wrong decisions are visibly RED, not green/amber", () => {
+  test("CSS: .dec-opt.is-wrong has red border + red bar gradient + ✗ suffix",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      // We don't need the full decision flow — synthesize a
+      // .dec-opt.is-wrong element and inspect the computed styles.
+      const result = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        // Build the minimal DOM shape the renderer produces.
+        const wrap = document.createElement("div");
+        wrap.className = "decision committed";
+        const btn = document.createElement("button");
+        btn.className = "dec-opt is-wrong";
+        const bar = document.createElement("span");
+        bar.className = "dec-bar";
+        bar.style.width = "70%";
+        const label = document.createElement("span");
+        label.className = "dec-opt-label";
+        label.textContent = "Prescribe an opioid";
+        btn.appendChild(bar); btn.appendChild(label);
+        wrap.appendChild(btn);
+        document.body.appendChild(wrap);
+
+        // Read computed border colour + ::after content.
+        const btnStyle = getComputedStyle(btn);
+        const labelAfter = getComputedStyle(label, "::after");
+        const barStyle = getComputedStyle(bar);
+        return {
+          borderColor: btnStyle.borderColor,
+          afterContent: labelAfter.content,
+          afterColor: labelAfter.color,
+          barBackground: barStyle.background || barStyle.backgroundImage
+        };
+      });
+      // Red border — Chromium reports rgb format; check for the expected
+      // red component being dominant.
+      expect(result.borderColor,
+        "the wrong option's border must be a clear red — was: " +
+        result.borderColor)
+        .toMatch(/^rgb\(\s*(?:1[89]\d|2\d\d)\s*,/);
+      // ::after content must include a ✗ ( quoted in computed styles ).
+      expect(result.afterContent,
+        "the wrong option's label must end with a ✗ suffix")
+        .toMatch(/✗/);
+      // The bar gradient must include red — exact format varies, but
+      // the rgba red component should be present.
+      expect(result.barBackground,
+        "the wrong option's bar must use a red gradient — was: " +
+        result.barBackground)
+        .toMatch(/(rgba?\(\s*(?:1[89]\d|2\d\d),)|(#c0392b)/i);
+    });
+
+  test("CSS: .decision.committed.wrong uses red palette (not amber)",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const result = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        const wrap = document.createElement("div");
+        wrap.className = "decision committed wrong";
+        document.body.appendChild(wrap);
+        const style = getComputedStyle(wrap);
+        return { borderColor: style.borderColor, background: style.backgroundColor };
+      });
+      // Border should be red, NOT the previous amber #e0a86b.
+      expect(result.borderColor,
+        "the wrong-committed decision border must be red — was: " +
+        result.borderColor)
+        .toMatch(/^rgb\(\s*(?:1[89]\d|2\d\d)\s*,/);
+      // Make sure we are NOT showing the old amber.
+      expect(result.borderColor)
+        .not.toMatch(/rgb\(\s*224\s*,\s*168\s*,\s*107\s*\)/);
+    });
+
+  test("JS: buildDecision adds .is-wrong when committed option is incorrect",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const m = await page.evaluate(() => {
+        // Pin the JS contract by inspecting the source — same pattern
+        // as other 'Bug N (JS)' source-level tests in this file. The
+        // string must show the .is-wrong class being applied when the
+        // committed option's correct flag is false.
+        if (!window.fetch) return null;
+        return fetch("/script.js").then(r => r.text()).then(src => {
+          return {
+            hasIsWrong: /is-wrong/.test(src),
+            hasIsCorrect: /is-correct/.test(src),
+            hasWrongGate: /committed === i && !opt\.correct/.test(src)
+          };
+        });
+      });
+      expect(m, "expected a fetch result from /script.js").not.toBeNull();
+      expect(m.hasIsCorrect,
+        "the existing .is-correct class must still be applied (sanity check)")
+        .toBe(true);
+      expect(m.hasIsWrong,
+        "buildDecision must apply the .is-wrong class — without it the " +
+        "CSS rules above are inert.")
+        .toBe(true);
+      expect(m.hasWrongGate,
+        "the .is-wrong gate must be 'committed === i && !opt.correct' — " +
+        "any other guard would either over-mark options or miss the actual " +
+        "wrong-committed case.")
+        .toBe(true);
+    });
+});
