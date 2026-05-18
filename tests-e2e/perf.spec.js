@@ -74,12 +74,19 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     modB.answers.bullet.*, room.answer.add). The 5 second-wave
 //     languages (es/pt/de/ko/zh) fall back to English at runtime per
 //     the deep-i18n tc() chain; a follow-up coverage pass adds them
-//     and will push another ~5 KB. Bumping to 245 KB now reserves the
-//     headroom for that pass without another budget bump.
+//     and will push another ~5 KB.
+//   - 255 KB after the "what to do next" coach + state-aware phase
+//     stepper landed. NET +6 KB gz: a small JS module
+//     (updateModANextStep, updateModBNextStep, setPhaseStepperState,
+//     initCoachDismiss — ~2 KB gz), ~16 new i18n strings across en+fr+ja
+//     for the coach state-machine messages (~3 KB gz), CSS for the
+//     coach card + synthesis-unlocked banner (~1 KB gz). Headroom for
+//     the second-wave coach translations is still in the +5 KB pool
+//     from the previous bump.
 // Any breach forces the next PR to either justify the regression or
 // split another chunk out via script-loader.js (lazy-load i18n locale
-// tables is the obvious next move once we hit ~270 KB).
-const FIRST_PARTY_BYTES_LIMIT_KB = 245;
+// tables is the obvious next move once we hit ~280 KB).
+const FIRST_PARTY_BYTES_LIMIT_KB = 255;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

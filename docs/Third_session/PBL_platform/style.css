@@ -742,6 +742,119 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .micro-framework-card[open] summary::before { content: "\25BE\00A0"; }
 .micro-framework-card .info-list { margin-top: var(--s-2); }
 
+/* "What to do next" coach card — the persistent (but dismissible)
+   guidance under the phase stepper. Designed to be eye-catching
+   without being noisy: warm caen-amber border-left + soft surface +
+   ample horizontal padding so the text is easy to scan in passing.
+   Picks the same colour as the .everyone-talks reminder card so both
+   "you-the-student-please-read-this" surfaces stay visually grouped. */
+.next-step-coach {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s-3);
+  margin: 0 0 var(--s-3);
+  padding: 12px 14px;
+  background: var(--caen-50);
+  border-left: 4px solid var(--caen-line);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-sm);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+.next-step-coach.hidden { display: none; }
+.next-step-icon {
+  flex: 0 0 auto;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding-top: 1px;
+}
+.next-step-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.next-step-text {
+  margin: 0;
+  color: var(--ink);
+}
+.next-step-text strong { color: var(--caen-ink); }
+.next-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.next-step-actions button {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 7px 14px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-soft), transform var(--dur-fast) var(--ease-soft);
+}
+.next-step-actions button:hover { background: var(--primary-hover); transform: translateY(-1px); }
+.next-step-actions button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.next-step-dismiss {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  align-self: flex-start;
+}
+.next-step-dismiss:hover { color: var(--ink); background: rgba(0,0,0,.06); }
+.next-step-dismiss:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* Dark-mode tweak: the warm caen-amber is too dim on the dark page,
+   so use the meeting-blue surface for better readability. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .next-step-coach {
+    background: var(--meeting-50);
+    border-left-color: var(--meeting);
+  }
+}
+html[data-theme="dark"] .next-step-coach {
+  background: var(--meeting-50);
+  border-left-color: var(--meeting);
+}
+
+/* A brief "synthesis unlocked — Discussion is open" banner that
+   appears at the top of the Discussion panel when the platform
+   auto-switches there after the clinical synthesis is revealed. It
+   fades after a few seconds via the .auto-fade class. */
+.synthesis-unlocked-banner {
+  background: var(--ok-50);
+  border-left: 4px solid var(--ok);
+  border-radius: var(--r-sm);
+  padding: 10px 14px;
+  margin: 0 0 var(--s-3);
+  font-size: 0.92rem;
+  color: var(--ink);
+  font-weight: 500;
+  animation: synthesis-banner-in 280ms var(--ease-out);
+}
+.synthesis-unlocked-banner.auto-fade {
+  animation: synthesis-banner-out 600ms var(--ease-out) forwards;
+  animation-delay: 6s;
+}
+.synthesis-unlocked-banner strong { color: var(--ok-strong); }
+.synthesis-unlocked-banner.hidden { display: none; }
+@keyframes synthesis-banner-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes synthesis-banner-out {
+  to { opacity: 0; transform: translateY(-6px); pointer-events: none; }
+}
+
 /* Structured Group-answers form (per-bullet sections). One labelled
    section per bullet question; each holds its own list + input row. */
 .answers-card-bulleted { display: flex; flex-direction: column; gap: var(--s-3); }

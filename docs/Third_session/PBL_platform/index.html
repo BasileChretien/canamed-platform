@@ -1024,6 +1024,25 @@
           </ol>
         </nav>
 
+        <!-- "What to do next" coach — updates contextually from
+             updateModANextStep(). Hidden once student dismisses it for
+             the session (× button stores a flag in localStorage). -->
+        <div class="next-step-coach" id="modA-next-step" role="status" aria-live="polite">
+          <span class="next-step-icon" aria-hidden="true">👉</span>
+          <div class="next-step-body">
+            <p class="next-step-text" id="modA-next-step-text"
+               data-i18n="modA.coach.read-case">
+              Read the case below, then tap any button on the left
+              (Ask the patient / Examine / Investigations) to start gathering info.
+            </p>
+            <div class="next-step-actions" id="modA-next-step-actions"></div>
+          </div>
+          <button class="next-step-dismiss" id="modA-next-step-dismiss" type="button"
+                  data-i18n="coach.dismiss" data-i18n-attr="aria-label"
+                  aria-label="Hide this guidance for the rest of the session"
+                  title="Hide for the session">×</button>
+        </div>
+
         <section class="card vignette">
           <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
                aria-label="A patient sitting in a clinic consultation">
@@ -1152,6 +1171,16 @@
 
             <div class="rcol-panel" id="rcol-p-discussion" hidden
                  role="tabpanel" data-panel="discussion">
+            <!-- Auto-injected by updateModANextStep() when the platform
+                 switches to this panel because the synthesis was just
+                 revealed. Hidden by default; .auto-fade triggers
+                 dismissal after ~6s. -->
+            <div class="synthesis-unlocked-banner hidden"
+                 id="synthesis-unlocked-banner" role="status" aria-live="polite"
+                 data-i18n="modA.coach.synthesis-unlocked" data-i18n-html>
+              ✓ <strong>Synthesis done — Phase 3 is open.</strong> The 6 discussion prompts
+              are below. Both Caen and Nagoya voices must speak on each comparison prompt.
+            </div>
             <p class="banner-rule banner-compare"
                data-i18n="modA.discussion.compare-rule" data-i18n-html>
               🗣️ <strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice
@@ -1475,6 +1504,22 @@
             </li>
           </ol>
         </nav>
+
+        <div class="next-step-coach" id="modB-next-step" role="status" aria-live="polite">
+          <span class="next-step-icon" aria-hidden="true">👉</span>
+          <div class="next-step-body">
+            <p class="next-step-text" id="modB-next-step-text"
+               data-i18n="modB.coach.pick-role">
+              Pick your role below before starting the roleplay.
+              The observer keeps time.
+            </p>
+            <div class="next-step-actions" id="modB-next-step-actions"></div>
+          </div>
+          <button class="next-step-dismiss" id="modB-next-step-dismiss" type="button"
+                  data-i18n="coach.dismiss" data-i18n-attr="aria-label"
+                  aria-label="Hide this guidance for the rest of the session"
+                  title="Hide for the session">×</button>
+        </div>
         <section class="card vignette">
           <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
                aria-label="A doctor speaking with a patient and a family member">
