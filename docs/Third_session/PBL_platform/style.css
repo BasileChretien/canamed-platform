@@ -509,6 +509,148 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .compare-card { border-left: 4px solid var(--key); }
 .compare-card ul { margin: var(--s-2) 0; padding-left: 20px; }
 
+/* Progressive single-prompt UI (user request 2026-05-18: 'too much
+   text. It must be smoother. Maybe point by point. And they write a
+   reply, then the next point appears.') — one prompt visible at a
+   time, with a reply textarea + nav controls. Cursor + replies
+   cross-room synced via Firebase. */
+.prompt-progressive { display: flex; flex-direction: column; gap: var(--s-3); }
+.prompt-progressive.hidden { display: none; }
+.prompt-progress {
+  margin: 0;
+  padding: 4px 10px;
+  background: var(--surface-sunk);
+  border-radius: var(--r-pill);
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.prompt-text {
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--card);
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  border-left: 3px solid var(--meeting);
+  animation: prompt-fade-in 200ms var(--ease-out);
+}
+@keyframes prompt-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.prompt-reply-area { display: flex; flex-direction: column; gap: 8px; }
+#prompt-reply {
+  width: 100%;
+  min-height: 80px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  resize: vertical;
+  box-sizing: border-box;
+}
+#prompt-reply:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+.prompt-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.prompt-prev {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: var(--r-pill);
+  padding: 6px 12px;
+  font: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+.prompt-prev:disabled { opacity: 0.45; cursor: not-allowed; }
+.prompt-prev:not(:disabled):hover { border-color: var(--ink); color: var(--ink); }
+.prompt-skip {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.86rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 6px 4px;
+}
+.prompt-skip:hover { color: var(--ink); }
+.prompt-next {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 7px 16px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+.prompt-next:hover { background: var(--primary-hover); transform: translateY(-1px); }
+.prompt-next:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Done state — all prompts worked through. */
+.prompt-done {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--ok-50);
+  border-left: 4px solid var(--ok);
+  border-radius: var(--r-md);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+.prompt-done.hidden { display: none; }
+.prompt-done p { margin: 0; }
+.prompt-done strong { color: var(--ok-strong); }
+.prompt-done-cta {
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 8px 16px;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.prompt-done-cta:hover { background: var(--primary-hover); }
+.prompt-review {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.84rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.prompt-review:hover { color: var(--ink); }
+
+/* Mobile: stack the controls. */
+@media (max-width: 480px) {
+  .prompt-controls { flex-direction: column; align-items: stretch; }
+  .prompt-skip { margin-left: 0; text-align: center; }
+  .prompt-next { width: 100%; }
+  .prompt-prev { width: 100%; text-align: center; }
+}
+
 /* ---------- module content: guidelines, recap tables, roleplay aids ---------- */
 .guidelines-card, .recap-card { background: var(--surface-sunk); }
 .guidelines-card > summary, .recap-card > summary {

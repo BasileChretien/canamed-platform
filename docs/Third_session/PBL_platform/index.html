@@ -1287,7 +1287,62 @@
                 Locked &mdash; complete the clinical synthesis (red-flag review) to unlock the
                 discussion prompts.
               </p>
-              <ol id="prompts-list" class="hidden"></ol>
+              <!-- Progressive single-prompt reveal (user request 2026-05-18:
+                   'The compare prompt is too much text. It must be smoother.
+                   Maybe point by point. And they write a reply, then the
+                   next point appears.'). Cursor + replies cross-room
+                   synced via Firebase (refPromptCursor + refPromptReplies)
+                   so the whole team moves through the prompts together. -->
+              <div class="prompt-progressive hidden" id="prompt-progressive">
+                <p class="prompt-progress" id="prompt-progress">
+                  <span id="prompt-progress-current">1</span> /
+                  <span id="prompt-progress-total">?</span>
+                </p>
+                <div class="prompt-text" id="prompt-text"></div>
+                <div class="prompt-reply-area">
+                  <textarea id="prompt-reply" maxlength="600"
+                            data-i18n="prompts.reply.placeholder"
+                            data-i18n-attr="placeholder"
+                            placeholder="Type a short note from your group's discussion — anyone in the room can edit and it autosaves."></textarea>
+                  <div class="prompt-controls">
+                    <button type="button" class="prompt-prev"
+                            id="prompt-prev"
+                            data-i18n="prompts.prev"
+                            aria-label="Previous prompt">← Previous</button>
+                    <button type="button" class="prompt-skip"
+                            id="prompt-skip"
+                            data-i18n="prompts.skip">
+                      Discussed verbally — skip ahead →
+                    </button>
+                    <button type="button" class="prompt-next"
+                            id="prompt-next"
+                            data-i18n="prompts.next">
+                      Save and next →
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="prompt-done hidden" id="prompt-done">
+                <p data-i18n="prompts.done.msg" data-i18n-html>
+                  ✓ <strong>You've worked through all the discussion prompts.</strong>
+                  Now capture your team's bullets.
+                </p>
+                <button type="button" class="prompt-done-cta"
+                        id="prompt-done-cta"
+                        data-i18n="prompts.done.cta">
+                  Open Group answers →
+                </button>
+                <button type="button" class="prompt-review"
+                        id="prompt-review"
+                        data-i18n="prompts.review"
+                        aria-label="Go back to review the prompts">
+                  ← Review prompts
+                </button>
+              </div>
+              <!-- Legacy <ol> kept hidden so any code that still references
+                   #prompts-list (back-compat for the rest of the engine)
+                   doesn't crash. The progressive UI above is the real one. -->
+              <ol id="prompts-list" class="hidden" aria-hidden="true"></ol>
             </section>
 
             <section class="card compare-card hidden" id="compare-card">

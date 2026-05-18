@@ -989,6 +989,17 @@ let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees 
                       // BEFORE running investigations. Cross-room synced via
                       // refHypotheses. Keyed by Firebase push id; value is
                       // { by, cid, university, text, at }.
+/* Progressive discussion-prompts (user request 2026-05-18: 'The compare
+ * prompt is too much text. It must be smoother. Maybe point by point.
+ * And they write a reply, then the next point appears.'). Only ONE
+ * prompt is visible at a time. promptCursor is the room-shared index
+ * of the currently-active prompt; promptReplies maps prompt index →
+ * { cid → { text, by, at } } so the team's collective notes are
+ * recorded alongside the conversation. Anyone in the room can advance
+ * the cursor (the platform is leaderless by design). */
+let promptCursor = 0;
+let promptReplies = {};
+let _promptReplyTimer = null;
 let callForHelp = null;
 let teamsLink = "";
 let quizLink = "";          // end-of-session questionnaire link
@@ -1033,7 +1044,7 @@ let refPool = null, refMyPool = null, refStarted = null, refRoomCount = null,
     refTeams = null, refQuiz = null, refPreQuiz = null;
 let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
-    refHypotheses = null,
+    refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
     refClosed = null;
 
@@ -2402,6 +2413,8 @@ function teardownRoom() {
     if (refStage) refStage.off();
     if (refRevealed) refRevealed.off();
     if (refHypotheses) refHypotheses.off();
+    if (refPromptCursor) refPromptCursor.off();
+    if (refPromptReplies) refPromptReplies.off();
     if (refPresence) refPresence.off();
     if (refTyping) refTyping.off();
     if (refAnswers.moduleA) refAnswers.moduleA.off();
@@ -2423,6 +2436,8 @@ function startRoom() {
   refStage = db.ref(base + "/stage");
   refRevealed = db.ref(base + "/moduleA/revealed");
   refHypotheses = db.ref(base + "/moduleA/hypotheses");
+  refPromptCursor = db.ref(base + "/moduleA/promptCursor");
+  refPromptReplies = db.ref(base + "/moduleA/promptReplies");
   refPresence = db.ref(base + "/presence");
   refTyping = db.ref(base + "/typing");
   refAnswers.moduleA = db.ref(base + "/answers/moduleA");
@@ -2467,6 +2482,16 @@ function startRoom() {
     if (typeof renderHypotheses === "function") renderHypotheses();
     if (typeof renderButtons === "function") renderButtons();
     if (typeof updateModANextStep === "function") updateModANextStep();
+  });
+  // Progressive prompt state (cross-room synced).
+  refPromptCursor.on("value", snap => {
+    const v = snap.val();
+    promptCursor = (typeof v === "number" && v >= 0) ? Math.floor(v) : 0;
+    if (typeof renderPrompts === "function") renderPrompts();
+  });
+  refPromptReplies.on("value", snap => {
+    promptReplies = snap.val() || {};
+    if (typeof renderPrompts === "function") renderPrompts();
   });
   refPresence.on("value", snap => {
     presence = snap.val() || {};
@@ -5506,6 +5531,63 @@ function keyRevealed() {
   return ITEM_IDS.some(id => revealed[id] && itemById(id).key);
 }
 
+/* Test hooks — top-level `let` bindings (revealed, promptCursor,
+ * promptReplies, ITEM_IDS, CASE) are script-scoped and can't be
+ * reached via `window.X = ...` assignments from E2E tests. These
+ * small setters mutate the bindings directly so Playwright tests
+ * can drive renderPrompts / renderButtons with deterministic state
+ * without needing the full Firebase round-trip. Production code
+ * never calls these; they're inert outside test runs. */
+if (typeof window !== "undefined") {
+  window._test_setRevealed = function (obj) { revealed = obj || {}; };
+  window._test_setPromptCursor = function (n) { promptCursor = (typeof n === "number") ? n : 0; };
+  window._test_setPromptReplies = function (obj) { promptReplies = obj || {}; };
+  window._test_getItemIds = function () { return ITEM_IDS.slice(); };
+  window._test_getCase = function () { return CASE; };
+  window._test_rebuildCaseDerived = function () { rebuildCaseDerived(); };
+}
+
+/* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
+ * can advance it; the cursor write triggers refPromptCursor.on for every
+ * teammate, which re-renders renderPrompts with the new prompt. */
+function _advancePromptCursor(delta) {
+  if (!refPromptCursor) return;
+  // Flush any pending reply edit to the previous prompt BEFORE advancing,
+  // so the change isn't lost if the user clicks Next while still in the
+  // textarea (the blur-based flush usually catches this, but a tap
+  // sequence on mobile sometimes fires next/save in the wrong order).
+  _flushPromptReply();
+  const total = (CASE && Array.isArray(CASE.prompts)) ? CASE.prompts.length : 0;
+  const next = Math.max(0, Math.min((promptCursor || 0) + delta, total));
+  refPromptCursor.set(next).catch(e => console.error("prompt cursor set failed", e));
+}
+
+/* Debounced save of the textarea content for the current prompt.
+ * Cross-room synced via refPromptReplies/$promptIdx/$cid. */
+function _onPromptReplyInput(e) {
+  if (_promptReplyTimer) clearTimeout(_promptReplyTimer);
+  _promptReplyTimer = setTimeout(_flushPromptReply, 600);
+}
+
+function _flushPromptReply() {
+  if (_promptReplyTimer) { clearTimeout(_promptReplyTimer); _promptReplyTimer = null; }
+  const replyEl = el("prompt-reply");
+  if (!replyEl || !refPromptReplies) return;
+  const text = (replyEl.value || "").trim().slice(0, 600);
+  const cursor = promptCursor || 0;
+  const path = refPromptReplies.child(String(cursor)).child(clientId);
+  if (text === "") {
+    path.remove().catch(() => {});
+    return;
+  }
+  path.set({
+    text: text,
+    by: myName || "",
+    cid: clientId,
+    at: Date.now()
+  }).catch(e => console.error("prompt reply save failed", e));
+}
+
 /* Synthesis progress chip — shows "X / Y red flags screened" above
  * the Investigations button group. Driven from renderFindings()
  * (where prereq state can change). When all prereqs are met the chip
@@ -5546,18 +5628,112 @@ let promptsWereUnlocked = false;
 function renderPrompts() {
   const unlocked = keyRevealed();
   el("prompts-locked").classList.toggle("hidden", unlocked);
-  const list = el("prompts-list");
-  list.classList.toggle("hidden", !unlocked);
+  // Hide the legacy <ol> permanently (kept in HTML for back-compat).
+  const legacyList = el("prompts-list");
+  if (legacyList) {
+    legacyList.classList.add("hidden");
+    legacyList.innerHTML = "";
+  }
   el("compare-card").classList.toggle("hidden", !unlocked);
-  list.innerHTML = "";
-  if (unlocked) {
-    const lang = _curLang();
-    CASE.prompts.forEach(p => {
-      const li = document.createElement("li");
-      li.textContent = tc(p, lang);
-      list.appendChild(li);
+
+  const progressive = el("prompt-progressive");
+  const done = el("prompt-done");
+  if (!progressive || !done) {
+    // HTML hasn't been migrated yet; skip the new UI but DON'T crash.
+    setTabBadge("tab-badge-discussion", unlocked ? "🔓" : "");
+    if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(unlocked);
+    return;
+  }
+
+  if (!unlocked) {
+    progressive.classList.add("hidden");
+    done.classList.add("hidden");
+    setTabBadge("tab-badge-discussion", "");
+    if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(false);
+    return;
+  }
+
+  const lang = _curLang();
+  const prompts = (CASE && Array.isArray(CASE.prompts)) ? CASE.prompts : [];
+  const total = prompts.length;
+  const cursor = Math.max(0, Math.min(promptCursor || 0, total));
+
+  // Final state — student worked through every prompt.
+  if (cursor >= total && total > 0) {
+    progressive.classList.add("hidden");
+    done.classList.remove("hidden");
+    setTabBadge("tab-badge-discussion", "✓");
+    if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(true);
+    return;
+  }
+
+  // Progressive single-prompt view.
+  progressive.classList.remove("hidden");
+  done.classList.add("hidden");
+
+  const currentEl = el("prompt-progress-current");
+  const totalEl = el("prompt-progress-total");
+  const textEl = el("prompt-text");
+  const replyEl = el("prompt-reply");
+  const prevBtn = el("prompt-prev");
+  const skipBtn = el("prompt-skip");
+  const nextBtn = el("prompt-next");
+
+  if (currentEl) currentEl.textContent = String(cursor + 1);
+  if (totalEl) totalEl.textContent = String(total);
+  const promptText = total > 0 ? tc(prompts[cursor], lang) : "";
+  if (textEl) textEl.textContent = promptText;
+
+  // Restore the team's saved reply for this prompt (if any). Use the
+  // newest reply across all room members (anyone can edit, last-write-wins
+  // on display — full per-author log is preserved in promptReplies for
+  // research/export purposes).
+  const repliesForThisPrompt = (promptReplies && promptReplies[cursor]) || {};
+  let latest = null;
+  Object.keys(repliesForThisPrompt).forEach(cid => {
+    const r = repliesForThisPrompt[cid];
+    if (r && (!latest || (r.at || 0) > (latest.at || 0))) latest = r;
+  });
+  if (replyEl && !replyEl.matches(":focus")) {
+    replyEl.value = (latest && latest.text) || "";
+  }
+
+  // Prev disabled at the start; Next always enabled (reply is optional).
+  if (prevBtn) prevBtn.disabled = cursor === 0;
+  if (nextBtn) {
+    nextBtn.disabled = false;
+    nextBtn.textContent = (cursor + 1 >= total)
+      ? (typeof window.t === "function" && window.t("prompts.next.last") !== "prompts.next.last"
+          ? window.t("prompts.next.last")
+          : "Save and finish →")
+      : (typeof window.t === "function" && window.t("prompts.next") !== "prompts.next"
+          ? window.t("prompts.next")
+          : "Save and next →");
+  }
+  // Wire handlers once (idempotent guard).
+  if (progressive && !progressive.dataset.wired) {
+    progressive.dataset.wired = "1";
+    if (nextBtn) nextBtn.addEventListener("click", () => _advancePromptCursor(+1));
+    if (skipBtn) skipBtn.addEventListener("click", () => _advancePromptCursor(+1));
+    if (prevBtn) prevBtn.addEventListener("click", () => _advancePromptCursor(-1));
+    if (replyEl) {
+      replyEl.addEventListener("input", _onPromptReplyInput);
+      replyEl.addEventListener("blur", _flushPromptReply);
+    }
+  }
+  // Wire the done-state buttons once.
+  const doneCta = el("prompt-done-cta");
+  const reviewBtn = el("prompt-review");
+  if (done && !done.dataset.wired) {
+    done.dataset.wired = "1";
+    if (doneCta) doneCta.addEventListener("click", () => {
+      if (typeof switchRcolTab === "function") switchRcolTab("answers");
+    });
+    if (reviewBtn) reviewBtn.addEventListener("click", () => {
+      if (refPromptCursor) refPromptCursor.set(Math.max(0, total - 1));
     });
   }
+
   setTabBadge("tab-badge-discussion", unlocked ? "🔓" : "");
   // Visible lock state on the tab itself — driven by the same `unlocked`
   // computation as the panel content.

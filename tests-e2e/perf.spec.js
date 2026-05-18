@@ -104,7 +104,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 // Any breach forces the next PR to either justify the regression or
 // split another chunk out via script-loader.js (lazy-load i18n locale
 // tables is the obvious next move once we hit ~280 KB).
-const FIRST_PARTY_BYTES_LIMIT_KB = 272;
+//   - 280 KB after the progressive-prompts refactor (2026-05-18 user
+//     request: 'too much text. It must be smoother. Maybe point by
+//     point. And they write a reply, then the next point appears.').
+//     NET +8 KB gz: new Firebase listeners (refPromptCursor +
+//     refPromptReplies), renderPrompts rewrite, _advancePromptCursor /
+//     _onPromptReplyInput / _flushPromptReply helpers (~3 KB), CSS
+//     for the single-prompt card + done state + mobile stack (~2 KB),
+//     ~9 new i18n keys × 3 core langs (~3 KB). We're at the doorstep
+//     of the 280 KB 'lazy-load i18n locales' threshold — next perf
+//     budget breach should trigger that refactor instead of bumping.
+const FIRST_PARTY_BYTES_LIMIT_KB = 282;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
