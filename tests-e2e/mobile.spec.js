@@ -195,4 +195,95 @@ test.describe("mobile splash usability", () => {
       expect(avg).toBeLessThan(80);
     }
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Disconnect / Leave (2026-05-18 user-reported regression: "once
+  // connected to a session in a browser, it is not possible to disconnect
+  // from this session"). The two new affordances — splash banner and
+  // lobby "switch session" button — must be visible AND tappable on
+  // mobile-iphone + mobile-ipad viewports (this spec runs under both via
+  // the playwright project matrix).
+  // ──────────────────────────────────────────────────────────────────────
+
+  test("disconnect: splash banner is visible + tappable with a saved session", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => {
+      localStorage.setItem("canamed_resume", JSON.stringify({
+        sessionNum: "ABC-DEF", name: "Mobile User",
+        university: "caen", year: 4, english: "C1",
+        consent: { workshop: true, research: false, version: 1, at: Date.now() }
+      }));
+      localStorage.removeItem("canamed_session");
+    });
+    await page.reload();
+    await page.waitForSelector(".splash", { state: "visible" });
+
+    // Banner must be visible and contain the saved identity + code.
+    await expect(page.locator("#splash-saved-session")).toBeVisible();
+    await expect(page.locator("#splash-saved-session-name")).toHaveText("Mobile User");
+    await expect(page.locator("#splash-saved-session-code")).toHaveText("ABC-DEF");
+
+    // The clear button must meet the platform's 44px tap-target floor (the
+    // same standard we hold elsewhere on mobile per the standing rule).
+    const btn = page.locator("#splash-saved-session-clear");
+    await expect(btn).toBeVisible();
+    const box = await btn.boundingBox();
+    expect(box, "clear button must have a measurable bounding box").not.toBeNull();
+    if (box) {
+      expect(box.height, "tap-target height >= 40px on mobile").toBeGreaterThanOrEqual(40);
+    }
+
+    // Tap (touch event, not click) — verifies the handler is mobile-safe.
+    await btn.tap();
+    await expect(page.locator("#splash-saved-session")).toBeHidden();
+    const resume = await page.evaluate(() => localStorage.getItem("canamed_resume"));
+    expect(resume, "tap on clear must clear canamed_resume").toBeNull();
+  });
+
+  test("disconnect: lobby 'switch session' button is visible + tappable", async ({ page }) => {
+    // Render lobby directly with a stored session — we don't need a real
+    // session here, just to assert the affordance is wired/visible/tappable.
+    // initEntry's stored-session path calls sessionStatus, which in LOCAL
+    // mode resolves to {exists:false} for an unknown code — that branch
+    // clears the storage and shows splash, so for THIS test we manually
+    // reveal #lobby + call paintLobbySwitchSession() to isolate the UI.
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    await page.evaluate(() => {
+      ["splash", "waiting", "app", "admin-app"].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.classList.add("hidden");
+      });
+      document.getElementById("lobby").classList.remove("hidden");
+      document.body.classList.remove("locked");
+      if (typeof paintLobbySwitchSession === "function") paintLobbySwitchSession();
+    });
+
+    const btn = page.locator("#lobby-switch-session-btn");
+    await expect(btn).toBeVisible();
+    const box = await btn.boundingBox();
+    expect(box, "switch-session button must have a bounding box").not.toBeNull();
+    if (box) {
+      expect(box.height, "tap-target height >= 40px on mobile").toBeGreaterThanOrEqual(40);
+    }
+
+    // Seed storage so we can verify the click clears it.
+    await page.evaluate(() => {
+      localStorage.setItem("canamed_session", "ABC-DEF");
+      localStorage.setItem("canamed_resume", JSON.stringify({ sessionNum: "ABC-DEF", name: "X" }));
+    });
+    // The button calls location.reload(); wait for the next splash render
+    // before reading localStorage to avoid "execution context destroyed".
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: "load" }),
+      btn.tap()
+    ]);
+    await page.waitForSelector(".splash", { state: "visible" });
+    const cleared = await page.evaluate(() => ({
+      session: localStorage.getItem("canamed_session"),
+      resume:  localStorage.getItem("canamed_resume")
+    }));
+    expect(cleared.session, "switch must clear canamed_session").toBeNull();
+    expect(cleared.resume,  "switch must clear canamed_resume").toBeNull();
+  });
 });

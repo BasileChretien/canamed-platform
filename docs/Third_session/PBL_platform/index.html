@@ -154,6 +154,22 @@
         <button type="button" class="splash-link" id="splash-signed-in-out"
                 data-i18n="splash.sign-out">Sign out</button>
       </div>
+      <!-- Shown when a previous session's resume data is still in localStorage.
+           User-reported regression (2026-05-18): "once connected to a session
+           in a browser, it is not possible to disconnect from this session."
+           Root cause: autoResume() silently re-joins the previous session if
+           the user types the same code again, and there is no other place on
+           the splash to clear that saved state. This block gives the returning
+           user a visible name/code + an explicit "start fresh" escape hatch
+           BEFORE they type anything. Populated + revealed by initSavedSessionBanner(). -->
+      <div class="splash-saved-session" id="splash-saved-session" hidden role="status">
+        <span data-i18n="splash.saved-session-as">Resuming as</span>
+        <strong id="splash-saved-session-name">—</strong>
+        <span data-i18n="splash.saved-session-in">in session</span>
+        <strong id="splash-saved-session-code">—</strong>
+        <button type="button" class="splash-link" id="splash-saved-session-clear"
+                data-i18n="splash.saved-session-clear">Not you? Disconnect &amp; start fresh →</button>
+      </div>
       <h1 class="splash-title" id="splash-title">CANAMED</h1>
       <p class="splash-tag" data-i18n="splash.tagline">A collaborative platform for medical-education
         partnerships between universities.</p>
@@ -613,6 +629,17 @@
     </div>
     <div class="lobby-card">
       <h2>Join the session</h2>
+      <!-- Escape hatch: lets a user back out of the unlocked session BEFORE
+           they join. Without this, a stored canamed_session sends initEntry()
+           straight to the lobby with no visible way back to the splash, and
+           autoResume() may silently re-join them on the next interaction.
+           User-reported regression (2026-05-18): "once connected to a session
+           in a browser, it is not possible to disconnect from this session."
+           Painted + wired by paintLobbySwitchSession(). -->
+      <p class="lobby-switch-session" id="lobby-switch-session" hidden>
+        <button type="button" class="splash-link" id="lobby-switch-session-btn"
+                data-i18n="lobby.switch-session">← Use a different session</button>
+      </p>
       <p class="lobby-mode" id="lobby-mode"></p>
       <p class="session-badge" id="session-badge" hidden>
         Session <span id="session-badge-code"></span>

@@ -102,6 +102,10 @@
       "splash.signed-in-as": "Signed in as",
       "splash.sign-out": "Sign out",
       "splash.lang-label": "Language",
+      "splash.saved-session-as": "Resuming as",
+      "splash.saved-session-in": "in session",
+      "splash.saved-session-clear": "Not you? Disconnect & start fresh →",
+      "lobby.switch-session": "← Use a different session",
 
       // privacy page — R3 deep-i18n: privacy.html is a single dynamic
       // page; reviewed body copy lives inline as <section data-priv-lang>.
@@ -732,6 +736,10 @@
       "splash.signed-in-as": "Connecté·e en tant que",
       "splash.sign-out": "Se déconnecter",
       "splash.lang-label": "Langue",
+      "splash.saved-session-as": "Reprise en tant que",
+      "splash.saved-session-in": "dans la session",
+      "splash.saved-session-clear": "Ce n'est pas vous ? Se déconnecter et repartir à zéro →",
+      "lobby.switch-session": "← Utiliser une autre session",
       "privacy.title": "CaNaMED — Politique de confidentialité",
       "privacy.subtitle": "Comment nous utilisons vos données, et vos droits",
       "privacy.lang-not-available": "Une traduction complète de cette politique de confidentialité dans la langue que vous avez choisie n'est pas encore disponible. Le texte anglais ci-dessous est la version juridiquement contraignante. Une version révisée en <a href=\"privacy.html?lang=fr\">français</a> ou en <a href=\"privacy.html?lang=ja\">japonais</a> est également disponible.",
@@ -1255,6 +1263,10 @@
       "splash.signed-in-as": "ログイン中:",
       "splash.sign-out": "ログアウト",
       "splash.lang-label": "言語",
+      "splash.saved-session-as": "再開ユーザー",
+      "splash.saved-session-in": "セッション",
+      "splash.saved-session-clear": "あなたではありませんか？ 切断して最初からやり直す →",
+      "lobby.switch-session": "← 別のセッションを使用",
       "privacy.title": "CaNaMED — プライバシーポリシー",
       "privacy.subtitle": "あなたのデータの使い方と、あなたの権利",
       "privacy.lang-not-available": "選択された言語によるプライバシーポリシー全文の翻訳はまだご用意できていません。下記の英文が法的拘束力を持つ版です。レビュー済みの<a href=\"privacy.html?lang=fr\">フランス語</a>版または<a href=\"privacy.html?lang=ja\">日本語</a>版もご利用いただけます。",

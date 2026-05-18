@@ -3838,6 +3838,49 @@ body.session-ended-shown { overflow: hidden; }
 }
 .splash-signed-in[hidden] { display: none; }
 .splash-signed-in strong { color: var(--ink); font-weight: 700; }
+
+/* --- saved-session banner: visible escape hatch when localStorage resume
+   data is present. User-reported regression (2026-05-18): "once connected
+   to a session in a browser, it is not possible to disconnect from this
+   session." Same visual language as .splash-signed-in but wraps gracefully
+   for the longer text (name + code + clear button). The clear button has
+   a 44px hit target so it works on mobile devices. --- */
+.splash-saved-session {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  color: var(--muted);
+  background: var(--surface-sunk, #f3f0e8);
+  border-radius: var(--r-pill);
+  text-align: center;
+}
+.splash-saved-session[hidden] { display: none; }
+.splash-saved-session strong { color: var(--ink); font-weight: 700; }
+#splash-saved-session-clear {
+  font-weight: 600;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+
+/* Lobby escape hatch — companion to the splash banner, shown above the
+   join form whenever the user reached the lobby via an unlocked session
+   (i.e. there is something to "switch away from"). 44px hit target. */
+.lobby-switch-session {
+  margin: 0 0 12px;
+  text-align: left;
+}
+.lobby-switch-session[hidden] { display: none; }
+#lobby-switch-session-btn {
+  font-weight: 600;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .splash-card { animation: none; }
   #splash-code.shake { animation: none; }

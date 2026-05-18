@@ -7796,6 +7796,41 @@ function lobbyShowLockedSession() {
   } else if (line) {
     line.hidden = true;
   }
+  // Reveal the "← Use a different session" escape hatch. The lobby is the
+  // ONLY view a returning user with stored canamed_session sees before the
+  // (silent) auto-rejoin, so without this they have no visible way back to
+  // the splash. User-reported regression 2026-05-18.
+  paintLobbySwitchSession();
+}
+
+/* Reveal + wire the lobby "switch session" button whenever the lobby is
+ * showing an unlocked session. Idempotent: the click handler is attached at
+ * most once via a dataset flag. */
+function paintLobbySwitchSession() {
+  const row = el("lobby-switch-session");
+  const btn = el("lobby-switch-session-btn");
+  if (!row || !btn) return;
+  row.hidden = false;
+  if (!btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", switchSession);
+  }
+}
+
+/* User picked "← Use a different session" from the lobby. Clears the
+ * unlocked-session pointer + any resume data so initEntry() shows the
+ * splash on reload. Same cleanup surface as forgetSavedSession() (the
+ * splash banner's equivalent button), but kept as a separate symbol so
+ * each entry point is greppable and easy to test. */
+function switchSession() {
+  try {
+    localStorage.removeItem(RESUME_KEY);
+    localStorage.removeItem("canamed_name");
+    localStorage.removeItem("canamed_session");
+    localStorage.removeItem("canamed_client");
+    if (typeof STABLE_ID_KEY === "string") localStorage.removeItem(STABLE_ID_KEY);
+  } catch (e) { /* ignore */ }
+  location.reload();
 }
 
 /* Paint a minimal "Org not found" splash + abort entry. Triggered when the
@@ -7898,7 +7933,58 @@ function initEntry() {
     // URL), pre-fill the code and auto-submit. Runs AFTER wireSplash() so
     // the splash-enter form's submit handler is already attached.
     tryConsumeDeepLink();
+    // Surface the "Resuming as <name> in session <CODE> — disconnect & start
+    // fresh →" escape hatch if localStorage still has resume data. Without
+    // this, a returning user has no visible way to clear a saved session
+    // before the next code-entry triggers a silent auto-rejoin (user-reported
+    // regression 2026-05-18).
+    paintSavedSessionBanner();
   }
+}
+
+/* Populate + reveal the .splash-saved-session banner if resume data is in
+ * localStorage. Wires the clear button to forgetSavedSession() the first
+ * time it runs (subsequent calls just refresh the displayed name + code).
+ * Safe to call on any view transition that lands the user back on the
+ * splash — the hidden attribute toggles per the current localStorage state. */
+function paintSavedSessionBanner() {
+  const banner = el("splash-saved-session");
+  if (!banner) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(RESUME_KEY) || "null"); } catch (e) { saved = null; }
+  const hasName = saved && saved.name;
+  const hasCode = saved && saved.sessionNum;
+  if (!hasName || !hasCode) {
+    banner.hidden = true;
+    return;
+  }
+  const nameEl = el("splash-saved-session-name");
+  const codeEl = el("splash-saved-session-code");
+  if (nameEl) nameEl.textContent = String(saved.name).slice(0, 40);
+  if (codeEl) codeEl.textContent = String(saved.sessionNum).toUpperCase();
+  banner.hidden = false;
+  const btn = el("splash-saved-session-clear");
+  if (btn && !btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", forgetSavedSession);
+  }
+}
+
+/* User-initiated "I'm not that person / I want a different session". Mirrors
+ * leaveAndReload()'s localStorage cleanup but does NOT touch any Firebase
+ * refs (we're on the splash — no active session refs to detach). After
+ * clearing, reload so initEntry() sees a clean slate and shows the splash. */
+function forgetSavedSession() {
+  try {
+    localStorage.removeItem(RESUME_KEY);
+    localStorage.removeItem("canamed_name");
+    localStorage.removeItem("canamed_session");
+    localStorage.removeItem("canamed_client");
+    // Match leaveAndReload(): drop the persistent stableId too so a shared
+    // lab machine doesn't carry the previous student's identity forward.
+    if (typeof STABLE_ID_KEY === "string") localStorage.removeItem(STABLE_ID_KEY);
+  } catch (e) { /* ignore */ }
+  location.reload();
 }
 
 let splashWired = false;
