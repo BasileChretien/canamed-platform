@@ -871,6 +871,192 @@ html[data-theme="dark"] .next-step-coach {
   font-weight: 800;
 }
 
+/* ── Chart-metaphor framing for Module A (pedagogist's strongest
+   claim, 2026-05-18 specialist panel): the case-work isn't a "menu
+   of buttons", it's the consultation note the team is writing. The
+   visual treatment evokes a clinical note: warm paper-like surface,
+   a clear chart header with the patient's name, and "chart sections"
+   (History / Examination / Investigations) instead of generic cards. */
+.consultation-note {
+  background:
+    linear-gradient(180deg, transparent 0, transparent calc(100% - 14px),
+      rgba(206, 184, 138, 0.18) calc(100% - 14px), rgba(206, 184, 138, 0.18) 100%);
+  background-color: #fbf9f3;
+  border: 1px solid #d8cdb4;
+  border-radius: var(--r-lg, 14px);
+  padding: var(--s-4) var(--s-4) var(--s-5);
+  box-shadow: var(--sh-md);
+  margin-bottom: var(--s-3);
+  position: relative;
+}
+.consultation-note::before {
+  /* A subtle red margin line, like a paper chart. */
+  content: "";
+  position: absolute;
+  left: 38px;
+  top: 16px;
+  bottom: 16px;
+  width: 1px;
+  background: rgba(220, 120, 90, 0.30);
+  pointer-events: none;
+}
+.consultation-note-head {
+  margin-bottom: var(--s-3);
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid rgba(216, 205, 180, 0.6);
+}
+.consultation-note-title {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--caen-ink, #5a3b14);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.consultation-note-title em {
+  font-style: italic;
+  color: var(--ink);
+}
+.consultation-note-icon {
+  font-size: 1.3rem;
+  line-height: 1;
+}
+.consultation-note-sub {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.consultation-note-sub em {
+  font-style: italic;
+  color: var(--caen-ink);
+  font-weight: 500;
+}
+.chart-section {
+  background: transparent;
+  margin-bottom: var(--s-4);
+  padding: 8px 0 0;
+}
+.chart-section:last-child { margin-bottom: 0; }
+.chart-section-h {
+  margin: 0 0 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.chart-section-icon { font-size: 1.1rem; line-height: 1; }
+.chart-section-hint {
+  margin: 0 0 8px;
+  font-size: 0.88rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.chart-section-locked-hint {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  background: rgba(220, 120, 90, 0.10);
+  border-left: 3px solid var(--key, #c47a5a);
+  border-radius: var(--r-sm);
+  font-size: 0.88rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+/* ── Working hypotheses panel (PBL 7-jump scaffold step) ── */
+.chart-hypotheses {
+  background: rgba(46, 159, 223, 0.06);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  margin-bottom: var(--s-3);
+}
+.hypothesis-list {
+  list-style: none;
+  margin: 6px 0 8px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hypothesis-list:empty { display: none; }
+.hypothesis-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card, #fff);
+  border: 1px solid var(--primary, #2e9fdf);
+  border-radius: var(--r-pill, 999px);
+  padding: 5px 10px 5px 12px;
+  font-size: 0.88rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+.hypothesis-list li .by {
+  font-size: 0.74rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+.hypothesis-list li .del {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0 2px;
+  border-radius: 3px;
+}
+.hypothesis-list li .del:hover { color: var(--key, #c47a5a); }
+.hypothesis-empty {
+  font-style: italic;
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin: 4px 0 8px;
+}
+.hypothesis-add {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.hypothesis-add input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  font: inherit;
+  font-size: 0.92rem;
+}
+.hypothesis-add input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+  border-color: var(--primary);
+}
+.hypothesis-add button {
+  flex: 0 0 auto;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-pill);
+  padding: 7px 14px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hypothesis-add button:hover { background: var(--primary-hover); }
+
+/* ── Investigations panel locked state ── */
+.chart-investigations.is-locked {
+  opacity: 0.65;
+}
+.chart-investigations.is-locked .btn-group { pointer-events: none; }
+.chart-investigations.is-locked .req-btn {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 /* Reference section — the relocated "Reference" tab content. Sits
    below the columns block, clearly framed as a utility lookup
    (background, guidelines, recap) separate from the workflow above. */
@@ -3481,28 +3667,35 @@ body.session-ended-shown { overflow: hidden; }
 }
 .req-warn-note::before { content: "\26A0  "; }   /* warning sign */
 
-/* --- Bug 2 (user-feedback-2): inline reveal under each button on mobile.
-   The right-column findings log is the canonical surface on desktop, but
-   on stacked-mobile layout the answers live below the viewport. We add a
-   per-button inline reveal here so the patient's answer appears DIRECTLY
-   under the tapped button. Hidden on desktop (>960px) to avoid duplicating
-   the right-column log. Hidden when prefers-reduced-motion isn't a factor
-   here — the inline reveal is text only. */
+/* --- Inline reveal under each button — the patient's answer appears
+   DIRECTLY under the tapped button on EVERY viewport (per 2026-05-18
+   specialist panel: "Inline-reveal answers under the clicked button.
+   Action and result fuse spatially. Mobile is fixed for free — no
+   scroll-up-to-see-result"). Originally mobile-only (Bug 2 user-
+   feedback-2); promoted to all viewports because the right-column log
+   is too far away even on desktop for many students. The right-column
+   "What we're finding" log still aggregates everything chronologically
+   — useful for the team to see teammates' contributions across panels. */
 .req-inline-reveal {
-  display: none;
+  display: block;
+  margin: 6px 0 10px;
+  padding: 8px 12px;
+  background: var(--surface-sunk, #f6f4ef);
+  border-left: 3px solid var(--ok, #2a9d8f);
+  border-radius: var(--r-sm, 6px);
+  font-size: 0.92rem;
+  color: var(--ink, #2a2a2a);
+  line-height: 1.45;
+  animation: req-reveal-in 200ms var(--ease-out, ease-out);
 }
-@media (max-width: 960px) {
-  .req-inline-reveal {
-    display: block;
-    margin: 4px 0 8px;
-    padding: 8px 10px;
-    background: var(--surface-sunk, #f6f4ef);
-    border-left: 3px solid var(--ok, #2a9d8f);
-    border-radius: var(--r-sm, 6px);
-    font-size: 0.92rem;
-    color: var(--ink, #2a2a2a);
-    line-height: 1.4;
-  }
+.req-inline-reveal::before {
+  content: "→ ";
+  color: var(--ok, #2a9d8f);
+  font-weight: 700;
+}
+@keyframes req-reveal-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
 }
 
 /* --- wrap-up "your team did well" recap --- */

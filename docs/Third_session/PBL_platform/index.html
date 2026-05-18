@@ -1082,39 +1082,112 @@
 
         <div class="columns">
           <div class="col-left">
-            <section class="card">
-              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path
-                d="M4 5h16v11H9l-4 4v-4H4z" /><circle cx="9" cy="10.5" r="1"
-                fill="#1763a6" stroke="none" /><circle cx="12" cy="10.5" r="1"
-                fill="#1763a6" stroke="none" /><circle cx="15" cy="10.5" r="1"
-                fill="#1763a6" stroke="none" /></svg> Ask the patient</h3>
-              <div class="btn-group" id="group-history"></div>
-            </section>
-            <section class="card">
-              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
-                d="M6 3v6a5 5 0 0 0 10 0V3" /><circle cx="18" cy="15" r="3" /><path
-                d="M11 14v2a4 4 0 0 0 4 4" /></svg> Examine</h3>
-              <div class="btn-group" id="group-exam"></div>
-            </section>
-            <section class="card">
-              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
-                2-3l-5-9V3" /><path d="M7.5 14h9" /></svg> Investigations &amp; synthesis</h3>
-              <!-- "X / Y red flags screened" progress chip — answers the
-                   student-persona's #1 complaint: "no progress bar, no
-                   '3 of 6 needed'… this is the moment I would message
-                   my facilitator." updateSynthesisProgress() in
-                   script.js drives the text and toggles .is-done when
-                   the prereqs are met. -->
-              <p class="synthesis-progress" id="synthesis-progress"
-                 data-i18n="modA.synthesis.progress" aria-live="polite">
-                0 / 3 red flags screened
-              </p>
-              <div class="btn-group" id="group-labs"></div>
-            </section>
+            <!-- Consultation-note framing (pedagogist's strongest claim,
+                 2026-05-18 specialist panel): the case-work isn't a
+                 "menu of buttons" — it's the consultation note the
+                 team is writing about M. Lefebvre. Wrapping the case
+                 sections in a single chart container with a header
+                 changes the activity identity from "click things" to
+                 "write the patient's chart together". -->
+            <article class="consultation-note">
+              <header class="consultation-note-head">
+                <h3 class="consultation-note-title">
+                  <span class="consultation-note-icon" aria-hidden="true">📋</span>
+                  <span data-i18n="modA.chart.title">Your consultation note —
+                    <em>M. Lefebvre</em>, today</span>
+                </h3>
+                <p class="consultation-note-sub"
+                   data-i18n="modA.chart.subtitle" data-i18n-html>
+                  You and your partners are the clinicians seeing M. Lefebvre.
+                  Everything you ask, examine, investigate or decide goes into
+                  <em>your shared chart</em>.
+                </p>
+              </header>
+
+              <!-- ── Working hypotheses (PBL 7-jump brainstorm step ──
+                   pedagogist's strongest claim: "hypothesis BEFORE data
+                   gathering" is the missing classical-PBL step. Until
+                   the team has at least one working hypothesis,
+                   Investigations stay locked — students MUST commit to
+                   what they suspect before running tests. Cross-room
+                   synced via Firebase (refHypotheses). -->
+              <section class="chart-section chart-hypotheses">
+                <h4 class="chart-section-h">
+                  <span class="chart-section-icon" aria-hidden="true">💭</span>
+                  <span data-i18n="modA.chart.hypotheses.title">Working hypotheses</span>
+                </h4>
+                <p class="chart-section-hint"
+                   data-i18n="modA.chart.hypotheses.hint" data-i18n-html>
+                  Before you order tests, agree as a team: <strong>what do you
+                  suspect?</strong> List the differential diagnoses you want to
+                  rule in or rule out. (Investigations unlock once you have at
+                  least one.)
+                </p>
+                <ul class="hypothesis-list" id="hypothesis-list"></ul>
+                <p class="hint hypothesis-empty hidden" id="hypothesis-empty"
+                   data-i18n="modA.chart.hypotheses.empty">
+                  No hypotheses yet — add one below.
+                </p>
+                <div class="hypothesis-add">
+                  <input type="text" id="hypothesis-input" maxlength="160"
+                         data-i18n="modA.chart.hypotheses.placeholder"
+                         data-i18n-attr="placeholder"
+                         placeholder='e.g. "mechanical low back pain"' />
+                  <button type="button" id="hypothesis-add-btn"
+                          data-i18n="modA.chart.hypotheses.add">Add</button>
+                </div>
+              </section>
+
+              <!-- ── History (was "Ask the patient") ── -->
+              <section class="chart-section">
+                <h4 class="chart-section-h">
+                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                    stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path
+                    d="M4 5h16v11H9l-4 4v-4H4z" /><circle cx="9" cy="10.5" r="1"
+                    fill="#1763a6" stroke="none" /><circle cx="12" cy="10.5" r="1"
+                    fill="#1763a6" stroke="none" /><circle cx="15" cy="10.5" r="1"
+                    fill="#1763a6" stroke="none" /></svg>
+                  <span data-i18n="modA.chart.history.title">History &mdash; ask the patient</span>
+                </h4>
+                <div class="btn-group" id="group-history"></div>
+              </section>
+
+              <!-- ── Examination (was "Examine") ── -->
+              <section class="chart-section">
+                <h4 class="chart-section-h">
+                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                    stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
+                    d="M6 3v6a5 5 0 0 0 10 0V3" /><circle cx="18" cy="15" r="3" /><path
+                    d="M11 14v2a4 4 0 0 0 4 4" /></svg>
+                  <span data-i18n="modA.chart.exam.title">Examination</span>
+                </h4>
+                <div class="btn-group" id="group-exam"></div>
+              </section>
+
+              <!-- ── Investigations (was "Investigations & synthesis") ──
+                   Locked until at least one hypothesis is recorded
+                   (hypothesis-first PBL scaffold). The .is-locked
+                   class fades the section + the buttons are disabled
+                   in renderButtons until the gate opens. -->
+              <section class="chart-section chart-investigations" id="chart-investigations">
+                <h4 class="chart-section-h">
+                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
+                    2-3l-5-9V3" /><path d="M7.5 14h9" /></svg>
+                  <span data-i18n="modA.chart.investigations.title">Investigations &amp; synthesis</span>
+                </h4>
+                <p class="chart-section-locked-hint hidden" id="investigations-locked-hint"
+                   data-i18n="modA.chart.investigations.locked-hint">
+                  🔒 Locked &mdash; add a working hypothesis above to unlock.
+                </p>
+                <p class="synthesis-progress" id="synthesis-progress"
+                   data-i18n="modA.synthesis.progress" aria-live="polite">
+                  0 / 3 red flags screened
+                </p>
+                <div class="btn-group" id="group-labs"></div>
+              </section>
+            </article>
             <button id="reset-btn" class="reset-btn"
                     data-i18n="reset.btn"
                     data-i18n-title="reset.btn-title"
