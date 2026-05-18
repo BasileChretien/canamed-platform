@@ -2227,7 +2227,10 @@ function wireRoomUI() {
    keeps working unmodified - the tabs only toggle visibility and a small badge
    that nudges attention when something new arrives while a different tab is
    open. */
-let activeRcolTab = "findings";
+/* Default tab. Was "findings" until the tab was removed 2026-05-18
+   (redundant with inline-reveal chips under each chart button).
+   "decisions" is now the first tab and the natural default. */
+let activeRcolTab = "decisions";
 function initRightColumnTabs() {
   const bar = document.querySelector(".rcol-tabs");
   if (!bar || bar.dataset.wired) return;
@@ -5176,11 +5179,27 @@ function renderButtons() {
         btn.insertAdjacentElement("afterend", inline);
       }
       const item = itemById(id);
+      const meta = revealed[id];
       if (item) {
         const lang = (typeof _curLang === "function") ? _curLang() : "en";
-        // Use textContent (NOT innerHTML) — case content is author-controlled
-        // but we still keep the no-eval-by-default discipline.
-        inline.textContent = tc(item.a, lang);
+        // Rebuild as two children so we can style the author byline
+        // (italic + muted) separately from the answer body. Each child
+        // is set via textContent — case content is author-controlled
+        // but we keep the no-eval-by-default discipline.
+        inline.textContent = "";
+        const ans = document.createElement("span");
+        ans.className = "req-inline-answer";
+        ans.textContent = tc(item.a, lang);
+        inline.appendChild(ans);
+        // Author byline: replaces the work the removed Findings tab
+        // used to do ("revealed by [name]") so the WHO information
+        // stays visible without a separate tab.
+        if (meta && meta.by) {
+          const by = document.createElement("span");
+          by.className = "req-inline-by";
+          by.textContent = " — " + meta.by;
+          inline.appendChild(by);
+        }
         inline.setAttribute("aria-live", "polite");
       }
     } else if (inline) {
@@ -5188,67 +5207,65 @@ function renderButtons() {
     }
   });
 }
+/* renderFindings was the renderer for the "What we're finding" tab
+ * (a chronological log of all revealed items). That tab was removed
+ * 2026-05-18 — the inline-reveal chips under each chart button now
+ * carry the same information at the point of action, no scrolling.
+ *
+ * The function is retained for two side effects that still matter:
+ *   1. It triggers the coach + synthesis-progress updates that fire
+ *      whenever a finding is revealed. (Those used to live elsewhere
+ *      but were wired through this entry point.)
+ *   2. It keeps seenFindingIds populated so the inline-reveal "just-
+ *      in" animation can run once per item (CSS req-reveal-in
+ *      keyframe doesn't need this, but other future consumers might).
+ *
+ * The DOM operations on #findings-log / #findings-count / #findings-
+ * empty / tab-badge-findings are all gated on the element existing,
+ * because those nodes are no longer in the HTML. Same for the scroll-
+ * into-view path — inline reveals are already at the click site, so
+ * the scroll is now redundant. */
 function renderFindings() {
-  // Coach updates whenever the findings count changes (revealed items
-  // drive the Module A phase stepper from setup → case → exchange).
   if (typeof updateModANextStep === "function") updateModANextStep();
-  // Synthesis progress chip — fed by the same revealed[] state.
   if (typeof updateSynthesisProgress === "function") updateSynthesisProgress();
-  const log = el("findings-log");
-  log.innerHTML = "";
-  const ids = ITEM_IDS.filter(id => revealed[id])
-    .sort((a, b) => (revealed[a].at || 0) - (revealed[b].at || 0));
-  el("findings-count").textContent = ids.length + " / " + ITEM_IDS.length;
-  el("findings-empty").classList.toggle("hidden", ids.length > 0);
-  setTabBadge("tab-badge-findings", ids.length);
-  // Track the <li> we just created for the local revealer's tap so we
-  // can scroll it into view AFTER the loop (Bug 3 — Android: on stacked
-  // mobile layout the new finding lands far below the buttons and the
-  // user doesn't see it appear).
-  let scrollTarget = null;
-  ids.forEach(id => {
-    const item = itemById(id), meta = revealed[id];
-    const li = document.createElement("li");
-    if (item.key) li.className = "key";
-    if (!seenFindingIds[id]) {
-      li.classList.add("just-in"); seenFindingIds[id] = true;
-      nudgeRcolTab("findings");
-    }
-    if (id === myPendingReveal) scrollTarget = li;
-    const lang = _curLang();
-    const q = document.createElement("div"); q.className = "q"; q.textContent = tc(item.q, lang);
-    const a = document.createElement("div"); a.className = "a"; a.textContent = tc(item.a, lang);
-    const by = document.createElement("div"); by.className = "by";
-    by.textContent = "revealed by ";
-    const who = document.createElement("span");
-    who.textContent = meta.by || "?";
-    who.style.fontWeight = "600";
-    by.appendChild(who);
-    li.appendChild(q); li.appendChild(a); li.appendChild(by);
-    log.appendChild(li);
+  // Mark all currently-revealed items as seen so subsequent renders
+  // don't re-fire any future "just appeared" animation/effect.
+  ITEM_IDS.forEach(id => {
+    if (revealed[id]) seenFindingIds[id] = true;
   });
-  if (scrollTarget) {
-    // Switch to the Findings tab in case the user was on Decisions /
-    // Discussion / Reference when the patient response landed (otherwise
-    // the panel is display:none and scrollIntoView is a no-op).
-    if (typeof switchRcolTab === "function") switchRcolTab("findings");
-    // rAF gives the layout engine a tick to apply the tab switch before
-    // we ask the browser to scroll — without it the panel is still
-    // hidden when scrollIntoView runs and the call is a no-op on Android
-    // Chrome.
-    const doScroll = () => {
-      try {
-        scrollTarget.scrollIntoView({ behavior: "smooth", block: "center" });
-      } catch (_) {
-        // Older Android Chrome doesn't support the options object —
-        // fall back to the no-arg form which still scrolls.
-        try { scrollTarget.scrollIntoView(); } catch (__) {}
-      }
-    };
-    if (typeof requestAnimationFrame === "function") requestAnimationFrame(doScroll);
-    else doScroll();
-    myPendingReveal = null;
+  // Legacy DOM updates — kept guarded so the function still works if
+  // a future PR re-introduces the findings panel (or if a custom
+  // operator deployment keeps it). All no-ops in the current build.
+  const log = el("findings-log");
+  if (log) {
+    log.innerHTML = "";
+    const ids = ITEM_IDS.filter(id => revealed[id])
+      .sort((a, b) => (revealed[a].at || 0) - (revealed[b].at || 0));
+    const countEl = el("findings-count");
+    if (countEl) countEl.textContent = ids.length + " / " + ITEM_IDS.length;
+    const emptyEl = el("findings-empty");
+    if (emptyEl) emptyEl.classList.toggle("hidden", ids.length > 0);
+    setTabBadge("tab-badge-findings", ids.length);
+    ids.forEach(id => {
+      const item = itemById(id), meta = revealed[id];
+      const li = document.createElement("li");
+      if (item.key) li.className = "key";
+      const lang = _curLang();
+      const q = document.createElement("div"); q.className = "q"; q.textContent = tc(item.q, lang);
+      const a = document.createElement("div"); a.className = "a"; a.textContent = tc(item.a, lang);
+      const by = document.createElement("div"); by.className = "by";
+      by.textContent = "revealed by ";
+      const who = document.createElement("span");
+      who.textContent = meta.by || "?";
+      who.style.fontWeight = "600";
+      by.appendChild(who);
+      li.appendChild(q); li.appendChild(a); li.appendChild(by);
+      log.appendChild(li);
+    });
   }
+  // Clear the local-reveal-pending marker even though we no longer
+  // need the scroll-into-view (inline reveal is already at the click).
+  if (myPendingReveal) myPendingReveal = null;
 }
 function keyRevealed() {
   return ITEM_IDS.some(id => revealed[id] && itemById(id).key);
@@ -5321,7 +5338,11 @@ function renderPrompts() {
     // answers / another tab they actively chose to be on. Safer to
     // switch only when the user is on the default Findings tab — most
     // users haven't actively navigated away yet.
-    if (activeRcolTab === "findings" && typeof switchRcolTab === "function") {
+    // Auto-switch to Discussion ONLY when the user is on Decisions
+    // (the new default tab after removing "What we're finding"). If
+    // they've actively navigated elsewhere — Group answers — we don't
+    // yank their view.
+    if (activeRcolTab === "decisions" && typeof switchRcolTab === "function") {
       switchRcolTab("discussion");
     }
     const banner = el("synthesis-unlocked-banner");

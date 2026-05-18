@@ -3693,6 +3693,26 @@ body.session-ended-shown { overflow: hidden; }
   color: var(--ok, #2a9d8f);
   font-weight: 700;
 }
+/* Author byline inside the inline-reveal chip — replaces the
+   "revealed by [name]" line that used to live in the (now removed)
+   Findings tab. Muted italic so the answer text stays the visual
+   focus. */
+.req-inline-by {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.84rem;
+  margin-left: 4px;
+}
+/* Contribution tally relocated 2026-05-18 to the chart header (was
+   inside the removed Findings panel). Tighter top spacing + lighter
+   surface so it sits naturally inside the consultation-note header
+   without competing with the title. */
+.contrib-tally-header {
+  margin: 8px 0 0;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.45);
+  border-radius: var(--r-sm);
+}
 @keyframes req-reveal-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }

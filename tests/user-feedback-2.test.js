@@ -113,9 +113,14 @@ test("Bug 2 (JS): renderButtons populates .req-inline-reveal directly after each
     "renderButtons must reference the req-inline-reveal class");
   assert.match(scriptJs, /insertAdjacentElement\("afterend",\s*inline\)/,
     "renderButtons must insert the reveal directly after the button");
-  // Make sure the answer is read from the case content via tc()
-  assert.match(scriptJs, /inline\.textContent\s*=\s*tc\(item\.a,\s*lang\)/,
+  // The answer is read from the case content via tc() — used to be
+  // set directly on inline.textContent, now lives inside a child
+  // .req-inline-answer span (so the .req-inline-by author byline can
+  // be styled separately). Either assertion catches the regression.
+  assert.match(scriptJs, /tc\(item\.a,\s*lang\)/,
     "the reveal must render the localised case answer (tc + item.a)");
+  assert.match(scriptJs, /className\s*=\s*"req-inline-answer"/,
+    "the reveal must wrap the answer text in a .req-inline-answer span so the author byline can sit next to it");
 });
 
 /* ===================== Bug 3 — live language re-render ===================== */

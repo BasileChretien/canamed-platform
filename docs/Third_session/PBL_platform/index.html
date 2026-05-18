@@ -1102,6 +1102,13 @@
                   Everything you ask, examine, investigate or decide goes into
                   <em>your shared chart</em>.
                 </p>
+                <!-- Per-person contribution tally (relocated 2026-05-18 from
+                     the now-removed Findings tab). Colored dots show "who
+                     in the room has done anything" — the 'everyone takes
+                     part' social signal stays visible at the top of the
+                     chart, where it has more presence than buried inside
+                     a tab. Populated by renderContrib(). -->
+                <div id="contrib-tally" class="contrib-tally contrib-tally-header"></div>
               </header>
 
               <!-- ── Working hypotheses (PBL 7-jump brainstorm step ──
@@ -1207,15 +1214,13 @@
                  The Discussion tab carries a visible 🔒 lock label
                  spelling out the unlock condition so students don't
                  wonder whether it's "really" available. -->
+            <!-- Findings tab removed 2026-05-18 — redundant with the
+                 inline-reveal chips under each chart button (see
+                 .req-inline-reveal). Decide together is the new default
+                 tab; #contrib-tally relocated to the chart header. -->
             <div class="rcol-tabs" role="tablist" aria-label="Module A panels">
-              <button class="rcol-tab is-active" type="button" data-tab="findings"
-                      role="tab" aria-selected="true" aria-controls="rcol-p-findings">
-                <span class="rcol-tab-icon" aria-hidden="true">🔍</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.findings">What we're finding</span>
-                <span class="rcol-tab-badge" id="tab-badge-findings">0</span>
-              </button>
-              <button class="rcol-tab" type="button" data-tab="decisions"
-                      role="tab" aria-selected="false" aria-controls="rcol-p-decisions">
+              <button class="rcol-tab is-active" type="button" data-tab="decisions"
+                      role="tab" aria-selected="true" aria-controls="rcol-p-decisions">
                 <span class="rcol-tab-icon" aria-hidden="true">🗳️</span>
                 <span class="rcol-tab-label" data-i18n="rcol.tab.decisions">Decide together</span>
                 <span class="rcol-tab-badge" id="tab-badge-decisions" hidden></span>
@@ -1237,27 +1242,8 @@
               </button>
             </div>
 
-            <div class="rcol-panel is-active" id="rcol-p-findings"
-                 role="tabpanel" data-panel="findings" aria-labelledby="rcol-tab-findings">
-            <section class="card">
-              <h3><span data-i18n="findings.title">Findings log</span>
-                  <span class="count" id="findings-count">0</span></h3>
-              <p class="empty" id="findings-empty"><svg class="empty-art" viewBox="0 0 80 60"
-                aria-hidden="true"><rect x="14" y="10" width="52" height="40" rx="4"
-                fill="#f3f5f8" stroke="#d8dde3" /><line x1="22" y1="22" x2="46" y2="22"
-                stroke="#bcc3cc" stroke-width="3" stroke-linecap="round" /><line x1="22"
-                y1="30" x2="40" y2="30" stroke="#bcc3cc" stroke-width="3"
-                stroke-linecap="round" /><circle cx="58" cy="44" r="11" fill="none"
-                stroke="#2e9fdf" stroke-width="3" /><line x1="66" y1="52" x2="74" y2="60"
-                stroke="#2e9fdf" stroke-width="3" stroke-linecap="round" /></svg>
-                <span data-i18n="findings.empty">Nothing asked yet &mdash; use the buttons on the left to work the case.</span></p>
-              <ol id="findings-log"></ol>
-              <div id="contrib-tally" class="contrib-tally"></div>
-            </section>
-            </div><!-- /findings panel -->
-
-            <div class="rcol-panel" id="rcol-p-decisions" hidden
-                 role="tabpanel" data-panel="decisions">
+            <div class="rcol-panel is-active" id="rcol-p-decisions"
+                 role="tabpanel" data-panel="decisions" aria-labelledby="rcol-tab-decisions">
             <section class="card decisions-card" id="decisions-A"></section>
             </div><!-- /decisions panel -->
 
