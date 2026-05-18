@@ -63,14 +63,23 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     every screen, ~1.6 KB gz); (c) the live i18n re-render path that
 //     wires every renderX() helper to canamed:langchange so dynamic
 //     content (findings, decisions, prompts, leaderboard, answers)
-//     updates without a reload (~1.4 KB gz). All three are operator-
-//     requested features from real Round-3 use; tour copy in particular
-//     cannot be lazy-loaded without breaking the first-paint trigger
-//     (enterRoom() launches the tour on first room entry).
+//     updates without a reload (~1.4 KB gz).
+//   - 245 KB after the natural-flow refactor that deleted the Module
+//     A + Module B instruction walls (~280 + ~1000 words in en/fr/ja
+//     each = ~3 KB gz removed) in favour of a phase stepper + role
+//     picker + structured per-bullet Group-answers form. NET +12 KB gz
+//     mostly in i18n.js: ~25 new EN keys × 3 core langs = 75 string
+//     entries (modA.phase.*, modA.vignette.*, modA.discussion.*,
+//     modA.answers.bullet.*, modB.roles.*, modB.role.*.{name,brief},
+//     modB.answers.bullet.*, room.answer.add). The 5 second-wave
+//     languages (es/pt/de/ko/zh) fall back to English at runtime per
+//     the deep-i18n tc() chain; a follow-up coverage pass adds them
+//     and will push another ~5 KB. Bumping to 245 KB now reserves the
+//     headroom for that pass without another budget bump.
 // Any breach forces the next PR to either justify the regression or
 // split another chunk out via script-loader.js (lazy-load i18n locale
-// tables is the obvious next move once we hit ~250 KB).
-const FIRST_PARTY_BYTES_LIMIT_KB = 230;
+// tables is the obvious next move once we hit ~270 KB).
+const FIRST_PARTY_BYTES_LIMIT_KB = 245;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

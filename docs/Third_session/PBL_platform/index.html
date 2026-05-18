@@ -986,36 +986,43 @@
 
       <!-- STAGE 1: MODULE A -->
       <section id="stage-1" class="stage hidden">
-        <details class="card instructions" open>
-          <summary><strong>Module A &mdash; instructions</strong> (tap to show or hide)</summary>
-          <p><strong>How it works.</strong> Work through the case as a group: decide what to
-            ask, examine and investigate. Each result is revealed on request and everyone in
-            the room sees who revealed what. Completing the clinical synthesis unlocks the
-            discussion prompts.</p>
-          <p><strong>Phase 0 &mdash; Set up (2 min).</strong> No roles and no group leader
-            &mdash; you work as equals. The one thing to agree on:
-            <strong>make sure everyone takes part</strong>. Every voice in the room, French
-            and Japanese, should be heard &mdash; before you move on from a "Compare France
-            &amp; Japan" prompt, check that both a Caen and a Nagoya voice have spoken.</p>
-          <p><strong>Phase 1 &mdash; Work through the case (22 min).</strong> Use the panels
-            below: press a button to ask the patient a question, examine them, or run a test
-            &mdash; the answer appears for the whole room.</p>
-          <p><strong>Phase 2 &mdash; The Exchange (10 min).</strong> Work through the discussion
-            prompts above. The prompts marked <strong>"Compare France &amp; Japan"</strong> must
-            be answered by at least one <strong>Caen</strong> voice <em>and</em> one
-            <strong>Nagoya</strong> voice before you move on &mdash; the point is to compare and
-            debate, not to agree quickly. You are explicitly comparing five things: how a named
-            drug request is handled, opioid prescribing rules and culture, how readily imaging
-            is ordered, what patients expect from the consultation, and how decisions are shared.</p>
-          <p><strong>Phase 3 &mdash; Write your bullets (5 min)</strong> in the Group answers box
-            below:</p>
-          <ol class="info-list">
-            <li>Your group's first-line plan for the patient.</li>
-            <li>One way France and Japan genuinely <strong>differ</strong> on this case.</li>
-            <li>One thing your group <strong>disagreed</strong> about and could not fully resolve.</li>
-            <li>One thing you each take home.</li>
+        <!-- Natural-flow refactor (2026-05-18): the 5-paragraph
+             "instructions" block was removed in favour of a tiny phase
+             stepper + just-in-time inline hints + a structured Group
+             answers form whose field labels ARE the 4 bullet questions.
+             The original block lived here as <details class="card
+             instructions" open>. Load-bearing rules preserved:
+               - "Everyone takes part" → inline hint under the vignette
+               - "Compare prompts need Caen + Nagoya voice" → banner
+                  pinned at the top of the Discussion panel
+               - 4 bullets to write → labels on the Group-answers fields
+               - Time budgets → small chips inside the phase stepper
+             See ARCHITECTURE/script-js-map.md "Phase stepper" for the
+             component contract. -->
+        <nav class="phase-stepper" aria-label="Module A phases">
+          <ol class="phase-stepper-list">
+            <li class="phase-step is-current" data-phase="setup">
+              <span class="phase-step-num">1</span>
+              <span class="phase-step-label" data-i18n="modA.phase.setup.label">Set up</span>
+              <span class="phase-step-time" data-i18n="modA.phase.setup.time">2 min</span>
+            </li>
+            <li class="phase-step" data-phase="case">
+              <span class="phase-step-num">2</span>
+              <span class="phase-step-label" data-i18n="modA.phase.case.label">Work the case</span>
+              <span class="phase-step-time" data-i18n="modA.phase.case.time">22 min</span>
+            </li>
+            <li class="phase-step" data-phase="exchange">
+              <span class="phase-step-num">3</span>
+              <span class="phase-step-label" data-i18n="modA.phase.exchange.label">The Exchange</span>
+              <span class="phase-step-time" data-i18n="modA.phase.exchange.time">10 min</span>
+            </li>
+            <li class="phase-step" data-phase="bullets">
+              <span class="phase-step-num">4</span>
+              <span class="phase-step-label" data-i18n="modA.phase.bullets.label">Write bullets</span>
+              <span class="phase-step-time" data-i18n="modA.phase.bullets.time">5 min</span>
+            </li>
           </ol>
-        </details>
+        </nav>
 
         <section class="card vignette">
           <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
@@ -1039,10 +1046,15 @@
             given oxycodone and "it fixed everything", and he wants the same. Your group must
             work up the case and agree a management plan.
           </p>
-          <p class="hint">
+          <p class="hint" data-i18n="modA.vignette.hint" data-i18n-html>
             Decide what to <em>ask</em>, <em>examine</em> and <em>investigate</em> &mdash; each
             result is revealed on request. Completing the clinical synthesis unlocks the
             discussion prompts.
+          </p>
+          <p class="hint everyone-talks" data-i18n="modA.vignette.everyone" data-i18n-html>
+            👥 <strong>Work as equals — every voice in the room.</strong> Before you finish a
+            "Compare France &amp; Japan" prompt, check that both a Caen <em>and</em> a Nagoya
+            voice have spoken.
           </p>
         </section>
 
@@ -1140,6 +1152,12 @@
 
             <div class="rcol-panel" id="rcol-p-discussion" hidden
                  role="tabpanel" data-panel="discussion">
+            <p class="banner-rule banner-compare"
+               data-i18n="modA.discussion.compare-rule" data-i18n-html>
+              🗣️ <strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice
+              must speak before you move on. The point is to compare and debate, not to agree
+              quickly.
+            </p>
             <section class="card prompts-card" id="prompts-card">
               <h3 data-i18n="prompts.title">Discussion prompts</h3>
               <p class="empty" id="prompts-locked" data-i18n="prompts.locked">
@@ -1325,19 +1343,96 @@
 
             <div class="rcol-panel" id="rcol-p-answers" hidden
                  role="tabpanel" data-panel="answers">
-            <section class="card answers-card">
-              <h3>Group answers &mdash; Module A</h3>
+            <!-- Natural-flow refactor: the form now drives the four
+                 bullets students need to write, instead of asking them
+                 to remember a list from an instructions block. Each
+                 bullet has its own labelled input + its own filtered
+                 list of contributions (filtered by `bulletKey`). The
+                 backing data shape is unchanged (refAnswers.moduleA
+                 push entries) — we just add an optional `bulletKey`
+                 field; entries without it (legacy / pre-refactor) render
+                 in the unsorted bucket at the bottom. -->
+            <section class="card answers-card answers-card-bulleted">
+              <h3 data-i18n="modA.answers.title">Group answers — Module A</h3>
               <p class="hint" id="answersA-hint"></p>
-              <ul class="answers-list" id="answers-list-moduleA"></ul>
-              <p class="typing-line hidden" id="typing-moduleA"></p>
               <p class="hint answer-input-language-hint"
                  data-i18n="room.answer-input-language-hint">Write in any language &mdash; your facilitator and teammates can read English, French and Japanese.</p>
-              <div class="answer-add">
-                <input type="text" id="answer-input-moduleA" maxlength="500"
-                       data-i18n="room.answer-input-label" data-i18n-attr="aria-label"
-                       aria-label="Add a Module A group answer"
-                       placeholder="Add a point - it appears with your name and colour" />
-                <button class="answer-add-btn" data-mod="moduleA">Add</button>
+
+              <div class="answer-bullet" data-bullet-key="plan">
+                <label class="answer-bullet-label" for="answer-input-moduleA-plan"
+                       data-i18n="modA.answers.bullet.plan.label">
+                  1. Your group's first-line plan for the patient
+                </label>
+                <ul class="answers-list" id="answers-list-moduleA-plan"></ul>
+                <div class="answer-add">
+                  <input type="text" id="answer-input-moduleA-plan" maxlength="500"
+                         data-bullet-key="plan"
+                         data-i18n="modA.answers.bullet.plan.placeholder" data-i18n-attr="placeholder"
+                         placeholder="e.g. NSAID + active rehab; reassess in 4 weeks" />
+                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="plan"
+                          data-i18n="room.answer.add" title="Add">Add</button>
+                </div>
+              </div>
+
+              <div class="answer-bullet" data-bullet-key="differ">
+                <label class="answer-bullet-label" for="answer-input-moduleA-differ"
+                       data-i18n="modA.answers.bullet.differ.label" data-i18n-html>
+                  2. One way France and Japan genuinely <strong>differ</strong> on this case
+                </label>
+                <ul class="answers-list" id="answers-list-moduleA-differ"></ul>
+                <div class="answer-add">
+                  <input type="text" id="answer-input-moduleA-differ" maxlength="500"
+                         data-bullet-key="differ"
+                         data-i18n="modA.answers.bullet.differ.placeholder" data-i18n-attr="placeholder"
+                         placeholder="e.g. how readily opioids are prescribed for chronic pain" />
+                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="differ"
+                          data-i18n="room.answer.add" title="Add">Add</button>
+                </div>
+              </div>
+
+              <div class="answer-bullet" data-bullet-key="disagree">
+                <label class="answer-bullet-label" for="answer-input-moduleA-disagree"
+                       data-i18n="modA.answers.bullet.disagree.label" data-i18n-html>
+                  3. One thing your group <strong>disagreed</strong> about and could not fully resolve
+                </label>
+                <ul class="answers-list" id="answers-list-moduleA-disagree"></ul>
+                <div class="answer-add">
+                  <input type="text" id="answer-input-moduleA-disagree" maxlength="500"
+                         data-bullet-key="disagree"
+                         data-i18n="modA.answers.bullet.disagree.placeholder" data-i18n-attr="placeholder"
+                         placeholder="e.g. whether imaging is reassuring or a waste of resources" />
+                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="disagree"
+                          data-i18n="room.answer.add" title="Add">Add</button>
+                </div>
+              </div>
+
+              <div class="answer-bullet" data-bullet-key="takehome">
+                <label class="answer-bullet-label" for="answer-input-moduleA-takehome"
+                       data-i18n="modA.answers.bullet.takehome.label">
+                  4. One thing you each take home
+                </label>
+                <ul class="answers-list" id="answers-list-moduleA-takehome"></ul>
+                <div class="answer-add">
+                  <input type="text" id="answer-input-moduleA-takehome" maxlength="500"
+                         data-bullet-key="takehome"
+                         data-i18n="modA.answers.bullet.takehome.placeholder" data-i18n-attr="placeholder"
+                         placeholder="one sentence per person" />
+                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="takehome"
+                          data-i18n="room.answer.add" title="Add">Add</button>
+                </div>
+              </div>
+
+              <p class="typing-line hidden" id="typing-moduleA"></p>
+
+              <!-- Unsorted bucket: pre-refactor entries (no bulletKey) and
+                   anything the new code couldn't categorise. Hidden when
+                   empty; shown with a heading explaining the bucket. -->
+              <div class="answer-bullet answer-bullet-unsorted hidden" data-bullet-key="_unsorted">
+                <label class="answer-bullet-label answer-bullet-label-muted"
+                       data-i18n="modA.answers.bullet.unsorted.label">
+                  Other points (not yet attached to a bullet)
+                </label>
+                <ul class="answers-list" id="answers-list-moduleA-_unsorted"></ul>
               </div>
             </section>
             </div><!-- /answers panel -->
@@ -1347,6 +1442,39 @@
 
       <!-- STAGE 2: MODULE B -->
       <section id="stage-2" class="stage hidden">
+        <!-- Natural-flow refactor (2026-05-18): the ~1000-word
+             `<div class="card instructions-open">` block was removed.
+             Roles became interactive chips; SPIKES + useful sentences
+             stayed (small, load-bearing reference); the
+             Pause/Explore/Explain/Realign framework moved into a
+             collapsed <details> available when needed; the 6 discussion
+             prompts remained but are presented under a thin Phase 3
+             heading with the ground rule pinned; the 3 bullets became
+             the labels of a structured Group answers form. -->
+        <nav class="phase-stepper" aria-label="Module B phases">
+          <ol class="phase-stepper-list">
+            <li class="phase-step is-current" data-phase="setup">
+              <span class="phase-step-num">1</span>
+              <span class="phase-step-label" data-i18n="stage.modB.phase1.title">Phase 1 — Set up</span>
+              <span class="phase-step-time" data-i18n="modB.phase.setup.time">6 min</span>
+            </li>
+            <li class="phase-step" data-phase="play">
+              <span class="phase-step-num">2</span>
+              <span class="phase-step-label" data-i18n="stage.modB.phase2.title">Phase 2 — Play it out</span>
+              <span class="phase-step-time" data-i18n="modB.phase.play.time">12 + 3 min</span>
+            </li>
+            <li class="phase-step" data-phase="exchange">
+              <span class="phase-step-num">3</span>
+              <span class="phase-step-label" data-i18n="stage.modB.phase3.title">Phase 3 — The exchange</span>
+              <span class="phase-step-time" data-i18n="modB.phase.exchange.time">15 min</span>
+            </li>
+            <li class="phase-step" data-phase="bullets">
+              <span class="phase-step-num">4</span>
+              <span class="phase-step-label" data-i18n="stage.modB.phase4.title">Phase 4 — Write bullets</span>
+              <span class="phase-step-time" data-i18n="modB.phase.bullets.time">5 min</span>
+            </li>
+          </ol>
+        </nav>
         <section class="card vignette">
           <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
                aria-label="A doctor speaking with a patient and a family member">
@@ -1384,85 +1512,101 @@
             and your face, not in advanced vocabulary.</p>
         </div>
 
-        <div class="card instructions-open">
-          <p class="hint" data-i18n="stage.modB.intro.hint">This module is a roleplay your group runs together. Work through
-            the four phases in order &mdash; an observer keeps time.</p>
-
-          <h3 data-i18n="stage.modB.phase1.title">Phase 1 &mdash; Set up (6 min)</h3>
-          <p data-i18n="stage.modB.phase1.intro">Assign one volunteer to each role; everyone else is an observer. Read your own
-            short brief, then begin.</p>
-          <ul class="info-list">
-            <li data-i18n="stage.modB.phase1.role.physician" data-i18n-html><strong>Physician</strong> &mdash; you have the test results. Deliver the news
-              honestly and with empathy, and handle whatever happens in the room. Keep SPIKES
-              in mind (see the strip below) but do not recite it. You do not have to "win" or
-              fix everything &mdash; a good consultation can end with the patient still upset.</li>
-            <li data-i18n="stage.modB.phase1.role.patient" data-i18n-html><strong>Patient</strong> &mdash; you are 60. You suspected something was wrong
-              but hoped it was nothing. Choose privately how you react, and you may change as
-              the scene goes on. <strong>Decide one thing in advance: deep down, do you want to
-              know everything, or not?</strong> Don't announce it &mdash; let the physician
-              discover it.</li>
-            <li data-i18n="stage.modB.phase1.role.family" data-i18n-html><strong>Family member (adult child)</strong> &mdash; you love your parent and
-              you are frightened. Partway through &mdash; not at the start &mdash; find a natural
-              moment to <strong>lower your voice and speak to the physician aside</strong>:
-              ask them not to tell your parent everything. Have a reason ready in your head.
-              Keep it quiet and well-meant, not a demand.</li>
-            <li data-i18n="stage.modB.phase1.role.observer" data-i18n-html><strong>Observer(s)</strong> &mdash; you are the timekeeper and you run Phase 3.
-              Stay silent during the scene. Watch <em>for the SPIKES steps</em>: what built
-              trust, what created distance, and what the physician did at the moment the family
-              member spoke to them. Note one thing the physician <em>said</em> that worked, and
-              one moment that was hard.</li>
-          </ul>
-
-          <div class="spikes-strip">
-            <strong data-i18n="stage.modB.spikes.label">SPIKES</strong> &mdash;
-            <span data-i18n="stage.modB.spikes.s" data-i18n-html><strong>S</strong>etting</span> &middot;
-            <span data-i18n="stage.modB.spikes.p" data-i18n-html><strong>P</strong>erception (what do they already understand?)</span> &middot;
-            <span data-i18n="stage.modB.spikes.i" data-i18n-html><strong>I</strong>nvitation (how much do they want to know?)</span> &middot;
-            <span data-i18n="stage.modB.spikes.k" data-i18n-html><strong>K</strong>nowledge (news in small, plain pieces)</span> &middot;
-            <span data-i18n="stage.modB.spikes.e" data-i18n-html><strong>E</strong>motions (name and acknowledge the feeling)</span> &middot;
-            <span data-i18n="stage.modB.spikes.s2" data-i18n-html><strong>S</strong>trategy (agree the next step; you won't abandon them)</span>
+        <!-- Roles: small interactive picker (one volunteer per role, others
+             become observers). Tapping a role chip "claims" it for this
+             student locally; future PRs may sync via Firebase. -->
+        <div class="card role-picker" id="modB-role-picker">
+          <p class="role-picker-prompt" data-i18n="modB.roles.prompt" data-i18n-html>
+            <strong>Pick your role</strong> for this roleplay. Everyone not in a named role
+            is an observer (timekeeper + Phase 3 facilitator).
+          </p>
+          <div class="role-chip-row" role="radiogroup" aria-label="Pick your role">
+            <button class="role-chip" type="button" data-role="physician"
+                    role="radio" aria-checked="false">
+              <span class="role-chip-name" data-i18n="modB.role.physician.name">Physician</span>
+              <span class="role-chip-brief" data-i18n="modB.role.physician.brief"
+                    data-i18n-html>Deliver the news with empathy. Keep SPIKES in mind but don't
+                recite it. A good consultation can end with the patient still upset.</span>
+            </button>
+            <button class="role-chip" type="button" data-role="patient"
+                    role="radio" aria-checked="false">
+              <span class="role-chip-name" data-i18n="modB.role.patient.name">Patient (60)</span>
+              <span class="role-chip-brief" data-i18n="modB.role.patient.brief"
+                    data-i18n-html>You suspected something was wrong. <strong>Decide privately:
+                deep down, do you want to know everything or not?</strong> Let the physician
+                discover it.</span>
+            </button>
+            <button class="role-chip" type="button" data-role="family"
+                    role="radio" aria-checked="false">
+              <span class="role-chip-name" data-i18n="modB.role.family.name">Family (adult child)</span>
+              <span class="role-chip-brief" data-i18n="modB.role.family.brief"
+                    data-i18n-html>Partway through — not at the start — quietly take the
+                physician aside and ask them not to tell your parent everything.</span>
+            </button>
+            <button class="role-chip" type="button" data-role="observer"
+                    role="radio" aria-checked="false">
+              <span class="role-chip-name" data-i18n="modB.role.observer.name">Observer</span>
+              <span class="role-chip-brief" data-i18n="modB.role.observer.brief"
+                    data-i18n-html>You time the scene and run Phase 3. Watch the SPIKES steps —
+                note one thing the physician <em>said</em> that worked and one moment that was
+                hard.</span>
+            </button>
           </div>
+        </div>
 
-          <div class="phrases-box">
-            <strong data-i18n="stage.modB.spikes.useful.label">Useful sentences (English is everyone's second language):</strong>
-            <span data-i18n="stage.modB.spikes.useful.examples">"I'm afraid I have some serious news." &middot; "Would you like me to explain
-            everything, or focus on what we do next?" &middot; "I can see this is hard to hear."
-            &middot; "Take your time." &middot; "What questions do you have for me?"</span>
-          </div>
+        <!-- SPIKES + useful sentences: compact reference strips, available
+             throughout the scene without taking column-inches.  -->
+        <div class="spikes-strip">
+          <strong data-i18n="stage.modB.spikes.label">SPIKES</strong> &mdash;
+          <span data-i18n="stage.modB.spikes.s" data-i18n-html><strong>S</strong>etting</span> &middot;
+          <span data-i18n="stage.modB.spikes.p" data-i18n-html><strong>P</strong>erception (what do they already understand?)</span> &middot;
+          <span data-i18n="stage.modB.spikes.i" data-i18n-html><strong>I</strong>nvitation (how much do they want to know?)</span> &middot;
+          <span data-i18n="stage.modB.spikes.k" data-i18n-html><strong>K</strong>nowledge (news in small, plain pieces)</span> &middot;
+          <span data-i18n="stage.modB.spikes.e" data-i18n-html><strong>E</strong>motions (name and acknowledge the feeling)</span> &middot;
+          <span data-i18n="stage.modB.spikes.s2" data-i18n-html><strong>S</strong>trategy (agree the next step; you won't abandon them)</span>
+        </div>
 
-          <h3 data-i18n="stage.modB.phase2.title">Phase 2 &mdash; Play it out (12 min scene + 3 min swap)</h3>
-          <p data-i18n="stage.modB.phase2.intro" data-i18n-html>The observer says "start": the patient is already seated, the physician begins.
-            The physician delivers the news and handles the family member's request in the
-            moment. Observers stay silent; the observer calls "time" at the end. <strong>Then
-            swap and run it again</strong> with a different physician &mdash; over the two runs,
-            at least one Caen and one Nagoya student must take the physician role. The second
-            run is almost always better, and that improvement is worth discussing.</p>
+        <div class="phrases-box">
+          <strong data-i18n="stage.modB.spikes.useful.label">Useful sentences (English is everyone's second language):</strong>
+          <span data-i18n="stage.modB.spikes.useful.examples">"I'm afraid I have some serious news." &middot; "Would you like me to explain
+          everything, or focus on what we do next?" &middot; "I can see this is hard to hear."
+          &middot; "Take your time." &middot; "What questions do you have for me?"</span>
+        </div>
 
-          <div class="micro-framework">
-            <p data-i18n="stage.modB.framework.label" data-i18n-html><strong>When the family asks you to withhold information &mdash; "Pause &middot;
-              Explore &middot; Explain &middot; Realign":</strong></p>
-            <ol class="info-list">
-              <li data-i18n="stage.modB.framework.pause" data-i18n-html><strong>Pause</strong> &mdash; don't refuse or agree on the spot. Thank them;
-                their worry is real and usually loving.</li>
-              <li data-i18n="stage.modB.framework.explore" data-i18n-html><strong>Explore the <em>why</em></strong> &mdash; "Help me understand what
-                worries you most about your parent knowing."</li>
-              <li data-i18n="stage.modB.framework.explain" data-i18n-html><strong>Explain your position</strong> &mdash; you cannot deceive a patient
-                who wants to know, but you do not have to force information on someone who
-                does not.</li>
-              <li data-i18n="stage.modB.framework.realign" data-i18n-html><strong>Realign</strong> &mdash; ask the <em>patient</em> how much they want
-                to know and who they want involved (this is SPIKES' "Invitation"). The family's
-                worry becomes part of the conversation, not a secret kept from the patient.</li>
-            </ol>
-          </div>
-
-          <h3 data-i18n="stage.modB.phase3.title">Phase 3 &mdash; The exchange (15 min)</h3>
-          <p data-i18n="stage.modB.phase3.ground-rule" data-i18n-html><strong>Ground rule (an observer reads this aloud):</strong> we are comparing
-            <em>practices and how they are changing</em>, not ranking countries. Neither model
-            is "the advanced one". Speak about what you have actually seen or been taught
-            &mdash; and it is completely fine to say "I'm not sure, this is changing."</p>
-          <p data-i18n="stage.modB.phase3.intro">An observer reads these out one at a time &mdash; for each, make sure both a Caen
-            and a Nagoya voice answers:</p>
+        <!-- Pause/Explore/Explain/Realign — collapsed by default. Opens
+             when the family raises their quiet aside (Physician + Observer
+             can flip it open as a checklist). -->
+        <details class="card micro-framework-card">
+          <summary>
+            <span data-i18n="stage.modB.framework.label" data-i18n-html><strong>When the family asks you to withhold information &mdash; "Pause &middot;
+              Explore &middot; Explain &middot; Realign"</strong></span>
+          </summary>
           <ol class="info-list">
+            <li data-i18n="stage.modB.framework.pause" data-i18n-html><strong>Pause</strong> &mdash; don't refuse or agree on the spot. Thank them;
+              their worry is real and usually loving.</li>
+            <li data-i18n="stage.modB.framework.explore" data-i18n-html><strong>Explore the <em>why</em></strong> &mdash; "Help me understand what
+              worries you most about your parent knowing."</li>
+            <li data-i18n="stage.modB.framework.explain" data-i18n-html><strong>Explain your position</strong> &mdash; you cannot deceive a patient
+              who wants to know, but you do not have to force information on someone who
+              does not.</li>
+            <li data-i18n="stage.modB.framework.realign" data-i18n-html><strong>Realign</strong> &mdash; ask the <em>patient</em> how much they want
+              to know and who they want involved (this is SPIKES' "Invitation"). The family's
+              worry becomes part of the conversation, not a secret kept from the patient.</li>
+          </ol>
+        </details>
+
+        <!-- Phase 3 discussion: pinned ground rule + the 6 questions as
+             discrete prompt cards. -->
+        <section class="card prompts-card prompts-card-modB">
+          <p class="banner-rule banner-compare"
+             data-i18n="stage.modB.phase3.ground-rule" data-i18n-html><strong>Ground rule
+            (an observer reads this aloud):</strong> we are comparing <em>practices and how
+            they are changing</em>, not ranking countries. Neither model is "the advanced one".
+            Speak about what you have actually seen or been taught &mdash; and it is completely
+            fine to say "I'm not sure, this is changing."</p>
+          <p class="hint" data-i18n="stage.modB.phase3.intro">An observer reads these out one
+            at a time &mdash; for each, make sure both a Caen and a Nagoya voice answers:</p>
+          <ol class="discussion-q-list">
             <li data-i18n="stage.modB.phase3.q1" data-i18n-html><strong>Who is the information for?</strong> When there is serious news, who is
               told <em>first</em> &mdash; the patient or the family? Is that what the law says,
               the textbook says, or what actually happens on the ward? Name one way France and
@@ -1488,18 +1632,7 @@
               member? saying the diagnosis out loud? not fixing the distress?)? What does that
               difference tell you?</li>
           </ol>
-
-          <h3 data-i18n="stage.modB.phase4.title">Phase 4 &mdash; Write your bullets (5 min)</h3>
-          <p data-i18n="stage.modB.phase4.intro">In the Group answers box below (the facilitators collect these at the end):</p>
-          <ol class="info-list">
-            <li data-i18n="stage.modB.phase4.b1">One concrete sentence your group would use to answer the family's request to
-              withhold information.</li>
-            <li data-i18n="stage.modB.phase4.b2" data-i18n-html>One way disclosure practice <strong>differs</strong> between France and Japan
-              &mdash; and one way it is <strong>converging</strong>.</li>
-            <li data-i18n="stage.modB.phase4.b3">One thing each of you will do differently, in your own country, because of
-              this discussion.</li>
-          </ol>
-        </div>
+        </section>
 
         <details class="card history-card">
           <summary><strong>&#128220; Historical context &mdash; how we got here</strong></summary>
@@ -1648,19 +1781,68 @@
         </details>
         <section class="card decisions-card" id="decisions-B"></section>
 
-        <section class="card answers-card">
+        <section class="card answers-card answers-card-bulleted">
           <h3 data-i18n="stage.modB.answers.title">Group answers &mdash; Module B</h3>
           <p class="hint" id="answersB-hint"></p>
-          <ul class="answers-list" id="answers-list-moduleB"></ul>
-          <p class="typing-line hidden" id="typing-moduleB"></p>
           <p class="hint answer-input-language-hint"
              data-i18n="room.answer-input-language-hint">Write in any language &mdash; your facilitator and teammates can read English, French and Japanese.</p>
-          <div class="answer-add">
-            <input type="text" id="answer-input-moduleB" maxlength="500"
-                   data-i18n="room.answer-input-label-b" data-i18n-attr="aria-label"
-                   aria-label="Add a Module B group answer"
-                   placeholder="Add a point - it appears with your name and colour" />
-            <button class="answer-add-btn" data-mod="moduleB">Add</button>
+
+          <div class="answer-bullet" data-bullet-key="family-sentence">
+            <label class="answer-bullet-label" for="answer-input-moduleB-family-sentence"
+                   data-i18n="modB.answers.bullet.family-sentence.label">
+              1. One concrete sentence your group would use to answer the family's request to withhold information
+            </label>
+            <ul class="answers-list" id="answers-list-moduleB-family-sentence"></ul>
+            <div class="answer-add">
+              <input type="text" id="answer-input-moduleB-family-sentence" maxlength="500"
+                     data-bullet-key="family-sentence"
+                     data-i18n="modB.answers.bullet.family-sentence.placeholder" data-i18n-attr="placeholder"
+                     placeholder='e.g. "Let me first ask your parent how much they want to know..."' />
+              <button class="answer-add-btn" data-mod="moduleB" data-bullet-key="family-sentence"
+                      data-i18n="room.answer.add" title="Add">Add</button>
+            </div>
+          </div>
+
+          <div class="answer-bullet" data-bullet-key="differ-converge">
+            <label class="answer-bullet-label" for="answer-input-moduleB-differ-converge"
+                   data-i18n="modB.answers.bullet.differ-converge.label" data-i18n-html>
+              2. One way disclosure practice <strong>differs</strong> between France and Japan — and one way it is <strong>converging</strong>
+            </label>
+            <ul class="answers-list" id="answers-list-moduleB-differ-converge"></ul>
+            <div class="answer-add">
+              <input type="text" id="answer-input-moduleB-differ-converge" maxlength="500"
+                     data-bullet-key="differ-converge"
+                     data-i18n="modB.answers.bullet.differ-converge.placeholder" data-i18n-attr="placeholder"
+                     placeholder="e.g. differs on family-first vs patient-first; converges toward shared decision-making" />
+              <button class="answer-add-btn" data-mod="moduleB" data-bullet-key="differ-converge"
+                      data-i18n="room.answer.add" title="Add">Add</button>
+            </div>
+          </div>
+
+          <div class="answer-bullet" data-bullet-key="practice-change">
+            <label class="answer-bullet-label" for="answer-input-moduleB-practice-change"
+                   data-i18n="modB.answers.bullet.practice-change.label">
+              3. One thing each of you will do differently, in your own country, because of this discussion
+            </label>
+            <ul class="answers-list" id="answers-list-moduleB-practice-change"></ul>
+            <div class="answer-add">
+              <input type="text" id="answer-input-moduleB-practice-change" maxlength="500"
+                     data-bullet-key="practice-change"
+                     data-i18n="modB.answers.bullet.practice-change.placeholder" data-i18n-attr="placeholder"
+                     placeholder="one sentence per person" />
+              <button class="answer-add-btn" data-mod="moduleB" data-bullet-key="practice-change"
+                      data-i18n="room.answer.add" title="Add">Add</button>
+            </div>
+          </div>
+
+          <p class="typing-line hidden" id="typing-moduleB"></p>
+
+          <div class="answer-bullet answer-bullet-unsorted hidden" data-bullet-key="_unsorted">
+            <label class="answer-bullet-label answer-bullet-label-muted"
+                   data-i18n="modB.answers.bullet.unsorted.label">
+              Other points (not yet attached to a bullet)
+            </label>
+            <ul class="answers-list" id="answers-list-moduleB-_unsorted"></ul>
           </div>
         </section>
       </section>

@@ -2202,6 +2202,7 @@ function wireRoomUI() {
   initCallProf();
   initLeave();
   initTeamName();
+  initRolePicker();
   initRightColumnTabs();
 }
 
@@ -5916,6 +5917,44 @@ function renderLeaderboard() {
   box.appendChild(list);
 }
 
+/* Module B role picker (local-only). The HTML chips are radio buttons;
+ * clicking one toggles its aria-checked=true and unsets all siblings.
+ * Local state persists in localStorage so a refresh during the roleplay
+ * doesn't lose the assignment. Cross-room sync (everyone seeing each
+ * other's picks) is a future PR. Idempotent — safe to call on every
+ * wireRoomUI invocation; uses a `_wired` flag to bind once. */
+function initRolePicker() {
+  const picker = el("modB-role-picker");
+  if (!picker || picker._wired) return;
+  picker._wired = true;
+  const chips = picker.querySelectorAll(".role-chip");
+  const STORAGE_KEY = "canamed_modB_role";
+  // restore saved selection
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      chips.forEach(c => c.setAttribute("aria-checked",
+        c.dataset.role === saved ? "true" : "false"));
+    }
+  } catch (e) { /* localStorage may be blocked; OK */ }
+  chips.forEach(chip => {
+    chip.addEventListener("click", () => {
+      chips.forEach(c => c.setAttribute("aria-checked", "false"));
+      chip.setAttribute("aria-checked", "true");
+      try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
+    });
+    // arrow-key navigation inside the radiogroup
+    chip.addEventListener("keydown", e => {
+      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+      e.preventDefault();
+      const list = Array.from(chips);
+      const i = list.indexOf(chip);
+      const next = list[(i + (e.key === "ArrowRight" ? 1 : -1) + list.length) % list.length];
+      next.focus();
+    });
+  });
+}
+
 /* save the room's chosen team name (any room member may set it) */
 function initTeamName() {
   const btn = el("team-name-btn"), inp = el("team-name-input");
@@ -5982,12 +6021,21 @@ function renderAnswerHints(moduleKey) {
   hintEl.textContent = bits.join("  ·  ") + ".  " + i18nT("room.answers.hint.suffix");
 }
 let lastAnswerCount = { moduleA: 0, moduleB: 0 };
+
+/* Bullet-key validators per module: any entry whose `bulletKey` is not in
+ * this set falls through to the "_unsorted" bucket (typically: legacy
+ * pre-refactor entries that have no bulletKey at all, or future bullet
+ * keys not yet known to the running client). Keep in sync with the HTML
+ * data-bullet-key attributes in index.html. */
+const ANSWER_BULLETS = {
+  moduleA: ["plan", "differ", "disagree", "takehome"],
+  moduleB: ["family-sentence", "differ-converge", "practice-change"]
+};
+
 function renderAnswers(moduleKey) {
   renderContrib();
   renderAnswerHints(moduleKey);
   checkScoreEvents();
-  const list = el("answers-list-" + moduleKey);
-  if (!list) return;
   // tab badge for the Module A "Group answers" tab in the right column
   if (moduleKey === "moduleA") {
     const n = Object.keys(answers.moduleA || {}).length;
@@ -5995,60 +6043,113 @@ function renderAnswers(moduleKey) {
     if (n > (lastAnswerCount.moduleA || 0)) nudgeRcolTab("answers");
     lastAnswerCount.moduleA = n;
   }
-  // if THIS user is mid inline-edit, a rebuild would destroy their open <input>
-  // and abort the edit - defer until the edit finishes (flag set in editAnswer)
-  if (list._editing) { list._pendingRender = true; return; }
-  list._pendingRender = false;
-  list.innerHTML = "";
-  const entries = entriesSorted(answers[moduleKey]);
-  if (entries.length === 0) {
-    const li = document.createElement("li");
-    li.className = "answers-empty";
-    li.textContent = "No points yet - add the group's bullets below.";
-    list.appendChild(li);
-    return;
-  }
-  entries.forEach(entry => {
-    const li = document.createElement("li");
-    li.className = "answer-entry";
-    const dot = document.createElement("span");
-    dot.className = "dot"; dot.style.background = colorFor(entry.by);
-    const who = document.createElement("span");
-    who.className = "answer-by"; who.textContent = entry.by;
-    const txt = document.createElement("span");
-    txt.className = "answer-text"; txt.textContent = entry.text;
-    li.appendChild(dot); li.appendChild(who); li.appendChild(txt);
-    if (entry.cid === clientId) {
-      const editBtn = document.createElement("button");
-      editBtn.className = "entry-act"; editBtn.textContent = "edit";
-      editBtn.setAttribute("aria-label", "Edit your point");
-      editBtn.addEventListener("click", () => editAnswer(moduleKey, entry, li));
-      const delBtn = document.createElement("button");
-      delBtn.className = "entry-act"; delBtn.textContent = "delete";
-      delBtn.setAttribute("aria-label", "Delete your point");
-      delBtn.addEventListener("click", () => deleteAnswer(moduleKey, entry.id));
-      li.appendChild(editBtn); li.appendChild(delBtn);
-    }
-    list.appendChild(li);
+
+  // The form is now a set of per-bullet sections; gather the entries
+  // for each bullet's <ul> separately. Anything without a recognised
+  // bulletKey lands in `_unsorted` (legacy entries from before this
+  // refactor, plus any future-bulletKey value not in ANSWER_BULLETS).
+  const validBullets = ANSWER_BULLETS[moduleKey] || [];
+  const buckets = {};
+  validBullets.forEach(k => { buckets[k] = []; });
+  buckets._unsorted = [];
+  entriesSorted(answers[moduleKey]).forEach(entry => {
+    const key = entry.bulletKey;
+    if (key && validBullets.indexOf(key) !== -1) buckets[key].push(entry);
+    else buckets._unsorted.push(entry);
   });
+
+  // Render each bucket into its own <ul>. Hide the unsorted section when
+  // empty (it only matters for legacy data).
+  Object.keys(buckets).forEach(bulletKey => {
+    const list = el("answers-list-" + moduleKey + "-" + bulletKey);
+    if (!list) return;
+    if (list._editing) { list._pendingRender = true; return; }
+    list._pendingRender = false;
+    list.innerHTML = "";
+    buckets[bulletKey].forEach(entry => {
+      list.appendChild(buildAnswerLi(moduleKey, entry));
+    });
+    // toggle visibility of the unsorted wrapper card based on whether
+    // there's anything to show. Real bullets always stay visible (so
+    // students see their empty inputs).
+    if (bulletKey === "_unsorted") {
+      const wrap = list.closest(".answer-bullet-unsorted");
+      if (wrap) wrap.classList.toggle("hidden", buckets._unsorted.length === 0);
+    }
+  });
+
+  // back-compat: some legacy fallbacks (or future tests) may still look
+  // for the original flat list element id; keep one if the page renders
+  // it. Render the flat list as an aggregate of all buckets when present.
+  const flatList = el("answers-list-" + moduleKey);
+  if (flatList && !flatList._editing) {
+    flatList.innerHTML = "";
+    entriesSorted(answers[moduleKey]).forEach(entry => {
+      flatList.appendChild(buildAnswerLi(moduleKey, entry));
+    });
+  }
 }
-function addAnswer(moduleKey) {
-  const input = el("answer-input-" + moduleKey);
+
+/* Build a single answer <li>. Extracted from the original renderAnswers
+ * so it's reusable across the per-bullet lists and the legacy flat list. */
+function buildAnswerLi(moduleKey, entry) {
+  const li = document.createElement("li");
+  li.className = "answer-entry";
+  const dot = document.createElement("span");
+  dot.className = "dot"; dot.style.background = colorFor(entry.by);
+  const who = document.createElement("span");
+  who.className = "answer-by"; who.textContent = entry.by;
+  const txt = document.createElement("span");
+  txt.className = "answer-text"; txt.textContent = entry.text;
+  li.appendChild(dot); li.appendChild(who); li.appendChild(txt);
+  if (entry.cid === clientId) {
+    const editBtn = document.createElement("button");
+    editBtn.className = "entry-act"; editBtn.textContent = "edit";
+    editBtn.setAttribute("aria-label", "Edit your point");
+    editBtn.addEventListener("click", () => editAnswer(moduleKey, entry, li));
+    const delBtn = document.createElement("button");
+    delBtn.className = "entry-act"; delBtn.textContent = "delete";
+    delBtn.setAttribute("aria-label", "Delete your point");
+    delBtn.addEventListener("click", () => deleteAnswer(moduleKey, entry.id));
+    li.appendChild(editBtn); li.appendChild(delBtn);
+  }
+  return li;
+}
+
+/* `bulletKey` is optional — when present, the answer is tagged so the
+ * structured form can group it under the matching bullet. Legacy
+ * callers without a bulletKey still work (entries land in _unsorted on
+ * render). */
+function addAnswer(moduleKey, bulletKey) {
+  // resolve the right input element: per-bullet form uses
+  //   answer-input-{moduleKey}-{bulletKey}
+  // legacy form uses
+  //   answer-input-{moduleKey}
+  const input = bulletKey
+    ? el("answer-input-" + moduleKey + "-" + bulletKey)
+    : el("answer-input-" + moduleKey);
+  if (!input) return;
   const text = (input.value || "").trim();
   if (!text || !refAnswers[moduleKey]) return;
   clearTimeout(typingTimer);   // stop the pending "still typing" tick
   setTyping(null);
   // tag the author's university so the export is analysable for cross-cultural
-  // balance (who from which country contributed which point)
-  refAnswers[moduleKey].push({
-    by: myName, cid: clientId, university: myUniversity || "", text: text, at: Date.now()
-  })
+  // balance (who from which country contributed which point). bulletKey is
+  // included when present so structured answers carry their bucket.
+  const payload = {
+    by: myName, cid: clientId, university: myUniversity || "",
+    text: text, at: Date.now()
+  };
+  if (bulletKey) payload.bulletKey = bulletKey;
+  refAnswers[moduleKey].push(payload)
     .then(() => { input.value = ""; })
     .catch(() => { /* keep the text in the box so a failed write doesn't lose it */ });
   // append-only event log: NEVER include the answer body (see §3.4 of the
-  // event-sourcing design — payload is metadata only: who, where, length)
+  // event-sourcing design — payload is metadata only: who, where, length).
+  // bulletKey IS metadata so it's safe + useful for analysis.
   logEvent(myRoom, "answer." + moduleKey, {
-    by: myName, university: myUniversity || "", len: text.length
+    by: myName, university: myUniversity || "", len: text.length,
+    bulletKey: bulletKey || ""
   });
 }
 /* Inline edit: swap the text span for an input (no native prompt() - it is
@@ -6057,8 +6158,12 @@ function editAnswer(moduleKey, entry, li) {
   if (li.querySelector(".answer-edit")) return;
   const txtSpan = li.querySelector(".answer-text");
   if (!txtSpan) return;
-  const list = el("answers-list-" + moduleKey);
-  list._editing = true;   // pause rebuilds while this edit is open
+  // The list element being edited is the entry's parent <ul> — the
+  // legacy form had one flat list per module, the new bulleted form has
+  // one per bullet (answers-list-{module}-{bullet}). Resolve via DOM
+  // climb rather than a hardcoded id so both shapes work.
+  const list = li.closest(".answers-list") || el("answers-list-" + moduleKey);
+  if (list) list._editing = true;   // pause rebuilds while this edit is open
   const input = document.createElement("input");
   input.type = "text";
   input.className = "answer-edit";
@@ -6088,7 +6193,7 @@ function editAnswer(moduleKey, entry, li) {
   // edit is over once the input blurs: clear the pause flag FIRST (so any
   // render triggered from inside save() can proceed), commit, then rebuild
   input.addEventListener("blur", () => {
-    list._editing = false;
+    if (list) list._editing = false;
     save();
     renderAnswers(moduleKey);
   });
@@ -6123,28 +6228,48 @@ function renderTyping() {
   });
 }
 function initAnswers() {
+  // Every "Add" button carries data-mod + (optional) data-bullet-key.
+  // The legacy flat form uses no data-bullet-key; the new bulleted form
+  // tags it. addAnswer() handles both cases.
   document.querySelectorAll(".answer-add-btn").forEach(btn => {
-    btn.addEventListener("click", () => addAnswer(btn.dataset.mod));
+    btn.addEventListener("click", () => addAnswer(btn.dataset.mod, btn.dataset.bulletKey));
   });
   const i18nT = (typeof window !== "undefined" && typeof window.t === "function")
     ? window.t
     : ((k) => k);
-  ["moduleA", "moduleB"].forEach(moduleKey => {
-    const input = el("answer-input-" + moduleKey);
-    input.addEventListener("keydown", e => { if (e.key === "Enter") addAnswer(moduleKey); });
+  // Wire every input under .answer-add: typing indicator + Enter-to-submit.
+  // Each per-bullet input has its own id pattern answer-input-{mod}-{bullet};
+  // the legacy flat input is answer-input-{mod}. We iterate the rendered
+  // .answer-add wrappers so both shapes are covered.
+  document.querySelectorAll(".answer-add").forEach(addRow => {
+    const input = addRow.querySelector("input[id^='answer-input-']");
+    const btn = addRow.querySelector(".answer-add-btn");
+    if (!input || !btn) return;
+    const moduleKey = btn.dataset.mod;
+    const bulletKey = btn.dataset.bulletKey;
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter") addAnswer(moduleKey, bulletKey);
+    });
     input.addEventListener("input", () => {
       setTyping(moduleKey);
       clearTimeout(typingTimer);
       typingTimer = setTimeout(() => setTyping(null), 2500);
     });
     input.addEventListener("blur", () => setTyping(null));
-    // localize the placeholder (the i18n applyI18n() pass only handles one
-    // attribute via data-i18n-attr, which we use for aria-label).
-    input.setAttribute("placeholder", i18nT("room.answer-input-placeholder"));
+    // The legacy flat input had its placeholder set programmatically (no
+    // data-i18n-attr). Keep doing so only for the legacy element so the
+    // new per-bullet inputs (which DO use data-i18n-attr="placeholder")
+    // aren't double-set.
+    if (!bulletKey) {
+      input.setAttribute("placeholder", i18nT("room.answer-input-placeholder"));
+    }
   });
-  // initial hint text; renderAnswerHints keeps it live as answers come in
-  el("answersA-hint").textContent = i18nT("room.answers.hint.moduleA");
-  el("answersB-hint").textContent = i18nT("room.answers.hint.moduleB");
+  // initial hint text; renderAnswerHints keeps it live as answers come in.
+  // Element may be absent on a stripped-down test fixture; guard for that.
+  const hintA = el("answersA-hint");
+  if (hintA) hintA.textContent = i18nT("room.answers.hint.moduleA");
+  const hintB = el("answersB-hint");
+  if (hintB) hintB.textContent = i18nT("room.answers.hint.moduleB");
 }
 
 /* ===================== MISC ===================== */

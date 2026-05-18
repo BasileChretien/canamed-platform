@@ -576,6 +576,190 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .micro-framework p { margin: 0 0 4px; font-size: 0.95rem; }
 .micro-framework .info-list { margin-top: 4px; }
 
+/* Natural-flow refactor (2026-05-18): components introduced when the
+   Module A + Module B instruction walls were replaced by progressive,
+   contextual cues. See ARCHITECTURE/script-js-map.md "Phase stepper". */
+
+/* Phase stepper — slim 4-step horizontal nav at the top of each stage.
+   Each step is rank + label + time-budget. Current step is highlighted;
+   completed steps get a subtle check. Wraps on narrow viewports. */
+.phase-stepper {
+  margin: 0 0 var(--s-3);
+}
+.phase-stepper-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  counter-reset: phase-step;
+}
+.phase-step {
+  flex: 1 1 140px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.25;
+  position: relative;
+}
+.phase-step.is-current {
+  background: var(--card);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 0 0 1px var(--primary) inset;
+}
+.phase-step.is-done {
+  color: var(--ok-strong);
+}
+.phase-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--line);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.phase-step.is-current .phase-step-num {
+  background: var(--primary);
+  color: #fff;
+}
+.phase-step.is-done .phase-step-num {
+  background: var(--ok);
+  color: #fff;
+}
+.phase-step-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.phase-step-time {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+/* "Everyone talks" reminder under the vignette in Module A. */
+.everyone-talks {
+  background: var(--meeting-50);
+  border-left: 4px solid var(--meeting);
+  padding: 9px 13px;
+  border-radius: var(--r-sm);
+  margin-top: var(--s-2);
+}
+
+/* Pinned banners at the top of a panel — used for the Caen+Nagoya rule
+   on the Discussion panel and the Module-B ground rule. */
+.banner-rule {
+  background: var(--meeting-50);
+  border-left: 4px solid var(--meeting);
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  margin: 0 0 var(--s-3);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+.banner-rule.banner-compare { background: var(--caen-50); border-left-color: var(--caen-line); }
+
+/* Module B role picker — interactive chip grid. Tapping a chip claims
+   the role (CSS-only highlight; JS in wireRolePicker() drives state). */
+.role-picker { padding: 14px 16px; }
+.role-picker-prompt { margin: 0 0 var(--s-2); font-size: 0.95rem; }
+.role-chip-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.role-chip {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  gap: 4px;
+  padding: 10px 12px;
+  background: var(--surface-sunk);
+  border: 2px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              background var(--dur-fast) var(--ease-soft),
+              transform var(--dur-fast) var(--ease-soft);
+}
+.role-chip:hover { border-color: var(--primary); transform: translateY(-1px); }
+.role-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.role-chip[aria-checked="true"] {
+  background: var(--nagoya-50);
+  border-color: var(--primary);
+  box-shadow: 0 1px 4px rgba(46,159,223,.18);
+}
+.role-chip-name { font-weight: 700; font-size: 0.95rem; }
+.role-chip-brief { font-size: 0.84rem; color: var(--muted); line-height: 1.4; }
+.role-chip[aria-checked="true"] .role-chip-brief { color: var(--ink); }
+
+/* Discussion-question list inside Module B's prompts-card. */
+.discussion-q-list {
+  margin: var(--s-2) 0 0;
+  padding-left: 1.4em;
+}
+.discussion-q-list li {
+  margin-bottom: var(--s-2);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+/* Pause/Explore/Explain/Realign — collapsed-by-default reference card. */
+.micro-framework-card {
+  background: var(--surface-sunk);
+  border-left: 4px solid var(--ok);
+  padding: 10px 14px;
+}
+.micro-framework-card summary {
+  cursor: pointer;
+  font-size: 0.95rem;
+  color: var(--ink);
+  list-style: none;
+}
+.micro-framework-card summary::-webkit-details-marker { display: none; }
+.micro-framework-card summary::before {
+  content: "\25B8\00A0";
+  color: var(--muted);
+}
+.micro-framework-card[open] summary::before { content: "\25BE\00A0"; }
+.micro-framework-card .info-list { margin-top: var(--s-2); }
+
+/* Structured Group-answers form (per-bullet sections). One labelled
+   section per bullet question; each holds its own list + input row. */
+.answers-card-bulleted { display: flex; flex-direction: column; gap: var(--s-3); }
+.answer-bullet { display: flex; flex-direction: column; gap: 6px; }
+.answer-bullet-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink);
+  line-height: 1.4;
+}
+.answer-bullet-label-muted { color: var(--muted); font-weight: 500; font-size: 0.86rem; }
+.answer-bullet .answers-list { margin: 0; }
+.answer-bullet-unsorted {
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px dashed var(--line);
+}
+
 /* ---------- saved confirmation ---------- */
 .copy-ok { color: var(--ok); font-size: 0.86rem; margin-left: 10px; font-weight: 600; }
 

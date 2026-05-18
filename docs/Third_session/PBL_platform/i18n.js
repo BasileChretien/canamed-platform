@@ -397,6 +397,74 @@
 
       "stage.modB.answers.title": "Group answers — Module B",
 
+      // ────────────────────────────────────────────────────────────────
+      // Natural-flow refactor (2026-05-18): the Module A "instructions"
+      // and Module B "instructions-open" walls were replaced with a
+      // phase stepper + structured Group-answers form + small inline
+      // hints. Only EN canonical strings are added here; other locales
+      // fall back via tc() until a coverage pass is run.
+      // ────────────────────────────────────────────────────────────────
+
+      // Module A — phase stepper
+      "modA.phase.setup.label": "Set up",
+      "modA.phase.setup.time": "2 min",
+      "modA.phase.case.label": "Work the case",
+      "modA.phase.case.time": "22 min",
+      "modA.phase.exchange.label": "The Exchange",
+      "modA.phase.exchange.time": "10 min",
+      "modA.phase.bullets.label": "Write bullets",
+      "modA.phase.bullets.time": "5 min",
+
+      // Module A — vignette hints
+      "modA.vignette.hint": "Decide what to <em>ask</em>, <em>examine</em> and <em>investigate</em> — each result is revealed on request. Completing the clinical synthesis unlocks the discussion prompts.",
+      "modA.vignette.everyone": "👥 <strong>Work as equals — every voice in the room.</strong> Before you finish a \"Compare France &amp; Japan\" prompt, check that both a Caen <em>and</em> a Nagoya voice have spoken.",
+
+      // Module A — Discussion-panel banner
+      "modA.discussion.compare-rule": "🗣️ <strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice must speak before you move on. The point is to compare and debate, not to agree quickly.",
+
+      // Module A — structured Group-answers form
+      "modA.answers.title": "Group answers — Module A",
+      "modA.answers.bullet.plan.label": "1. Your group's first-line plan for the patient",
+      "modA.answers.bullet.plan.placeholder": "e.g. NSAID + active rehab; reassess in 4 weeks",
+      "modA.answers.bullet.differ.label": "2. One way France and Japan genuinely <strong>differ</strong> on this case",
+      "modA.answers.bullet.differ.placeholder": "e.g. how readily opioids are prescribed for chronic pain",
+      "modA.answers.bullet.disagree.label": "3. One thing your group <strong>disagreed</strong> about and could not fully resolve",
+      "modA.answers.bullet.disagree.placeholder": "e.g. whether imaging is reassuring or a waste of resources",
+      "modA.answers.bullet.takehome.label": "4. One thing you each take home",
+      "modA.answers.bullet.takehome.placeholder": "one sentence per person",
+      "modA.answers.bullet.unsorted.label": "Other points (not yet attached to a bullet)",
+
+      // Module B — phase stepper time chips (titles re-use existing
+      // stage.modB.phaseN.title keys for cross-version stability)
+      "modB.phase.setup.time": "6 min",
+      "modB.phase.play.time": "12 + 3 min",
+      "modB.phase.exchange.time": "15 min",
+      "modB.phase.bullets.time": "5 min",
+
+      // Module B — role picker
+      "modB.roles.prompt": "<strong>Pick your role</strong> for this roleplay. Everyone not in a named role is an observer (timekeeper + Phase 3 facilitator).",
+      "modB.role.physician.name": "Physician",
+      "modB.role.physician.brief": "Deliver the news with empathy. Keep SPIKES in mind but don't recite it. A good consultation can end with the patient still upset.",
+      "modB.role.patient.name": "Patient (60)",
+      "modB.role.patient.brief": "You suspected something was wrong. <strong>Decide privately: deep down, do you want to know everything or not?</strong> Let the physician discover it.",
+      "modB.role.family.name": "Family (adult child)",
+      "modB.role.family.brief": "Partway through — not at the start — quietly take the physician aside and ask them not to tell your parent everything.",
+      "modB.role.observer.name": "Observer",
+      "modB.role.observer.brief": "You time the scene and run Phase 3. Watch the SPIKES steps — note one thing the physician <em>said</em> that worked and one moment that was hard.",
+
+      // Module B — structured Group-answers form
+      "modB.answers.bullet.family-sentence.label": "1. One concrete sentence your group would use to answer the family's request to withhold information",
+      "modB.answers.bullet.family-sentence.placeholder": "e.g. \"Let me first ask your parent how much they want to know...\"",
+      "modB.answers.bullet.differ-converge.label": "2. One way disclosure practice <strong>differs</strong> between France and Japan — and one way it is <strong>converging</strong>",
+      "modB.answers.bullet.differ-converge.placeholder": "e.g. differs on family-first vs patient-first; converges toward shared decision-making",
+      "modB.answers.bullet.practice-change.label": "3. One thing each of you will do differently, in your own country, because of this discussion",
+      "modB.answers.bullet.practice-change.placeholder": "one sentence per person",
+      "modB.answers.bullet.unsorted.label": "Other points (not yet attached to a bullet)",
+
+      // Shared button label used by every "Add" button in the new
+      // bulleted form. Kept short so it fits next to the input.
+      "room.answer.add": "Add",
+
       // wrap-up stage (stage-3) — the last thing students see in the room
       "stage.wrap.title": "Wrap-up & Next Steps",
       "stage.wrap.thanks": "Thank you for taking part! Before you go:",
@@ -839,6 +907,50 @@
 
       "stage.modB.answers.title": "Réponses de groupe — Module B",
 
+      // ─── Natural-flow refactor (2026-05-18) — FR ───
+      "modA.phase.setup.label": "Mise en place",
+      "modA.phase.setup.time": "2 min",
+      "modA.phase.case.label": "Travailler le cas",
+      "modA.phase.case.time": "22 min",
+      "modA.phase.exchange.label": "L'échange",
+      "modA.phase.exchange.time": "10 min",
+      "modA.phase.bullets.label": "Écrire les bullets",
+      "modA.phase.bullets.time": "5 min",
+      "modA.vignette.hint": "Décidez ce que vous voulez <em>demander</em>, <em>examiner</em> et <em>investiguer</em> — chaque résultat est révélé sur demande. Compléter la synthèse clinique débloque les questions de discussion.",
+      "modA.vignette.everyone": "👥 <strong>Travaillez à égalité — chaque voix dans la salle.</strong> Avant de terminer une question \"Comparer France &amp; Japon\", vérifiez qu'une voix de Caen <em>et</em> une de Nagoya se sont exprimées.",
+      "modA.discussion.compare-rule": "🗣️ <strong>Questions de comparaison :</strong> une voix de Caen <em>et</em> une de Nagoya doivent parler avant de passer à la suivante. Le but est de comparer et débattre, pas de se mettre d'accord rapidement.",
+      "modA.answers.title": "Réponses de groupe — Module A",
+      "modA.answers.bullet.plan.label": "1. La conduite à tenir de première intention de votre groupe pour ce patient",
+      "modA.answers.bullet.plan.placeholder": "ex. AINS + rééducation active ; réévaluer dans 4 semaines",
+      "modA.answers.bullet.differ.label": "2. Une vraie <strong>différence</strong> entre France et Japon sur ce cas",
+      "modA.answers.bullet.differ.placeholder": "ex. la facilité de prescription des opioïdes dans la douleur chronique",
+      "modA.answers.bullet.disagree.label": "3. Un point sur lequel votre groupe n'a pas pu pleinement se <strong>mettre d'accord</strong>",
+      "modA.answers.bullet.disagree.placeholder": "ex. l'imagerie est-elle rassurante ou un gaspillage de ressources ?",
+      "modA.answers.bullet.takehome.label": "4. Une chose que chacun·e d'entre vous retient",
+      "modA.answers.bullet.takehome.placeholder": "une phrase par personne",
+      "modA.answers.bullet.unsorted.label": "Autres points (non encore rattachés à une bullet)",
+      "modB.phase.setup.time": "6 min",
+      "modB.phase.play.time": "12 + 3 min",
+      "modB.phase.exchange.time": "15 min",
+      "modB.phase.bullets.time": "5 min",
+      "modB.roles.prompt": "<strong>Choisissez votre rôle</strong> pour ce jeu de rôle. Toute personne sans rôle nommé devient observateur·rice (chronométrage + animation de la phase 3).",
+      "modB.role.physician.name": "Médecin",
+      "modB.role.physician.brief": "Annoncez la nouvelle avec empathie. Gardez SPIKES en tête sans le réciter. Une bonne consultation peut se terminer avec un·e patient·e encore bouleversé·e.",
+      "modB.role.patient.name": "Patient·e (60 ans)",
+      "modB.role.patient.brief": "Vous soupçonniez que quelque chose n'allait pas. <strong>Décidez en privé : au fond, voulez-vous tout savoir ou non ?</strong> Laissez le·la médecin le découvrir.",
+      "modB.role.family.name": "Famille (enfant adulte)",
+      "modB.role.family.brief": "À un moment — pas au début — prenez discrètement le·la médecin à part et demandez-lui de ne pas tout dire à votre parent.",
+      "modB.role.observer.name": "Observateur·rice",
+      "modB.role.observer.brief": "Vous chronométrez la scène et animez la phase 3. Surveillez les étapes SPIKES — notez une chose que le·la médecin <em>a dite</em> qui a fonctionné et un moment difficile.",
+      "modB.answers.bullet.family-sentence.label": "1. Une phrase concrète que votre groupe utiliserait pour répondre à la demande de la famille de ne pas tout dire",
+      "modB.answers.bullet.family-sentence.placeholder": "ex. \"Laissez-moi d'abord demander à votre parent ce qu'il·elle souhaite savoir...\"",
+      "modB.answers.bullet.differ-converge.label": "2. Une façon dont la pratique de l'annonce <strong>diffère</strong> entre France et Japon — et une façon dont elle <strong>converge</strong>",
+      "modB.answers.bullet.differ-converge.placeholder": "ex. diffère sur famille-d'abord vs patient·e-d'abord ; converge vers la décision partagée",
+      "modB.answers.bullet.practice-change.label": "3. Une chose que chacun·e fera différemment, dans son propre pays, suite à cette discussion",
+      "modB.answers.bullet.practice-change.placeholder": "une phrase par personne",
+      "modB.answers.bullet.unsorted.label": "Autres points (non encore rattachés à une bullet)",
+      "room.answer.add": "Ajouter",
+
       "stage.wrap.title": "Bilan & Étapes suivantes",
       "stage.wrap.thanks": "Merci d'avoir participé ! Avant de partir :",
       "stage.wrap.do-questionnaire": "Remplissez le questionnaire de fin de séance — il ne prend que quelques minutes, et un court post-test aura lieu dans 3 semaines.",
@@ -1262,6 +1374,50 @@
       "stage.modB.phase4.b3": "この議論を受けて、それぞれが自国で違うふうにしようと思うこと、一つずつ。",
 
       "stage.modB.answers.title": "グループ回答 — モジュールB",
+
+      // ─── Natural-flow refactor (2026-05-18) — JA ───
+      "modA.phase.setup.label": "準備",
+      "modA.phase.setup.time": "2分",
+      "modA.phase.case.label": "症例を進める",
+      "modA.phase.case.time": "22分",
+      "modA.phase.exchange.label": "意見交換",
+      "modA.phase.exchange.time": "10分",
+      "modA.phase.bullets.label": "要点を書く",
+      "modA.phase.bullets.time": "5分",
+      "modA.vignette.hint": "何を <em>問診</em>・<em>診察</em>・<em>検査</em> するかをグループで決めてください — 各結果は要求に応じて開示されます。臨床総合判断を完了すると、ディスカッション項目が解放されます。",
+      "modA.vignette.everyone": "👥 <strong>全員が対等に — 部屋の全ての声を聞く。</strong>「フランスと日本を比較する」項目を終える前に、Caenと名古屋の両方の声が発言されたか確認してください。",
+      "modA.discussion.compare-rule": "🗣️ <strong>比較項目:</strong> 次に進む前に、Caenと名古屋の両方の声が発言する必要があります。早く合意することではなく、比較し議論することが目的です。",
+      "modA.answers.title": "グループ回答 — モジュールA",
+      "modA.answers.bullet.plan.label": "1. この患者へのあなたのグループの第一選択の方針",
+      "modA.answers.bullet.plan.placeholder": "例: NSAID + アクティブ・リハ ; 4週間後に再評価",
+      "modA.answers.bullet.differ.label": "2. この症例でフランスと日本が本当に <strong>異なる</strong> 一つの点",
+      "modA.answers.bullet.differ.placeholder": "例: 慢性痛に対するオピオイド処方のしやすさ",
+      "modA.answers.bullet.disagree.label": "3. グループが完全に <strong>合意できなかった</strong> 一つの点",
+      "modA.answers.bullet.disagree.placeholder": "例: 画像検査は安心材料か、それとも資源の無駄か",
+      "modA.answers.bullet.takehome.label": "4. それぞれが持ち帰る一つのこと",
+      "modA.answers.bullet.takehome.placeholder": "一人一文",
+      "modA.answers.bullet.unsorted.label": "その他の項目 (まだ要点に紐付いていないもの)",
+      "modB.phase.setup.time": "6分",
+      "modB.phase.play.time": "12 + 3分",
+      "modB.phase.exchange.time": "15分",
+      "modB.phase.bullets.time": "5分",
+      "modB.roles.prompt": "<strong>役割を選んでください</strong> — このロールプレイのために。名前のついた役割を持たない人は観察者 (タイムキーパー + フェーズ3の司会) となります。",
+      "modB.role.physician.name": "医師",
+      "modB.role.physician.brief": "共感を持って告知してください。SPIKESを心に留めつつ、暗唱はしないでください。良い面談は、患者がまだ動揺したままで終わることもあります。",
+      "modB.role.patient.name": "患者 (60歳)",
+      "modB.role.patient.brief": "何かおかしいと感じていました。<strong>心の中で決めてください: 本当はすべて知りたいですか、それとも知りたくないですか?</strong> 医師に見つけてもらいましょう。",
+      "modB.role.family.name": "家族 (成人の子)",
+      "modB.role.family.brief": "途中で — 最初ではなく — そっと医師を脇に呼び、親にすべて伝えないでほしいと頼んでください。",
+      "modB.role.observer.name": "観察者",
+      "modB.role.observer.brief": "場面のタイムキーパーとフェーズ3の司会を務めます。SPIKESの各ステップを観察し、医師が <em>言って</em> うまくいったこと一つと、難しかった瞬間一つを記録してください。",
+      "modB.answers.bullet.family-sentence.label": "1. 情報を伏せてほしいという家族の頼みに、あなたのグループが使う具体的な一文",
+      "modB.answers.bullet.family-sentence.placeholder": "例: 「まずご家族の方ご自身に、どこまで知りたいかを伺いましょう…」",
+      "modB.answers.bullet.differ-converge.label": "2. フランスと日本で告知の実践が <strong>異なる</strong> 一つの点 — そして <strong>近づきつつある</strong> 一つの点",
+      "modB.answers.bullet.differ-converge.placeholder": "例: 家族優先 vs 患者優先で異なる ; 共有意思決定へ収束",
+      "modB.answers.bullet.practice-change.label": "3. この議論を受けて、それぞれが自国で違うふうにしようと思うこと",
+      "modB.answers.bullet.practice-change.placeholder": "一人一文",
+      "modB.answers.bullet.unsorted.label": "その他の項目 (まだ要点に紐付いていないもの)",
+      "room.answer.add": "追加",
 
       "stage.wrap.title": "まとめと次のステップ",
       "stage.wrap.thanks": "ご参加ありがとうございました。退室する前に以下をお願いします:",
