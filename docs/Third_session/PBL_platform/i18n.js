@@ -192,6 +192,7 @@
       "splash.created.copy": "Copy",
       "splash.created.copy-link": "Copy link",
       "splash.created.qr-caption": "Or scan the QR with a phone",
+      "splash.qr.loading": "Generating QR code…",
       "splash.created.create-another": "Create another",
       "splash.created.open-admin": "Open admin dashboard →",
 
@@ -794,6 +795,7 @@
       "splash.created.copy": "Copier",
       "splash.created.copy-link": "Copier le lien",
       "splash.created.qr-caption": "Ou scannez le QR avec un téléphone",
+      "splash.qr.loading": "Génération du QR code…",
       "splash.created.create-another": "Créer une autre séance",
       "splash.created.open-admin": "Ouvrir le tableau de bord →",
 
@@ -1306,6 +1308,7 @@
       "splash.created.copy": "コピー",
       "splash.created.copy-link": "リンクをコピー",
       "splash.created.qr-caption": "またはスマートフォンでQRコードを読み取ってください",
+      "splash.qr.loading": "QRコードを生成中…",
       "splash.created.create-another": "別のセッションを作成",
       "splash.created.open-admin": "管理ダッシュボードを開く →",
 

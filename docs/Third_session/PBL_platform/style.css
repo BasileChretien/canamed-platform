@@ -3754,6 +3754,18 @@ body.session-ended-shown { overflow: hidden; }
   border-radius: var(--r-sm);
 }
 
+/* Transient "Generating QR code…" placeholder shown while the lazy-
+   loaded qrcode.js library finishes fetching. Prevents the previous
+   session's QR from lingering visible during the load gap. */
+.splash-qr-placeholder {
+  margin: 0;
+  padding: 60px 12px;
+  text-align: center;
+  font-size: 0.92rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* Empty-input flash used by the team-name save button (and reusable
    elsewhere) — pulses the input border + tints the background so the
    user gets visible feedback when they click Save on an empty field

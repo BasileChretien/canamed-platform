@@ -7138,16 +7138,54 @@ function buildJoinUrl(code) {
   if (!safeCode) return window.location.origin + "/";
   return window.location.origin + "/?s=" + encodeURIComponent(safeCode);
 }
+/* Tracks the most-recently-requested QR code so async paths can detect
+ * when they're stale and bail out. User report (2026-05-18): "the QR
+ * code that was displayed, was displayed for the last session. It was
+ * not updated to the current one." Root cause: two paths could leave
+ * the previous session's QR visible —
+ *   1. paintJoinQr(newCode) was called BEFORE the lazy qrcode lib
+ *      finished loading; the function returned early WITHOUT clearing
+ *      the container, so the old QR for the previous session stayed
+ *      on screen until the lib loaded.
+ *   2. A second create-session click could fire a second paintJoinQr
+ *      while the first's load-then-recurse was still pending — the
+ *      two recursive callbacks could resolve in unpredictable order,
+ *      and the loser's render would overwrite the winner's.
+ * Both fixed below: clear the container FIRST regardless of lib state,
+ * and gate the post-load recursive call on the latest-code check. */
+let _lastJoinQrCode = null;
 function paintJoinQr(code) {
   const container = el("splash-qr-img");
   const wrap = el("splash-qr-wrap");
   if (!container || !wrap) return;
+  // Record the latest requested code IMMEDIATELY so any earlier-in-
+  // flight callbacks can detect they're stale.
+  _lastJoinQrCode = code;
+  // Clear the container BEFORE any early-return path so a stale QR
+  // from a previous session never lingers on screen while the new
+  // one is being prepared. Show a transient "Generating QR…" hint
+  // so the user knows the empty space is intentional + temporary.
+  container.innerHTML = "";
   // qrcode.js is lazy-loaded (out of the splash bundle). Pull it in now
   // if the admin hasn't reached this surface yet, then re-call ourselves.
   if (typeof QRCode === "undefined") {
+    const ph = document.createElement("p");
+    ph.className = "splash-qr-placeholder";
+    ph.textContent = (typeof window !== "undefined" && typeof window.t === "function" &&
+                      window.t("splash.qr.loading") !== "splash.qr.loading")
+      ? window.t("splash.qr.loading")
+      : "Generating QR code…";
+    container.appendChild(ph);
+    wrap.hidden = false;
     if (window.CanamedLoader && window.CanamedLoader.ensureQrcode) {
       window.CanamedLoader.ensureQrcode()
-        .then(() => paintJoinQr(code))
+        .then(() => {
+          // Race guard: a newer paintJoinQr call may have come in
+          // while we were waiting. If so, the NEW call will repaint
+          // itself; we abandon this stale resolution.
+          if (_lastJoinQrCode !== code) return;
+          paintJoinQr(code);
+        })
         .catch(() => { wrap.hidden = true; });
       return;
     }
@@ -7156,9 +7194,6 @@ function paintJoinQr(code) {
     wrap.hidden = true;
     return;
   }
-  // Clear any previous render — qrcode.js appends a <canvas> + <img>
-  // each call, so a fresh "Create another" round would otherwise stack.
-  container.innerHTML = "";
   try {
     /* eslint-disable no-new */
     new QRCode(container, {
