@@ -6995,6 +6995,29 @@ function sessionExists(code) {
     .then(snap => (snap.val() != null)).catch(() => false);
 }
 
+/* Tri-state session status — used by the splash + auto-resume to reject
+ * closed (finished) sessions BEFORE the student fills in name + consent
+ * and gets kicked to the "session ended" screen anyway. Returns:
+ *   { exists: bool, closed: bool }
+ * User report (2026-05-18): "It should not be possible for a student to
+ * join a finished session anyway." Right — the old sessionExists() only
+ * checked `created`, so students could pass the splash and waste
+ * effort on a session that's already over. */
+function sessionStatus(code) {
+  try { dbInit(); } catch (e) {}
+  if (!db) return Promise.resolve({ exists: false, closed: false });
+  return ensureSignedIn()
+    .then(() => Promise.all([
+      db.ref(oPath(code, "created")).once("value"),
+      db.ref(oPath(code, "closed")).once("value")
+    ]))
+    .then(snaps => ({
+      exists: snaps[0].val() != null,
+      closed: snaps[1].val() != null
+    }))
+    .catch(() => ({ exists: false, closed: false }));
+}
+
 function setUnlockedSession(code) {
   sessionNum = code;
   try { localStorage.setItem("canamed_session", code); } catch (e) {}
@@ -7402,15 +7425,28 @@ function initEntry() {
     return;
   }
   const splash = el("splash");
-  // if a previously unlocked session is still valid, skip the splash
+  // if a previously unlocked session is still valid, skip the splash.
+  // 2026-05-18: switched from sessionExists to sessionStatus so we
+  // also reject CLOSED sessions on auto-resume — a stored code for a
+  // session the facilitator has already ended should clear localStorage
+  // and show the splash (with a one-time "session ended" hint), not
+  // auto-resume into a session that's about to kick the user out.
   const stored = sanitizeCode(localStorage.getItem("canamed_session"));
   if (stored) {
-    sessionExists(stored).then(ok => {
-      if (ok) {
+    sessionStatus(stored).then(status => {
+      if (status.exists && !status.closed) {
         enterUnlockedSession(stored);
       } else {
-        // stale code (session purged or never existed): clear and show splash
+        // stale code (purged, never existed, or finished): clear and
+        // show splash. Stash a one-shot hint key so the splash can
+        // explain "your previous session has ended" if that's why we
+        // ended up here (vs the generic "not found").
         try { localStorage.removeItem("canamed_session"); } catch (e) {}
+        if (status.closed) {
+          try {
+            sessionStorage.setItem("canamed_just_ended_session", stored);
+          } catch (e) {}
+        }
         sessionNum = "";
         showSplash();
       }
@@ -7425,6 +7461,22 @@ function initEntry() {
     document.title = "CANAMED";
     wireSplash();
     splashShowView("enter");
+    // If the auto-resume just bailed because the stored session was
+    // CLOSED, surface a one-shot hint so the student sees why they're
+    // back on the splash (rather than silently dumping them there).
+    try {
+      const endedCode = sessionStorage.getItem("canamed_just_ended_session");
+      if (endedCode) {
+        sessionStorage.removeItem("canamed_just_ended_session");
+        const hint = el("splash-hint");
+        if (hint) {
+          hint.textContent = tFallback("splash.enter.previous-session-ended",
+            "Your previous session (" + endedCode.toUpperCase() +
+            ") has ended. Enter a new code from your facilitator.");
+          hint.className = "splash-hint err";
+        }
+      }
+    } catch (e) { /* sessionStorage may be blocked — silently ignore */ }
     // If the user landed via a deep-link (e.g., a QR scan or a shared
     // URL), pre-fill the code and auto-submit. Runs AFTER wireSplash() so
     // the splash-enter form's submit handler is already attached.
@@ -7471,8 +7523,12 @@ function wireSplash() {
     }
     hint.textContent = "Checking…";
     hint.className = "splash-hint";
-    sessionExists(got).then(ok => {
-      if (!ok) {
+    // 2026-05-18: switched from sessionExists (boolean) to sessionStatus
+    // ({exists, closed}) so a CLOSED session is rejected up front with a
+    // clear "this session has ended" message — students no longer waste
+    // time on the lobby + name/consent + room only to get kicked.
+    sessionStatus(got).then(status => {
+      if (!status.exists) {
         // B7 (SIMULATION_EDGE_CASES.md): if the user typed a 6-char code
         // without the dash (e.g. "abcdef"), try the dashed variant
         // ("abc-def") before showing the generic miss. Only auto-retry
@@ -7481,11 +7537,16 @@ function wireSplash() {
         // generateSessionCode() emits.
         if (/^[a-z0-9]{6}$/.test(got)) {
           const dashed = got.slice(0, 3) + "-" + got.slice(3);
-          return sessionExists(dashed).then(okDashed => {
-            if (okDashed) {
+          return sessionStatus(dashed).then(dashedStatus => {
+            if (dashedStatus.exists && !dashedStatus.closed) {
               hint.textContent = "";
               if (code) code.value = dashed;
               enterUnlockedSession(dashed);
+            } else if (dashedStatus.exists && dashedStatus.closed) {
+              hint.textContent = tFallback("splash.enter.session-ended",
+                "This session has already ended. Ask your facilitator for a new session code.");
+              hint.className = "splash-hint err";
+              shake();
             } else {
               hint.textContent = "No session matches this code. Did you mean " +
                 dashed.toUpperCase() + "? Check it with your facilitator.";
@@ -7495,6 +7556,16 @@ function wireSplash() {
           });
         }
         hint.textContent = "No session matches this code. Check it with your facilitator, or have a facilitator create a new session.";
+        hint.className = "splash-hint err";
+        shake();
+        return;
+      }
+      if (status.closed) {
+        // Session exists but the facilitator has ended it — bail before
+        // we drag the student through the lobby + consent only to get
+        // kicked. Clear, single-line error in the splash hint slot.
+        hint.textContent = tFallback("splash.enter.session-ended",
+          "This session has already ended. Ask your facilitator for a new session code.");
         hint.className = "splash-hint err";
         shake();
         return;
