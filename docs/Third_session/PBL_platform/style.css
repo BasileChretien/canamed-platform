@@ -1053,6 +1053,17 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 .lb-row {
   display: flex;
   align-items: center;
+  /* flex-wrap is REQUIRED. `.lb-gap` (only present on the "me" row)
+     has `flex-basis: 100%` so that the "+N to catch X" line drops to
+     its own row below rank/name/pts. Without flex-wrap on the parent,
+     that 100% basis can't actually force a new line — instead .lb-gap
+     competes with rank+name+pts for the SAME horizontal track,
+     squashing `.lb-name` (the team name) to 0 width and triggering
+     per-character vertical stacking via overflow-wrap. The Bug 1
+     user-feedback-2 fix added `min-width: 0` + `overflow-wrap:
+     break-word` on .lb-name to prevent that, but the actual root
+     cause was the missing flex-wrap. */
+  flex-wrap: wrap;
   gap: var(--s-3);
   padding: 9px 12px;
   background: var(--card);
