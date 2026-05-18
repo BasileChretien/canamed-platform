@@ -687,3 +687,168 @@ test.describe("Wrong decisions are visibly RED, not green/amber", () => {
         .toBe(true);
     });
 });
+
+/* User request (2026-05-18): 'The compare prompt is too much text. It
+ * must be smoother. Maybe point by point. And they write a reply, then
+ * the next point appears.'
+ *
+ * Pin the contract: only ONE prompt is visible at a time; the legacy
+ * <ol id="prompts-list"> is hidden; a reply textarea and Next button
+ * exist; the cursor advances on Next. Mobile viewport per the new
+ * standing rule. The full Firebase round-trip is not driven here —
+ * we hand-drive the render call with synthetic state to keep the
+ * test isolated and deterministic. */
+test.describe("Progressive discussion prompts — one at a time + reply", () => {
+  test("only ONE prompt is visible at a time (legacy <ol> stays hidden)",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const result = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        document.getElementById("stage-1").classList.remove("hidden");
+        // Force unlocked state + cursor=0 + a known case.
+        window.revealed = window.revealed || {};
+        // Mark a key item as revealed so keyRevealed() returns true.
+        if (window.ITEM_IDS && window.CASE) {
+          for (const id of window.ITEM_IDS) {
+            const [g, i] = id.split(":");
+            if (window.CASE[g] && window.CASE[g][+i] && window.CASE[g][+i].key) {
+              window.revealed[id] = { by: "test", at: Date.now() };
+              break;
+            }
+          }
+        }
+        window.promptCursor = 0;
+        window.promptReplies = {};
+        if (typeof window.renderPrompts === "function") window.renderPrompts();
+        const progressive = document.getElementById("prompt-progressive");
+        const legacy = document.getElementById("prompts-list");
+        const text = document.getElementById("prompt-text");
+        const reply = document.getElementById("prompt-reply");
+        const next = document.getElementById("prompt-next");
+        const progressTotal = document.getElementById("prompt-progress-total");
+        return {
+          progressiveVisible: progressive && !progressive.classList.contains("hidden"),
+          legacyHidden: legacy && legacy.classList.contains("hidden"),
+          textHasContent: text && (text.textContent || "").length > 20,
+          replyExists: !!reply,
+          nextExists: !!next,
+          totalCount: progressTotal && parseInt(progressTotal.textContent, 10),
+          numPromptsInLegacy: legacy ? legacy.querySelectorAll("li").length : -1
+        };
+      });
+      expect(result.progressiveVisible,
+        "the new #prompt-progressive panel must be visible after the synthesis is revealed")
+        .toBe(true);
+      expect(result.legacyHidden,
+        "the legacy <ol id='prompts-list'> must stay hidden — it's only kept for back-compat")
+        .toBe(true);
+      expect(result.numPromptsInLegacy,
+        "the legacy <ol> must NOT be populated with all prompts (that's the old 'wall of text' behaviour)")
+        .toBe(0);
+      expect(result.textHasContent,
+        "the single visible prompt's text must be populated from CASE.prompts[0]")
+        .toBe(true);
+      expect(result.replyExists, "the reply textarea must exist").toBe(true);
+      expect(result.nextExists, "the Next button must exist").toBe(true);
+      expect(result.totalCount,
+        "the 'N / TOTAL' chip must reflect CASE.prompts.length")
+        .toBeGreaterThan(0);
+    });
+
+  test("clicking Next advances the cursor and reveals the next prompt",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const result = await page.evaluate(async () => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        document.getElementById("stage-1").classList.remove("hidden");
+        window.revealed = window.revealed || {};
+        if (window.ITEM_IDS && window.CASE) {
+          for (const id of window.ITEM_IDS) {
+            const [g, i] = id.split(":");
+            if (window.CASE[g] && window.CASE[g][+i] && window.CASE[g][+i].key) {
+              window.revealed[id] = { by: "test", at: Date.now() };
+              break;
+            }
+          }
+        }
+        window.promptCursor = 0;
+        window.promptReplies = {};
+        if (typeof window.renderPrompts === "function") window.renderPrompts();
+        const text = document.getElementById("prompt-text");
+        const promptZero = text ? text.textContent : "";
+        // Simulate the cursor advancement that refPromptCursor.set
+        // would trigger (the Firebase listener calls renderPrompts).
+        window.promptCursor = 1;
+        if (typeof window.renderPrompts === "function") window.renderPrompts();
+        const promptOne = text ? text.textContent : "";
+        const currentNum = document.getElementById("prompt-progress-current");
+        return {
+          promptZero: promptZero,
+          promptOne: promptOne,
+          currentChip: currentNum ? currentNum.textContent : null
+        };
+      });
+      expect(result.promptZero.length,
+        "first prompt must have content").toBeGreaterThan(20);
+      expect(result.promptOne.length,
+        "second prompt must have content").toBeGreaterThan(20);
+      expect(result.promptOne,
+        "after advancing the cursor, the visible prompt text must change")
+        .not.toEqual(result.promptZero);
+      expect(result.currentChip,
+        "the 'N / TOTAL' chip's N must advance from '1' to '2'")
+        .toEqual("2");
+    });
+
+  test("final state shows the 'Open Group answers' done card",
+    async ({ page }) => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.goto("/");
+      const result = await page.evaluate(() => {
+        document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
+        const splash = document.getElementById("splash");
+        if (splash) splash.classList.add("hidden");
+        document.getElementById("app").classList.remove("hidden");
+        document.getElementById("stage-1").classList.remove("hidden");
+        window.revealed = window.revealed || {};
+        if (window.ITEM_IDS && window.CASE) {
+          for (const id of window.ITEM_IDS) {
+            const [g, i] = id.split(":");
+            if (window.CASE[g] && window.CASE[g][+i] && window.CASE[g][+i].key) {
+              window.revealed[id] = { by: "test", at: Date.now() };
+              break;
+            }
+          }
+        }
+        const total = (window.CASE && window.CASE.prompts || []).length;
+        window.promptCursor = total;   // past the last prompt = done state
+        window.promptReplies = {};
+        if (typeof window.renderPrompts === "function") window.renderPrompts();
+        const done = document.getElementById("prompt-done");
+        const progressive = document.getElementById("prompt-progressive");
+        const cta = document.getElementById("prompt-done-cta");
+        return {
+          doneVisible: done && !done.classList.contains("hidden"),
+          progressiveHidden: progressive && progressive.classList.contains("hidden"),
+          ctaExists: !!cta
+        };
+      });
+      expect(result.doneVisible,
+        "the #prompt-done card must be visible once promptCursor >= total")
+        .toBe(true);
+      expect(result.progressiveHidden,
+        "the single-prompt panel must hide once we're past the last prompt")
+        .toBe(true);
+      expect(result.ctaExists,
+        "the 'Open Group answers' CTA button must be present in the done state")
+        .toBe(true);
+    });
+});

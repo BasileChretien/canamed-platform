@@ -700,6 +700,15 @@
       "findings.empty": "Nothing asked yet — use the buttons on the left to work the case.",
       "prompts.title": "Discussion prompts",
       "prompts.locked": "Locked — complete the clinical synthesis (red-flag review) to unlock the discussion prompts.",
+      // Progressive single-prompt UI (2026-05-18 user request)
+      "prompts.reply.placeholder": "Type a short note from your group's discussion — anyone in the room can edit and it autosaves.",
+      "prompts.prev": "← Previous",
+      "prompts.skip": "Discussed verbally — skip ahead →",
+      "prompts.next": "Save and next →",
+      "prompts.next.last": "Save and finish →",
+      "prompts.done.msg": "✓ <strong>You've worked through all the discussion prompts.</strong> Now capture your team's bullets.",
+      "prompts.done.cta": "Open Group answers →",
+      "prompts.review": "← Review prompts",
 
       // Reset button (in-room, destructive — must be discoverable in
       // every UI language so a participant doesn't tap it by mistake).
@@ -1213,6 +1222,14 @@
       "findings.empty": "Rien demandé pour l'instant — utilisez les boutons à gauche pour avancer dans le cas.",
       "prompts.title": "Questions de discussion",
       "prompts.locked": "Verrouillé — complétez la synthèse clinique (revue des signes d'alerte) pour débloquer les questions de discussion.",
+      "prompts.reply.placeholder": "Notez brièvement ce que votre groupe en a dit — n'importe qui dans la salle peut éditer et la sauvegarde est automatique.",
+      "prompts.prev": "← Précédent",
+      "prompts.skip": "Discuté à l'oral — passer →",
+      "prompts.next": "Enregistrer et continuer →",
+      "prompts.next.last": "Enregistrer et terminer →",
+      "prompts.done.msg": "✓ <strong>Vous avez parcouru toutes les questions de discussion.</strong> Capturez maintenant les bullets de votre équipe.",
+      "prompts.done.cta": "Ouvrir Réponses de groupe →",
+      "prompts.review": "← Revoir les questions",
 
       "reset.btn": "Réinitialiser le cas de cette salle",
       "reset.btn-title": "Effacer les résultats de cette salle"
@@ -1727,6 +1744,14 @@
       "findings.empty": "まだ何も尋ねていません。左のボタンを使って症例を進めてください。",
       "prompts.title": "ディスカッションの設問",
       "prompts.locked": "ロック中 — 臨床的総合（レッドフラッグの確認）を完了するとディスカッションの設問が解放されます。",
+      "prompts.reply.placeholder": "グループでのディスカッションから短いメモを入力してください — ルームの誰もが編集でき、自動保存されます。",
+      "prompts.prev": "← 前へ",
+      "prompts.skip": "口頭で議論済み — 次へ →",
+      "prompts.next": "保存して次へ →",
+      "prompts.next.last": "保存して終了 →",
+      "prompts.done.msg": "✓ <strong>すべてのディスカッション設問を完了しました。</strong> 次はチームの要点を記録しましょう。",
+      "prompts.done.cta": "グループ回答を開く →",
+      "prompts.review": "← 設問を見直す",
 
       "reset.btn": "このルームの症例をリセット",
       "reset.btn-title": "このルームの所見を消去します"
