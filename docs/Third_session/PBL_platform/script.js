@@ -1460,8 +1460,40 @@ function initLobby() {
   }
   wireToggle("admin-toggle", "admin-lobby-body");
   wireToggle("superadmin-toggle", "superadmin-panel");
+  // "Forgot the password? Reset with super-admin key" link — was
+  // added in R3-D2 but its click handler was never wired (user report
+  // 2026-05-18: "This button does not work"). Opens the same
+  // superadmin-panel that the existing toggle opens, plus brings
+  // the super-admin key input into focus so the recovery flow feels
+  // intentional, not just "we re-routed you to the setup panel".
+  const forgotLink = el("forgot-pass-link");
+  const superPanel = el("superadmin-panel");
+  if (forgotLink && superPanel) {
+    forgotLink.addEventListener("click", () => {
+      superPanel.classList.remove("hidden");
+      const toggle = el("superadmin-toggle");
+      if (toggle) toggle.setAttribute("aria-expanded", "true");
+      // Defer focus by a tick so the panel has laid out before
+      // we steal focus — otherwise some browsers ignore the focus()
+      // call on a freshly-unhidden element.
+      setTimeout(() => {
+        const keyInput = el("superadmin-key-input");
+        if (keyInput) {
+          try { keyInput.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          catch (_) { try { keyInput.scrollIntoView(); } catch (__) {} }
+          try { keyInput.focus(); } catch (e) {}
+        }
+      }, 0);
+    });
+  }
   el("set-pass-btn").addEventListener("click", joinSuperAdmin);
-  if (!SUPERADMIN_KEY) el("superadmin-toggle").classList.add("hidden");
+  // If super-admin is disabled on this deployment, hide BOTH entry
+  // points (the toggle AND the "forgot password" link) — without this
+  // the link still showed and would open an empty panel.
+  if (!SUPERADMIN_KEY) {
+    el("superadmin-toggle").classList.add("hidden");
+    if (forgotLink) forgotLink.classList.add("hidden");
+  }
   initSoundToggle();
 }
 
