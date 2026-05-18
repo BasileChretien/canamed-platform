@@ -3618,6 +3618,24 @@ html[data-theme="dark"] textarea::placeholder {
   opacity: 1;
 }
 
+/* Bug 4 follow-up (PR #3 follow-up): the lobby's privacy disclosure
+   (`.privacy-note`) contains inline <a> links (lobby.privacy.p5 + p6)
+   injected via data-i18n-html. Because the i18n payload uses bare
+   <a href> without a class, the links fall through to the browser
+   default link colour #0000ee, which only hits ~2.01:1 contrast on
+   the dark `--surface-sunk` background (#0a1119) — well under the
+   4.5:1 AA floor (axe-core fail). Force `--primary` (= --nagoya-500
+   = #5cb8e8 = ~6.5:1) in dark + high-contrast. Mirrored in the
+   prefers-color-scheme block for data-theme="auto" with dark OS. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .privacy-note a {
+    color: var(--primary);
+  }
+}
+html[data-theme="dark"] .privacy-note a {
+  color: var(--primary);
+}
+
 /* The theme selector control in admin prefs / nav */
 .theme-toggle {
   display: inline-flex;
