@@ -637,6 +637,67 @@
   }
 
   // ---------------------------------------------------------------
+  // assignRooms — initial Caen×Nagoya pairing at session start
+  // ---------------------------------------------------------------
+  //
+  // Goal: split the pool across `roomCount` rooms so each room has a
+  // FRANCO-JAPANESE pair (the whole point of the workshop) and the
+  // English-level distribution is balanced across rooms (so no single
+  // room is "all A2 vs all C2" by accident).
+  //
+  // Algorithm:
+  //   1. Bucket participants by university, sorted by english-level
+  //      desc, then year desc (stable within a bucket).
+  //   2. Interleave the buckets row-by-row — index 0 from each, then
+  //      index 1 from each, ... — to produce a "combined" sequence
+  //      where adjacent entries are from different universities.
+  //   3. Snake-pattern across rooms: 1, 2, 3, 4, 4, 3, 2, 1, 1, 2, …
+  //      The snake reverses at each end so a "+1 student" doesn't
+  //      always land in room 1, which would skew sizes for small
+  //      cohorts. With 8 students × 4 rooms this lands exactly 2/room.
+  //
+  // Pure: no DOM, no Firebase. `pool` is an array of {clientId,
+  // university, english, year, …}; `roomCount` is the integer number
+  // of rooms. Returns a map { clientId → "Room N" }.
+  //
+  // engRankMap is exposed for tests/future scenarios that use a non-
+  // CEFR scale — defaults to the platform's CEFR-A2..C2 ranking.
+  const DEFAULT_ENG_RANK = { A2: 0, B1: 1, B2: 2, C1: 3, C2: 4 };
+  function assignRooms(pool, roomCount, engRankMap) {
+    const rank = engRankMap || DEFAULT_ENG_RANK;
+    const rc = Math.max(1, parseInt(roomCount, 10) || 1);
+    const arr = Array.isArray(pool) ? pool.filter(p => p && p.clientId) : [];
+    if (!arr.length) return {};
+
+    const sortFn = (a, b) =>
+      ((rank[b.english] || 0) - (rank[a.english] || 0)) ||
+      ((b.year || 0) - (a.year || 0));
+    const byUni = {};
+    arr.forEach(p => { (byUni[p.university] = byUni[p.university] || []).push(p); });
+    const lists = Object.keys(byUni).sort().map(u => byUni[u].slice().sort(sortFn));
+
+    const combined = [];
+    let added = true, i = 0;
+    while (added) {
+      added = false;
+      lists.forEach(list => { if (i < list.length) { combined.push(list[i]); added = true; } });
+      i++;
+    }
+
+    const names = [];
+    for (let n = 1; n <= rc; n++) names.push("Room " + n);
+    const assignment = {};
+    let r = 0, dir = 1;
+    combined.forEach(p => {
+      assignment[p.clientId] = names[r];
+      r += dir;
+      if (r >= rc) { r = rc - 1; dir = -1; }
+      else if (r < 0) { r = 0; dir = 1; }
+    });
+    return assignment;
+  }
+
+  // ---------------------------------------------------------------
   // exports
   // ---------------------------------------------------------------
   return {
@@ -661,6 +722,8 @@
     pseudonymiseTree: pseudonymiseTree,
     pseudoCode: pseudoCode,
     bestRoomFor: bestRoomFor,
+    assignRooms: assignRooms,
+    DEFAULT_ENG_RANK: DEFAULT_ENG_RANK,
     dedupeBallotsByStableId: dedupeBallotsByStableId,
     // expose the constant so tests can assert it
     PBKDF2_ITERS_DEFAULT: PBKDF2_ITERS_DEFAULT

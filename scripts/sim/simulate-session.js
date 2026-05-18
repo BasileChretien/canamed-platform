@@ -224,6 +224,10 @@ async function snapshot(page) {
       const b = document.getElementById("presence-bar");
       return b ? b.children.length : 0;
     })();
+    const roomName = (function () {
+      const e = document.getElementById("room-name");
+      return e ? (e.textContent || "").trim() : "";
+    })();
     const stageNow = (function () {
       const e = document.getElementById("stage-now");
       return e ? (e.textContent || "").trim().slice(0, 120) : "";
@@ -231,7 +235,7 @@ async function snapshot(page) {
     return {
       url: location.href,
       title: document.title,
-      activeView,
+      activeView, roomName,
       visibleButtons, heading, stageNow,
       scrollH, view, scrollRatio: view ? +(scrollH / view).toFixed(2) : 0,
       hasError, presence
@@ -670,6 +674,7 @@ function writeReport(extra) {
       if (o.durationMs != null) lines.push("- duration: " + o.durationMs + "ms");
       if (o.snapshot) {
         if (o.snapshot.activeView) lines.push("- active view: `#" + o.snapshot.activeView + "`");
+        if (o.snapshot.roomName) lines.push("- room: " + o.snapshot.roomName);
         if (o.snapshot.heading) lines.push("- heading: \"" + o.snapshot.heading.replace(/"/g, "'") + "\"");
         if (o.snapshot.stageNow) lines.push("- stage text: \"" + o.snapshot.stageNow.replace(/"/g, "'") + "\"");
         if (o.snapshot.scrollRatio) lines.push("- scroll: " + o.snapshot.scrollRatio + "× viewport");

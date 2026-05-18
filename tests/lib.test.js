@@ -843,3 +843,151 @@ test("pseudonymiseTree: linkage table excludes empty / missing names", () => {
   assert.deepStrictEqual(linkage, { Alice: "Student-A" });
 });
 
+
+// =============================================================
+// assignRooms — Caen × Nagoya pairing at session start
+// =============================================================
+// Sim 2026-05-18 surfaced "Room 2 had 0 people" on the admin dashboard
+// after Start; investigation showed the dashboard read was stale
+// (cross-tab propagation lag) but the underlying assignment WAS
+// correct: 8 students × 4 rooms landed exactly 2 per room with one
+// Caen + one Nagoya in each. These tests lock that behaviour in so a
+// future refactor can't regress to "each student in their own room".
+function mkP(clientId, university, english, year) {
+  return { clientId, university, english, year };
+}
+
+test("assignRooms — 8 students × 4 rooms = exactly 2 per room", () => {
+  const pool = [
+    mkP("c1", "Caen",   "C2", 5),
+    mkP("c2", "Caen",   "C1", 4),
+    mkP("c3", "Caen",   "C2", 6),
+    mkP("c4", "Caen",   "B2", 3),
+    mkP("n1", "Nagoya", "B2", 5),
+    mkP("n2", "Nagoya", "B1", 4),
+    mkP("n3", "Nagoya", "C1", 6),
+    mkP("n4", "Nagoya", "A2", 4)
+  ];
+  const out = lib.assignRooms(pool, 4);
+  const sizes = {};
+  Object.values(out).forEach(r => { sizes[r] = (sizes[r] || 0) + 1; });
+  // Every room must end up with EXACTLY 2 students.
+  assert.deepStrictEqual(sizes,
+    { "Room 1": 2, "Room 2": 2, "Room 3": 2, "Room 4": 2 },
+    "expected 2 students per room, got " + JSON.stringify(sizes));
+});
+
+test("assignRooms — every room is a Franco-Japanese pair (no same-uni doubles)", () => {
+  const pool = [
+    mkP("c1", "Caen",   "C2", 5),
+    mkP("c2", "Caen",   "C1", 4),
+    mkP("c3", "Caen",   "C2", 6),
+    mkP("c4", "Caen",   "B2", 3),
+    mkP("n1", "Nagoya", "B2", 5),
+    mkP("n2", "Nagoya", "B1", 4),
+    mkP("n3", "Nagoya", "C1", 6),
+    mkP("n4", "Nagoya", "A2", 4)
+  ];
+  const out = lib.assignRooms(pool, 4);
+  const roomToUnis = {};
+  pool.forEach(p => {
+    (roomToUnis[out[p.clientId]] = roomToUnis[out[p.clientId]] || []).push(p.university);
+  });
+  Object.entries(roomToUnis).forEach(([room, unis]) => {
+    const unique = new Set(unis);
+    assert.ok(unique.size === 2,
+      room + " is mono-university (" + unis.join(", ") +
+      ") — workshop must keep a Caen × Nagoya pair per room");
+  });
+});
+
+test("assignRooms — English level is spread, not stacked in one room", () => {
+  // Build 6 students with deliberately skewed levels: C2,C2,C2 Caen +
+  // A2,A2,A2 Nagoya. With 3 rooms, no single room should hold both
+  // C2s from one uni and an A2 from the other — the round-robin sort
+  // by english-rank-desc + interleave keeps the distribution flat.
+  const pool = [
+    mkP("c1", "Caen",   "C2", 5),
+    mkP("c2", "Caen",   "C2", 4),
+    mkP("c3", "Caen",   "C2", 3),
+    mkP("n1", "Nagoya", "A2", 5),
+    mkP("n2", "Nagoya", "A2", 4),
+    mkP("n3", "Nagoya", "A2", 3)
+  ];
+  const out = lib.assignRooms(pool, 3);
+  const sizes = {};
+  Object.values(out).forEach(r => { sizes[r] = (sizes[r] || 0) + 1; });
+  assert.deepStrictEqual(sizes,
+    { "Room 1": 2, "Room 2": 2, "Room 3": 2 },
+    "expected exactly 2/room with 6 students + 3 rooms");
+  // every room is a Caen+Nagoya pair
+  const unisPerRoom = {};
+  pool.forEach(p => {
+    (unisPerRoom[out[p.clientId]] = unisPerRoom[out[p.clientId]] || []).push(p.university);
+  });
+  Object.values(unisPerRoom).forEach(u => {
+    assert.deepStrictEqual([...new Set(u)].sort(), ["Caen", "Nagoya"]);
+  });
+});
+
+test("assignRooms — odd cohort sizes balance within ±1 across rooms", () => {
+  // 9 students × 4 rooms => sizes should be {3,2,2,2} (no room has >3 or <2).
+  const pool = [];
+  for (let i = 0; i < 5; i++) pool.push(mkP("c" + i, "Caen",   "B2", 4));
+  for (let i = 0; i < 4; i++) pool.push(mkP("n" + i, "Nagoya", "B2", 4));
+  const out = lib.assignRooms(pool, 4);
+  const sizes = Object.values(out).reduce((acc, r) => {
+    acc[r] = (acc[r] || 0) + 1; return acc;
+  }, {});
+  const counts = Object.values(sizes).sort();
+  assert.ok(counts.length === 4, "expected 4 rooms, got " + counts.length);
+  const min = Math.min.apply(null, counts);
+  const max = Math.max.apply(null, counts);
+  assert.ok(max - min <= 1,
+    "expected room sizes within ±1, got [" + counts.join(",") + "]");
+});
+
+test("assignRooms — empty pool returns empty assignment (no crash)", () => {
+  assert.deepStrictEqual(lib.assignRooms([],     4), {});
+  assert.deepStrictEqual(lib.assignRooms(null,   4), {});
+  assert.deepStrictEqual(lib.assignRooms(undefined, 4), {});
+});
+
+test("assignRooms — degenerate roomCount falls back to 1 room (never throws)", () => {
+  const pool = [
+    mkP("c1", "Caen",   "C2", 5),
+    mkP("n1", "Nagoya", "B2", 5)
+  ];
+  // every weird input must place everyone in "Room 1" rather than crash
+  for (const rc of [0, -1, NaN, null, undefined, "garbage"]) {
+    const out = lib.assignRooms(pool, rc);
+    const rooms = new Set(Object.values(out));
+    assert.deepStrictEqual([...rooms], ["Room 1"],
+      "rc=" + String(rc) + " should fall back to a single room");
+  }
+});
+
+test("assignRooms — deterministic: same input twice → same assignment", () => {
+  const pool = [
+    mkP("c1", "Caen",   "C2", 5),
+    mkP("c2", "Caen",   "B2", 4),
+    mkP("n1", "Nagoya", "C1", 6),
+    mkP("n2", "Nagoya", "B1", 3)
+  ];
+  const a = lib.assignRooms(pool, 2);
+  const b = lib.assignRooms(pool, 2);
+  assert.deepStrictEqual(a, b,
+    "assignRooms must be deterministic so admins see the same preview as the runtime");
+});
+
+test("assignRooms — entries without clientId are silently dropped", () => {
+  const pool = [
+    mkP("c1", "Caen",   "C2", 5),
+    { university: "Caen", english: "B2", year: 4 }, // no clientId
+    null,
+    undefined,
+    mkP("n1", "Nagoya", "B2", 5)
+  ];
+  const out = lib.assignRooms(pool, 2);
+  assert.deepStrictEqual(Object.keys(out).sort(), ["c1", "n1"]);
+});

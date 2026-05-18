@@ -1075,6 +1075,10 @@ html[data-theme="dark"] .next-step-coach {
   color: var(--caen-ink);
   font-weight: 500;
 }
+/* Chart sections (History / Examination / Investigations) — each is a
+   <details open> so a student can collapse a section they're done with,
+   trimming the chart's scroll-height without losing the gameplay
+   options. Default-open so first-time users see the full chart. */
 .chart-section {
   background: transparent;
   margin-bottom: var(--s-4);
@@ -1089,6 +1093,65 @@ html[data-theme="dark"] .next-step-coach {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* When rendered as <summary> the default marker is a triangle on the
+     left — keep it but make it match the section padding. cursor:pointer
+     surfaces "this is clickable". list-style is reset on the summary
+     element so we control the disclosure caret ourselves below. */
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.chart-section-h::-webkit-details-marker { display: none; }   /* WebKit/Safari */
+.chart-section-h::marker { content: ""; }                      /* Firefox/Chrome */
+/* Custom disclosure caret — rotates 90° when the section is open. */
+.chart-section-h::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  font-size: 0.85em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.chart-section[open] > .chart-section-h::before {
+  transform: rotate(90deg);
+}
+.chart-section-h:hover { color: var(--primary, #1763a6); }
+/* Browser-native <details> collapse hides non-summary children, but the
+   .btn-group's explicit display:flex (defined above) wins specificity
+   against the implicit shadow-slot. Force-hide non-summary children
+   when the section is collapsed. */
+.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
+  display: none !important;
+}
+
+/* --- collapsible info cards (Module B safety-note, future Module A
+   vignette, etc.). Default-open <details> with the heading-as-summary
+   pattern: read once at the start, then a single click moves the card
+   out of the way. Sim 2026-05-18: Module B was 4.5× viewport tall
+   because every informational block stayed permanently expanded. --- */
+.collapsible-card > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  /* Match the card padding so the click-target covers the whole row,
+     not just the heading line. */
+}
+.collapsible-card > summary::-webkit-details-marker { display: none; }
+.collapsible-card > summary::marker { content: ""; }
+.collapsible-card > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  font-size: 0.85em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  margin-right: 4px;
+}
+.collapsible-card[open] > summary::before {
+  transform: rotate(90deg);
+}
+.collapsible-card:not([open]) > *:not(summary) {
+  display: none !important;
 }
 .chart-section-icon { font-size: 1.1rem; line-height: 1; }
 .chart-section-hint {

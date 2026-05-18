@@ -846,12 +846,20 @@
                cue to look for the recovery path. The link opens the same
                superadmin-panel the existing "Super admin: set / change the
                password" toggle opens — but framed as recovery, not setup. -->
+          <!-- Single recovery affordance. R3 originally had TWO buttons that
+               opened the same super-admin panel — "Forgot the password?"
+               (recovery framing) and "Super admin: set / change the
+               password" (setup framing). Sim 2026-05-18 surfaced that as
+               lobby density — too many controls for a returning facilitator
+               to parse. Collapsed into one link covering both flows. The
+               panel below still opens the same setup/recovery form. -->
           <button class="link-btn" id="forgot-pass-link"
                   data-i18n="lobby.forgot-pass-link"
                   type="button">
-            Forgot the password? Reset with super-admin key &rsaquo;
+            Need to set or recover the admin password? &rsaquo;
           </button>
-          <button class="link-btn" id="superadmin-toggle"
+          <button class="link-btn hidden" id="superadmin-toggle"
+                  aria-hidden="true"
                   data-i18n="lobby.superadmin-toggle">
             Super admin: set / change the password
           </button>
@@ -1223,9 +1231,16 @@
                 </div>
               </section>
 
-              <!-- ── History (was "Ask the patient") ── -->
-              <section class="chart-section">
-                <h4 class="chart-section-h">
+              <!-- ── History (was "Ask the patient") ──
+                   <details>-wrapped per Sim 2026-05-18 finding: the
+                   stacked chart had ~30 buttons visible at once, 4.6×
+                   viewport tall, overwhelming students with low-English
+                   or anxious traits. Each chart-section is now
+                   collapsible (default-open). Collapsing a section a
+                   student is done with shortens the scroll without
+                   removing any gameplay options. -->
+              <details class="chart-section" open id="chart-section-history">
+                <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path
                     d="M4 5h16v11H9l-4 4v-4H4z" /><circle cx="9" cy="10.5" r="1"
@@ -1233,35 +1248,35 @@
                     fill="#1763a6" stroke="none" /><circle cx="15" cy="10.5" r="1"
                     fill="#1763a6" stroke="none" /></svg>
                   <span data-i18n="modA.chart.history.title">History &mdash; ask the patient</span>
-                </h4>
+                </summary>
                 <div class="btn-group" id="group-history"></div>
-              </section>
+              </details>
 
               <!-- ── Examination (was "Examine") ── -->
-              <section class="chart-section">
-                <h4 class="chart-section-h">
+              <details class="chart-section" open id="chart-section-exam">
+                <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
                     d="M6 3v6a5 5 0 0 0 10 0V3" /><circle cx="18" cy="15" r="3" /><path
                     d="M11 14v2a4 4 0 0 0 4 4" /></svg>
                   <span data-i18n="modA.chart.exam.title">Examination</span>
-                </h4>
+                </summary>
                 <div class="btn-group" id="group-exam"></div>
-              </section>
+              </details>
 
               <!-- ── Investigations (was "Investigations & synthesis") ──
                    Locked until at least one hypothesis is recorded
                    (hypothesis-first PBL scaffold). The .is-locked
                    class fades the section + the buttons are disabled
                    in renderButtons until the gate opens. -->
-              <section class="chart-section chart-investigations" id="chart-investigations">
-                <h4 class="chart-section-h">
+              <details class="chart-section chart-investigations" open id="chart-investigations">
+                <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                     aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
                     2-3l-5-9V3" /><path d="M7.5 14h9" /></svg>
                   <span data-i18n="modA.chart.investigations.title">Investigations &amp; synthesis</span>
-                </h4>
+                </summary>
                 <p class="chart-section-locked-hint hidden" id="investigations-locked-hint"
                    data-i18n="modA.chart.investigations.locked-hint">
                   🔒 Locked &mdash; add a working hypothesis above to unlock.
@@ -1271,7 +1286,7 @@
                   0 / 3 red flags screened
                 </p>
                 <div class="btn-group" id="group-labs"></div>
-              </section>
+              </details>
             </article>
             <button id="reset-btn" class="reset-btn"
                     data-i18n="reset.btn"
@@ -1765,8 +1780,15 @@
             with them and is in the room &mdash; and at some point will quietly ask you something.</p>
         </section>
 
-        <div class="card safety-note">
-          <p data-i18n="stage.modB.safety.heading" data-i18n-html><strong>Before you start &mdash; two things.</strong></p>
+        <!-- Safety note: read once at the start, then collapsible so it
+             doesn't crowd the role-picker / SPIKES reference for the rest
+             of the scene. Sim 2026-05-18 finding: Module B was 4.5×
+             viewport tall — anxious / low-English students reported
+             "Do I have to read all of this?". Default-open keeps the
+             first-read affordance; a single click later moves it out of
+             the way. -->
+        <details class="card safety-note collapsible-card" open>
+          <summary data-i18n="stage.modB.safety.heading" data-i18n-html><strong>Before you start &mdash; two things.</strong></summary>
           <p data-i18n="stage.modB.safety.simulation" data-i18n-html><em>This is a simulation.</em> The feelings can still feel real. If anything hits
             too close to home, you can move into the observer role at any time, no explanation
             needed. When you debrief, talk about <strong>the physician's choices</strong> &mdash;
@@ -1775,7 +1797,7 @@
             the point. If you cannot find a word, slow down, use a simpler one, or pause. Silence
             is allowed in this conversation and often helps. Empathy is in your tone, your pace
             and your face, not in advanced vocabulary.</p>
-        </div>
+        </details>
 
         <!-- Roles: small interactive picker (one volunteer per role, others
              become observers). Tapping a role chip "claims" it for this

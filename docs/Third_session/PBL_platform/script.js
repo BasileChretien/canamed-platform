@@ -603,9 +603,23 @@ if (typeof window !== "undefined") {
  * Falls back to native confirm() if <dialog> isn't supported (very
  * old browsers) so the platform never deadlocks on a missing modal.
  * ============================================================ */
+/* Per-modal resolver pointer: when canamedConfirm is called while a
+ * previous prompt is still open, the previous Promise gets resolved
+ * with `false` (treated as cancel) and the new prompt takes over.
+ * Without this guard, a double-click on Advance / End-session would
+ * stack two sets of listeners on the same OK button — the first OK
+ * click would resolve BOTH promises, executing the action twice.
+ * Sim 2026-05-18 reproduced this as a flake; the fix also hardens the
+ * production path. */
+let _activeModalResolver = null;
 function canamedConfirm(opts) {
   opts = opts || {};
   const dlg = el("canamed-modal");
+  if (typeof _activeModalResolver === "function") {
+    const prev = _activeModalResolver;
+    _activeModalResolver = null;
+    try { prev(false); } catch (e) { /* prev was already settled */ }
+  }
   if (!dlg) {
     // Old browsers (or stripped test harness). Synthesise a single-line
     // string and fall back to the native confirm — the caller still
@@ -646,10 +660,13 @@ function canamedConfirm(opts) {
     const finish = (val) => {
       if (settled) return;
       settled = true;
+      if (_activeModalResolver === finish) _activeModalResolver = null;
       cleanup();
       try { dialogClose(dlg); } catch (e) {}
       resolve(val);
     };
+    // Register this resolver so a later canamedConfirm call can cancel it.
+    _activeModalResolver = finish;
     const onOk = () => finish(true);
     const onCancel = () => finish(false);
     const onCancelEvent = (e) => { e.preventDefault(); finish(false); };
@@ -821,32 +838,11 @@ if (MODE === "shared" && window.CANAMED_SUPERADMIN_KEY) {
     "session password from the Firebase console and leaving the key null.");
 }
 
-/* ===================== ROOM BALANCING ===================== */
-function assignRooms(pool, roomCount) {
-  const sortFn = (a, b) =>
-    ((ENG_RANK[b.english] || 0) - (ENG_RANK[a.english] || 0)) ||
-    ((b.year || 0) - (a.year || 0));
-  const byUni = {};
-  pool.forEach(p => { (byUni[p.university] = byUni[p.university] || []).push(p); });
-  const lists = Object.keys(byUni).sort().map(u => byUni[u].slice().sort(sortFn));
-  const combined = [];
-  let added = true, i = 0;
-  while (added) {
-    added = false;
-    lists.forEach(list => { if (i < list.length) { combined.push(list[i]); added = true; } });
-    i++;
-  }
-  const names = roomNames(roomCount);
-  const assignment = {};
-  let r = 0, dir = 1;
-  combined.forEach(p => {
-    assignment[p.clientId] = names[r];
-    r += dir;
-    if (r >= roomCount) { r = roomCount - 1; dir = -1; }
-    else if (r < 0) { r = 0; dir = 1; }
-  });
-  return assignment;
-}
+/* ===================== ROOM BALANCING =====================
+ * The pure implementation lives in lib.js (assignRooms) — covered by
+ * unit tests under tests/lib.test.js without needing a browser. lib.js
+ * loads first and attaches assignRooms to the global window object via
+ * its UMD wrapper, so the rest of script.js can call it by name. */
 /* R3-C3 fix — late-joiner room cap.
    A facilitator who carefully balanced 4 rooms of 5 each at start time can
    end up with one room of 7 after three late-joiners arrive. The original
@@ -1485,6 +1481,34 @@ function initLobby() {
   }
   wireToggle("admin-toggle", "admin-lobby-body");
   wireToggle("superadmin-toggle", "superadmin-panel");
+  // When the admin sub-panel opens, scroll the SHARED name field into
+  // view so a facilitator notices they need to fill it (this prevents
+  // the silent-bounce sim 2026-05-18 hit when Dr Chrétien clicked
+  // "Open admin dashboard" without typing a name first).
+  const adminToggleBtn = el("admin-toggle");
+  const adminBody = el("admin-lobby-body");
+  const nameFieldForFocus = el("name-input");
+  if (adminToggleBtn && adminBody && nameFieldForFocus) {
+    adminToggleBtn.addEventListener("click", () => {
+      // wireToggle uses a class swap; observe the next tick to see the
+      // post-click state. If the body is now visible AND the name field
+      // is empty, scroll/highlight it.
+      setTimeout(() => {
+        if (adminBody.classList.contains("hidden")) return;
+        const nameVal = (nameFieldForFocus.value || "").trim();
+        if (!nameVal) {
+          try { nameFieldForFocus.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          catch (_) { try { nameFieldForFocus.scrollIntoView(); } catch (__) {} }
+          const hint = el("admin-hint");
+          if (hint) {
+            hint.textContent = tFallback("lobby.admin-name-prompt",
+              "Type your name above first, then your admin password here.");
+            hint.className = "lobby-hint";   // informational, not red
+          }
+        }
+      }, 30);
+    });
+  }
   // "Forgot the password? Reset with super-admin key" link — was
   // added in R3-D2 but its click handler was never wired (user report
   // 2026-05-18: "This button does not work"). Opens the same
@@ -2585,6 +2609,26 @@ function joinAdmin() {
   el("admin-hint").textContent = "";
   sessionNum = readSession("admin-hint");
   if (!sessionNum) return;
+  // The lobby reuses the participant #name-input for the admin flow. A
+  // facilitator who jumps straight to "I am a facilitator" without typing
+  // a name was previously bounced silently: readName() focuses the empty
+  // field and returns null, but the admin section is below the fold so
+  // the focus shift isn't noticed. Surface that explicitly + auto-fill
+  // a sensible default so the next click goes through.
+  // (Sim 2026-05-18 surfaced this — Dr Chrétien got stuck on the lobby
+  // because the name field was empty.)
+  const nameField = el("name-input");
+  if (nameField && !(nameField.value || "").trim()) {
+    const cached = (function () {
+      try { return (localStorage.getItem("canamed_name") || "").trim(); }
+      catch (e) { return ""; }
+    })();
+    nameField.value = cached || tFallback("lobby.admin-default-name", "Facilitator");
+    el("admin-hint").textContent = tFallback("lobby.admin-name-defaulted",
+      "Joining as \"" + nameField.value + "\" — edit the name field above if " +
+      "you want it on the audit trail.");
+    el("admin-hint").className = "lobby-hint";   // not .err — informational
+  }
   myName = readName("admin-hint");
   if (!myName) return;
   const pass = el("admin-pass-input").value;
