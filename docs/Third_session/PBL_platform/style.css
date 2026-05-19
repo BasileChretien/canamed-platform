@@ -1256,6 +1256,140 @@ html[data-theme="dark"] .next-step-coach {
   background: var(--primary, #1763a6);
 }
 
+/* --- Observer button + body-level state --- */
+.observer-btn {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line-strong, #c9bd9c);
+  border-radius: var(--r-pill, 999px);
+  padding: 6px 12px;
+  font-weight: 500;
+  cursor: pointer;
+  min-height: 44px;
+}
+.observer-btn.is-active {
+  background: var(--surface-sunk, #f3f0e8);
+  font-weight: 600;
+}
+body[data-observer="1"] .decisions-card,
+body[data-observer="1"] .hypotheses-card,
+body[data-observer="1"] #modA-bullet-progress {
+  /* soften participation prompts but keep them readable */
+  opacity: 0.65;
+}
+body[data-observer="1"] #modA-next-step,
+body[data-observer="1"] #modB-next-step {
+  /* coach prompts can be muted when in observer mode */
+  filter: grayscale(0.4);
+}
+
+/* --- Side-chat panel --- */
+.chat-card { padding: 12px; }
+.chat-intro {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.chat-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface-sunk, #f9f7f1);
+  border: 1px solid var(--line, #e2dccf);
+  border-radius: var(--r-sm, 8px);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+.chat-msg { margin: 0 0 4px; }
+.chat-msg.me { color: var(--primary, #1763a6); }
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+#chat-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--r-sm, 8px);
+  border: 1px solid var(--line-strong, #c9bd9c);
+}
+#chat-send { min-height: 44px; }
+
+/* --- End-of-session poll --- */
+.endpoll-card {
+  border-left: 4px solid var(--accent, #e08a1e);
+}
+.endpoll-card h3 { margin-top: 0; }
+.endpoll-field {
+  display: block;
+  margin: 10px 0;
+  font-weight: 500;
+}
+.endpoll-field span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+.endpoll-field textarea,
+.endpoll-field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong, #c9bd9c);
+  border-radius: var(--r-sm, 8px);
+  font-size: 1rem;
+}
+#endpoll-submit { min-height: 44px; }
+.endpoll-thanks {
+  color: var(--success, #2e7d32);
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+/* --- Counter-bullet replies under group answers --- */
+.entry-disagree { color: var(--meeting, #8a2017); }
+.answer-replies {
+  list-style: none;
+  margin: 4px 0 0 18px;
+  padding: 0;
+  font-size: 0.92rem;
+}
+.answer-reply {
+  margin: 2px 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--meeting, #8a2017);
+  background: rgba(192, 57, 43, 0.04);
+  border-radius: 0 4px 4px 0;
+}
+.answer-reply.is-support {
+  border-left-color: var(--success, #2e7d32);
+  background: rgba(46, 125, 50, 0.05);
+}
+.reply-arrow {
+  color: var(--muted);
+  margin-right: 4px;
+}
+.counter-bullet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--surface-sunk, #f9f7f1);
+  border: 1px dashed var(--meeting, #8a2017);
+  border-radius: var(--r-sm, 8px);
+}
+.counter-bullet-form textarea {
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line, #e2dccf);
+  border-radius: var(--r-sm, 8px);
+}
+.counter-bullet-form button {
+  align-self: flex-start;
+  min-height: 38px;
+}
+
 /* --- collapsible info cards (Module B safety-note, future Module A
    vignette, etc.). Default-open <details> with the heading-as-summary
    pattern: read once at the start, then a single click moves the card

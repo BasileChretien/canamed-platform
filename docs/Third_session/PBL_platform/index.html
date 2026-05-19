@@ -941,6 +941,20 @@
             <button id="call-prof-btn" class="call-btn"
                     data-i18n="room.call-facilitator">Call a facilitator</button>
             <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
+            <!-- Sim 2026-05-19 (Hana B1, Camille first-timer, Théo lurker):
+                 "A 'I'm not ready' panic button that just lets me move
+                 into an observer slot for the rest of this stage." Quiet
+                 affordance — no broadcast to the room, no flashing UI.
+                 Writes /sessions/{code}/rooms/{room}/observers/{cid}
+                 which the score engine reads to skip participation-
+                 pressure events for this client. -->
+            <button id="observer-btn" class="observer-btn"
+                    type="button"
+                    data-i18n="room.observer-btn"
+                    data-i18n-title="room.observer-btn-title"
+                    title="Move into the observer role — you can still see everything but no one will ask you to commit.">
+              I'm just observing
+            </button>
             <button id="leave-btn" title="Leave">Leave</button>
           </div>
         </div>
@@ -1350,6 +1364,17 @@
                 <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
                 <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
               </button>
+              <!-- Sim 2026-05-19 (Sayaka, Mei): "A private side-chat
+                   with just my room (separate from group-answers) for
+                   clarifying questions." Hidden-by-default tab —
+                   surfaces a thin chat surface scoped to this room only.
+                   Messages live at /rooms/{room}/chat. -->
+              <button class="rcol-tab" type="button" data-tab="chat"
+                      role="tab" aria-selected="false" aria-controls="rcol-p-chat">
+                <span class="rcol-tab-icon" aria-hidden="true">💭</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.chat">Side-chat</span>
+                <span class="rcol-tab-badge" id="tab-badge-chat" hidden></span>
+              </button>
             </div>
 
             <div class="rcol-panel is-active" id="rcol-p-decisions"
@@ -1559,6 +1584,32 @@
               </div>
             </section>
             </div><!-- /answers panel -->
+
+            <!-- Side-chat panel — sim 2026-05-19 (Sayaka, Mei).
+                 Light surface: scroll-pane of last 50 messages + a
+                 one-line input. Wired by initSideChat(). -->
+            <div class="rcol-panel" id="rcol-p-chat" hidden
+                 role="tabpanel" data-panel="chat" aria-labelledby="rcol-tab-chat">
+              <section class="card chat-card">
+                <p class="chat-intro"
+                   data-i18n="rcol.chat.intro">
+                  Private side-chat for your room — for clarifying questions,
+                  glossary checks, side-thoughts. Messages stay within this
+                  room only.
+                </p>
+                <ul class="chat-list" id="chat-list"
+                    aria-label="Side-chat messages" aria-live="polite"></ul>
+                <div class="chat-input-row">
+                  <input type="text" id="chat-input" maxlength="500"
+                         data-i18n="rcol.chat.placeholder"
+                         data-i18n-attr="placeholder"
+                         placeholder="Type a quick message…"
+                         aria-label="Side-chat message" />
+                  <button id="chat-send" type="button"
+                          data-i18n="rcol.chat.send">Send</button>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
 
@@ -2195,6 +2246,38 @@
         <div class="card team-recap-card">
           <div id="team-recap"></div>
         </div>
+
+        <!-- End-of-session 30-second poll — sim 2026-05-19 (Akari,
+             Antoine, Manon, Sophie, Daichi): "'What was the hardest
+             moment?' + 'One word that describes how you felt.'"
+             Persists to /sessions/{code}/poll/{cid}; one entry per
+             client. Defaults to empty; never blocks closure. -->
+        <div class="card endpoll-card" id="endpoll-card">
+          <h3 data-i18n="endpoll.title">Quick reflection — 30 seconds</h3>
+          <p class="hint" data-i18n="endpoll.intro">
+            Two questions before you close the tab. Optional but valuable —
+            your facilitators read every answer to shape the next session.
+          </p>
+          <label class="endpoll-field">
+            <span data-i18n="endpoll.hardest-label">What was the hardest moment today?</span>
+            <textarea id="endpoll-hardest" rows="2" maxlength="280"
+                      data-i18n-attr="placeholder"
+                      data-i18n="endpoll.hardest-placeholder"
+                      placeholder="A short sentence is enough."></textarea>
+          </label>
+          <label class="endpoll-field">
+            <span data-i18n="endpoll.feeling-label">One word that describes how you felt:</span>
+            <input type="text" id="endpoll-feeling" maxlength="40"
+                   data-i18n-attr="placeholder"
+                   data-i18n="endpoll.feeling-placeholder"
+                   placeholder="e.g. focused / unsure / surprised / proud" />
+          </label>
+          <button id="endpoll-submit" type="button"
+                  data-i18n="endpoll.submit">Send my reflection</button>
+          <p class="endpoll-thanks hidden" id="endpoll-thanks"
+             data-i18n="endpoll.thanks">Thank you — your reflection is in.</p>
+        </div>
+
         <div class="card">
           <h3 data-i18n="stage.wrap.room-answers">Your room's answers</h3>
           <div id="wrapup-summary"></div>

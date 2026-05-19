@@ -981,6 +981,7 @@ let presence = {};
 let typingState = {};      // who is typing - kept off the presence node so a
                            // keystroke does not force a presence re-render for everyone
 let answers = { moduleA: {}, moduleB: {} };
+let answerReplies = {};   // map: entryId → { replyId → { text, by, cid, at, stance } }
 let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees on
                       // BEFORE running investigations. Cross-room synced via
                       // refHypotheses. Keyed by Firebase push id; value is
@@ -1042,6 +1043,7 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
+    refObservers = null, refAnswerReplies = null, refChat = null, refPoll = null,
     refClosed = null;
 
 /* Activate Firebase App Check with reCAPTCHA Enterprise. Idempotent — safe
@@ -2336,6 +2338,9 @@ function wireRoomUI() {
   initStageNav();
   initCallProf();
   initLeave();
+  initObserver();
+  initSideChat();
+  initEndPoll();
   initTeamName();
   initRolePicker();
   initCoachDismiss();
@@ -2495,6 +2500,9 @@ function teardownRoom() {
     if (refCallForHelp) refCallForHelp.off();
     if (refScore) refScore.off();
     if (refVotes) refVotes.off();
+    if (refObservers) refObservers.off();
+    if (refAnswerReplies) refAnswerReplies.off();
+    if (refChat) refChat.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
     // NOTE: refClosed is session-scoped (not room-scoped). It is owned by
@@ -2520,6 +2528,13 @@ function startRoom() {
   refVotes = db.ref(base + "/votes");
   refTeamName = db.ref(base + "/teamName");
   refLeaderboard = db.ref(sPath("rooms"));
+  // Sim 2026-05-19 features — per-room observer flags, free-text reply
+  // threads on group-answers, in-room side-chat. Refs declared here so
+  // every room transition wires/teardowns them in lock-step with the
+  // existing per-room subscribers.
+  refObservers = db.ref(base + "/observers");
+  refAnswerReplies = db.ref(base + "/answerReplies");
+  refChat = db.ref(base + "/chat");
   // session-wide closed marker - shows the "session closed by facilitator"
   // banner the moment an admin ends the session. Wired here (not in the room
   // subtree) because `closed` lives at the session level, not the room level.
@@ -2588,6 +2603,18 @@ function startRoom() {
     renderAnswers("moduleB");
     renderObjectives();
   });
+  // Sim 2026-05-19 — counter-bullet replies on group-answer entries.
+  // Re-render Module A + B answers so the new replies appear under
+  // their parent <li>. The pure-DOM render is cheap.
+  if (refAnswerReplies) {
+    refAnswerReplies.on("value", snap => {
+      answerReplies = snap.val() || {};
+      try {
+        renderAnswers("moduleA");
+        renderAnswers("moduleB");
+      } catch (e) { /* render may not be ready */ }
+    });
+  }
   refCallForHelp.on("value", snap => { callForHelp = snap.val(); renderCallProf(); });
 
   refScore.on("value", snap => {
@@ -5739,10 +5766,14 @@ function _updateModABulletProgress() {
   });
 }
 
-/* Per chart-section: if every `item.key` button in that group is
- * revealed, collapse the section once. Idempotent — leaves alone any
- * section the user reopened after our auto-collapse (`data-auto-
- * collapsed` flag) so the engine never fights an explicit user choice. */
+/* Per chart-section: collapse the section once the team has done a
+ * reasonable workup in it. "Reasonable" = the section's flagged `key`
+ * item was revealed AND there are ≥ 4 items revealed, OR (for sections
+ * without a key item like history/exam) ≥ 4 items revealed. Idempotent
+ * — leaves alone any section the user reopened after our auto-collapse
+ * (`data-auto-collapsed` flag) so the engine never fights an explicit
+ * user choice. Sim 2026-05-19 (25 personas asked for this). */
+const _AUTO_COLLAPSE_MIN = 4;
 function _autoCollapseCompletedChartSections() {
   const sectionIds = {
     history: "chart-section-history",
@@ -5754,10 +5785,20 @@ function _autoCollapseCompletedChartSections() {
     if (!sec || !sec.hasAttribute("open")) return;
     if (sec.dataset.autoCollapsed === "1") return;
     const items = (CASE && CASE[group]) || [];
-    const keyIds = items.map((it, i) => (it && it.key) ? (group + ":" + i) : null)
-                        .filter(Boolean);
-    if (!keyIds.length) return;
-    if (keyIds.every(id => !!revealed[id])) {
+    if (!items.length) return;
+    let revealedCount = 0;
+    let keyRevealed = false;
+    let keyExists = false;
+    items.forEach((it, i) => {
+      if (revealed[group + ":" + i]) revealedCount++;
+      if (it && it.key) {
+        keyExists = true;
+        if (revealed[group + ":" + i]) keyRevealed = true;
+      }
+    });
+    const done = (keyExists && keyRevealed) ||
+                 (revealedCount >= _AUTO_COLLAPSE_MIN);
+    if (done) {
       sec.dataset.autoCollapsed = "1";
       sec.removeAttribute("open");
     }
@@ -5841,6 +5882,14 @@ if (typeof window !== "undefined") {
   window._test_getItemIds = function () { return ITEM_IDS.slice(); };
   window._test_getCase = function () { return CASE; };
   window._test_rebuildCaseDerived = function () { rebuildCaseDerived(); };
+  // Sim 2026-05-19 follow-ups — hooks for the per-feature E2E tests
+  // under tests-e2e/sim-recommendations.spec.js. Production code never
+  // calls these; they're inert outside test runs.
+  window._test_setClientId      = function (c) { clientId = String(c || ""); };
+  window._test_setSessionNum    = function (n) { sessionNum = String(n || ""); };
+  window._test_setRoomCount     = function (n) { roomCount = parseInt(n, 10) || 1; };
+  window._test_setAllRooms      = function (m) { allRooms = m || {}; };
+  window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
@@ -7472,6 +7521,7 @@ function renderAnswers(moduleKey) {
 function buildAnswerLi(moduleKey, entry) {
   const li = document.createElement("li");
   li.className = "answer-entry";
+  li.dataset.entryId = entry.id || "";
   const dot = document.createElement("span");
   dot.className = "dot"; dot.style.background = colorFor(entry.by);
   const who = document.createElement("span");
@@ -7489,8 +7539,100 @@ function buildAnswerLi(moduleKey, entry) {
     delBtn.setAttribute("aria-label", "Delete your point");
     delBtn.addEventListener("click", () => deleteAnswer(moduleKey, entry.id));
     li.appendChild(editBtn); li.appendChild(delBtn);
+  } else {
+    // Sim 2026-05-19 (Akari, Antoine, Hugo, Sophie): "A 'disagree'
+    // button on a teammate's answer that opens a counter-bullet —
+    // keeps debate visible." Only render for SOMEONE ELSE's answer
+    // (you can't disagree with yourself). Click opens an inline
+    // textarea below this li; submit pushes to answerReplies/{entryId}.
+    const disBtn = document.createElement("button");
+    disBtn.className = "entry-act entry-disagree";
+    disBtn.textContent = "disagree ↪";
+    disBtn.setAttribute("aria-label",
+      "Add a counter-point under " + entry.by + "'s answer");
+    disBtn.addEventListener("click", () => openCounterBullet(entry, li));
+    li.appendChild(disBtn);
   }
+  // Always render any existing counter-bullets under this answer.
+  const repliesWrap = document.createElement("ul");
+  repliesWrap.className = "answer-replies";
+  repliesWrap.dataset.repliesFor = entry.id || "";
+  li.appendChild(repliesWrap);
+  _renderRepliesForEntry(entry.id, repliesWrap);
   return li;
+}
+
+/* Render counter-bullets (any { text, by, stance } entries under
+ * answerReplies/{entryId}) into the supplied wrapper. Read-only;
+ * deletion belongs to whoever wrote the reply (could be added later). */
+function _renderRepliesForEntry(entryId, wrap) {
+  if (!entryId || !wrap) return;
+  wrap.innerHTML = "";
+  const replies = (answerReplies && answerReplies[entryId]) || {};
+  Object.keys(replies)
+    .map(k => Object.assign({ id: k }, replies[k]))
+    .sort((a, b) => (a.at || 0) - (b.at || 0))
+    .forEach(r => {
+      const li = document.createElement("li");
+      li.className = "answer-reply " + (r.stance === "support" ? "is-support" : "is-disagree");
+      const arrow = document.createElement("span");
+      arrow.className = "reply-arrow"; arrow.textContent = "↪";
+      const who = document.createElement("strong");
+      who.textContent = (r.by || "?") + ":";
+      const txt = document.createElement("span");
+      txt.textContent = " " + (r.text || "");
+      li.appendChild(arrow); li.appendChild(who); li.appendChild(txt);
+      wrap.appendChild(li);
+    });
+}
+
+/* Open an inline counter-bullet input under a teammate's answer.
+ * Idempotent — calling twice on the same answer reuses the existing
+ * input rather than stacking duplicates. */
+function openCounterBullet(entry, li) {
+  if (!li || !entry || !entry.id) return;
+  if (li.querySelector(".counter-bullet-form")) {
+    // already open — focus its textarea
+    const ta = li.querySelector(".counter-bullet-form textarea");
+    if (ta) try { ta.focus(); } catch (e) {}
+    return;
+  }
+  const form = document.createElement("div");
+  form.className = "counter-bullet-form";
+  const ta = document.createElement("textarea");
+  ta.rows = 2;
+  ta.maxLength = 400;
+  ta.placeholder = tFallback("answer.counter.placeholder",
+    "Why do you see it differently?");
+  ta.setAttribute("aria-label",
+    tFallback("answer.counter.aria",
+      "Counter-bullet to " + (entry.by || "teammate") + "'s answer"));
+  const send = document.createElement("button");
+  send.type = "button";
+  send.textContent = tFallback("answer.counter.send", "Send counter-point");
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "ghost-btn";
+  cancel.textContent = tFallback("modal.cancel", "Cancel");
+  form.appendChild(ta);
+  form.appendChild(send);
+  form.appendChild(cancel);
+  li.appendChild(form);
+  setTimeout(() => { try { ta.focus(); } catch (e) {} }, 30);
+  cancel.addEventListener("click", () => form.remove());
+  send.addEventListener("click", () => {
+    const text = (ta.value || "").trim();
+    if (!text || !refAnswerReplies) return;
+    send.disabled = true;
+    refAnswerReplies.child(entry.id).push({
+      text: text.slice(0, 400),
+      by:   (myName || "anon").slice(0, 40),
+      cid:  clientId,
+      at:   Date.now(),
+      stance: "disagree"
+    }).then(() => { form.remove(); })
+      .catch(() => { send.disabled = false; });
+  });
 }
 
 /* `bulletKey` is optional — when present, the answer is tagged so the
@@ -7696,6 +7838,156 @@ function initLeave() {
   el("leave-btn").addEventListener("click", () => {
     if (isRoomAdmin) backToDashboard();
     else leaveAndReload();
+  });
+}
+
+/* "I'm just observing" — sim 2026-05-19 feature for anxious / B1 /
+ * first-timer personas. Writes /sessions/{code}/rooms/{room}/observers/
+ * {clientId} = {at} so other clients (and the scoring engine) can
+ * distinguish observers from active participants. Local UX: button
+ * flips to "Rejoin actively" and the room view gets data-observer="1"
+ * so CSS can soften participation prompts (toned-down call-to-action
+ * styling on Decisions, Hypotheses, etc.). No broadcast / no toast —
+ * intentionally quiet so a stressed student can step back without
+ * announcing it to the room. */
+function initObserver() {
+  const btn = el("observer-btn");
+  if (!btn || isRoomAdmin) {
+    if (btn) btn.classList.add("hidden");
+    return;
+  }
+  if (btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  // Reflect any pre-existing observer state (e.g. after a refresh).
+  if (refObservers) {
+    refObservers.child(clientId).on("value", snap => {
+      const isObs = !!snap.val();
+      document.body.dataset.observer = isObs ? "1" : "";
+      btn.textContent = isObs
+        ? tFallback("room.observer-rejoin", "Rejoin actively")
+        : tFallback("room.observer-btn",   "I'm just observing");
+      btn.classList.toggle("is-active", isObs);
+    });
+  }
+  btn.addEventListener("click", () => {
+    if (!refObservers) return;
+    const isObs = document.body.dataset.observer === "1";
+    if (isObs) {
+      // toggle off
+      refObservers.child(clientId).remove().catch(() => {});
+    } else {
+      refObservers.child(clientId).set({ at: Date.now() }).catch(() => {});
+    }
+  });
+}
+
+/* End-of-session poll — sim 2026-05-19 (Akari, Antoine, Manon, Sophie,
+ * Daichi): "End-of-session quick poll: 'What was the hardest moment?'
+ * + 'One word that describes how you felt.'" Writes one entry per
+ * client to /sessions/{code}/poll/{cid}. Idempotent — submitting again
+ * overwrites the existing entry. No facilitator notification (the
+ * facilitator reads /poll later as part of the archive). */
+function initEndPoll() {
+  const card = el("endpoll-card");
+  if (!card || isRoomAdmin) {
+    if (card) card.classList.add("hidden");
+    return;
+  }
+  if (card.dataset.wired === "1") return;
+  card.dataset.wired = "1";
+  const hard = el("endpoll-hardest");
+  const feel = el("endpoll-feeling");
+  const btn = el("endpoll-submit");
+  const thanks = el("endpoll-thanks");
+  if (!btn || !hard || !feel) return;
+  // Pre-fill if the user already submitted this session (refresh case).
+  if (!refPoll && db && typeof sPath === "function") {
+    try { refPoll = db.ref(sPath("poll/" + clientId)); } catch (e) {}
+  }
+  if (refPoll) {
+    refPoll.once("value").then(snap => {
+      const v = snap && snap.val();
+      if (v) {
+        if (hard) hard.value = String(v.hardest || "");
+        if (feel) feel.value = String(v.feeling || "");
+        if (thanks) thanks.classList.remove("hidden");
+      }
+    }).catch(() => {});
+  }
+  btn.addEventListener("click", () => {
+    if (!refPoll) {
+      try { refPoll = db.ref(sPath("poll/" + clientId)); } catch (e) { return; }
+    }
+    const payload = {
+      hardest: (hard.value || "").trim().slice(0, 280),
+      feeling: (feel.value || "").trim().slice(0, 40),
+      by:      (myName || "anon").slice(0, 40),
+      at:      Date.now()
+    };
+    if (!payload.hardest && !payload.feeling) return;   // nothing to send
+    btn.disabled = true;
+    refPoll.set(payload).then(() => {
+      if (thanks) thanks.classList.remove("hidden");
+      setTimeout(() => { btn.disabled = false; }, 1500);
+    }).catch(() => { btn.disabled = false; });
+  });
+}
+
+/* Per-room side-chat — sim 2026-05-19 (Sayaka, Mei): "A private side-
+ * chat with just my room (separate from group-answers) for clarifying
+ * questions." Light-touch UI: collapsed by default, expands to a
+ * scroll-pane of messages + a one-line input. Messages live at
+ * /sessions/{code}/rooms/{room}/chat/{msgId} (push id). */
+function initSideChat() {
+  const panel = el("rcol-p-chat");
+  if (!panel || isRoomAdmin) return;
+  if (panel.dataset.wired === "1") return;
+  panel.dataset.wired = "1";
+  const list = el("chat-list");
+  const input = el("chat-input");
+  const send = el("chat-send");
+  if (!list || !input || !send) return;
+
+  if (refChat) {
+    refChat.on("value", snap => {
+      const msgs = snap.val() || {};
+      const sorted = Object.keys(msgs)
+        .map(k => Object.assign({ id: k }, msgs[k]))
+        .filter(m => m && m.text)
+        .sort((a, b) => (a.at || 0) - (b.at || 0))
+        .slice(-50);   // last 50 only
+      list.innerHTML = "";
+      sorted.forEach(m => {
+        const li = document.createElement("li");
+        li.className = "chat-msg" + (m.cid === clientId ? " me" : "");
+        const who = document.createElement("strong");
+        who.textContent = m.by || "?";
+        const txt = document.createElement("span");
+        txt.textContent = " " + m.text;
+        li.appendChild(who);
+        li.appendChild(txt);
+        list.appendChild(li);
+      });
+      list.scrollTop = list.scrollHeight;
+    });
+  }
+
+  function sendMessage() {
+    const text = (input.value || "").trim();
+    if (!text) return;
+    refChat.push({
+      text: text.slice(0, 500),
+      by: (myName || "anon").slice(0, 40),
+      cid: clientId,
+      at: Date.now()
+    }).then(() => { input.value = ""; }).catch(() => {});
+  }
+  send.addEventListener("click", sendMessage);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   });
 }
 
