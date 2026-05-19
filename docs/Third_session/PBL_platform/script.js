@@ -2889,6 +2889,8 @@ function enterAdminApp() {
     if (confirm("Leave the admin dashboard? You will return to the lobby.")) location.reload();
   });
   el("admin-download-btn").addEventListener("click", downloadAllAnswers);
+  const mdBtn = el("admin-download-md-btn");
+  if (mdBtn) mdBtn.addEventListener("click", downloadAllAnswersMarkdown);
   const debriefBtn = el("admin-debrief-btn");
   if (debriefBtn && !debriefBtn.dataset.wired) {
     debriefBtn.dataset.wired = "1";
@@ -5129,6 +5131,61 @@ function downloadAllAnswers() {
   URL.revokeObjectURL(a.href);
 }
 
+/* Markdown variant of downloadAllAnswers — sim 2026-05-19 feature for
+ * the `writes_lots` / `methodical` / `checks_evidence` personas who
+ * want a revision-friendly export. Same payload + pseudonymisation
+ * toggle as the .txt version; structure mirrors the .txt one with
+ * markdown headings (room = h2, module = h3) and bulleted answers. */
+function downloadAllAnswersMarkdown() {
+  const anon = !!(el("anon-export") && el("anon-export").checked);
+  const lines = [];
+  lines.push("# CaNaMED Session " + sessionNum + " — Group Answers");
+  lines.push("");
+  lines.push("- **Exported:** " + new Date().toLocaleString());
+  if (anon) lines.push("- _Names pseudonymised per room (Student A, B, …)._");
+  lines.push("");
+  roomNames(roomCount).forEach(r => {
+    const data = allRooms[r] || {};
+    const st = typeof data.stage === "number" ? data.stage : 0;
+    const ans = data.answers || {};
+    const aliasMap = {};
+    let aliasN = 0;
+    const labelFor = nm => {
+      if (!anon) return nm;
+      if (!(nm in aliasMap)) {
+        const letter = String.fromCharCode(65 + (aliasN % 26));
+        const suffix = aliasN >= 26 ? String(Math.floor(aliasN / 26) + 1) : "";
+        aliasMap[nm] = "Student " + letter + suffix;
+        aliasN++;
+      }
+      return aliasMap[nm];
+    };
+    lines.push("## " + r + " — reached " + STAGE_LABELS[st]);
+    lines.push("");
+    ["moduleA", "moduleB"].forEach(mk => {
+      lines.push("### " + (mk === "moduleA"
+        ? "Module A — Chronic Pain"
+        : "Module B — Breaking Bad News"));
+      const entries = entriesSorted(ans[mk]);
+      if (entries.length === 0) lines.push("_(no points recorded)_");
+      else entries.forEach(e => lines.push("- **" + labelFor(e.by) +
+        (e.university ? " / " + e.university : "") + ":** " +
+        // escape markdown-sensitive chars in user-typed content
+        String(e.text || "").replace(/([*_`#|])/g, "\\$1")));
+      lines.push("");
+    });
+  });
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "CaNaMED_Session" + sessionNum +
+    (anon ? "_group_answers_pseudonymised.md" : "_group_answers.md");
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 /* ===================== ROOM VIEW: STAGE & NAVIGATION ===================== */
 /* Late-join banner. R3-C1 fix: every visible string flows through tFallback()
    so a Japanese / French / German late-joiner sees a localised message at the
@@ -5191,6 +5248,21 @@ function renderStage() {
     wrapCelebrated = true;
     burst();
     toast("Great work today — thank you for taking part! 🎌");
+  }
+  // Sim 2026-05-19 (Camille, first-timer): 3-step Module A walkthrough
+  // the first time a participant lands on stage 1. Skip-able via the
+  // tour overlay's Esc / Skip control. Idempotent — fires once per
+  // browser per session via the localStorage marker handled by
+  // CanamedTour. Admins-in-a-room are skipped (they have their own tour).
+  if (!isRoomAdmin && viewStage === 1 && window.CanamedTour &&
+      !window.CanamedTour.isDone("studentModA")) {
+    setTimeout(() => {
+      try {
+        if (!window.CanamedTour.isDone("studentModA")) {
+          window.CanamedTour.start("studentModA");
+        }
+      } catch (e) { /* tour module missing — non-fatal */ }
+    }, 500);
   }
   const wait = el("stage-wait");
   if (isRoomAdmin) {
@@ -5392,10 +5464,35 @@ function buildButtons() {
       // item.q is a translatable { en, fr, ja } in the default content, but
       // tc() also passes plain strings through (back-compat for custom JSON).
       btn.textContent = tc(item.q, _curLang());
+      _annotateButtonWithGlossary(btn);
       btn.addEventListener("click", () => reveal(id));
       container.appendChild(btn);
     });
   });
+}
+
+/* Attach a multi-line `title` tooltip to a case-content button when
+ * the button text contains any glossed clinical term. Browsers render
+ * `title` natively (hover on desktop, long-press on mobile), so this
+ * needs no extra CSS / JS frameworks. Sim 2026-05-19 feature for the
+ * A2-English Japanese students. */
+function _annotateButtonWithGlossary(btn) {
+  if (!btn || !btn.textContent) return;
+  const gloss = (typeof window !== "undefined") && window.CANAMED_GLOSSARY;
+  if (!gloss) return;
+  const txt = btn.textContent.toLowerCase();
+  const hits = [];
+  Object.keys(gloss).forEach(term => {
+    if (txt.indexOf(term) !== -1) {
+      const g = gloss[term];
+      hits.push("• " + term + " — " + g.en + " / " + g.ja);
+    }
+  });
+  if (hits.length) {
+    // First-hit only if there are many — keep the tooltip readable.
+    btn.title = hits.slice(0, 3).join("\n");
+    btn.classList.add("has-glossary");
+  }
 }
 function prereqsMet() {
   return SYNTH_PREREQS.every(id => revealed[id]);
@@ -5547,6 +5644,19 @@ function renderButtons() {
         ans.className = "req-inline-answer";
         ans.textContent = tc(item.a, lang);
         inline.appendChild(ans);
+        // Citation badge (sim 2026-05-19 — Lucas): "Inline citation
+        // badges (NICE 2021, HAS 2023…) on each finding so we can argue
+        // from sources." Pull from CASE item's optional `cite` field
+        // (a translatable trio { en, fr, ja } or a plain string). Two
+        // children so we can style the badge separately from the
+        // author byline (badge sits between answer + byline).
+        if (item.cite) {
+          const cite = document.createElement("span");
+          cite.className = "req-inline-cite";
+          cite.textContent = (typeof tc === "function")
+            ? tc(item.cite, lang) : String(item.cite);
+          inline.appendChild(cite);
+        }
         // Author byline: replaces the work the removed Findings tab
         // used to do ("revealed by [name]") so the WHO information
         // stays visible without a separate tab.
@@ -5560,6 +5670,96 @@ function renderButtons() {
       }
     } else if (inline) {
       inline.remove();
+    }
+  });
+  // Auto-collapse a chart section once every KEY item in it is revealed
+  // — sim 2026-05-19 finding (25 personas): "Could Module A let me
+  // collapse a chart section the moment I've ticked a 'done' box?"
+  // We only collapse ONCE per section (data-auto-collapsed flag) so a
+  // student who manually reopens it later isn't fought by the engine.
+  _autoCollapseCompletedChartSections();
+}
+
+/* Build the anonymised per-room cohort progress strip used by
+ * renderLeaderboard. One bar per room, in name order (NOT score order)
+ * so a competitive student doesn't accidentally learn the ranking.
+ * Bar fill = revealed-keys / total-keys for the current stage (a
+ * proxy for module progress). My room's bar is highlighted in the
+ * accent colour; others are neutral grey. */
+function _buildCohortProgressStrip(rows) {
+  const wrap = document.createElement("div");
+  wrap.className = "lb-cohort-progress";
+  wrap.setAttribute("aria-label", "Anonymised cohort progress per room");
+  const head = document.createElement("p");
+  head.className = "lb-cohort-head";
+  head.textContent = "Cohort progress (anonymised) — your bar is highlighted";
+  wrap.appendChild(head);
+  const grid = document.createElement("div");
+  grid.className = "lb-cohort-grid";
+  // sort by room name (NOT score) — so the order is stable + doesn't
+  // betray ranking. Each room contributes a single bar.
+  const inNameOrder = rows.slice().sort((a, b) => a.room.localeCompare(b.room));
+  // Progress proxy = the room's `findings` count / a target. The target
+  // is roughly the number of key items in the current stage's CASE; we
+  // approximate as scoreTotal / 100 capped at 1 so we don't need the
+  // case structure here. Falls back to fractional pts.
+  const target = 220;   // matches the goal-per-room used above
+  inNameOrder.forEach(r => {
+    const pct = Math.min(100, Math.round((r.total / target) * 100));
+    const cell = document.createElement("div");
+    cell.className = "lb-cohort-cell" + (r.room === myRoom ? " is-me" : "");
+    const tinyBar = document.createElement("div");
+    tinyBar.className = "lb-cohort-bar";
+    const fill = document.createElement("span");
+    fill.style.width = pct + "%";
+    tinyBar.appendChild(fill);
+    cell.appendChild(tinyBar);
+    cell.setAttribute("aria-label",
+      (r.room === myRoom ? "Your room: " : "A room in the cohort: ") +
+      pct + " per cent of the typical progress");
+    grid.appendChild(cell);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/* Update the per-bullet progress checklist at the top of Module A.
+ * A bullet is "done" the moment its group-answers list has at least
+ * one entry. Pure DOM toggle — safe to call repeatedly. */
+function _updateModABulletProgress() {
+  const list = el("modA-bullet-progress");
+  if (!list) return;
+  const buckets = {};
+  entriesSorted(answers.moduleA || {}).forEach(e => {
+    if (e.bulletKey) buckets[e.bulletKey] = (buckets[e.bulletKey] || 0) + 1;
+  });
+  list.querySelectorAll("li[data-bullet-key]").forEach(li => {
+    const k = li.dataset.bulletKey;
+    li.classList.toggle("is-done", (buckets[k] || 0) > 0);
+  });
+}
+
+/* Per chart-section: if every `item.key` button in that group is
+ * revealed, collapse the section once. Idempotent — leaves alone any
+ * section the user reopened after our auto-collapse (`data-auto-
+ * collapsed` flag) so the engine never fights an explicit user choice. */
+function _autoCollapseCompletedChartSections() {
+  const sectionIds = {
+    history: "chart-section-history",
+    exam:    "chart-section-exam",
+    labs:    "chart-investigations"
+  };
+  Object.keys(sectionIds).forEach(group => {
+    const sec = document.getElementById(sectionIds[group]);
+    if (!sec || !sec.hasAttribute("open")) return;
+    if (sec.dataset.autoCollapsed === "1") return;
+    const items = (CASE && CASE[group]) || [];
+    const keyIds = items.map((it, i) => (it && it.key) ? (group + ":" + i) : null)
+                        .filter(Boolean);
+    if (!keyIds.length) return;
+    if (keyIds.every(id => !!revealed[id])) {
+      sec.dataset.autoCollapsed = "1";
+      sec.removeAttribute("open");
     }
   });
 }
@@ -6677,6 +6877,13 @@ function renderLeaderboard() {
   note.textContent = "Every room's points add to the same goal — across all the " +
     "rooms you are one team today.";
   shared.appendChild(sh); shared.appendChild(bar); shared.appendChild(note);
+  // Anonymised cohort progress strip — sim 2026-05-19 (Daichi,
+  // competitive): "A small per-room progress bar against the other
+  // rooms (without exposing 'which room is winning')." Each room is one
+  // bar; the rooms are shown in a stable order (by room name, NOT by
+  // rank) so a competitive participant can spot relative progress
+  // without learning who's behind. My room is highlighted.
+  shared.appendChild(_buildCohortProgressStrip(rows));
   box.appendChild(shared);
 
   if (rows.every(r => r.total === 0)) {
@@ -7209,6 +7416,9 @@ function renderAnswers(moduleKey) {
     setTabBadge("tab-badge-answers", n || "");
     if (n > (lastAnswerCount.moduleA || 0)) nudgeRcolTab("answers");
     lastAnswerCount.moduleA = n;
+    // Refresh the per-bullet checklist at the top of Module A
+    // (sim 2026-05-19 feature for `methodical` personas).
+    _updateModABulletProgress();
   }
 
   // The form is now a set of per-bullet sections; gather the entries

@@ -1097,6 +1097,23 @@
           </ol>
         </nav>
 
+        <!-- Per-bullet progress checklist — sim 2026-05-19 (Hiroshi,
+             Lucas): "Show me my team's progress against the four
+             bullets at the top of Module A — checkbox style." A bullet
+             is marked done when its answers list has at least one
+             entry; updated live by renderAnswers(). -->
+        <ul class="modA-bullet-progress" id="modA-bullet-progress"
+            aria-label="Group-answer progress">
+          <li data-bullet-key="plan"
+              data-i18n="modA.bullet-progress.plan">Plan</li>
+          <li data-bullet-key="differ"
+              data-i18n="modA.bullet-progress.differ">Differentials</li>
+          <li data-bullet-key="disagree"
+              data-i18n="modA.bullet-progress.disagree">Disagreements</li>
+          <li data-bullet-key="takehome"
+              data-i18n="modA.bullet-progress.takehome">Take-home</li>
+        </ul>
+
         <!-- "What to do next" coach — updates contextually from
              updateModANextStep(). Hidden once student dismisses it for
              the session (× button stores a flag in localStorage). -->
@@ -2207,6 +2224,13 @@
         <div class="stage-controls">
           <button id="admin-download-btn"
                   data-i18n="admin.download-all">Download all group answers</button>
+          <!-- Markdown variant — sim 2026-05-19 (Hiroshi, Antoine, Hugo,
+               Lucas): "Let me export my team's group-answers + transcript
+               as a markdown file at the end." Same payload as the .txt
+               download, formatted as markdown for easy paste into notes
+               apps + revision tools. -->
+          <button id="admin-download-md-btn"
+                  data-i18n="admin.download-md">Download as Markdown</button>
           <button id="admin-debrief-btn" type="button"
                   data-i18n="debrief.toggle"
                   aria-controls="admin-debrief" aria-expanded="false">Open debrief</button>
@@ -2531,6 +2555,11 @@
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
   <script src="lib.js?v=v2" defer></script>
+  <!-- glossary.js — tiny clinical glossary (EN + JP) used by
+       _annotateButtonsWithGlossary() to attach hover tooltips to any
+       case-content button whose text contains a glossed term. Small,
+       static, public — safe to ship in the splash bundle. -->
+  <script src="glossary.js?v=v2" defer></script>
   <!-- script-loader.js — bundle splitter. Lazy-loads case-content.js,
        qrcode.js, tour.js and scenario-author.js on demand so the splash
        boot stays under the perf budget (see tests-e2e/perf.spec.js).

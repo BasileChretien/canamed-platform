@@ -41,7 +41,13 @@
     // Bug 5 (user-feedback-2): students get a brief overlay tour on first
     // room entry. Same versioned-localStorage gate as the facilitator
     // tours; bump VERSION when the participant UI shifts meaningfully.
-    student: "canamed_tour_student_done"
+    student: "canamed_tour_student_done",
+    // Sim 2026-05-19 (Camille, Y3 first-timer): "A 30-second guided
+    // walkthrough of Module A's chart on first entry. Skip-able."
+    // Fires once the student lands on stage 1 (Module A), not on the
+    // welcome stage. Independent localStorage key so a returning user
+    // who has done the general student tour still sees this once.
+    studentModA: "canamed_tour_student_moda_done"
   };
 
   /* ============================================================
@@ -112,6 +118,18 @@
       { anchor: "global-lang-switcher",
         titleKey: "tour.student.7.title", bodyKey: "tour.student.7.body",
         placement: "bottom" }
+    ],
+    // Module A first-entry mini-tour: 3 steps × ~10s each.
+    studentModA: [
+      { anchor: "modA-bullet-progress",
+        titleKey: "tour.studentModA.1.title", bodyKey: "tour.studentModA.1.body",
+        placement: "bottom" },
+      { anchor: "chart-section-history",
+        titleKey: "tour.studentModA.2.title", bodyKey: "tour.studentModA.2.body",
+        placement: "right" },
+      { anchor: "rcol-p-decisions",
+        titleKey: "tour.studentModA.3.title", bodyKey: "tour.studentModA.3.body",
+        placement: "left" }
     ]
   };
 

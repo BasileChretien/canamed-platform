@@ -232,8 +232,35 @@ main {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--s-4);
+  /* `align-items: start` is load-bearing for the sticky-right-column
+     pattern below — without it a grid cell stretches to match the
+     tallest sibling, and a child with position:sticky inside a stretched
+     cell never has anything to be sticky to. */
+  align-items: start;
 }
 @media (max-width: 960px) { .columns { grid-template-columns: 1fr; } }
+
+/* Sticky right-column — sim 2026-05-19 finding (24 students):
+   "Sticky right-column (Findings + Decisions + Discussion) so the case
+   panels can scroll without losing the working answers." Pinned at
+   viewport ≥960px (where the two-column layout is in effect); on
+   narrow viewports the layout already stacks so stickiness is a no-op. */
+@media (min-width: 961px) {
+  .columns > .col-right {
+    position: sticky;
+    /* Sticky offset = global-header height + a small breathing margin.
+       The header is ~60px tall + 8px gap so the right column is never
+       glued to the very top edge of the viewport. */
+    top: 68px;
+    /* Cap height so the inner scrollable region (when content overflows)
+       can scroll independently of the case panels in col-left.
+       Falls back to auto if the calc unit isn't supported. */
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    /* Restore native momentum-scroll on touchpads/Macs */
+    -webkit-overflow-scrolling: touch;
+  }
+}
 
 /* ---------- buttons (3 roles: primary / secondary / danger) ---------- */
 /* primary */
@@ -1122,6 +1149,111 @@ html[data-theme="dark"] .next-step-coach {
    when the section is collapsed. */
 .chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   display: none !important;
+}
+
+/* --- Module A per-bullet progress checklist --- */
+.modA-bullet-progress {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.modA-bullet-progress li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.modA-bullet-progress li::before {
+  content: "☐";
+  font-size: 1.1em;
+  color: var(--muted);
+}
+.modA-bullet-progress li.is-done {
+  color: var(--ink);
+  font-weight: 600;
+}
+.modA-bullet-progress li.is-done::before {
+  content: "☑";
+  color: var(--success, #2e7d32);
+}
+
+/* Glossed buttons get a tiny dotted underline as a "hover for more"
+   cue — sim 2026-05-19 feature for low-English students. Title
+   attribute carries the EN+JP explanation; this is just the visual
+   handle so the user knows hovering / long-pressing is useful. */
+.req-btn.has-glossary::after {
+  content: " ⓘ";
+  font-size: 0.85em;
+  color: var(--muted);
+  margin-left: 4px;
+  text-decoration: none;
+}
+.req-btn.has-glossary:hover::after {
+  color: var(--primary, #1763a6);
+}
+
+/* Inline citation badges on revealed findings — sim 2026-05-19
+   feature for `checks_evidence` personas. Sits between the answer
+   body and the author byline; visually de-emphasized but tappable. */
+.req-inline-cite {
+  display: inline-block;
+  margin: 0 6px;
+  padding: 1px 8px;
+  background: var(--surface-sunk, #f3f0e8);
+  border: 1px solid var(--line, #e2dccf);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* Anonymised cohort progress strip — sim 2026-05-19 feature.
+   One bar per room, name-ordered (not rank-ordered), so a competitive
+   student can see relative progress without learning the ranking.
+   My room's bar uses the accent palette; others are muted. */
+.lb-cohort-progress {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line, #e2dccf);
+}
+.lb-cohort-head {
+  margin: 0 0 6px;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.lb-cohort-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 6px;
+}
+.lb-cohort-cell {
+  padding: 2px 0;
+}
+.lb-cohort-bar {
+  height: 8px;
+  background: var(--n-100, #f0eadb);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.lb-cohort-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--n-300, #c9bd9c);
+  transition: width var(--dur-base, 0.25s) var(--ease-soft, ease-out);
+}
+.lb-cohort-cell.is-me .lb-cohort-bar {
+  border: 1px solid var(--primary, #1763a6);
+  background: rgba(23, 99, 166, 0.08);
+}
+.lb-cohort-cell.is-me .lb-cohort-bar > span {
+  background: var(--primary, #1763a6);
 }
 
 /* --- collapsible info cards (Module B safety-note, future Module A
