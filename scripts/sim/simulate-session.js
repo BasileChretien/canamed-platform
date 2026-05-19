@@ -183,6 +183,11 @@ async function getCtx(browser) {
       localStorage.setItem("canamed_tour_done", "v1");
       localStorage.setItem("canamed_tour_admin_done", "v1");
       localStorage.setItem("canamed_tour_student_done", "v1");
+      // Sim 2026-05-19 v2 — also suppress the Module A walkthrough
+      // (PR #24). Without this, the overlay blocks the interactive
+      // pass's clicks on chart sections, observer button, hypothesis
+      // input, side-chat tab — every action that lives in Module A.
+      localStorage.setItem("canamed_tour_student_moda_done", "v1");
     } catch (e) {}
   }, { useEmulator, host: emuHost, dbPort: emuDbPort, authPort: emuAuthPort });
   if (useEmulator) {
@@ -230,6 +235,116 @@ async function newTab(browser, persona) {
     });
   });
   return { ctx, page };
+}
+
+/* ─────────────── persona-specific interaction pass ───────────────
+ *
+ * Each persona has traits; each trait maps to one click/type/submit
+ * on a feature we shipped in PR #24/#25. The goal is to make the
+ * sim's BEFORE/AFTER metrics actually different — without this, the
+ * heuristic reactions report the same "30 buttons, 4.9× scroll"
+ * forever, regardless of whether the user is using the collapse /
+ * sticky / side-chat affordances designed to relieve that load.
+ *
+ * Returns { tried: [...], ok: [...], failed: [...] } so the report
+ * can show what each persona actually did. */
+async function _runPersonaActions(page, persona, stageName) {
+  const tr = persona.traits || [];
+  const has = t => tr.indexOf(t) !== -1;
+  const tried = [];
+  const ok = [];
+  const failed = [];
+  async function tryDo(name, fn) {
+    tried.push(name);
+    try {
+      const result = await fn();
+      if (result === false) failed.push(name);
+      else ok.push(name);
+    } catch (e) { failed.push(name + ": " + (e.message || e).slice(0, 80)); }
+  }
+
+  // ── On Module A: methodical/time_pressed collapses a chart section.
+  if (stageName === "moduleA") {
+    if (has("methodical") || has("time_pressed")) {
+      await tryDo("collapse-history", async () => {
+        const s = page.locator("#chart-section-history summary");
+        if (await s.count() === 0) return false;
+        await s.click({ timeout: 2000 });
+        // The <details> open attribute should now be removed.
+        return await page.evaluate(() =>
+          !document.getElementById("chart-section-history").hasAttribute("open"));
+      });
+    }
+    // low_english / uses_glossary: hover a glossed button to surface tooltip.
+    if (has("low_english") || has("uses_glossary")) {
+      await tryDo("hover-glossary", async () => {
+        const b = page.locator(".req-btn.has-glossary").first();
+        if (await b.count() === 0) return false;
+        await b.hover({ timeout: 2000 });
+        const title = await b.getAttribute("title");
+        return !!(title && title.length);
+      });
+    }
+    // anxious / first_timer: click "I'm just observing" to step back.
+    if (has("anxious") || has("first_timer") || has("lurker_until_engaged")) {
+      await tryDo("click-observer", async () => {
+        const b = page.locator("#observer-btn");
+        if (await b.count() === 0 || !(await b.isVisible())) return false;
+        await b.click({ timeout: 2000 });
+        // body[data-observer] should flip to "1".
+        return (await page.getAttribute("body", "data-observer")) === "1";
+      });
+    }
+    // contributor / leader: add a working hypothesis (the canonical one
+    // now sits between Examination and Investigations after the
+    // specialist-panel reorganisation).
+    if (has("contributor") || has("leader") || has("methodical")) {
+      await tryDo("add-hypothesis", async () => {
+        const input = page.locator("#hypothesis-input");
+        if (await input.count() === 0 || !(await input.isVisible())) return false;
+        await input.fill("mechanical low back pain");
+        await page.locator("#hypothesis-add-btn").click({ timeout: 2000 });
+        // a chip should appear in #hypothesis-list (any non-empty <li>).
+        return await page.evaluate(() =>
+          document.querySelectorAll("#hypothesis-list li").length > 0);
+      });
+    }
+    // joke_teller / translator_helper: open the side-chat tab and post.
+    if (has("joke_teller") || has("translator_helper") || has("contributor")) {
+      await tryDo("post-side-chat", async () => {
+        const tab = page.locator(".rcol-tab[data-tab='chat']");
+        if (await tab.count() === 0) return false;
+        await tab.click({ timeout: 2000 });
+        const inp = page.locator("#chat-input");
+        if (!(await inp.isVisible())) return false;
+        await inp.fill("Quick check — anyone got the NICE link?");
+        await page.locator("#chat-send").click({ timeout: 2000 });
+        return await page.evaluate(() =>
+          document.querySelectorAll("#chat-list .chat-msg").length > 0);
+      });
+    }
+  }
+
+  // ── On Wrap-up: contributor/methodical submits the end-of-session poll.
+  if (stageName === "wrapup") {
+    if (has("contributor") || has("methodical") || has("leader") ||
+        has("writes_lots")) {
+      await tryDo("submit-endpoll", async () => {
+        const card = page.locator("#endpoll-card");
+        if (await card.count() === 0 || !(await card.isVisible())) return false;
+        await page.locator("#endpoll-hardest").fill("Translating the cauda equina screen under time pressure");
+        await page.locator("#endpoll-feeling").fill("focused");
+        await page.locator("#endpoll-submit").click({ timeout: 2000 });
+        // brief settle then check the thanks message
+        await page.waitForTimeout(300);
+        return await page.evaluate(() => {
+          const t = document.getElementById("endpoll-thanks");
+          return !!(t && !t.classList.contains("hidden"));
+        });
+      });
+    }
+  }
+  return { tried, ok, failed };
 }
 
 async function shot(page, persona, stepName) {
@@ -301,13 +416,17 @@ async function snapshot(page) {
       const e = document.getElementById("stage-now");
       return e ? (e.textContent || "").trim().slice(0, 120) : "";
     })();
+    // Sim v2 — observer mode flag flips when student clicks "I'm just
+    // observing", used by the post-action reactions to confirm the
+    // affordance landed.
+    const observerMode = document.body.dataset.observer === "1";
     return {
       url: location.href,
       title: document.title,
       activeView, roomName,
       visibleButtons, heading, stageNow,
       scrollH, view, scrollRatio: view ? +(scrollH / view).toFixed(2) : 0,
-      hasError, presence
+      hasError, presence, observerMode
     };
   }).catch(() => ({ visibleButtons: [], heading: "[snapshot-failed]" }));
 }
@@ -322,7 +441,30 @@ function reactionsFrom(persona, snap, durationMs, stepName) {
   const tr = persona.traits || [];
   const has = t => tr.includes(t);
   const btnCount = (snap.visibleButtons || []).length;
+  const scroll = snap.scrollRatio || 0;
   const stage = _stageOf(snap, stepName);
+  const isPost = typeof stepName === "string" && stepName.indexOf("post-") === 0;
+
+  // ── post-action reactions (sim 2026-05-19 v2 interactive pass) ─
+  // Fire only when this is a POST-action snapshot AND the metric has
+  // dropped to a level that suggests the shipped affordance actually
+  // helped. These produce DIFFERENT recommendations from the
+  // "before" snapshots — they confirm the feature worked AND nudge
+  // toward the next iteration.
+  if (isPost) {
+    if (btnCount <= 18 && (has("anxious") || has("first_timer") || has("low_english"))) {
+      r.push("That's better — once I collapsed the section I could actually focus on what's left.");
+    }
+    if (scroll <= 3 && has("time_pressed")) {
+      r.push("Page fits the screen now. I can scan the whole chart at once.");
+    }
+    if (snap.observerMode && (has("anxious") || has("first_timer"))) {
+      r.push("Observer mode took the pressure off. I can still see everything, no one will ask me to commit.");
+    }
+    // Caveat — the heuristic floor is rarely under ~14 because the
+    // global header always contributes Settings/mute/Leave/etc.
+    return r.slice(0, 3);
+  }
 
   // ── universal: visible errors / loading slowness ─────────────
   if (snap.hasError) {
@@ -937,17 +1079,27 @@ function buildRecommendations(perPersonaReflections) {
         screenshot: await shot(page, s, "03-stage" + i + "-" + stageName),
         errors: page.__errors.slice(-3)   // last 3 errors only
       });
-      // Persona-specific micro-action: contributor / explorer / leader
-      // try to actually interact with the stage to surface friction.
-      if ((s.traits || []).includes("explorer") ||
-          (s.traits || []).includes("contributor") ||
-          (s.traits || []).includes("leader")) {
-        try {
-          // Click the first visible "Findings" / "Decisions" / module
-          // tab if it exists. Best-effort; failures are observations.
-          const tab = page.locator(".rcol-tab:visible, [data-tab]:visible").first();
-          if (await tab.count() > 0) await tab.click({ timeout: 2000 }).catch(() => {});
-        } catch (e) { /* observation only */ }
+      // ── Persona-specific micro-actions (sim 2026-05-19 v2) ──
+      // Each trait maps to a click/type/submit on a feature we shipped
+      // in PR #24/#25 (collapse chart, glossary tooltip, observer slot,
+      // hypothesis Add, disagree → counter-bullet, side-chat, endpoll).
+      // After the action, we re-snapshot and store as a separate
+      // observation prefixed `post-` so the report shows the BEFORE +
+      // AFTER metrics for the same persona at the same stage. That's
+      // how we surface NEW recommendations — the heuristic templates
+      // key on metrics (button count, scroll depth) and now see what
+      // those metrics ACTUALLY drop to once the shipped affordances
+      // are exercised.
+      const actions = await _runPersonaActions(page, s, stageName);
+      if (actions.tried.length) {
+        const postSnap = await snapshot(page);
+        obs(persona, "post-" + stageName + "-actions", {
+          ok: true,
+          snapshot: postSnap,
+          reactions: reactionsFrom(s, postSnap, 0, "stage-" + i + "-" + stageName),
+          actions: actions,
+          screenshot: await shot(page, s, "04-stage" + i + "-" + stageName + "-post")
+        });
       }
     }
   }
@@ -1192,6 +1344,12 @@ function writeReport(extra) {
       if (o.reactions && o.reactions.length) {
         lines.push("- *reactions:*");
         o.reactions.forEach(r => lines.push("  - " + r));
+      }
+      if (o.actions && (o.actions.ok || o.actions.failed)) {
+        const okList = (o.actions.ok || []);
+        const failList = (o.actions.failed || []);
+        if (okList.length) lines.push("- actions worked: " + okList.join(", "));
+        if (failList.length) lines.push("- actions failed: " + failList.join(", "));
       }
       if (o.errors && o.errors.length) {
         lines.push("- console errors during this step:");

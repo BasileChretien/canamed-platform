@@ -19,6 +19,12 @@ sim-output/screens-*/
 sim-output/feedback-*.md
 sim-output/theme-audit/
 
+# scripts/sim/sim-with-emulator.js generates these on every run as the
+# emulator-compatible rule copy + companion firebase.json. They're
+# deleted on clean exit but linger after a kill — keep them out of git.
+docs/Third_session/PBL_platform/database.rules.emulator.json
+docs/Third_session/PBL_platform/firebase.emulator.json
+
 # Credentials — local-only reference copies of API keys, service-account
 # JSONs, and similar. NEVER commit. The git-tracked counterparts hold only
 # the public values (e.g., Firebase web apiKey + reCAPTCHA site key in
