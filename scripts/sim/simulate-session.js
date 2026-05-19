@@ -312,51 +312,336 @@ async function snapshot(page) {
   }).catch(() => ({ visibleButtons: [], heading: "[snapshot-failed]" }));
 }
 
-/* Persona reactions are derived from the snapshot + the persona's
- * traits. Returns 1-3 short first-person quotes that this kind of
- * person would plausibly say. */
-function reactionsFrom(persona, snap, durationMs) {
+/* Persona reactions are derived from the snapshot + persona traits +
+ * the current stage. Returns 1-3 short first-person quotes that this
+ * kind of person would plausibly say in this moment. The catalogue
+ * below is intentionally wide so the same heuristic seldom fires the
+ * same line for two personas in a row — variation is the point. */
+function reactionsFrom(persona, snap, durationMs, stepName) {
   const r = [];
   const tr = persona.traits || [];
+  const has = t => tr.includes(t);
   const btnCount = (snap.visibleButtons || []).length;
+  const stage = _stageOf(snap, stepName);
 
+  // ── universal: visible errors / loading slowness ─────────────
   if (snap.hasError) {
     r.push("I see a red error message — am I supposed to do something?");
   }
-  if (btnCount >= 12 && tr.includes("anxious")) {
-    r.push("There are so many buttons. I don't know where to start.");
+  if (durationMs > 8000) {
+    if (has("distracted"))   r.push("Took a while to load. I checked my phone.");
+    if (has("anxious"))      r.push("Why is it so slow — did I break it?");
+    if (has("time_pressed")) r.push("Come on, come on. This is dragging.");
   }
-  if (btnCount >= 12 && tr.includes("low_english")) {
-    r.push("Too many words. I want to click the wrong thing by mistake.");
-  }
-  if (btnCount <= 3 && tr.includes("explorer")) {
-    r.push("Only " + btnCount + " buttons? Hope I'm not missing anything.");
-  }
-  if (snap.scrollRatio >= 3 && tr.includes("time_pressed")) {
-    r.push("This page is long. I'm just going to scroll through.");
-  }
-  if (snap.scrollRatio >= 3 && tr.includes("anxious")) {
-    r.push("Do I have to read all of this?");
-  }
-  if (durationMs > 8000 && tr.includes("distracted")) {
-    r.push("Took a while to load. I checked my phone.");
-  }
-  if (durationMs < 1500 && tr.includes("thoughtful")) {
+  if (durationMs < 1500 && has("thoughtful")) {
     r.push("Fast — but I want a moment to read before the screen changes.");
   }
-  if (snap.presence === 0 && tr.includes("contributor")) {
-    r.push("I don't see anyone else in my room — is anyone here yet?");
+
+  // ── button-count overload ────────────────────────────────────
+  if (btnCount >= 18) {
+    if (has("anxious"))    r.push("There are " + btnCount + " buttons on this page. I freeze a bit.");
+    if (has("low_english")) r.push("Too many words. I want to click the wrong thing by mistake.");
+    if (has("first_timer")) r.push("I've never used this kind of platform — where do I look first?");
+    if (has("uses_glossary")) r.push("I keep my dictionary tab open — there's a lot of medical English here.");
   }
-  if (snap.presence > 0 && tr.includes("leader")) {
-    r.push("I see " + snap.presence + " others. Let me start the conversation.");
+  if (btnCount <= 4 && has("explorer")) {
+    r.push("Only " + btnCount + " visible buttons — am I missing a tab?");
   }
-  if (tr.includes("fluent_french") && /Module A|Module B|Wrap-up/.test(snap.heading)) {
-    r.push("OK, on est sur " + snap.heading + ". Allons-y.");
+
+  // ── scroll depth ─────────────────────────────────────────────
+  if (snap.scrollRatio >= 3) {
+    if (has("time_pressed")) r.push("This page is " + snap.scrollRatio + "× tall. I'm scrolling, not reading.");
+    if (has("anxious"))      r.push("Do I have to read all of this?");
+    if (has("skim_reader"))  r.push("Scrolling. Reading bullet points only.");
   }
-  if (tr.includes("second_language_caution") && /Module|Wrap/.test(snap.heading)) {
-    r.push("Let me re-read the title to be sure I understand.");
+
+  // ── presence (sense of who's in the room) ────────────────────
+  if (snap.presence === 1 && has("contributor")) {
+    r.push("I see no one else in my room yet — is anyone here?");
   }
+  if (snap.presence >= 2 && snap.presence <= 4) {
+    if (has("leader"))      r.push("I can see " + snap.presence + " of us. Let me start the conversation.");
+    if (has("competitive")) r.push(snap.presence + " in the room — we can move faster than the others.");
+    if (has("joke_teller")) r.push("Small enough room. I'll loosen the mood with a quick joke.");
+  }
+  if (snap.presence > 4) {
+    if (has("engaged_but_quiet")) r.push("Big group — I'd rather listen before speaking.");
+    if (has("lurker_until_engaged")) r.push("I'll lurk. If someone asks me directly, I'll answer.");
+  }
+
+  // ── language / metacommentary ────────────────────────────────
+  if (has("fluent_french") && /Module A|Module B|Wrap-up/.test(snap.heading)) {
+    r.push("OK, on attaque " + (snap.heading.match(/(Module [AB]|Wrap-up)/) || ["la suite"])[0] + ".");
+  }
+  if (has("second_language_caution") && /Module|Wrap/.test(snap.heading)) {
+    r.push("Let me re-read the heading to be sure I understand.");
+  }
+  if (has("translator_helper") && snap.presence >= 2) {
+    r.push("I'll quietly translate the harder words for whoever needs it.");
+  }
+  if (has("fluent_japanese_writer") && stage === "moduleA") {
+    r.push("I'll write the case notes in clear English — the others can build on what I type.");
+  }
+
+  // ── stage-specific commentary ────────────────────────────────
+  if (stage === "welcome") {
+    if (has("first_timer"))     r.push("Welcome screen is calm — good. I needed a moment.");
+    if (has("technical"))       r.push("'Save name' makes sense — I assume our team name shows up everywhere.");
+    if (has("methodical"))      r.push("Stage 1 of 4 — clear progress indicator. I like knowing where we are.");
+    if (has("asks_many_questions")) r.push("Where do I see the pre-test? Is it the button or do I scroll?");
+  }
+  if (stage === "moduleA") {
+    if (has("technical"))      r.push("History / Examination / Investigations — same shape as a real consultation chart.");
+    if (has("methodical"))     r.push("I'll work through history first, then examination, then investigations. Top-down.");
+    if (has("writes_lots"))    r.push("Lots of typing fields. I'll capture everything we say.");
+    if (has("checks_evidence")) r.push("I want to cite NICE / HAS for at least one of our answers. Let me find a reference.");
+    if (has("challenger"))     r.push("I'd push back on opioids first-line — is anyone else uncomfortable with that?");
+    if (has("low_english"))    r.push("Some of the question wording is hard. I'd benefit from a glossary tooltip.");
+    if (btnCount >= 25 && has("anxious")) {
+      r.push("So many history buttons. Could we collapse the section once we've finished it?");
+    }
+  }
+  if (stage === "moduleB") {
+    if (has("anxious"))        r.push("Bad news roleplay. I really hope I'm not the physician.");
+    if (has("leader"))         r.push("I'll volunteer as physician. Someone has to.");
+    if (has("joke_teller"))    r.push("OK, no jokes during the diagnosis. Save them for after.");
+    if (has("challenger"))     r.push("If the family asks me to withhold, I'll respectfully refuse — patient first.");
+    if (has("anti_overconfidence")) r.push("I don't think SPIKES alone is enough. We should ask the patient what they want first.");
+    if (has("translator_helper")) r.push("If anyone gets stuck on a phrase, I'll whisper a translation.");
+    if (has("competitive"))    r.push("I want our roleplay to be the best of the day. Setting that bar.");
+  }
+  if (stage === "wrapup") {
+    if (has("methodical"))     r.push("Wrap-up. I want to see what we got right — show me the scoreboard.");
+    if (has("writes_lots"))    r.push("Can I export our group's notes? I want to keep them for revision.");
+    if (has("anxious"))        r.push("Did I do enough? I'm not sure how the scoring works.");
+    if (has("contributor"))    r.push("I want a chance to give feedback on the case — that was rich.");
+    if (has("first_timer"))    r.push("That went faster than I expected. I'd do another one.");
+  }
+
   return r.slice(0, 3);
+}
+
+/* Map a sim step name like "stage-1-moduleA" to a coarse stage key
+ * the reaction templates can switch on. */
+function _stageOf(snap, stepName) {
+  if (!snap) return "?";
+  const txt = (snap.stageNow || snap.heading || "").toLowerCase();
+  if (/wrap/.test(txt)) return "wrapup";
+  if (/breaking|roleplay|spikes|bad news/.test(txt)) return "moduleB";
+  if (/case up|chart|opioid|differential|chronic/.test(txt)) return "moduleA";
+  if (/opening|welcome|presentation|team below/.test(txt)) return "welcome";
+  if (typeof stepName === "string") {
+    if (/wrapup|ended/.test(stepName))   return "wrapup";
+    if (/moduleB/.test(stepName))         return "moduleB";
+    if (/moduleA/.test(stepName))         return "moduleA";
+    if (/stage-0|welcome|waiting/.test(stepName)) return "welcome";
+  }
+  return "?";
+}
+
+/* ─────────────────── post-session reflection ─────────────────────
+ *
+ * After the sim, summarise each persona's whole journey into a
+ * short "what worked / what frustrated me / what I'd change" bundle.
+ * The synthesizer reads the persona's observations + their traits and
+ * produces 1-3 items per category. Where heuristics fire is what
+ * surfaces — silence in a category means the persona didn't hit a
+ * trigger threshold there. */
+function reflectOnSession(persona, personaObs) {
+  const tr = persona.traits || [];
+  const has = t => tr.includes(t);
+
+  // ── analyse the journey ─────────────────────────────────────
+  const stagesSeen = new Set();
+  let maxButtons = 0;
+  let maxScroll = 0;
+  let presenceSeenInRoom = 0;
+  let everSawError = false;
+  let everSawWrapup = false;
+  let everJoined = false;
+  let everReachedRoom = false;
+  let stepsCount = 0;
+  let slowSteps = 0;
+  for (const o of personaObs) {
+    stepsCount++;
+    if (o.snapshot) {
+      if (o.snapshot.heading) stagesSeen.add(_stageOf(o.snapshot, o.step));
+      if (Array.isArray(o.snapshot.visibleButtons)) {
+        maxButtons = Math.max(maxButtons, o.snapshot.visibleButtons.length);
+      }
+      if (typeof o.snapshot.scrollRatio === "number") {
+        maxScroll = Math.max(maxScroll, o.snapshot.scrollRatio);
+      }
+      if (typeof o.snapshot.presence === "number" &&
+          o.snapshot.activeView === "app") {
+        presenceSeenInRoom = Math.max(presenceSeenInRoom, o.snapshot.presence);
+      }
+      if (o.snapshot.hasError) everSawError = true;
+    }
+    if (o.step === "join-lobby-to-waiting" && o.ok) everJoined = true;
+    if (o.step === "stage-0-welcome-arrived" && o.ok) everReachedRoom = true;
+    if (o.step === "session-ended-observed" && o.ok) everSawWrapup = true;
+    if (o.durationMs && o.durationMs > 6000) slowSteps++;
+  }
+
+  const liked = [];
+  const frustrated = [];
+  const improvements = [];
+
+  // ── liked / praised ─────────────────────────────────────────
+  if (everJoined) {
+    if (has("first_timer"))    liked.push("Joining was straightforward — code, name, consent, done.");
+    if (has("anxious"))        liked.push("I didn't have to make an account. That lowered my barrier.");
+  }
+  if (everReachedRoom && presenceSeenInRoom >= 2) {
+    if (has("contributor"))    liked.push("Once we were in the room I could see who I was with — that felt collaborative.");
+    if (has("translator_helper")) liked.push("Small room (" + presenceSeenInRoom + " people) made it easy to help others quietly.");
+  }
+  if (stagesSeen.has("moduleA")) {
+    if (has("methodical"))     liked.push("Module A's chart shape mirrored a real consultation note. Mental model travelled.");
+    if (has("checks_evidence")) liked.push("Having reference cards inside the case (not in a separate tab) saved context-switching.");
+    if (has("writes_lots"))    liked.push("The four-bullet group-answers form gave my notes a place to land.");
+  }
+  if (stagesSeen.has("moduleB")) {
+    if (has("leader"))         liked.push("The role chips made volunteering low-friction — I clicked and we got going.");
+    if (has("contributor"))    liked.push("SPIKES + the useful sentences strip was a quiet scaffold without holding our hands.");
+    if (has("anti_overconfidence")) liked.push("The safety-note framing 'this is a simulation, feelings are real' is the right tone.");
+  }
+  if (everSawWrapup) {
+    if (has("methodical"))     liked.push("Wrap-up landed cleanly — I knew when the session was done.");
+  }
+
+  // ── frustrated / criticised ──────────────────────────────────
+  if (!everReachedRoom && everJoined) {
+    frustrated.push("I joined the waiting room but never got moved to a room. I sat staring at 'You have joined'.");
+  }
+  if (maxButtons >= 25) {
+    if (has("anxious") || has("low_english")) {
+      frustrated.push("Module A pages had ~" + maxButtons + " visible buttons at peak. I couldn't tell what mattered.");
+    }
+    if (has("first_timer")) {
+      frustrated.push("First-timer + " + maxButtons + " buttons = I clicked things at random for a while.");
+    }
+  }
+  if (maxScroll >= 4) {
+    if (has("anxious") || has("first_timer") || has("low_english")) {
+      frustrated.push("Some pages were " + maxScroll + "× the screen height. Scrolling broke my focus.");
+    }
+    if (has("checks_phone") || has("distracted")) {
+      frustrated.push("I lose attention on long pages — I scrolled past stuff I shouldn't have.");
+    }
+  }
+  if (presenceSeenInRoom < 2 && everReachedRoom) {
+    frustrated.push("Felt alone in my 'room' — wasn't sure if my partner was actually online.");
+  }
+  if (everSawError) {
+    frustrated.push("There was a red message on screen at one point and I never figured out if I caused it.");
+  }
+  if (slowSteps >= 2 && has("time_pressed")) {
+    frustrated.push("Several transitions took 6+ seconds. That cuts into the 22-minute Module A budget.");
+  }
+
+  // ── improvement recommendations ──────────────────────────────
+  if (maxButtons >= 25) {
+    improvements.push("Could Module A let me collapse a chart section the moment I've ticked a 'done' box? Less scroll, same info.");
+  }
+  if (maxScroll >= 4) {
+    improvements.push("Sticky right-column (Findings + Decisions + Discussion) so the case panels can scroll without losing the working answers.");
+  }
+  if (has("low_english")) {
+    improvements.push("Hover a medical phrase → see plain-English + Japanese gloss in a tooltip.");
+  }
+  if (has("uses_glossary")) {
+    improvements.push("A '?' icon next to each clinical button that explains the term in one line, English + JP.");
+  }
+  if (has("first_timer")) {
+    improvements.push("A 30-second guided walkthrough of Module A's chart on first entry. Skip-able.");
+  }
+  if (has("methodical")) {
+    improvements.push("Show me my team's progress against the four bullets at the top of Module A — checkbox style.");
+  }
+  if (has("competitive")) {
+    improvements.push("A small per-room progress bar against the other rooms (without exposing 'which room is winning').");
+  }
+  if (has("checks_evidence")) {
+    improvements.push("Inline citation badges (NICE 2021, HAS 2023…) on each finding so we can argue from sources.");
+  }
+  if (has("writes_lots") || has("methodical")) {
+    improvements.push("Let me export my team's group-answers + transcript as a markdown file at the end.");
+  }
+  if (has("challenger") || has("contributor")) {
+    improvements.push("A 'disagree' button on a teammate's answer that opens a counter-bullet — keeps debate visible.");
+  }
+  if (has("anxious") || has("first_timer")) {
+    improvements.push("A 'I'm not ready' panic button that just lets me move into an observer slot for the rest of this stage.");
+  }
+  if (has("translator_helper") || has("fluent_japanese_writer")) {
+    improvements.push("A private side-chat with just my room (separate from group-answers) for clarifying questions.");
+  }
+  if (everSawWrapup && (has("contributor") || has("leader"))) {
+    improvements.push("End-of-session quick poll: 'What was the hardest moment?' + 'One word that describes how you felt.'");
+  }
+  if (everSawWrapup && has("checks_evidence")) {
+    improvements.push("Show me the full debate transcript — I'd re-read it for revision.");
+  }
+
+  // de-duplicate within each bucket while preserving order
+  const uniq = arr => Array.from(new Set(arr));
+  return {
+    liked: uniq(liked).slice(0, 4),
+    frustrated: uniq(frustrated).slice(0, 4),
+    improvements: uniq(improvements).slice(0, 5),
+    journey: {
+      stagesSeen: Array.from(stagesSeen),
+      maxButtons,
+      maxScroll,
+      presenceSeenInRoom,
+      everReachedRoom,
+      everSawWrapup,
+      everSawError,
+      stepsCount,
+      slowSteps
+    }
+  };
+}
+
+/* ─────────────────── cross-cutting recommendations ──────────────
+ *
+ * Aggregate every persona's improvement list into a few thematic
+ * buckets the user can act on. Items mentioned by >= 3 personas float
+ * to the top of the "Themes raised by multiple personas" section. */
+function buildRecommendations(perPersonaReflections) {
+  const counts = new Map();
+  for (const [persona, refl] of perPersonaReflections) {
+    for (const item of refl.improvements) {
+      const cur = counts.get(item) || { count: 0, personas: [] };
+      cur.count++;
+      cur.personas.push(persona.split(" (")[0]);
+      counts.set(item, cur);
+    }
+  }
+  const byCount = Array.from(counts.entries())
+    .sort((a, b) => b[1].count - a[1].count);
+
+  // Heuristic bucketing: short ones with words like "collapse / sticky /
+  // tooltip / glossary / checkbox" are "quick wins"; "side-chat / panic
+  // button / poll" are "structural"; everything else "content / scaffolding".
+  const isQuickWin = s => /collapse|sticky|tooltip|gloss|checkbox|badge|export|skip-able|skip-able/i.test(s);
+  const isStructural = s => /side-chat|panic|poll|guided walkthrough|disagree|counter-bullet|export|transcript/i.test(s);
+
+  const themes = [];
+  const quickWins = [];
+  const structural = [];
+  const other = [];
+  for (const [item, info] of byCount) {
+    const row = { item, count: info.count,
+      personas: Array.from(new Set(info.personas)).slice(0, 6) };
+    if (info.count >= 3) themes.push(row);
+    if (isQuickWin(item))         quickWins.push(row);
+    else if (isStructural(item))  structural.push(row);
+    else                          other.push(row);
+  }
+  return { themes, quickWins, structural, other };
 }
 
 /* ====================== flow ====================== */
@@ -490,7 +775,7 @@ function reactionsFrom(persona, snap, durationMs) {
           ok: true,
           durationMs: Date.now() - tJoin,
           snapshot: snap,
-          reactions: reactionsFrom(s, snap, Date.now() - tJoin),
+          reactions: reactionsFrom(s, snap, Date.now() - tJoin, "join-lobby-to-waiting"),
           screenshot: await shot(page, s, "01-waiting"),
           errors: page.__errors.slice()
         });
@@ -574,7 +859,7 @@ function reactionsFrom(persona, snap, durationMs) {
           ok: true,
           durationMs: Date.now() - tEnter,
           snapshot: snap,
-          reactions: reactionsFrom(s, snap, Date.now() - tEnter),
+          reactions: reactionsFrom(s, snap, Date.now() - tEnter, "stage-0-welcome-arrived"),
           screenshot: await shot(page, s, "02-stage0")
         });
     } catch (e) {
@@ -648,7 +933,7 @@ function reactionsFrom(persona, snap, durationMs) {
       obs(persona, "stage-" + i + "-" + stageName, {
         ok: inRoom && !snap.hasError && !!snap.heading,
         snapshot: snap,
-        reactions: reactionsFrom(s, snap, Date.now() - tAdv),
+        reactions: reactionsFrom(s, snap, Date.now() - tAdv, "stage-" + i + "-" + stageName),
         screenshot: await shot(page, s, "03-stage" + i + "-" + stageName),
         errors: page.__errors.slice(-3)   // last 3 errors only
       });
@@ -786,12 +1071,106 @@ function writeReport(extra) {
   lines.push("---");
   lines.push("");
 
+  // ===== persona-name → persona-object lookup, so reflectOnSession
+  // can read the traits when summarising a journey =====
+  const _allActors = STUDENTS.concat(FACILITATORS);
+  function _findPersona(personaName) {
+    const justName = String(personaName || "").split(" (")[0];
+    return _allActors.find(p => p.name === justName) || { traits: [] };
+  }
+
+  // Build reflections up front so the recommendations roll-up can
+  // aggregate across personas.
+  const perPersonaReflections = [];
+  for (const persona of Object.keys(byPersona)) {
+    const refl = reflectOnSession(_findPersona(persona), byPersona[persona]);
+    perPersonaReflections.push([persona, refl]);
+  }
+  const recs = buildRecommendations(perPersonaReflections);
+
+  // ===== cross-cutting recommendations (front-loaded so it's the
+  //       first thing the user sees after the executive summary) =====
+  lines.push("## Recommendations & criticism — rolled up");
+  lines.push("");
+  if (!recs.themes.length && !recs.quickWins.length && !recs.structural.length && !recs.other.length) {
+    lines.push("_No personas hit a recommendation trigger this run._");
+    lines.push("");
+  } else {
+    if (recs.themes.length) {
+      lines.push("**Themes raised by multiple personas** _(count = personas who flagged it)_:");
+      recs.themes.forEach(t => {
+        lines.push("- **(" + t.count + ")** " + t.item +
+          "  — _" + t.personas.join(", ") + "_");
+      });
+      lines.push("");
+    }
+    if (recs.quickWins.length) {
+      lines.push("**Quick wins** _(small UX changes, narrow blast radius)_:");
+      recs.quickWins.forEach(t => {
+        lines.push("- " + t.item +
+          " — flagged by " + t.count + ": _" + t.personas.join(", ") + "_");
+      });
+      lines.push("");
+    }
+    if (recs.structural.length) {
+      lines.push("**Structural ideas** _(new affordances / new flows)_:");
+      recs.structural.forEach(t => {
+        lines.push("- " + t.item +
+          " — flagged by " + t.count + ": _" + t.personas.join(", ") + "_");
+      });
+      lines.push("");
+    }
+    if (recs.other.length) {
+      lines.push("**Other suggestions**:");
+      recs.other.forEach(t => {
+        lines.push("- " + t.item +
+          " — flagged by " + t.count + ": _" + t.personas.join(", ") + "_");
+      });
+      lines.push("");
+    }
+  }
+  lines.push("---");
+  lines.push("");
+
   // ===== per-persona feedback =====
   lines.push("## Per-persona feedback");
   lines.push("");
+  const reflMap = new Map(perPersonaReflections);
   Object.keys(byPersona).sort((a, b) => a.localeCompare(b)).forEach(persona => {
     lines.push("### " + persona);
     lines.push("");
+    // Reflection-first so the per-step diary doesn't bury the human voice.
+    const refl = reflMap.get(persona);
+    if (refl) {
+      if (refl.liked && refl.liked.length) {
+        lines.push("**What worked for me:**");
+        refl.liked.forEach(s => lines.push("- " + s));
+        lines.push("");
+      }
+      if (refl.frustrated && refl.frustrated.length) {
+        lines.push("**What frustrated me:**");
+        refl.frustrated.forEach(s => lines.push("- " + s));
+        lines.push("");
+      }
+      if (refl.improvements && refl.improvements.length) {
+        lines.push("**What I'd change:**");
+        refl.improvements.forEach(s => lines.push("- " + s));
+        lines.push("");
+      }
+      if (refl.journey) {
+        const j = refl.journey;
+        lines.push("_Journey:_ stages seen: " + (j.stagesSeen.join(", ") || "—") +
+          "; max buttons: " + j.maxButtons +
+          "; max scroll: " + j.maxScroll + "×" +
+          "; presence peak in room: " + j.presenceSeenInRoom +
+          "; reached wrap-up: " + (j.everSawWrapup ? "yes" : "no") +
+          (j.everSawError ? "; saw an error message: yes" : "") +
+          (j.slowSteps ? "; slow steps: " + j.slowSteps : "") + ".");
+        lines.push("");
+      }
+      lines.push("<details><summary>Per-step diary</summary>");
+      lines.push("");
+    }
     byPersona[persona].forEach(o => {
       const flag = o.ok === false ? " ❌" : (o.ok === true ? " ✓" : "");
       lines.push("**" + o.step + "**" + flag);
@@ -824,6 +1203,8 @@ function writeReport(extra) {
       }
       lines.push("");
     });
+    lines.push("</details>");
+    lines.push("");
     lines.push("---");
     lines.push("");
   });
