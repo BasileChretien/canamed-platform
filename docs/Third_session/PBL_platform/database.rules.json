@@ -135,13 +135,13 @@
             "score": {
               "auto": {
                 "$eventId": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
                   ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                 }
               },
               "penalties": {
                 "$eventId": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
                   ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                 }
               },
@@ -397,13 +397,13 @@
                 "score": {
                   "auto": {
                     "$eventId": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
                       ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                     }
                   },
                   "penalties": {
                     "$eventId": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
                       ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                     }
                   },
