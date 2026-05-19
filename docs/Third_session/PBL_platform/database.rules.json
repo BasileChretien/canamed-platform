@@ -98,21 +98,30 @@
 
         "poll": {
           "$cid": {
-            ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+            ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($cid).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($cid).val() == auth.uid)",
             ".validate": "newData.val() == null || (newData.child('hardest').isString() && newData.child('hardest').val().length <= 280 && newData.child('feeling').isString() && newData.child('feeling').val().length <= 40 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
           }
         },
 
         "pool": {
           "$clientId": {
-            ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+            ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
             ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)",
             "room": {
+              ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 30)"
             },
             "consent": {
               ".validate": "newData.val() == null || (newData.hasChildren(['workshop','research','version','at']) && newData.child('workshop').isBoolean() && newData.child('research').isBoolean() && newData.child('version').isString() && newData.child('version').val().length <= 40 && newData.child('at').isNumber())"
             }
+          }
+        },
+
+        "clientMapping": {
+          "$clientId": {
+            ".read": "auth != null && root.child('sessions').child($sessionId).child('members').hasChild(auth.uid)",
+            ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+            ".validate": "newData.isString() && newData.val() == auth.uid"
           }
         },
 
@@ -153,8 +162,8 @@
               }
             },
             "stageAt": {
-              ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
-              ".validate": "newData.isNumber()"
+              ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.isNumber() && newData.val() >= now - 5000 && newData.val() <= now + 5000"
             },
             "callForHelp": {
               ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!data.exists() || data.child('ack').val() == true || newData.val() == null || newData.child('at').val() >= data.child('at').val() + 30000)",
@@ -168,13 +177,13 @@
             },
             "presence": {
               "$clientId": {
-                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                 ".validate": "newData.val() == null || (newData.hasChildren(['name','at']) && newData.child('name').isString() && newData.child('name').val().length <= 40 && newData.child('at').isNumber())"
               }
             },
             "typing": {
               "$clientId": {
-                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                 ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 20)"
               }
             },
@@ -242,7 +251,7 @@
             },
             "observers": {
               "$clientId": {
-                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                 ".validate": "newData.val() == null || (newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
               }
             },
@@ -255,7 +264,7 @@
             "tests": {
               "$cid": {
                 "pre": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($cid).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($cid).val() == auth.uid)",
                   ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('score') || (newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100)))",
                   "answers": {
                     "$qid": {
@@ -264,7 +273,7 @@
                   }
                 },
                 "post": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($cid).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($cid).val() == auth.uid)",
                   ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('score') || (newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100)))",
                   "answers": {
                     "$qid": {
@@ -360,14 +369,23 @@
 
             "pool": {
               "$clientId": {
-                ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                 ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)",
                 "room": {
+                  ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
                   ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 30)"
                 },
                 "consent": {
                   ".validate": "newData.val() == null || (newData.hasChildren(['workshop','research','version','at']) && newData.child('workshop').isBoolean() && newData.child('research').isBoolean() && newData.child('version').isString() && newData.child('version').val().length <= 40 && newData.child('at').isNumber())"
                 }
+              }
+            },
+
+            "clientMapping": {
+              "$clientId": {
+                ".read": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('members').hasChild(auth.uid)",
+                ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.isString() && newData.val() == auth.uid"
               }
             },
 
@@ -415,8 +433,8 @@
                   }
                 },
                 "stageAt": {
-                  ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
-                  ".validate": "newData.isNumber()"
+                  ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.isNumber() && newData.val() >= now - 5000 && newData.val() <= now + 5000"
                 },
                 "callForHelp": {
                   ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!data.exists() || data.child('ack').val() == true || newData.val() == null || newData.child('at').val() >= data.child('at').val() + 30000)",
@@ -430,13 +448,13 @@
                 },
                 "presence": {
                   "$clientId": {
-                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                     ".validate": "newData.val() == null || (newData.hasChildren(['name','at']) && newData.child('name').isString() && newData.child('name').val().length <= 40 && newData.child('at').isNumber())"
                   }
                 },
                 "typing": {
                   "$clientId": {
-                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                     ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 20)"
                   }
                 },
@@ -479,7 +497,7 @@
                 "tests": {
                   "$cid": {
                     "pre": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($cid).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($cid).val() == auth.uid)",
                       ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('score') || (newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100)))",
                       "answers": {
                         "$qid": {
@@ -488,7 +506,7 @@
                       }
                     },
                     "post": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($cid).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($cid).val() == auth.uid)",
                       ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('score') || (newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 100)))",
                       "answers": {
                         "$qid": {
