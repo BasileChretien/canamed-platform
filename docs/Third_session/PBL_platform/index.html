@@ -717,7 +717,7 @@
         <p data-i18n-html="lobby.privacy.p2">The free-text answers you write may disclose health-related,
           religious or philosophical opinions about clinical scenarios &mdash;
           <strong>special-category data</strong> under GDPR Art. 9 and
-          <strong>要配慮個人情報</strong> under APPI Art. 2(3). The optional
+          <strong lang="ja">要配慮個人情報</strong> under APPI Art. 2(3). The optional
           second consent box below covers this.</p>
         <p data-i18n-html="lobby.privacy.p3">Data is stored on Google Firebase Realtime Database in
           <strong>europe-west1 (Belgium, EU)</strong>. For Japanese
@@ -930,6 +930,12 @@
 
   <!-- ============ ROOM VIEW (participants AND admins-in-a-room) ============ -->
   <main id="app" class="hidden">
+    <!-- Off-screen live region targeted by script.js for facilitator-call
+         state transitions and other ad-hoc stage announcements. Round-2 a11y
+         review flagged that script.js writes here but the element was
+         missing — silently dropping SR announcements. -->
+    <div id="a11y-stage-announce" class="sr-only"
+         aria-live="polite" aria-atomic="true"></div>
     <div id="room-main">
       <section class="card stage-card">
         <div class="stage-row">
@@ -1190,9 +1196,10 @@
                  sections in a single chart container with a header
                  changes the activity identity from "click things" to
                  "write the patient's chart together". -->
-            <article class="consultation-note">
+            <article class="consultation-note"
+                     aria-labelledby="consultation-note-title">
               <header class="consultation-note-head">
-                <h3 class="consultation-note-title">
+                <h3 class="consultation-note-title" id="consultation-note-title">
                   <span class="consultation-note-icon" aria-hidden="true">📋</span>
                   <span data-i18n="modA.chart.title" data-i18n-html>Your consultation note —
                     <em>M. Lefebvre</em>, today</span>
@@ -1633,8 +1640,13 @@
                   glossary checks, side-thoughts. Messages stay within this
                   room only.
                 </p>
+                <!-- Round-2 a11y: role="log" + aria-atomic="false" so SR
+                     users hear ONLY new messages, not the whole list re-read.
+                     renderChat() appends individual <li>s, which matches the
+                     log pattern. -->
                 <ul class="chat-list" id="chat-list"
-                    aria-label="Side-chat messages" aria-live="polite"></ul>
+                    aria-label="Side-chat messages"
+                    role="log" aria-live="polite" aria-atomic="false"></ul>
                 <div class="chat-input-row">
                   <input type="text" id="chat-input" maxlength="500"
                          data-i18n="rcol.chat.placeholder"
@@ -1672,7 +1684,7 @@
               misleading marketing; prescriptions tripled and hundreds of thousands of
               overdose deaths followed. Japan took a strikingly different path &mdash; tight
               narcotics regulation, restrictive insurance rules, conservative training and a
-              deep cultural wariness of <em>mayaku</em> (narcotics) &mdash; and today
+              deep cultural wariness of <em lang="ja">mayaku</em> (narcotics) &mdash; and today
               prescribes opioids many times less than the US, with France and the UK in
               between. Low-back-pain care had its own reversal: until the 1990s bed rest and
               routine imaging were standard, until trials showed bed rest <em>delays</em>
@@ -2004,7 +2016,7 @@
               Japan are the <strong>same</strong> and one way they <strong>differ</strong>.</li>
             <li data-i18n="stage.modB.phase3.q2" data-i18n-html><strong>Has it changed?</strong> Was disclosure done differently 20&ndash;30
               years ago? (Japan: cancer-diagnosis disclosure rose from under ~30% in the early
-              1990s to ~94% by 2016. France: the 2002 <em>loi Kouchner</em> changed patients'
+              1990s to ~94% by 2016. France: the 2002 <em lang="fr">loi Kouchner</em> changed patients'
               information rights.) Why do norms change &mdash; law, generations, expectations?</li>
             <li data-i18n="stage.modB.phase3.q3" data-i18n-html><strong>The family's quiet request &mdash; what did you actually do, and why?</strong>
               Would a typical doctor in France respond the same way as one in Japan? What is each
@@ -2035,7 +2047,7 @@
             of bioethics, research scandals such as Tuskegee, and a new emphasis on autonomy
             and informed consent, a 1979 replication found roughly 97% of physicians now
             favoured disclosure. France formalised these patient rights later: the
-            <em>loi Kouchner</em> of 4 March 2002 enshrined the right to information, consent
+            <em lang="fr">loi Kouchner</em> of 4 March 2002 enshrined the right to information, consent
             and access to one's medical record. Japan's trajectory differed and is unusually
             well documented: into the early 1990s physicians routinely told only the
             <em>family</em>, not the patient, of a cancer diagnosis &mdash; disclosure then
@@ -2073,11 +2085,11 @@
             disclosure</strong> (France &middot; Japan &middot; UK &middot; USA)</summary>
           <ul class="ref-list">
             <li><strong>France &mdash;</strong> Loi n&deg; 2002-303 du 4 mars 2002
-              ("loi Kouchner"), right to be informed <em>and</em> the right not to know
-              (Code de la santé publique, art. L1111-2)
+              (<span lang="fr">"loi Kouchner"</span>), right to be informed <em>and</em> the right not to know
+              (<span lang="fr">Code de la santé publique, art. L1111-2</span>)
               <a href="https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000227015"
                  target="_blank" rel="noopener">legifrance.gouv.fr</a>;
-              HAS, <em>Annoncer une mauvaise nouvelle</em> (2008)
+              HAS, <em lang="fr">Annoncer une mauvaise nouvelle</em> (2008)
               <a href="https://www.has-sante.fr/jcms/c_698028/fr/annoncer-une-mauvaise-nouvelle"
                  target="_blank" rel="noopener">has-sante.fr</a>.</li>
             <li><strong>Japan &mdash;</strong> Japan Medical Association, <em>Guidelines for
