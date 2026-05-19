@@ -1,6 +1,6 @@
 # cnm-pp
 
-> Auto-generated stub on 2026-05-19 by ensure-claude-md hook.
+> Auto-generated stub on 2026-05-18 by ensure-claude-md hook.
 > Run `/init` to replace this with a full codebase analysis, or edit by hand.
 
 ## Overview
