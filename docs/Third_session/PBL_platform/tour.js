@@ -348,17 +348,23 @@
     const root = document.createElement("div");
     root.className = "canamed-tour-root";
     root.setAttribute("data-tour-set", set);
-    root.setAttribute("role", "dialog");
-    root.setAttribute("aria-modal", "false");
+    // Round-2 a11y review: role="dialog" with aria-modal="false" is
+    // contradictory. Drop the dialog role — the tour is an annotated
+    // overlay, not a modal dialog. Use role="region" with an accessible
+    // label so AT can still announce it on landmark navigation.
+    root.setAttribute("role", "region");
     root.setAttribute("aria-label", "CaNaMED onboarding tour");
 
     const overlay = document.createElement("div");
     overlay.className = "canamed-tour-overlay";
+    // Round-2 a11y review: a stray overlay-click silently advancing the
+    // tour is a motor-accessibility hazard. Overlay click now only
+    // dismisses on the LAST step (matches the documented Skip path);
+    // earlier steps require the explicit Next button or Arrow keys.
     overlay.addEventListener("click", () => {
       if (!active) return;
       const total = STEPS[active.set].length;
       if (active.index >= total - 1) dismiss(true);
-      else goTo(active.index + 1);
     });
     root.appendChild(overlay);
 
@@ -387,7 +393,17 @@
     const root = buildRoot(set);
     document.body.appendChild(root);
 
-    active = { set, index: 0, root, onKey: null, onResize: null, onScroll: null };
+    // Round-2 a11y: stash the opener so dismiss() can restore keyboard
+    // focus to where the user came from (otherwise focus drops on body
+    // and the next Tab lands unpredictably for SR users).
+    let opener = null;
+    try {
+      opener = document.activeElement;
+      if (opener === document.body) opener = null;
+    } catch (_) { opener = null; }
+
+    active = { set, index: 0, root, opener,
+               onKey: null, onResize: null, onScroll: null };
 
     active.onKey = (e) => {
       if (e.key === "Escape") {
@@ -419,6 +435,7 @@
   function dismiss(persist) {
     if (!active) return;
     const set = active.set;
+    const opener = active.opener;
     document.removeEventListener("keydown", active.onKey, true);
     window.removeEventListener("resize", active.onResize);
     window.removeEventListener("scroll", active.onScroll, true);
@@ -427,6 +444,12 @@
     }
     active = null;
     if (persist) markDone(set);
+    // Round-2 a11y: restore focus to the element that opened the tour
+    // (the "show tour again" link, the Welcome card button, etc.) so
+    // keyboard / SR users land somewhere predictable.
+    if (opener && typeof opener.focus === "function") {
+      try { opener.focus(); } catch (_) { /* element may be gone */ }
+    }
   }
 
   /* ============================================================

@@ -38,7 +38,11 @@
   --n-100: #e6e2d8;
   --n-200: #d4cfc2;
   --n-300: #b3ab99;
-  --n-500: #5b6b7a;
+  /* Round-2 a11y: bumped from #5b6b7a (≈4.72:1 on --bg) to #4d5b6a
+     (≈5.6:1) for more comfortable scanning by B1/B2 EFL readers at
+     the smaller font sizes (.lobby-hint 0.86rem, .role-chip-brief
+     0.84rem). No layout impact. */
+  --n-500: #4d5b6a;
   --n-700: #38434f;
   --n-900: #16202b;
 
@@ -4334,6 +4338,10 @@ body.session-ended-shown { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .splash-card { animation: none; }
   #splash-code.shake { animation: none; }
+  /* Round-2 a11y: kill the connection-lost attention shake for
+     vestibular-sensitive users — the conn-badge color/text change
+     is enough on its own. */
+  .conn-badge.conn-lost { animation: none; }
 }
 
 /* ---------- the "what is CANAMED" panel under the entry card ---------- */
