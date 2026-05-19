@@ -5721,36 +5721,39 @@ function renderButtons() {
  * proxy for module progress). My room's bar is highlighted in the
  * accent colour; others are neutral grey. */
 function _buildCohortProgressStrip(rows) {
-  const wrap = document.createElement("div");
+  // <section> + role="group" so axe-core accepts the aria-label.
+  // The previous structure used a bare <div aria-label="..."> which
+  // axe flagged as aria-prohibited-attr (an aria-label on a div with
+  // no valid role is an a11y violation per WAI-ARIA 1.2).
+  const wrap = document.createElement("section");
   wrap.className = "lb-cohort-progress";
+  wrap.setAttribute("role", "group");
   wrap.setAttribute("aria-label", "Anonymised cohort progress per room");
   const head = document.createElement("p");
   head.className = "lb-cohort-head";
   head.textContent = "Cohort progress (anonymised) — your bar is highlighted";
   wrap.appendChild(head);
-  const grid = document.createElement("div");
+  const grid = document.createElement("ul");
   grid.className = "lb-cohort-grid";
-  // sort by room name (NOT score) — so the order is stable + doesn't
-  // betray ranking. Each room contributes a single bar.
+  // Each cell is a <li> (implicit role=listitem, accepts aria-label
+  // per ARIA 1.2). The inner bar is aria-hidden so the SR reads the
+  // li's label once instead of also stumbling through the empty bar.
   const inNameOrder = rows.slice().sort((a, b) => a.room.localeCompare(b.room));
-  // Progress proxy = the room's `findings` count / a target. The target
-  // is roughly the number of key items in the current stage's CASE; we
-  // approximate as scoreTotal / 100 capped at 1 so we don't need the
-  // case structure here. Falls back to fractional pts.
   const target = 220;   // matches the goal-per-room used above
   inNameOrder.forEach(r => {
     const pct = Math.min(100, Math.round((r.total / target) * 100));
-    const cell = document.createElement("div");
+    const cell = document.createElement("li");
     cell.className = "lb-cohort-cell" + (r.room === myRoom ? " is-me" : "");
+    cell.setAttribute("aria-label",
+      (r.room === myRoom ? "Your room: " : "A room in the cohort: ") +
+      pct + " per cent of the typical progress");
     const tinyBar = document.createElement("div");
     tinyBar.className = "lb-cohort-bar";
+    tinyBar.setAttribute("aria-hidden", "true");
     const fill = document.createElement("span");
     fill.style.width = pct + "%";
     tinyBar.appendChild(fill);
     cell.appendChild(tinyBar);
-    cell.setAttribute("aria-label",
-      (r.room === myRoom ? "Your room: " : "A room in the cohort: ") +
-      pct + " per cent of the typical progress");
     grid.appendChild(cell);
   });
   wrap.appendChild(grid);
