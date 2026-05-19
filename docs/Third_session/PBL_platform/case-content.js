@@ -44,6 +44,13 @@
  * Clinical content reviewed against current guidance: HAS 2019 (France), JOA
  * low-back-pain guideline 2019 (Japan), NICE NG59 (UK), ACP 2017 + CDC 2022 (USA).
  */
+/* Node/test shim: this file is authored for the browser and assigns scenario
+   registries onto `window` near the bottom. When loaded under Node (e.g. the
+   static-assertion tests, or `node -e "require(...)"`), `window` does not
+   exist, so define a harmless stand-in. In the browser this branch never runs
+   because `window` is already defined — so browser behaviour is unchanged. */
+if (typeof window === "undefined") { var window = globalThis; }
+
 /* `var` (not `const`) so applyScenario() in script.js can swap the data when a
    facilitator picks a different scenario at session-creation time. `var` at
    top-level binds to `window.CASE` etc., so writing `window.CASE = ...` is
@@ -833,9 +840,9 @@ var CASE_B = {
     { q: { en: "Multidisciplinary team (MDT / RCP) review and biopsy result",
            fr: "Revue en réunion de concertation pluridisciplinaire (RCP) et résultat de la biopsie",
            ja: "多職種カンファレンス (MDT/キャンサーボード) 検討とバイオプシー結果" },
-      a: { en: "EUS-guided fine-needle biopsy of the pancreatic mass: \"Moderately differentiated ductal adenocarcinoma.\" MDT conclusion: unresectable Stage IV disease; options to discuss with the patient are palliative chemotherapy (gemcitabine ± nab-paclitaxel; FOLFIRINOX considered too toxic given her age, performance status and albumin); biliary stenting (ERCP) for the obstructive jaundice; and early palliative care referral. Estimated median survival 6-11 months with chemotherapy, 3-5 months without.",
-           fr: "Biopsie échoguidée (écho-endoscopie) de la masse pancréatique : « Adénocarcinome canalaire moyennement différencié. » Conclusion de RCP : maladie Stade IV non résécable ; options à discuter avec la patiente : chimiothérapie palliative (gemcitabine ± nab-paclitaxel ; le FOLFIRINOX est jugé trop toxique compte tenu de son âge, de son état général et de son albuminémie) ; drainage biliaire endoscopique (CPRE) pour l'ictère obstructif ; et avis précoce en soins palliatifs. Survie médiane estimée 6-11 mois sous chimiothérapie, 3-5 mois sans.",
-           ja: "膵腫瘤の超音波内視鏡下穿刺吸引細胞診:「中分化型管状腺がん」。多職種カンファレンス結論:切除不能のStage IV;患者と相談すべき選択肢は緩和的化学療法 (ゲムシタビン±nab-パクリタキセル;FOLFIRINOXは年齢・全身状態・アルブミン値を考慮すると毒性が高すぎると判断)、閉塞性黄疸に対する内視鏡的胆道ステント留置 (ERCP)、早期緩和ケアコンサルテーション。推定生存期間中央値は化学療法ありで6-11か月、なしで3-5か月。" } },
+      a: { en: "EUS-guided fine-needle biopsy of the pancreatic mass: \"Moderately differentiated ductal adenocarcinoma.\" MDT conclusion: unresectable Stage IV disease. Her ECOG performance status is 1 (symptomatic but fully ambulatory, able to do light work). Options to discuss with the patient are: palliative chemotherapy — gemcitabine ± nab-paclitaxel chosen over FOLFIRINOX given her ECOG performance status 1, age 75 and serum albumin 28 g/L (FOLFIRINOX would require ECOG 0-1 AND robust nutritional status — she does not meet the second criterion); biliary stenting (ERCP) offered now for symptom relief from the obstructive jaundice (pruritus, prevention of cholangitis), independent of whether she chooses chemotherapy; and early palliative care referral and advance care planning offered alongside oncology, not after it. Estimated median survival 6-11 months with chemotherapy, 3-5 months without.",
+           fr: "Biopsie échoguidée (écho-endoscopie) de la masse pancréatique : « Adénocarcinome canalaire moyennement différencié. » Conclusion de RCP : maladie Stade IV non résécable. Son indice de performance ECOG est de 1 (symptomatique mais totalement ambulatoire, capable d'un travail léger). Options à discuter avec la patiente : chimiothérapie palliative — gemcitabine ± nab-paclitaxel retenue plutôt que le FOLFIRINOX compte tenu de son indice ECOG 1, de son âge (75 ans) et de son albuminémie à 28 g/L (le FOLFIRINOX exigerait un ECOG 0-1 ET un état nutritionnel robuste — elle ne remplit pas le second critère) ; drainage biliaire endoscopique (CPRE) proposé d'emblée pour soulager l'ictère obstructif (prurit, prévention de l'angiocholite), indépendamment de son choix de chimiothérapie ; et avis précoce en soins palliatifs et planification anticipée des soins, proposés en parallèle de l'oncologie et non après. Survie médiane estimée 6-11 mois sous chimiothérapie, 3-5 mois sans.",
+           ja: "膵腫瘤の超音波内視鏡下穿刺吸引細胞診:「中分化型管状腺がん」。多職種カンファレンス結論:切除不能のStage IV。ECOG パフォーマンスステータスは 1 (症状はあるが完全に歩行可能で、軽作業もできる)。患者と相談すべき選択肢は:緩和的化学療法 — ECOG 1、年齢75歳、血清アルブミン 28 g/L を考慮し、FOLFIRINOX ではなくゲムシタビン±nab-パクリタキセルを選択 (FOLFIRINOX は ECOG 0-1 かつ良好な栄養状態の両方を要するが、彼女は後者を満たさない);閉塞性黄疸の症状緩和 (掻痒、胆管炎予防) のため、化学療法を選ぶか否かにかかわらず内視鏡的胆道ステント留置 (ERCP) を今すぐ提案;早期緩和ケアコンサルテーションとアドバンス・ケア・プランニングを、腫瘍内科の後ではなく並行して提案。推定生存期間中央値は化学療法ありで6-11か月、なしで3-5か月。" } },
     /* --- deliberately poor investigation choice; index 5. */
     { q: { en: "Whole-body PET-CT before the diagnosis is communicated",
            fr: "TEP-TDM corps entier avant l'annonce du diagnostic",
@@ -1172,6 +1179,162 @@ var DECISIONS_B = [
                    "の形にすべきものであることの明確な承認。これは、彼女の先ほどの希望 " +
                    "(優しく、自分のペースで、息子に同席してもらって) を尊重しつつ、彼女" +
                    "の知らないところで誰とも約束を結ばないやり方です。" } }
+    ]
+  },
+  {
+    // Round-2 clinical-educator edit (sim-output/round2-clinical-ebm.md,
+    // Scenario 2 Edit 1): the case decides WHETHER to disclose but never
+    // models the harder downstream question — should you volunteer a
+    // numerical prognosis, or first explore what kind of answer she wants?
+    // SPIKES "Invitation" applied to prognosis. Low-stakes (penalty 0),
+    // consistent with the other Module-B roleplay votes. Appended to the
+    // END of DECISIONS_B; decisions are consumed by `.id`, never by index,
+    // so this does not disturb dec_family / dec_first_words.
+    id: "dec_prognosis", module: "B", points: 20, penalty: 0,
+    prompt: { en: "After Mrs Tanaka has absorbed the diagnosis, she asks: \"How long " +
+                  "do I have, doctor?\" Your response is…",
+              fr: "Une fois que Mme Tanaka a absorbé le diagnostic, elle demande : " +
+                  "« Combien de temps me reste-t-il, docteur ? » Votre réponse est…",
+              ja: "田中さんが診断を受け止めたあと、こう尋ねます:「先生、私はあとどれ" +
+                  "くらいですか?」あなたの応答は…" },
+    options: [
+      { text: { en: "\"Median survival is 6-11 months with chemotherapy.\" — Give the number directly.",
+                fr: "« La survie médiane est de 6 à 11 mois avec chimiothérapie. » — Donner le chiffre directement.",
+                ja: "「化学療法ありで生存期間中央値は6か月から11か月です。」 — 数字を直接伝える。" },
+        correct: false,
+        why: { en: "Honest, but premature. She asked a question; she has not yet asked " +
+                   "for a number. Some patients want the median, some want a range, some " +
+                   "want \"weeks vs months vs years.\" Volunteering the precise number can " +
+                   "land like a sentence — explore first what kind of answer she is " +
+                   "asking for.",
+               fr: "Honnête, mais prématuré. Elle a posé une question, elle n'a pas demandé " +
+                   "un chiffre. Certaines patientes veulent la médiane, d'autres une " +
+                   "fourchette, d'autres « semaines vs mois vs années ». Donner le chiffre " +
+                   "précis peut tomber comme une condamnation — explorez d'abord quel type " +
+                   "de réponse elle attend.",
+               ja: "誠実ですが、急ぎすぎです。彼女は問いを発しただけで、数字を求めたわけ" +
+                   "ではありません。中央値を知りたい人もいれば、範囲を聞きたい人も、" +
+                   "「週か、月か、年か」だけを知りたい人もいます。正確な数字を持ち出すと" +
+                   "宣告のように響くことがあります — まずどんな答えを求めているのか確認" +
+                   "しましょう。" } },
+      { text: { en: "\"That's hard to predict — every patient is different.\" — Deflect.",
+                fr: "« C'est difficile à dire — chaque patient est différent. » — Esquiver.",
+                ja: "「予測は難しいんです — 患者さんごとに違いますから。」 — はぐらかす。" },
+        correct: false,
+        why: { en: "True in part, but used here as deflection it refuses her question. She " +
+                   "asked because she wants to plan — for grandchildren, for affairs, for " +
+                   "the time she has. Deflection denies her that planning capacity.",
+               fr: "Partiellement vrai, mais utilisé ici comme esquive cela refuse sa " +
+                   "question. Elle demande parce qu'elle veut planifier — pour ses " +
+                   "petits-enfants, ses affaires, le temps qui lui reste. L'esquive lui " +
+                   "refuse cette capacité de planification.",
+               ja: "一面では正しいですが、ここではぐらかしとして使えば、彼女の問いを退ける" +
+                   "ことになります。彼女は計画したいから尋ねているのです — 孫のこと、身辺" +
+                   "の整理、残された時間のために。はぐらかしはその計画する力を奪います。" } },
+      { text: { en: "\"That is a really important question. Before I answer, can I ask — " +
+                    "would you like a precise estimate, a rough range like 'months not " +
+                    "years', or just the headline?\"",
+                fr: "« C'est une question vraiment importante. Avant que je vous réponde, " +
+                    "puis-je vous demander — préférez-vous une estimation précise, une " +
+                    "fourchette comme « des mois plutôt que des années », ou juste " +
+                    "l'essentiel ? »",
+                ja: "「とても大切なご質問です。お答えする前に伺ってもよろしいですか — " +
+                    "具体的な見込み、『年単位ではなく月単位』のような大まかな範囲、それとも" +
+                    "要点だけ、どれをお望みですか?」" },
+        correct: true,
+        why: { en: "This is SPIKES Invitation applied to prognosis: name that the question " +
+                   "is important, check what KIND of answer she wants, then deliver at her " +
+                   "chosen resolution. Studies of cancer-prognosis disclosure (Mack et al; " +
+                   "the Japanese JSCO CST) show that calibrating the resolution to patient " +
+                   "preference improves both understanding and emotional integration.",
+               fr: "C'est l'étape « Invitation » de SPIKES appliquée au pronostic : nommer " +
+                   "l'importance de la question, vérifier quel TYPE de réponse elle souhaite, " +
+                   "puis répondre à la résolution qu'elle a choisie. Les études sur l'annonce " +
+                   "du pronostic en oncologie (Mack et al ; CST de la JSCO) montrent que " +
+                   "calibrer la résolution selon la préférence de la patiente améliore à la " +
+                   "fois la compréhension et l'intégration émotionnelle.",
+               ja: "これはSPIKESのInvitationを予後告知に応用したものです:質問の重要性を" +
+                   "認め、どんな種類の答えを望むかを確認し、彼女が選んだ粒度で答える。予後" +
+                   "告知の研究(Mackら;JSCO CST)は、患者の希望に粒度を合わせることが理解" +
+                   "と感情的統合の双方を改善することを示しています。" } }
+    ]
+  },
+  {
+    // Round-2 clinical-educator edit (sim-output/round2-clinical-ebm.md,
+    // Scenario 2 Edit 3 / "minor clinical gaps"): biliary stenting is an
+    // immediate symptom-relief intervention the patient may want even if she
+    // declines chemotherapy. Surface it as an explicit team vote rather than
+    // a fait accompli buried in the MDT summary. Appended to the END (id-keyed).
+    id: "dec_ercp_stent", module: "B", points: 20, penalty: 0,
+    prompt: { en: "Mrs Tanaka has obstructive jaundice with distressing pruritus. The " +
+                  "MDT has offered ERCP biliary stenting. She has NOT yet decided about " +
+                  "chemotherapy. Your team's position on the stent is…",
+              fr: "Mme Tanaka présente un ictère obstructif avec un prurit pénible. La RCP " +
+                  "a proposé un drainage biliaire par CPRE. Elle n'a PAS encore décidé pour " +
+                  "la chimiothérapie. La position de votre équipe sur le stent est…" ,
+              ja: "田中さんは閉塞性黄疸でつらい掻痒を伴っています。多職種カンファレンスは " +
+                  "ERCP による胆道ステント留置を提案しました。彼女は化学療法についてまだ" +
+                  "決めていません。ステントに関するチームの立場は…" },
+    options: [
+      { text: { en: "Wait — don't offer the stent until she has decided about chemotherapy",
+                fr: "Attendre — ne pas proposer le stent tant qu'elle n'a pas décidé pour la chimiothérapie",
+                ja: "待つ — 化学療法を決めるまでステントは提案しない" },
+        correct: false,
+        why: { en: "Biliary stenting relieves the jaundice, the itch and the risk of " +
+                   "cholangitis regardless of the cancer decision — it is a symptom-control " +
+                   "intervention, not part of the chemotherapy pathway. Withholding it " +
+                   "until she chooses chemotherapy needlessly prolongs her suffering and " +
+                   "wrongly bundles a palliative comfort measure into a curative-intent " +
+                   "decision.",
+               fr: "Le drainage biliaire soulage l'ictère, le prurit et le risque " +
+                   "d'angiocholite quelle que soit la décision oncologique — c'est un geste " +
+                   "de contrôle des symptômes, pas une étape de la chimiothérapie. Le " +
+                   "différer jusqu'à son choix de chimiothérapie prolonge inutilement sa " +
+                   "souffrance et confond à tort une mesure de confort palliatif avec une " +
+                   "décision à visée curative.",
+               ja: "胆道ステントは、がんに関する決定とは無関係に黄疸・掻痒・胆管炎リスクを" +
+                   "軽減します — これは症状コントロールの手技であって、化学療法の経路の一部" +
+                   "ではありません。化学療法の選択まで保留することは、彼女の苦痛を不必要に" +
+                   "長引かせ、緩和的な安楽措置を根治目的の決定と誤って束ねてしまいます。" } },
+      { text: { en: "Offer the stent now for symptom relief, explaining it is independent of the chemotherapy decision",
+                fr: "Proposer le stent maintenant pour soulager les symptômes, en expliquant qu'il est indépendant de la décision de chimiothérapie",
+                ja: "症状緩和のため今ステントを提案し、化学療法の決定とは独立したものだと説明する" },
+        correct: true,
+        why: { en: "Correct. ERCP stenting is the right early offer: it relieves the " +
+                   "obstructive jaundice and pruritus, reduces cholangitis risk, and can " +
+                   "improve her quality of life and even her fitness for any chemotherapy " +
+                   "she may later choose. Framing it explicitly as a comfort measure she " +
+                   "can accept whether or not she wants chemotherapy respects her autonomy " +
+                   "and separates symptom control from the bigger treatment decision.",
+               fr: "Correct. Le drainage par CPRE est la bonne proposition précoce : il " +
+                   "soulage l'ictère obstructif et le prurit, réduit le risque d'angiocholite, " +
+                   "et peut améliorer sa qualité de vie et même son aptitude à une éventuelle " +
+                   "chimiothérapie ultérieure. Le présenter explicitement comme une mesure de " +
+                   "confort qu'elle peut accepter, qu'elle veuille ou non la chimiothérapie, " +
+                   "respecte son autonomie et sépare le contrôle des symptômes de la décision " +
+                   "thérapeutique plus large.",
+               ja: "正解です。ERCP ステント留置は適切な早期提案です:閉塞性黄疸と掻痒を" +
+                   "軽減し、胆管炎リスクを下げ、QOL を改善し、後に化学療法を選んだ場合の" +
+                   "適応にも資する可能性があります。化学療法を望むか否かにかかわらず受け" +
+                   "入れられる安楽措置として明確に提示することは、彼女の自律を尊重し、症状" +
+                   "コントロールをより大きな治療決定から切り離すことになります。" } },
+      { text: { en: "Insist she must accept the stent — refusing it would be irresponsible",
+                fr: "Insister pour qu'elle accepte le stent — le refuser serait irresponsable",
+                ja: "ステントを受けるべきだと迫る — 断るのは無責任だと伝える" },
+        correct: false,
+        why: { en: "Pressuring a competent patient to accept any intervention overrides her " +
+                   "autonomy. The stent is strongly advisable for comfort, but it remains " +
+                   "her choice — some patients decline procedures near the end of life. Your " +
+                   "job is to make a clear, well-explained recommendation, not to coerce.",
+               fr: "Faire pression sur une patiente apte pour qu'elle accepte un geste " +
+                   "bafoue son autonomie. Le stent est fortement conseillé pour le confort, " +
+                   "mais cela reste son choix — certains patients refusent des procédures en " +
+                   "fin de vie. Votre rôle est de formuler une recommandation claire et bien " +
+                   "expliquée, pas de contraindre.",
+               ja: "判断能力のある患者にいかなる処置であれ受け入れるよう圧力をかけることは、" +
+                   "彼女の自律を踏みにじります。ステントは安楽のために強く勧められますが、" +
+                   "それでも選ぶのは彼女です — 終末期に処置を断る患者もいます。あなたの役割" +
+                   "は、明確でよく説明された推奨を示すことであり、強制することではありません。" } }
     ]
   }
 ];
@@ -2111,6 +2274,535 @@ var POSTTEST_CHRONIC_PAIN = [
                    ja: "モジュールAの共通の学び:フランスと日本のガイダンスは、エビデンスに基づくオピオイドの慎重な使用と能動的管理において収束しますが、診察の枠組み(パターナリズム対共有、家族の役割、処方への期待)は異なり、比較する価値があります。エビデンスに基づくガイドラインは文化を越えて適用可能ですが、その伝え方は文化的に流暢でなければなりません。" } }
 ];
 
+/* ----- Scenario 2 (Breaking Bad News / Mrs Tanaka) MCQ banks -----
+ * Round-2 follow-up (sim-output/round2-clinical-ebm.md severity item #7):
+ * scenarios 2 and 3 previously shipped without pre/post tests. Same shape as
+ * PRETEST_CHRONIC_PAIN: { id, q:{en,fr,ja}, options:[{text:{en,fr,ja}, correct}],
+ * explanation:{en,fr,ja} }. Topics: capacity, SPIKES, FR/JP disclosure law
+ * (loi Kouchner / MHLW 人生会議), prognosis communication. */
+var PRETEST_BREAKING_BAD_NEWS = [
+  { id: "q1",
+    q: { en: "A 75-year-old woman with newly diagnosed Stage IV pancreatic cancer is fully oriented, can explain her situation in her own words, and weighs her options. Who has the right to decide how much she is told?",
+         fr: "Une femme de 75 ans avec un cancer du pancréas de Stade IV nouvellement diagnostiqué est parfaitement orientée, peut expliquer sa situation avec ses propres mots et pèse ses options. Qui a le droit de décider de ce qu'on lui dit ?",
+         ja: "新たに Stage IV 膵がんと診断された75歳の女性が、見当識は完全で、自分の状況を自分の言葉で説明でき、選択肢を比較考量できます。どこまで伝えるかを決める権利は誰にありますか?" },
+    options: [
+      { text: { en: "The eldest son, as head of the family",
+                fr: "Le fils aîné, en tant que chef de famille",
+                ja: "家長としての長男" }, correct: false },
+      { text: { en: "The patient herself — she has decision-making capacity",
+                fr: "La patiente elle-même — elle a la capacité de décider",
+                ja: "患者本人 — 意思決定能力があるため" }, correct: true },
+      { text: { en: "The treating physician, in the patient's best interests",
+                fr: "Le médecin traitant, dans l'intérêt de la patiente",
+                ja: "患者の最善の利益のために主治医が" }, correct: false },
+      { text: { en: "Whoever signed the consent form",
+                fr: "Celui qui a signé le formulaire de consentement",
+                ja: "同意書に署名した人" }, correct: false }
+    ],
+    explanation: { en: "A patient who can understand, retain, weigh and communicate has decision-making capacity, and the information is hers. Capacity — not age, family hierarchy or a 'best-interests' override — determines who controls disclosure. This is the default in France (Loi Kouchner 2002) and in current Japanese MHLW guidance.",
+                   fr: "Une patiente capable de comprendre, retenir, pondérer et communiquer a la capacité de décider, et l'information lui appartient. C'est la capacité — non l'âge, la hiérarchie familiale ou un principe de « bien du patient » — qui détermine qui contrôle l'annonce. C'est la règle en France (Loi Kouchner 2002) et dans les recommandations actuelles du MHLW japonais.",
+                   ja: "理解・保持・比較考量・伝達ができる患者には意思決定能力があり、情報は本人のものです。誰が告知をコントロールするかを決めるのは、年齢でも家族の序列でも「最善の利益」原則でもなく、能力です。これはフランス(Loi Kouchner 2002)でも現行の日本のMHLWガイダンスでも原則です。" } },
+  { id: "q2",
+    q: { en: "In the SPIKES protocol, what is the purpose of the 'I' (Invitation) step?",
+         fr: "Dans le protocole SPIKES, quel est le but de l'étape « I » (Invitation) ?",
+         ja: "SPIKES プロトコルにおいて、「I」(Invitation/招待) のステップの目的は何ですか?" },
+    options: [
+      { text: { en: "To invite the family to make the decision for the patient",
+                fr: "Inviter la famille à décider à la place du patient",
+                ja: "家族を患者に代わって決めるよう招くこと" }, correct: false },
+      { text: { en: "To find out how much information the patient wants, and at what level of detail",
+                fr: "Découvrir combien d'informations le patient souhaite, et à quel niveau de détail",
+                ja: "患者がどれだけの情報を、どの程度の詳しさで望むかを確かめること" }, correct: true },
+      { text: { en: "To invite the patient to a follow-up appointment",
+                fr: "Inviter le patient à un rendez-vous de suivi",
+                ja: "患者をフォローアップの予約に招くこと" }, correct: false },
+      { text: { en: "To deliver the diagnosis in a single clear sentence",
+                fr: "Délivrer le diagnostic en une seule phrase claire",
+                ja: "診断を明確な一文で伝えること" }, correct: false }
+    ],
+    explanation: { en: "SPIKES = Setting, Perception, Invitation, Knowledge, Empathy, Strategy/Summary. The Invitation step checks what and how much the patient wants to know BEFORE giving information — some want every detail, some want the headline only. It is also the right tool for prognosis ('would you like a number, a range, or just the headline?').",
+                   fr: "SPIKES = Setting (cadre), Perception, Invitation, Knowledge (savoir), Empathy (empathie), Strategy/Summary. L'étape Invitation vérifie ce que le patient veut savoir et jusqu'où AVANT de donner l'information — certains veulent tous les détails, d'autres juste l'essentiel. C'est aussi le bon outil pour le pronostic (« voulez-vous un chiffre, une fourchette, ou juste l'essentiel ? »).",
+                   ja: "SPIKES = Setting(場の設定)、Perception(認識)、Invitation(招待)、Knowledge(情報)、Empathy(共感)、Strategy/Summary(方針・要約)。Invitation のステップは、情報を伝える前に、患者が何をどこまで知りたいかを確認します — すべての詳細を望む人もいれば、要点だけを望む人もいます。予後告知(「数字、範囲、要点のどれをお望みですか?」)にも適した手段です。" } },
+  { id: "q3",
+    q: { en: "Which French law established the patient's right to be directly informed of their diagnosis?",
+         fr: "Quelle loi française a établi le droit du patient à être directement informé de son diagnostic ?",
+         ja: "患者が自らの診断について直接知らされる権利を確立したフランスの法律はどれですか?" },
+    options: [
+      { text: { en: "Loi Kouchner (loi n°2002-303 du 4 mars 2002)",
+                fr: "Loi Kouchner (loi n°2002-303 du 4 mars 2002)",
+                ja: "Loi Kouchner(2002年3月4日 法律第2002-303号)" }, correct: true },
+      { text: { en: "Loi Leonetti (2005) on end-of-life care only",
+                fr: "Loi Leonetti (2005) sur la fin de vie uniquement",
+                ja: "終末期医療のみを扱うLeonetti法(2005)" }, correct: false },
+      { text: { en: "The Napoleonic Code",
+                fr: "Le Code Napoléon",
+                ja: "ナポレオン法典" }, correct: false },
+      { text: { en: "There is no such law in France",
+                fr: "Il n'existe pas de telle loi en France",
+                ja: "フランスにはそのような法律はない" }, correct: false }
+    ],
+    explanation: { en: "The Loi Kouchner (2002) made direct disclosure to the competent patient the legal default in France and created the right to be informed (and the right NOT to know, if the patient expresses it). The Loi Leonetti (2005, revised 2016) deals with end-of-life decisions and advance directives — related but distinct.",
+                   fr: "La Loi Kouchner (2002) a fait de l'information directe au patient apte la règle légale en France et a créé le droit d'être informé (et le droit de NE PAS savoir, si le patient l'exprime). La Loi Leonetti (2005, révisée 2016) traite des décisions de fin de vie et des directives anticipées — liée mais distincte.",
+                   ja: "Loi Kouchner(2002)は、判断能力のある患者本人への直接告知をフランスの法的原則とし、知らされる権利(および患者が表明すれば知らない権利)を確立しました。Leonetti法(2005、2016改正)は終末期の意思決定と事前指示を扱うもので、関連はあるが別物です。" } },
+  { id: "q4",
+    q: { en: "How is Japanese practice on cancer disclosure (がん告知) best characterised today, compared with the 1990s?",
+         fr: "Comment caractériser au mieux la pratique japonaise d'annonce du cancer (がん告知) aujourd'hui, par rapport aux années 1990 ?",
+         ja: "1990年代と比べて、今日の日本のがん告知の実践は最もよくどのように特徴づけられますか?" },
+    options: [
+      { text: { en: "Unchanged — the diagnosis is still routinely withheld from the patient",
+                fr: "Inchangée — le diagnostic est encore systématiquement caché au patient",
+                ja: "変わっていない — 診断は今も日常的に患者に伏せられている" }, correct: false },
+      { text: { en: "Converging toward patient-centred disclosure, supported by MHLW guidance and the 人生会議 (ACP) campaign",
+                fr: "Convergeant vers une annonce centrée sur le patient, soutenue par les recommandations du MHLW et la campagne 人生会議 (ACP)",
+                ja: "MHLWのガイダンスと人生会議(ACP)キャンペーンに支えられ、患者中心の告知へと収束しつつある" }, correct: true },
+      { text: { en: "Now identical to US practice in every respect",
+                fr: "Désormais identique à la pratique américaine en tous points",
+                ja: "今やあらゆる点で米国の実践と同一" }, correct: false },
+      { text: { en: "Legally banned from telling patients their diagnosis",
+                fr: "Interdisant légalement d'annoncer leur diagnostic aux patients",
+                ja: "患者に診断を伝えることが法的に禁止されている" }, correct: false }
+    ],
+    explanation: { en: "Japanese practice has moved from family-mediated non-disclosure (common into the 1990s) toward patient-centred decision-making, supported by MHLW end-of-life guidance (2007, revised 2018) and the 人生会議 (jinsei kaigi / advance care planning) campaign launched in 2018. The systems are converging with France, not diverging — but the family's role remains more prominent by default.",
+                   fr: "La pratique japonaise est passée de l'annonce médiée par la famille (courante jusque dans les années 1990) à une décision centrée sur le patient, soutenue par les recommandations de fin de vie du MHLW (2007, révisées 2018) et la campagne 人生会議 (jinsei kaigi / planification anticipée) lancée en 2018. Les systèmes convergent avec la France — mais le rôle de la famille reste plus présent par défaut.",
+                   ja: "日本の実践は、家族を介した非告知(1990年代まで一般的)から患者中心の意思決定へと移行し、MHLWの終末期ガイダンス(2007、2018改訂)と2018年開始の人生会議(アドバンス・ケア・プランニング)キャンペーンに支えられています。両国の制度は乖離ではなく収束しつつありますが、家族の役割は依然として既定でより大きいままです。" } },
+  { id: "q5",
+    q: { en: "A family member privately asks the team not to tell a competent patient her diagnosis. The best FIRST response is:",
+         fr: "Un proche demande discrètement à l'équipe de ne pas annoncer le diagnostic à une patiente apte. La meilleure PREMIÈRE réponse est :",
+         ja: "ある家族が、判断能力のある患者に診断を伝えないでほしいとチームにそっと頼みます。最初の対応として最善なのは:" },
+    options: [
+      { text: { en: "Promise to withhold it — the family knows the patient best",
+                fr: "Promettre de ne rien dire — la famille connaît mieux la patiente",
+                ja: "伏せると約束する — 家族が患者を最もよく知っているから" }, correct: false },
+      { text: { en: "Acknowledge the family member's fear, then ask the patient herself how much she wants to know",
+                fr: "Reconnaître la peur du proche, puis demander à la patiente elle-même ce qu'elle souhaite savoir",
+                ja: "家族の恐れを受け止め、その上で患者本人にどこまで知りたいかを尋ねる" }, correct: true },
+      { text: { en: "Refuse firmly and go straight in to tell the patient everything",
+                fr: "Refuser fermement et entrer directement tout dire à la patiente",
+                ja: "毅然と拒否し、直ちに患者にすべてを伝えに行く" }, correct: false },
+      { text: { en: "Tell the family member it is none of their business",
+                fr: "Dire au proche que cela ne le regarde pas",
+                ja: "家族に、あなたには関係ないことだと伝える" }, correct: false }
+    ],
+    explanation: { en: "The skilled move refuses the false binary of 'tell vs withhold'. Acknowledge the family member's fear (often grounded in love or recent loss), then ask the patient herself what and how much she wants to know. This honours both the family's role and the patient's autonomy. Promising to withhold removes her right to information; rigidly overriding the family breaks the alliance — and neither has actually asked the patient.",
+                   fr: "Le geste expert refuse le faux dilemme « dire ou cacher ». Reconnaître la peur du proche (souvent ancrée dans l'amour ou un deuil récent), puis demander à la patiente elle-même ce qu'elle souhaite savoir et jusqu'où. Cela honore à la fois le rôle de la famille et l'autonomie de la patiente. Promettre de cacher la prive de son droit à l'information ; contourner rigidement la famille rompt l'alliance — et aucun des deux n'a interrogé la patiente.",
+                   ja: "熟練した対応は「伝える対伏せる」という誤った二者択一を退けます。家族の恐れ(しばしば愛情や最近の死別に根ざす)を受け止め、その上で患者本人に何をどこまで知りたいかを尋ねます。これは家族の役割と患者の自律の双方を尊重します。伏せると約束すれば情報の権利を奪い、家族を硬直的に押しのければ同盟を壊します — どちらも患者本人には尋ねていません。" } }
+,
+  { id: "q6",
+    q: { en: "The consultation is run jointly by a French and a Japanese physician. What is the best way to handle the LANGUAGE of breaking the news?",
+         fr: "La consultation est menée conjointement par un médecin français et un médecin japonais. Quelle est la meilleure façon de gérer la LANGUE de l'annonce ?",
+         ja: "診察はフランス人医師と日本人医師が共同で担当します。告知に用いる言語を最もよく扱う方法は?" },
+    options: [
+      { text: { en: "Always use the doctor's strongest language, regardless of the patient",
+                fr: "Toujours utiliser la langue la plus forte du médecin, sans tenir compte du patient",
+                ja: "患者に関係なく、常に医師が最も得意な言語を使う" }, correct: false },
+      { text: { en: "Break the news in the language the patient understands best, and be transparent if you are working in a non-native language",
+                fr: "Annoncer dans la langue que la patiente comprend le mieux, et être transparent si vous travaillez dans une langue non maternelle",
+                ja: "患者が最もよく理解する言語で告知し、母語でない言語で進めている場合はそれを正直に伝える" }, correct: true },
+      { text: { en: "Use medical jargon so nothing is lost in translation",
+                fr: "Utiliser le jargon médical pour que rien ne se perde à la traduction",
+                ja: "翻訳で失われないよう医学専門用語を使う" }, correct: false },
+      { text: { en: "Have the family translate everything informally",
+                fr: "Faire traduire le tout de façon informelle par la famille",
+                ja: "すべてを家族に非公式に通訳させる" }, correct: false }
+    ],
+    explanation: { en: "Breaking bad news must happen in the language the patient understands best, with a professional interpreter where needed — never via informal family translation, which burdens relatives and risks softening or distorting the message. If the clinician is working in a non-native language, being transparent about that ('I want to be sure I explain this clearly — please stop me if anything is unclear') protects the patient. Jargon obscures rather than clarifies.",
+                   fr: "L'annonce d'une mauvaise nouvelle doit se faire dans la langue que la patiente comprend le mieux, avec un interprète professionnel si nécessaire — jamais via une traduction familiale informelle, qui pèse sur les proches et risque d'adoucir ou de déformer le message. Si le clinicien travaille dans une langue non maternelle, être transparent à ce sujet (« je veux être sûr de bien expliquer — arrêtez-moi si quelque chose n'est pas clair ») protège la patiente. Le jargon obscurcit au lieu de clarifier.",
+                   ja: "悪い知らせの告知は、患者が最もよく理解する言語で、必要なら専門の通訳を介して行うべきであり — 家族による非公式の通訳は決して用いません。それは家族に負担をかけ、メッセージを和らげたり歪めたりする危険があります。臨床医が母語でない言語で進める場合、その旨を正直に伝えること(「きちんと説明したいので、分かりにくければ止めてください」)が患者を守ります。専門用語は明確化ではなく不明瞭化を招きます。" } }
+];
+
+var POSTTEST_BREAKING_BAD_NEWS = [
+  { id: "q1",
+    q: { en: "After exploring the son's fear and asking the patient, you learn she wants to know — gently, at her pace, with her son present. What does this tell you about the 'family vs patient' conflict?",
+         fr: "Après avoir exploré la peur du fils et interrogé la patiente, vous apprenez qu'elle veut savoir — doucement, à son rythme, avec son fils présent. Que vous apprend cela sur le conflit « famille vs patiente » ?",
+         ja: "息子の恐れを掘り下げ患者に尋ねた結果、彼女は「優しく、自分のペースで、息子に同席してもらって」知りたいと分かりました。これは「家族対患者」の対立について何を教えますか?" },
+    options: [
+      { text: { en: "The conflict was real and unresolvable",
+                fr: "Le conflit était réel et insoluble",
+                ja: "対立は本物で解決不能だった" }, correct: false },
+      { text: { en: "Much of the apparent conflict dissolves once you ask the right person in the right order",
+                fr: "Une grande partie du conflit apparent se dissout dès qu'on interroge la bonne personne dans le bon ordre",
+                ja: "正しい順序で正しい人に尋ねれば、見かけの対立の多くは解消する" }, correct: true },
+      { text: { en: "The son should have been overruled immediately",
+                fr: "Le fils aurait dû être désavoué immédiatement",
+                ja: "息子は即座に押し切られるべきだった" }, correct: false },
+      { text: { en: "The patient should not have been asked at all",
+                fr: "On n'aurait pas dû interroger la patiente du tout",
+                ja: "患者には一切尋ねるべきではなかった" }, correct: false }
+    ],
+    explanation: { en: "The 'family vs patient' framing is often a false binary. The son's wish (protect his mother) and the mother's wish (to know, gently, with him present) are largely compatible — the apparent conflict was an artefact of not having asked her. Acknowledging the family's fear and then asking the patient resolves most of it.",
+                   fr: "Le cadrage « famille vs patiente » est souvent un faux dilemme. Le souhait du fils (protéger sa mère) et celui de la mère (savoir, doucement, en sa présence) sont largement compatibles — le conflit apparent venait de ne pas l'avoir interrogée. Reconnaître la peur de la famille puis interroger la patiente en résout l'essentiel.",
+                   ja: "「家族対患者」という枠組みはしばしば誤った二者択一です。息子の願い(母を守る)と母の願い(優しく、息子の同席のもとで知る)は大きく両立します — 見かけの対立は、彼女に尋ねていなかったことの産物でした。家族の恐れを受け止め、その上で患者に尋ねることで、その大半は解消します。" } },
+  { id: "q2",
+    q: { en: "Mrs Tanaka asks 'How long do I have?'. Which response best applies SPIKES to prognosis?",
+         fr: "Mme Tanaka demande « Combien de temps me reste-t-il ? ». Quelle réponse applique le mieux SPIKES au pronostic ?",
+         ja: "田中さんが「あとどれくらいですか?」と尋ねます。予後告知にSPIKESを最もよく適用する応答はどれですか?" },
+    options: [
+      { text: { en: "Immediately state '6-11 months with chemotherapy'",
+                fr: "Annoncer immédiatement « 6 à 11 mois avec chimiothérapie »",
+                ja: "ただちに「化学療法ありで6-11か月」と告げる" }, correct: false },
+      { text: { en: "Ask what KIND of answer she wants (precise number, rough range, or just the headline) before answering",
+                fr: "Demander quel TYPE de réponse elle souhaite (chiffre précis, fourchette, ou juste l'essentiel) avant de répondre",
+                ja: "答える前に、どんな種類の答え(正確な数字、大まかな範囲、要点だけ)を望むかを尋ねる" }, correct: true },
+      { text: { en: "Deflect with 'every patient is different' and change the subject",
+                fr: "Esquiver avec « chaque patient est différent » et changer de sujet",
+                ja: "「患者さんごとに違います」とはぐらかして話題を変える" }, correct: false },
+      { text: { en: "Refer the question to the oncologist next week",
+                fr: "Renvoyer la question à l'oncologue la semaine prochaine",
+                ja: "その質問は来週腫瘍内科医に回す" }, correct: false }
+    ],
+    explanation: { en: "Applying SPIKES Invitation to prognosis means calibrating the resolution to what the patient actually wants. Volunteering a precise median unasked can land like a sentence; deflecting denies her the ability to plan. Naming the question as important and asking what kind of answer she wants respects her autonomy and improves both understanding and emotional integration.",
+                   fr: "Appliquer l'Invitation de SPIKES au pronostic, c'est calibrer la résolution sur ce que la patiente souhaite réellement. Donner une médiane précise sans qu'elle l'ait demandée peut tomber comme une condamnation ; esquiver lui refuse la possibilité de planifier. Nommer l'importance de la question et demander quel type de réponse elle veut respecte son autonomie et améliore compréhension et intégration émotionnelle.",
+                   ja: "SPIKESのInvitationを予後に応用するとは、患者が実際に望む粒度に合わせることです。求められてもいない正確な中央値を持ち出すと宣告のように響きかねず、はぐらかしは計画する力を奪います。質問の重要性を認め、どんな答えを望むかを尋ねることは、自律を尊重し、理解と感情的統合の双方を高めます。" } },
+  { id: "q3",
+    q: { en: "The patient has obstructive jaundice with severe itching but has not decided about chemotherapy. Regarding ERCP biliary stenting, the correct approach is:",
+         fr: "La patiente présente un ictère obstructif avec un prurit sévère mais n'a pas décidé pour la chimiothérapie. Concernant le drainage biliaire par CPRE, la bonne approche est :",
+         ja: "患者は閉塞性黄疸で強い掻痒がありますが、化学療法はまだ決めていません。ERCP胆道ステントについて正しいアプローチは:" },
+    options: [
+      { text: { en: "Withhold the stent until she decides about chemotherapy",
+                fr: "Différer le stent jusqu'à sa décision sur la chimiothérapie",
+                ja: "化学療法を決めるまでステントを保留する" }, correct: false },
+      { text: { en: "Offer it now as symptom relief, independent of the chemotherapy decision",
+                fr: "Le proposer maintenant pour soulager les symptômes, indépendamment de la chimiothérapie",
+                ja: "化学療法の決定とは独立に、症状緩和として今提案する" }, correct: true },
+      { text: { en: "Only stent if she agrees to chemotherapy",
+                fr: "Ne poser le stent que si elle accepte la chimiothérapie",
+                ja: "化学療法に同意した場合のみステントを留置する" }, correct: false },
+      { text: { en: "Stenting is never indicated in metastatic disease",
+                fr: "Le stent n'est jamais indiqué dans la maladie métastatique",
+                ja: "転移性疾患ではステントは決して適応にならない" }, correct: false }
+    ],
+    explanation: { en: "Biliary stenting is a symptom-control intervention — it relieves jaundice and pruritus and reduces cholangitis risk regardless of the cancer-treatment decision. It should be offered promptly and framed as separate from the chemotherapy choice. Bundling a palliative comfort measure into a curative-intent decision needlessly prolongs suffering.",
+                   fr: "Le drainage biliaire est un geste de contrôle des symptômes — il soulage l'ictère et le prurit et réduit le risque d'angiocholite quelle que soit la décision oncologique. Il doit être proposé rapidement et présenté comme distinct du choix de chimiothérapie. Confondre une mesure de confort palliatif avec une décision à visée curative prolonge inutilement la souffrance.",
+                   ja: "胆道ステントは症状コントロールの手技であり、がん治療の決定とは無関係に黄疸・掻痒を軽減し胆管炎リスクを下げます。速やかに提案し、化学療法の選択とは別物として提示すべきです。緩和的安楽措置を根治目的の決定と束ねることは、苦痛を不必要に長引かせます。" } },
+  { id: "q4",
+    q: { en: "Which statement best captures the France/Japan comparison this case is built around?",
+         fr: "Quelle affirmation résume le mieux la comparaison France/Japon autour de laquelle ce cas est construit ?",
+         ja: "この症例が軸とするフランス/日本の比較を最もよく捉える記述はどれですか?" },
+    options: [
+      { text: { en: "France and Japan are fundamentally opposed on disclosure and cannot learn from each other",
+                fr: "La France et le Japon sont fondamentalement opposés sur l'annonce et ne peuvent rien s'apprendre",
+                ja: "フランスと日本は告知について根本的に対立し、互いに学べない" }, correct: false },
+      { text: { en: "Both default to patient autonomy in law/guidance, but differ in the prominence of the family and in softening language — and Japan is converging toward direct disclosure",
+                fr: "Les deux privilégient l'autonomie du patient en droit/recommandations, mais diffèrent par la place de la famille et l'adoucissement du langage — et le Japon converge vers l'annonce directe",
+                ja: "両国とも法・ガイダンス上は患者の自律を原則とするが、家族の存在感と言葉の和らげ方で異なり、日本は直接告知へ収束しつつある" }, correct: true },
+      { text: { en: "Japan never involves the family in any medical decision",
+                fr: "Le Japon n'implique jamais la famille dans une décision médicale",
+                ja: "日本は医療上の決定に家族を一切関与させない" }, correct: false },
+      { text: { en: "France always tells the family first, before the patient",
+                fr: "La France informe toujours la famille en premier, avant le patient",
+                ja: "フランスは常に患者より先に家族に伝える" }, correct: false }
+    ],
+    explanation: { en: "Both systems default to the competent patient's autonomy (Loi Kouchner; MHLW guidance + 人生会議), but the cultural framing differs: the family is more routinely present by default in Japan, and softer Japanese clinical language (進行, 限られた時間) can do work that the word 'cancer' does in French. Japan is converging toward direct disclosure rather than diverging — the cases are more similar than the stereotype suggests.",
+                   fr: "Les deux systèmes privilégient l'autonomie de la patiente apte (Loi Kouchner ; recommandations du MHLW + 人生会議), mais le cadrage culturel diffère : la famille est plus systématiquement présente par défaut au Japon, et un langage clinique japonais plus doux (進行, 限られた時間) peut faire le travail que le mot « cancer » fait en français. Le Japon converge vers l'annonce directe plutôt qu'il ne s'en éloigne — les pratiques sont plus proches que le stéréotype ne le suggère.",
+                   ja: "両制度とも判断能力のある患者の自律を原則とします(Loi Kouchner;MHLWガイダンス+人生会議)が、文化的枠組みは異なります:日本では家族が既定でより日常的に同席し、より柔らかな日本語の臨床表現(進行、限られた時間)が、フランス語で「がん」が果たす役割を担うことがあります。日本は直接告知から遠ざかるのではなく収束しつつあり — 実践はステレオタイプが示すより似ています。" } },
+  { id: "q5",
+    q: { en: "What does confirming a patient's decision-making capacity (Understand / Retain / Weigh / Communicate) achieve in this case?",
+         fr: "Que permet la confirmation de la capacité décisionnelle de la patiente (Comprendre / Retenir / Pondérer / Communiquer) dans ce cas ?",
+         ja: "この症例で患者の意思決定能力(理解/保持/比較考量/伝達)を確認することは何を達成しますか?" },
+    options: [
+      { text: { en: "It allows the team to bypass her on best-interests grounds",
+                fr: "Cela permet à l'équipe de la contourner au nom de son intérêt",
+                ja: "最善の利益を理由に本人を素通りすることを可能にする" }, correct: false },
+      { text: { en: "It establishes that disclosure decisions are hers, and removes any clinical basis for family-mediated non-disclosure",
+                fr: "Cela établit que les décisions d'annonce lui appartiennent, et retire toute base clinique à une non-divulgation médiée par la famille",
+                ja: "告知の決定が本人のものであることを確立し、家族介在型の非告知の臨床的根拠を取り除く" }, correct: true },
+      { text: { en: "It is a formality with no bearing on disclosure",
+                fr: "C'est une formalité sans incidence sur l'annonce",
+                ja: "告知に影響しない形式的手続きにすぎない" }, correct: false },
+      { text: { en: "It transfers the decision to the eldest son",
+                fr: "Cela transfère la décision au fils aîné",
+                ja: "決定を長男に移す" }, correct: false }
+    ],
+    explanation: { en: "Documenting capacity (the four-part test: understand, retain, weigh, communicate) establishes that the information and the disclosure decision belong to the patient. With full capacity there is no clinical or legal basis to bypass her under a 'best-interests' doctrine — that doctrine applies only when capacity is absent. This protects the patient against well-meant but autonomy-eroding family-mediated non-disclosure.",
+                   fr: "Documenter la capacité (le test en quatre temps : comprendre, retenir, pondérer, communiquer) établit que l'information et la décision d'annonce appartiennent à la patiente. Avec une pleine capacité, il n'existe aucune base clinique ou légale pour la contourner au titre du « bien du patient » — ce principe ne s'applique qu'en l'absence de capacité. Cela protège la patiente d'une non-divulgation médiée par la famille, bien intentionnée mais érodant l'autonomie.",
+                   ja: "能力の記録(4要素テスト:理解・保持・比較考量・伝達)は、情報と告知の決定が患者本人に属することを確立します。完全な能力がある場合、「最善の利益」原則で本人を素通りする臨床的・法的根拠はありません — その原則は能力を欠く場合にのみ適用されます。これは、善意ではあるが自律を損なう家族介在型の非告知から患者を守ります。" } }
+,
+  { id: "q6",
+    q: { en: "Comparing France and Japan, which is the EXPECTED default for who is present at a serious-news consultation?",
+         fr: "En comparant la France et le Japon, quelle est la règle ATTENDUE par défaut quant à qui est présent lors d'une annonce grave ?",
+         ja: "フランスと日本を比較して、重大な告知の場に誰が同席するかについての標準的なデフォルトはどれですか?" },
+    options: [
+      { text: { en: "Japan: a family member present is the expected default; France: the patient is asked first whether they want anyone present",
+                fr: "Japon : la présence d'un proche est la norme attendue ; France : on demande d'abord au patient s'il souhaite quelqu'un",
+                ja: "日本:家族の同席が標準的な前提;フランス:まず患者に同席者を望むか尋ねる" }, correct: true },
+      { text: { en: "Both countries forbid any family presence",
+                fr: "Les deux pays interdisent toute présence familiale",
+                ja: "両国とも家族の同席を一切禁じている" }, correct: false },
+      { text: { en: "France always requires the whole family; Japan always excludes them",
+                fr: "La France exige toujours toute la famille ; le Japon les exclut toujours",
+                ja: "フランスは常に家族全員を求め、日本は常に家族を排除する" }, correct: false },
+      { text: { en: "Neither country has any norm about who attends",
+                fr: "Aucun des deux pays n'a de norme sur qui assiste",
+                ja: "どちらの国にも同席者についての規範はない" }, correct: false }
+    ],
+    explanation: { en: "In Japan a family member present at a serious-news consultation is the expected default; in France the patient is asked first whether they want someone present. Neither is wrong — each protects the patient differently and each can fail differently (Japan risks the patient being talked around; France risks isolating a patient who wanted support). The skilled clinician asks the patient her preference rather than assuming the national default.",
+                   fr: "Au Japon, la présence d'un proche lors d'une annonce grave est la norme attendue ; en France, on demande d'abord au patient s'il souhaite quelqu'un. Aucune n'est fausse — chacune protège le patient autrement et peut faillir autrement (le Japon risque que l'on parle autour du patient ; la France risque d'isoler un patient qui voulait du soutien). Le clinicien expert demande sa préférence à la patiente plutôt que de présumer la norme nationale.",
+                   ja: "日本では重大な告知に家族が同席するのが標準的な前提であり、フランスではまず患者に同席者を望むか尋ねます。どちらも誤りではなく — それぞれ異なる形で患者を守り、異なる形で失敗しうます(日本は患者を素通りして話される危険、フランスは支えを望んだ患者を孤立させる危険)。熟練した臨床医は、国ごとのデフォルトを前提とせず、患者本人に希望を尋ねます。" } }
+];
+
+/* ----- Scenario 3 (Antibiotic Stewardship / Mme Moreau) MCQ banks -----
+ * Topics: Centor/McIsaac scoring, NICE NG84 delayed prescribing, AMR
+ * stewardship, and the EBV-mononucleosis + amoxicillin rash trap. */
+var PRETEST_RESPIRATORY_STEWARDSHIP = [
+  { id: "q1",
+    q: { en: "Which of the following is a Centor/McIsaac criterion that INCREASES the likelihood of group A streptococcal pharyngitis?",
+         fr: "Lequel des éléments suivants est un critère de Centor/McIsaac qui AUGMENTE la probabilité d'une pharyngite à streptocoque du groupe A ?",
+         ja: "次のうち、A群溶連菌性咽頭炎の可能性を高めるCentor/McIsaacの項目はどれですか?" },
+    options: [
+      { text: { en: "Presence of a cough",
+                fr: "Présence d'une toux",
+                ja: "咳があること" }, correct: false },
+      { text: { en: "Tender anterior cervical lymphadenopathy",
+                fr: "Adénopathie cervicale antérieure douloureuse",
+                ja: "圧痛を伴う前頸部リンパ節腫脹" }, correct: true },
+      { text: { en: "A runny nose (coryza)",
+                fr: "Un nez qui coule (rhinorrhée)",
+                ja: "鼻水(鼻汁)" }, correct: false },
+      { text: { en: "Hoarseness",
+                fr: "Un enrouement",
+                ja: "嗄声" }, correct: false }
+    ],
+    explanation: { en: "Centor/McIsaac points are: fever > 38°C, absence of cough, tender anterior cervical nodes, tonsillar swelling/exudate, plus an age adjustment (McIsaac). Cough, coryza and hoarseness all point toward a VIRAL cause and do not score. Tender anterior cervical adenopathy is one of the four classic positive criteria.",
+                   fr: "Les points de Centor/McIsaac sont : fièvre > 38°C, absence de toux, adénopathie cervicale antérieure douloureuse, hypertrophie/exsudat amygdalien, plus un ajustement selon l'âge (McIsaac). La toux, la rhinorrhée et l'enrouement orientent vers une cause VIRALE et ne comptent pas. L'adénopathie cervicale antérieure douloureuse est l'un des quatre critères positifs classiques.",
+                   ja: "Centor/McIsaacの項目は:38°C超の発熱、咳がない、圧痛を伴う前頸部リンパ節、扁桃腫脹/滲出液、加えて年齢補正(McIsaac)です。咳・鼻汁・嗄声はいずれもウイルス性を示唆し加点されません。圧痛を伴う前頸部リンパ節腫脹は古典的な4つの陽性項目の一つです。" } },
+  { id: "q2",
+    q: { en: "A 32-year-old with sore throat, cough, coryza, low-grade fever and Centor/McIsaac 0 asks for amoxicillin. What is the best management?",
+         fr: "Une femme de 32 ans avec mal de gorge, toux, rhinorrhée, fébricule et Centor/McIsaac 0 demande de l'amoxicilline. Quelle est la meilleure prise en charge ?",
+         ja: "のどの痛み、咳、鼻水、軽度の発熱があり Centor/McIsaac 0 の32歳がアモキシシリンを希望します。最善の対応は?" },
+    options: [
+      { text: { en: "Prescribe a 5-day amoxicillin course as requested",
+                fr: "Prescrire une cure d'amoxicilline de 5 jours comme demandé",
+                ja: "希望どおりアモキシシリン5日分を処方する" }, correct: false },
+      { text: { en: "Decline antibiotics, explain why in plain language, give a symptomatic plan and a safety-net",
+                fr: "Refuser les antibiotiques, expliquer pourquoi en mots simples, donner un plan symptomatique et un filet de sécurité",
+                ja: "抗生物質を控え、平易な言葉で理由を説明し、対症療法プランとセーフティネットを示す" }, correct: true },
+      { text: { en: "Send a throat culture and prescribe while waiting",
+                fr: "Envoyer une culture de gorge et prescrire en attendant",
+                ja: "咽頭培養を提出し、結果待ちの間に処方する" }, correct: false },
+      { text: { en: "Prescribe a broad-spectrum antibiotic to be safe",
+                fr: "Prescrire un antibiotique à large spectre par précaution",
+                ja: "念のため広域抗生物質を処方する" }, correct: false }
+    ],
+    explanation: { en: "At Centor/McIsaac 0 the picture is viral pharyngitis; HAS 2021, NICE NG84 and the CDC all agree antibiotics are not indicated and do not even recommend a rapid antigen test at this score. The job is to decline, explain, provide a real symptomatic plan and safety-net — taking the patient seriously, not minimising her.",
+                   fr: "À Centor/McIsaac 0, le tableau est une pharyngite virale ; HAS 2021, NICE NG84 et le CDC s'accordent : les antibiotiques ne sont pas indiqués et un test antigénique rapide n'est même pas recommandé à ce score. Le rôle est de refuser, d'expliquer, de fournir un vrai plan symptomatique et un filet de sécurité — en prenant la patiente au sérieux, sans la minimiser.",
+                   ja: "Centor/McIsaac 0 では所見はウイルス性咽頭炎です;HAS 2021、NICE NG84、CDCはいずれも、抗生物質の適応はなく、このスコアでは迅速抗原検査すら推奨しないと一致しています。求められるのは、断り、説明し、実効性のある対症療法プランとセーフティネットを提供することです — 患者を軽視せず真剣に受け止めて。" } },
+  { id: "q3",
+    q: { en: "What is 'delayed (back-pocket) prescribing' as endorsed by NICE NG84?",
+         fr: "Qu'est-ce que la « prescription différée (de réserve) » telle qu'avalisée par NICE NG84 ?",
+         ja: "NICE NG84が支持する「遅延(とっておき)処方」とは何ですか?" },
+    options: [
+      { text: { en: "Refusing all prescriptions on principle",
+                fr: "Refuser toute prescription par principe",
+                ja: "原則としてすべての処方を拒否すること" }, correct: false },
+      { text: { en: "Giving a prescription the patient is asked NOT to fill unless they get worse over 48-72 hours",
+                fr: "Donner une ordonnance que le patient est prié de NE PAS utiliser sauf en cas d'aggravation à 48-72 heures",
+                ja: "48-72時間で悪化しない限り使わないよう患者に求めたうえで処方箋を渡すこと" }, correct: true },
+      { text: { en: "Posting the antibiotics to the patient a week later",
+                fr: "Envoyer les antibiotiques au patient une semaine plus tard",
+                ja: "1週間後に抗生物質を患者に郵送すること" }, correct: false },
+      { text: { en: "Prescribing a lower dose than usual",
+                fr: "Prescrire une dose plus faible que d'habitude",
+                ja: "通常より低用量で処方すること" }, correct: false }
+    ],
+    explanation: { en: "Delayed prescribing is a recognised middle path (NICE NG84, supported by Cochrane reviews): the patient leaves with a prescription but is asked to fill it only if they fail to improve or worsen over 48-72 hours. Used selectively with clear rules, it reduces antibiotic use; used reflexively 'to keep everyone happy', it just outsources the decision and becomes a slower immediate prescription.",
+                   fr: "La prescription différée est une voie intermédiaire reconnue (NICE NG84, soutenue par les revues Cochrane) : le patient repart avec une ordonnance mais on lui demande de ne l'utiliser qu'en cas de non-amélioration ou d'aggravation à 48-72 heures. Utilisée de façon sélective avec des règles claires, elle réduit l'usage d'antibiotiques ; utilisée par réflexe « pour contenter tout le monde », elle ne fait que sous-traiter la décision et devient une prescription immédiate plus lente.",
+                   ja: "遅延処方は認められた中間的手段です(NICE NG84、Cochraneレビューも支持):患者は処方箋を持ち帰りますが、48-72時間で改善しないか悪化した場合にのみ使うよう求められます。明確なルールのもとで選択的に使えば抗生物質使用を減らしますが、「みんなを満足させるため」に反射的に使えば、判断を外注するだけで時間差のある即時処方になってしまいます。" } },
+  { id: "q4",
+    q: { en: "Why is prescribing amoxicillin to a young adult who actually has infectious mononucleosis (EBV) a particular hazard?",
+         fr: "Pourquoi prescrire de l'amoxicilline à un jeune adulte qui a en réalité une mononucléose infectieuse (EBV) est-il un danger particulier ?",
+         ja: "実際には伝染性単核球症(EBV)である若年成人にアモキシシリンを処方することが、なぜ特に危険なのですか?" },
+    options: [
+      { text: { en: "It cures the EBV infection too quickly",
+                fr: "Elle guérit l'infection à EBV trop vite",
+                ja: "EBV感染をあまりに速く治してしまうから" }, correct: false },
+      { text: { en: "Most such patients develop a florid morbilliform rash, often mislabelled as a permanent penicillin allergy",
+                fr: "La plupart de ces patients développent une éruption morbilliforme floride, souvent étiquetée à tort comme une allergie permanente à la pénicilline",
+                ja: "そうした患者の多くが顕著な麻疹様皮疹を生じ、しばしば永続的なペニシリンアレルギーと誤標識される" }, correct: true },
+      { text: { en: "Amoxicillin is contraindicated in everyone under 40",
+                fr: "L'amoxicilline est contre-indiquée chez tous les moins de 40 ans",
+                ja: "アモキシシリンは40歳未満の全員に禁忌である" }, correct: false },
+      { text: { en: "It turns EBV into a bacterial infection",
+                fr: "Elle transforme l'EBV en infection bactérienne",
+                ja: "EBVを細菌感染に変えてしまうから" }, correct: false }
+    ],
+    explanation: { en: "EBV mononucleosis is a common mimic of strep in young adults (posterior cervical adenopathy is a hint). Roughly 80-100% of EBV patients given an aminopenicillin such as amoxicillin develop a maculopapular/morbilliform rash. This is frequently mislabelled as a true penicillin allergy — a durable, iatrogenic label that follows the patient for life and narrows their future antibiotic options. This is a safety reason to avoid empirical amoxicillin for sore throat, independent of the AMR argument.",
+                   fr: "La mononucléose à EBV est un imitateur fréquent de l'angine streptococcique chez le jeune adulte (l'adénopathie cervicale postérieure est un indice). Environ 80-100% des patients EBV recevant une aminopénicilline comme l'amoxicilline développent une éruption maculopapuleuse/morbilliforme. Elle est souvent étiquetée à tort comme une vraie allergie à la pénicilline — un label iatrogène durable qui suit le patient à vie et restreint ses options antibiotiques futures. C'est une raison de sécurité d'éviter l'amoxicilline empirique pour un mal de gorge, indépendamment de l'argument RAM.",
+                   ja: "EBV単核球症は若年成人で溶連菌の頻度の高い擬態です(後頸部リンパ節腫脹がヒント)。アモキシシリンなどのアミノペニシリンを投与されたEBV患者の約80-100%が斑状丘疹性/麻疹様皮疹を生じます。これはしばしば真のペニシリンアレルギーと誤標識され — 生涯患者につきまとい将来の抗生物質選択を狭める、医原性で永続的なラベルとなります。これはAMRの議論とは独立して、のどの痛みに経験的アモキシシリンを避けるべき安全上の理由です。" } },
+  { id: "q5",
+    q: { en: "Japan's MHLW AMR National Action Plan 2023-2027 includes which specific target?",
+         fr: "Le Plan national antibiorésistance 2023-2027 du MHLW japonais comprend quel objectif spécifique ?",
+         ja: "日本のMHLW AMR対策国家行動計画2023-2027には、どの具体的な目標が含まれますか?" },
+    options: [
+      { text: { en: "Banning all outpatient antibiotics",
+                fr: "Interdire tous les antibiotiques en ambulatoire",
+                ja: "外来抗生物質の全面禁止" }, correct: false },
+      { text: { en: "Cutting prescriptions for respiratory tract infections by 50% by 2027",
+                fr: "Réduire de 50% les prescriptions pour les infections respiratoires d'ici 2027",
+                ja: "2027年までに呼吸器感染症への処方を50%削減すること" }, correct: true },
+      { text: { en: "Doubling antibiotic use to prevent complications",
+                fr: "Doubler l'usage d'antibiotiques pour prévenir les complications",
+                ja: "合併症予防のため抗生物質使用を倍増させること" }, correct: false },
+      { text: { en: "Removing the financial incentive for stewardship",
+                fr: "Supprimer l'incitation financière au bon usage",
+                ja: "適正使用への経済的インセンティブを廃止すること" }, correct: false }
+    ],
+    explanation: { en: "The MHLW AMR National Action Plan 2023-2027 sets an overall target of cutting outpatient oral antibiotics by about a third, with a SPECIFIC target of halving (50%) respiratory-tract-infection prescriptions by 2027. It builds on the 2018 抗微生物薬適正使用加算 (Antimicrobial Stewardship Premium) — a small reimbursement for clinicians who decide NOT to prescribe for a viral URI and document the counselling.",
+                   fr: "Le Plan national AMR 2023-2027 du MHLW fixe un objectif global de réduction d'environ un tiers des antibiotiques oraux ambulatoires, avec un objectif SPÉCIFIQUE de réduction de moitié (50%) des prescriptions pour infections respiratoires d'ici 2027. Il s'appuie sur le 抗微生物薬適正使用加算 (forfait de bon usage des antimicrobiens) de 2018 — un remboursement modeste pour les cliniciens qui décident de NE PAS prescrire pour une infection virale et documentent le conseil donné.",
+                   ja: "MHLW AMR対策国家行動計画2023-2027は、外来経口抗生物質を全体で約3分の1削減する目標を掲げ、具体的に2027年までに呼吸器感染症処方を半減(50%)させる目標を定めています。これは2018年の「抗微生物薬適正使用加算」 — ウイルス性上気道感染症に処方しないと決定し説明を記録した医師への小さな診療報酬 — を基盤としています。" } }
+,
+  { id: "q6",
+    q: { en: "What does the FeverPAIN score measure, and what is it used for?",
+         fr: "Que mesure le score FeverPAIN, et à quoi sert-il ?",
+         ja: "FeverPAINスコアは何を測り、何に使われますか?" },
+    options: [
+      { text: { en: "It grades the severity of pneumonia",
+                fr: "Il évalue la gravité d'une pneumonie",
+                ja: "肺炎の重症度を評価する" }, correct: false },
+      { text: { en: "A 5-item sore-throat score (Fever, Purulence, Attend rapidly ≤3 days, severely Inflamed tonsils, No cough/coryza) used to guide antibiotic decisions",
+                fr: "Un score de mal de gorge à 5 items (Fièvre, Purulence, consultation rapide ≤3 jours, amygdales très Inflammées, absence de toux/coryza) pour guider la décision antibiotique",
+                ja: "のどの痛みの5項目スコア(発熱、膿性、3日以内の早期受診、扁桃の高度炎症、咳・鼻汁がない)で、抗生物質の判断を導く" }, correct: true },
+      { text: { en: "It predicts the risk of penicillin allergy",
+                fr: "Il prédit le risque d'allergie à la pénicilline",
+                ja: "ペニシリンアレルギーのリスクを予測する" }, correct: false },
+      { text: { en: "It measures pain after surgery",
+                fr: "Il mesure la douleur après une chirurgie",
+                ja: "術後の痛みを測定する" }, correct: false }
+    ],
+    explanation: { en: "FeverPAIN (NICE NG84) is a 5-item sore-throat score: Fever in the past 24h, Purulence, Attend rapidly (within 3 days of onset), severely Inflamed tonsils, No cough or coryza. Like Centor/McIsaac it estimates the likelihood of a streptococcal cause and helps decide whether antibiotics or a rapid antigen test are warranted. A low score (as here) supports a no-antibiotic, symptomatic-care approach.",
+                   fr: "FeverPAIN (NICE NG84) est un score de mal de gorge à 5 items : Fièvre dans les dernières 24 h, Purulence, consultation rapide (dans les 3 jours), amygdales très Inflammées, absence de toux ou de coryza. Comme Centor/McIsaac, il estime la probabilité d'une cause streptococcique et aide à décider si un antibiotique ou un test antigénique rapide est justifié. Un score bas (comme ici) appuie une approche sans antibiotique, en soins symptomatiques.",
+                   ja: "FeverPAIN(NICE NG84)はのどの痛みの5項目スコアです:過去24時間の発熱、膿性、早期受診(発症3日以内)、扁桃の高度炎症、咳・鼻汁がない。Centor/McIsaacと同様に溶連菌が原因である可能性を推定し、抗生物質や迅速抗原検査が妥当かの判断を助けます。低スコア(本例のように)は、抗生物質なしの対症療法アプローチを支持します。" } }
+];
+
+var POSTTEST_RESPIRATORY_STEWARDSHIP = [
+  { id: "q1",
+    q: { en: "Mme Moreau says 'amoxicillin always works for me — last year I was better in two days.' What is the most accurate interpretation?",
+         fr: "Mme Moreau dit « l'amoxicilline marche toujours pour moi — l'an dernier j'allais mieux en deux jours ». Quelle est l'interprétation la plus exacte ?",
+         ja: "Mme Moreau は「アモキシシリンはいつも私に効く — 去年は2日で良くなった」と言います。最も正確な解釈はどれですか?" },
+    options: [
+      { text: { en: "The antibiotic clearly cured her viral illness both times",
+                fr: "L'antibiotique a clairement guéri sa maladie virale les deux fois",
+                ja: "抗生物質が両度ともウイルス性疾患を明らかに治した" }, correct: false },
+      { text: { en: "The viral illness almost certainly resolved on its own in parallel with the antibiotic — 'it worked' is not 'it was needed'",
+                fr: "La maladie virale a presque certainement guéri spontanément en parallèle de l'antibiotique — « ça a marché » n'est pas « c'était nécessaire »",
+                ja: "ウイルス性疾患はほぼ確実に抗生物質と並行して自然軽快しただけ — 「効いた」は「必要だった」ではない" }, correct: true },
+      { text: { en: "She must have a chronic bacterial infection",
+                fr: "Elle doit avoir une infection bactérienne chronique",
+                ja: "彼女は慢性細菌感染症に違いない" }, correct: false },
+      { text: { en: "Amoxicillin shortens all sore throats by two days",
+                fr: "L'amoxicilline raccourcit tous les maux de gorge de deux jours",
+                ja: "アモキシシリンはすべてののどの痛みを2日短縮する" }, correct: false }
+    ],
+    explanation: { en: "Viral pharyngitis is self-limiting and typically improving by day 3-5 anyway. 'It worked last year' almost always means the illness ran its natural course alongside the antibiotic, which played no causal role. The post hoc belief is exactly what makes the next consultation harder — naming it gently is part of the stewardship conversation.",
+                   fr: "La pharyngite virale est spontanément résolutive et s'améliore généralement dès le 3e-5e jour. « Ça a marché l'an dernier » signifie presque toujours que la maladie a suivi son cours naturel en parallèle de l'antibiotique, qui n'a joué aucun rôle causal. Cette croyance post hoc est précisément ce qui rend la consultation suivante plus difficile — la nommer avec tact fait partie de la conversation sur le bon usage.",
+                   ja: "ウイルス性咽頭炎は自然軽快し、通常はいずれにせよ第3-5病日には改善します。「去年は効いた」はほぼ常に、抗生物質と並行して疾患が自然経過をたどっただけで、抗生物質に因果的役割はなかったことを意味します。この後付けの信念こそが次の診察を難しくします — それを穏やかに指摘することは適正使用の会話の一部です。" } },
+  { id: "q2",
+    q: { en: "Setting antibiotics aside, what is the single most useful thing to offer Mme Moreau for her Friday presentation?",
+         fr: "Mise à part la question des antibiotiques, quelle est la chose la plus utile à offrir à Mme Moreau pour sa présentation de vendredi ?",
+         ja: "抗生物質を脇に置いて、金曜のプレゼンのために Mme Moreau に提供できる最も役立つことは何ですか?" },
+    options: [
+      { text: { en: "A sick note telling her to cancel the trip",
+                fr: "Un arrêt de travail lui demandant d'annuler le voyage",
+                ja: "出張を中止するよう求める診断書" }, correct: false },
+      { text: { en: "A symptomatic plan tuned to the flight and stage — scheduled paracetamol + NSAID, voice rest, in-flight hydration, lozenges, and a clear rule if she's worse Friday morning",
+                fr: "Un plan symptomatique adapté au vol et à la scène — paracétamol + AINS systématiques, repos vocal, hydratation en vol, pastilles, et une règle claire si elle est pire vendredi matin",
+                ja: "フライトと壇上に合わせた対症療法プラン — アセトアミノフェン+NSAIDの定時投与、声の休息、機内の水分摂取、のど飴、金曜朝に悪化した場合の明確なルール" }, correct: true },
+      { text: { en: "A short course of oral corticosteroids",
+                fr: "Une cure courte de corticoïdes oraux",
+                ja: "経口ステロイドの短期コース" }, correct: false },
+      { text: { en: "A delayed amoxicillin prescription handed over by reflex",
+                fr: "Une prescription différée d'amoxicilline donnée par réflexe",
+                ja: "反射的に渡される遅延アモキシシリン処方" }, correct: false }
+    ],
+    explanation: { en: "Scheduled (not as-needed) analgesia controls throat pain through the meeting; an NSAID before the stage manages inflammation and voice; in-flight hydration protects the mucosa; lozenges give sustained relief; and a clear Friday-morning safety-net rule lets her act. This addresses the trip far better than an antibiotic she'd only be on day 3 of by Friday. Steroids offer only a small effect with non-zero risk and mirror the very pattern the case teaches you to resist.",
+                   fr: "Une antalgie systématique (et non à la demande) contrôle la douleur pendant la réunion ; un AINS avant la scène gère l'inflammation et la voix ; l'hydratation en vol protège la muqueuse ; les pastilles soulagent durablement ; et une règle de sécurité claire pour vendredi matin lui permet d'agir. Cela répond au voyage bien mieux qu'un antibiotique dont elle ne serait qu'au 3e jour vendredi. Les corticoïdes n'offrent qu'un effet modeste avec un risque non nul et reproduisent le schéma que le cas vous apprend à éviter.",
+                   ja: "定時(頓用ではない)の鎮痛は会議中の咽頭痛をコントロールし、登壇前のNSAIDは炎症と声を管理し、機内の水分摂取は粘膜を守り、のど飴は持続的な緩和を与え、金曜朝の明確なセーフティネットのルールが彼女に行動を可能にします。金曜にやっと服用3日目になる抗生物質よりはるかに出張に応えます。ステロイドは小さな効果しかなくゼロでないリスクを伴い、この症例が抵抗を教えるまさにそのパターンを再現します。" } },
+  { id: "q3",
+    q: { en: "What is the key difference in the financial signal around antibiotic prescribing between France and Japan in 2026?",
+         fr: "Quelle est la différence clé dans le signal financier autour de la prescription d'antibiotiques entre la France et le Japon en 2026 ?",
+         ja: "2026年において、抗生物質処方をめぐる経済的シグナルのフランスと日本の主な違いは何ですか?" },
+    options: [
+      { text: { en: "France pays doctors more to prescribe antibiotics",
+                fr: "La France paie davantage les médecins pour prescrire des antibiotiques",
+                ja: "フランスは抗生物質を処方する医師により多く支払う" }, correct: false },
+      { text: { en: "Japan offers a stewardship premium for NOT prescribing for a viral URI (with documented counselling); France's consultation fee is broadly the same either way",
+                fr: "Le Japon offre un forfait de bon usage pour NE PAS prescrire en cas d'infection virale (avec conseil documenté) ; en France le tarif de consultation est globalement identique quoi qu'il arrive",
+                ja: "日本はウイルス性上気道感染症に処方しないこと(説明の記録を条件)に適正使用加算を支払う;フランスの診察料はどちらでも概ね同じ" }, correct: true },
+      { text: { en: "Neither country has any policy on antibiotic prescribing",
+                fr: "Aucun des deux pays n'a de politique sur la prescription d'antibiotiques",
+                ja: "どちらの国も抗生物質処方に関する政策を持たない" }, correct: false },
+      { text: { en: "Both countries fine patients who request antibiotics",
+                fr: "Les deux pays sanctionnent les patients qui demandent des antibiotiques",
+                ja: "両国とも抗生物質を求める患者に罰金を科す" }, correct: false }
+    ],
+    explanation: { en: "Since 2018 a Japanese primary-care clinician who decides NOT to prescribe an antibiotic for an acute viral URI (patient ≥ 6 months) and documents the counselling can claim the 抗微生物薬適正使用加算 — a small but symbolic financial incentive to do the harder thing. In France the consultation fee is broadly the same whether you prescribe or not (though ROSP public-health bonuses add a modest, indirect prescribing-rate incentive — a useful nuance for the facilitator).",
+                   fr: "Depuis 2018, un médecin de soins primaires japonais qui décide de NE PAS prescrire d'antibiotique pour une infection virale aiguë (patient ≥ 6 mois) et qui documente le conseil peut facturer le 抗微生物薬適正使用加算 — une incitation financière modeste mais symbolique à faire le choix difficile. En France, le tarif de consultation est globalement le même que l'on prescrive ou non (bien que les primes ROSP de santé publique ajoutent une incitation indirecte modeste sur les taux de prescription — nuance utile pour le facilitateur).",
+                   ja: "2018年以降、急性ウイルス性上気道感染症(患者は生後6か月以上)に抗生物質を処方しないと決定し説明を記録した日本のプライマリ・ケア医は「抗微生物薬適正使用加算」を算定できます — より難しい選択をすることへの小さくも象徴的な経済的インセンティブです。フランスでは処方の有無にかかわらず診察料は概ね同じです(ただしROSPの公衆衛生ボーナスが処方率に対する控えめで間接的なインセンティブを加えており、これはファシリテーターにとって有用なニュアンスです)。" } },
+  { id: "q4",
+    q: { en: "Which statement about antimicrobial resistance (AMR) and the individual consultation is most accurate?",
+         fr: "Quelle affirmation sur la résistance antimicrobienne (RAM) et la consultation individuelle est la plus exacte ?",
+         ja: "薬剤耐性(AMR)と個々の診察に関する記述で最も正確なのはどれですか?" },
+    options: [
+      { text: { en: "One unnecessary course harms this patient severely, so AMR is mainly an individual risk",
+                fr: "Une seule cure inutile nuit gravement à ce patient, donc la RAM est surtout un risque individuel",
+                ja: "1コースの不要処方がこの患者に重大な害を与えるため、AMRは主に個人のリスクである" }, correct: false },
+      { text: { en: "AMR is largely a population-level harm — each unnecessary course adds a small increment, but millions of them over time erode the antibiotics future patients will need",
+                fr: "La RAM est largement un dommage de niveau populationnel — chaque cure inutile ajoute un petit incrément, mais des millions au fil du temps érodent les antibiotiques dont les futurs patients auront besoin",
+                ja: "AMRは主に集団レベルの害である — 各不要処方は小さな増分を加えるが、時間とともに何百万件もが将来の患者に必要な抗生物質を蝕む" }, correct: true },
+      { text: { en: "AMR is a slogan with no real clinical relevance",
+                fr: "La RAM est un slogan sans réelle pertinence clinique",
+                ja: "AMRは臨床的に意味のないスローガンにすぎない" }, correct: false },
+      { text: { en: "Resistance only develops in hospitals, not in the community",
+                fr: "La résistance ne se développe qu'à l'hôpital, pas en ville",
+                ja: "耐性は病院でのみ生じ、地域では生じない" }, correct: false }
+    ],
+    explanation: { en: "AMR is a classic collective-action problem: the marginal harm of any single unnecessary course to the individual patient is small, but the aggregate over millions of consultations drives community resistance and threatens the antibiotics future patients will need. The lived clinical tension is precisely between 'this patient, this Friday' and 'the next generation's working antibiotics' — and stewardship is the discipline of holding both.",
+                   fr: "La RAM est un problème classique d'action collective : le dommage marginal d'une seule cure inutile pour le patient est faible, mais l'agrégat sur des millions de consultations alimente la résistance communautaire et menace les antibiotiques dont les futurs patients auront besoin. La tension clinique vécue est précisément entre « ce patient, ce vendredi » et « les antibiotiques qui fonctionneront pour la génération suivante » — et le bon usage est la discipline de tenir les deux.",
+                   ja: "AMRは典型的な集合行為問題です:一件の不要処方が個々の患者に与える限界的な害は小さいものの、何百万件もの診察にわたる総和が地域の耐性を生み、将来の患者に必要な抗生物質を脅かします。体感される臨床的葛藤はまさに「この患者、この金曜日」と「次世代に効く抗生物質」の間にあり — 適正使用とはその両方を保持する規律です。" } },
+  { id: "q5",
+    q: { en: "Reflecting on the cross-cultural discussion, which is the best summary of the France/Japan stewardship comparison?",
+         fr: "En réfléchissant à la discussion interculturelle, quel est le meilleur résumé de la comparaison France/Japon sur le bon usage ?",
+         ja: "異文化間の議論を振り返り、フランス/日本の適正使用比較の最良の要約はどれですか?" },
+    options: [
+      { text: { en: "France and Japan have nothing to learn from each other on antibiotics",
+                fr: "La France et le Japon n'ont rien à apprendre l'un de l'autre sur les antibiotiques",
+                ja: "フランスと日本は抗生物質について互いに学ぶことがない" }, correct: false },
+      { text: { en: "Both pursue stewardship, but via different levers — France through education/ROSP, Japan through education plus a pay-for-not-prescribing fee — and patient expectations differ accordingly",
+                fr: "Les deux poursuivent le bon usage, mais par des leviers différents — la France via l'éducation/ROSP, le Japon via l'éducation plus un forfait pour non-prescription — et les attentes des patients diffèrent en conséquence",
+                ja: "両国とも適正使用を追求するが、手段が異なる — フランスは教育/ROSP、日本は教育に加え非処方への加算 — そして患者の期待もそれに応じて異なる" }, correct: true },
+      { text: { en: "Japan simply copies French prescribing culture",
+                fr: "Le Japon copie simplement la culture de prescription française",
+                ja: "日本は単にフランスの処方文化を模倣している" }, correct: false },
+      { text: { en: "Cultural differences make evidence-based stewardship impossible to apply across borders",
+                fr: "Les différences culturelles rendent le bon usage fondé sur les preuves impossible à appliquer au-delà des frontières",
+                ja: "文化的差異により、エビデンスに基づく適正使用は国境を越えて適用できない" }, correct: false }
+    ],
+    explanation: { en: "Both health systems converge on the same evidence (HAS 2021, NICE NG84, CDC, MHLW AMR plan) but reach it through different policy levers and against different baseline patient expectations — France with persistently high per-capita use and education/ROSP incentives, Japan with an explicit pay-for-not-prescribing premium. Evidence-based stewardship CAN cross borders; how it is delivered must be culturally fluent.",
+                   fr: "Les deux systèmes convergent vers les mêmes données (HAS 2021, NICE NG84, CDC, plan AMR du MHLW) mais y parviennent par des leviers différents et face à des attentes initiales différentes — la France avec un usage par habitant durablement élevé et des incitations éducation/ROSP, le Japon avec un forfait explicite pour non-prescription. Le bon usage fondé sur les preuves PEUT franchir les frontières ; sa mise en œuvre doit être culturellement fluide.",
+                   ja: "両医療制度は同じエビデンス(HAS 2021、NICE NG84、CDC、MHLW AMR計画)に収束しますが、異なる政策手段を通じ、異なる初期の患者期待のもとでそこに至ります — フランスは一人当たり使用が依然高く教育/ROSPのインセンティブ、日本は明示的な非処方への加算。エビデンスに基づく適正使用は国境を越えられますが、その伝え方は文化的に流暢でなければなりません。" } }
+,
+  { id: "q6",
+    q: { en: "Mme Moreau is on the combined oral contraceptive pill and worries amoxicillin will reduce its efficacy. What does current guidance (FSRH/BNF/CDC) say?",
+         fr: "Mme Moreau prend une pilule œstroprogestative et craint que l'amoxicilline ne réduise son efficacité. Que disent les recommandations actuelles (FSRH/BNF/CDC) ?",
+         ja: "Mme Moreau は混合経口避妊薬を服用しており、アモキシシリンがその効果を下げると心配しています。現行のガイダンス(FSRH/BNF/CDC)は何と述べていますか?" },
+    options: [
+      { text: { en: "She must use additional contraception for a month",
+                fr: "Elle doit utiliser une contraception supplémentaire pendant un mois",
+                ja: "1か月間は追加の避妊が必要" }, correct: false },
+      { text: { en: "Non-enzyme-inducing antibiotics including amoxicillin do NOT reduce combined-pill efficacy; no additional contraception is needed",
+                fr: "Les antibiotiques non inducteurs enzymatiques, dont l'amoxicilline, ne réduisent PAS l'efficacité de la pilule combinée ; aucune contraception supplémentaire n'est nécessaire",
+                ja: "アモキシシリンを含む酵素誘導性のない抗生物質は混合ピルの効果を下げない;追加の避妊は不要" }, correct: true },
+      { text: { en: "She should stop the pill entirely while unwell",
+                fr: "Elle devrait arrêter complètement la pilule pendant sa maladie",
+                ja: "体調不良の間はピルを完全に中止すべき" }, correct: false },
+      { text: { en: "Amoxicillin makes the pill dangerous and both must be stopped",
+                fr: "L'amoxicilline rend la pilule dangereuse et les deux doivent être arrêtés",
+                ja: "アモキシシリンはピルを危険にするため両方を中止すべき" }, correct: false }
+    ],
+    explanation: { en: "The advice to use extra contraception with broad-spectrum antibiotics has been formally withdrawn for years: non-enzyme-inducing antibiotics such as amoxicillin do NOT reduce the efficacy of the combined oral contraceptive pill (FSRH 2011 and current guidance; BNF; CDC). Only enzyme-inducing drugs (e.g. rifampicin, certain anticonvulsants) do. The myth persists in patient lore — a useful side-conversation that builds trust while you decline the antibiotic for the unrelated viral pharyngitis.",
+                   fr: "Le conseil d'utiliser une contraception supplémentaire avec les antibiotiques à large spectre a été formellement retiré depuis des années : les antibiotiques non inducteurs enzymatiques comme l'amoxicilline ne réduisent PAS l'efficacité de la pilule combinée (FSRH 2011 et recommandations actuelles ; BNF ; CDC). Seuls les inducteurs enzymatiques (rifampicine, certains anticonvulsivants) le font. Le mythe persiste dans la croyance populaire — une conversation parallèle utile qui renforce la confiance pendant que vous refusez l'antibiotique pour la pharyngite virale sans rapport.",
+                   ja: "広域抗生物質と併用する追加避妊の助言は何年も前に正式に撤回されています:アモキシシリンなど酵素誘導性のない抗生物質は混合経口避妊薬の効果を下げません(FSRH 2011および現行ガイダンス、BNF、CDC)。下げるのは酵素誘導薬(リファンピシン、一部の抗けいれん薬など)のみです。この俗説は患者の間に根強く残っています — 無関係なウイルス性咽頭炎に抗生物質を断りつつ信頼を築く、有用な脇道の会話です。" } }
+];
+
 window.CANAMED_SCENARIOS = {
   "chronic-pain-opioids": {
     id: "chronic-pain-opioids",
@@ -2180,7 +2872,9 @@ window.CANAMED_SCENARIOS = {
     case: CASE_B,
     scoring: SCORING_B,
     penalties: PENALTIES_B,
-    decisions: DECISIONS_B
+    decisions: DECISIONS_B,
+    preTest: PRETEST_BREAKING_BAD_NEWS,
+    postTest: POSTTEST_BREAKING_BAD_NEWS
   },
   "respiratory-stewardship": {
     id: "respiratory-stewardship",
@@ -2230,7 +2924,74 @@ window.CANAMED_SCENARIOS = {
     case: CASE_C,
     scoring: SCORING_C,
     penalties: PENALTIES_C,
-    decisions: DECISIONS_C
+    decisions: DECISIONS_C,
+    preTest: PRETEST_RESPIRATORY_STEWARDSHIP,
+    postTest: POSTTEST_RESPIRATORY_STEWARDSHIP
+  }
+};
+
+/* ===================== FACILITATOR POCKET CARDS ============================
+ * Round-2 clinical-educator follow-up (sim-output/round2-clinical-ebm.md,
+ * severity item #6 — "no facilitator pocket cards"). One { en, fr, ja } card
+ * per scenario id, so the Caen / Nagoya academic running the room has a
+ * ~200-word teaching script without having to derive it from the inline JS
+ * comments. Keyed by the SAME scenario ids used in CANAMED_SCENARIOS, so the
+ * UI can look the card up by the active session's scenarioId.
+ *
+ * Each card covers: learning objectives, the deliberately-wrong traps, the key
+ * teaching moments, and suggested timing. Exposed at the bottom of the file the
+ * same way the other globals are (window.X = X). */
+var FACILITATOR_NOTES = {
+  "chronic-pain-opioids": {
+    en: "FACILITATOR CARD — Chronic Pain & the Opioid Request (Mr Lefebvre, 45y, 8-month LBP).\n" +
+        "LEARNING OBJECTIVES: (1) recognise chronic non-specific (mechanical) low-back pain and the absence of red flags; (2) explore — not simply grant or refuse — a named drug request (oxycodone); (3) build a guideline-concordant non-opioid active plan and address yellow flags (fear of movement, low mood, sleep); (4) compare France/Japan opioid-prescribing and imaging cultures.\n" +
+        "DELIBERATE TRAPS (these LOSE points): promising oxycodone before assessment (history); 'is it just stress?' which destroys the alliance (history); a rectal exam with no cauda-equina indication; a scattergun cardio-resp exam; and ordering MRI / X-ray / CT / bloods with no red flag.\n" +
+        "KEY TEACHING MOMENTS: 'hurt is not harm'; imaging without indication finds incidental age-related change and increases worry; the correct opioid stance is 'explore the request, assess first'; staying active is the single biggest determinant of long-term outcome.\n" +
+        "TIMING (≈90 min): pre-test 5 · Module A workup + synthesis gate 30 · plan & opioid votes 15 · Module B roleplay 25 · debrief + post-test 15.",
+    fr: "FICHE FACILITATEUR — Douleur chronique et demande d'opioïde (M. Lefebvre, 45 ans, lombalgie de 8 mois).\n" +
+        "OBJECTIFS PÉDAGOGIQUES : (1) reconnaître une lombalgie chronique non spécifique (mécanique) et l'absence de drapeaux rouges ; (2) explorer — et non simplement accorder ou refuser — une demande nominative (oxycodone) ; (3) construire un plan actif sans opioïde conforme aux recommandations et traiter les drapeaux jaunes (peur du mouvement, humeur basse, sommeil) ; (4) comparer les cultures France/Japon de prescription d'opioïdes et d'imagerie.\n" +
+        "PIÈGES DÉLIBÉRÉS (qui FONT PERDRE des points) : promettre l'oxycodone avant l'évaluation ; « ce n'est pas juste du stress ? » qui détruit l'alliance ; un toucher rectal sans indication de queue de cheval ; un examen cardio-respiratoire au hasard ; et prescrire IRM / radio / scanner / bilan sans drapeau rouge.\n" +
+        "MOMENTS CLÉS : « avoir mal n'est pas être abîmé » ; l'imagerie sans indication révèle des modifications fortuites liées à l'âge et augmente l'inquiétude ; la bonne posture face aux opioïdes est « explorer la demande, évaluer d'abord » ; rester actif est le principal déterminant du devenir à long terme.\n" +
+        "MINUTAGE (≈90 min) : pré-test 5 · démarche Module A + synthèse 30 · votes plan & opioïde 15 · jeu de rôle Module B 25 · débriefing + post-test 15.",
+    ja: "ファシリテーターカード — 慢性疼痛とオピオイドの要望(M. Lefebvre、45歳、8か月の腰痛)。\n" +
+        "学習目標:(1) 慢性非特異的(機械的)腰痛とレッドフラッグの不在を認識する;(2) 名指しの薬剤要望(オキシコドン)を、単に応じる/断るのではなく掘り下げる;(3) ガイドラインに沿った非オピオイドの能動的計画を立て、イエローフラッグ(運動恐怖、抑うつ、睡眠)に対応する;(4) フランス/日本のオピオイド処方と画像検査の文化を比較する。\n" +
+        "意図的なトラップ(減点される):評価前にオキシコドンを約束する;治療同盟を壊す「ただのストレスでは?」;馬尾の適応がない直腸指診;焦点のない心血管・呼吸器の診察;レッドフラッグなしのMRI/X線/CT/血液検査の指示。\n" +
+        "重要な教育ポイント:「痛み≠損傷」;適応のない画像検査は加齢性の偶発所見を見つけ不安を増す;正しいオピオイドの姿勢は「要望を掘り下げ、まず評価する」;活動性の維持が長期予後の最大の決定因子。\n" +
+        "タイムライン(約90分):事前テスト5・モジュールA ワークアップ+総合判断ゲート30・計画&オピオイド投票15・モジュールB ロールプレイ25・デブリーフ+事後テスト15。"
+  },
+  "breaking-bad-news-disclosure": {
+    en: "FACILITATOR CARD — Breaking Bad News & Cross-Cultural Disclosure (Mrs Tanaka, 75y, Stage IV pancreatic Ca).\n" +
+        "LEARNING OBJECTIVES: (1) confirm decision-making capacity (Understand/Retain/Weigh/Communicate) and grasp why it makes disclosure HER decision; (2) refuse the false 'tell vs withhold' binary — acknowledge the family's fear, then ask the patient; (3) apply SPIKES, including to prognosis (Invitation); (4) compare the France/Japan legal-and-cultural defaults (Loi Kouchner vs MHLW 人生会議 / ACP).\n" +
+        "DELIBERATE TRAPS (penalties): promising the son you will withhold (before asking the patient); answering the son with a rule and no empathy; ordering a PET-CT to delay the conversation; an unfocused neuro exam. The dec_first_words and dec_prognosis votes also have wrong options (too fast / paternalistic deflection).\n" +
+        "KEY TEACHING MOMENTS: capacity removes any 'best-interests' bypass; the apparent family-vs-patient conflict largely dissolves once you ask the right person in the right order; prognosis is delivered at the resolution the patient asks for; ERCP biliary stenting is symptom relief, offered independent of the chemo decision.\n" +
+        "TIMING (≈90 min): pre-test 5 · Module A jaundice workup 20 · disclosure planning + capacity 10 · Module B roleplay (family, first words, prognosis, stent) 35 · debrief + post-test 15.",
+    fr: "FICHE FACILITATEUR — Annoncer une mauvaise nouvelle et divulgation interculturelle (Mme Tanaka, 75 ans, cancer du pancréas de Stade IV).\n" +
+        "OBJECTIFS PÉDAGOGIQUES : (1) confirmer la capacité décisionnelle (Comprendre/Retenir/Pondérer/Communiquer) et saisir pourquoi l'annonce lui revient ; (2) refuser le faux dilemme « dire vs cacher » — reconnaître la peur de la famille, puis interroger la patiente ; (3) appliquer SPIKES, y compris au pronostic (Invitation) ; (4) comparer les règles légales et culturelles France/Japon (Loi Kouchner vs MHLW 人生会議 / ACP).\n" +
+        "PIÈGES DÉLIBÉRÉS (pénalités) : promettre au fils de cacher (avant d'interroger la patiente) ; répondre au fils par une règle sans empathie ; prescrire une TEP-TDM pour différer ; un examen neuro non ciblé. Les votes dec_first_words et dec_prognosis ont aussi des options fausses (trop rapide / esquive paternaliste).\n" +
+        "MOMENTS CLÉS : la capacité retire tout contournement au nom de l'« intérêt » ; le conflit apparent famille-vs-patiente se dissout largement dès qu'on interroge la bonne personne dans le bon ordre ; le pronostic se donne à la résolution demandée par la patiente ; le drainage biliaire par CPRE est un soulagement symptomatique, proposé indépendamment de la chimiothérapie.\n" +
+        "MINUTAGE (≈90 min) : pré-test 5 · démarche de l'ictère Module A 20 · planification de l'annonce + capacité 10 · jeu de rôle Module B (famille, premiers mots, pronostic, stent) 35 · débriefing + post-test 15.",
+    ja: "ファシリテーターカード — 悪い知らせの告知と異文化間の情報開示(田中さん、75歳、Stage IV 膵がん)。\n" +
+        "学習目標:(1) 意思決定能力(理解/保持/比較考量/伝達)を確認し、それが告知を本人の決定とする理由を理解する;(2) 「伝える対伏せる」の誤った二者択一を退ける — 家族の恐れを受け止め、その上で患者に尋ねる;(3) SPIKESを、予後告知(Invitation)も含めて適用する;(4) フランス/日本の法的・文化的デフォルト(Loi Kouchner 対 MHLW 人生会議/ACP)を比較する。\n" +
+        "意図的なトラップ(減点):患者に尋ねる前に息子へ伏せると約束する;息子に共感なく規則だけで答える;会話を遅らせるためのPET-CT;焦点のない神経診察。dec_first_words と dec_prognosis の投票にも誤答(急ぎすぎ/パターナリスティックなはぐらかし)がある。\n" +
+        "重要な教育ポイント:能力があれば「最善の利益」による素通りは成立しない;見かけの家族対患者の対立は、正しい順序で正しい人に尋ねれば大半が解消する;予後は患者が求める粒度で伝える;ERCP胆道ステントは症状緩和であり、化学療法の決定とは独立に提案する。\n" +
+        "タイムライン(約90分):事前テスト5・モジュールA 黄疸ワークアップ20・告知計画+能力10・モジュールB ロールプレイ(家族・最初の言葉・予後・ステント)35・デブリーフ+事後テスト15。"
+  },
+  "respiratory-stewardship": {
+    en: "FACILITATOR CARD — Antibiotic Stewardship & the Sore-Throat Request (Mme Moreau, 32y, Centor/McIsaac 0).\n" +
+        "LEARNING OBJECTIVES: (1) score Centor/McIsaac and recognise viral pharyngitis; (2) decline antibiotics WITHOUT minimising the patient — explain, plan, safety-net; (3) address her real Friday-deadline need without a drug she does not need; (4) use delayed prescribing as a shared decision, not a reflex; (5) compare France/Japan stewardship levers (ROSP vs the 抗微生物薬適正使用加算 pay-for-not-prescribing premium; MHLW AMR plan 2023-2027).\n" +
+        "DELIBERATE TRAPS (penalties): promising amoxicillin before the workup; 'it's just a cold' with no exam/plan/safety-net; a scattergun neuro+abdo exam; unnecessary FBC/CRP/LFTs; and the empirical 5-day amoxicillin course.\n" +
+        "KEY TEACHING MOMENTS: 'it worked' ≠ 'it was needed' (post hoc belief); the EBV-mononucleosis + amoxicillin maculopapular rash trap and the durable false 'penicillin allergy' label it creates; a real symptomatic plan (scheduled paracetamol + NSAID, voice rest, in-flight hydration) beats an antibiotic she'd only be on day 3 of by Friday; AMR is a population-level harm.\n" +
+        "TIMING (≈90 min): pre-test 5 · Module A throat workup + Centor scoring 25 · prescribe / delayed / trip votes 20 · Module B patient-pressure roleplay 25 · debrief + post-test 15.",
+    fr: "FICHE FACILITATEUR — Bon usage des antibiotiques et demande pour mal de gorge (Mme Moreau, 32 ans, Centor/McIsaac 0).\n" +
+        "OBJECTIFS PÉDAGOGIQUES : (1) calculer le Centor/McIsaac et reconnaître une pharyngite virale ; (2) refuser les antibiotiques SANS minimiser la patiente — expliquer, planifier, sécuriser ; (3) répondre à son vrai besoin (échéance de vendredi) sans un médicament inutile ; (4) utiliser la prescription différée comme décision partagée, non comme réflexe ; (5) comparer les leviers France/Japon (ROSP vs le forfait 抗微生物薬適正使用加算 « payé pour ne pas prescrire » ; plan AMR du MHLW 2023-2027).\n" +
+        "PIÈGES DÉLIBÉRÉS (pénalités) : promettre l'amoxicilline avant le bilan ; « ce n'est qu'un rhume » sans examen/plan/filet ; un examen neuro+abdo au hasard ; NFS/CRP/bilan hépatique inutiles ; et la cure empirique d'amoxicilline de 5 jours.\n" +
+        "MOMENTS CLÉS : « ça a marché » ≠ « c'était nécessaire » (croyance post hoc) ; le piège mononucléose à EBV + éruption maculopapuleuse à l'amoxicilline et l'étiquette durable et fausse d'« allergie à la pénicilline » qu'il crée ; un vrai plan symptomatique (paracétamol + AINS systématiques, repos vocal, hydratation en vol) vaut mieux qu'un antibiotique dont elle ne serait qu'au 3e jour vendredi ; la RAM est un dommage populationnel.\n" +
+        "MINUTAGE (≈90 min) : pré-test 5 · démarche pharyngée Module A + score Centor 25 · votes prescription / différée / voyage 20 · jeu de rôle Module B sous pression 25 · débriefing + post-test 15.",
+    ja: "ファシリテーターカード — 抗菌薬適正使用とのどの痛みへの要望(Mme Moreau、32歳、Centor/McIsaac 0)。\n" +
+        "学習目標:(1) Centor/McIsaacを算出しウイルス性咽頭炎を認識する;(2) 患者を軽視せずに抗生物質を断る — 説明し、計画し、セーフティネットを示す;(3) 不要な薬に頼らず、彼女の本当のニーズ(金曜の締切)に応える;(4) 遅延処方を反射ではなく共有意思決定として用いる;(5) フランス/日本の適正使用の手段(ROSP 対「抗微生物薬適正使用加算」の非処方への報酬;MHLW AMR計画2023-2027)を比較する。\n" +
+        "意図的なトラップ(減点):ワークアップ前にアモキシシリンを約束する;診察/計画/セーフティネットなしの「ただの風邪」;焦点のない神経+腹部の診察;不要な全血球計算/CRP/肝機能;経験的アモキシシリン5日コース。\n" +
+        "重要な教育ポイント:「効いた」≠「必要だった」(後付けの信念);EBV単核球症+アモキシシリンの斑状丘疹性皮疹のトラップと、それが生む永続的な偽の「ペニシリンアレルギー」ラベル;実効性のある対症療法プラン(アセトアミノフェン+NSAIDの定時投与、声の休息、機内の水分摂取)は、金曜にやっと3日目になる抗生物質に勝る;AMRは集団レベルの害である。\n" +
+        "タイムライン(約90分):事前テスト5・モジュールA 咽頭ワークアップ+Centorスコア25・処方/遅延/出張の投票20・モジュールB 患者プレッシャーのロールプレイ25・デブリーフ+事後テスト15。"
   }
 };
 
@@ -2238,4 +2999,5 @@ window.CANAMED_SCENARIOS = {
    case-content.js leaves in the globals when script.js starts up. Once a
    session is unlocked, script.js calls applyScenario() with the session's
    chosen scenarioId (or its custom content) and swaps these globals out. */
+window.FACILITATOR_NOTES = FACILITATOR_NOTES;
 window.CANAMED_DEFAULT_SCENARIO_ID = "chronic-pain-opioids";
