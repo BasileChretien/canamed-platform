@@ -41,8 +41,21 @@
  * Loaded BEFORE script.js (see the <script> order in index.html), so `CASE` is
  * available as a global there.
  *
- * Clinical content reviewed against current guidance: HAS 2019 (France), JOA
- * low-back-pain guideline 2019 (Japan), NICE NG59 (UK), ACP 2017 + CDC 2022 (USA).
+ * Clinical content reviewed against current guidance (Round-2 clinical/EBM
+ * audit 2026-05-20):
+ *   - France: HAS 2019 ("Prise en charge du patient présentant une lombalgie
+ *     commune") + HAS 2024 ("Pertinence et bon usage des antalgiques
+ *     opioïdes") + ANSM 2024 opioid surveillance report.
+ *   - Japan:  JOA 2019 (low-back pain) + JSPC 2021 (chronic pain).
+ *   - UK:     NICE NG59 (2016, upd. 2020 — low-back pain & sciatica) +
+ *             NICE NG65 (axial spondyloarthritis) + NICE NG193 (2021 —
+ *             chronic primary pain).
+ *   - USA:    ACP 2017 (non-invasive Rx of LBP) + CDC 2022 (opioids for
+ *             pain, supersedes 2016).
+ *   - Breaking bad news: SPIKES (Baile et al, Oncologist 2000), Loi
+ *     Kouchner 2002, HAS 2008 (annonce), MHLW 2018 (人生会議).
+ *   - Pharyngitis stewardship: McIsaac/Centor, NICE NG84, MHLW AMR
+ *     Action Plan 2023–2027, HAS 2021 (antibiothérapie).
  */
 /* `var` (not `const`) so applyScenario() in script.js can swap the data when a
    facilitator picks a different scenario at session-creation time. `var` at
@@ -105,11 +118,26 @@ var CASE = {
       a: { en: "Otherwise healthy, no regular medication. A glass of wine at the weekend, no smoking, no recreational drugs. My father had a problem with alcohol years ago, but I don't.",
            fr: "Sinon je suis en bonne santé, pas de traitement habituel. Un verre de vin le week-end, je ne fume pas, pas de drogues récréatives. Mon père a eu un problème avec l'alcool il y a des années, mais pas moi.",
            ja: "それ以外は健康で、常用薬はありません。週末にワインを一杯、喫煙はせず、嗜好性の薬物もありません。父親は何年も前にアルコールの問題を抱えていましたが、私はそうではありません。" } },
+    /* --- Round-2 clinical-EBM review (2026-05-20): inserted an explicit
+       inflammatory back-pain / axial-spondyloarthritis (axSpA) screen.
+       A 45-year-old with 8 months of low-back pain is squarely in the axSpA
+       age window; before the new item the case let students "rule out"
+       axSpA in the synthesis without ever doing the screen. */
+    { q: { en: "Inflammatory back-pain screen: morning back stiffness lasting more than 30 minutes, alternating buttock pain, pain that IMPROVES with movement and is worse after rest, age < 45 at onset, family history of psoriasis, inflammatory bowel disease, or uveitis?",
+           fr: "Dépistage de la lombalgie inflammatoire : raideur matinale du dos > 30 min, douleur fessière alternante, douleur AMÉLIORÉE par le mouvement et aggravée par le repos, début avant 45 ans, antécédents familiaux de psoriasis, MICI ou uvéite ?",
+           ja: "炎症性腰痛のスクリーニング:30分以上続く朝のこわばり、左右交代性の臀部痛、運動で改善し安静で悪化する痛み、45歳未満での発症、乾癬・炎症性腸疾患・ぶどう膜炎の家族歴は?" },
+      a: { en: "No morning stiffness — when I get up I'm just sore, not stiff, and it loosens up within a few minutes. No buttock pain. Movement actually doesn't help much; in fact resting helps more. No psoriasis, no IBD, no eye problems in me or my family.",
+           fr: "Pas de raideur matinale — au lever je suis juste douloureux, pas raide, et ça se délie en quelques minutes. Pas de douleur fessière. Le mouvement n'aide pas vraiment ; le repos m'aide plutôt plus. Pas de psoriasis, pas de MICI, pas de problème oculaire chez moi ou ma famille.",
+           ja: "朝のこわばりはなく — 起床時はただ痛いだけで、数分で楽になります。臀部痛もありません。動いてもあまり楽にならず、むしろ休んだほうが楽です。本人にも家族にも乾癬、炎症性腸疾患、眼の病気はありません。" },
+      cite: { en: "ASAS / NICE NG65 — axial spondyloarthritis red flags",
+              fr: "ASAS / HAS — spondyloarthrite axiale",
+              ja: "ASAS / 日本リウマチ学会 — 軸性脊椎関節炎" } },
     /* --- the following two are deliberately POOR opening moves; the platform
        deducts points for them, with an explanation on screen. They are kept here
        (rather than hidden) so a real choice is offered - students should be able
-       to make a mistake and learn from it. Indices are 8 and 9; if you insert
-       earlier history items, update the PENALTIES list below to match. */
+       to make a mistake and learn from it. Indices are 9 and 10 (shifted +1
+       after the axSpA insert above); PENALTIES below already references the
+       new indices. */
     { q: { en: "So, shall I write the oxycodone now — tablets or patches?",
            fr: "Alors, je vous prescris l'oxycodone tout de suite — comprimés ou patchs ?",
            ja: "では、オキシコドンを今すぐ処方しましょうか — 錠剤と貼付剤、どちらにしますか?" },
@@ -409,7 +437,7 @@ var PENALTIES = [
                "画像検査の選択肢の中で、最も有害であり、したがって最も多くの点数が減点され" +
                "ます。" } },
   /* --- history: the two deliberately wrong opening moves --- */
-  { id: "pen_prescribe", item: "history:8", points: 14,
+  { id: "pen_prescribe", item: "history:9", points: 14,
     title: { en: "Promised the oxycodone before any assessment",
              fr: "A promis l'oxycodone avant toute évaluation",
              ja: "評価前にオキシコドンを約束した" },
@@ -427,7 +455,7 @@ var PENALTIES = [
                "前に強オピオイドの処方に同意することは、まさに依存症を生み出す処方パターン" +
                "です。診察の残りは要望の掘り下げではなく、その約束を実行することを中心に" +
                "回ることになります — それがチームが減点される理由です。" } },
-  { id: "pen_dismiss", item: "history:9", points: 10,
+  { id: "pen_dismiss", item: "history:10", points: 10,
     title: { en: "Suggested the pain was imagined or 'just stress'",
              fr: "A suggéré que la douleur était imaginaire ou « juste du stress »",
              ja: "痛みは気のせい、または「ただのストレス」だと示唆した" },
@@ -1593,7 +1621,17 @@ var PENALTIES_C = [
                "the next consultation harder for the next colleague), and contributes " +
                "to community resistance — for an illness her body was already clearing " +
                "on its own. \"It worked\" is not the same as \"it was needed\". This " +
-               "is the central wrong choice the case is designed to teach.",
+               "is the central wrong choice the case is designed to teach. " +
+               "ADDITIONAL TRAP: in any young adult with sore throat where EBV " +
+               "(infectious mononucleosis) has not been ruled out, empirical aminopenicillins " +
+               "trigger a near-universal maculopapular rash (~ 80–100% of EBV cases). " +
+               "Most clinicians and patients then mislabel this as a permanent " +
+               "\"penicillin allergy\" — a label that follows the patient for life " +
+               "and pushes future infections toward broader-spectrum, more toxic, " +
+               "more expensive antibiotics. Mme Moreau had her tonsils out as a " +
+               "child so classic exudative tonsillitis is unlikely, but the EBV " +
+               "+ amoxicillin trap is the canonical reason \"empirical amoxicillin " +
+               "for sore throat\" is unsafe even when it does no infectious harm.",
            fr: "Prescrire de l'amoxicilline pour une pharyngite virale à Centor/McIsaac 0 " +
                "expose Mme Moreau aux effets secondaires (troubles digestifs, éruption, " +
                "risque d'environ 1 sur 1 000 d'infection à C. difficile, risque d'environ " +
