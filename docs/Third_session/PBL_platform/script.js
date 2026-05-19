@@ -5298,6 +5298,22 @@ function renderStage() {
       } catch (e) { /* tour module missing — non-fatal */ }
     }, 500);
   }
+  // Auto-dismiss any stage-specific tour when the room advances past
+  // its stage. Sim 2026-05-19 (Marie/Room 5, Sara/Room 1) caught the
+  // studentModA overlay still pinned to the wrap-up screen because the
+  // student hadn't finished clicking through it before the admin
+  // Advanced. Without this guard the tour bubble blocks the wrap-up
+  // content + its anchors (chart-section-history etc.) are gone, so
+  // the bubble misaligns over an empty area.
+  if (window.CanamedTour && typeof window.CanamedTour.activeSet === "function") {
+    const activeSet = window.CanamedTour.activeSet();
+    // Map of stage-bound tour sets → the stage they belong on.
+    const TOUR_STAGE = { student: 0, studentModA: 1 };
+    if (activeSet && TOUR_STAGE.hasOwnProperty(activeSet) &&
+        TOUR_STAGE[activeSet] !== viewStage) {
+      try { window.CanamedTour.dismiss(); } catch (e) {}
+    }
+  }
   const wait = el("stage-wait");
   if (isRoomAdmin) {
     el("prev-btn").textContent = "← Move room back";
@@ -5901,6 +5917,12 @@ if (typeof window !== "undefined") {
   window._test_setAllRooms      = function (m) { allRooms = m || {}; };
   window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
   window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
+  window._test_setViewStage     = function (n) {
+    // Drive both viewStage and roomStage so renderStage's lock/coach
+    // branches see a consistent state. Used by tour-stage-dismiss.
+    viewStage = parseInt(n, 10) || 0;
+    roomStage = Math.max(roomStage, viewStage);
+  };
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room

@@ -450,6 +450,14 @@
     dismiss: () => dismiss(false),
     isDone: isDone,
     addReopenLink: addReopenLink,
+    /* Which tour set (if any) is currently displayed? Used by
+     * renderStage() to auto-dismiss stage-specific tours when the room
+     * advances past their stage — without this, a student who hadn't
+     * clicked through the Module A walkthrough before the admin
+     * Advanced would carry the overlay into Module B and Wrap-up
+     * (sim 2026-05-19 found this in Marie + Sara's run, blocking the
+     * Wrap-up content underneath). */
+    activeSet: () => active ? active.set : null,
     _STEPS: STEPS,   // exposed for unit-test inspection
     _VERSION: VERSION
   };
