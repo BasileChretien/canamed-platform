@@ -154,6 +154,22 @@
         <button type="button" class="splash-link" id="splash-signed-in-out"
                 data-i18n="splash.sign-out">Sign out</button>
       </div>
+      <!-- Shown when a previous session's resume data is still in localStorage.
+           User-reported regression (2026-05-18): "once connected to a session
+           in a browser, it is not possible to disconnect from this session."
+           Root cause: autoResume() silently re-joins the previous session if
+           the user types the same code again, and there is no other place on
+           the splash to clear that saved state. This block gives the returning
+           user a visible name/code + an explicit "start fresh" escape hatch
+           BEFORE they type anything. Populated + revealed by initSavedSessionBanner(). -->
+      <div class="splash-saved-session" id="splash-saved-session" hidden role="status">
+        <span data-i18n="splash.saved-session-as">Resuming as</span>
+        <strong id="splash-saved-session-name">—</strong>
+        <span data-i18n="splash.saved-session-in">in session</span>
+        <strong id="splash-saved-session-code">—</strong>
+        <button type="button" class="splash-link" id="splash-saved-session-clear"
+                data-i18n="splash.saved-session-clear">Not you? Disconnect &amp; start fresh →</button>
+      </div>
       <h1 class="splash-title" id="splash-title">CANAMED</h1>
       <p class="splash-tag" data-i18n="splash.tagline">A collaborative platform for medical-education
         partnerships between universities.</p>
@@ -199,6 +215,16 @@
           </div>
           <p class="splash-hint" id="splash-hint" role="status" aria-live="polite"></p>
         </form>
+        <!-- Reaper-list link: shown only when the local "my sessions"
+             tracker is non-empty. Click → splashShowView("my-sessions").
+             Lets a facilitator close abandoned sessions they previously
+             created and forgot to end. -->
+        <p class="splash-my-sessions-row" id="splash-my-sessions-row" hidden>
+          <button type="button" class="splash-link" id="splash-go-my-sessions"
+                  data-i18n-html="splash.my-sessions.link">
+            My open sessions (<span id="splash-my-sessions-count">0</span>) &rarr;
+          </button>
+        </p>
         <p class="splash-foot">
           <span data-i18n="splash.enter.no-code">Don't have a code yet?</span>
           <button type="button" class="splash-link" id="splash-go-create"
@@ -210,6 +236,31 @@
                   data-i18n="splash.enter.go-account">
             Sign in with Google to save your profile &amp; history &rarr;
           </button>
+        </p>
+      </div>
+
+      <!-- VIEW 6: My open sessions — list of sessions this browser
+           created. Each row exposes a one-click "Close session" that
+           writes the closed marker without going through the full
+           archive-download flow (the dashboard remains the path for
+           that). Useful when an admin forgot to end the session and
+           wants to clean up later. Populated by renderMySessions(). -->
+      <div class="splash-view" id="splash-view-my-sessions" hidden>
+        <p class="splash-label splash-label-big"
+           data-i18n="splash.my-sessions.title">Sessions you created</p>
+        <p class="splash-sublabel" data-i18n="splash.my-sessions.subtitle">
+          These are sessions started from this browser. Close any that are
+          no longer in use to free quota and stop new students from joining.
+        </p>
+        <div class="splash-my-sessions-list" id="splash-my-sessions-list" role="list"></div>
+        <p class="splash-my-sessions-empty" id="splash-my-sessions-empty" hidden
+           data-i18n="splash.my-sessions.empty">
+          No sessions tracked on this browser. Sessions you create from here
+          will appear in this list.
+        </p>
+        <p class="splash-row">
+          <button type="button" id="splash-my-sessions-back" class="splash-back"
+                  data-i18n="splash.back">&larr; Back</button>
         </p>
       </div>
 
@@ -613,6 +664,17 @@
     </div>
     <div class="lobby-card">
       <h2>Join the session</h2>
+      <!-- Escape hatch: lets a user back out of the unlocked session BEFORE
+           they join. Without this, a stored canamed_session sends initEntry()
+           straight to the lobby with no visible way back to the splash, and
+           autoResume() may silently re-join them on the next interaction.
+           User-reported regression (2026-05-18): "once connected to a session
+           in a browser, it is not possible to disconnect from this session."
+           Painted + wired by paintLobbySwitchSession(). -->
+      <p class="lobby-switch-session" id="lobby-switch-session" hidden>
+        <button type="button" class="splash-link" id="lobby-switch-session-btn"
+                data-i18n="lobby.switch-session">← Use a different session</button>
+      </p>
       <p class="lobby-mode" id="lobby-mode"></p>
       <p class="session-badge" id="session-badge" hidden>
         Session <span id="session-badge-code"></span>
@@ -784,12 +846,20 @@
                cue to look for the recovery path. The link opens the same
                superadmin-panel the existing "Super admin: set / change the
                password" toggle opens — but framed as recovery, not setup. -->
+          <!-- Single recovery affordance. R3 originally had TWO buttons that
+               opened the same super-admin panel — "Forgot the password?"
+               (recovery framing) and "Super admin: set / change the
+               password" (setup framing). Sim 2026-05-18 surfaced that as
+               lobby density — too many controls for a returning facilitator
+               to parse. Collapsed into one link covering both flows. The
+               panel below still opens the same setup/recovery form. -->
           <button class="link-btn" id="forgot-pass-link"
                   data-i18n="lobby.forgot-pass-link"
                   type="button">
-            Forgot the password? Reset with super-admin key &rsaquo;
+            Need to set or recover the admin password? &rsaquo;
           </button>
-          <button class="link-btn" id="superadmin-toggle"
+          <button class="link-btn hidden" id="superadmin-toggle"
+                  aria-hidden="true"
                   data-i18n="lobby.superadmin-toggle">
             Super admin: set / change the password
           </button>
@@ -871,6 +941,20 @@
             <button id="call-prof-btn" class="call-btn"
                     data-i18n="room.call-facilitator">Call a facilitator</button>
             <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
+            <!-- Sim 2026-05-19 (Hana B1, Camille first-timer, Théo lurker):
+                 "A 'I'm not ready' panic button that just lets me move
+                 into an observer slot for the rest of this stage." Quiet
+                 affordance — no broadcast to the room, no flashing UI.
+                 Writes /sessions/{code}/rooms/{room}/observers/{cid}
+                 which the score engine reads to skip participation-
+                 pressure events for this client. -->
+            <button id="observer-btn" class="observer-btn"
+                    type="button"
+                    data-i18n="room.observer-btn"
+                    data-i18n-title="room.observer-btn-title"
+                    title="Move into the observer role — you can still see everything but no one will ask you to commit.">
+              I'm just observing
+            </button>
             <button id="leave-btn" title="Leave">Leave</button>
           </div>
         </div>
@@ -1027,6 +1111,23 @@
           </ol>
         </nav>
 
+        <!-- Per-bullet progress checklist — sim 2026-05-19 (Hiroshi,
+             Lucas): "Show me my team's progress against the four
+             bullets at the top of Module A — checkbox style." A bullet
+             is marked done when its answers list has at least one
+             entry; updated live by renderAnswers(). -->
+        <ul class="modA-bullet-progress" id="modA-bullet-progress"
+            aria-label="Group-answer progress">
+          <li data-bullet-key="plan"
+              data-i18n="modA.bullet-progress.plan">Plan</li>
+          <li data-bullet-key="differ"
+              data-i18n="modA.bullet-progress.differ">Differentials</li>
+          <li data-bullet-key="disagree"
+              data-i18n="modA.bullet-progress.disagree">Disagreements</li>
+          <li data-bullet-key="takehome"
+              data-i18n="modA.bullet-progress.takehome">Take-home</li>
+        </ul>
+
         <!-- "What to do next" coach — updates contextually from
              updateModANextStep(). Hidden once student dismisses it for
              the session (× button stores a flag in localStorage). -->
@@ -1127,24 +1228,92 @@
                 </p>
               </header>
 
-              <!-- ── Working hypotheses (PBL 7-jump brainstorm step ──
-                   pedagogist's strongest claim: "hypothesis BEFORE data
-                   gathering" is the missing classical-PBL step. Until
-                   the team has at least one working hypothesis,
-                   Investigations stay locked — students MUST commit to
-                   what they suspect before running tests. Cross-room
-                   synced via Firebase (refHypotheses). -->
-              <section class="chart-section chart-hypotheses">
-                <h4 class="chart-section-h">
+              <!-- ── First impressions — small optional prompt at the
+                   top of the chart. Sim 2026-05-19 specialist panel
+                   (UX practitioner): give Y3/first-timers a place to
+                   note their gut-feel BEFORE asking the patient, so
+                   they have something to refine after History + Exam.
+                   Intentionally lightweight + non-blocking — no gating,
+                   no Firebase write. Persists per-tab only.
+                   The CANONICAL "Working hypotheses" block sits BELOW
+                   Examination (see comment further down). -->
+              <details class="chart-section chart-impressions" id="chart-impressions">
+                <summary class="chart-section-h">
+                  <span class="chart-section-icon" aria-hidden="true">💡</span>
+                  <span data-i18n="modA.chart.impressions.title">First impressions (optional)</span>
+                </summary>
+                <p class="chart-section-hint"
+                   data-i18n="modA.chart.impressions.hint">
+                  Your gut-feel before you ask the patient. Just for you — no one
+                  else sees this, and you'll come back to refine it after History
+                  + Examination.
+                </p>
+                <textarea id="impressions-input" rows="2" maxlength="500"
+                          data-i18n-attr="placeholder"
+                          data-i18n="modA.chart.impressions.placeholder"
+                          placeholder="A line or two — what do you suspect, what would surprise you?"></textarea>
+              </details>
+
+              <!-- ── History (was "Ask the patient") ──
+                   <details>-wrapped per Sim 2026-05-18 finding: the
+                   stacked chart had ~30 buttons visible at once, 4.6×
+                   viewport tall, overwhelming students with low-English
+                   or anxious traits. Each chart-section is now
+                   collapsible (default-open). Collapsing a section a
+                   student is done with shortens the scroll without
+                   removing any gameplay options. -->
+              <details class="chart-section" open id="chart-section-history">
+                <summary class="chart-section-h">
+                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                    stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path
+                    d="M4 5h16v11H9l-4 4v-4H4z" /><circle cx="9" cy="10.5" r="1"
+                    fill="#1763a6" stroke="none" /><circle cx="12" cy="10.5" r="1"
+                    fill="#1763a6" stroke="none" /><circle cx="15" cy="10.5" r="1"
+                    fill="#1763a6" stroke="none" /></svg>
+                  <span data-i18n="modA.chart.history.title">History &mdash; ask the patient</span>
+                </summary>
+                <div class="btn-group" id="group-history"></div>
+              </details>
+
+              <!-- ── Examination (was "Examine") ── -->
+              <details class="chart-section" open id="chart-section-exam">
+                <summary class="chart-section-h">
+                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                    stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
+                    d="M6 3v6a5 5 0 0 0 10 0V3" /><circle cx="18" cy="15" r="3" /><path
+                    d="M11 14v2a4 4 0 0 0 4 4" /></svg>
+                  <span data-i18n="modA.chart.exam.title">Examination</span>
+                </summary>
+                <div class="btn-group" id="group-exam"></div>
+              </details>
+
+              <!-- ── Working hypotheses (PBL 7-jump brainstorm step) ──
+                   Placement decided by sim 2026-05-19 specialist panel
+                   (4 perspectives: PBL pedagogist, clinical educator,
+                   UX practitioner, healthcare/CDSS reviewer). Consensus
+                   was to move this block from ABOVE History to BETWEEN
+                   Examination and Investigations: (a) real consultation
+                   teaches history → exam → differential → targeted
+                   investigations; (b) chronic-pain cases need the
+                   red-flag screen done first to avoid missing cauda
+                   equina (NICE NG59); (c) hypothesising cold from the
+                   case stem trains anchoring bias.
+                   The Investigations gate is extended to also require
+                   the red-flag screen (history:1 + history:2 + exam:3)
+                   so unlocking by typing a throwaway hypothesis is no
+                   longer possible. Cross-room synced via Firebase
+                   (refHypotheses). -->
+              <details class="chart-section chart-hypotheses" open id="chart-hypotheses">
+                <summary class="chart-section-h">
                   <span class="chart-section-icon" aria-hidden="true">💭</span>
                   <span data-i18n="modA.chart.hypotheses.title">Working hypotheses</span>
-                </h4>
+                </summary>
                 <p class="chart-section-hint"
                    data-i18n="modA.chart.hypotheses.hint" data-i18n-html>
-                  Before you order tests, agree as a team: <strong>what do you
-                  suspect?</strong> List the differential diagnoses you want to
-                  rule in or rule out. (Investigations unlock once you have at
-                  least one.)
+                  Now that you've taken a history and examined the patient, agree as a team:
+                  <strong>what do you suspect?</strong> List 2 or more differentials you want
+                  to rule in or rule out. (Investigations unlock once you have a hypothesis
+                  AND have completed the red-flag screen + leg neuro exam.)
                 </p>
                 <ul class="hypothesis-list" id="hypothesis-list"></ul>
                 <p class="hint hypothesis-empty hidden" id="hypothesis-empty"
@@ -1159,57 +1328,32 @@
                   <button type="button" id="hypothesis-add-btn"
                           data-i18n="modA.chart.hypotheses.add">Add</button>
                 </div>
-              </section>
-
-              <!-- ── History (was "Ask the patient") ── -->
-              <section class="chart-section">
-                <h4 class="chart-section-h">
-                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                    stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path
-                    d="M4 5h16v11H9l-4 4v-4H4z" /><circle cx="9" cy="10.5" r="1"
-                    fill="#1763a6" stroke="none" /><circle cx="12" cy="10.5" r="1"
-                    fill="#1763a6" stroke="none" /><circle cx="15" cy="10.5" r="1"
-                    fill="#1763a6" stroke="none" /></svg>
-                  <span data-i18n="modA.chart.history.title">History &mdash; ask the patient</span>
-                </h4>
-                <div class="btn-group" id="group-history"></div>
-              </section>
-
-              <!-- ── Examination (was "Examine") ── -->
-              <section class="chart-section">
-                <h4 class="chart-section-h">
-                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                    stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
-                    d="M6 3v6a5 5 0 0 0 10 0V3" /><circle cx="18" cy="15" r="3" /><path
-                    d="M11 14v2a4 4 0 0 0 4 4" /></svg>
-                  <span data-i18n="modA.chart.exam.title">Examination</span>
-                </h4>
-                <div class="btn-group" id="group-exam"></div>
-              </section>
+              </details>
 
               <!-- ── Investigations (was "Investigations & synthesis") ──
-                   Locked until at least one hypothesis is recorded
-                   (hypothesis-first PBL scaffold). The .is-locked
-                   class fades the section + the buttons are disabled
-                   in renderButtons until the gate opens. -->
-              <section class="chart-section chart-investigations" id="chart-investigations">
-                <h4 class="chart-section-h">
+                   Locked until the team has (a) recorded a working
+                   hypothesis AND (b) screened red flags (NICE NG59:
+                   serious causes + cauda equina + leg neuro). The
+                   .is-locked class fades the section + the buttons
+                   are disabled in renderButtons until the gate opens. -->
+              <details class="chart-section chart-investigations" open id="chart-investigations">
+                <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
                     aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
                     2-3l-5-9V3" /><path d="M7.5 14h9" /></svg>
                   <span data-i18n="modA.chart.investigations.title">Investigations &amp; synthesis</span>
-                </h4>
+                </summary>
                 <p class="chart-section-locked-hint hidden" id="investigations-locked-hint"
                    data-i18n="modA.chart.investigations.locked-hint">
-                  🔒 Locked &mdash; add a working hypothesis above to unlock.
+                  🔒 Locked — first screen the red flags (serious causes + cauda equina + leg neuro) AND add a working hypothesis above.
                 </p>
                 <p class="synthesis-progress" id="synthesis-progress"
                    data-i18n="modA.synthesis.progress" aria-live="polite">
                   0 / 3 red flags screened
                 </p>
                 <div class="btn-group" id="group-labs"></div>
-              </section>
+              </details>
             </article>
             <button id="reset-btn" class="reset-btn"
                     data-i18n="reset.btn"
@@ -1255,6 +1399,17 @@
                 <span class="rcol-tab-icon" aria-hidden="true">📝</span>
                 <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
                 <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
+              </button>
+              <!-- Sim 2026-05-19 (Sayaka, Mei): "A private side-chat
+                   with just my room (separate from group-answers) for
+                   clarifying questions." Hidden-by-default tab —
+                   surfaces a thin chat surface scoped to this room only.
+                   Messages live at /rooms/{room}/chat. -->
+              <button class="rcol-tab" type="button" data-tab="chat"
+                      role="tab" aria-selected="false" aria-controls="rcol-p-chat">
+                <span class="rcol-tab-icon" aria-hidden="true">💭</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.chat">Side-chat</span>
+                <span class="rcol-tab-badge" id="tab-badge-chat" hidden></span>
               </button>
             </div>
 
@@ -1465,6 +1620,32 @@
               </div>
             </section>
             </div><!-- /answers panel -->
+
+            <!-- Side-chat panel — sim 2026-05-19 (Sayaka, Mei).
+                 Light surface: scroll-pane of last 50 messages + a
+                 one-line input. Wired by initSideChat(). -->
+            <div class="rcol-panel" id="rcol-p-chat" hidden
+                 role="tabpanel" data-panel="chat" aria-labelledby="rcol-tab-chat">
+              <section class="card chat-card">
+                <p class="chat-intro"
+                   data-i18n="rcol.chat.intro">
+                  Private side-chat for your room — for clarifying questions,
+                  glossary checks, side-thoughts. Messages stay within this
+                  room only.
+                </p>
+                <ul class="chat-list" id="chat-list"
+                    aria-label="Side-chat messages" aria-live="polite"></ul>
+                <div class="chat-input-row">
+                  <input type="text" id="chat-input" maxlength="500"
+                         data-i18n="rcol.chat.placeholder"
+                         data-i18n-attr="placeholder"
+                         placeholder="Type a quick message…"
+                         aria-label="Side-chat message" />
+                  <button id="chat-send" type="button"
+                          data-i18n="rcol.chat.send">Send</button>
+                </div>
+              </section>
+            </div>
           </div>
         </div>
 
@@ -1703,8 +1884,15 @@
             with them and is in the room &mdash; and at some point will quietly ask you something.</p>
         </section>
 
-        <div class="card safety-note">
-          <p data-i18n="stage.modB.safety.heading" data-i18n-html><strong>Before you start &mdash; two things.</strong></p>
+        <!-- Safety note: read once at the start, then collapsible so it
+             doesn't crowd the role-picker / SPIKES reference for the rest
+             of the scene. Sim 2026-05-18 finding: Module B was 4.5×
+             viewport tall — anxious / low-English students reported
+             "Do I have to read all of this?". Default-open keeps the
+             first-read affordance; a single click later moves it out of
+             the way. -->
+        <details class="card safety-note collapsible-card" open>
+          <summary data-i18n="stage.modB.safety.heading" data-i18n-html><strong>Before you start &mdash; two things.</strong></summary>
           <p data-i18n="stage.modB.safety.simulation" data-i18n-html><em>This is a simulation.</em> The feelings can still feel real. If anything hits
             too close to home, you can move into the observer role at any time, no explanation
             needed. When you debrief, talk about <strong>the physician's choices</strong> &mdash;
@@ -1713,7 +1901,7 @@
             the point. If you cannot find a word, slow down, use a simpler one, or pause. Silence
             is allowed in this conversation and often helps. Empathy is in your tone, your pace
             and your face, not in advanced vocabulary.</p>
-        </div>
+        </details>
 
         <!-- Roles: small interactive picker (one volunteer per role, others
              become observers). Tapping a role chip "claims" it for this
@@ -2094,6 +2282,38 @@
         <div class="card team-recap-card">
           <div id="team-recap"></div>
         </div>
+
+        <!-- End-of-session 30-second poll — sim 2026-05-19 (Akari,
+             Antoine, Manon, Sophie, Daichi): "'What was the hardest
+             moment?' + 'One word that describes how you felt.'"
+             Persists to /sessions/{code}/poll/{cid}; one entry per
+             client. Defaults to empty; never blocks closure. -->
+        <div class="card endpoll-card" id="endpoll-card">
+          <h3 data-i18n="endpoll.title">Quick reflection — 30 seconds</h3>
+          <p class="hint" data-i18n="endpoll.intro">
+            Two questions before you close the tab. Optional but valuable —
+            your facilitators read every answer to shape the next session.
+          </p>
+          <label class="endpoll-field">
+            <span data-i18n="endpoll.hardest-label">What was the hardest moment today?</span>
+            <textarea id="endpoll-hardest" rows="2" maxlength="280"
+                      data-i18n-attr="placeholder"
+                      data-i18n="endpoll.hardest-placeholder"
+                      placeholder="A short sentence is enough."></textarea>
+          </label>
+          <label class="endpoll-field">
+            <span data-i18n="endpoll.feeling-label">One word that describes how you felt:</span>
+            <input type="text" id="endpoll-feeling" maxlength="40"
+                   data-i18n-attr="placeholder"
+                   data-i18n="endpoll.feeling-placeholder"
+                   placeholder="e.g. focused / unsure / surprised / proud" />
+          </label>
+          <button id="endpoll-submit" type="button"
+                  data-i18n="endpoll.submit">Send my reflection</button>
+          <p class="endpoll-thanks hidden" id="endpoll-thanks"
+             data-i18n="endpoll.thanks">Thank you — your reflection is in.</p>
+        </div>
+
         <div class="card">
           <h3 data-i18n="stage.wrap.room-answers">Your room's answers</h3>
           <div id="wrapup-summary"></div>
@@ -2123,6 +2343,13 @@
         <div class="stage-controls">
           <button id="admin-download-btn"
                   data-i18n="admin.download-all">Download all group answers</button>
+          <!-- Markdown variant — sim 2026-05-19 (Hiroshi, Antoine, Hugo,
+               Lucas): "Let me export my team's group-answers + transcript
+               as a markdown file at the end." Same payload as the .txt
+               download, formatted as markdown for easy paste into notes
+               apps + revision tools. -->
+          <button id="admin-download-md-btn"
+                  data-i18n="admin.download-md">Download as Markdown</button>
           <button id="admin-debrief-btn" type="button"
                   data-i18n="debrief.toggle"
                   aria-controls="admin-debrief" aria-expanded="false">Open debrief</button>
@@ -2447,6 +2674,11 @@
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
   <script src="lib.js?v=v2" defer></script>
+  <!-- glossary.js — tiny clinical glossary (EN + JP) used by
+       _annotateButtonsWithGlossary() to attach hover tooltips to any
+       case-content button whose text contains a glossed term. Small,
+       static, public — safe to ship in the splash bundle. -->
+  <script src="glossary.js?v=v2" defer></script>
   <!-- script-loader.js — bundle splitter. Lazy-loads case-content.js,
        qrcode.js, tour.js and scenario-author.js on demand so the splash
        boot stays under the perf budget (see tests-e2e/perf.spec.js).

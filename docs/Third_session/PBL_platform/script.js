@@ -603,9 +603,23 @@ if (typeof window !== "undefined") {
  * Falls back to native confirm() if <dialog> isn't supported (very
  * old browsers) so the platform never deadlocks on a missing modal.
  * ============================================================ */
+/* Per-modal resolver pointer: when canamedConfirm is called while a
+ * previous prompt is still open, the previous Promise gets resolved
+ * with `false` (treated as cancel) and the new prompt takes over.
+ * Without this guard, a double-click on Advance / End-session would
+ * stack two sets of listeners on the same OK button — the first OK
+ * click would resolve BOTH promises, executing the action twice.
+ * Sim 2026-05-18 reproduced this as a flake; the fix also hardens the
+ * production path. */
+let _activeModalResolver = null;
 function canamedConfirm(opts) {
   opts = opts || {};
   const dlg = el("canamed-modal");
+  if (typeof _activeModalResolver === "function") {
+    const prev = _activeModalResolver;
+    _activeModalResolver = null;
+    try { prev(false); } catch (e) { /* prev was already settled */ }
+  }
   if (!dlg) {
     // Old browsers (or stripped test harness). Synthesise a single-line
     // string and fall back to the native confirm — the caller still
@@ -646,10 +660,13 @@ function canamedConfirm(opts) {
     const finish = (val) => {
       if (settled) return;
       settled = true;
+      if (_activeModalResolver === finish) _activeModalResolver = null;
       cleanup();
       try { dialogClose(dlg); } catch (e) {}
       resolve(val);
     };
+    // Register this resolver so a later canamedConfirm call can cancel it.
+    _activeModalResolver = finish;
     const onOk = () => finish(true);
     const onCancel = () => finish(false);
     const onCancelEvent = (e) => { e.preventDefault(); finish(false); };
@@ -821,32 +838,11 @@ if (MODE === "shared" && window.CANAMED_SUPERADMIN_KEY) {
     "session password from the Firebase console and leaving the key null.");
 }
 
-/* ===================== ROOM BALANCING ===================== */
-function assignRooms(pool, roomCount) {
-  const sortFn = (a, b) =>
-    ((ENG_RANK[b.english] || 0) - (ENG_RANK[a.english] || 0)) ||
-    ((b.year || 0) - (a.year || 0));
-  const byUni = {};
-  pool.forEach(p => { (byUni[p.university] = byUni[p.university] || []).push(p); });
-  const lists = Object.keys(byUni).sort().map(u => byUni[u].slice().sort(sortFn));
-  const combined = [];
-  let added = true, i = 0;
-  while (added) {
-    added = false;
-    lists.forEach(list => { if (i < list.length) { combined.push(list[i]); added = true; } });
-    i++;
-  }
-  const names = roomNames(roomCount);
-  const assignment = {};
-  let r = 0, dir = 1;
-  combined.forEach(p => {
-    assignment[p.clientId] = names[r];
-    r += dir;
-    if (r >= roomCount) { r = roomCount - 1; dir = -1; }
-    else if (r < 0) { r = 0; dir = 1; }
-  });
-  return assignment;
-}
+/* ===================== ROOM BALANCING =====================
+ * The pure implementation lives in lib.js (assignRooms) — covered by
+ * unit tests under tests/lib.test.js without needing a browser. lib.js
+ * loads first and attaches assignRooms to the global window object via
+ * its UMD wrapper, so the rest of script.js can call it by name. */
 /* R3-C3 fix — late-joiner room cap.
    A facilitator who carefully balanced 4 rooms of 5 each at start time can
    end up with one room of 7 after three late-joiners arrive. The original
@@ -985,6 +981,7 @@ let presence = {};
 let typingState = {};      // who is typing - kept off the presence node so a
                            // keystroke does not force a presence re-render for everyone
 let answers = { moduleA: {}, moduleB: {} };
+let answerReplies = {};   // map: entryId → { replyId → { text, by, cid, at, stance } }
 let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees on
                       // BEFORE running investigations. Cross-room synced via
                       // refHypotheses. Keyed by Firebase push id; value is
@@ -1046,6 +1043,7 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
+    refObservers = null, refAnswerReplies = null, refChat = null, refPoll = null,
     refClosed = null;
 
 /* Activate Firebase App Check with reCAPTCHA Enterprise. Idempotent — safe
@@ -1113,6 +1111,42 @@ function initPerfMonitoring() {
   }
 }
 
+/* Firebase-emulator wiring (sim + integration-test use).
+ *
+ * When window.CANAMED_EMULATOR is set to
+ *   { host: "127.0.0.1", dbPort: 9000, authPort: 9099 }
+ * dbInit() points the Realtime Database + Auth SDKs at the local Firebase
+ * emulator suite (launched by `npm run emulator` or by the sim harness).
+ * That lets us drive 28-tab classroom simulations through the same
+ * Firebase code path production uses — without the LocalDB cross-tab
+ * storage-event drops we hit at scale.
+ *
+ * The flag is gated to MODE === "shared" only; in LOCAL mode the engine
+ * still rides LocalDB. The flag is a NO-OP in production (the global is
+ * never set on a real deploy). */
+function _isEmulatorMode() {
+  return !!(typeof window !== "undefined" && window.CANAMED_EMULATOR);
+}
+function _maybeWireEmulators(databaseInstance) {
+  const cfg = (typeof window !== "undefined") && window.CANAMED_EMULATOR;
+  if (!cfg || !databaseInstance || typeof databaseInstance.useEmulator !== "function") return;
+  try {
+    databaseInstance.useEmulator(cfg.host || "127.0.0.1", parseInt(cfg.dbPort, 10) || 9000);
+  } catch (e) { console.warn("DB emulator hookup failed", e); }
+}
+function _maybeWireAuthEmulator(authInstance) {
+  const cfg = (typeof window !== "undefined") && window.CANAMED_EMULATOR;
+  if (!cfg || !authInstance || typeof authInstance.useEmulator !== "function") return;
+  try {
+    const host = cfg.host || "127.0.0.1";
+    const port = parseInt(cfg.authPort, 10) || 9099;
+    // disableWarnings:true hides the "running in emulator" yellow banner
+    // the Web Auth SDK normally renders — fine for sim, fine for tests.
+    authInstance.useEmulator("http://" + host + ":" + port,
+      { disableWarnings: true });
+  } catch (e) { console.warn("Auth emulator hookup failed", e); }
+}
+
 function dbInit() {
   if (db) return;
   if (MODE === "shared") {
@@ -1120,12 +1154,22 @@ function dbInit() {
     // App Check must be activated AFTER initializeApp but BEFORE any other
     // Firebase service is used (auth, database). Idempotent and a no-op when
     // window.CANAMED_RECAPTCHA_SITE_KEY isn't configured.
-    initAppCheck();
+    //
+    // Emulator mode skips App Check: the local emulator doesn't enforce it
+    // and reCAPTCHA can't reach the Google verification endpoint in tests
+    // (which would otherwise spam the console with appCheck/recaptcha-error).
+    if (!_isEmulatorMode()) initAppCheck();
     // Performance Monitoring is similarly opt-in via the firebase-config
     // flag. Safe to activate before database/auth — it just attaches to
     // the global window.fetch / XMLHttpRequest for timing capture.
     initPerfMonitoring();
     db = firebase.database();
+    // Emulator hookup: when window.CANAMED_EMULATOR is set to
+    // { host: "127.0.0.1", dbPort: 9000, authPort: 9099 }, point the
+    // database + auth SDKs at the local Firebase emulator suite. Used by
+    // scripts/sim/simulate-session.js so the sim no longer relies on
+    // LocalDB's flaky cross-tab storage events. No-op in production.
+    _maybeWireEmulators(db);
     // live connection indicator - a silent write failure mid-workshop is worse
     // than a visible "Reconnecting" badge
     try {
@@ -1143,6 +1187,9 @@ function dbInit() {
     try {
       if (firebase.auth) {
         auth = firebase.auth();
+        // Emulator hookup must run BEFORE any auth call (setPersistence,
+        // onAuthStateChanged, etc.) so the SDK routes to localhost.
+        _maybeWireAuthEmulator(auth);
         auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
         // create the authReady promise BEFORE wiring the listener so the
         // first auth-state change can resolve it
@@ -1485,6 +1532,34 @@ function initLobby() {
   }
   wireToggle("admin-toggle", "admin-lobby-body");
   wireToggle("superadmin-toggle", "superadmin-panel");
+  // When the admin sub-panel opens, scroll the SHARED name field into
+  // view so a facilitator notices they need to fill it (this prevents
+  // the silent-bounce sim 2026-05-18 hit when Dr Chrétien clicked
+  // "Open admin dashboard" without typing a name first).
+  const adminToggleBtn = el("admin-toggle");
+  const adminBody = el("admin-lobby-body");
+  const nameFieldForFocus = el("name-input");
+  if (adminToggleBtn && adminBody && nameFieldForFocus) {
+    adminToggleBtn.addEventListener("click", () => {
+      // wireToggle uses a class swap; observe the next tick to see the
+      // post-click state. If the body is now visible AND the name field
+      // is empty, scroll/highlight it.
+      setTimeout(() => {
+        if (adminBody.classList.contains("hidden")) return;
+        const nameVal = (nameFieldForFocus.value || "").trim();
+        if (!nameVal) {
+          try { nameFieldForFocus.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          catch (_) { try { nameFieldForFocus.scrollIntoView(); } catch (__) {} }
+          const hint = el("admin-hint");
+          if (hint) {
+            hint.textContent = tFallback("lobby.admin-name-prompt",
+              "Type your name above first, then your admin password here.");
+            hint.className = "lobby-hint";   // informational, not red
+          }
+        }
+      }, 30);
+    });
+  }
   // "Forgot the password? Reset with super-admin key" link — was
   // added in R3-D2 but its click handler was never wired (user report
   // 2026-05-18: "This button does not work"). Opens the same
@@ -2263,6 +2338,9 @@ function wireRoomUI() {
   initStageNav();
   initCallProf();
   initLeave();
+  initObserver();
+  initSideChat();
+  initEndPoll();
   initTeamName();
   initRolePicker();
   initCoachDismiss();
@@ -2422,6 +2500,9 @@ function teardownRoom() {
     if (refCallForHelp) refCallForHelp.off();
     if (refScore) refScore.off();
     if (refVotes) refVotes.off();
+    if (refObservers) refObservers.off();
+    if (refAnswerReplies) refAnswerReplies.off();
+    if (refChat) refChat.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
     // NOTE: refClosed is session-scoped (not room-scoped). It is owned by
@@ -2447,6 +2528,13 @@ function startRoom() {
   refVotes = db.ref(base + "/votes");
   refTeamName = db.ref(base + "/teamName");
   refLeaderboard = db.ref(sPath("rooms"));
+  // Sim 2026-05-19 features — per-room observer flags, free-text reply
+  // threads on group-answers, in-room side-chat. Refs declared here so
+  // every room transition wires/teardowns them in lock-step with the
+  // existing per-room subscribers.
+  refObservers = db.ref(base + "/observers");
+  refAnswerReplies = db.ref(base + "/answerReplies");
+  refChat = db.ref(base + "/chat");
   // session-wide closed marker - shows the "session closed by facilitator"
   // banner the moment an admin ends the session. Wired here (not in the room
   // subtree) because `closed` lives at the session level, not the room level.
@@ -2476,7 +2564,14 @@ function startRoom() {
     }
     renderStage();
   });
-  refRevealed.on("value", snap => { revealed = snap.val() || {}; renderCase(); });
+  refRevealed.on("value", snap => {
+    revealed = snap.val() || {};
+    renderCase();
+    // The Investigations unlock gate now depends on revealed items
+    // (red-flag screen: history:1 + history:2 + exam:3). Re-render
+    // the hypotheses block so its visible lock state stays in sync.
+    if (typeof renderHypotheses === "function") renderHypotheses();
+  });
   refHypotheses.on("value", snap => {
     hypotheses = snap.val() || {};
     if (typeof renderHypotheses === "function") renderHypotheses();
@@ -2515,6 +2610,18 @@ function startRoom() {
     renderAnswers("moduleB");
     renderObjectives();
   });
+  // Sim 2026-05-19 — counter-bullet replies on group-answer entries.
+  // Re-render Module A + B answers so the new replies appear under
+  // their parent <li>. The pure-DOM render is cheap.
+  if (refAnswerReplies) {
+    refAnswerReplies.on("value", snap => {
+      answerReplies = snap.val() || {};
+      try {
+        renderAnswers("moduleA");
+        renderAnswers("moduleB");
+      } catch (e) { /* render may not be ready */ }
+    });
+  }
   refCallForHelp.on("value", snap => { callForHelp = snap.val(); renderCallProf(); });
 
   refScore.on("value", snap => {
@@ -2585,6 +2692,26 @@ function joinAdmin() {
   el("admin-hint").textContent = "";
   sessionNum = readSession("admin-hint");
   if (!sessionNum) return;
+  // The lobby reuses the participant #name-input for the admin flow. A
+  // facilitator who jumps straight to "I am a facilitator" without typing
+  // a name was previously bounced silently: readName() focuses the empty
+  // field and returns null, but the admin section is below the fold so
+  // the focus shift isn't noticed. Surface that explicitly + auto-fill
+  // a sensible default so the next click goes through.
+  // (Sim 2026-05-18 surfaced this — Dr Chrétien got stuck on the lobby
+  // because the name field was empty.)
+  const nameField = el("name-input");
+  if (nameField && !(nameField.value || "").trim()) {
+    const cached = (function () {
+      try { return (localStorage.getItem("canamed_name") || "").trim(); }
+      catch (e) { return ""; }
+    })();
+    nameField.value = cached || tFallback("lobby.admin-default-name", "Facilitator");
+    el("admin-hint").textContent = tFallback("lobby.admin-name-defaulted",
+      "Joining as \"" + nameField.value + "\" — edit the name field above if " +
+      "you want it on the audit trail.");
+    el("admin-hint").className = "lobby-hint";   // not .err — informational
+  }
   myName = readName("admin-hint");
   if (!myName) return;
   const pass = el("admin-pass-input").value;
@@ -2796,6 +2923,8 @@ function enterAdminApp() {
     if (confirm("Leave the admin dashboard? You will return to the lobby.")) location.reload();
   });
   el("admin-download-btn").addEventListener("click", downloadAllAnswers);
+  const mdBtn = el("admin-download-md-btn");
+  if (mdBtn) mdBtn.addEventListener("click", downloadAllAnswersMarkdown);
   const debriefBtn = el("admin-debrief-btn");
   if (debriefBtn && !debriefBtn.dataset.wired) {
     debriefBtn.dataset.wired = "1";
@@ -4521,7 +4650,10 @@ function closeSession() {
     })
     .then(result => {
       if (result !== "written") return;
-      // write succeeded - update the button
+      // write succeeded - update the button + drop this session from the
+      // local "my open sessions" tracker (the reaper list won't show it
+      // anymore on next splash visit).
+      try { removeMySession(sessionNum); } catch (e) { /* non-fatal */ }
       resetBtn("Session closed ✓ — re-download archive");
       if (btn) btn.classList.add("done");
     })
@@ -5033,6 +5165,61 @@ function downloadAllAnswers() {
   URL.revokeObjectURL(a.href);
 }
 
+/* Markdown variant of downloadAllAnswers — sim 2026-05-19 feature for
+ * the `writes_lots` / `methodical` / `checks_evidence` personas who
+ * want a revision-friendly export. Same payload + pseudonymisation
+ * toggle as the .txt version; structure mirrors the .txt one with
+ * markdown headings (room = h2, module = h3) and bulleted answers. */
+function downloadAllAnswersMarkdown() {
+  const anon = !!(el("anon-export") && el("anon-export").checked);
+  const lines = [];
+  lines.push("# CaNaMED Session " + sessionNum + " — Group Answers");
+  lines.push("");
+  lines.push("- **Exported:** " + new Date().toLocaleString());
+  if (anon) lines.push("- _Names pseudonymised per room (Student A, B, …)._");
+  lines.push("");
+  roomNames(roomCount).forEach(r => {
+    const data = allRooms[r] || {};
+    const st = typeof data.stage === "number" ? data.stage : 0;
+    const ans = data.answers || {};
+    const aliasMap = {};
+    let aliasN = 0;
+    const labelFor = nm => {
+      if (!anon) return nm;
+      if (!(nm in aliasMap)) {
+        const letter = String.fromCharCode(65 + (aliasN % 26));
+        const suffix = aliasN >= 26 ? String(Math.floor(aliasN / 26) + 1) : "";
+        aliasMap[nm] = "Student " + letter + suffix;
+        aliasN++;
+      }
+      return aliasMap[nm];
+    };
+    lines.push("## " + r + " — reached " + STAGE_LABELS[st]);
+    lines.push("");
+    ["moduleA", "moduleB"].forEach(mk => {
+      lines.push("### " + (mk === "moduleA"
+        ? "Module A — Chronic Pain"
+        : "Module B — Breaking Bad News"));
+      const entries = entriesSorted(ans[mk]);
+      if (entries.length === 0) lines.push("_(no points recorded)_");
+      else entries.forEach(e => lines.push("- **" + labelFor(e.by) +
+        (e.university ? " / " + e.university : "") + ":** " +
+        // escape markdown-sensitive chars in user-typed content
+        String(e.text || "").replace(/([*_`#|])/g, "\\$1")));
+      lines.push("");
+    });
+  });
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "CaNaMED_Session" + sessionNum +
+    (anon ? "_group_answers_pseudonymised.md" : "_group_answers.md");
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 /* ===================== ROOM VIEW: STAGE & NAVIGATION ===================== */
 /* Late-join banner. R3-C1 fix: every visible string flows through tFallback()
    so a Japanese / French / German late-joiner sees a localised message at the
@@ -5095,6 +5282,21 @@ function renderStage() {
     wrapCelebrated = true;
     burst();
     toast("Great work today — thank you for taking part! 🎌");
+  }
+  // Sim 2026-05-19 (Camille, first-timer): 3-step Module A walkthrough
+  // the first time a participant lands on stage 1. Skip-able via the
+  // tour overlay's Esc / Skip control. Idempotent — fires once per
+  // browser per session via the localStorage marker handled by
+  // CanamedTour. Admins-in-a-room are skipped (they have their own tour).
+  if (!isRoomAdmin && viewStage === 1 && window.CanamedTour &&
+      !window.CanamedTour.isDone("studentModA")) {
+    setTimeout(() => {
+      try {
+        if (!window.CanamedTour.isDone("studentModA")) {
+          window.CanamedTour.start("studentModA");
+        }
+      } catch (e) { /* tour module missing — non-fatal */ }
+    }, 500);
   }
   const wait = el("stage-wait");
   if (isRoomAdmin) {
@@ -5296,10 +5498,35 @@ function buildButtons() {
       // item.q is a translatable { en, fr, ja } in the default content, but
       // tc() also passes plain strings through (back-compat for custom JSON).
       btn.textContent = tc(item.q, _curLang());
+      _annotateButtonWithGlossary(btn);
       btn.addEventListener("click", () => reveal(id));
       container.appendChild(btn);
     });
   });
+}
+
+/* Attach a multi-line `title` tooltip to a case-content button when
+ * the button text contains any glossed clinical term. Browsers render
+ * `title` natively (hover on desktop, long-press on mobile), so this
+ * needs no extra CSS / JS frameworks. Sim 2026-05-19 feature for the
+ * A2-English Japanese students. */
+function _annotateButtonWithGlossary(btn) {
+  if (!btn || !btn.textContent) return;
+  const gloss = (typeof window !== "undefined") && window.CANAMED_GLOSSARY;
+  if (!gloss) return;
+  const txt = btn.textContent.toLowerCase();
+  const hits = [];
+  Object.keys(gloss).forEach(term => {
+    if (txt.indexOf(term) !== -1) {
+      const g = gloss[term];
+      hits.push("• " + term + " — " + g.en + " / " + g.ja);
+    }
+  });
+  if (hits.length) {
+    // First-hit only if there are many — keep the tooltip readable.
+    btn.title = hits.slice(0, 3).join("\n");
+    btn.classList.add("has-glossary");
+  }
 }
 function prereqsMet() {
   return SYNTH_PREREQS.every(id => revealed[id]);
@@ -5451,6 +5678,19 @@ function renderButtons() {
         ans.className = "req-inline-answer";
         ans.textContent = tc(item.a, lang);
         inline.appendChild(ans);
+        // Citation badge (sim 2026-05-19 — Lucas): "Inline citation
+        // badges (NICE 2021, HAS 2023…) on each finding so we can argue
+        // from sources." Pull from CASE item's optional `cite` field
+        // (a translatable trio { en, fr, ja } or a plain string). Two
+        // children so we can style the badge separately from the
+        // author byline (badge sits between answer + byline).
+        if (item.cite) {
+          const cite = document.createElement("span");
+          cite.className = "req-inline-cite";
+          cite.textContent = (typeof tc === "function")
+            ? tc(item.cite, lang) : String(item.cite);
+          inline.appendChild(cite);
+        }
         // Author byline: replaces the work the removed Findings tab
         // used to do ("revealed by [name]") so the WHO information
         // stays visible without a separate tab.
@@ -5464,6 +5704,110 @@ function renderButtons() {
       }
     } else if (inline) {
       inline.remove();
+    }
+  });
+  // Auto-collapse a chart section once every KEY item in it is revealed
+  // — sim 2026-05-19 finding (25 personas): "Could Module A let me
+  // collapse a chart section the moment I've ticked a 'done' box?"
+  // We only collapse ONCE per section (data-auto-collapsed flag) so a
+  // student who manually reopens it later isn't fought by the engine.
+  _autoCollapseCompletedChartSections();
+}
+
+/* Build the anonymised per-room cohort progress strip used by
+ * renderLeaderboard. One bar per room, in name order (NOT score order)
+ * so a competitive student doesn't accidentally learn the ranking.
+ * Bar fill = revealed-keys / total-keys for the current stage (a
+ * proxy for module progress). My room's bar is highlighted in the
+ * accent colour; others are neutral grey. */
+function _buildCohortProgressStrip(rows) {
+  const wrap = document.createElement("div");
+  wrap.className = "lb-cohort-progress";
+  wrap.setAttribute("aria-label", "Anonymised cohort progress per room");
+  const head = document.createElement("p");
+  head.className = "lb-cohort-head";
+  head.textContent = "Cohort progress (anonymised) — your bar is highlighted";
+  wrap.appendChild(head);
+  const grid = document.createElement("div");
+  grid.className = "lb-cohort-grid";
+  // sort by room name (NOT score) — so the order is stable + doesn't
+  // betray ranking. Each room contributes a single bar.
+  const inNameOrder = rows.slice().sort((a, b) => a.room.localeCompare(b.room));
+  // Progress proxy = the room's `findings` count / a target. The target
+  // is roughly the number of key items in the current stage's CASE; we
+  // approximate as scoreTotal / 100 capped at 1 so we don't need the
+  // case structure here. Falls back to fractional pts.
+  const target = 220;   // matches the goal-per-room used above
+  inNameOrder.forEach(r => {
+    const pct = Math.min(100, Math.round((r.total / target) * 100));
+    const cell = document.createElement("div");
+    cell.className = "lb-cohort-cell" + (r.room === myRoom ? " is-me" : "");
+    const tinyBar = document.createElement("div");
+    tinyBar.className = "lb-cohort-bar";
+    const fill = document.createElement("span");
+    fill.style.width = pct + "%";
+    tinyBar.appendChild(fill);
+    cell.appendChild(tinyBar);
+    cell.setAttribute("aria-label",
+      (r.room === myRoom ? "Your room: " : "A room in the cohort: ") +
+      pct + " per cent of the typical progress");
+    grid.appendChild(cell);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/* Update the per-bullet progress checklist at the top of Module A.
+ * A bullet is "done" the moment its group-answers list has at least
+ * one entry. Pure DOM toggle — safe to call repeatedly. */
+function _updateModABulletProgress() {
+  const list = el("modA-bullet-progress");
+  if (!list) return;
+  const buckets = {};
+  entriesSorted(answers.moduleA || {}).forEach(e => {
+    if (e.bulletKey) buckets[e.bulletKey] = (buckets[e.bulletKey] || 0) + 1;
+  });
+  list.querySelectorAll("li[data-bullet-key]").forEach(li => {
+    const k = li.dataset.bulletKey;
+    li.classList.toggle("is-done", (buckets[k] || 0) > 0);
+  });
+}
+
+/* Per chart-section: collapse the section once the team has done a
+ * reasonable workup in it. "Reasonable" = the section's flagged `key`
+ * item was revealed AND there are ≥ 4 items revealed, OR (for sections
+ * without a key item like history/exam) ≥ 4 items revealed. Idempotent
+ * — leaves alone any section the user reopened after our auto-collapse
+ * (`data-auto-collapsed` flag) so the engine never fights an explicit
+ * user choice. Sim 2026-05-19 (25 personas asked for this). */
+const _AUTO_COLLAPSE_MIN = 4;
+function _autoCollapseCompletedChartSections() {
+  const sectionIds = {
+    history: "chart-section-history",
+    exam:    "chart-section-exam",
+    labs:    "chart-investigations"
+  };
+  Object.keys(sectionIds).forEach(group => {
+    const sec = document.getElementById(sectionIds[group]);
+    if (!sec || !sec.hasAttribute("open")) return;
+    if (sec.dataset.autoCollapsed === "1") return;
+    const items = (CASE && CASE[group]) || [];
+    if (!items.length) return;
+    let revealedCount = 0;
+    let keyRevealed = false;
+    let keyExists = false;
+    items.forEach((it, i) => {
+      if (revealed[group + ":" + i]) revealedCount++;
+      if (it && it.key) {
+        keyExists = true;
+        if (revealed[group + ":" + i]) keyRevealed = true;
+      }
+    });
+    const done = (keyExists && keyRevealed) ||
+                 (revealedCount >= _AUTO_COLLAPSE_MIN);
+    if (done) {
+      sec.dataset.autoCollapsed = "1";
+      sec.removeAttribute("open");
     }
   });
 }
@@ -5545,6 +5889,15 @@ if (typeof window !== "undefined") {
   window._test_getItemIds = function () { return ITEM_IDS.slice(); };
   window._test_getCase = function () { return CASE; };
   window._test_rebuildCaseDerived = function () { rebuildCaseDerived(); };
+  // Sim 2026-05-19 follow-ups — hooks for the per-feature E2E tests
+  // under tests-e2e/sim-recommendations.spec.js. Production code never
+  // calls these; they're inert outside test runs.
+  window._test_setClientId      = function (c) { clientId = String(c || ""); };
+  window._test_setSessionNum    = function (n) { sessionNum = String(n || ""); };
+  window._test_setRoomCount     = function (n) { roomCount = parseInt(n, 10) || 1; };
+  window._test_setAllRooms      = function (m) { allRooms = m || {}; };
+  window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
+  window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
@@ -6581,6 +6934,13 @@ function renderLeaderboard() {
   note.textContent = "Every room's points add to the same goal — across all the " +
     "rooms you are one team today.";
   shared.appendChild(sh); shared.appendChild(bar); shared.appendChild(note);
+  // Anonymised cohort progress strip — sim 2026-05-19 (Daichi,
+  // competitive): "A small per-room progress bar against the other
+  // rooms (without exposing 'which room is winning')." Each room is one
+  // bar; the rooms are shown in a stable order (by room name, NOT by
+  // rank) so a competitive participant can spot relative progress
+  // without learning who's behind. My room is highlighted.
+  shared.appendChild(_buildCohortProgressStrip(rows));
   box.appendChild(shared);
 
   if (rows.every(r => r.total === 0)) {
@@ -6857,8 +7217,43 @@ function initCoachDismiss() {
 function hypothesisCount() {
   return Object.keys(hypotheses || {}).length;
 }
+/* Investigations unlock gate — was "≥1 hypothesis recorded" (a gate
+ * satisfiable by typing 'back pain' to unlock the panel; trained
+ * gaming, not reasoning). Specialist panel 2026-05-19 recommended
+ * extending it to ALSO require the red-flag screen: history:1
+ * (serious-cause screen), history:2 (cauda equina screen), exam:3
+ * (leg neuro). The same items SYNTH_PREREQS already enforces for the
+ * synthesis step — applying them earlier means students cannot
+ * order an MRI without first ruling out the emergencies NICE NG59
+ * is written to catch. */
+function redFlagScreenDone() {
+  const need = ["history:1", "history:2", "exam:3"];
+  return need.every(id => !!revealed[id]);
+}
 function hypothesesUnlocked() {
-  return hypothesisCount() > 0;
+  return hypothesisCount() > 0 && redFlagScreenDone();
+}
+
+/* "First impressions (optional)" — sim 2026-05-19 UX-practitioner
+ * recommendation. A small textarea at the top of the Module A chart
+ * that lets a Y3/first-timer note their gut-feel BEFORE asking the
+ * patient anything. Per-tab only (localStorage); never written to
+ * Firebase, never shown to teammates, never assessed — the entire
+ * purpose is to give the student a place to externalise their first
+ * guess so they have something to refine after History + Exam.
+ * Keyed per session+room so it doesn't bleed across sessions. */
+function initImpressions() {
+  const ta = el("impressions-input");
+  if (!ta || ta._wired) return;
+  ta._wired = true;
+  const key = "canamed_impressions:" + (sessionNum || "?") + ":" + (myRoom || "?");
+  try {
+    const prev = localStorage.getItem(key);
+    if (prev) ta.value = prev;
+  } catch (e) { /* private mode — non-fatal */ }
+  ta.addEventListener("input", () => {
+    try { localStorage.setItem(key, ta.value); } catch (e) {}
+  });
 }
 
 function initHypotheses() {
@@ -6866,6 +7261,9 @@ function initHypotheses() {
   const btn = el("hypothesis-add-btn");
   if (!input || !btn || btn._wired) return;
   btn._wired = true;
+  // Wire the sibling "first impressions" textarea while we're here —
+  // they share a setup phase in Module A.
+  initImpressions();
   const submit = () => {
     const text = (input.value || "").trim().slice(0, 160);
     if (!text || !refHypotheses) return;
@@ -7113,6 +7511,9 @@ function renderAnswers(moduleKey) {
     setTabBadge("tab-badge-answers", n || "");
     if (n > (lastAnswerCount.moduleA || 0)) nudgeRcolTab("answers");
     lastAnswerCount.moduleA = n;
+    // Refresh the per-bullet checklist at the top of Module A
+    // (sim 2026-05-19 feature for `methodical` personas).
+    _updateModABulletProgress();
   }
 
   // The form is now a set of per-bullet sections; gather the entries
@@ -7166,6 +7567,7 @@ function renderAnswers(moduleKey) {
 function buildAnswerLi(moduleKey, entry) {
   const li = document.createElement("li");
   li.className = "answer-entry";
+  li.dataset.entryId = entry.id || "";
   const dot = document.createElement("span");
   dot.className = "dot"; dot.style.background = colorFor(entry.by);
   const who = document.createElement("span");
@@ -7183,8 +7585,100 @@ function buildAnswerLi(moduleKey, entry) {
     delBtn.setAttribute("aria-label", "Delete your point");
     delBtn.addEventListener("click", () => deleteAnswer(moduleKey, entry.id));
     li.appendChild(editBtn); li.appendChild(delBtn);
+  } else {
+    // Sim 2026-05-19 (Akari, Antoine, Hugo, Sophie): "A 'disagree'
+    // button on a teammate's answer that opens a counter-bullet —
+    // keeps debate visible." Only render for SOMEONE ELSE's answer
+    // (you can't disagree with yourself). Click opens an inline
+    // textarea below this li; submit pushes to answerReplies/{entryId}.
+    const disBtn = document.createElement("button");
+    disBtn.className = "entry-act entry-disagree";
+    disBtn.textContent = "disagree ↪";
+    disBtn.setAttribute("aria-label",
+      "Add a counter-point under " + entry.by + "'s answer");
+    disBtn.addEventListener("click", () => openCounterBullet(entry, li));
+    li.appendChild(disBtn);
   }
+  // Always render any existing counter-bullets under this answer.
+  const repliesWrap = document.createElement("ul");
+  repliesWrap.className = "answer-replies";
+  repliesWrap.dataset.repliesFor = entry.id || "";
+  li.appendChild(repliesWrap);
+  _renderRepliesForEntry(entry.id, repliesWrap);
   return li;
+}
+
+/* Render counter-bullets (any { text, by, stance } entries under
+ * answerReplies/{entryId}) into the supplied wrapper. Read-only;
+ * deletion belongs to whoever wrote the reply (could be added later). */
+function _renderRepliesForEntry(entryId, wrap) {
+  if (!entryId || !wrap) return;
+  wrap.innerHTML = "";
+  const replies = (answerReplies && answerReplies[entryId]) || {};
+  Object.keys(replies)
+    .map(k => Object.assign({ id: k }, replies[k]))
+    .sort((a, b) => (a.at || 0) - (b.at || 0))
+    .forEach(r => {
+      const li = document.createElement("li");
+      li.className = "answer-reply " + (r.stance === "support" ? "is-support" : "is-disagree");
+      const arrow = document.createElement("span");
+      arrow.className = "reply-arrow"; arrow.textContent = "↪";
+      const who = document.createElement("strong");
+      who.textContent = (r.by || "?") + ":";
+      const txt = document.createElement("span");
+      txt.textContent = " " + (r.text || "");
+      li.appendChild(arrow); li.appendChild(who); li.appendChild(txt);
+      wrap.appendChild(li);
+    });
+}
+
+/* Open an inline counter-bullet input under a teammate's answer.
+ * Idempotent — calling twice on the same answer reuses the existing
+ * input rather than stacking duplicates. */
+function openCounterBullet(entry, li) {
+  if (!li || !entry || !entry.id) return;
+  if (li.querySelector(".counter-bullet-form")) {
+    // already open — focus its textarea
+    const ta = li.querySelector(".counter-bullet-form textarea");
+    if (ta) try { ta.focus(); } catch (e) {}
+    return;
+  }
+  const form = document.createElement("div");
+  form.className = "counter-bullet-form";
+  const ta = document.createElement("textarea");
+  ta.rows = 2;
+  ta.maxLength = 400;
+  ta.placeholder = tFallback("answer.counter.placeholder",
+    "Why do you see it differently?");
+  ta.setAttribute("aria-label",
+    tFallback("answer.counter.aria",
+      "Counter-bullet to " + (entry.by || "teammate") + "'s answer"));
+  const send = document.createElement("button");
+  send.type = "button";
+  send.textContent = tFallback("answer.counter.send", "Send counter-point");
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "ghost-btn";
+  cancel.textContent = tFallback("modal.cancel", "Cancel");
+  form.appendChild(ta);
+  form.appendChild(send);
+  form.appendChild(cancel);
+  li.appendChild(form);
+  setTimeout(() => { try { ta.focus(); } catch (e) {} }, 30);
+  cancel.addEventListener("click", () => form.remove());
+  send.addEventListener("click", () => {
+    const text = (ta.value || "").trim();
+    if (!text || !refAnswerReplies) return;
+    send.disabled = true;
+    refAnswerReplies.child(entry.id).push({
+      text: text.slice(0, 400),
+      by:   (myName || "anon").slice(0, 40),
+      cid:  clientId,
+      at:   Date.now(),
+      stance: "disagree"
+    }).then(() => { form.remove(); })
+      .catch(() => { send.disabled = false; });
+  });
 }
 
 /* `bulletKey` is optional — when present, the answer is tagged so the
@@ -7390,6 +7884,156 @@ function initLeave() {
   el("leave-btn").addEventListener("click", () => {
     if (isRoomAdmin) backToDashboard();
     else leaveAndReload();
+  });
+}
+
+/* "I'm just observing" — sim 2026-05-19 feature for anxious / B1 /
+ * first-timer personas. Writes /sessions/{code}/rooms/{room}/observers/
+ * {clientId} = {at} so other clients (and the scoring engine) can
+ * distinguish observers from active participants. Local UX: button
+ * flips to "Rejoin actively" and the room view gets data-observer="1"
+ * so CSS can soften participation prompts (toned-down call-to-action
+ * styling on Decisions, Hypotheses, etc.). No broadcast / no toast —
+ * intentionally quiet so a stressed student can step back without
+ * announcing it to the room. */
+function initObserver() {
+  const btn = el("observer-btn");
+  if (!btn || isRoomAdmin) {
+    if (btn) btn.classList.add("hidden");
+    return;
+  }
+  if (btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  // Reflect any pre-existing observer state (e.g. after a refresh).
+  if (refObservers) {
+    refObservers.child(clientId).on("value", snap => {
+      const isObs = !!snap.val();
+      document.body.dataset.observer = isObs ? "1" : "";
+      btn.textContent = isObs
+        ? tFallback("room.observer-rejoin", "Rejoin actively")
+        : tFallback("room.observer-btn",   "I'm just observing");
+      btn.classList.toggle("is-active", isObs);
+    });
+  }
+  btn.addEventListener("click", () => {
+    if (!refObservers) return;
+    const isObs = document.body.dataset.observer === "1";
+    if (isObs) {
+      // toggle off
+      refObservers.child(clientId).remove().catch(() => {});
+    } else {
+      refObservers.child(clientId).set({ at: Date.now() }).catch(() => {});
+    }
+  });
+}
+
+/* End-of-session poll — sim 2026-05-19 (Akari, Antoine, Manon, Sophie,
+ * Daichi): "End-of-session quick poll: 'What was the hardest moment?'
+ * + 'One word that describes how you felt.'" Writes one entry per
+ * client to /sessions/{code}/poll/{cid}. Idempotent — submitting again
+ * overwrites the existing entry. No facilitator notification (the
+ * facilitator reads /poll later as part of the archive). */
+function initEndPoll() {
+  const card = el("endpoll-card");
+  if (!card || isRoomAdmin) {
+    if (card) card.classList.add("hidden");
+    return;
+  }
+  if (card.dataset.wired === "1") return;
+  card.dataset.wired = "1";
+  const hard = el("endpoll-hardest");
+  const feel = el("endpoll-feeling");
+  const btn = el("endpoll-submit");
+  const thanks = el("endpoll-thanks");
+  if (!btn || !hard || !feel) return;
+  // Pre-fill if the user already submitted this session (refresh case).
+  if (!refPoll && db && typeof sPath === "function") {
+    try { refPoll = db.ref(sPath("poll/" + clientId)); } catch (e) {}
+  }
+  if (refPoll) {
+    refPoll.once("value").then(snap => {
+      const v = snap && snap.val();
+      if (v) {
+        if (hard) hard.value = String(v.hardest || "");
+        if (feel) feel.value = String(v.feeling || "");
+        if (thanks) thanks.classList.remove("hidden");
+      }
+    }).catch(() => {});
+  }
+  btn.addEventListener("click", () => {
+    if (!refPoll) {
+      try { refPoll = db.ref(sPath("poll/" + clientId)); } catch (e) { return; }
+    }
+    const payload = {
+      hardest: (hard.value || "").trim().slice(0, 280),
+      feeling: (feel.value || "").trim().slice(0, 40),
+      by:      (myName || "anon").slice(0, 40),
+      at:      Date.now()
+    };
+    if (!payload.hardest && !payload.feeling) return;   // nothing to send
+    btn.disabled = true;
+    refPoll.set(payload).then(() => {
+      if (thanks) thanks.classList.remove("hidden");
+      setTimeout(() => { btn.disabled = false; }, 1500);
+    }).catch(() => { btn.disabled = false; });
+  });
+}
+
+/* Per-room side-chat — sim 2026-05-19 (Sayaka, Mei): "A private side-
+ * chat with just my room (separate from group-answers) for clarifying
+ * questions." Light-touch UI: collapsed by default, expands to a
+ * scroll-pane of messages + a one-line input. Messages live at
+ * /sessions/{code}/rooms/{room}/chat/{msgId} (push id). */
+function initSideChat() {
+  const panel = el("rcol-p-chat");
+  if (!panel || isRoomAdmin) return;
+  if (panel.dataset.wired === "1") return;
+  panel.dataset.wired = "1";
+  const list = el("chat-list");
+  const input = el("chat-input");
+  const send = el("chat-send");
+  if (!list || !input || !send) return;
+
+  if (refChat) {
+    refChat.on("value", snap => {
+      const msgs = snap.val() || {};
+      const sorted = Object.keys(msgs)
+        .map(k => Object.assign({ id: k }, msgs[k]))
+        .filter(m => m && m.text)
+        .sort((a, b) => (a.at || 0) - (b.at || 0))
+        .slice(-50);   // last 50 only
+      list.innerHTML = "";
+      sorted.forEach(m => {
+        const li = document.createElement("li");
+        li.className = "chat-msg" + (m.cid === clientId ? " me" : "");
+        const who = document.createElement("strong");
+        who.textContent = m.by || "?";
+        const txt = document.createElement("span");
+        txt.textContent = " " + m.text;
+        li.appendChild(who);
+        li.appendChild(txt);
+        list.appendChild(li);
+      });
+      list.scrollTop = list.scrollHeight;
+    });
+  }
+
+  function sendMessage() {
+    const text = (input.value || "").trim();
+    if (!text) return;
+    refChat.push({
+      text: text.slice(0, 500),
+      by: (myName || "anon").slice(0, 40),
+      cid: clientId,
+      at: Date.now()
+    }).then(() => { input.value = ""; }).catch(() => {});
+  }
+  send.addEventListener("click", sendMessage);
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
   });
 }
 
@@ -7710,10 +8354,255 @@ function clearLastWorkshop() {
   try { localStorage.removeItem(LAST_WORKSHOP_KEY); } catch (e) {}
 }
 
+/* ============================================================
+ * "My open sessions" tracker — abandoned-session reaper.
+ *
+ * User-reported gap (2026-05-18): "I need a way to close ongoing
+ * sessions for which there are no more participants and the admin
+ * forgot to close them."
+ *
+ * The platform never persisted a list of sessions a given browser
+ * created, so a facilitator who closed their tab without clicking
+ * "End session" had no way to reach those sessions again later. They
+ * stayed OPEN forever, wasting Spark-plan quota and showing as live.
+ *
+ * We track them locally (per-browser localStorage list of code +
+ * label + openedAt) and surface a "My open sessions →" link on the
+ * splash entry view. The list view exposes a one-click "Close" that
+ * writes the closed marker directly (no archive download — the
+ * facilitator can re-open the dashboard later for that).
+ *
+ * Schema: [{ code, label, openedAt }, ...]   (most-recent last)
+ * ============================================================ */
+const MY_SESSIONS_KEY = "canamed_my_sessions";
+
+function _readMySessions() {
+  try {
+    const v = JSON.parse(localStorage.getItem(MY_SESSIONS_KEY)) || [];
+    return Array.isArray(v) ? v.filter(s => s && typeof s.code === "string") : [];
+  } catch (e) { return []; }
+}
+function _writeMySessions(list) {
+  try { localStorage.setItem(MY_SESSIONS_KEY, JSON.stringify(list || [])); }
+  catch (e) { /* full / disabled — non-fatal */ }
+}
+function addMySession(code, label) {
+  if (!code) return;
+  const c = String(code).toUpperCase();
+  const list = _readMySessions().filter(s => s.code !== c);
+  list.push({
+    code: c,
+    label: (label || "").toString().slice(0, 80),
+    openedAt: Date.now()
+  });
+  // Cap to a reasonable number — even an active facilitator rarely
+  // opens more than 20 unique sessions per device.
+  if (list.length > 50) list.splice(0, list.length - 50);
+  _writeMySessions(list);
+}
+function removeMySession(code) {
+  if (!code) return;
+  const c = String(code).toUpperCase();
+  _writeMySessions(_readMySessions().filter(s => s.code !== c));
+}
+function getMySessions() { return _readMySessions(); }
+
+/* Reveal / hide the "My open sessions (N) →" link on the splash entry
+ * view + update its count. Idempotent; called whenever the entry view is
+ * shown or the list changes. */
+function paintMySessionsLink() {
+  const row = el("splash-my-sessions-row");
+  const count = el("splash-my-sessions-count");
+  if (!row || !count) return;
+  const list = getMySessions();
+  if (!list.length) { row.hidden = true; return; }
+  count.textContent = String(list.length);
+  row.hidden = false;
+  const btn = el("splash-go-my-sessions");
+  if (btn && !btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", () => splashShowView("my-sessions"));
+  }
+}
+
+/* Format an absolute timestamp as a human-friendly "Opened 2h ago" /
+ * "Opened 3 days ago" / "Opened just now" string. Defensive: bad input
+ * returns a generic "Opened earlier". */
+function _formatOpenedAt(ms) {
+  if (!ms || typeof ms !== "number") return tFallback("splash.my-sessions.opened-earlier", "Opened earlier");
+  const dMs = Date.now() - ms;
+  if (dMs < 60_000) return tFallback("splash.my-sessions.opened-just-now", "Opened just now");
+  if (dMs < 3_600_000) {
+    const m = Math.round(dMs / 60_000);
+    return tFallback("splash.my-sessions.opened-mins", "Opened " + m + " min ago")
+      .replace("{n}", String(m));
+  }
+  if (dMs < 86_400_000) {
+    const h = Math.round(dMs / 3_600_000);
+    return tFallback("splash.my-sessions.opened-hours", "Opened " + h + "h ago")
+      .replace("{n}", String(h));
+  }
+  const d = Math.round(dMs / 86_400_000);
+  return tFallback("splash.my-sessions.opened-days", "Opened " + d + " day(s) ago")
+    .replace("{n}", String(d));
+}
+
+/* Render the splash "My open sessions" list. One row per tracked session
+ * (newest first), each with code, label, opened-when, and a "Close"
+ * button. The Close button writes the closed marker directly via
+ * closeMySession(code) — no archive download (the facilitator can
+ * re-enter the dashboard later for that). Closed/missing sessions are
+ * marked then auto-pruned on next render. */
+function renderMySessions() {
+  const list = el("splash-my-sessions-list");
+  const empty = el("splash-my-sessions-empty");
+  if (!list || !empty) return;
+  const entries = getMySessions().slice().reverse();   // newest first
+  list.innerHTML = "";
+  if (!entries.length) { empty.hidden = false; return; }
+  empty.hidden = true;
+
+  // Wire the back button once.
+  const back = el("splash-my-sessions-back");
+  if (back && !back.dataset.wired) {
+    back.dataset.wired = "1";
+    back.addEventListener("click", () => splashShowView("enter"));
+  }
+
+  entries.forEach(s => {
+    const row = document.createElement("div");
+    row.className = "my-session-row";
+    row.setAttribute("role", "listitem");
+    row.dataset.code = s.code;
+
+    const code = document.createElement("p");
+    code.className = "my-session-code";
+    code.textContent = s.code;
+
+    const label = document.createElement("p");
+    label.className = "my-session-label";
+    label.textContent = s.label || tFallback("splash.my-sessions.no-label", "(no label)");
+
+    const when = document.createElement("p");
+    when.className = "my-session-when";
+    when.textContent = _formatOpenedAt(s.openedAt);
+
+    const status = document.createElement("p");
+    status.className = "my-session-status";
+    status.textContent = tFallback("splash.my-sessions.checking", "Checking status…");
+
+    const actions = document.createElement("div");
+    actions.className = "my-session-actions";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.type = "button";
+    closeBtn.className = "my-session-close";
+    closeBtn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
+    closeBtn.addEventListener("click", () => closeMySession(s.code, closeBtn, status));
+
+    const forgetBtn = document.createElement("button");
+    forgetBtn.type = "button";
+    forgetBtn.className = "splash-link my-session-forget";
+    forgetBtn.textContent = tFallback("splash.my-sessions.forget-btn", "Remove from list");
+    forgetBtn.addEventListener("click", () => {
+      removeMySession(s.code);
+      renderMySessions();
+      paintMySessionsLink();
+    });
+
+    actions.appendChild(closeBtn);
+    actions.appendChild(forgetBtn);
+
+    row.appendChild(code);
+    row.appendChild(label);
+    row.appendChild(when);
+    row.appendChild(status);
+    row.appendChild(actions);
+    list.appendChild(row);
+
+    // Best-effort live status check: is the session already closed in the
+    // DB? If we can read it, update the status text + disable Close.
+    // Silently ignores read-permission errors (LOCAL mode or rules deny).
+    try {
+      if (db && typeof db.ref === "function") {
+        db.ref(oPath(s.code, "closed")).once("value")
+          .then(snap => {
+            if (snap.val()) {
+              status.textContent = tFallback("splash.my-sessions.already-closed",
+                "Already closed — will be removed");
+              closeBtn.disabled = true;
+              // Auto-prune the local entry after a short visible delay so
+              // the user notices the list shrank rather than items just
+              // silently vanishing.
+              setTimeout(() => {
+                removeMySession(s.code);
+                renderMySessions();
+                paintMySessionsLink();
+              }, 1200);
+            } else {
+              status.textContent = tFallback("splash.my-sessions.status-open",
+                "Open — click Close to end it");
+            }
+          })
+          .catch(() => {
+            status.textContent = tFallback("splash.my-sessions.status-unknown",
+              "Status unknown");
+          });
+      } else {
+        status.textContent = tFallback("splash.my-sessions.status-unknown", "Status unknown");
+      }
+    } catch (e) {
+      status.textContent = tFallback("splash.my-sessions.status-unknown", "Status unknown");
+    }
+  });
+}
+
+/* Click handler for the "Close session" button in the my-sessions list.
+ * Writes the closed marker directly — the close-write rule allows any
+ * authenticated user to close any open session that exists. No archive
+ * download is attempted here; the facilitator can re-open the admin
+ * dashboard later to grab the archive. Defensive: confirms before the
+ * write, then removes the local entry on success. */
+function closeMySession(code, btn, statusEl) {
+  if (!code) return;
+  const c = String(code).toUpperCase();
+  const ok = window.confirm(tFallback("splash.my-sessions.close-confirm",
+    "End session " + c + "? Participants will see the wrap-up screen and " +
+    "cannot interact further. The data stays in the database — you can " +
+    "re-open the admin dashboard later to download the archive."));
+  if (!ok) return;
+  if (btn) { btn.disabled = true; btn.textContent = tFallback("splash.my-sessions.closing", "Closing…"); }
+
+  const write = () => db.ref(oPath(c, "closed")).set({
+    by: (myName || "Admin").toString().slice(0, 40),
+    at: Date.now()
+  });
+
+  // ensureSignedIn() is the platform's standard pre-write gate — the
+  // closed-write rule requires auth != null even though it doesn't
+  // require admin password verification (we trust the local UX gate
+  // since we only show sessions THIS browser created).
+  const auth = (typeof ensureSignedIn === "function") ? ensureSignedIn() : Promise.resolve();
+  auth.then(write).then(() => {
+    if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.closed-ok", "Closed ✓");
+    if (btn) btn.textContent = tFallback("splash.my-sessions.closed-btn", "Closed");
+    removeMySession(c);
+    setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 700);
+  }).catch(e => {
+    console.warn("Could not close session", c, e);
+    if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.close-failed",
+      "Could not close — check your connection and try again.");
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
+    }
+  });
+}
+
 /* swap which splash view is visible. The card itself stays put, only the inner
    "view" changes - keeps the layout stable as the user moves between flows. */
 function splashShowView(name) {
-  ["enter", "create", "created", "account", "profile-setup"].forEach(v => {
+  ["enter", "create", "created", "account", "profile-setup", "my-sessions"].forEach(v => {
     const node = el("splash-view-" + v);
     if (node) node.hidden = (v !== name);
   });
@@ -7722,8 +8611,14 @@ function splashShowView(name) {
     "create": "splash-create-name",
     "created": "splash-copy-code",
     "account": "splash-account-email",
-    "profile-setup": "splash-prof-name"
+    "profile-setup": "splash-prof-name",
+    "my-sessions": "splash-my-sessions-back"
   }[name];
+  // When entering the my-sessions view, re-render the list (the data may
+  // have changed since the user last opened the splash). When returning
+  // to the entry view, refresh the link's count.
+  if (name === "my-sessions") { try { renderMySessions(); } catch (e) {} }
+  if (name === "enter")       { try { paintMySessionsLink(); } catch (e) {} }
   // a11y: when the splash swaps to a new view, push focus to that
   // view's main heading (so a screen-reader user hears the section
   // name on transition). The splash uses .splash-label-big paragraphs
@@ -7796,6 +8691,41 @@ function lobbyShowLockedSession() {
   } else if (line) {
     line.hidden = true;
   }
+  // Reveal the "← Use a different session" escape hatch. The lobby is the
+  // ONLY view a returning user with stored canamed_session sees before the
+  // (silent) auto-rejoin, so without this they have no visible way back to
+  // the splash. User-reported regression 2026-05-18.
+  paintLobbySwitchSession();
+}
+
+/* Reveal + wire the lobby "switch session" button whenever the lobby is
+ * showing an unlocked session. Idempotent: the click handler is attached at
+ * most once via a dataset flag. */
+function paintLobbySwitchSession() {
+  const row = el("lobby-switch-session");
+  const btn = el("lobby-switch-session-btn");
+  if (!row || !btn) return;
+  row.hidden = false;
+  if (!btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", switchSession);
+  }
+}
+
+/* User picked "← Use a different session" from the lobby. Clears the
+ * unlocked-session pointer + any resume data so initEntry() shows the
+ * splash on reload. Same cleanup surface as forgetSavedSession() (the
+ * splash banner's equivalent button), but kept as a separate symbol so
+ * each entry point is greppable and easy to test. */
+function switchSession() {
+  try {
+    localStorage.removeItem(RESUME_KEY);
+    localStorage.removeItem("canamed_name");
+    localStorage.removeItem("canamed_session");
+    localStorage.removeItem("canamed_client");
+    if (typeof STABLE_ID_KEY === "string") localStorage.removeItem(STABLE_ID_KEY);
+  } catch (e) { /* ignore */ }
+  location.reload();
 }
 
 /* Paint a minimal "Org not found" splash + abort entry. Triggered when the
@@ -7898,7 +8828,61 @@ function initEntry() {
     // URL), pre-fill the code and auto-submit. Runs AFTER wireSplash() so
     // the splash-enter form's submit handler is already attached.
     tryConsumeDeepLink();
+    // Surface the "Resuming as <name> in session <CODE> — disconnect & start
+    // fresh →" escape hatch if localStorage still has resume data. Without
+    // this, a returning user has no visible way to clear a saved session
+    // before the next code-entry triggers a silent auto-rejoin (user-reported
+    // regression 2026-05-18).
+    paintSavedSessionBanner();
+    // Surface the "My open sessions (N) →" reaper link so a facilitator
+    // can find + close abandoned sessions they previously created.
+    paintMySessionsLink();
   }
+}
+
+/* Populate + reveal the .splash-saved-session banner if resume data is in
+ * localStorage. Wires the clear button to forgetSavedSession() the first
+ * time it runs (subsequent calls just refresh the displayed name + code).
+ * Safe to call on any view transition that lands the user back on the
+ * splash — the hidden attribute toggles per the current localStorage state. */
+function paintSavedSessionBanner() {
+  const banner = el("splash-saved-session");
+  if (!banner) return;
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(RESUME_KEY) || "null"); } catch (e) { saved = null; }
+  const hasName = saved && saved.name;
+  const hasCode = saved && saved.sessionNum;
+  if (!hasName || !hasCode) {
+    banner.hidden = true;
+    return;
+  }
+  const nameEl = el("splash-saved-session-name");
+  const codeEl = el("splash-saved-session-code");
+  if (nameEl) nameEl.textContent = String(saved.name).slice(0, 40);
+  if (codeEl) codeEl.textContent = String(saved.sessionNum).toUpperCase();
+  banner.hidden = false;
+  const btn = el("splash-saved-session-clear");
+  if (btn && !btn.dataset.wired) {
+    btn.dataset.wired = "1";
+    btn.addEventListener("click", forgetSavedSession);
+  }
+}
+
+/* User-initiated "I'm not that person / I want a different session". Mirrors
+ * leaveAndReload()'s localStorage cleanup but does NOT touch any Firebase
+ * refs (we're on the splash — no active session refs to detach). After
+ * clearing, reload so initEntry() sees a clean slate and shows the splash. */
+function forgetSavedSession() {
+  try {
+    localStorage.removeItem(RESUME_KEY);
+    localStorage.removeItem("canamed_name");
+    localStorage.removeItem("canamed_session");
+    localStorage.removeItem("canamed_client");
+    // Match leaveAndReload(): drop the persistent stableId too so a shared
+    // lab machine doesn't carry the previous student's identity forward.
+    if (typeof STABLE_ID_KEY === "string") localStorage.removeItem(STABLE_ID_KEY);
+  } catch (e) { /* ignore */ }
+  location.reload();
 }
 
 let splashWired = false;
@@ -8079,6 +9063,10 @@ function wireSplash() {
       paintJoinQr(code);
       splashShowView("created");
       cHint.textContent = "";
+      // Track in localStorage so the facilitator can find + close this
+      // session later via the "My open sessions →" splash link even if
+      // they close the tab without clicking "End session".
+      addMySession(code, label || name || "");
       cName.value = ""; cLabel.value = ""; cPass.value = "";
       const ta = el("splash-create-custom"); if (ta) ta.value = "";
     }).catch(e => {

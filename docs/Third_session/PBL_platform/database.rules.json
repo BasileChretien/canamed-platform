@@ -96,6 +96,13 @@
           ".validate": "newData.isString() && newData.val().length <= 500 && (newData.val() == '' || newData.val().matches(/^https:[/][/][^\\s]+$/))"
         },
 
+        "poll": {
+          "$cid": {
+            ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+            ".validate": "newData.val() == null || (newData.child('hardest').isString() && newData.child('hardest').val().length <= 280 && newData.child('feeling').isString() && newData.child('feeling').val().length <= 40 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
+          }
+        },
+
         "pool": {
           "$clientId": {
             ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
@@ -223,6 +230,26 @@
                   ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
                   ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
                 }
+              }
+            },
+            "answerReplies": {
+              "$entryId": {
+                "$replyId": {
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 400 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('stance') || (newData.child('stance').isString() && (newData.child('stance').val() == 'disagree' || newData.child('stance').val() == 'support'))))"
+                }
+              }
+            },
+            "observers": {
+              "$clientId": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
+              }
+            },
+            "chat": {
+              "$msgId": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000)"
               }
             },
             "tests": {

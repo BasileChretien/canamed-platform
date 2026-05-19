@@ -59,6 +59,20 @@
   --ok-50: #e7f4ec;
   --focus: #11161b;
 
+  /* --- consultation-note "paper chart" surface tokens (themed) ---
+   * The chart container used to hard-code #fbf9f3 + #d8cdb4 which left
+   * dark / high-contrast themes with cream paper underneath theme-aware
+   * white text → unreadable. Defining themed tokens here + overriding
+   * them in the dark / high-contrast blocks keeps the warm-paper look
+   * in light mode while making the surface follow the theme everywhere
+   * else. */
+  --note-bg:    #fbf9f3;
+  --note-line:  #d8cdb4;
+  --note-stripe: rgba(206, 184, 138, 0.18);
+  --note-margin-line: rgba(220, 120, 90, 0.30);
+  --note-ink:   var(--ink);
+  --note-accent-ink: #5a3b14;  /* caen-paper headline ink — overridden in dark */
+
   /* --- radius / shadow / spacing --- */
   --r-sm: 9px;
   --r-md: 13px;
@@ -232,8 +246,35 @@ main {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--s-4);
+  /* `align-items: start` is load-bearing for the sticky-right-column
+     pattern below — without it a grid cell stretches to match the
+     tallest sibling, and a child with position:sticky inside a stretched
+     cell never has anything to be sticky to. */
+  align-items: start;
 }
 @media (max-width: 960px) { .columns { grid-template-columns: 1fr; } }
+
+/* Sticky right-column — sim 2026-05-19 finding (24 students):
+   "Sticky right-column (Findings + Decisions + Discussion) so the case
+   panels can scroll without losing the working answers." Pinned at
+   viewport ≥960px (where the two-column layout is in effect); on
+   narrow viewports the layout already stacks so stickiness is a no-op. */
+@media (min-width: 961px) {
+  .columns > .col-right {
+    position: sticky;
+    /* Sticky offset = global-header height + a small breathing margin.
+       The header is ~60px tall + 8px gap so the right column is never
+       glued to the very top edge of the viewport. */
+    top: 68px;
+    /* Cap height so the inner scrollable region (when content overflows)
+       can scroll independently of the case panels in col-left.
+       Falls back to auto if the calc unit isn't supported. */
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
+    /* Restore native momentum-scroll on touchpads/Macs */
+    -webkit-overflow-scrolling: touch;
+  }
+}
 
 /* ---------- buttons (3 roles: primary / secondary / danger) ---------- */
 /* primary */
@@ -1022,9 +1063,10 @@ html[data-theme="dark"] .next-step-coach {
 .consultation-note {
   background:
     linear-gradient(180deg, transparent 0, transparent calc(100% - 14px),
-      rgba(206, 184, 138, 0.18) calc(100% - 14px), rgba(206, 184, 138, 0.18) 100%);
-  background-color: #fbf9f3;
-  border: 1px solid #d8cdb4;
+      var(--note-stripe) calc(100% - 14px), var(--note-stripe) 100%);
+  background-color: var(--note-bg);
+  color: var(--note-ink);
+  border: 1px solid var(--note-line);
   border-radius: var(--r-lg, 14px);
   padding: var(--s-4) var(--s-4) var(--s-5);
   box-shadow: var(--sh-md);
@@ -1039,26 +1081,26 @@ html[data-theme="dark"] .next-step-coach {
   top: 16px;
   bottom: 16px;
   width: 1px;
-  background: rgba(220, 120, 90, 0.30);
+  background: var(--note-margin-line);
   pointer-events: none;
 }
 .consultation-note-head {
   margin-bottom: var(--s-3);
   padding-bottom: var(--s-2);
-  border-bottom: 1px solid rgba(216, 205, 180, 0.6);
+  border-bottom: 1px solid var(--note-line);
 }
 .consultation-note-title {
   margin: 0 0 4px;
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--caen-ink, #5a3b14);
+  color: var(--note-accent-ink);
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
 .consultation-note-title em {
   font-style: italic;
-  color: var(--ink);
+  color: var(--note-ink);
 }
 .consultation-note-icon {
   font-size: 1.3rem;
@@ -1072,9 +1114,13 @@ html[data-theme="dark"] .next-step-coach {
 }
 .consultation-note-sub em {
   font-style: italic;
-  color: var(--caen-ink);
+  color: var(--note-accent-ink);
   font-weight: 500;
 }
+/* Chart sections (History / Examination / Investigations) — each is a
+   <details open> so a student can collapse a section they're done with,
+   trimming the chart's scroll-height without losing the gameplay
+   options. Default-open so first-time users see the full chart. */
 .chart-section {
   background: transparent;
   margin-bottom: var(--s-4);
@@ -1089,6 +1135,324 @@ html[data-theme="dark"] .next-step-coach {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* When rendered as <summary> the default marker is a triangle on the
+     left — keep it but make it match the section padding. cursor:pointer
+     surfaces "this is clickable". list-style is reset on the summary
+     element so we control the disclosure caret ourselves below. */
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+.chart-section-h::-webkit-details-marker { display: none; }   /* WebKit/Safari */
+.chart-section-h::marker { content: ""; }                      /* Firefox/Chrome */
+/* Custom disclosure caret — rotates 90° when the section is open. */
+.chart-section-h::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  font-size: 0.85em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.chart-section[open] > .chart-section-h::before {
+  transform: rotate(90deg);
+}
+.chart-section-h:hover { color: var(--primary, #1763a6); }
+/* Browser-native <details> collapse hides non-summary children, but the
+   .btn-group's explicit display:flex (defined above) wins specificity
+   against the implicit shadow-slot. Force-hide non-summary children
+   when the section is collapsed. */
+.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
+  display: none !important;
+}
+
+/* --- "First impressions (optional)" top-of-chart note ---
+   UX-practitioner recommendation: a private, free-text gut-feel
+   note that lets first-timers externalise their initial thinking
+   before the canonical hypothesis block. Visually de-emphasised so
+   it doesn't compete with the main case-workup actions. */
+.chart-impressions { opacity: 0.92; }
+.chart-impressions > textarea {
+  width: 100%;
+  min-height: 56px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px dashed var(--line-strong, var(--line));
+  border-radius: var(--r-sm, 8px);
+  resize: vertical;
+}
+
+/* --- Module A per-bullet progress checklist --- */
+.modA-bullet-progress {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.modA-bullet-progress li {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.modA-bullet-progress li::before {
+  content: "☐";
+  font-size: 1.1em;
+  color: var(--muted);
+}
+.modA-bullet-progress li.is-done {
+  color: var(--ink);
+  font-weight: 600;
+}
+.modA-bullet-progress li.is-done::before {
+  content: "☑";
+  color: var(--success, #2e7d32);
+}
+
+/* Glossed buttons get a tiny dotted underline as a "hover for more"
+   cue — sim 2026-05-19 feature for low-English students. Title
+   attribute carries the EN+JP explanation; this is just the visual
+   handle so the user knows hovering / long-pressing is useful. */
+.req-btn.has-glossary::after {
+  content: " ⓘ";
+  font-size: 0.85em;
+  color: var(--muted);
+  margin-left: 4px;
+  text-decoration: none;
+}
+.req-btn.has-glossary:hover::after {
+  color: var(--primary, #1763a6);
+}
+
+/* Inline citation badges on revealed findings — sim 2026-05-19
+   feature for `checks_evidence` personas. Sits between the answer
+   body and the author byline; visually de-emphasized but tappable. */
+.req-inline-cite {
+  display: inline-block;
+  margin: 0 6px;
+  padding: 1px 8px;
+  background: var(--surface-sunk, #f3f0e8);
+  border: 1px solid var(--line, #e2dccf);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* Anonymised cohort progress strip — sim 2026-05-19 feature.
+   One bar per room, name-ordered (not rank-ordered), so a competitive
+   student can see relative progress without learning the ranking.
+   My room's bar uses the accent palette; others are muted. */
+.lb-cohort-progress {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line, #e2dccf);
+}
+.lb-cohort-head {
+  margin: 0 0 6px;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+.lb-cohort-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
+  gap: 6px;
+}
+.lb-cohort-cell {
+  padding: 2px 0;
+}
+.lb-cohort-bar {
+  height: 8px;
+  background: var(--n-100, #f0eadb);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.lb-cohort-bar > span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--n-300, #c9bd9c);
+  transition: width var(--dur-base, 0.25s) var(--ease-soft, ease-out);
+}
+.lb-cohort-cell.is-me .lb-cohort-bar {
+  border: 1px solid var(--primary, #1763a6);
+  background: rgba(23, 99, 166, 0.08);
+}
+.lb-cohort-cell.is-me .lb-cohort-bar > span {
+  background: var(--primary, #1763a6);
+}
+
+/* --- Observer button + body-level state --- */
+.observer-btn {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line-strong, #c9bd9c);
+  border-radius: var(--r-pill, 999px);
+  padding: 6px 12px;
+  font-weight: 500;
+  cursor: pointer;
+  min-height: 44px;
+}
+.observer-btn.is-active {
+  background: var(--surface-sunk, #f3f0e8);
+  font-weight: 600;
+}
+body[data-observer="1"] .decisions-card,
+body[data-observer="1"] .hypotheses-card,
+body[data-observer="1"] #modA-bullet-progress {
+  /* soften participation prompts but keep them readable */
+  opacity: 0.65;
+}
+body[data-observer="1"] #modA-next-step,
+body[data-observer="1"] #modB-next-step {
+  /* coach prompts can be muted when in observer mode */
+  filter: grayscale(0.4);
+}
+
+/* --- Side-chat panel --- */
+.chat-card { padding: 12px; }
+.chat-intro {
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+.chat-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--surface-sunk, #f9f7f1);
+  border: 1px solid var(--line, #e2dccf);
+  border-radius: var(--r-sm, 8px);
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+.chat-msg { margin: 0 0 4px; }
+.chat-msg.me { color: var(--primary, #1763a6); }
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+#chat-input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: var(--r-sm, 8px);
+  border: 1px solid var(--line-strong, #c9bd9c);
+}
+#chat-send { min-height: 44px; }
+
+/* --- End-of-session poll --- */
+.endpoll-card {
+  border-left: 4px solid var(--accent, #e08a1e);
+}
+.endpoll-card h3 { margin-top: 0; }
+.endpoll-field {
+  display: block;
+  margin: 10px 0;
+  font-weight: 500;
+}
+.endpoll-field span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+}
+.endpoll-field textarea,
+.endpoll-field input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong, #c9bd9c);
+  border-radius: var(--r-sm, 8px);
+  font-size: 1rem;
+}
+#endpoll-submit { min-height: 44px; }
+.endpoll-thanks {
+  color: var(--success, #2e7d32);
+  font-weight: 600;
+  margin-top: 8px;
+}
+
+/* --- Counter-bullet replies under group answers --- */
+.entry-disagree { color: var(--meeting, #8a2017); }
+.answer-replies {
+  list-style: none;
+  margin: 4px 0 0 18px;
+  padding: 0;
+  font-size: 0.92rem;
+}
+.answer-reply {
+  margin: 2px 0;
+  padding: 4px 8px;
+  border-left: 3px solid var(--meeting, #8a2017);
+  background: rgba(192, 57, 43, 0.04);
+  border-radius: 0 4px 4px 0;
+}
+.answer-reply.is-support {
+  border-left-color: var(--success, #2e7d32);
+  background: rgba(46, 125, 50, 0.05);
+}
+.reply-arrow {
+  color: var(--muted);
+  margin-right: 4px;
+}
+.counter-bullet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  background: var(--surface-sunk, #f9f7f1);
+  border: 1px dashed var(--meeting, #8a2017);
+  border-radius: var(--r-sm, 8px);
+}
+.counter-bullet-form textarea {
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line, #e2dccf);
+  border-radius: var(--r-sm, 8px);
+}
+.counter-bullet-form button {
+  align-self: flex-start;
+  min-height: 38px;
+}
+
+/* --- collapsible info cards (Module B safety-note, future Module A
+   vignette, etc.). Default-open <details> with the heading-as-summary
+   pattern: read once at the start, then a single click moves the card
+   out of the way. Sim 2026-05-18: Module B was 4.5× viewport tall
+   because every informational block stayed permanently expanded. --- */
+.collapsible-card > summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  /* Match the card padding so the click-target covers the whole row,
+     not just the heading line. */
+}
+.collapsible-card > summary::-webkit-details-marker { display: none; }
+.collapsible-card > summary::marker { content: ""; }
+.collapsible-card > summary::before {
+  content: "▸";
+  display: inline-block;
+  width: 1em;
+  font-size: 0.85em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+  margin-right: 4px;
+}
+.collapsible-card[open] > summary::before {
+  transform: rotate(90deg);
+}
+.collapsible-card:not([open]) > *:not(summary) {
+  display: none !important;
 }
 .chart-section-icon { font-size: 1.1rem; line-height: 1; }
 .chart-section-hint {
@@ -3838,6 +4202,131 @@ body.session-ended-shown { overflow: hidden; }
 }
 .splash-signed-in[hidden] { display: none; }
 .splash-signed-in strong { color: var(--ink); font-weight: 700; }
+
+/* --- saved-session banner: visible escape hatch when localStorage resume
+   data is present. User-reported regression (2026-05-18): "once connected
+   to a session in a browser, it is not possible to disconnect from this
+   session." Same visual language as .splash-signed-in but wraps gracefully
+   for the longer text (name + code + clear button). The clear button has
+   a 44px hit target so it works on mobile devices. --- */
+.splash-saved-session {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  font-size: 0.84rem;
+  color: var(--muted);
+  background: var(--surface-sunk, #f3f0e8);
+  border-radius: var(--r-pill);
+  text-align: center;
+}
+.splash-saved-session[hidden] { display: none; }
+.splash-saved-session strong { color: var(--ink); font-weight: 700; }
+#splash-saved-session-clear {
+  font-weight: 600;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+
+/* Lobby escape hatch — companion to the splash banner, shown above the
+   join form whenever the user reached the lobby via an unlocked session
+   (i.e. there is something to "switch away from"). 44px hit target. */
+.lobby-switch-session {
+  margin: 0 0 12px;
+  text-align: left;
+}
+.lobby-switch-session[hidden] { display: none; }
+#lobby-switch-session-btn {
+  font-weight: 600;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+
+/* --- "My open sessions" reaper UI ---
+   The link on the splash entry view + the list view that lets a
+   facilitator close sessions they created previously and forgot to end.
+   User-reported gap (2026-05-18): no way to close abandoned sessions. */
+.splash-my-sessions-row {
+  margin: 8px 0 4px;
+  text-align: center;
+}
+.splash-my-sessions-row[hidden] { display: none; }
+#splash-go-my-sessions {
+  font-weight: 600;
+  min-height: 44px;
+  padding: 6px 10px;
+}
+.splash-my-sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 8px 0 12px;
+  text-align: left;
+}
+.splash-my-sessions-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  text-align: center;
+  margin: 16px 0;
+}
+.splash-my-sessions-empty[hidden] { display: none; }
+.my-session-row {
+  border: 1px solid var(--border, #e2dccf);
+  border-radius: var(--r-card, 10px);
+  padding: 10px 12px;
+  background: var(--surface-sunk, #f9f7f1);
+}
+.my-session-code {
+  font-weight: 700;
+  font-size: 1.05rem;
+  margin: 0 0 2px;
+  letter-spacing: 0.05em;
+}
+.my-session-label {
+  color: var(--ink, #1c1c1c);
+  font-size: 0.95rem;
+  margin: 0 0 2px;
+}
+.my-session-when, .my-session-status {
+  color: var(--muted);
+  font-size: 0.84rem;
+  margin: 0;
+}
+.my-session-status { margin-top: 4px; }
+.my-session-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  align-items: center;
+}
+.my-session-close {
+  /* Danger affordance — match the rest of the platform's "close session"
+     buttons (warm red border, clear visual weight). */
+  min-height: 44px;
+  padding: 6px 14px;
+  border: 1px solid #c0392b;
+  background: #fff5f3;
+  color: #8a2017;
+  border-radius: var(--r-pill, 999px);
+  font-weight: 600;
+  cursor: pointer;
+}
+.my-session-close:hover:not([disabled]) {
+  background: #ffe9e4;
+}
+.my-session-close[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.my-session-forget {
+  font-size: 0.84rem;
+  min-height: 44px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .splash-card { animation: none; }
   #splash-code.shake { animation: none; }
@@ -4399,7 +4888,7 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
    (bg < surface-sunk < card) so the layered-shadow system still reads.
    ========================================================================== */
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) {
     /* warm paper -> warm graphite */
     --bg: #0e1620;
     --surface-sunk: #0a1119;
@@ -4408,6 +4897,13 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
     --line-strong: #324760;
     --ink: #f1eee6;
     --muted: #b3ab99;
+    /* See html[data-theme="dark"] for note-token rationale. */
+    --note-bg:    #161e2a;
+    --note-line:  #2c3a52;
+    --note-stripe: rgba(206, 184, 138, 0.06);
+    --note-margin-line: rgba(220, 120, 90, 0.40);
+    --note-ink:   var(--ink);
+    --note-accent-ink: #e2b86b;
     /* brand: a touch brighter so they pop against dark surfaces */
     --nagoya-700: #1e6fb6;
     --nagoya-600: #2e9fdf;
@@ -4460,6 +4956,15 @@ html[data-theme="dark"] {
   --line-strong: #324760;
   --ink: #f1eee6;
   --muted: #b3ab99;
+  /* Consultation-note "paper chart" tokens override — see :root for
+     rationale. The warm-paper colour collapses to a deeper card so the
+     theme-aware text stays readable. */
+  --note-bg:    #161e2a;
+  --note-line:  #2c3a52;
+  --note-stripe: rgba(206, 184, 138, 0.06);
+  --note-margin-line: rgba(220, 120, 90, 0.40);
+  --note-ink:   var(--ink);
+  --note-accent-ink: #e2b86b;     /* warm headline ink that reads on dark */
   --nagoya-700: #1e6fb6;
   --nagoya-600: #2e9fdf;
   --nagoya-500: #5cb8e8;
@@ -4678,6 +5183,15 @@ html[data-theme="high-contrast"] {
   --line-strong: #000000;
   --ink: #000000;
   --muted: #1f1f1f;
+  /* Consultation-note tokens in high-contrast: hard white surface,
+     black borders, full-black ink. Removes the warm-paper effect
+     intentionally — high-contrast prioritises legibility. */
+  --note-bg:    #ffffff;
+  --note-line:  #000000;
+  --note-stripe: rgba(0, 0, 0, 0.04);
+  --note-margin-line: #000000;
+  --note-ink:   #000000;
+  --note-accent-ink: #000000;
   --primary: #0033a0;
   --primary-hover: #001f5c;
   --key: #c00000;

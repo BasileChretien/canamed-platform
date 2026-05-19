@@ -568,3 +568,49 @@ test("rules: R2-09 sensitive subtrees fall under the narrowed parent read", () =
       "Got: " + JSON.stringify(node[".read"]));
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// Sim 2026-05-19 — new schemas added for the 12 recommendations.
+// Each test asserts the rule exists + retains the auth + closed-session
+// guards that every other write path in /sessions/$sessionId already
+// has, so a future edit can't accidentally drop them and re-open the
+// session for writes after closure.
+// ─────────────────────────────────────────────────────────────────────────
+
+const SESSION = rules.rules.sessions.$sessionId;
+const ROOM = SESSION.rooms.$roomId;
+
+test("rules: session-level /poll/$cid requires auth + closed-session guard", () => {
+  assert.ok(SESSION.poll, "rules must declare /sessions/$sessionId/poll");
+  const node = SESSION.poll.$cid;
+  assert.ok(node, "rules must declare /poll/$cid");
+  assert.match(node[".write"], /auth != null/, "/poll/$cid must require authentication");
+  assert.match(node[".write"], /closed/, "/poll/$cid must refuse writes once the session is closed");
+  assert.match(node[".validate"], /hardest/, "/poll/$cid must validate the `hardest` field");
+  assert.match(node[".validate"], /feeling/, "/poll/$cid must validate the `feeling` field");
+});
+
+test("rules: per-room /observers/$clientId requires auth + closed-session guard", () => {
+  assert.ok(ROOM.observers, "rules must declare /rooms/$roomId/observers");
+  const node = ROOM.observers.$clientId;
+  assert.match(node[".write"], /auth != null/);
+  assert.match(node[".write"], /closed/);
+});
+
+test("rules: per-room /chat/$msgId requires auth + closed-session guard + 500-char cap", () => {
+  assert.ok(ROOM.chat, "rules must declare /rooms/$roomId/chat");
+  const node = ROOM.chat.$msgId;
+  assert.match(node[".write"], /auth != null/);
+  assert.match(node[".write"], /closed/);
+  assert.match(node[".validate"], /500/, "chat message body must be capped at 500 chars");
+});
+
+test("rules: per-room /answerReplies/$entryId/$replyId requires auth + 400-char cap", () => {
+  assert.ok(ROOM.answerReplies, "rules must declare /rooms/$roomId/answerReplies");
+  const node = ROOM.answerReplies.$entryId.$replyId;
+  assert.match(node[".write"], /auth != null/);
+  assert.match(node[".write"], /closed/);
+  assert.match(node[".validate"], /400/, "counter-bullet text must be capped at 400 chars");
+  assert.match(node[".validate"], /disagree|support/,
+    "counter-bullet stance must be a closed-set string when present");
+});
