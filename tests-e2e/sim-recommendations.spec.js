@@ -182,13 +182,21 @@ test.describe("Inline citation badges on revealed findings", () => {
 test.describe("Skip-able 30-second Module A walkthrough", () => {
   test("tour.js registers a studentModA tour set with 3 steps", async ({ page }) => {
     await page.goto("/");
-    const info = await page.evaluate(() => {
+    // CanamedTour is lazy-loaded by script-loader.js; force the load
+    // so the test isn't racy when other specs warm/cool the cache.
+    const info = await page.evaluate(async () => {
+      if (window.CanamedLoader && typeof window.CanamedLoader.ensureTour === "function") {
+        await window.CanamedLoader.ensureTour();
+      }
+      // Belt-and-braces: poll up to 3s for window.CanamedTour to appear.
+      for (let i = 0; i < 30; i++) {
+        if (window.CanamedTour) break;
+        await new Promise(r => setTimeout(r, 100));
+      }
       if (!window.CanamedTour) return { hasTour: false };
-      // .start("studentModA") would actually open the overlay; we just
-      // want to verify the set + marker exist.
       return {
         hasTour: true,
-        isDone: window.CanamedTour.isDone("studentModA")   // marker query works
+        isDone: window.CanamedTour.isDone("studentModA")
       };
     });
     expect(info.hasTour).toBe(true);
