@@ -1282,8 +1282,15 @@
                 <div class="btn-group" id="group-history"></div>
               </details>
 
-              <!-- ── Examination (was "Examine") ── -->
-              <details class="chart-section" open id="chart-section-exam">
+              <!-- ── Examination (was "Examine") ──
+                   Collapsed by default (sim 2026-05-20 recurring finding +
+                   UX-pedagogist review): Module A opened with ~30 buttons /
+                   ~5x viewport. Progressive disclosure — History stays open
+                   as the first step; Examination, Working hypotheses and
+                   Investigations open on demand as the team works down the
+                   chart. renderButtons still populates the (hidden) groups,
+                   so no gameplay option is removed. -->
+              <details class="chart-section" id="chart-section-exam">
                 <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
@@ -1310,7 +1317,7 @@
                    so unlocking by typing a throwaway hypothesis is no
                    longer possible. Cross-room synced via Firebase
                    (refHypotheses). -->
-              <details class="chart-section chart-hypotheses" open id="chart-hypotheses">
+              <details class="chart-section chart-hypotheses" id="chart-hypotheses">
                 <summary class="chart-section-h">
                   <span class="chart-section-icon" aria-hidden="true">💭</span>
                   <span data-i18n="modA.chart.hypotheses.title">Working hypotheses</span>
@@ -1343,7 +1350,7 @@
                    serious causes + cauda equina + leg neuro). The
                    .is-locked class fades the section + the buttons
                    are disabled in renderButtons until the gate opens. -->
-              <details class="chart-section chart-investigations" open id="chart-investigations">
+              <details class="chart-section chart-investigations" id="chart-investigations">
                 <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
