@@ -1302,15 +1302,30 @@ function wireLanguageSwitcher() {
     const closeBtn = document.getElementById("global-settings-close");
     const themeSel = document.getElementById("global-theme-select");
     const restartBtn = document.getElementById("global-settings-restart-tour");
-    const setOpen = (open) => {
+    // Round-2 a11y review: the settings popup had no focus management.
+    // On open, move keyboard focus into the panel (the theme <select>, or
+    // the Close button as a fallback); on a deliberate close (Esc / Close
+    // button / toggle) restore focus to the cog. A click-outside close does
+    // NOT steal focus back (the user is interacting elsewhere).
+    const setOpen = (open, restoreFocus) => {
       settingsPanel.hidden = !open;
       settingsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        const focusTarget = themeSel || closeBtn ||
+          settingsPanel.querySelector(
+            "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+        if (focusTarget && typeof focusTarget.focus === "function") {
+          try { focusTarget.focus(); } catch (_) {}
+        }
+      } else if (restoreFocus && settingsBtn && typeof settingsBtn.focus === "function") {
+        try { settingsBtn.focus(); } catch (_) {}
+      }
     };
     settingsBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      setOpen(settingsPanel.hidden);
+      setOpen(settingsPanel.hidden, true);
     });
-    if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
+    if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false, true));
     document.addEventListener("click", (e) => {
       if (settingsPanel.hidden) return;
       // User report (2026-05-18): "The setting button on the phone
@@ -1328,10 +1343,10 @@ function wireLanguageSwitcher() {
       // (the SVG icon + every child path) is treated as "inside" the
       // button. Same approach as the panel check on the next clause.
       if (settingsBtn.contains(e.target) || settingsPanel.contains(e.target)) return;
-      setOpen(false);
+      setOpen(false, false);
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !settingsPanel.hidden) setOpen(false);
+      if (e.key === "Escape" && !settingsPanel.hidden) setOpen(false, true);
     });
     if (themeSel) {
       try { themeSel.value = (typeof getTheme === "function") ? getTheme() : "auto"; }
