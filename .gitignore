@@ -17,6 +17,7 @@ playwright/.cache/
 # tracked; each run's screenshots + report are local artefacts.
 sim-output/screens-*/
 sim-output/feedback-*.md
+sim-output/theme-audit/
 
 # Credentials — local-only reference copies of API keys, service-account
 # JSONs, and similar. NEVER commit. The git-tracked counterparts hold only

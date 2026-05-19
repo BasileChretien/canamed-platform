@@ -2564,7 +2564,14 @@ function startRoom() {
     }
     renderStage();
   });
-  refRevealed.on("value", snap => { revealed = snap.val() || {}; renderCase(); });
+  refRevealed.on("value", snap => {
+    revealed = snap.val() || {};
+    renderCase();
+    // The Investigations unlock gate now depends on revealed items
+    // (red-flag screen: history:1 + history:2 + exam:3). Re-render
+    // the hypotheses block so its visible lock state stays in sync.
+    if (typeof renderHypotheses === "function") renderHypotheses();
+  });
   refHypotheses.on("value", snap => {
     hypotheses = snap.val() || {};
     if (typeof renderHypotheses === "function") renderHypotheses();
@@ -5890,6 +5897,7 @@ if (typeof window !== "undefined") {
   window._test_setRoomCount     = function (n) { roomCount = parseInt(n, 10) || 1; };
   window._test_setAllRooms      = function (m) { allRooms = m || {}; };
   window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
+  window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
@@ -7209,8 +7217,43 @@ function initCoachDismiss() {
 function hypothesisCount() {
   return Object.keys(hypotheses || {}).length;
 }
+/* Investigations unlock gate — was "≥1 hypothesis recorded" (a gate
+ * satisfiable by typing 'back pain' to unlock the panel; trained
+ * gaming, not reasoning). Specialist panel 2026-05-19 recommended
+ * extending it to ALSO require the red-flag screen: history:1
+ * (serious-cause screen), history:2 (cauda equina screen), exam:3
+ * (leg neuro). The same items SYNTH_PREREQS already enforces for the
+ * synthesis step — applying them earlier means students cannot
+ * order an MRI without first ruling out the emergencies NICE NG59
+ * is written to catch. */
+function redFlagScreenDone() {
+  const need = ["history:1", "history:2", "exam:3"];
+  return need.every(id => !!revealed[id]);
+}
 function hypothesesUnlocked() {
-  return hypothesisCount() > 0;
+  return hypothesisCount() > 0 && redFlagScreenDone();
+}
+
+/* "First impressions (optional)" — sim 2026-05-19 UX-practitioner
+ * recommendation. A small textarea at the top of the Module A chart
+ * that lets a Y3/first-timer note their gut-feel BEFORE asking the
+ * patient anything. Per-tab only (localStorage); never written to
+ * Firebase, never shown to teammates, never assessed — the entire
+ * purpose is to give the student a place to externalise their first
+ * guess so they have something to refine after History + Exam.
+ * Keyed per session+room so it doesn't bleed across sessions. */
+function initImpressions() {
+  const ta = el("impressions-input");
+  if (!ta || ta._wired) return;
+  ta._wired = true;
+  const key = "canamed_impressions:" + (sessionNum || "?") + ":" + (myRoom || "?");
+  try {
+    const prev = localStorage.getItem(key);
+    if (prev) ta.value = prev;
+  } catch (e) { /* private mode — non-fatal */ }
+  ta.addEventListener("input", () => {
+    try { localStorage.setItem(key, ta.value); } catch (e) {}
+  });
 }
 
 function initHypotheses() {
@@ -7218,6 +7261,9 @@ function initHypotheses() {
   const btn = el("hypothesis-add-btn");
   if (!input || !btn || btn._wired) return;
   btn._wired = true;
+  // Wire the sibling "first impressions" textarea while we're here —
+  // they share a setup phase in Module A.
+  initImpressions();
   const submit = () => {
     const text = (input.value || "").trim().slice(0, 160);
     if (!text || !refHypotheses) return;

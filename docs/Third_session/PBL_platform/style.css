@@ -59,6 +59,20 @@
   --ok-50: #e7f4ec;
   --focus: #11161b;
 
+  /* --- consultation-note "paper chart" surface tokens (themed) ---
+   * The chart container used to hard-code #fbf9f3 + #d8cdb4 which left
+   * dark / high-contrast themes with cream paper underneath theme-aware
+   * white text → unreadable. Defining themed tokens here + overriding
+   * them in the dark / high-contrast blocks keeps the warm-paper look
+   * in light mode while making the surface follow the theme everywhere
+   * else. */
+  --note-bg:    #fbf9f3;
+  --note-line:  #d8cdb4;
+  --note-stripe: rgba(206, 184, 138, 0.18);
+  --note-margin-line: rgba(220, 120, 90, 0.30);
+  --note-ink:   var(--ink);
+  --note-accent-ink: #5a3b14;  /* caen-paper headline ink — overridden in dark */
+
   /* --- radius / shadow / spacing --- */
   --r-sm: 9px;
   --r-md: 13px;
@@ -1049,9 +1063,10 @@ html[data-theme="dark"] .next-step-coach {
 .consultation-note {
   background:
     linear-gradient(180deg, transparent 0, transparent calc(100% - 14px),
-      rgba(206, 184, 138, 0.18) calc(100% - 14px), rgba(206, 184, 138, 0.18) 100%);
-  background-color: #fbf9f3;
-  border: 1px solid #d8cdb4;
+      var(--note-stripe) calc(100% - 14px), var(--note-stripe) 100%);
+  background-color: var(--note-bg);
+  color: var(--note-ink);
+  border: 1px solid var(--note-line);
   border-radius: var(--r-lg, 14px);
   padding: var(--s-4) var(--s-4) var(--s-5);
   box-shadow: var(--sh-md);
@@ -1066,26 +1081,26 @@ html[data-theme="dark"] .next-step-coach {
   top: 16px;
   bottom: 16px;
   width: 1px;
-  background: rgba(220, 120, 90, 0.30);
+  background: var(--note-margin-line);
   pointer-events: none;
 }
 .consultation-note-head {
   margin-bottom: var(--s-3);
   padding-bottom: var(--s-2);
-  border-bottom: 1px solid rgba(216, 205, 180, 0.6);
+  border-bottom: 1px solid var(--note-line);
 }
 .consultation-note-title {
   margin: 0 0 4px;
   font-size: 1.1rem;
   font-weight: 700;
-  color: var(--caen-ink, #5a3b14);
+  color: var(--note-accent-ink);
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
 .consultation-note-title em {
   font-style: italic;
-  color: var(--ink);
+  color: var(--note-ink);
 }
 .consultation-note-icon {
   font-size: 1.3rem;
@@ -1099,7 +1114,7 @@ html[data-theme="dark"] .next-step-coach {
 }
 .consultation-note-sub em {
   font-style: italic;
-  color: var(--caen-ink);
+  color: var(--note-accent-ink);
   font-weight: 500;
 }
 /* Chart sections (History / Examination / Investigations) — each is a
@@ -1149,6 +1164,26 @@ html[data-theme="dark"] .next-step-coach {
    when the section is collapsed. */
 .chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   display: none !important;
+}
+
+/* --- "First impressions (optional)" top-of-chart note ---
+   UX-practitioner recommendation: a private, free-text gut-feel
+   note that lets first-timers externalise their initial thinking
+   before the canonical hypothesis block. Visually de-emphasised so
+   it doesn't compete with the main case-workup actions. */
+.chart-impressions { opacity: 0.92; }
+.chart-impressions > textarea {
+  width: 100%;
+  min-height: 56px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px dashed var(--line-strong, var(--line));
+  border-radius: var(--r-sm, 8px);
+  resize: vertical;
 }
 
 /* --- Module A per-bullet progress checklist --- */
@@ -4853,7 +4888,7 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
    (bg < surface-sunk < card) so the layered-shadow system still reads.
    ========================================================================== */
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) {
     /* warm paper -> warm graphite */
     --bg: #0e1620;
     --surface-sunk: #0a1119;
@@ -4862,6 +4897,13 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
     --line-strong: #324760;
     --ink: #f1eee6;
     --muted: #b3ab99;
+    /* See html[data-theme="dark"] for note-token rationale. */
+    --note-bg:    #161e2a;
+    --note-line:  #2c3a52;
+    --note-stripe: rgba(206, 184, 138, 0.06);
+    --note-margin-line: rgba(220, 120, 90, 0.40);
+    --note-ink:   var(--ink);
+    --note-accent-ink: #e2b86b;
     /* brand: a touch brighter so they pop against dark surfaces */
     --nagoya-700: #1e6fb6;
     --nagoya-600: #2e9fdf;
@@ -4914,6 +4956,15 @@ html[data-theme="dark"] {
   --line-strong: #324760;
   --ink: #f1eee6;
   --muted: #b3ab99;
+  /* Consultation-note "paper chart" tokens override — see :root for
+     rationale. The warm-paper colour collapses to a deeper card so the
+     theme-aware text stays readable. */
+  --note-bg:    #161e2a;
+  --note-line:  #2c3a52;
+  --note-stripe: rgba(206, 184, 138, 0.06);
+  --note-margin-line: rgba(220, 120, 90, 0.40);
+  --note-ink:   var(--ink);
+  --note-accent-ink: #e2b86b;     /* warm headline ink that reads on dark */
   --nagoya-700: #1e6fb6;
   --nagoya-600: #2e9fdf;
   --nagoya-500: #5cb8e8;
@@ -5132,6 +5183,15 @@ html[data-theme="high-contrast"] {
   --line-strong: #000000;
   --ink: #000000;
   --muted: #1f1f1f;
+  /* Consultation-note tokens in high-contrast: hard white surface,
+     black borders, full-black ink. Removes the warm-paper effect
+     intentionally — high-contrast prioritises legibility. */
+  --note-bg:    #ffffff;
+  --note-line:  #000000;
+  --note-stripe: rgba(0, 0, 0, 0.04);
+  --note-margin-line: #000000;
+  --note-ink:   #000000;
+  --note-accent-ink: #000000;
   --primary: #0033a0;
   --primary-hover: #001f5c;
   --key: #c00000;
