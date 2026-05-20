@@ -9912,5 +9912,41 @@ function wireAccountUI() {
   });
 }
 
+/* ===================== Observer SPIKES checklist (Module B) =====================
+ * Roleplay review 2026-05-20: the observer had no structured tool. The
+ * #observer-checklist <details> in index.html gives them a SPIKES tick-list
+ * + two note fields to anchor the Phase-3 debrief. State is LOCAL (per-tab
+ * sessionStorage) — a private scratchpad, no Firebase write path, so it
+ * needs no rules change and never leaves the device. Wired idempotently. */
+function initObserverChecklist() {
+  const root = document.getElementById("observer-checklist");
+  if (!root || root.dataset.wired === "1") return;
+  root.dataset.wired = "1";
+  const KEY = "canamed_obs_spikes";
+  const boxes = Array.from(root.querySelectorAll("input[type=checkbox][data-obs]"));
+  const win = document.getElementById("observer-note-win");
+  const hard = document.getElementById("observer-note-hard");
+
+  let saved = {};
+  try { saved = JSON.parse(sessionStorage.getItem(KEY) || "{}") || {}; } catch (_) { saved = {}; }
+
+  // Restore.
+  boxes.forEach(b => { if (saved[b.dataset.obs]) b.checked = true; });
+  if (win && typeof saved._win === "string") win.value = saved._win;
+  if (hard && typeof saved._hard === "string") hard.value = saved._hard;
+
+  const persist = () => {
+    const state = {};
+    boxes.forEach(b => { if (b.checked) state[b.dataset.obs] = 1; });
+    if (win && win.value) state._win = win.value.slice(0, 400);
+    if (hard && hard.value) state._hard = hard.value.slice(0, 400);
+    try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch (_) { /* private mode */ }
+  };
+  boxes.forEach(b => b.addEventListener("change", persist));
+  if (win) win.addEventListener("input", persist);
+  if (hard) hard.addEventListener("input", persist);
+}
+
 /* ===================== START ===================== */
 initEntry();
+initObserverChecklist();
