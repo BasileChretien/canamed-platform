@@ -1302,15 +1302,30 @@ function wireLanguageSwitcher() {
     const closeBtn = document.getElementById("global-settings-close");
     const themeSel = document.getElementById("global-theme-select");
     const restartBtn = document.getElementById("global-settings-restart-tour");
-    const setOpen = (open) => {
+    // Round-2 a11y review: the settings popup had no focus management.
+    // On open, move keyboard focus into the panel (the theme <select>, or
+    // the Close button as a fallback); on a deliberate close (Esc / Close
+    // button / toggle) restore focus to the cog. A click-outside close does
+    // NOT steal focus back (the user is interacting elsewhere).
+    const setOpen = (open, restoreFocus) => {
       settingsPanel.hidden = !open;
       settingsBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) {
+        const focusTarget = themeSel || closeBtn ||
+          settingsPanel.querySelector(
+            "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])");
+        if (focusTarget && typeof focusTarget.focus === "function") {
+          try { focusTarget.focus(); } catch (_) {}
+        }
+      } else if (restoreFocus && settingsBtn && typeof settingsBtn.focus === "function") {
+        try { settingsBtn.focus(); } catch (_) {}
+      }
     };
     settingsBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      setOpen(settingsPanel.hidden);
+      setOpen(settingsPanel.hidden, true);
     });
-    if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false));
+    if (closeBtn) closeBtn.addEventListener("click", () => setOpen(false, true));
     document.addEventListener("click", (e) => {
       if (settingsPanel.hidden) return;
       // User report (2026-05-18): "The setting button on the phone
@@ -1328,10 +1343,10 @@ function wireLanguageSwitcher() {
       // (the SVG icon + every child path) is treated as "inside" the
       // button. Same approach as the panel check on the next clause.
       if (settingsBtn.contains(e.target) || settingsPanel.contains(e.target)) return;
-      setOpen(false);
+      setOpen(false, false);
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && !settingsPanel.hidden) setOpen(false);
+      if (e.key === "Escape" && !settingsPanel.hidden) setOpen(false, true);
     });
     if (themeSel) {
       try { themeSel.value = (typeof getTheme === "function") ? getTheme() : "auto"; }
@@ -1777,6 +1792,32 @@ function claimMembership(roleStr) {
   }
 }
 
+/* R3 FINDING-01: bind this tab's clientId to auth.uid, write-once. The
+ * server rules for pool / presence / typing / tests / poll / observers
+ * accept a write to $clientId only when this mapping is absent (first
+ * write) or already equals the caller's uid — so one participant can no
+ * longer overwrite another's slot. Best-effort + idempotent:
+ *   - on a refresh the same clientId re-resolves and the write-once rule
+ *     refuses the re-set; that's expected and harmless (the binding is
+ *     already ours), so PERMISSION_DENIED is swallowed.
+ *   - on a legacy DB without the clientMapping rule, the write simply
+ *     lands as ordinary data; the tolerant ".write" rule keeps working. */
+function claimClientMapping() {
+  if (!db || !currentUser || !currentUser.uid || !sessionNum || !clientId) {
+    return Promise.resolve();
+  }
+  try {
+    return db.ref(sPath("clientMapping/" + clientId)).set(currentUser.uid).catch(e => {
+      // Expected when the binding already exists (refresh / re-join) or on
+      // a legacy DB; the join continues regardless.
+      try { console.warn("claimClientMapping skipped (continuing):", e && e.code); } catch (_) {}
+    });
+  } catch (e) {
+    try { console.warn("claimClientMapping threw (continuing):", e); } catch (_) {}
+    return Promise.resolve();
+  }
+}
+
 function _joinParticipantAfterAuth() {
   // user may have hit "Leave" while we were waiting for auth
   if (!joined) return;
@@ -1785,10 +1826,14 @@ function _joinParticipantAfterAuth() {
   // is satisfied by the time the .on("value") handlers fire. We chain
   // through claimMembership() because the listener installs would race the
   // members write otherwise and the server would PERMISSION_DENY them.
-  claimMembership("participant").then(() => {
-    if (!joined) return; // user left while membership write was in-flight
-    _joinParticipantWireUp();
-  });
+  // R3 FINDING-01: also bind clientId->uid before the pool write so the
+  // owner-only write rules accept our own pool/presence/typing/tests writes.
+  claimMembership("participant")
+    .then(() => claimClientMapping())
+    .then(() => {
+      if (!joined) return; // user left while membership write was in-flight
+      _joinParticipantWireUp();
+    });
 }
 
 function _joinParticipantWireUp() {
@@ -9912,5 +9957,41 @@ function wireAccountUI() {
   });
 }
 
+/* ===================== Observer SPIKES checklist (Module B) =====================
+ * Roleplay review 2026-05-20: the observer had no structured tool. The
+ * #observer-checklist <details> in index.html gives them a SPIKES tick-list
+ * + two note fields to anchor the Phase-3 debrief. State is LOCAL (per-tab
+ * sessionStorage) — a private scratchpad, no Firebase write path, so it
+ * needs no rules change and never leaves the device. Wired idempotently. */
+function initObserverChecklist() {
+  const root = document.getElementById("observer-checklist");
+  if (!root || root.dataset.wired === "1") return;
+  root.dataset.wired = "1";
+  const KEY = "canamed_obs_spikes";
+  const boxes = Array.from(root.querySelectorAll("input[type=checkbox][data-obs]"));
+  const win = document.getElementById("observer-note-win");
+  const hard = document.getElementById("observer-note-hard");
+
+  let saved = {};
+  try { saved = JSON.parse(sessionStorage.getItem(KEY) || "{}") || {}; } catch (_) { saved = {}; }
+
+  // Restore.
+  boxes.forEach(b => { if (saved[b.dataset.obs]) b.checked = true; });
+  if (win && typeof saved._win === "string") win.value = saved._win;
+  if (hard && typeof saved._hard === "string") hard.value = saved._hard;
+
+  const persist = () => {
+    const state = {};
+    boxes.forEach(b => { if (b.checked) state[b.dataset.obs] = 1; });
+    if (win && win.value) state._win = win.value.slice(0, 400);
+    if (hard && hard.value) state._hard = hard.value.slice(0, 400);
+    try { sessionStorage.setItem(KEY, JSON.stringify(state)); } catch (_) { /* private mode */ }
+  };
+  boxes.forEach(b => b.addEventListener("change", persist));
+  if (win) win.addEventListener("input", persist);
+  if (hard) hard.addEventListener("input", persist);
+}
+
 /* ===================== START ===================== */
 initEntry();
+initObserverChecklist();

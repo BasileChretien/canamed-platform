@@ -5,19 +5,23 @@
  * (Kenta A2) + anxious (Hana B1) personas particularly hard ("Too many
  * words. I want to click the wrong thing by mistake.").
  *
- * Fix: each chart section (History / Examination / Investigations) is
- * now a <details open> instead of <section>. The chart still renders
- * fully on first load (no behaviour change for first-time users), but a
- * student can collapse any section they're done with — trimming the
- * scroll-height without removing gameplay options.
+ * Each chart section (History / Examination / Working hypotheses /
+ * Investigations) is a <details> with a <summary> heading.
+ *
+ * PROGRESSIVE DISCLOSURE (2026-05-20): the sim kept flagging Module A
+ * opening with ~30 buttons / ~5× viewport. History stays default-OPEN
+ * (the obvious starting point) while Examination, Working hypotheses and
+ * Investigations are default-COLLAPSED — their labelled summaries stay
+ * visible so discoverability is preserved, and the team expands each
+ * section as it works down the chart. renderButtons still populates the
+ * (hidden) groups, so no gameplay option is removed.
  *
  * This suite locks in:
- *   1. Each chart section is a <details open> in the DOM.
- *   2. Clicking the section heading collapses its button-group
- *      (and the buttons stop counting as visible).
- *   3. Clicking again re-opens.
- *   4. The keyboard a11y contract is honoured (<summary> is the focus
- *      target, Enter/Space toggles).
+ *   1. Every chart section is a <details> with a <summary> heading;
+ *      History defaults open, the other three default collapsed.
+ *   2. Clicking a section heading toggles its button-group visibility.
+ *   3. The default (collapsed) layout is meaningfully shorter than the
+ *      fully-expanded layout.
  *
  * Mode: LOCAL (forceLocalMode in fixtures.js).
  */
@@ -26,10 +30,11 @@
 const { test, expect } = require("./fixtures.js");
 
 test.describe("Module A chart sections — collapsible <details>", () => {
-  test("each chart section is a <details open> with a <summary> heading", async ({ page }) => {
+  test("chart sections are <details>+<summary>; History open, others collapsed", async ({ page }) => {
     await page.goto("/");
     const tags = await page.evaluate(() => {
-      const ids = ["chart-section-history", "chart-section-exam", "chart-investigations"];
+      const ids = ["chart-section-history", "chart-section-exam",
+                   "chart-hypotheses", "chart-investigations"];
       return ids.map(id => {
         const e = document.getElementById(id);
         if (!e) return { id: id, tag: "MISSING" };
@@ -43,11 +48,17 @@ test.describe("Module A chart sections — collapsible <details>", () => {
         };
       });
     });
+    // Which sections must default-open vs default-collapsed.
+    const shouldBeOpen = { "chart-section-history": true };
     for (const t of tags) {
       expect(t.tag, t.id + " must be <details>").toBe("DETAILS");
-      expect(t.open, t.id + " must default-open so first-time users see the full chart").toBe(true);
       expect(t.hasSummary, t.id + " must contain a <summary> click target").toBe(true);
       expect(t.summaryHasHeader, t.id + " summary must wrap the icon + heading").toBe(true);
+      const wantOpen = !!shouldBeOpen[t.id];
+      expect(t.open,
+        t.id + (wantOpen ? " must default-open (first step)"
+                         : " must default-collapse (progressive disclosure)")
+      ).toBe(wantOpen);
     }
   });
 
@@ -123,7 +134,7 @@ test.describe("Module A chart sections — collapsible <details>", () => {
     expect(visibleReopened).toBe(5);
   });
 
-  test("collapsing all three sections meaningfully shortens the page scroll-height", async ({ page }) => {
+  test("the default collapsed layout is meaningfully shorter than fully-expanded", async ({ page }) => {
     await page.goto("/");
     // Render the room view + populate each group with 10 buttons so the
     // collapse-effect is measurable.
@@ -152,21 +163,34 @@ test.describe("Module A chart sections — collapsible <details>", () => {
       });
     });
 
-    const heightOpen = await page.evaluate(() => document.body.scrollHeight);
+    const SECTIONS = ["chart-section-history", "chart-section-exam",
+                      "chart-hypotheses", "chart-investigations"];
 
-    // Collapse all three.
-    for (const id of ["chart-section-history", "chart-section-exam", "chart-investigations"]) {
-      await page.locator("#" + id + " summary").click();
-    }
+    // Fully-expanded baseline: force every section open.
+    const heightAllOpen = await page.evaluate((ids) => {
+      ids.forEach(id => { const e = document.getElementById(id); if (e) e.setAttribute("open", ""); });
+      return document.body.scrollHeight;
+    }, SECTIONS);
 
-    const heightClosed = await page.evaluate(() => document.body.scrollHeight);
-    expect(heightClosed,
-      "collapsing all 3 chart sections must noticeably shorten the page"
-    ).toBeLessThan(heightOpen);
-    // Empirically the 3 button groups together account for ~600-900px;
-    // require at least a 200px reduction so we don't pass on a no-op.
-    expect(heightOpen - heightClosed,
-      "expected at least 200px reduction after collapsing all 3 sections"
+    // Default layout: History open, the other three collapsed (the
+    // shipped progressive-disclosure state).
+    const heightDefault = await page.evaluate((ids) => {
+      ids.forEach(id => {
+        const e = document.getElementById(id);
+        if (!e) return;
+        if (id === "chart-section-history") e.setAttribute("open", "");
+        else e.removeAttribute("open");
+      });
+      return document.body.scrollHeight;
+    }, SECTIONS);
+
+    expect(heightDefault,
+      "the default collapsed layout must be shorter than fully-expanded"
+    ).toBeLessThan(heightAllOpen);
+    // The 3 collapsed button groups together account for several hundred px;
+    // require a meaningful reduction so we don't pass on a no-op.
+    expect(heightAllOpen - heightDefault,
+      "expected at least 200px shorter in the default layout"
     ).toBeGreaterThan(200);
   });
 });

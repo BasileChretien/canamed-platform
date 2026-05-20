@@ -1282,8 +1282,15 @@
                 <div class="btn-group" id="group-history"></div>
               </details>
 
-              <!-- ── Examination (was "Examine") ── -->
-              <details class="chart-section" open id="chart-section-exam">
+              <!-- ── Examination (was "Examine") ──
+                   Collapsed by default (sim 2026-05-20 recurring finding +
+                   UX-pedagogist review): Module A opened with ~30 buttons /
+                   ~5x viewport. Progressive disclosure — History stays open
+                   as the first step; Examination, Working hypotheses and
+                   Investigations open on demand as the team works down the
+                   chart. renderButtons still populates the (hidden) groups,
+                   so no gameplay option is removed. -->
+              <details class="chart-section" id="chart-section-exam">
                 <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
@@ -1310,7 +1317,7 @@
                    so unlocking by typing a throwaway hypothesis is no
                    longer possible. Cross-room synced via Firebase
                    (refHypotheses). -->
-              <details class="chart-section chart-hypotheses" open id="chart-hypotheses">
+              <details class="chart-section chart-hypotheses" id="chart-hypotheses">
                 <summary class="chart-section-h">
                   <span class="chart-section-icon" aria-hidden="true">💭</span>
                   <span data-i18n="modA.chart.hypotheses.title">Working hypotheses</span>
@@ -1343,7 +1350,7 @@
                    serious causes + cauda equina + leg neuro). The
                    .is-locked class fades the section + the buttons
                    are disabled in renderButtons until the gate opens. -->
-              <details class="chart-section chart-investigations" open id="chart-investigations">
+              <details class="chart-section chart-investigations" id="chart-investigations">
                 <summary class="chart-section-h">
                   <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
@@ -1975,6 +1982,40 @@
           everything, or focus on what we do next?" &middot; "I can see this is hard to hear."
           &middot; "Take your time." &middot; "What questions do you have for me?"</span>
         </div>
+
+        <!-- Observer's structured SPIKES observation pad (roleplay review
+             2026-05-20: "the observer had no structured tool — give them a
+             SPIKES tick-list + note field to anchor the Phase-3 debrief").
+             Local-only (per-tab sessionStorage via initObserverChecklist in
+             script.js) so it needs no Firebase write path or rules change;
+             it's a private scratchpad the observer fills during the scene
+             and reads back when they run the discussion. Collapsed by
+             default so it doesn't crowd the role-picker. -->
+        <details class="card observer-checklist-card" id="observer-checklist">
+          <summary class="observer-checklist-summary">
+            <span aria-hidden="true">📝</span>
+            <span data-i18n="modB.obs.title">Observer's SPIKES checklist — tick what you see, note one win + one hard moment</span>
+          </summary>
+          <p class="hint" data-i18n="modB.obs.hint">Just for you — tick a step when the physician does it, and jot the moments you'll raise in the debrief. Saved on this device only.</p>
+          <ul class="observer-spikes-list" id="observer-spikes-list">
+            <li><label><input type="checkbox" data-obs="s" /> <span data-i18n="modB.obs.s">Setting — set up privately, sat down, no interruptions</span></label></li>
+            <li><label><input type="checkbox" data-obs="p" /> <span data-i18n="modB.obs.p">Perception — asked what the patient already understands</span></label></li>
+            <li><label><input type="checkbox" data-obs="i" /> <span data-i18n="modB.obs.i">Invitation — asked how much they want to know</span></label></li>
+            <li><label><input type="checkbox" data-obs="k" /> <span data-i18n="modB.obs.k">Knowledge — gave a warning shot, then news in small plain pieces</span></label></li>
+            <li><label><input type="checkbox" data-obs="e" /> <span data-i18n="modB.obs.e">Emotions — named and acknowledged the feeling, allowed silence</span></label></li>
+            <li><label><input type="checkbox" data-obs="s2" /> <span data-i18n="modB.obs.s2">Strategy — agreed a next step; signalled they won't be abandoned</span></label></li>
+          </ul>
+          <label class="observer-note-label" for="observer-note-win"
+                 data-i18n="modB.obs.win-label">One thing the physician SAID that worked:</label>
+          <textarea id="observer-note-win" class="observer-note" rows="2" maxlength="400"
+                    data-i18n-attr="placeholder" data-i18n="modB.obs.win-ph"
+                    placeholder="e.g. &quot;I can see this is hard to hear&quot; — she paused and let them react"></textarea>
+          <label class="observer-note-label" for="observer-note-hard"
+                 data-i18n="modB.obs.hard-label">One moment that was hard or could improve:</label>
+          <textarea id="observer-note-hard" class="observer-note" rows="2" maxlength="400"
+                    data-i18n-attr="placeholder" data-i18n="modB.obs.hard-ph"
+                    placeholder="e.g. gave the prognosis number before the patient asked for it"></textarea>
+        </details>
 
         <!-- Pause/Explore/Explain/Realign — collapsed by default. Opens
              when the family raises their quiet aside (Physician + Observer
