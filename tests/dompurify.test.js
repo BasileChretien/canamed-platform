@@ -128,10 +128,14 @@ test("i18n.js fails closed (writes \"\") when DOMPurify is absent", () => {
   // If DOMPurify somehow did not load, the helper must write the empty
   // string rather than the raw (unsanitised) translation string. Pin this
   // so a future refactor can't quietly re-introduce a raw-innerHTML fallback.
-  const helper = I18N_JS.match(/function _setHTML\(node, html\)[\s\S]{0,600}?\n  \}/);
+  const helper = I18N_JS.match(/function _setHTML\(node, html\)[\s\S]{0,1600}?\n  \}/);
   assert.ok(helper, "i18n.js must define a _setHTML(node, html) sanitising helper");
   assert.ok(/window\.DOMPurify/.test(helper[0]),
     "_setHTML must guard on window.DOMPurify being present");
-  assert.ok(/:\s*""/.test(helper[0]),
+  // Fail closed: when DOMPurify is absent the helper writes "" (never the raw,
+  // unsanitised string). Accept either the legacy ternary (`: ""`) or the
+  // current guard-clause form (`innerHTML = "";`). Pin this so a future
+  // refactor can't quietly re-introduce a raw-innerHTML fallback.
+  assert.ok(/innerHTML\s*=\s*""|:\s*""/.test(helper[0]),
     "_setHTML must fall back to \"\" (never raw innerHTML) when DOMPurify is missing");
 });

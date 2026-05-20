@@ -3310,12 +3310,31 @@
   // the raw (unsanitised) string — a missing emphasis tag is acceptable, an
   // injected <script>/onerror is not.
   function _setHTML(node, html) {
-    node.innerHTML = (typeof window !== "undefined" && window.DOMPurify)
-      ? window.DOMPurify.sanitize(html, {
-          ALLOWED_TAGS: ["strong", "em", "br", "a", "b", "i", "span"],
-          ALLOWED_ATTR: ["href", "target", "rel", "lang"]
-        })
-      : "";
+    // Hard fail-closed: if DOMPurify is somehow absent we write "" rather
+    // than the raw (unsanitised) string — a missing emphasis tag is
+    // acceptable, an injected <script>/onerror is not. DOMPurify is vendored
+    // locally and loads (defer) before this file, so this branch is not
+    // expected at runtime.
+    if (typeof window === "undefined" || !window.DOMPurify) {
+      node.innerHTML = "";
+      return;
+    }
+    // The allowlist is a SUPERSET of every attribute the platform's own i18n
+    // markup uses, so sanitisation is a no-op for legitimate content:
+    //   - inline emphasis + translated links (strong/em/b/i/span/br/abbr/a)
+    //   - href/target/rel + lang/title on links and phrase fragments
+    //   - id/class and the data-i18n* hooks, because some data-i18n-html
+    //     strings embed elements the runtime later re-localises OR queries by
+    //     id/class (e.g. <a data-i18n-href="privacy"> in the consent
+    //     paragraphs). Stripping these (the original [href,target,rel,lang]
+    //     allowlist) broke runtime behaviour that depends on them.
+    // DOMPurify still strips the actual XSS vectors regardless of this list:
+    // <script>/<iframe>, on* event handlers, and javascript:/data: URIs.
+    node.innerHTML = window.DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ["strong", "em", "br", "a", "b", "i", "span", "abbr"],
+      ALLOWED_ATTR: ["href", "target", "rel", "lang", "title", "id", "class",
+                     "data-i18n", "data-i18n-html", "data-i18n-attr", "data-i18n-href"]
+    });
   }
 
   function applyI18n(root) {
