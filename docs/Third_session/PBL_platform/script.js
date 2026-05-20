@@ -3757,6 +3757,31 @@ function roomProgress(data) {
     " · answers A" + aCount + " B" + bCount;
 }
 
+/* Live participation equity for the facilitator dashboard. Returns how many
+ * of the students PRESENT in the room have actually CONTRIBUTED a substantive
+ * artefact (a group answer or a working hypothesis — both tagged with the
+ * author's clientId via `cid`). Lets the lead facilitator spot a room where
+ * one or two students are carrying the group while others stay silent, and
+ * intervene mid-session rather than discover it in the transcript afterwards.
+ *   present     = clientIds with a presence record
+ *   contributing = present clientIds that authored >= 1 answer/hypothesis
+ *   quiet        = present but never contributed (the students to nudge) */
+function roomParticipation(data) {
+  const present = Object.keys((data && data.presence) || {});
+  const authored = Object.create(null);
+  const collect = (obj) => {
+    Object.keys(obj || {}).forEach(k => {
+      const cid = obj[k] && obj[k].cid;
+      if (typeof cid === "string") authored[cid] = true;
+    });
+  };
+  collect(data && data.answers && data.answers.moduleA);
+  collect(data && data.answers && data.answers.moduleB);
+  collect(data && data.moduleA && data.moduleA.hypotheses);
+  const contributing = present.filter(cid => authored[cid]).length;
+  return { present: present.length, contributing: contributing };
+}
+
 /* the big dashboard overview */
 /* Help-call notifier — when a NEW (not-already-alerted) call appears
    on a room the admin is watching, play a soft chime + fire a desktop
@@ -4090,6 +4115,22 @@ function renderDashboard() {
       det.appendChild(m);
       prog.appendChild(det);
     }
+    // Live participation equity — how many present students have actually
+    // contributed. Only meaningful once the room is in an interactive stage
+    // (Module A/B) with 2+ present; flagged "quiet" when someone present
+    // hasn't contributed yet, so the facilitator can nudge the group.
+    const part = roomParticipation(data);
+    const partic = document.createElement("div");
+    const interactive = (st === 1 || st === 2);
+    const quiet = interactive && part.present >= 2 && part.contributing < part.present;
+    partic.className = "dash-participation" + (quiet ? " quiet" : "");
+    if (interactive && part.present >= 1) {
+      partic.textContent = "👥 " + part.contributing + "/" + part.present +
+        " contributing" + (quiet ? " — nudge the quiet ones" : "");
+    } else {
+      partic.textContent = "";
+    }
+
     const ppl = document.createElement("div");
     ppl.className = "dash-people";
     if (people.length) {
@@ -4111,7 +4152,8 @@ function renderDashboard() {
       "  ·  facilitator " + sManual + "/" + MANUAL_CAP +
       (sPen ? "  ·  penalties −" + sPen : "");
     info.appendChild(title); info.appendChild(stg);
-    info.appendChild(timer); info.appendChild(prog); info.appendChild(ppl);
+    info.appendChild(timer); info.appendChild(prog);
+    info.appendChild(partic); info.appendChild(ppl);
     info.appendChild(score);
 
     const ctrl = document.createElement("div");

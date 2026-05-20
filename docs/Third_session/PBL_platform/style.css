@@ -1849,6 +1849,10 @@ footer {
 .dash-timer { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
 .dash-timer.over { color: var(--key); font-weight: 600; }
 .dash-progress { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+/* Live participation equity (facilitator dashboard). */
+.dash-participation { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+.dash-participation:empty { display: none; }
+.dash-participation.quiet { color: var(--key); font-weight: 600; }
 .dash-ctrl { display: flex; gap: 6px; flex-wrap: wrap; }
 .dash-ctrl button, .sidebar-room-ctrl button, .admin-controls button {
   padding: 8px 13px;
