@@ -20,6 +20,11 @@
        toggles the active section based on the active language. Adding
        a new language with NO full translation just falls back to EN
        and surfaces the lang-not-available banner, same as today. -->
+  <!-- purify.min.js — vendored DOMPurify, MUST load before i18n.js so the
+       data-i18n-html sink (the lang-not-available banner below) is sanitised
+       rather than blanked by the fail-closed helper. Local copy: CSP is
+       script-src 'self' (no CDN). -->
+  <script src="purify.min.js" defer></script>
   <script src="i18n.js" defer></script>
   <script src="privacy-lang.js" defer></script>
 </head>
