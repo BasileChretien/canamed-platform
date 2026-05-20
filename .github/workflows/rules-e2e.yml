@@ -1,0 +1,86 @@
+# Rules E2E — exercises database.rules.json against the real Firebase
+# emulators (RTDB + Auth).
+#
+# WHY THIS EXISTS: the main E2E suite (.github/workflows/e2e.yml) runs the
+# platform in LOCAL mode (in-browser LocalDB), so it NEVER touches
+# database.rules.json. A rules regression — e.g. a write predicate that
+# breaks the join flow, or a rule accidentally opened to `true` — ships
+# invisibly. This job boots the Firebase emulators with the production
+# rules and runs a smoke flow (facilitator create → participant join →
+# advance) plus a negative check (a write to a denied path must be
+# rejected), so rules regressions are caught at PR time.
+#
+# Requires Java (RTDB emulator) + the Chromium Playwright browser. The
+# orchestration lives in `npm run test:e2e:rules`:
+#   build-emulator-rules.js  →  firebase emulators:exec "playwright test"
+
+name: Rules E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: rules-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rules-e2e:
+    name: Rules E2E (emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      # The RTDB emulator is a Java process.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Install firebase-tools
+        run: npm install --no-save firebase-tools
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-chromium-${{ hashFiles('package.json', 'package-lock.json') }}
+
+      - name: Install Playwright Chromium
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Playwright system deps (cache hit path)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # Cache the emulator jar so it isn't re-downloaded every run.
+      - name: Cache Firebase emulators
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ runner.os }}
+
+      - name: Run rules E2E against the emulator
+        run: npm run test:e2e:rules
+        env:
+          CI: "1"
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: rules-e2e-report
+          path: playwright-report/
+          retention-days: 14
