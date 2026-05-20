@@ -1853,6 +1853,9 @@ footer {
 .dash-participation { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
 .dash-participation:empty { display: none; }
 .dash-participation.quiet { color: var(--key); font-weight: 600; }
+/* "Who's stuck" — names of present students yet to contribute. */
+.dash-quiet-names { font-size: 0.82rem; color: var(--key); margin-top: 2px; }
+.dash-quiet-names:empty { display: none; }
 .dash-ctrl { display: flex; gap: 6px; flex-wrap: wrap; }
 .dash-ctrl button, .sidebar-room-ctrl button, .admin-controls button {
   padding: 8px 13px;

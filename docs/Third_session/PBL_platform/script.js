@@ -3766,20 +3766,51 @@ function roomProgress(data) {
  *   present     = clientIds with a presence record
  *   contributing = present clientIds that authored >= 1 answer/hypothesis
  *   quiet        = present but never contributed (the students to nudge) */
+/* Gini coefficient of a list of non-negative values (0 = perfectly even,
+ * → 1 = one person holds everything). Used to summarise how evenly the
+ * room's contributions are spread across the present students. Returns 0
+ * for an empty list or an all-zero list (no contributions yet = "even"). */
+function gini(values) {
+  const n = values.length;
+  if (n === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += values[i];
+  if (sum === 0) return 0;
+  let absDiff = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) absDiff += Math.abs(values[i] - values[j]);
+  }
+  return absDiff / (2 * n * sum);
+}
+
 function roomParticipation(data) {
-  const present = Object.keys((data && data.presence) || {});
-  const authored = Object.create(null);
-  const collect = (obj) => {
+  const presence = (data && data.presence) || {};
+  const present = Object.keys(presence);
+  // Per-student contribution COUNT (not just a boolean) so we can measure
+  // the spread, not only the headcount. Each answer / hypothesis is tagged
+  // with its author's clientId via `cid`.
+  const counts = Object.create(null);
+  const tally = (obj) => {
     Object.keys(obj || {}).forEach(k => {
       const cid = obj[k] && obj[k].cid;
-      if (typeof cid === "string") authored[cid] = true;
+      if (typeof cid === "string") counts[cid] = (counts[cid] || 0) + 1;
     });
   };
-  collect(data && data.answers && data.answers.moduleA);
-  collect(data && data.answers && data.answers.moduleB);
-  collect(data && data.moduleA && data.moduleA.hypotheses);
-  const contributing = present.filter(cid => authored[cid]).length;
-  return { present: present.length, contributing: contributing };
+  tally(data && data.answers && data.answers.moduleA);
+  tally(data && data.answers && data.answers.moduleB);
+  tally(data && data.moduleA && data.moduleA.hypotheses);
+  const perPresent = present.map(cid => counts[cid] || 0);
+  const contributing = perPresent.filter(c => c > 0).length;
+  // "Who's stuck" — present students who haven't contributed anything yet.
+  const quietNames = present
+    .filter(cid => !(counts[cid] > 0))
+    .map(cid => (presence[cid] && presence[cid].name) ? presence[cid].name : "—");
+  return {
+    present: present.length,
+    contributing: contributing,
+    gini: gini(perPresent),
+    quietNames: quietNames
+  };
 }
 
 /* the big dashboard overview */
@@ -4115,20 +4146,43 @@ function renderDashboard() {
       det.appendChild(m);
       prog.appendChild(det);
     }
-    // Live participation equity — how many present students have actually
-    // contributed. Only meaningful once the room is in an interactive stage
-    // (Module A/B) with 2+ present; flagged "quiet" when someone present
-    // hasn't contributed yet, so the facilitator can nudge the group.
+    // Live participation equity — how evenly the room is engaged. Only
+    // meaningful once the room is in an interactive stage (Module A/B) with
+    // students present. Shows the contributing headcount + a Gini-derived
+    // "balance" read, and (separately) names the students who haven't
+    // contributed yet so the facilitator can nudge them by name.
     const part = roomParticipation(data);
-    const partic = document.createElement("div");
     const interactive = (st === 1 || st === 2);
     const quiet = interactive && part.present >= 2 && part.contributing < part.present;
+
+    const partic = document.createElement("div");
     partic.className = "dash-participation" + (quiet ? " quiet" : "");
     if (interactive && part.present >= 1) {
-      partic.textContent = "👥 " + part.contributing + "/" + part.present +
-        " contributing" + (quiet ? " — nudge the quiet ones" : "");
+      let line = "👥 " + part.contributing + "/" + part.present + " contributing";
+      // A balance read is only meaningful with 2+ actual contributors among
+      // 3+ present (Gini on tiny / single-contributor sets is noise).
+      if (part.contributing >= 2 && part.present >= 3) {
+        const g = part.gini;
+        const label = g < 0.2 ? "even" :
+                      g < 0.4 ? "slightly uneven" : "uneven — one or two carrying it";
+        line += " · " + label;
+        partic.title = "Contribution balance (Gini) " + g.toFixed(2) +
+          " — 0 is perfectly even, 1 is one person doing everything";
+      }
+      partic.textContent = line;
     } else {
       partic.textContent = "";
+    }
+
+    // "Who's stuck" — name the present students with zero contributions so
+    // the facilitator can prompt them directly. Names via textContent only.
+    const quietLine = document.createElement("div");
+    quietLine.className = "dash-quiet-names";
+    if (interactive && part.present >= 2 && part.quietNames.length &&
+        part.quietNames.length < part.present) {
+      quietLine.textContent = "💤 not yet contributing: " + part.quietNames.join(", ");
+    } else {
+      quietLine.textContent = "";
     }
 
     const ppl = document.createElement("div");
@@ -4153,7 +4207,7 @@ function renderDashboard() {
       (sPen ? "  ·  penalties −" + sPen : "");
     info.appendChild(title); info.appendChild(stg);
     info.appendChild(timer); info.appendChild(prog);
-    info.appendChild(partic); info.appendChild(ppl);
+    info.appendChild(partic); info.appendChild(quietLine); info.appendChild(ppl);
     info.appendChild(score);
 
     const ctrl = document.createElement("div");
