@@ -6938,6 +6938,23 @@ function buildDecision(d) {
       res.appendChild(pts);
     }
     wrap.appendChild(res);
+    // BRANCHING: a committed option may carry a `branch.reveal` — a short
+    // narrative of what the patient/family does next, turning the decision
+    // into a fork. Derived from the synced committed choice, so the whole
+    // room sees the same continuation with no extra Firebase path. Options
+    // without a branch render nothing here (branching is opt-in per option).
+    const branchText = opt.branch && tc(opt.branch.reveal, lang);
+    if (branchText) {
+      const br = document.createElement("div");
+      br.className = "dec-branch";
+      const bh = document.createElement("strong");
+      bh.className = "dec-branch-h";
+      bh.textContent = "→ What happens next";
+      const bp = document.createElement("p");
+      bp.textContent = branchText;   // narrative content — textContent, no markup
+      br.appendChild(bh); br.appendChild(bp);
+      wrap.appendChild(br);
+    }
   } else {
     // not locked yet: the status line + the lock-in button
     const present = votablePresentCount();

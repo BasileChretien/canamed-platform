@@ -3089,6 +3089,17 @@ h2, h3 { text-wrap: balance; }
 }
 .dec-result-pts.good { color: var(--ok); }
 .dec-result-pts.bad { color: #b91c1c; }
+/* Branching: the "what happens next" consequence revealed once the room
+   locks in an option that carries a branch. */
+.dec-branch {
+  margin-top: var(--s-2);
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  background: var(--nagoya-50, #eaf4fb);
+  border-left: 3px solid var(--primary);
+}
+.dec-branch-h { display: block; margin-bottom: 4px; color: var(--primary); }
+.dec-branch p { margin: 0; color: var(--ink-soft, #5b4f40); line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) {
   .dec-bar { transition: none; }
   .dec-opt:hover:not(:disabled), .dec-lock:hover:not(:disabled) { transform: none; }

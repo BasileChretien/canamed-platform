@@ -1068,7 +1068,29 @@ var PENALTIES_B = [
 
 /* DECISIONS for the Breaking-Bad-News scenario. Two votes:
    1) handling the family request (the original dec_family, kept and refined);
-   2) Mrs Tanaka's "is it bad, doctor?" — the first response. */
+   2) Mrs Tanaka's "is it bad, doctor?" — the first response.
+
+   ── BRANCHING CASES (model) ───────────────────────────────────────────────
+   A decision option MAY carry an optional `branch`:
+
+     branch: { reveal: { en, fr, ja } }   // "what happens next"
+
+   When the room LOCKS IN that option, the platform renders branch.reveal — a
+   short narrative of the consequence (how the patient/family reacts), turning
+   a decision from a graded quiz item into a fork in a simulation. Different
+   options → different continuations, so the case responds to the team's
+   choice instead of marching down one fixed path.
+
+   No new data path or rules are needed: the committed choice already syncs via
+   votes/$id/committed, so every member of the room sees the same branch.
+   renderDecisions() (script.js) reads opt.branch off the committed option.
+
+   Options WITHOUT a `branch` simply show no continuation — branching is purely
+   additive and opt-in per option. dec_prognosis below is the first worked
+   example (all three responses branch to distinct reactions); add `branch` to
+   any other option the same way. A future step can chain branches (a reveal
+   that unlocks a follow-up decision) once the pedagogy/SAP defines the arc.
+   ────────────────────────────────────────────────────────────────────────── */
 var DECISIONS_B = [
   {
     id: "dec_family", module: "B", points: 25, penalty: 0,
@@ -1244,7 +1266,14 @@ var DECISIONS_B = [
                    "ではありません。中央値を知りたい人もいれば、範囲を聞きたい人も、" +
                    "「週か、月か、年か」だけを知りたい人もいます。正確な数字を持ち出すと" +
                    "宣告のように響くことがあります — まずどんな答えを求めているのか確認" +
-                   "しましょう。" } },
+                   "しましょう。" },
+        // BRANCH: the consequence the room sees once it locks in THIS option.
+        // See the "Branching cases" note above DECISIONS_B for the model.
+        branch: { reveal: {
+          en: "She goes very still. The number lands like a verdict — you can see the rest of what you say washing past her. Her son reaches for her hand. You will have to gently bring the conversation back to her.",
+          fr: "Elle se fige. Le chiffre tombe comme une condamnation — on voit le reste de vos paroles glisser sur elle. Son fils lui prend la main. Il vous faudra ramener doucement la conversation vers elle.",
+          ja: "彼女は凍りついたように動かなくなります。数字は宣告のように響き、その後の言葉は彼女を素通りしていくのが分かります。息子が手を取ります。あなたは会話をそっと彼女のもとへ引き戻さなければなりません。"
+        } } },
       { text: { en: "\"That's hard to predict — every patient is different.\" — Deflect.",
                 fr: "« C'est difficile à dire — chaque patient est différent. » — Esquiver.",
                 ja: "「予測は難しいんです — 患者さんごとに違いますから。」 — はぐらかす。" },
@@ -1258,7 +1287,12 @@ var DECISIONS_B = [
                    "refuse cette capacité de planification.",
                ja: "一面では正しいですが、ここではぐらかしとして使えば、彼女の問いを退ける" +
                    "ことになります。彼女は計画したいから尋ねているのです — 孫のこと、身辺" +
-                   "の整理、残された時間のために。はぐらかしはその計画する力を奪います。" } },
+                   "の整理、残された時間のために。はぐらかしはその計画する力を奪います。" },
+        branch: { reveal: {
+          en: "She presses, quietly but firmly: \"Please, doctor. I'm not asking you to be exact. I have grandchildren. I need to know what kind of time we're talking about.\" The deflection has cost a little trust — she now has to fight you for the answer she needs.",
+          fr: "Elle insiste, à voix basse mais ferme : « S'il vous plaît, docteur. Je ne vous demande pas d'être exact. J'ai des petits-enfants. J'ai besoin de savoir de quel ordre de temps on parle. » L'esquive a coûté un peu de confiance — elle doit maintenant vous arracher la réponse dont elle a besoin.",
+          ja: "彼女は静かに、しかし毅然と食い下がります:「お願いです、先生。正確でなくて構いません。孫がいるんです。どのくらいの時間の話なのか、知っておく必要があるんです。」はぐらかしは少し信頼を損ね — 彼女は必要な答えをあなたから引き出すために闘わなければならなくなります。"
+        } } },
       { text: { en: "\"That is a really important question. Before I answer, can I ask — " +
                     "would you like a precise estimate, a rough range like 'months not " +
                     "years', or just the headline?\"",
@@ -1284,7 +1318,12 @@ var DECISIONS_B = [
                ja: "これはSPIKESのInvitationを予後告知に応用したものです:質問の重要性を" +
                    "認め、どんな種類の答えを望むかを確認し、彼女が選んだ粒度で答える。予後" +
                    "告知の研究(Mackら;JSCO CST)は、患者の希望に粒度を合わせることが理解" +
-                   "と感情的統合の双方を改善することを示しています。" } }
+                   "と感情的統合の双方を改善することを示しています。" },
+        branch: { reveal: {
+          en: "She thinks for a moment, then: \"Months rather than years — that's what I need to know, gently, and I'd like my son to hear it with me.\" You've found the resolution she actually wants. The conversation can continue on her terms, with her son beside her — exactly the footing the rest of the disclosure needs.",
+          fr: "Elle réfléchit un instant, puis : « Des mois plutôt que des années — c'est ce que j'ai besoin de savoir, doucement, et j'aimerais que mon fils l'entende avec moi. » Vous avez trouvé la granularité qu'elle souhaite vraiment. La conversation peut se poursuivre selon ses termes, son fils à ses côtés — précisément l'assise dont le reste de l'annonce a besoin.",
+          ja: "彼女は少し考えてから言います:「年単位ではなく月単位 — それを、優しく知りたいのです。息子にも一緒に聞いてほしい。」あなたは彼女が本当に望む粒度を見つけました。会話は彼女のペースで、息子をそばに置いて続けられます — 残りの告知に必要なまさにその土台です。"
+        } } }
     ]
   },
   {
