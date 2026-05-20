@@ -753,6 +753,58 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   margin: var(--s-3) 0;
   font-size: 0.92rem;
 }
+
+/* Observer's SPIKES observation checklist (Module B) — a private,
+   per-tab scratchpad the observer fills during the scene. */
+.observer-checklist-card { margin: var(--s-3) 0; }
+.observer-checklist-summary {
+  cursor: pointer;
+  font-weight: 600;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.observer-checklist-summary::-webkit-details-marker { display: none; }
+.observer-spikes-list {
+  list-style: none;
+  margin: var(--s-2) 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+.observer-spikes-list li { margin: 0; }
+.observer-spikes-list label {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.observer-spikes-list input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  flex: 0 0 auto;
+}
+.observer-note-label {
+  display: block;
+  margin: var(--s-2) 0 4px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.observer-note {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  font-size: 0.92rem;
+  padding: 7px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--card);
+  color: var(--ink);
+}
 .micro-framework {
   background: var(--surface-sunk);
   border-left: 4px solid var(--ok);
