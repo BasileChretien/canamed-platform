@@ -124,7 +124,18 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     consultation-note + 60+ new i18n keys × 3 core langs. The
 //     "lazy-load i18n locales" refactor is now overdue — track in
 //     follow-up issue.
-const FIRST_PARTY_BYTES_LIMIT_KB = 296;
+//
+//   2026-05-20: Round-2/3 review batch — bumped to 312. NET +16 KB gz:
+//     (a) vendored DOMPurify (purify.min.js, ~9 KB gz) added to the eager
+//     bundle — it MUST load before i18n.js because the lobby's
+//     data-i18n-html consent paragraphs are sanitised on the initial
+//     i18n pass even while the lobby is hidden, so it can't be lazy-split;
+//     (b) the Module B observer-checklist UI + 12 i18n keys × 3 langs and
+//     the glossary expansion (16→48 terms) (~5 KB gz); (c) Module A
+//     progressive-disclosure markup + a11y settings-focus JS (~2 KB gz).
+//     The "lazy-load i18n locales" refactor remains the right next move
+//     before the budget grows further.
+const FIRST_PARTY_BYTES_LIMIT_KB = 312;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
