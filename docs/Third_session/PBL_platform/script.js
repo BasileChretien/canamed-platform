@@ -1777,6 +1777,32 @@ function claimMembership(roleStr) {
   }
 }
 
+/* R3 FINDING-01: bind this tab's clientId to auth.uid, write-once. The
+ * server rules for pool / presence / typing / tests / poll / observers
+ * accept a write to $clientId only when this mapping is absent (first
+ * write) or already equals the caller's uid — so one participant can no
+ * longer overwrite another's slot. Best-effort + idempotent:
+ *   - on a refresh the same clientId re-resolves and the write-once rule
+ *     refuses the re-set; that's expected and harmless (the binding is
+ *     already ours), so PERMISSION_DENIED is swallowed.
+ *   - on a legacy DB without the clientMapping rule, the write simply
+ *     lands as ordinary data; the tolerant ".write" rule keeps working. */
+function claimClientMapping() {
+  if (!db || !currentUser || !currentUser.uid || !sessionNum || !clientId) {
+    return Promise.resolve();
+  }
+  try {
+    return db.ref(sPath("clientMapping/" + clientId)).set(currentUser.uid).catch(e => {
+      // Expected when the binding already exists (refresh / re-join) or on
+      // a legacy DB; the join continues regardless.
+      try { console.warn("claimClientMapping skipped (continuing):", e && e.code); } catch (_) {}
+    });
+  } catch (e) {
+    try { console.warn("claimClientMapping threw (continuing):", e); } catch (_) {}
+    return Promise.resolve();
+  }
+}
+
 function _joinParticipantAfterAuth() {
   // user may have hit "Leave" while we were waiting for auth
   if (!joined) return;
@@ -1785,10 +1811,14 @@ function _joinParticipantAfterAuth() {
   // is satisfied by the time the .on("value") handlers fire. We chain
   // through claimMembership() because the listener installs would race the
   // members write otherwise and the server would PERMISSION_DENY them.
-  claimMembership("participant").then(() => {
-    if (!joined) return; // user left while membership write was in-flight
-    _joinParticipantWireUp();
-  });
+  // R3 FINDING-01: also bind clientId->uid before the pool write so the
+  // owner-only write rules accept our own pool/presence/typing/tests writes.
+  claimMembership("participant")
+    .then(() => claimClientMapping())
+    .then(() => {
+      if (!joined) return; // user left while membership write was in-flight
+      _joinParticipantWireUp();
+    });
 }
 
 function _joinParticipantWireUp() {
