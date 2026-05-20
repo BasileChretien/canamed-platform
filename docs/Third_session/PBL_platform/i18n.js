@@ -3295,6 +3295,29 @@
     return null;
   }
 
+  // Defense-in-depth XSS guard for the two data-i18n-html sinks below.
+  // The translation table is author-controlled today, but the moment a CMS
+  // or remote feed supplies a string this is a stored-XSS sink. Route every
+  // innerHTML write through DOMPurify (vendored locally as purify.min.js so
+  // it complies with the script-src 'self' CSP — no CDN at runtime).
+  //
+  // The allowlist mirrors the markup the privacy/legal paragraphs legitimately
+  // use: inline emphasis (<strong>/<em>/<b>/<i>/<span>), line breaks (<br>),
+  // and translated links (<a href target rel>). lang= is allowed so FR/JA
+  // phrase fragments can carry their own language attribute.
+  //
+  // Hard fail-closed: if DOMPurify is somehow absent we write "" rather than
+  // the raw (unsanitised) string — a missing emphasis tag is acceptable, an
+  // injected <script>/onerror is not.
+  function _setHTML(node, html) {
+    node.innerHTML = (typeof window !== "undefined" && window.DOMPurify)
+      ? window.DOMPurify.sanitize(html, {
+          ALLOWED_TAGS: ["strong", "em", "br", "a", "b", "i", "span"],
+          ALLOWED_ATTR: ["href", "target", "rel", "lang"]
+        })
+      : "";
+  }
+
   function applyI18n(root) {
     if (typeof document === "undefined") return;
     const scope = root || document;
@@ -3304,7 +3327,7 @@
       const attr = node.getAttribute("data-i18n-attr");
       const value = t(key);
       if (attr) node.setAttribute(attr, value);
-      else if (node.hasAttribute("data-i18n-html")) node.innerHTML = value;
+      else if (node.hasAttribute("data-i18n-html")) _setHTML(node, value);
       else node.textContent = value;
     });
     // rich-text content: the value MAY contain a small, controlled set of
@@ -3324,7 +3347,7 @@
       const key = node.getAttribute("data-i18n-html");
       if (!key) return;  // flag form — already handled in the data-i18n loop
       // eslint-disable-next-line no-unsanitized/property
-      node.innerHTML = t(key);
+      _setHTML(node, t(key));
     });
     // secondary translatable attributes — title tooltips need translation
     // INDEPENDENTLY of textContent (e.g. the Join button has translated
