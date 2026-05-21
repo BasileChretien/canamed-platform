@@ -406,4 +406,31 @@ test.describe("mobile splash usability", () => {
       .toHaveAttribute("aria-checked", "true");
     await expect(page.locator("#modB-replay-banner")).toBeVisible();
   });
+
+  // Chained branching (2026-05-22): the follow-up dec_prognosis_next is gated
+  // + hideWhenLocked, so before the room commits dec_prognosis it must not
+  // appear. On a small viewport an unexpected extra decision card would push
+  // the lock-in controls below the fold — verify it stays hidden on mobile.
+  test("chained branching: the gated follow-up stays hidden on mobile", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    const painted = await page.evaluate(() => {
+      ["splash", "lobby", "waiting", "admin-app", "session-ended"].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.classList.add("hidden");
+      });
+      document.getElementById("app").classList.remove("hidden");
+      const s2 = document.getElementById("stage-2");
+      if (s2) s2.classList.remove("hidden");
+      document.body.classList.remove("locked");
+      if (window.DECISIONS_B) window.DECISIONS = window.DECISIONS_B;
+      if (typeof window.renderDecisions === "function") window.renderDecisions();
+      const box = document.getElementById("decisions-B");
+      return !!(box && box.querySelector(".decision"));
+    });
+    expect(painted, "Module B decision cards must paint on mobile").toBe(true);
+    await expect(page.locator("#decisions-B", { hasText: "her son is beside her" }))
+      .toHaveCount(0);
+    await expect(page.locator("#decisions-B .decision-locked")).toHaveCount(0);
+  });
 });
