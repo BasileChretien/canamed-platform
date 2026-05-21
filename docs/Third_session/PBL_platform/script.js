@@ -6800,6 +6800,22 @@ function decisionUnlocked(d) {
   };
   const unmet = [];
   Object.keys(w).forEach(key => {
+    // CHAINED-BRANCH GATE: gate this decision behind a PRIOR decision's
+    // committed choice. `afterDecision` is either a decision id (any option
+    // unlocks) or { id, option } (only that committed option unlocks). Reads
+    // the live, synced roomVotes[id].committed — no new Firebase path. This is
+    // how a committed decision forks the case into a follow-up decision.
+    if (key === "afterDecision") {
+      const spec = w[key];
+      const depId = (typeof spec === "string") ? spec : (spec && spec.id);
+      const needOpt = (spec && typeof spec.option === "number") ? spec.option : null;
+      const dv = (typeof roomVotes !== "undefined" && depId) ? roomVotes[depId] : null;
+      const committedChoice = (dv && dv.committed && typeof dv.committed.choice === "number")
+        ? dv.committed.choice : null;
+      const ok = (committedChoice != null) && (needOpt == null || committedChoice === needOpt);
+      if (!ok) unmet.push({ key: "afterDecision", depId: depId, needOption: needOpt });
+      return;
+    }
     const need = w[key] || 0;
     if ((have[key] || 0) < need) unmet.push({ key: key, need: need, have: have[key] || 0 });
   });
@@ -6820,6 +6836,14 @@ function decisionUnlockHint(unmet) {
   };
   const parts = unmet.map(u => {
     switch (u.key) {
+      case "afterDecision": {
+        // Chained branch: name the prior decision the team must lock in first.
+        const dep = (typeof DECISIONS !== "undefined" ? DECISIONS : [])
+          .find(d => d.id === u.depId);
+        const depTitle = dep ? tc(dep.prompt, _curLang()) : "";
+        const lead = t("modA.decision.unlock.after", "the team locks in the previous decision");
+        return depTitle ? (lead + ": “" + depTitle + "”") : lead;
+      }
       case "hypotheses":
         return t("modA.decision.unlock.hypotheses", "add a working hypothesis");
       case "historyRevealed":
@@ -6842,6 +6866,11 @@ function decisionUnlockHint(unmet) {
 let lastUnlockedDecisionIds = new Set();
 
 function renderDecisions() {
+  // Combined across modules: which decisions are unlocked right now. Chained
+  // branches live in Module B (a committed decision unlocks a follow-up), so
+  // the unlock-transition nudge must span both modules — a single tracker
+  // keeps A and B from clobbering each other's "newly opened" state.
+  const allUnlockedNow = new Set();
   ["A", "B"].forEach(mod => {
     const box = el("decisions-" + mod);
     if (!box) return;
@@ -6864,31 +6893,6 @@ function renderDecisions() {
         if (ballots > lastDecisionBallotCount) nudgeRcolTab("decisions");
         lastDecisionBallotCount = ballots;
       }
-      // Coach nudge on unlock transitions (locked → unlocked) for any
-      // Module A decision. Surfaces a one-liner via toast() so the team
-      // sees that a new decision just opened without auto-stealing focus.
-      const nowUnlocked = new Set();
-      list.forEach(d => {
-        if (decisionUnlocked(d).unlocked) nowUnlocked.add(d.id);
-      });
-      nowUnlocked.forEach(id => {
-        if (!lastUnlockedDecisionIds.has(id) && lastUnlockedDecisionIds.size > 0) {
-          // Only nudge on a real transition (not on initial paint where
-          // lastUnlockedDecisionIds is still empty). Find the decision
-          // title for the toast.
-          const d = list.find(x => x.id === id);
-          if (d && typeof toast === "function") {
-            const lang = _curLang();
-            toast("🗳️ " + (typeof window.t === "function" ?
-                  (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
-                    ? window.t("modA.decision.unlocked")
-                    : "A new team decision just opened")
-                  : "A new team decision just opened"),
-                  tc(d.prompt, lang));
-          }
-        }
-      });
-      lastUnlockedDecisionIds = nowUnlocked;
     }
     const head = document.createElement("div");
     head.className = "dec-head";
@@ -6901,14 +6905,40 @@ function renderDecisions() {
     head.appendChild(h); head.appendChild(hint);
     box.appendChild(head);
     list.forEach(d => {
-      const gate = (mod === "A") ? decisionUnlocked(d) : { unlocked: true, unmet: [] };
+      // Gating now applies to ALL modules. Decisions without an `unlockWhen`
+      // are always unlocked (back-compat), so only opted-in decisions gate —
+      // including Module B chained branches (unlockWhen.afterDecision).
+      const gate = decisionUnlocked(d);
       if (gate.unlocked) {
+        allUnlockedNow.add(d.id);
         box.appendChild(buildDecision(d));
+      } else if (d.hideWhenLocked) {
+        // Chained-branch follow-ups stay invisible until they open, so the
+        // continuation lands as a surprise fork rather than a spoiler teaser.
+        // The unlock nudge below announces it the moment it opens.
       } else {
         box.appendChild(buildLockedDecision(d, gate.unmet));
       }
     });
   });
+  // Coach nudge on unlock transitions (locked → unlocked), across both modules.
+  // Surfaces a one-liner via toast() so the team sees a new decision opened
+  // without auto-stealing focus. Skipped on the initial paint (empty tracker).
+  allUnlockedNow.forEach(id => {
+    if (!lastUnlockedDecisionIds.has(id) && lastUnlockedDecisionIds.size > 0) {
+      const d = (typeof DECISIONS !== "undefined" ? DECISIONS : []).find(x => x.id === id);
+      if (d && typeof toast === "function") {
+        const lang = _curLang();
+        toast("🗳️ " + (typeof window.t === "function" ?
+              (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
+                ? window.t("modA.decision.unlocked")
+                : "A new team decision just opened")
+              : "A new team decision just opened"),
+              tc(d.prompt, lang));
+      }
+    }
+  });
+  lastUnlockedDecisionIds = allUnlockedNow;
 }
 
 /* Slim locked-state placeholder for a decision that hasn't yet met its
