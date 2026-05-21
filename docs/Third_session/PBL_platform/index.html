@@ -1342,6 +1342,8 @@
                   <button type="button" id="hypothesis-add-btn"
                           data-i18n="modA.chart.hypotheses.add">Add</button>
                 </div>
+                <p class="hint answer-input-language-hint"
+                   data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
               </details>
 
               <!-- ── Investigations (was "Investigations & synthesis") ──
@@ -1647,6 +1649,8 @@
                   glossary checks, side-thoughts. Messages stay within this
                   room only.
                 </p>
+                <p class="hint answer-input-language-hint"
+                   data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
                 <!-- Round-2 a11y: role="log" + aria-atomic="false" so SR
                      users hear ONLY new messages, not the whole list re-read.
                      renderChat() appends individual <li>s, which matches the
@@ -1971,6 +1975,41 @@
                 hard.</span>
             </button>
           </div>
+
+          <!-- "I'd rather observe" panic affordance (2026-05-22): the
+               safety-note promises "you can move into the observer role at any
+               time, no explanation needed" — this makes it a single, calm,
+               always-visible tap. Breaking-bad-news roleplay can hit close to
+               home; a face-saving exit reduces freeze-up dread and keeps the
+               room psychologically safe. One tap selects the observer role
+               (reusing the role-pick sync) and shows a reassuring note. -->
+          <button class="role-observer-escape" type="button" id="modB-observe-instead-btn"
+                  data-i18n="modB.observe.escape">I'd rather just observe — that's completely okay</button>
+          <p class="role-observe-reassure hidden" id="modB-observe-reassure"
+             role="status" aria-live="polite"></p>
+
+          <!-- Live double-pick notice (role-pick sync, roleplay review
+               2026-05-20): shown by renderRoleChoices() when two students in
+               the room pick the same role, so they resolve it together. -->
+          <p class="role-clash-note hidden" id="role-clash-note" role="status" aria-live="polite"
+             data-i18n="modB.role.clash">Two of you picked the same role — decide together so everyone has a part.</p>
+
+          <!-- Swap-and-replay loop (2026-05-22): the single highest-value
+               roleplay enhancement — after a round, the room ROTATES roles
+               (physician → patient → family → observer) and replays the same
+               scene from the other side, which is where the empathy learning
+               happens. Any member can advance the round; each client rotates
+               ITS OWN pick (writing only its own roleChoices node, so no
+               cross-writing / privilege is needed). Synced via
+               <base>/roleplayRound; works in LOCAL/solo mode too. -->
+          <div class="role-replay" id="modB-role-replay">
+            <span class="role-replay-round" id="modB-replay-round"
+                  data-i18n="modB.replay.round1">Round 1 — first run</span>
+            <button class="role-replay-btn" type="button" id="modB-swap-replay-btn"
+                    data-i18n="modB.replay.swap">🔄 Swap roles &amp; replay</button>
+          </div>
+          <p class="role-replay-banner hidden" id="modB-replay-banner"
+             role="status" aria-live="polite"></p>
         </div>
 
         <!-- SPIKES + useful sentences: compact reference strips, available

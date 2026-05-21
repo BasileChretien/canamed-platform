@@ -128,10 +128,13 @@ test.describe("Module B body i18n", () => {
     });
 
     const hints = page.locator(".answer-input-language-hint");
-    // There are two hints: one above Module A's input, one above Module
-    // B's. Both must show the French message.
-    await expect(hints).toHaveCount(2);
-    for (let i = 0; i < 2; i++) {
+    // The shared language hint now sits at every free-text contribution
+    // point (inclusion 2026-05-21): the Module A + Module B group-answer
+    // cards, the working-hypotheses input, and the side-chat — 4 in all.
+    // Each uses the same i18n key, so all must show the French message.
+    const count = await hints.count();
+    expect(count).toBe(4);
+    for (let i = 0; i < count; i++) {
       await expect(hints.nth(i))
         .toContainText("Écrivez dans la langue de votre choix");
     }

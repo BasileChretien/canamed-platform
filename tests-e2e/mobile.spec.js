@@ -373,4 +373,95 @@ test.describe("mobile splash usability", () => {
     await expect(page.locator("#group-exam")).toBeHidden();
     await expect(page.locator("#group-labs")).toBeHidden();
   });
+
+  // Swap-and-replay (2026-05-22): the swap button + role chips must be
+  // tappable on a phone, and a swap must rotate the client's own role with
+  // the reflective banner visible (it's a polite live region below the chips).
+  test("swap-and-replay: button is tappable and rotates the role on mobile", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    await page.evaluate(() => {
+      ["splash", "lobby", "waiting", "admin-app", "session-ended"].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.classList.add("hidden");
+      });
+      document.getElementById("app").classList.remove("hidden");
+      const s2 = document.getElementById("stage-2");
+      if (s2) s2.classList.remove("hidden");
+      document.body.classList.remove("locked");
+      if (typeof window.initRolePicker === "function") window.initRolePicker();
+    });
+
+    const swap = page.locator("#modB-swap-replay-btn");
+    await expect(swap).toBeVisible();
+    const box = await swap.boundingBox();
+    expect(box, "swap button must render").not.toBeNull();
+    if (box) {
+      expect(box.height, "swap tap-target >= 36px on mobile").toBeGreaterThanOrEqual(36);
+    }
+
+    await page.locator('#modB-role-picker .role-chip[data-role="physician"]').tap();
+    await swap.tap();
+    await expect(page.locator('#modB-role-picker .role-chip[data-role="patient"]'))
+      .toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#modB-replay-banner")).toBeVisible();
+  });
+
+  // "I'd rather observe" panic affordance (2026-05-22): the calm escape hatch
+  // must be a comfortable tap-target on a phone and one tap must move the
+  // student into the observer role with the reassurance shown.
+  test("observe-escape: one tap selects observer on mobile", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    await page.evaluate(() => {
+      ["splash", "lobby", "waiting", "admin-app", "session-ended"].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.classList.add("hidden");
+      });
+      document.getElementById("app").classList.remove("hidden");
+      const s2 = document.getElementById("stage-2");
+      if (s2) s2.classList.remove("hidden");
+      document.body.classList.remove("locked");
+      if (typeof window.initRolePicker === "function") window.initRolePicker();
+    });
+
+    const escape = page.locator("#modB-observe-instead-btn");
+    await expect(escape).toBeVisible();
+    const box = await escape.boundingBox();
+    expect(box, "escape button must render").not.toBeNull();
+    if (box) {
+      expect(box.height, "escape tap-target >= 36px on mobile").toBeGreaterThanOrEqual(36);
+    }
+    await escape.tap();
+    await expect(page.locator('#modB-role-picker .role-chip[data-role="observer"]'))
+      .toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#modB-observe-reassure")).toBeVisible();
+  });
+
+  // Chained branching (2026-05-22): the follow-up dec_prognosis_next is gated
+  // + hideWhenLocked, so before the room commits dec_prognosis it must not
+  // appear. On a small viewport an unexpected extra decision card would push
+  // the lock-in controls below the fold — verify it stays hidden on mobile.
+  test("chained branching: the gated follow-up stays hidden on mobile", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    const painted = await page.evaluate(() => {
+      ["splash", "lobby", "waiting", "admin-app", "session-ended"].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.classList.add("hidden");
+      });
+      document.getElementById("app").classList.remove("hidden");
+      const s2 = document.getElementById("stage-2");
+      if (s2) s2.classList.remove("hidden");
+      document.body.classList.remove("locked");
+      if (window.DECISIONS_B) window.DECISIONS = window.DECISIONS_B;
+      if (typeof window.renderDecisions === "function") window.renderDecisions();
+      const box = document.getElementById("decisions-B");
+      return !!(box && box.querySelector(".decision"));
+    });
+    expect(painted, "Module B decision cards must paint on mobile").toBe(true);
+    await expect(page.locator("#decisions-B", { hasText: "her son is beside her" }))
+      .toHaveCount(0);
+    await expect(page.locator("#decisions-B .decision-locked")).toHaveCount(0);
+  });
 });
