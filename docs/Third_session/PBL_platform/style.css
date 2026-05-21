@@ -950,6 +950,30 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .role-chip-brief { font-size: 0.84rem; color: var(--muted); line-height: 1.4; }
 .role-chip[aria-checked="true"] .role-chip-brief { color: var(--ink); }
 
+/* Live role-pick sync: who has claimed each role + a double-pick flag. */
+.role-chip-claimants {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+.role-chip-claimants:empty { display: none; }
+.role-chip.role-clash {
+  border-color: var(--caen-line, #b45309);
+  box-shadow: 0 1px 4px rgba(180,83,9,.2);
+}
+.role-chip.role-clash .role-chip-claimants { color: var(--caen-line, #b45309); }
+.role-clash-note {
+  margin: var(--s-2) 0 0;
+  padding: 7px 11px;
+  font-size: 0.86rem;
+  border-radius: var(--r-sm);
+  background: var(--caen-50);
+  border: 1px solid #ecd9a0;
+  color: var(--ink);
+}
+
 /* Discussion-question list inside Module B's prompts-card. */
 .discussion-q-list {
   margin: var(--s-2) 0 0;

@@ -1044,6 +1044,7 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
     refObservers = null, refAnswerReplies = null, refChat = null, refPoll = null,
+    refRoleChoices = null,
     refClosed = null;
 
 /* Activate Firebase App Check with reCAPTCHA Enterprise. Idempotent — safe
@@ -2558,6 +2559,7 @@ function teardownRoom() {
     if (refScore) refScore.off();
     if (refVotes) refVotes.off();
     if (refObservers) refObservers.off();
+    if (refRoleChoices) refRoleChoices.off();
     if (refAnswerReplies) refAnswerReplies.off();
     if (refChat) refChat.off();
     if (refTeamName) refTeamName.off();
@@ -2592,6 +2594,12 @@ function startRoom() {
   refObservers = db.ref(base + "/observers");
   refAnswerReplies = db.ref(base + "/answerReplies");
   refChat = db.ref(base + "/chat");
+  // Module B role-pick sync (roleplay review 2026-05-20): each student
+  // writes their OWN choice keyed by clientId (protected by the same
+  // clientMapping ownership rule as presence/typing); everyone in the room
+  // sees the live picks so a double-claim ("two physicians") is visible and
+  // resolved socially rather than discovered mid-scene.
+  refRoleChoices = db.ref(base + "/roleChoices");
   // session-wide closed marker - shows the "session closed by facilitator"
   // banner the moment an admin ends the session. Wired here (not in the room
   // subtree) because `closed` lives at the session level, not the room level.
@@ -2605,7 +2613,15 @@ function startRoom() {
     myPresence.set({ name: myName, at: Date.now() });
     myPresence.onDisconnect().remove();
     refTyping.child(clientId).onDisconnect().remove();
+    // Drop my role pick when I disconnect so a stale claim doesn't linger.
+    refRoleChoices.child(clientId).onDisconnect().remove();
   }
+  // Render the room's live role picks on every change (admins observing a
+  // room see them too). renderRoleChoices is a no-op if the picker DOM for
+  // this stage isn't mounted yet.
+  refRoleChoices.on("value", snap => {
+    try { renderRoleChoices(snap.val() || {}); } catch (_) {}
+  });
 
   refStage.on("value", snap => {
     const newStage = typeof snap.val() === "number" ? snap.val() : 0;
@@ -7540,6 +7556,17 @@ function initRolePicker() {
     chips.forEach(c => c.setAttribute("aria-checked", "false"));
     chip.setAttribute("aria-checked", "true");
     try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
+    // Publish my pick so the room sees it live (double-claim becomes visible).
+    // Best-effort: keyed by clientId, the rule lets me write only my own slot.
+    // No-op in LOCAL/solo mode or before a room exists. Living inside select()
+    // means arrow-key selection syncs too, not just clicks.
+    try {
+      if (refRoleChoices && clientId && !isRoomAdmin) {
+        refRoleChoices.child(clientId).set({
+          role: chip.dataset.role, name: myName || "", at: Date.now()
+        });
+      }
+    } catch (e) { /* offline / rules — local pick still stands */ }
     // Coach updates: role-picked drives Module B's setup→play transition.
     if (typeof updateModBNextStep === "function") updateModBNextStep();
   };
@@ -7556,6 +7583,41 @@ function initRolePicker() {
       select(next);   // move AND select, matching the APG radio pattern
     });
   });
+}
+
+/* Render the room's live role picks onto the chips. `map` is
+ * { clientId: { role, name, at } } from refRoleChoices. Each chip shows the
+ * names of who picked it; if two+ students pick the same role, the chip is
+ * flagged and a shared "decide together" note appears. Names go through
+ * textContent (never innerHTML) so a participant-supplied name can't inject
+ * markup. No-op when the picker isn't mounted (e.g. not on Module B). */
+function renderRoleChoices(map) {
+  const picker = el("modB-role-picker");
+  if (!picker) return;
+  const byRole = {};
+  Object.keys(map || {}).forEach(cid => {
+    const c = map[cid];
+    if (!c || typeof c.role !== "string") return;
+    (byRole[c.role] = byRole[c.role] || []).push(
+      (typeof c.name === "string" && c.name.trim()) ? c.name.trim() : "—");
+  });
+  let anyClash = false;
+  picker.querySelectorAll(".role-chip").forEach(chip => {
+    const names = byRole[chip.dataset.role] || [];
+    const clash = names.length > 1;
+    if (clash) anyClash = true;
+    chip.classList.toggle("role-claimed", names.length > 0);
+    chip.classList.toggle("role-clash", clash);
+    let slot = chip.querySelector(".role-chip-claimants");
+    if (!slot) {
+      slot = document.createElement("span");
+      slot.className = "role-chip-claimants";
+      chip.appendChild(slot);
+    }
+    slot.textContent = names.length ? names.join(", ") : "";
+  });
+  const note = el("role-clash-note");
+  if (note) note.classList.toggle("hidden", !anyClash);
 }
 
 /* Save the room's chosen team name (any room member may set it).

@@ -527,6 +527,7 @@
       "modB.role.family.name": "Family (adult child)",
       "modB.role.family.brief": "Partway through — not at the start — quietly take the physician aside and ask them not to tell your parent everything.",
       "modB.role.observer.name": "Observer",
+      "modB.role.clash": "Two of you picked the same role — decide together so everyone has a part.",
       "modB.role.observer.brief": "You time the scene and run Phase 3. Watch the SPIKES steps — note one thing the physician <em>said</em> that worked and one moment that was hard.",
 
       // Module B — structured Group-answers form
@@ -1169,6 +1170,7 @@
       "modB.role.family.name": "Famille (enfant adulte)",
       "modB.role.family.brief": "À un moment — pas au début — prenez discrètement le·la médecin à part et demandez-lui de ne pas tout dire à votre parent.",
       "modB.role.observer.name": "Observateur·rice",
+      "modB.role.clash": "Vous avez choisi le même rôle à deux — mettez-vous d'accord pour que chacun·e ait un rôle.",
       "modB.role.observer.brief": "Vous chronométrez la scène et animez la phase 3. Surveillez les étapes SPIKES — notez une chose que le·la médecin <em>a dite</em> qui a fonctionné et un moment difficile.",
       "modB.answers.bullet.family-sentence.label": "1. Une phrase concrète que votre groupe utiliserait pour répondre à la demande de la famille de ne pas tout dire",
       "modB.answers.bullet.family-sentence.placeholder": "ex. \"Laissez-moi d'abord demander à votre parent ce qu'il·elle souhaite savoir...\"",
@@ -1770,6 +1772,7 @@
       "modB.role.family.name": "家族 (成人の子)",
       "modB.role.family.brief": "途中で — 最初ではなく — そっと医師を脇に呼び、親にすべて伝えないでほしいと頼んでください。",
       "modB.role.observer.name": "観察者",
+      "modB.role.clash": "二人が同じ役を選びました — 全員に役が行き渡るよう話し合って決めましょう。",
       "modB.role.observer.brief": "場面のタイムキーパーとフェーズ3の司会を務めます。SPIKESの各ステップを観察し、医師が <em>言って</em> うまくいったこと一つと、難しかった瞬間一つを記録してください。",
       "modB.answers.bullet.family-sentence.label": "1. 情報を伏せてほしいという家族の頼みに、あなたのグループが使う具体的な一文",
       "modB.answers.bullet.family-sentence.placeholder": "例: 「まずご家族の方ご自身に、どこまで知りたいかを伺いましょう…」",
