@@ -1342,6 +1342,8 @@
                   <button type="button" id="hypothesis-add-btn"
                           data-i18n="modA.chart.hypotheses.add">Add</button>
                 </div>
+                <p class="hint answer-input-language-hint"
+                   data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
               </details>
 
               <!-- ── Investigations (was "Investigations & synthesis") ──
@@ -1647,6 +1649,8 @@
                   glossary checks, side-thoughts. Messages stay within this
                   room only.
                 </p>
+                <p class="hint answer-input-language-hint"
+                   data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
                 <!-- Round-2 a11y: role="log" + aria-atomic="false" so SR
                      users hear ONLY new messages, not the whole list re-read.
                      renderChat() appends individual <li>s, which matches the
@@ -1962,6 +1966,11 @@
                 hard.</span>
             </button>
           </div>
+          <!-- Live double-pick notice (role-pick sync, roleplay review
+               2026-05-20): shown by renderRoleChoices() when two students in
+               the room pick the same role, so they resolve it together. -->
+          <p class="role-clash-note hidden" id="role-clash-note" role="status" aria-live="polite"
+             data-i18n="modB.role.clash">Two of you picked the same role — decide together so everyone has a part.</p>
         </div>
 
         <!-- SPIKES + useful sentences: compact reference strips, available

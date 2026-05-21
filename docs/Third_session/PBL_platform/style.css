@@ -950,6 +950,30 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .role-chip-brief { font-size: 0.84rem; color: var(--muted); line-height: 1.4; }
 .role-chip[aria-checked="true"] .role-chip-brief { color: var(--ink); }
 
+/* Live role-pick sync: who has claimed each role + a double-pick flag. */
+.role-chip-claimants {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--primary);
+}
+.role-chip-claimants:empty { display: none; }
+.role-chip.role-clash {
+  border-color: var(--caen-line, #b45309);
+  box-shadow: 0 1px 4px rgba(180,83,9,.2);
+}
+.role-chip.role-clash .role-chip-claimants { color: var(--caen-line, #b45309); }
+.role-clash-note {
+  margin: var(--s-2) 0 0;
+  padding: 7px 11px;
+  font-size: 0.86rem;
+  border-radius: var(--r-sm);
+  background: var(--caen-50);
+  border: 1px solid #ecd9a0;
+  color: var(--ink);
+}
+
 /* Discussion-question list inside Module B's prompts-card. */
 .discussion-q-list {
   margin: var(--s-2) 0 0;
@@ -1276,15 +1300,56 @@ html[data-theme="dark"] .next-step-coach {
    cue — sim 2026-05-19 feature for low-English students. Title
    attribute carries the EN+JP explanation; this is just the visual
    handle so the user knows hovering / long-pressing is useful. */
-.req-btn.has-glossary::after {
+/* Glossary marker: a REAL child <span.glossary-marker> (with role=img +
+   aria-label) is now rendered by _annotateButtonWithGlossary so the gloss
+   is keyboard/touch/SR-discoverable, not hover-only (round4-a11y Rec 5).
+   The decorative ::after "ⓘ" is therefore suppressed when the real marker
+   is present to avoid a double badge; kept as a fallback if JS didn't add
+   the span (e.g. an externally-supplied button). */
+.req-btn.has-glossary:not(:has(.glossary-marker))::after {
   content: " ⓘ";
   font-size: 0.85em;
   color: var(--muted);
   margin-left: 4px;
   text-decoration: none;
 }
-.req-btn.has-glossary:hover::after {
+.req-btn.has-glossary:not(:has(.glossary-marker)):hover::after {
   color: var(--primary, #1763a6);
+}
+.glossary-marker {
+  font-size: 0.85em;
+  margin-left: 2px;
+  line-height: 1;
+}
+
+/* History sub-grouping (round4-a11y Rec 4): the dense History group is
+   split into a short visible cluster + a collapsed "More questions"
+   <details>, cutting the at-once button count for the A2/B1 cohort. Both
+   sub-groups inherit the .btn-group flow; the more-toggle is a quiet,
+   full-width affordance, not another loud button. */
+.history-sub-primary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2, 6px);
+}
+.history-sub-more {
+  margin-top: var(--s-2, 6px);
+}
+.history-sub-summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 4px 2px;
+  list-style: revert;
+}
+.history-sub-more[open] .history-sub-summary {
+  margin-bottom: var(--s-2, 6px);
+}
+.history-sub-more .btn-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2, 6px);
 }
 
 /* Inline citation badges on revealed findings — sim 2026-05-19
@@ -2809,14 +2874,19 @@ h2, h3 { text-wrap: balance; }
   margin-top: 2px;
 }
 
-/* --- participation dots (no per-person numbers) --- */
+/* --- participation dots (no per-person numbers) ---
+   The done/not-done meaning is carried for SR users by a .sr-only status
+   span in renderContrib(); the dot is a redundant VISUAL cue. Empty state =
+   thick high-contrast hollow ring (shape, not colour); enlarged to 14px so
+   the hollow-vs-filled distinction stays legible on a shared projector at
+   the back of a lecture room (round4-a11y Rec 2). */
 .contrib-dot {
-  width: 11px; height: 11px;
+  width: 14px; height: 14px;
   border-radius: 50%;
   display: inline-block;
   flex-shrink: 0;
   background: transparent;
-  border: 2px solid var(--line-strong);
+  border: 2.5px solid var(--caen-ink);
   box-sizing: border-box;
 }
 .contrib-dot.on { border-color: transparent; }
