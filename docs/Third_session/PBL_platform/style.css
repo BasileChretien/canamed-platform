@@ -278,14 +278,23 @@ main {
     /* Restore native momentum-scroll on touchpads/Macs */
     -webkit-overflow-scrolling: touch;
   }
+  /* Module B (Round-4): the instructional/reference column is content-heavy
+     and the group-answers sidebar is lighter, so give col-left more room
+     than Module A's even 1fr 1fr split. Below 961px the base .columns rule
+     stacks them to a single column (sticky becomes a no-op). */
+  .columns.modB-columns { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); }
 }
+
+/* Student wrap-up export button. */
+.wrapup-download-btn { margin-top: var(--s-2); }
+.wrapup-download-btn.hidden { display: none; }
 
 /* ---------- buttons (3 roles: primary / secondary / danger) ---------- */
 /* primary */
 #join-btn, #start-session-btn, #prev-btn, #next-btn, .answer-add-btn,
 #save-teams-btn, #save-quiz-btn, #advance-all-btn, #admin-download-btn,
 #change-pass-btn, .dash-ctrl button, .sidebar-room-ctrl button,
-.admin-controls button {
+.admin-controls button, #wrapup-download-btn {
   background: var(--primary);
   color: #fff;
   border: 1px solid transparent;

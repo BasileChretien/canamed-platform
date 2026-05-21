@@ -5488,6 +5488,41 @@ function downloadAllAnswersMarkdown() {
   URL.revokeObjectURL(a.href);
 }
 
+/* Student-facing export — Round-4 (sim: students asked to take their team's
+ * answers away). Exports ONLY the participant's own room as Markdown, read
+ * fresh from the room subtree (the student is a member, so the read is
+ * allowed). Distinct from the admin export above, which dumps every room. */
+function downloadMyRoomAnswers() {
+  if (!db || !myRoom) return;
+  db.ref(sPath("rooms/" + myRoom)).once("value").then(snap => {
+    const data = snap.val() || {};
+    const ans = data.answers || {};
+    const lines = [];
+    lines.push("# CaNaMED Session " + sessionNum + " — " + myRoom + " group answers");
+    lines.push("");
+    lines.push("- **Exported:** " + new Date().toLocaleString());
+    if (data.teamName) lines.push("- **Team:** " + data.teamName);
+    lines.push("");
+    [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
+      lines.push("## " + pair[1]);
+      const entries = entriesSorted(ans[pair[0]]);
+      if (!entries.length) lines.push("_(no points recorded)_");
+      else entries.forEach(e => lines.push("- **" + (e.by || "?") +
+        (e.university ? " / " + e.university : "") + ":** " +
+        String(e.text || "").replace(/([*_`#|])/g, "\\$1")));
+      lines.push("");
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "CaNaMED_" + myRoom + "_answers.md";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }).catch(e => { try { console.warn("room export failed", e); } catch (_) {} });
+}
+
 /* ===================== ROOM VIEW: STAGE & NAVIGATION ===================== */
 /* Late-join banner. R3-C1 fix: every visible string flows through tFallback()
    so a Japanese / French / German late-joiner sees a localised message at the
@@ -8612,10 +8647,19 @@ function initEndPoll() {
   const card = el("endpoll-card");
   if (!card || isRoomAdmin) {
     if (card) card.classList.add("hidden");
+    // Admins have their own all-rooms export; hide the student per-room one.
+    if (isRoomAdmin) { const d = el("wrapup-download-btn"); if (d) d.classList.add("hidden"); }
     return;
   }
   if (card.dataset.wired === "1") return;
   card.dataset.wired = "1";
+  // Round-4: wire the student room-answers export (student-only — this whole
+  // function early-returns for admins, who have their own all-rooms export).
+  const dlBtn = el("wrapup-download-btn");
+  if (dlBtn && !dlBtn.dataset.wired) {
+    dlBtn.dataset.wired = "1";
+    dlBtn.addEventListener("click", downloadMyRoomAnswers);
+  }
   const hard = el("endpoll-hardest");
   const feel = el("endpoll-feeling");
   const btn = el("endpoll-submit");

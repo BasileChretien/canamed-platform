@@ -614,6 +614,7 @@
       "stage.wrap.questionnaire-fallback": "Your facilitator will share the questionnaire link.",
       "stage.wrap.bye": "Once you've done the questionnaire you can close this tab. See you at Session 4!",
       "stage.wrap.room-answers": "Your room's answers",
+      "stage.wrap.download": "⤓ Download my room's answers (Markdown)",
 
       // pre/post knowledge test (per-scenario in-platform MCQ) — optional;
       // students can always skip. Pre-test shown on the Welcome stage,
@@ -1256,6 +1257,7 @@
       "stage.wrap.questionnaire-fallback": "Votre encadrant·e partagera le lien du questionnaire.",
       "stage.wrap.bye": "Une fois le questionnaire rempli vous pouvez fermer cet onglet. Rendez-vous à la séance 4 !",
       "stage.wrap.room-answers": "Les réponses de votre salle",
+      "stage.wrap.download": "⤓ Télécharger les réponses de ma salle (Markdown)",
 
       "test.pre.title": "Petit test de connaissances avant la séance",
       "test.pre.intro": "Avant le début de l'atelier, votre encadrant·e a mis en place un court questionnaire à choix multiples sur le scénario que vous allez discuter. Il est anonyme au sein de votre université, facultatif, et vos réponses n'affectent pas votre note.",
@@ -1870,6 +1872,7 @@
       "stage.wrap.questionnaire-fallback": "ファシリテーターからアンケートのリンクが共有されます。",
       "stage.wrap.bye": "アンケートにご回答いただけましたら、このタブを閉じてお戻りください。セッション4でお会いしましょう!",
       "stage.wrap.room-answers": "ルームの回答",
+      "stage.wrap.download": "⤓ ルームの回答をダウンロード(Markdown)",
 
       "test.pre.title": "セッション前の簡単な知識チェック",
       "test.pre.intro": "本日のワークショップが始まる前に、これから議論するシナリオに関する短い選択式の確認テストをご用意しています。所属大学内では匿名で、回答は任意であり、成績には影響しません。",
