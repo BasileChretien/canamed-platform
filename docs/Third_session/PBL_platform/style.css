@@ -1856,6 +1856,21 @@ footer {
 /* "Who's stuck" — names of present students yet to contribute. */
 .dash-quiet-names { font-size: 0.82rem; color: var(--key); margin-top: 2px; }
 .dash-quiet-names:empty { display: none; }
+
+/* Session-wide pacing + attention roll-up at the top of the dashboard. */
+.dash-session-signal {
+  margin: 0 0 var(--s-2);
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  background: var(--n-50, #f3f6f9);
+  border: 1px solid var(--n-200, #e1e7ed);
+}
+.dash-signal-line { font-size: 0.9rem; line-height: 1.4; }
+.dash-signal-line + .dash-signal-line { margin-top: 3px; }
+.dash-signal-call { color: var(--meeting, #8a2017); font-weight: 700; }
+.dash-signal-pace.behind { color: var(--key, #b45309); font-weight: 600; }
+.dash-signal-pace.ontrack { color: var(--muted); }
+.dash-signal-quiet { color: var(--muted); }
 .dash-ctrl { display: flex; gap: 6px; flex-wrap: wrap; }
 .dash-ctrl button, .sidebar-room-ctrl button, .admin-controls button {
   padding: 8px 13px;

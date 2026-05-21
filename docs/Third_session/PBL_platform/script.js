@@ -4063,6 +4063,83 @@ function roomMatchesFilter(name, data) {
   return false;
 }
 
+/* Session-wide pacing + attention roll-up for the lead facilitator. Aggregates
+   the same per-room signals already on each card (stage timer vs planned, help
+   calls, quiet rooms) into ONE glance, so a prof running several rooms can pace
+   the whole session and triage attention without scanning every card. Pure
+   read of the live `allRooms` — no new schema, no new listeners. */
+function sessionSignal() {
+  const names = roomNames(roomCount);
+  let active = 0, over = 0, minStage = Infinity, maxStage = -Infinity;
+  let slowest = null, slowestMin = -1, quietRooms = 0;
+  const calling = [];
+  names.forEach(r => {
+    const d = allRooms[r] || {};
+    const st = typeof d.stage === "number" ? d.stage : 0;
+    if (d.callForHelp && !d.callForHelp.ack) calling.push(r);
+    const mins = minsSince(d.stageAt);
+    if (mins == null) return;            // room hasn't started a stage yet
+    active++;
+    minStage = Math.min(minStage, st);
+    maxStage = Math.max(maxStage, st);
+    if (mins > (STAGE_MINUTES[st] || 99)) {
+      over++;
+      if (mins > slowestMin) { slowestMin = mins; slowest = r; }
+    }
+    if ((st === 1 || st === 2) && typeof roomParticipation === "function") {
+      const p = roomParticipation(d);
+      if (p.present >= 2 && p.contributing < p.present) quietRooms++;
+    }
+  });
+  return { rooms: names.length, active, over, minStage, maxStage,
+           slowest, slowestMin, calling, quietRooms };
+}
+
+/* Paint the session signal as the first child of #dashboard. */
+function renderSessionSignal(dash) {
+  if (!dash) return;
+  const s = sessionSignal();
+  if (!s.active && !s.calling.length) return;   // nothing started yet
+  const wrap = document.createElement("div");
+  wrap.className = "dash-session-signal";
+
+  // 1) Urgent first: rooms calling for a facilitator.
+  if (s.calling.length) {
+    const call = document.createElement("div");
+    call.className = "dash-signal-line dash-signal-call";
+    call.textContent = "🔔 " + s.calling.length + " room" + (s.calling.length === 1 ? "" : "s") +
+      " need a facilitator now: " + s.calling.join(", ");
+    wrap.appendChild(call);
+  }
+
+  // 2) Pacing.
+  const pace = document.createElement("div");
+  pace.className = "dash-signal-line dash-signal-pace" + (s.over > 0 ? " behind" : " ontrack");
+  if (!s.active) {
+    pace.textContent = "⏱ Pacing — waiting for rooms to start.";
+  } else if (s.over === 0) {
+    pace.textContent = "⏱ Pacing — all " + s.active + " active room" +
+      (s.active === 1 ? "" : "s") + " on track.";
+  } else {
+    pace.textContent = "⏱ Pacing — " + s.over + "/" + s.active +
+      " over planned stage time" +
+      (s.slowest ? " (slowest: " + s.slowest + ", " + s.slowestMin + " min)" : "") +
+      (s.maxStage > s.minStage
+        ? " · rooms span stages " + (s.minStage + 1) + "–" + (s.maxStage + 1) : "") + ".";
+  }
+  wrap.appendChild(pace);
+
+  // 3) Quiet rooms (gentle nudge; per-room names are still on each card).
+  if (s.quietRooms > 0) {
+    const q = document.createElement("div");
+    q.className = "dash-signal-line dash-signal-quiet";
+    q.textContent = "💤 " + s.quietRooms + " room" + (s.quietRooms === 1 ? "" : "s") +
+      " with a student not yet contributing.";
+    wrap.appendChild(q);
+  }
+  dash.appendChild(wrap);
+}
+
 function renderDashboard() {
   const dash = el("dashboard");
   dash.innerHTML = "";
@@ -4084,6 +4161,10 @@ function renderDashboard() {
       if (clr) clr.hidden = true;
     }
   }
+  // Session-wide pacing + attention roll-up at the top of the dashboard, so
+  // the lead facilitator can pace the whole room set at a glance instead of
+  // scanning every card (read-only; derived from the live `allRooms`).
+  renderSessionSignal(dash);
   let visibleCount = 0;
   roomNames(roomCount).forEach(r => {
     const data = allRooms[r] || {};
