@@ -1962,6 +1962,19 @@
                 hard.</span>
             </button>
           </div>
+
+          <!-- "I'd rather observe" panic affordance (2026-05-22): the
+               safety-note promises "you can move into the observer role at any
+               time, no explanation needed" — this makes it a single, calm,
+               always-visible tap. Breaking-bad-news roleplay can hit close to
+               home; a face-saving exit reduces freeze-up dread and keeps the
+               room psychologically safe. One tap selects the observer role
+               (reusing the role-pick sync) and shows a reassuring note. -->
+          <button class="role-observer-escape" type="button" id="modB-observe-instead-btn"
+                  data-i18n="modB.observe.escape">I'd rather just observe — that's completely okay</button>
+          <p class="role-observe-reassure hidden" id="modB-observe-reassure"
+             role="status" aria-live="polite"></p>
+
           <!-- Live double-pick notice (role-pick sync, roleplay review
                2026-05-20): shown by renderRoleChoices() when two students in
                the room pick the same role, so they resolve it together. -->
