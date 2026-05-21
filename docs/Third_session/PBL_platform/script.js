@@ -5539,6 +5539,31 @@ if (typeof window !== "undefined") {
   window._seededShuffleIndexes = _seededShuffleIndexes;
 }
 
+// History sub-grouping: the History chart-section is `open` by default and
+// holds the most buttons (~11), so on entry it dominates the ~22-button
+// "wall" the round4-a11y review flagged as a cognitive-accessibility
+// blocker for the A2/B1 cohort. We keep ALL buttons reachable and DON'T
+// touch the shuffle or item IDs; we just split the rendered list into a
+// short visible cluster ("First questions") plus a labelled, collapsed
+// <details> sub-group ("More questions to ask") so fewer prompts hit the
+// screen at once. Only applied to `history` (the dense group); exam/labs
+// stay flat. Threshold chosen so the always-visible count stays small.
+const HISTORY_VISIBLE_COUNT = 4;
+
+function _makeReqBtn(group, i) {
+  const item = CASE[group][i];
+  const id = group + ":" + i;   // ← ORIGINAL index, not the shuffled position
+  const btn = document.createElement("button");
+  btn.className = "req-btn" + (item.key ? " key-btn" : "");
+  btn.dataset.id = id;
+  // item.q is a translatable { en, fr, ja } in the default content, but
+  // tc() also passes plain strings through (back-compat for custom JSON).
+  btn.textContent = tc(item.q, _curLang());
+  _annotateButtonWithGlossary(btn);
+  btn.addEventListener("click", () => reveal(id));
+  return btn;
+}
+
 function buildButtons() {
   ["history", "exam", "labs"].forEach(group => {
     const container = el("group-" + group);
@@ -5550,19 +5575,46 @@ function buildButtons() {
     const seedStr = (sessionNum || "default") + ":" +
                     (myRoom || "lobby") + ":" + group;
     const order = _seededShuffleIndexes(CASE[group].length, seedStr);
-    order.forEach(i => {
-      const item = CASE[group][i];
-      const id = group + ":" + i;   // ← ORIGINAL index, not the shuffled position
-      const btn = document.createElement("button");
-      btn.className = "req-btn" + (item.key ? " key-btn" : "");
-      btn.dataset.id = id;
-      // item.q is a translatable { en, fr, ja } in the default content, but
-      // tc() also passes plain strings through (back-compat for custom JSON).
-      btn.textContent = tc(item.q, _curLang());
-      _annotateButtonWithGlossary(btn);
-      btn.addEventListener("click", () => reveal(id));
-      container.appendChild(btn);
-    });
+
+    // Dense History group → sub-cluster the overflow into a collapsed,
+    // labelled <details> so the at-once count drops without removing
+    // any option (round4-a11y Rec 4).
+    if (group === "history" && order.length > HISTORY_VISIBLE_COUNT + 1) {
+      const _t = (key, fallback) => {
+        if (typeof window !== "undefined" && typeof window.t === "function") {
+          const v = window.t(key);
+          if (v && v !== key) return v;
+        }
+        return fallback;
+      };
+      const primary = document.createElement("div");
+      primary.className = "history-sub history-sub-primary";
+      primary.setAttribute("role", "group");
+      primary.setAttribute("aria-label",
+        _t("modA.history.sub.primary", "First questions to ask"));
+      order.slice(0, HISTORY_VISIBLE_COUNT)
+        .forEach(i => primary.appendChild(_makeReqBtn(group, i)));
+      container.appendChild(primary);
+
+      const more = document.createElement("details");
+      more.className = "history-sub history-sub-more";
+      const summary = document.createElement("summary");
+      summary.className = "history-sub-summary";
+      summary.textContent = _t("modA.history.sub.more", "More questions to ask");
+      more.appendChild(summary);
+      const moreGroup = document.createElement("div");
+      moreGroup.className = "btn-group";
+      moreGroup.setAttribute("role", "group");
+      moreGroup.setAttribute("aria-label",
+        _t("modA.history.sub.more", "More questions to ask"));
+      order.slice(HISTORY_VISIBLE_COUNT)
+        .forEach(i => moreGroup.appendChild(_makeReqBtn(group, i)));
+      more.appendChild(moreGroup);
+      container.appendChild(more);
+      return;
+    }
+
+    order.forEach(i => container.appendChild(_makeReqBtn(group, i)));
   });
 }
 
@@ -5584,9 +5636,35 @@ function _annotateButtonWithGlossary(btn) {
     }
   });
   if (hits.length) {
+    const glossText = hits.slice(0, 3).join("\n");
     // First-hit only if there are many — keep the tooltip readable.
-    btn.title = hits.slice(0, 3).join("\n");
+    // `title` is the mouse-hover affordance (round4-a11y Rec 5: hover-only,
+    // invisible to keyboard + touch + SR). Add a NON-title accessible hook
+    // so the gloss is reachable without a mouse:
+    //  1. aria-description carries the same gloss into the accessible name
+    //     computation, so a SR announces it on focus (no hover needed).
+    //  2. a visible 📖 marker (with its own accessible label) tells sighted
+    //     keyboard/touch users a definition exists. The marker is appended
+    //     as a child <span>; the button label text stays first so the
+    //     primary action name is unchanged.
+    btn.title = glossText;
+    btn.setAttribute("aria-description", glossText);
     btn.classList.add("has-glossary");
+    if (!btn.querySelector(".glossary-marker")) {
+      const mark = document.createElement("span");
+      mark.className = "glossary-marker";
+      mark.textContent = "📖";
+      // Accessible name for the marker glyph (the gloss itself lives in
+      // aria-description on the button); keep it short + translatable.
+      const markLabel = (typeof window !== "undefined" && typeof window.t === "function"
+        && window.t("modA.glossary.marker-label") !== "modA.glossary.marker-label")
+        ? window.t("modA.glossary.marker-label")
+        : "has a plain-language definition";
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", markLabel);
+      btn.appendChild(document.createTextNode(" "));
+      btn.appendChild(mark);
+    }
   }
 }
 function prereqsMet() {
@@ -6226,15 +6304,36 @@ function renderContrib() {
   label.className = "contrib-label";
   label.textContent = "Everyone taking part:";
   box.appendChild(label);
+  // Non-visual status text: a screen reader otherwise hears an identical
+  // name list whether or not someone has acted (the done-state is colour +
+  // dot-fill + font-weight only — WCAG 1.4.1 / 1.3.1). A visually-hidden
+  // span per chip carries the meaning. We deliberately keep it QUALITATIVE
+  // ("contributed" / "not yet"), never a number — the no-score, no-shame
+  // design above is intentional.
+  const tStatus = (key, fallback) => {
+    if (typeof window !== "undefined" && typeof window.t === "function") {
+      const v = window.t(key);
+      if (v && v !== key) return v;
+    }
+    return fallback;
+  };
   list.forEach(nm => {
     const did = !!acted[nm];
     const chip = document.createElement("span");
     chip.className = "contrib-chip" + (did ? " acted" : "");
     const dot = document.createElement("span");
     dot.className = "contrib-dot" + (did ? " on" : "");
+    dot.setAttribute("aria-hidden", "true");
     if (did) dot.style.background = colorFor(nm);
     chip.appendChild(dot);
     chip.appendChild(document.createTextNode(nm));
+    // Name via textContent (createTextNode) — never innerHTML.
+    const status = document.createElement("span");
+    status.className = "sr-only";
+    status.textContent = did
+      ? " — " + tStatus("modA.contrib.acted", "contributed")
+      : " — " + tStatus("modA.contrib.not-yet", "not yet");
+    chip.appendChild(status);
     box.appendChild(chip);
   });
 }
@@ -7421,15 +7520,20 @@ function initRolePicker() {
         c.dataset.role === saved ? "true" : "false"));
     }
   } catch (e) { /* localStorage may be blocked; OK */ }
+  // Single selection routine shared by click AND arrow keys. Per the
+  // WAI-ARIA radiogroup pattern (round4-a11y Rec 3 / WCAG 2.1.1) arrow
+  // keys must MOVE focus AND SELECT — previously they only moved focus,
+  // so the role never committed unless the user also pressed Space/Enter.
+  const select = chip => {
+    chips.forEach(c => c.setAttribute("aria-checked", "false"));
+    chip.setAttribute("aria-checked", "true");
+    try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
+    // Coach updates: role-picked drives Module B's setup→play transition.
+    if (typeof updateModBNextStep === "function") updateModBNextStep();
+  };
   chips.forEach(chip => {
-    chip.addEventListener("click", () => {
-      chips.forEach(c => c.setAttribute("aria-checked", "false"));
-      chip.setAttribute("aria-checked", "true");
-      try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
-      // Coach updates: role-picked drives Module B's setup→play transition.
-      if (typeof updateModBNextStep === "function") updateModBNextStep();
-    });
-    // arrow-key navigation inside the radiogroup
+    chip.addEventListener("click", () => select(chip));
+    // arrow-key navigation inside the radiogroup — select-on-move
     chip.addEventListener("keydown", e => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
       e.preventDefault();
@@ -7437,6 +7541,7 @@ function initRolePicker() {
       const i = list.indexOf(chip);
       const next = list[(i + (e.key === "ArrowRight" ? 1 : -1) + list.length) % list.length];
       next.focus();
+      select(next);   // move AND select, matching the APG radio pattern
     });
   });
 }
