@@ -1878,6 +1878,15 @@
                   aria-label="Hide this guidance for the rest of the session"
                   title="Hide for the session">×</button>
         </div>
+        <!-- Round-4 UX (sim: 16 personas asked for a sticky working panel —
+             the real cause was Module B being single-column with the group
+             answers dead-last at ~4.8x viewport). Module B now uses the same
+             two-column layout as Module A: instructional/reference cards in
+             .col-left, the group-answers form in a sticky .col-right so the
+             team's working answers stay visible while scrolling the body. The
+             phase-stepper + coach stay full-width above the columns. -->
+        <div class="columns modB-columns">
+          <div class="col-left">
         <section class="card vignette">
           <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
                aria-label="A doctor speaking with a patient and a family member">
@@ -2225,6 +2234,8 @@
         </details>
         <section class="card decisions-card" id="decisions-B"></section>
 
+          </div><!-- /.col-left -->
+          <div class="col-right">
         <section class="card answers-card answers-card-bulleted">
           <h3 data-i18n="stage.modB.answers.title">Group answers &mdash; Module B</h3>
           <p class="hint" id="answersB-hint"></p>
@@ -2289,6 +2300,8 @@
             <ul class="answers-list" id="answers-list-moduleB-_unsorted"></ul>
           </div>
         </section>
+          </div><!-- /.col-right -->
+        </div><!-- /.columns.modB-columns -->
       </section>
 
       <!-- STAGE 3: WRAP-UP -->
@@ -2370,6 +2383,12 @@
         <div class="card">
           <h3 data-i18n="stage.wrap.room-answers">Your room's answers</h3>
           <div id="wrapup-summary"></div>
+          <!-- Round-4 (sim: Hiroshi, Antoine, Hugo asked to take their team's
+               answers away). Students can now export their OWN room's answers
+               as Markdown at wrap-up — previously only the facilitator could
+               export (all rooms). Wired student-only in initEndPoll(). -->
+          <button id="wrapup-download-btn" class="wrapup-download-btn" type="button"
+                  data-i18n="stage.wrap.download">⤓ Download my room's answers (Markdown)</button>
         </div>
       </section>
     </div>
