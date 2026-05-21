@@ -2018,7 +2018,15 @@ function _saveTestStart(which) {
   const ref = _testRef(which);
   if (!ref) return Promise.resolve(false);
   return ref.child("startedAt").transaction(cur => (cur == null ? Date.now() : undefined))
-    .then(() => true).catch(() => false);
+    .then(() => {
+      // R4 linkage: tag the test with the durable per-person id so a
+      // researcher can link pre↔post↔questionnaire reliably (the test node
+      // is otherwise keyed only by the ephemeral per-tab clientId).
+      if (typeof stableId === "string" && stableId) {
+        ref.child("stableId").set(stableId).catch(() => {});
+      }
+      return true;
+    }).catch(() => false);
 }
 
 function _saveTestComplete(which, score) {
@@ -2035,10 +2043,14 @@ function _saveTestSkipped(which) {
   return ref.transaction(cur => {
     const now = Date.now();
     const prev = cur || {};
-    return Object.assign({}, prev, {
+    const next = Object.assign({}, prev, {
       startedAt: prev.startedAt || now,
       skipped: true
     });
+    // R4 linkage: keep the durable per-person id on a skipped test too, so a
+    // non-completer still links to their pre-test + questionnaire (attrition).
+    if (typeof stableId === "string" && stableId) next.stableId = stableId;
+    return next;
   }).then(() => true).catch(e => { console.warn("skip save failed", e); return false; });
 }
 
@@ -3791,6 +3803,62 @@ function roomProgress(data) {
     " · answers A" + aCount + " B" + bCount;
 }
 
+/* Live participation equity for the facilitator dashboard. Returns how many
+ * of the students PRESENT in the room have actually CONTRIBUTED a substantive
+ * artefact (a group answer or a working hypothesis — both tagged with the
+ * author's clientId via `cid`). Lets the lead facilitator spot a room where
+ * one or two students are carrying the group while others stay silent, and
+ * intervene mid-session rather than discover it in the transcript afterwards.
+ *   present     = clientIds with a presence record
+ *   contributing = present clientIds that authored >= 1 answer/hypothesis
+ *   quiet        = present but never contributed (the students to nudge) */
+/* Gini coefficient of a list of non-negative values (0 = perfectly even,
+ * → 1 = one person holds everything). Used to summarise how evenly the
+ * room's contributions are spread across the present students. Returns 0
+ * for an empty list or an all-zero list (no contributions yet = "even"). */
+function gini(values) {
+  const n = values.length;
+  if (n === 0) return 0;
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += values[i];
+  if (sum === 0) return 0;
+  let absDiff = 0;
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < n; j++) absDiff += Math.abs(values[i] - values[j]);
+  }
+  return absDiff / (2 * n * sum);
+}
+
+function roomParticipation(data) {
+  const presence = (data && data.presence) || {};
+  const present = Object.keys(presence);
+  // Per-student contribution COUNT (not just a boolean) so we can measure
+  // the spread, not only the headcount. Each answer / hypothesis is tagged
+  // with its author's clientId via `cid`.
+  const counts = Object.create(null);
+  const tally = (obj) => {
+    Object.keys(obj || {}).forEach(k => {
+      const cid = obj[k] && obj[k].cid;
+      if (typeof cid === "string") counts[cid] = (counts[cid] || 0) + 1;
+    });
+  };
+  tally(data && data.answers && data.answers.moduleA);
+  tally(data && data.answers && data.answers.moduleB);
+  tally(data && data.moduleA && data.moduleA.hypotheses);
+  const perPresent = present.map(cid => counts[cid] || 0);
+  const contributing = perPresent.filter(c => c > 0).length;
+  // "Who's stuck" — present students who haven't contributed anything yet.
+  const quietNames = present
+    .filter(cid => !(counts[cid] > 0))
+    .map(cid => (presence[cid] && presence[cid].name) ? presence[cid].name : "—");
+  return {
+    present: present.length,
+    contributing: contributing,
+    gini: gini(perPresent),
+    quietNames: quietNames
+  };
+}
+
 /* the big dashboard overview */
 /* Help-call notifier — when a NEW (not-already-alerted) call appears
    on a room the admin is watching, play a soft chime + fire a desktop
@@ -4041,6 +4109,83 @@ function roomMatchesFilter(name, data) {
   return false;
 }
 
+/* Session-wide pacing + attention roll-up for the lead facilitator. Aggregates
+   the same per-room signals already on each card (stage timer vs planned, help
+   calls, quiet rooms) into ONE glance, so a prof running several rooms can pace
+   the whole session and triage attention without scanning every card. Pure
+   read of the live `allRooms` — no new schema, no new listeners. */
+function sessionSignal() {
+  const names = roomNames(roomCount);
+  let active = 0, over = 0, minStage = Infinity, maxStage = -Infinity;
+  let slowest = null, slowestMin = -1, quietRooms = 0;
+  const calling = [];
+  names.forEach(r => {
+    const d = allRooms[r] || {};
+    const st = typeof d.stage === "number" ? d.stage : 0;
+    if (d.callForHelp && !d.callForHelp.ack) calling.push(r);
+    const mins = minsSince(d.stageAt);
+    if (mins == null) return;            // room hasn't started a stage yet
+    active++;
+    minStage = Math.min(minStage, st);
+    maxStage = Math.max(maxStage, st);
+    if (mins > (STAGE_MINUTES[st] || 99)) {
+      over++;
+      if (mins > slowestMin) { slowestMin = mins; slowest = r; }
+    }
+    if ((st === 1 || st === 2) && typeof roomParticipation === "function") {
+      const p = roomParticipation(d);
+      if (p.present >= 2 && p.contributing < p.present) quietRooms++;
+    }
+  });
+  return { rooms: names.length, active, over, minStage, maxStage,
+           slowest, slowestMin, calling, quietRooms };
+}
+
+/* Paint the session signal as the first child of #dashboard. */
+function renderSessionSignal(dash) {
+  if (!dash) return;
+  const s = sessionSignal();
+  if (!s.active && !s.calling.length) return;   // nothing started yet
+  const wrap = document.createElement("div");
+  wrap.className = "dash-session-signal";
+
+  // 1) Urgent first: rooms calling for a facilitator.
+  if (s.calling.length) {
+    const call = document.createElement("div");
+    call.className = "dash-signal-line dash-signal-call";
+    call.textContent = "🔔 " + s.calling.length + " room" + (s.calling.length === 1 ? "" : "s") +
+      " need a facilitator now: " + s.calling.join(", ");
+    wrap.appendChild(call);
+  }
+
+  // 2) Pacing.
+  const pace = document.createElement("div");
+  pace.className = "dash-signal-line dash-signal-pace" + (s.over > 0 ? " behind" : " ontrack");
+  if (!s.active) {
+    pace.textContent = "⏱ Pacing — waiting for rooms to start.";
+  } else if (s.over === 0) {
+    pace.textContent = "⏱ Pacing — all " + s.active + " active room" +
+      (s.active === 1 ? "" : "s") + " on track.";
+  } else {
+    pace.textContent = "⏱ Pacing — " + s.over + "/" + s.active +
+      " over planned stage time" +
+      (s.slowest ? " (slowest: " + s.slowest + ", " + s.slowestMin + " min)" : "") +
+      (s.maxStage > s.minStage
+        ? " · rooms span stages " + (s.minStage + 1) + "–" + (s.maxStage + 1) : "") + ".";
+  }
+  wrap.appendChild(pace);
+
+  // 3) Quiet rooms (gentle nudge; per-room names are still on each card).
+  if (s.quietRooms > 0) {
+    const q = document.createElement("div");
+    q.className = "dash-signal-line dash-signal-quiet";
+    q.textContent = "💤 " + s.quietRooms + " room" + (s.quietRooms === 1 ? "" : "s") +
+      " with a student not yet contributing.";
+    wrap.appendChild(q);
+  }
+  dash.appendChild(wrap);
+}
+
 function renderDashboard() {
   const dash = el("dashboard");
   dash.innerHTML = "";
@@ -4062,6 +4207,10 @@ function renderDashboard() {
       if (clr) clr.hidden = true;
     }
   }
+  // Session-wide pacing + attention roll-up at the top of the dashboard, so
+  // the lead facilitator can pace the whole room set at a glance instead of
+  // scanning every card (read-only; derived from the live `allRooms`).
+  renderSessionSignal(dash);
   let visibleCount = 0;
   roomNames(roomCount).forEach(r => {
     const data = allRooms[r] || {};
@@ -4124,6 +4273,45 @@ function renderDashboard() {
       det.appendChild(m);
       prog.appendChild(det);
     }
+    // Live participation equity — how evenly the room is engaged. Only
+    // meaningful once the room is in an interactive stage (Module A/B) with
+    // students present. Shows the contributing headcount + a Gini-derived
+    // "balance" read, and (separately) names the students who haven't
+    // contributed yet so the facilitator can nudge them by name.
+    const part = roomParticipation(data);
+    const interactive = (st === 1 || st === 2);
+    const quiet = interactive && part.present >= 2 && part.contributing < part.present;
+
+    const partic = document.createElement("div");
+    partic.className = "dash-participation" + (quiet ? " quiet" : "");
+    if (interactive && part.present >= 1) {
+      let line = "👥 " + part.contributing + "/" + part.present + " contributing";
+      // A balance read is only meaningful with 2+ actual contributors among
+      // 3+ present (Gini on tiny / single-contributor sets is noise).
+      if (part.contributing >= 2 && part.present >= 3) {
+        const g = part.gini;
+        const label = g < 0.2 ? "even" :
+                      g < 0.4 ? "slightly uneven" : "uneven — one or two carrying it";
+        line += " · " + label;
+        partic.title = "Contribution balance (Gini) " + g.toFixed(2) +
+          " — 0 is perfectly even, 1 is one person doing everything";
+      }
+      partic.textContent = line;
+    } else {
+      partic.textContent = "";
+    }
+
+    // "Who's stuck" — name the present students with zero contributions so
+    // the facilitator can prompt them directly. Names via textContent only.
+    const quietLine = document.createElement("div");
+    quietLine.className = "dash-quiet-names";
+    if (interactive && part.present >= 2 && part.quietNames.length &&
+        part.quietNames.length < part.present) {
+      quietLine.textContent = "💤 not yet contributing: " + part.quietNames.join(", ");
+    } else {
+      quietLine.textContent = "";
+    }
+
     const ppl = document.createElement("div");
     ppl.className = "dash-people";
     if (people.length) {
@@ -4145,7 +4333,8 @@ function renderDashboard() {
       "  ·  facilitator " + sManual + "/" + MANUAL_CAP +
       (sPen ? "  ·  penalties −" + sPen : "");
     info.appendChild(title); info.appendChild(stg);
-    info.appendChild(timer); info.appendChild(prog); info.appendChild(ppl);
+    info.appendChild(timer); info.appendChild(prog);
+    info.appendChild(partic); info.appendChild(quietLine); info.appendChild(ppl);
     info.appendChild(score);
 
     const ctrl = document.createElement("div");
@@ -5573,6 +5762,31 @@ if (typeof window !== "undefined") {
   window._seededShuffleIndexes = _seededShuffleIndexes;
 }
 
+// History sub-grouping: the History chart-section is `open` by default and
+// holds the most buttons (~11), so on entry it dominates the ~22-button
+// "wall" the round4-a11y review flagged as a cognitive-accessibility
+// blocker for the A2/B1 cohort. We keep ALL buttons reachable and DON'T
+// touch the shuffle or item IDs; we just split the rendered list into a
+// short visible cluster ("First questions") plus a labelled, collapsed
+// <details> sub-group ("More questions to ask") so fewer prompts hit the
+// screen at once. Only applied to `history` (the dense group); exam/labs
+// stay flat. Threshold chosen so the always-visible count stays small.
+const HISTORY_VISIBLE_COUNT = 4;
+
+function _makeReqBtn(group, i) {
+  const item = CASE[group][i];
+  const id = group + ":" + i;   // ← ORIGINAL index, not the shuffled position
+  const btn = document.createElement("button");
+  btn.className = "req-btn" + (item.key ? " key-btn" : "");
+  btn.dataset.id = id;
+  // item.q is a translatable { en, fr, ja } in the default content, but
+  // tc() also passes plain strings through (back-compat for custom JSON).
+  btn.textContent = tc(item.q, _curLang());
+  _annotateButtonWithGlossary(btn);
+  btn.addEventListener("click", () => reveal(id));
+  return btn;
+}
+
 function buildButtons() {
   ["history", "exam", "labs"].forEach(group => {
     const container = el("group-" + group);
@@ -5584,19 +5798,46 @@ function buildButtons() {
     const seedStr = (sessionNum || "default") + ":" +
                     (myRoom || "lobby") + ":" + group;
     const order = _seededShuffleIndexes(CASE[group].length, seedStr);
-    order.forEach(i => {
-      const item = CASE[group][i];
-      const id = group + ":" + i;   // ← ORIGINAL index, not the shuffled position
-      const btn = document.createElement("button");
-      btn.className = "req-btn" + (item.key ? " key-btn" : "");
-      btn.dataset.id = id;
-      // item.q is a translatable { en, fr, ja } in the default content, but
-      // tc() also passes plain strings through (back-compat for custom JSON).
-      btn.textContent = tc(item.q, _curLang());
-      _annotateButtonWithGlossary(btn);
-      btn.addEventListener("click", () => reveal(id));
-      container.appendChild(btn);
-    });
+
+    // Dense History group → sub-cluster the overflow into a collapsed,
+    // labelled <details> so the at-once count drops without removing
+    // any option (round4-a11y Rec 4).
+    if (group === "history" && order.length > HISTORY_VISIBLE_COUNT + 1) {
+      const _t = (key, fallback) => {
+        if (typeof window !== "undefined" && typeof window.t === "function") {
+          const v = window.t(key);
+          if (v && v !== key) return v;
+        }
+        return fallback;
+      };
+      const primary = document.createElement("div");
+      primary.className = "history-sub history-sub-primary";
+      primary.setAttribute("role", "group");
+      primary.setAttribute("aria-label",
+        _t("modA.history.sub.primary", "First questions to ask"));
+      order.slice(0, HISTORY_VISIBLE_COUNT)
+        .forEach(i => primary.appendChild(_makeReqBtn(group, i)));
+      container.appendChild(primary);
+
+      const more = document.createElement("details");
+      more.className = "history-sub history-sub-more";
+      const summary = document.createElement("summary");
+      summary.className = "history-sub-summary";
+      summary.textContent = _t("modA.history.sub.more", "More questions to ask");
+      more.appendChild(summary);
+      const moreGroup = document.createElement("div");
+      moreGroup.className = "btn-group";
+      moreGroup.setAttribute("role", "group");
+      moreGroup.setAttribute("aria-label",
+        _t("modA.history.sub.more", "More questions to ask"));
+      order.slice(HISTORY_VISIBLE_COUNT)
+        .forEach(i => moreGroup.appendChild(_makeReqBtn(group, i)));
+      more.appendChild(moreGroup);
+      container.appendChild(more);
+      return;
+    }
+
+    order.forEach(i => container.appendChild(_makeReqBtn(group, i)));
   });
 }
 
@@ -5618,9 +5859,35 @@ function _annotateButtonWithGlossary(btn) {
     }
   });
   if (hits.length) {
+    const glossText = hits.slice(0, 3).join("\n");
     // First-hit only if there are many — keep the tooltip readable.
-    btn.title = hits.slice(0, 3).join("\n");
+    // `title` is the mouse-hover affordance (round4-a11y Rec 5: hover-only,
+    // invisible to keyboard + touch + SR). Add a NON-title accessible hook
+    // so the gloss is reachable without a mouse:
+    //  1. aria-description carries the same gloss into the accessible name
+    //     computation, so a SR announces it on focus (no hover needed).
+    //  2. a visible 📖 marker (with its own accessible label) tells sighted
+    //     keyboard/touch users a definition exists. The marker is appended
+    //     as a child <span>; the button label text stays first so the
+    //     primary action name is unchanged.
+    btn.title = glossText;
+    btn.setAttribute("aria-description", glossText);
     btn.classList.add("has-glossary");
+    if (!btn.querySelector(".glossary-marker")) {
+      const mark = document.createElement("span");
+      mark.className = "glossary-marker";
+      mark.textContent = "📖";
+      // Accessible name for the marker glyph (the gloss itself lives in
+      // aria-description on the button); keep it short + translatable.
+      const markLabel = (typeof window !== "undefined" && typeof window.t === "function"
+        && window.t("modA.glossary.marker-label") !== "modA.glossary.marker-label")
+        ? window.t("modA.glossary.marker-label")
+        : "has a plain-language definition";
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", markLabel);
+      btn.appendChild(document.createTextNode(" "));
+      btn.appendChild(mark);
+    }
   }
 }
 function prereqsMet() {
@@ -6260,15 +6527,36 @@ function renderContrib() {
   label.className = "contrib-label";
   label.textContent = "Everyone taking part:";
   box.appendChild(label);
+  // Non-visual status text: a screen reader otherwise hears an identical
+  // name list whether or not someone has acted (the done-state is colour +
+  // dot-fill + font-weight only — WCAG 1.4.1 / 1.3.1). A visually-hidden
+  // span per chip carries the meaning. We deliberately keep it QUALITATIVE
+  // ("contributed" / "not yet"), never a number — the no-score, no-shame
+  // design above is intentional.
+  const tStatus = (key, fallback) => {
+    if (typeof window !== "undefined" && typeof window.t === "function") {
+      const v = window.t(key);
+      if (v && v !== key) return v;
+    }
+    return fallback;
+  };
   list.forEach(nm => {
     const did = !!acted[nm];
     const chip = document.createElement("span");
     chip.className = "contrib-chip" + (did ? " acted" : "");
     const dot = document.createElement("span");
     dot.className = "contrib-dot" + (did ? " on" : "");
+    dot.setAttribute("aria-hidden", "true");
     if (did) dot.style.background = colorFor(nm);
     chip.appendChild(dot);
     chip.appendChild(document.createTextNode(nm));
+    // Name via textContent (createTextNode) — never innerHTML.
+    const status = document.createElement("span");
+    status.className = "sr-only";
+    status.textContent = did
+      ? " — " + tStatus("modA.contrib.acted", "contributed")
+      : " — " + tStatus("modA.contrib.not-yet", "not yet");
+    chip.appendChild(status);
     box.appendChild(chip);
   });
 }
@@ -6707,6 +6995,22 @@ function decisionUnlocked(d) {
   };
   const unmet = [];
   Object.keys(w).forEach(key => {
+    // CHAINED-BRANCH GATE: gate this decision behind a PRIOR decision's
+    // committed choice. `afterDecision` is either a decision id (any option
+    // unlocks) or { id, option } (only that committed option unlocks). Reads
+    // the live, synced roomVotes[id].committed — no new Firebase path. This is
+    // how a committed decision forks the case into a follow-up decision.
+    if (key === "afterDecision") {
+      const spec = w[key];
+      const depId = (typeof spec === "string") ? spec : (spec && spec.id);
+      const needOpt = (spec && typeof spec.option === "number") ? spec.option : null;
+      const dv = (typeof roomVotes !== "undefined" && depId) ? roomVotes[depId] : null;
+      const committedChoice = (dv && dv.committed && typeof dv.committed.choice === "number")
+        ? dv.committed.choice : null;
+      const ok = (committedChoice != null) && (needOpt == null || committedChoice === needOpt);
+      if (!ok) unmet.push({ key: "afterDecision", depId: depId, needOption: needOpt });
+      return;
+    }
     const need = w[key] || 0;
     if ((have[key] || 0) < need) unmet.push({ key: key, need: need, have: have[key] || 0 });
   });
@@ -6727,6 +7031,14 @@ function decisionUnlockHint(unmet) {
   };
   const parts = unmet.map(u => {
     switch (u.key) {
+      case "afterDecision": {
+        // Chained branch: name the prior decision the team must lock in first.
+        const dep = (typeof DECISIONS !== "undefined" ? DECISIONS : [])
+          .find(d => d.id === u.depId);
+        const depTitle = dep ? tc(dep.prompt, _curLang()) : "";
+        const lead = t("modA.decision.unlock.after", "the team locks in the previous decision");
+        return depTitle ? (lead + ": “" + depTitle + "”") : lead;
+      }
       case "hypotheses":
         return t("modA.decision.unlock.hypotheses", "add a working hypothesis");
       case "historyRevealed":
@@ -6749,6 +7061,11 @@ function decisionUnlockHint(unmet) {
 let lastUnlockedDecisionIds = new Set();
 
 function renderDecisions() {
+  // Combined across modules: which decisions are unlocked right now. Chained
+  // branches live in Module B (a committed decision unlocks a follow-up), so
+  // the unlock-transition nudge must span both modules — a single tracker
+  // keeps A and B from clobbering each other's "newly opened" state.
+  const allUnlockedNow = new Set();
   ["A", "B"].forEach(mod => {
     const box = el("decisions-" + mod);
     if (!box) return;
@@ -6771,31 +7088,6 @@ function renderDecisions() {
         if (ballots > lastDecisionBallotCount) nudgeRcolTab("decisions");
         lastDecisionBallotCount = ballots;
       }
-      // Coach nudge on unlock transitions (locked → unlocked) for any
-      // Module A decision. Surfaces a one-liner via toast() so the team
-      // sees that a new decision just opened without auto-stealing focus.
-      const nowUnlocked = new Set();
-      list.forEach(d => {
-        if (decisionUnlocked(d).unlocked) nowUnlocked.add(d.id);
-      });
-      nowUnlocked.forEach(id => {
-        if (!lastUnlockedDecisionIds.has(id) && lastUnlockedDecisionIds.size > 0) {
-          // Only nudge on a real transition (not on initial paint where
-          // lastUnlockedDecisionIds is still empty). Find the decision
-          // title for the toast.
-          const d = list.find(x => x.id === id);
-          if (d && typeof toast === "function") {
-            const lang = _curLang();
-            toast("🗳️ " + (typeof window.t === "function" ?
-                  (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
-                    ? window.t("modA.decision.unlocked")
-                    : "A new team decision just opened")
-                  : "A new team decision just opened"),
-                  tc(d.prompt, lang));
-          }
-        }
-      });
-      lastUnlockedDecisionIds = nowUnlocked;
     }
     const head = document.createElement("div");
     head.className = "dec-head";
@@ -6808,14 +7100,40 @@ function renderDecisions() {
     head.appendChild(h); head.appendChild(hint);
     box.appendChild(head);
     list.forEach(d => {
-      const gate = (mod === "A") ? decisionUnlocked(d) : { unlocked: true, unmet: [] };
+      // Gating now applies to ALL modules. Decisions without an `unlockWhen`
+      // are always unlocked (back-compat), so only opted-in decisions gate —
+      // including Module B chained branches (unlockWhen.afterDecision).
+      const gate = decisionUnlocked(d);
       if (gate.unlocked) {
+        allUnlockedNow.add(d.id);
         box.appendChild(buildDecision(d));
+      } else if (d.hideWhenLocked) {
+        // Chained-branch follow-ups stay invisible until they open, so the
+        // continuation lands as a surprise fork rather than a spoiler teaser.
+        // The unlock nudge below announces it the moment it opens.
       } else {
         box.appendChild(buildLockedDecision(d, gate.unmet));
       }
     });
   });
+  // Coach nudge on unlock transitions (locked → unlocked), across both modules.
+  // Surfaces a one-liner via toast() so the team sees a new decision opened
+  // without auto-stealing focus. Skipped on the initial paint (empty tracker).
+  allUnlockedNow.forEach(id => {
+    if (!lastUnlockedDecisionIds.has(id) && lastUnlockedDecisionIds.size > 0) {
+      const d = (typeof DECISIONS !== "undefined" ? DECISIONS : []).find(x => x.id === id);
+      if (d && typeof toast === "function") {
+        const lang = _curLang();
+        toast("🗳️ " + (typeof window.t === "function" ?
+              (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
+                ? window.t("modA.decision.unlocked")
+                : "A new team decision just opened")
+              : "A new team decision just opened"),
+              tc(d.prompt, lang));
+      }
+    }
+  });
+  lastUnlockedDecisionIds = allUnlockedNow;
 }
 
 /* Slim locked-state placeholder for a decision that hasn't yet met its
@@ -6972,6 +7290,23 @@ function buildDecision(d) {
       res.appendChild(pts);
     }
     wrap.appendChild(res);
+    // BRANCHING: a committed option may carry a `branch.reveal` — a short
+    // narrative of what the patient/family does next, turning the decision
+    // into a fork. Derived from the synced committed choice, so the whole
+    // room sees the same continuation with no extra Firebase path. Options
+    // without a branch render nothing here (branching is opt-in per option).
+    const branchText = opt.branch && tc(opt.branch.reveal, lang);
+    if (branchText) {
+      const br = document.createElement("div");
+      br.className = "dec-branch";
+      const bh = document.createElement("strong");
+      bh.className = "dec-branch-h";
+      bh.textContent = "→ What happens next";
+      const bp = document.createElement("p");
+      bp.textContent = branchText;   // narrative content — textContent, no markup
+      br.appendChild(bh); br.appendChild(bp);
+      wrap.appendChild(br);
+    }
   } else {
     // not locked yet: the status line + the lock-in button
     const present = votablePresentCount();
@@ -7455,25 +7790,31 @@ function initRolePicker() {
         c.dataset.role === saved ? "true" : "false"));
     }
   } catch (e) { /* localStorage may be blocked; OK */ }
+  // Single selection routine shared by click AND arrow keys. Per the
+  // WAI-ARIA radiogroup pattern (round4-a11y Rec 3 / WCAG 2.1.1) arrow
+  // keys must MOVE focus AND SELECT — previously they only moved focus,
+  // so the role never committed unless the user also pressed Space/Enter.
+  const select = chip => {
+    chips.forEach(c => c.setAttribute("aria-checked", "false"));
+    chip.setAttribute("aria-checked", "true");
+    try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
+    // Publish my pick so the room sees it live (double-claim becomes visible).
+    // Best-effort: keyed by clientId, the rule lets me write only my own slot.
+    // No-op in LOCAL/solo mode or before a room exists. Living inside select()
+    // means arrow-key selection syncs too, not just clicks.
+    try {
+      if (refRoleChoices && clientId && !isRoomAdmin) {
+        refRoleChoices.child(clientId).set({
+          role: chip.dataset.role, name: myName || "", at: Date.now()
+        });
+      }
+    } catch (e) { /* offline / rules — local pick still stands */ }
+    // Coach updates: role-picked drives Module B's setup→play transition.
+    if (typeof updateModBNextStep === "function") updateModBNextStep();
+  };
   chips.forEach(chip => {
-    chip.addEventListener("click", () => {
-      chips.forEach(c => c.setAttribute("aria-checked", "false"));
-      chip.setAttribute("aria-checked", "true");
-      try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
-      // Publish my pick so the room sees it live (double-claim becomes
-      // visible). Best-effort: keyed by clientId, the rule lets me write
-      // only my own slot. No-op in LOCAL/solo mode or before a room exists.
-      try {
-        if (refRoleChoices && clientId && !isRoomAdmin) {
-          refRoleChoices.child(clientId).set({
-            role: chip.dataset.role, name: myName || "", at: Date.now()
-          });
-        }
-      } catch (e) { /* offline / rules — local pick still stands */ }
-      // Coach updates: role-picked drives Module B's setup→play transition.
-      if (typeof updateModBNextStep === "function") updateModBNextStep();
-    });
-    // arrow-key navigation inside the radiogroup
+    chip.addEventListener("click", () => select(chip));
+    // arrow-key navigation inside the radiogroup — select-on-move
     chip.addEventListener("keydown", e => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
       e.preventDefault();
@@ -7481,6 +7822,7 @@ function initRolePicker() {
       const i = list.indexOf(chip);
       const next = list[(i + (e.key === "ArrowRight" ? 1 : -1) + list.length) % list.length];
       next.focus();
+      select(next);   // move AND select, matching the APG radio pattern
     });
   });
   // Swap-and-replay: wire the round button + seed local round state so
@@ -8303,6 +8645,10 @@ function initEndPoll() {
       by:      (myName || "anon").slice(0, 40),
       at:      Date.now()
     };
+    // R4 linkage: stamp the durable per-person id so the wrap-up poll can be
+    // joined to this student's pre/post tests + questionnaire without the
+    // ephemeral per-tab clientId (Round-4 research-methods finding #1).
+    if (typeof stableId === "string" && stableId) payload.stableId = stableId;
     if (!payload.hardest && !payload.feeling) return;   // nothing to send
     btn.disabled = true;
     refPoll.set(payload).then(() => {
