@@ -1403,6 +1403,103 @@ var DECISIONS_B = [
                    "それでも選ぶのは彼女です — 終末期に処置を断る患者もいます。あなたの役割" +
                    "は、明確でよく説明された推奨を示すことであり、強制することではありません。" } }
     ]
+  },
+  {
+    /* ── CHAINED BRANCH (2026-05-22) ───────────────────────────────────────
+       The follow-up beat to dec_prognosis. It stays HIDDEN until the room has
+       LOCKED IN dec_prognosis (any option), then opens as a fresh decision:
+       the conversation has reached "she has heard the prognosis — what now?".
+       This is the *chained* step the BRANCHING CASES note above DECISIONS_B
+       anticipated — a committed decision unlocks a follow-up decision, which
+       itself branches. The gate is declared HERE via unlockWhen.afterDecision,
+       reusing the same unlockWhen schema Module A already uses (evaluated by
+       decisionUnlocked() in script.js); `hideWhenLocked` keeps it out of sight
+       until it opens so it lands as a continuation, not a spoiler. No new
+       Firebase path: the gate reads the synced votes/dec_prognosis/committed. */
+    id: "dec_prognosis_next", module: "B", points: 20, penalty: 0,
+    unlockWhen: { afterDecision: "dec_prognosis" },
+    hideWhenLocked: true,
+    prompt: { en: "She has heard you, and her son is beside her. What do you do with the " +
+                  "time you have just opened up?",
+              fr: "Elle vous a entendu, et son fils est à ses côtés. Que faites-vous du " +
+                  "temps que vous venez d'ouvrir ?",
+              ja: "彼女はあなたの言葉を受け止め、息子がそばにいます。今ひらいたこの時間を、" +
+                  "あなたはどう使いますか?" },
+    options: [
+      { text: { en: "Ask what matters most to her now, then offer a palliative-care referral " +
+                    "and a family meeting to plan around it",
+                fr: "Lui demander ce qui compte le plus pour elle maintenant, puis proposer " +
+                    "une orientation en soins palliatifs et une réunion de famille pour " +
+                    "organiser la suite",
+                ja: "今の彼女にとって最も大切なことを尋ね、その上で緩和ケアへの紹介と、それを" +
+                    "軸に計画を立てる家族面談を提案する" },
+        correct: true,
+        why: { en: "This turns disclosure into a plan. Eliciting her values first (a " +
+                   "goals-of-care conversation) and then offering palliative care early — " +
+                   "which the landmark Temel et al trial (NEJM 2010) links to better quality " +
+                   "of life and mood — meets her where she is. The family meeting keeps her " +
+                   "son inside the plan rather than chasing answers in the corridor.",
+               fr: "Cela transforme l'annonce en projet. Recueillir d'abord ses valeurs " +
+                   "(conversation sur les objectifs de soins) puis proposer tôt les soins " +
+                   "palliatifs — que l'essai de référence de Temel et al (NEJM 2010) associe à " +
+                   "une meilleure qualité de vie et humeur — la rejoint là où elle est. La " +
+                   "réunion de famille garde son fils dans le projet plutôt que de courir " +
+                   "après des réponses dans le couloir.",
+               ja: "これは告知を計画へと変えます。まず彼女の価値観を引き出し(ケアの目標の" +
+                   "対話)、その上で緩和ケアを早期に提案する — 画期的な Temel ら(NEJM 2010)の" +
+                   "試験はこれをより良いQOLと気分に結びつけています — ことは、彼女の今に寄り添" +
+                   "います。家族面談は、息子を廊下で答えを探させるのではなく計画の中にとどめ" +
+                   "ます。" },
+        branch: { reveal: {
+          en: "Her shoulders drop a little. \"I want to be home for my grandson's birthday in June,\" she says. The room has a goal now — and a plan begins to take shape around it.",
+          fr: "Ses épaules se relâchent un peu. « Je veux être à la maison pour l'anniversaire de mon petit-fils en juin », dit-elle. La pièce a désormais un objectif — et un plan commence à se dessiner autour.",
+          ja: "彼女の肩が少し下がります。「6月の孫の誕生日には家にいたいんです」と彼女は言います。この場に目標ができ — それを軸に計画が形になり始めます。"
+        } } },
+      { text: { en: "Reassure her there are still treatments worth trying, to keep her spirits up",
+                fr: "La rassurer qu'il reste des traitements à tenter, pour lui garder le moral",
+                ja: "まだ試す価値のある治療があると安心させ、気持ちを保たせる" },
+        correct: false,
+        why: { en: "Well-meant, but it trades honesty for comfort. Offering vague hope without " +
+                   "naming her values forecloses the goals-of-care conversation and can drive " +
+                   "overtreatment near the end of life. Hope and honesty are not opposites — " +
+                   "hope can be reframed around what is actually achievable.",
+               fr: "Bien intentionné, mais cela troque l'honnêteté contre le réconfort. Offrir " +
+                   "un espoir vague sans nommer ses valeurs ferme la conversation sur les " +
+                   "objectifs de soins et peut conduire à un surtraitement en fin de vie. " +
+                   "Espoir et honnêteté ne s'opposent pas — l'espoir peut être recentré sur ce " +
+                   "qui est réellement atteignable.",
+               ja: "善意ではありますが、これは正直さを慰めと引き換えにします。彼女の価値観を" +
+                   "言葉にせず曖昧な希望を差し出すことは、ケアの目標の対話を閉ざし、終末期の" +
+                   "過剰治療につながりかねません。希望と正直さは対立しません — 希望は、実際に" +
+                   "達成可能なことを軸に捉え直すことができます。" },
+        branch: { reveal: {
+          en: "She brightens for a moment — but her son catches your eye, uneasy. You have bought a little comfort and lost the opening to plan. The questions she could not ask will surface later, harder.",
+          fr: "Elle s'illumine un instant — mais son fils capte votre regard, mal à l'aise. Vous avez acheté un peu de réconfort et perdu l'ouverture pour planifier. Les questions qu'elle n'a pas pu poser ressurgiront plus tard, plus durement.",
+          ja: "彼女は一瞬明るくなります — が、息子が不安げにあなたと目を合わせます。あなたはわずかな慰めを得て、計画の糸口を失いました。彼女が問えなかった問いは、後でより重くなって現れます。"
+        } } },
+      { text: { en: "Give her space — end the visit now and schedule a follow-up next week",
+                fr: "Lui laisser de l'espace — terminer la visite maintenant et programmer un " +
+                    "suivi la semaine prochaine",
+                ja: "彼女に時間を与える — ここで診察を終え、来週フォローアップを設定する" },
+        correct: false,
+        why: { en: "Space is kind, but ending here abandons her at the rawest moment with no " +
+                   "next step. A brief check of what she needs right now — and a concrete " +
+                   "near-term plan — costs little and prevents her son from carrying her " +
+                   "unasked questions out into the corridor alone.",
+               fr: "Laisser de l'espace est bienveillant, mais clore ici l'abandonne au moment " +
+                   "le plus vif sans étape suivante. Vérifier brièvement ce dont elle a besoin " +
+                   "maintenant — et un plan concret à court terme — coûte peu et évite que son " +
+                   "fils emporte seul ses questions sans réponse dans le couloir.",
+               ja: "時間を与えるのは優しさですが、ここで終えることは、最もつらい瞬間に次の" +
+                   "一歩もなく彼女を置き去りにします。今の彼女に何が必要かを手短に確認し — " +
+                   "具体的な短期の計画を示すこと — は手間が少なく、息子が答えのない問いを" +
+                   "一人で廊下へ持ち出すのを防ぎます。" },
+        branch: { reveal: {
+          en: "She nods politely and the visit ends. In the corridor, her son turns to you with the questions she was too stunned to ask — the plan has slipped into a hallway conversation without her.",
+          fr: "Elle hoche poliment la tête et la visite se termine. Dans le couloir, son fils se tourne vers vous avec les questions qu'elle était trop sidérée pour poser — le projet a glissé dans une conversation de couloir, sans elle.",
+          ja: "彼女は礼儀正しくうなずき、診察は終わります。廊下で、息子が、彼女が呆然として問えなかった問いを携えてあなたの方を向きます — 計画は、彼女を欠いたまま廊下の会話へとすべり込んでしまいました。"
+        } } }
+    ]
   }
 ];
 
