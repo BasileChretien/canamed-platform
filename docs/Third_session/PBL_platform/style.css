@@ -974,6 +974,43 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   color: var(--ink);
 }
 
+/* Swap-and-replay loop: round indicator + the swap button + the reflective
+   "you've swapped seats" banner. */
+.role-replay {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  margin-top: var(--s-2);
+}
+.role-replay-round {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--n-600, #41506180);
+}
+.role-replay-btn {
+  margin-left: auto;
+  padding: 7px 13px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: var(--r-md);
+  border: 1px solid var(--primary);
+  background: var(--nagoya-50, #eaf4fb);
+  color: var(--primary);
+  cursor: pointer;
+}
+.role-replay-btn:hover { background: var(--nagoya-100, #d6eafb); }
+.role-replay-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.role-replay-banner {
+  margin: var(--s-2) 0 0;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  border-radius: var(--r-md);
+  background: var(--nagoya-50, #eaf4fb);
+  border-left: 3px solid var(--primary);
+  color: var(--ink);
+}
+
 /* Discussion-question list inside Module B's prompts-card. */
 .discussion-q-list {
   margin: var(--s-2) 0 0;

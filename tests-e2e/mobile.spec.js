@@ -373,4 +373,37 @@ test.describe("mobile splash usability", () => {
     await expect(page.locator("#group-exam")).toBeHidden();
     await expect(page.locator("#group-labs")).toBeHidden();
   });
+
+  // Swap-and-replay (2026-05-22): the swap button + role chips must be
+  // tappable on a phone, and a swap must rotate the client's own role with
+  // the reflective banner visible (it's a polite live region below the chips).
+  test("swap-and-replay: button is tappable and rotates the role on mobile", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    await page.evaluate(() => {
+      ["splash", "lobby", "waiting", "admin-app", "session-ended"].forEach(id => {
+        const e = document.getElementById(id);
+        if (e) e.classList.add("hidden");
+      });
+      document.getElementById("app").classList.remove("hidden");
+      const s2 = document.getElementById("stage-2");
+      if (s2) s2.classList.remove("hidden");
+      document.body.classList.remove("locked");
+      if (typeof window.initRolePicker === "function") window.initRolePicker();
+    });
+
+    const swap = page.locator("#modB-swap-replay-btn");
+    await expect(swap).toBeVisible();
+    const box = await swap.boundingBox();
+    expect(box, "swap button must render").not.toBeNull();
+    if (box) {
+      expect(box.height, "swap tap-target >= 36px on mobile").toBeGreaterThanOrEqual(36);
+    }
+
+    await page.locator('#modB-role-picker .role-chip[data-role="physician"]').tap();
+    await swap.tap();
+    await expect(page.locator('#modB-role-picker .role-chip[data-role="patient"]'))
+      .toHaveAttribute("aria-checked", "true");
+    await expect(page.locator("#modB-replay-banner")).toBeVisible();
+  });
 });

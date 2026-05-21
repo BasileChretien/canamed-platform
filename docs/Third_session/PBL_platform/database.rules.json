@@ -141,6 +141,10 @@
               ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 40)"
             },
+            "roleplayRound": {
+              ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+              ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 4)"
+            },
             "score": {
               "auto": {
                 "$eventId": {
@@ -417,6 +421,10 @@
                 "teamName": {
                   ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
                   ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 40)"
+                },
+                "roleplayRound": {
+                  ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                  ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 1 && newData.val() <= 4)"
                 },
                 "score": {
                   "auto": {
