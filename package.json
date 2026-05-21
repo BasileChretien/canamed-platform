@@ -11,7 +11,8 @@
     "serve:platform": "node scripts/serve-platform.js",
     "i18n:coverage": "node scripts/i18n-coverage-report.js",
     "emulator": "npx firebase emulators:start --only=database,auth --config docs/Third_session/PBL_platform/firebase.json --project canamed-sim",
-    "sim:emulator": "node scripts/sim/sim-with-emulator.js"
+    "sim:emulator": "node scripts/sim/sim-with-emulator.js",
+    "test:e2e:rules": "node scripts/sim/build-emulator-rules.js && npx firebase emulators:exec --only database,auth --config docs/Third_session/PBL_platform/firebase.emulator.json --project canamed-sim \"npx playwright test --config=playwright.emulator.config.js\""
   },
   "engines": {
     "node": ">=20"
