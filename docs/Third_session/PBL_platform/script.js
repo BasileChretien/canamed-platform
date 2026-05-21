@@ -2009,7 +2009,15 @@ function _saveTestStart(which) {
   const ref = _testRef(which);
   if (!ref) return Promise.resolve(false);
   return ref.child("startedAt").transaction(cur => (cur == null ? Date.now() : undefined))
-    .then(() => true).catch(() => false);
+    .then(() => {
+      // R4 linkage: tag the test with the durable per-person id so a
+      // researcher can link pre↔post↔questionnaire reliably (the test node
+      // is otherwise keyed only by the ephemeral per-tab clientId).
+      if (typeof stableId === "string" && stableId) {
+        ref.child("stableId").set(stableId).catch(() => {});
+      }
+      return true;
+    }).catch(() => false);
 }
 
 function _saveTestComplete(which, score) {
@@ -2026,10 +2034,14 @@ function _saveTestSkipped(which) {
   return ref.transaction(cur => {
     const now = Date.now();
     const prev = cur || {};
-    return Object.assign({}, prev, {
+    const next = Object.assign({}, prev, {
       startedAt: prev.startedAt || now,
       skipped: true
     });
+    // R4 linkage: keep the durable per-person id on a skipped test too, so a
+    // non-completer still links to their pre-test + questionnaire (attrition).
+    if (typeof stableId === "string" && stableId) next.stableId = stableId;
+    return next;
   }).then(() => true).catch(e => { console.warn("skip save failed", e); return false; });
 }
 
@@ -8040,6 +8052,10 @@ function initEndPoll() {
       by:      (myName || "anon").slice(0, 40),
       at:      Date.now()
     };
+    // R4 linkage: stamp the durable per-person id so the wrap-up poll can be
+    // joined to this student's pre/post tests + questionnaire without the
+    // ephemeral per-tab clientId (Round-4 research-methods finding #1).
+    if (typeof stableId === "string" && stableId) payload.stableId = stableId;
     if (!payload.hardest && !payload.feeling) return;   // nothing to send
     btn.disabled = true;
     refPoll.set(payload).then(() => {
