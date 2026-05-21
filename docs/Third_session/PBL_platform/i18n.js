@@ -372,7 +372,7 @@
       "room.answer.err.edit-failed": "Your edit could not be saved — check your connection. Your text: ",
       "room.answer.err.delete-failed": "That point could not be deleted — check your connection and try again.",
       // language hint + placeholder shown above each answers box
-      "room.answer-input-language-hint": "Write in any language — your facilitator and teammates can read English, French and Japanese.",
+      "room.answer-input-language-hint": "Write in any language — English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.",
       "room.answer-input-placeholder": "Add a point — it appears with your name and colour",
       // dynamic hint under each answers box (set from script.js)
       "room.answers.hint.moduleA": "Anyone in the room can add a point — it saves automatically. Aim for the four bullets above; both France and Japan should write.",
@@ -1044,7 +1044,7 @@
       "room.call.throttle-again": "Veuillez patienter {seconds}s avant d'appeler à nouveau un·e encadrant·e.",
       "room.answer.err.edit-failed": "Votre modification n'a pas pu être enregistrée — vérifiez votre connexion. Votre texte : ",
       "room.answer.err.delete-failed": "Ce point n'a pas pu être supprimé — vérifiez votre connexion et réessayez.",
-      "room.answer-input-language-hint": "Écrivez dans la langue de votre choix — vos encadrant·e·s et coéquipier·ère·s lisent l'anglais, le français et le japonais.",
+      "room.answer-input-language-hint": "Écrivez dans la langue de votre choix — anglais, français ou japonais. Vous n'êtes pas évalué·e sur votre anglais ; c'est votre raisonnement clinique qui compte.",
       "room.answer-input-placeholder": "Ajoutez un point — il apparaît avec votre nom et votre couleur",
       "room.answers.hint.moduleA": "Chacun·e dans la salle peut ajouter un point — l'enregistrement est automatique. Visez les quatre puces ci-dessus ; la France comme le Japon doivent écrire.",
       "room.answers.hint.moduleB": "Chacun·e dans la salle peut ajouter un point — l'enregistrement est automatique. Couvrez les trois puces ci-dessus ; la France comme le Japon doivent écrire.",
@@ -1646,7 +1646,7 @@
       "room.call.throttle-again": "ファシリテーターを再度呼ぶまで{seconds}秒お待ちください。",
       "room.answer.err.edit-failed": "編集を保存できませんでした — 接続を確認してください。入力内容: ",
       "room.answer.err.delete-failed": "この項目を削除できませんでした — 接続を確認してもう一度お試しください。",
-      "room.answer-input-language-hint": "好きな言語で書いてください — ファシリテーターと仲間は英語・フランス語・日本語を読めます。",
+      "room.answer-input-language-hint": "好きな言語で書いてください — 英語・フランス語・日本語のいずれでも。英語の上手さは評価しません。評価するのは臨床的な考え方です。",
       "room.answer-input-placeholder": "ポイントを追加 — あなたの名前と色とともに表示されます",
       "room.answers.hint.moduleA": "ルームの誰でもポイントを追加できます — 自動的に保存されます。上の4つの項目をカバーしましょう。フランスと日本の双方から書き込んでください。",
       "room.answers.hint.moduleB": "ルームの誰でもポイントを追加できます — 自動的に保存されます。上の3つの項目をカバーしましょう。フランスと日本の双方から書き込んでください。",
