@@ -7828,6 +7828,30 @@ function initRolePicker() {
   // Swap-and-replay: wire the round button + seed local round state so
   // LOCAL/solo mode can advance rounds without a Firebase listener.
   wireSwapReplay();
+  // "I'd rather observe" panic affordance — a calm one-tap escape hatch.
+  wireObserveEscape();
+}
+
+/* "I'd rather observe" panic affordance: one calm tap moves the student into
+   the observer role (reusing the role-pick sync so the change propagates and
+   the coach updates) and shows a reassuring, no-judgment note. Always
+   available — the safety-note promises this exit, this makes it one tap. */
+function wireObserveEscape() {
+  const btn = el("modB-observe-instead-btn");
+  if (!btn || btn._wired) return;
+  btn._wired = true;
+  btn.addEventListener("click", () => {
+    const picker = el("modB-role-picker");
+    const observerChip = picker && picker.querySelector('.role-chip[data-role="observer"]');
+    // Reuse the chip-select path so the pick syncs + coach hooks fire.
+    if (observerChip) observerChip.click();
+    const note = el("modB-observe-reassure");
+    if (note) {
+      note.textContent = _swapT("modB.observe.reassure",
+        "That's completely fine — you're observing now. Watch the SPIKES steps, and step back in whenever you're ready.");
+      note.classList.remove("hidden");
+    }
+  });
 }
 
 /* Render the room's live role picks onto the chips. `map` is
@@ -7983,41 +8007,6 @@ function renderReplayRound(round) {
 function _swapRoundLabel(round) {
   if (round <= 1) return _swapT("modB.replay.round1", "Round 1 — first run");
   return _swapT("modB.replay.roundN", "Round {n}").replace("{n}", String(round));
-}
-
-/* Render the room's live role picks onto the chips. `map` is
- * { clientId: { role, name, at } } from refRoleChoices. Each chip shows the
- * names of who picked it; if two+ students pick the same role, the chip is
- * flagged and a shared "decide together" note appears. Names go through
- * textContent (never innerHTML) so a participant-supplied name can't inject
- * markup. No-op when the picker isn't mounted (e.g. not on Module B). */
-function renderRoleChoices(map) {
-  const picker = el("modB-role-picker");
-  if (!picker) return;
-  const byRole = {};
-  Object.keys(map || {}).forEach(cid => {
-    const c = map[cid];
-    if (!c || typeof c.role !== "string") return;
-    (byRole[c.role] = byRole[c.role] || []).push(
-      (typeof c.name === "string" && c.name.trim()) ? c.name.trim() : "—");
-  });
-  let anyClash = false;
-  picker.querySelectorAll(".role-chip").forEach(chip => {
-    const names = byRole[chip.dataset.role] || [];
-    const clash = names.length > 1;
-    if (clash) anyClash = true;
-    chip.classList.toggle("role-claimed", names.length > 0);
-    chip.classList.toggle("role-clash", clash);
-    let slot = chip.querySelector(".role-chip-claimants");
-    if (!slot) {
-      slot = document.createElement("span");
-      slot.className = "role-chip-claimants";
-      chip.appendChild(slot);
-    }
-    slot.textContent = names.length ? names.join(", ") : "";
-  });
-  const note = el("role-clash-note");
-  if (note) note.classList.toggle("hidden", !anyClash);
 }
 
 /* Save the room's chosen team name (any room member may set it).
@@ -8245,8 +8234,18 @@ function buildAnswerLi(moduleKey, entry) {
     disBtn.textContent = "disagree ↪";
     disBtn.setAttribute("aria-label",
       "Add a counter-point under " + entry.by + "'s answer");
-    disBtn.addEventListener("click", () => openCounterBullet(entry, li));
+    disBtn.addEventListener("click", () => openCounterBullet(entry, li, "disagree"));
     li.appendChild(disBtn);
+    // ...and a matching "agree ↩" so debate isn't only dissent — quieter
+    // students can amplify a point they back, not just challenge it. Same
+    // inline form, stance="support" (rendered distinctly by is-support).
+    const agreeBtn = document.createElement("button");
+    agreeBtn.className = "entry-act entry-agree";
+    agreeBtn.textContent = "agree ↩";
+    agreeBtn.setAttribute("aria-label",
+      "Add a supporting point under " + entry.by + "'s answer");
+    agreeBtn.addEventListener("click", () => openCounterBullet(entry, li, "support"));
+    li.appendChild(agreeBtn);
   }
   // Always render any existing counter-bullets under this answer.
   const repliesWrap = document.createElement("ul");
@@ -8284,11 +8283,15 @@ function _renderRepliesForEntry(entryId, wrap) {
 /* Open an inline counter-bullet input under a teammate's answer.
  * Idempotent — calling twice on the same answer reuses the existing
  * input rather than stacking duplicates. */
-function openCounterBullet(entry, li) {
+function openCounterBullet(entry, li, stance) {
   if (!li || !entry || !entry.id) return;
-  if (li.querySelector(".counter-bullet-form")) {
-    // already open — focus its textarea
-    const ta = li.querySelector(".counter-bullet-form textarea");
+  stance = (stance === "support") ? "support" : "disagree";
+  const existing = li.querySelector(".counter-bullet-form");
+  if (existing) {
+    // already open — switch its stance (agree ↔ disagree) and refocus rather
+    // than stacking a second form.
+    _setCounterFormStance(existing, stance);
+    const ta = existing.querySelector("textarea");
     if (ta) try { ta.focus(); } catch (e) {}
     return;
   }
@@ -8297,14 +8300,9 @@ function openCounterBullet(entry, li) {
   const ta = document.createElement("textarea");
   ta.rows = 2;
   ta.maxLength = 400;
-  ta.placeholder = tFallback("answer.counter.placeholder",
-    "Why do you see it differently?");
-  ta.setAttribute("aria-label",
-    tFallback("answer.counter.aria",
-      "Counter-bullet to " + (entry.by || "teammate") + "'s answer"));
   const send = document.createElement("button");
   send.type = "button";
-  send.textContent = tFallback("answer.counter.send", "Send counter-point");
+  send.className = "counter-send";
   const cancel = document.createElement("button");
   cancel.type = "button";
   cancel.className = "ghost-btn";
@@ -8313,6 +8311,7 @@ function openCounterBullet(entry, li) {
   form.appendChild(send);
   form.appendChild(cancel);
   li.appendChild(form);
+  _setCounterFormStance(form, stance);   // sets placeholder/aria + send label + dataset
   setTimeout(() => { try { ta.focus(); } catch (e) {} }, 30);
   cancel.addEventListener("click", () => form.remove());
   send.addEventListener("click", () => {
@@ -8324,10 +8323,37 @@ function openCounterBullet(entry, li) {
       by:   (myName || "anon").slice(0, 40),
       cid:  clientId,
       at:   Date.now(),
-      stance: "disagree"
+      stance: form.dataset.stance === "support" ? "support" : "disagree"
     }).then(() => { form.remove(); })
       .catch(() => { send.disabled = false; });
   });
+}
+
+/* Set (or switch) a counter-bullet form's stance — placeholder, aria-label
+ * and send-button copy follow the stance, and the stance is stored on the
+ * form so the submit handler tags the reply correctly. */
+function _setCounterFormStance(form, stance) {
+  if (!form) return;
+  stance = (stance === "support") ? "support" : "disagree";
+  form.dataset.stance = stance;
+  form.classList.toggle("is-support", stance === "support");
+  const ta = form.querySelector("textarea");
+  const send = form.querySelector(".counter-send");
+  if (stance === "support") {
+    if (ta) {
+      ta.placeholder = tFallback("answer.support.placeholder",
+        "What would you add, or why do you agree?");
+      ta.setAttribute("aria-label", tFallback("answer.support.aria", "Supporting point"));
+    }
+    if (send) send.textContent = tFallback("answer.support.send", "Add supporting point");
+  } else {
+    if (ta) {
+      ta.placeholder = tFallback("answer.counter.placeholder",
+        "Why do you see it differently?");
+      ta.setAttribute("aria-label", tFallback("answer.counter.aria", "Counter-bullet"));
+    }
+    if (send) send.textContent = tFallback("answer.counter.send", "Send counter-point");
+  }
 }
 
 /* `bulletKey` is optional — when present, the answer is tagged so the

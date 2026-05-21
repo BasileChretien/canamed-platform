@@ -1011,6 +1011,34 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   color: var(--ink);
 }
 
+/* "I'd rather observe" panic affordance — a calm, low-key, full-width escape
+   hatch. Deliberately understated (not alarm-coloured) so taking it never
+   feels like a failure. */
+.role-observer-escape {
+  display: block;
+  width: 100%;
+  margin-top: var(--s-2);
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  border-radius: var(--r-md);
+  border: 1px dashed var(--n-300, #c7d0d9);
+  background: transparent;
+  color: var(--n-600, #415061);
+  cursor: pointer;
+  text-align: center;
+}
+.role-observer-escape:hover { background: var(--n-50, #f3f6f9); }
+.role-observer-escape:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.role-observe-reassure {
+  margin: var(--s-2) 0 0;
+  padding: 9px 12px;
+  font-size: 0.9rem;
+  border-radius: var(--r-md);
+  background: #e8f5ec;
+  border-left: 3px solid #2e7d4f;
+  color: var(--ink);
+}
+
 /* Discussion-question list inside Module B's prompts-card. */
 .discussion-q-list {
   margin: var(--s-2) 0 0;
@@ -1545,6 +1573,7 @@ body[data-observer="1"] #modB-next-step {
 
 /* --- Counter-bullet replies under group answers --- */
 .entry-disagree { color: var(--meeting, #8a2017); }
+.entry-agree { color: #2e7d4f; }
 .answer-replies {
   list-style: none;
   margin: 4px 0 0 18px;
