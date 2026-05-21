@@ -48,17 +48,17 @@ module.exports = defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$/
+      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$|[\\/]emulator[\\/]/
     },
     {
       name: "firefox",
       use: { ...devices["Desktop Firefox"] },
-      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$/
+      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$|[\\/]emulator[\\/]/
     },
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
-      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$/
+      testIgnore: /visual\.spec\.js$|mobile\.spec\.js$|a11y\.spec\.js$|perf\.spec\.js$|android-findings\.spec\.js$|[\\/]emulator[\\/]/
     },
     // ---- perf budget — splash FCP/TTI and first-party JS+CSS bytes,
     // chromium only (Chrome's PerformanceNavigationTiming is the most
