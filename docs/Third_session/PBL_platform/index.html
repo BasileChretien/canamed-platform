@@ -1971,6 +1971,23 @@
                the room pick the same role, so they resolve it together. -->
           <p class="role-clash-note hidden" id="role-clash-note" role="status" aria-live="polite"
              data-i18n="modB.role.clash">Two of you picked the same role — decide together so everyone has a part.</p>
+
+          <!-- Swap-and-replay loop (2026-05-22): the single highest-value
+               roleplay enhancement — after a round, the room ROTATES roles
+               (physician → patient → family → observer) and replays the same
+               scene from the other side, which is where the empathy learning
+               happens. Any member can advance the round; each client rotates
+               ITS OWN pick (writing only its own roleChoices node, so no
+               cross-writing / privilege is needed). Synced via
+               <base>/roleplayRound; works in LOCAL/solo mode too. -->
+          <div class="role-replay" id="modB-role-replay">
+            <span class="role-replay-round" id="modB-replay-round"
+                  data-i18n="modB.replay.round1">Round 1 — first run</span>
+            <button class="role-replay-btn" type="button" id="modB-swap-replay-btn"
+                    data-i18n="modB.replay.swap">🔄 Swap roles &amp; replay</button>
+          </div>
+          <p class="role-replay-banner hidden" id="modB-replay-banner"
+             role="status" aria-live="polite"></p>
         </div>
 
         <!-- SPIKES + useful sentences: compact reference strips, available

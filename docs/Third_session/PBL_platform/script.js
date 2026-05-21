@@ -1045,7 +1045,15 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
     refObservers = null, refAnswerReplies = null, refChat = null, refPoll = null,
     refRoleChoices = null,
+    refReplayRound = null,
     refClosed = null;
+
+/* Swap-and-replay loop state (Module B). `replayRound` is the current
+ * roleplay round (1..4); `replayRoundReady` guards the first sync/local paint
+ * so a late joiner doesn't auto-rotate on arrival — rotation only fires on a
+ * genuine round increment after the listener has seen its baseline. */
+let replayRound = 1;
+let replayRoundReady = false;
 
 /* Activate Firebase App Check with reCAPTCHA Enterprise. Idempotent — safe
    to call multiple times. No-op (with a single console.info hint to
@@ -2560,6 +2568,7 @@ function teardownRoom() {
     if (refVotes) refVotes.off();
     if (refObservers) refObservers.off();
     if (refRoleChoices) refRoleChoices.off();
+    if (refReplayRound) refReplayRound.off();
     if (refAnswerReplies) refAnswerReplies.off();
     if (refChat) refChat.off();
     if (refTeamName) refTeamName.off();
@@ -2621,6 +2630,15 @@ function startRoom() {
   // this stage isn't mounted yet.
   refRoleChoices.on("value", snap => {
     try { renderRoleChoices(snap.val() || {}); } catch (_) {}
+  });
+
+  // Swap-and-replay round: the whole room advances together. The first
+  // snapshot establishes the baseline (no rotation); later increments rotate
+  // each client's own role. A late joiner landing in round 2 therefore does
+  // not auto-rotate — handleReplayRound() guards on replayRoundReady.
+  refReplayRound = db.ref(base + "/roleplayRound");
+  refReplayRound.on("value", snap => {
+    try { handleReplayRound(snap.val(), true); } catch (_) {}
   });
 
   refStage.on("value", snap => {
@@ -7807,6 +7825,164 @@ function initRolePicker() {
       select(next);   // move AND select, matching the APG radio pattern
     });
   });
+  // Swap-and-replay: wire the round button + seed local round state so
+  // LOCAL/solo mode can advance rounds without a Firebase listener.
+  wireSwapReplay();
+}
+
+/* Render the room's live role picks onto the chips. `map` is
+ * { clientId: { role, name, at } } from refRoleChoices. Each chip shows the
+ * names of who picked it; if two+ students pick the same role, the chip is
+ * flagged and a shared "decide together" note appears. Names go through
+ * textContent (never innerHTML) so a participant-supplied name can't inject
+ * markup. No-op when the picker isn't mounted (e.g. not on Module B). */
+function renderRoleChoices(map) {
+  const picker = el("modB-role-picker");
+  if (!picker) return;
+  const byRole = {};
+  Object.keys(map || {}).forEach(cid => {
+    const c = map[cid];
+    if (!c || typeof c.role !== "string") return;
+    (byRole[c.role] = byRole[c.role] || []).push(
+      (typeof c.name === "string" && c.name.trim()) ? c.name.trim() : "—");
+  });
+  let anyClash = false;
+  picker.querySelectorAll(".role-chip").forEach(chip => {
+    const names = byRole[chip.dataset.role] || [];
+    const clash = names.length > 1;
+    if (clash) anyClash = true;
+    chip.classList.toggle("role-claimed", names.length > 0);
+    chip.classList.toggle("role-clash", clash);
+    let slot = chip.querySelector(".role-chip-claimants");
+    if (!slot) {
+      slot = document.createElement("span");
+      slot.className = "role-chip-claimants";
+      chip.appendChild(slot);
+    }
+    slot.textContent = names.length ? names.join(", ") : "";
+  });
+  const note = el("role-clash-note");
+  if (note) note.classList.toggle("hidden", !anyClash);
+}
+
+/* ── Swap-and-replay loop (Module B) ──────────────────────────────────────
+   After a roleplay round the room rotates roles and replays the scene from
+   the other side — where the cross-perspective empathy learning happens.
+   Rotation: physician → patient → family → observer → physician. Any member
+   advances the round (synced via <base>/roleplayRound); each client rotates
+   ITS OWN pick only, so no cross-client writes or extra privilege are needed.
+   Works in LOCAL/solo mode (no listener — the button applies the bump here). */
+const REPLAY_ROLE_ORDER = ["physician", "patient", "family", "observer"];
+
+function _swapT(key, fallback) {
+  if (typeof window !== "undefined" && typeof window.t === "function") {
+    const v = window.t(key);
+    if (v && v !== key) return v;
+  }
+  return fallback;
+}
+
+/* Rotate a role by `steps` around the 4-role cycle. Unknown/unpicked → unchanged. */
+function rotateRole(role, steps) {
+  const i = REPLAY_ROLE_ORDER.indexOf(role);
+  if (i < 0) return role;
+  const n = REPLAY_ROLE_ORDER.length;
+  return REPLAY_ROLE_ORDER[(i + ((steps % n) + n)) % n];
+}
+
+/* Wire the "Swap roles & replay" button and seed local round state. */
+function wireSwapReplay() {
+  const btn = el("modB-swap-replay-btn");
+  if (!btn || btn._wired) { renderReplayRound(replayRound); return; }
+  btn._wired = true;
+  // No roleplayRound listener exists in LOCAL/solo mode, so mark the round
+  // state ready here; shared mode flips this on its first synced snapshot.
+  if (MODE !== "shared") replayRoundReady = true;
+  btn.addEventListener("click", bumpReplayRound);
+  renderReplayRound(replayRound);
+}
+
+/* Advance to the next round. Shared mode writes <base>/roleplayRound (the
+   listener then drives every client's own rotation); LOCAL applies it here. */
+function bumpReplayRound() {
+  const next = replayRound + 1;
+  if (next > REPLAY_ROLE_ORDER.length) {
+    if (typeof toast === "function") {
+      toast(_swapT("modB.replay.full",
+        "Everyone has now played every role — nicely done."));
+    }
+    return;
+  }
+  if (MODE === "shared" && refReplayRound) {
+    refReplayRound.set(next).catch(() => { handleReplayRound(next, false); });
+  } else {
+    handleReplayRound(next, false);
+  }
+}
+
+/* Apply a round value (from sync or local). Rotates this client's own role
+   ONLY on a real increment after the baseline round is known — a late joiner
+   landing straight into round 2 must NOT rotate on arrival. */
+function handleReplayRound(round, fromSync) {
+  round = (typeof round === "number" && round >= 1 && round <= REPLAY_ROLE_ORDER.length)
+    ? round : 1;
+  const prev = replayRound;
+  const wasReady = replayRoundReady;
+  replayRound = round;
+  replayRoundReady = true;
+  renderReplayRound(round);
+  if (wasReady && round > prev) applyRoleSwap(round - prev, round);
+}
+
+/* Rotate THIS client's own role chip by `steps` and show a reflective banner.
+   Writes only the client's own roleChoices node (shared mode). */
+function applyRoleSwap(steps, round) {
+  const picker = el("modB-role-picker");
+  if (!picker) return;
+  const chips = Array.from(picker.querySelectorAll(".role-chip"));
+  let cur = null;
+  chips.forEach(c => { if (c.getAttribute("aria-checked") === "true") cur = c.dataset.role; });
+  if (!cur) { try { cur = localStorage.getItem("canamed_modB_role"); } catch (e) {} }
+  const next = cur ? rotateRole(cur, steps) : null;
+  if (next) {
+    chips.forEach(c =>
+      c.setAttribute("aria-checked", c.dataset.role === next ? "true" : "false"));
+    try { localStorage.setItem("canamed_modB_role", next); } catch (e) {}
+    try {
+      if (MODE === "shared" && refRoleChoices && clientId && !isRoomAdmin) {
+        refRoleChoices.child(clientId).set({ role: next, name: myName || "", at: Date.now() });
+      }
+    } catch (e) { /* offline — local pick still stands */ }
+    if (typeof updateModBNextStep === "function") updateModBNextStep();
+  }
+  showSwapBanner(cur, next, round);
+}
+
+/* The "you've swapped seats" reflective banner — names the roles in the
+   active language and prompts the cross-perspective reflection. */
+function showSwapBanner(oldRole, newRole, round) {
+  const banner = el("modB-replay-banner");
+  if (!banner) return;
+  const roleName = (r) => r ? _swapT("modB.role." + r + ".name", r) : "";
+  const lead = _swapT("modB.replay.swapped",
+    "You've swapped seats — notice how the conversation feels from here.");
+  let line = lead;
+  if (oldRole && newRole) {
+    line = _swapT("modB.replay.fromto", "You were the {old} — now you're the {new}.")
+      .replace("{old}", roleName(oldRole)).replace("{new}", roleName(newRole)) + " " + lead;
+  }
+  banner.textContent = "🔄 " + _swapRoundLabel(round) + " — " + line;
+  banner.classList.remove("hidden");
+}
+
+function renderReplayRound(round) {
+  const ind = el("modB-replay-round");
+  if (ind) ind.textContent = _swapRoundLabel(round);
+}
+
+function _swapRoundLabel(round) {
+  if (round <= 1) return _swapT("modB.replay.round1", "Round 1 — first run");
+  return _swapT("modB.replay.roundN", "Round {n}").replace("{n}", String(round));
 }
 
 /* Render the room's live role picks onto the chips. `map` is
