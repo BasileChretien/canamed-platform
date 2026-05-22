@@ -137,14 +137,27 @@ test.describe("Markdown export of group-answers", () => {
 });
 
 test.describe("Glossary tooltips on clinical buttons", () => {
+  // glossary.js is now lazy-loaded (script-loader.js) — only Module A/B need
+  // it, never the splash. Drive the same load path the app uses (ensureGlossary
+  // returns a Promise that resolves once the chunk is in) so the assertion is
+  // deterministic across browsers (webkit lacks requestIdleCallback, so its
+  // idle prefetch lands later than chromium/firefox).
+  async function loadGlossary(page) {
+    await page.evaluate(() =>
+      (window.CanamedLoader && window.CanamedLoader.ensureGlossary)
+        ? window.CanamedLoader.ensureGlossary()
+        : Promise.resolve());
+  }
   test("glossary.js exposes a populated CANAMED_GLOSSARY", async ({ page }) => {
     await page.goto("/");
+    await loadGlossary(page);
     const count = await page.evaluate(() =>
       window.CANAMED_GLOSSARY ? Object.keys(window.CANAMED_GLOSSARY).length : 0);
     expect(count, "glossary must ship a non-empty term map").toBeGreaterThanOrEqual(10);
   });
   test("a synthetic button with a glossed term gets a title attribute", async ({ page }) => {
     await page.goto("/");
+    await loadGlossary(page);
     const title = await page.evaluate(() => {
       const b = document.createElement("button");
       b.className = "req-btn";
