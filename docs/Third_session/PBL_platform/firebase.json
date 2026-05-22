@@ -5,6 +5,7 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**",
+      "functions/**",
       "public/**",
       "README.md",
       "*.bak",
@@ -54,6 +55,10 @@
   },
   "database": {
     "rules": "database.rules.json"
+  },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs20"
   },
   "emulators": {
     "database": { "port": 9000, "host": "127.0.0.1" },
