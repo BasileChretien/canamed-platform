@@ -3030,6 +3030,11 @@ function enterAdminApp() {
     debriefBtn.dataset.wired = "1";
     debriefBtn.addEventListener("click", toggleDebrief);
   }
+  const impactBtn = el("admin-impact-btn");
+  if (impactBtn && !impactBtn.dataset.wired) {
+    impactBtn.dataset.wired = "1";
+    impactBtn.addEventListener("click", generateImpactReport);
+  }
   const closeBtn = el("admin-close-btn");
   if (closeBtn && !closeBtn.dataset.wired) {
     closeBtn.dataset.wired = "1";
@@ -5391,6 +5396,200 @@ function renderClosedState(closed) {
       else { try { localStorage.removeItem("canamed_session"); } catch (e) {} location.reload(); }
     });
   }
+}
+
+/* ── Impact report ────────────────────────────────────────────────────────
+   A one-click, dean-ready summary of the session, assembled CLIENT-SIDE from
+   the data already live on the admin dashboard (allRooms). Opens as a
+   self-contained, printable page (Save as PDF). Aggregate + pseudonymous: NO
+   individual names — only counts, rates and balance measures. No new Firebase
+   path. Built to drop straight into an accreditation dossier or partnership
+   report: participation + equity, decision quality (a reasoning proxy),
+   engagement, and a per-room appendix. */
+function _impactMetrics() {
+  const rooms = (typeof _debriefRoomList === "function")
+    ? _debriefRoomList()
+    : roomNames(roomCount).filter(r => allRooms[r] != null);
+  let present = 0, contributing = 0, giniSum = 0, giniN = 0, unevenRooms = 0;
+  let answers = 0, hypotheses = 0, decisionsCommitted = 0;
+  const perRoom = [];
+
+  rooms.forEach(r => {
+    const d = allRooms[r] || {};
+    const part = (typeof roomParticipation === "function")
+      ? roomParticipation(d) : { present: 0, contributing: 0, gini: 0 };
+    present += part.present || 0;
+    contributing += part.contributing || 0;
+    if ((part.present || 0) >= 3 && (part.contributing || 0) >= 2) {
+      giniSum += part.gini || 0; giniN++;
+    }
+    if ((part.present || 0) >= 2 && (part.contributing || 0) < (part.present || 0)) unevenRooms++;
+
+    const ans = d.answers || {};
+    let roomAnswers = 0;
+    ["moduleA", "moduleB"].forEach(mk => { roomAnswers += Object.keys(ans[mk] || {}).length; });
+    answers += roomAnswers;
+    hypotheses += Object.keys(d.hypotheses || {}).length;
+
+    const votes = d.votes || {};
+    let roomCommitted = 0;
+    Object.keys(votes).forEach(id => {
+      if (votes[id] && votes[id].committed && typeof votes[id].committed.choice === "number") {
+        roomCommitted++;
+      }
+    });
+    decisionsCommitted += roomCommitted;
+
+    const score = (typeof _debriefBucket === "function") ? _debriefBucket(d).total : 0;
+    perRoom.push({
+      room: r, team: d.teamName || "",
+      present: part.present || 0, contributing: part.contributing || 0,
+      gini: part.gini || 0, answers: roomAnswers, committed: roomCommitted, score: score
+    });
+  });
+
+  // Decision accuracy across rooms — a reasoning proxy: per DECISION, of the
+  // rooms that locked an answer in, how many chose the safest (correct) option.
+  const decAgg = [];
+  const decList = (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [];
+  let totalCommitted = 0, totalCorrect = 0;
+  decList.forEach(dec => {
+    let committedRooms = 0, correctRooms = 0;
+    rooms.forEach(r => {
+      const v = ((allRooms[r] || {}).votes || {})[dec.id] || {};
+      const c = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
+      if (c == null) return;
+      committedRooms++;
+      const opt = (dec.options || [])[c];
+      if (opt && opt.correct) correctRooms++;
+    });
+    if (committedRooms > 0) {
+      decAgg.push({ prompt: tc(dec.prompt, _curLang()), module: dec.module || "",
+                    committedRooms: committedRooms, correctRooms: correctRooms });
+      totalCommitted += committedRooms; totalCorrect += correctRooms;
+    }
+  });
+
+  return {
+    rooms: rooms, perRoom: perRoom, decAgg: decAgg,
+    roomCount: rooms.length, present: present, contributing: contributing,
+    contribPct: present ? Math.round((contributing / present) * 100) : 0,
+    meanGini: giniN ? (giniSum / giniN) : null, unevenRooms: unevenRooms,
+    answers: answers, hypotheses: hypotheses, decisionsCommitted: decisionsCommitted,
+    decisionAccuracyPct: totalCommitted ? Math.round((totalCorrect / totalCommitted) * 100) : null
+  };
+}
+
+/* HTML-escape for values interpolated into the report document. The report is
+   opened in a fresh window (no platform CSP), so we escape defensively even
+   though the inputs are aggregate numbers + the session code. */
+function _impactEsc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function generateImpactReport() {
+  const m = _impactMetrics();
+  const when = new Date();
+  const giniTxt = m.meanGini == null ? "—"
+    : m.meanGini.toFixed(2) + " (" +
+      (m.meanGini < 0.2 ? "even" : m.meanGini < 0.4 ? "slightly uneven" : "uneven") + ")";
+  const accTxt = m.decisionAccuracyPct == null ? "—" : m.decisionAccuracyPct + "%";
+
+  const decRows = m.decAgg.map(d => {
+    const pct = d.committedRooms ? Math.round((d.correctRooms / d.committedRooms) * 100) : 0;
+    return "<tr><td>" + (d.module ? "[" + _impactEsc(d.module) + "] " : "") + _impactEsc(d.prompt) +
+      "</td><td class='num'>" + d.correctRooms + "/" + d.committedRooms +
+      "</td><td class='num'>" + pct + "%</td></tr>";
+  }).join("");
+
+  const roomRows = m.perRoom.map(r =>
+    "<tr><td>" + _impactEsc(r.room) + (r.team ? " — " + _impactEsc(r.team) : "") +
+    "</td><td class='num'>" + r.contributing + "/" + r.present +
+    "</td><td class='num'>" + (r.present >= 3 && r.contributing >= 2 ? r.gini.toFixed(2) : "—") +
+    "</td><td class='num'>" + r.answers + "</td><td class='num'>" + r.committed +
+    "</td><td class='num'>" + r.score + "</td></tr>"
+  ).join("");
+
+  const html =
+"<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
+"<meta name='viewport' content='width=device-width, initial-scale=1'>" +
+"<title>CANAMED — Session Impact Report</title><style>" +
+"*{box-sizing:border-box}body{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d2733;max-width:900px;margin:0 auto;padding:32px 24px;background:#fff}" +
+"h1{font-size:1.6rem;margin:0 0 4px}h2{font-size:1.15rem;margin:28px 0 8px;border-bottom:2px solid #2563eb;padding-bottom:4px;color:#16335c}" +
+".sub{color:#5b6b7b;margin:0 0 20px}.kpis{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}" +
+".kpi{flex:1 1 150px;border:1px solid #e1e7ed;border-radius:10px;padding:12px 14px;background:#f7f9fb}" +
+".kpi .v{font-size:1.6rem;font-weight:700;color:#16335c}.kpi .l{font-size:.8rem;color:#5b6b7b}" +
+"table{width:100%;border-collapse:collapse;margin:8px 0;font-size:.92rem}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #e8edf2}" +
+"th{background:#f0f4f8;color:#16335c}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}" +
+".note{font-size:.85rem;color:#5b6b7b;background:#f7f9fb;border-left:3px solid #2563eb;padding:10px 12px;border-radius:6px;margin:10px 0}" +
+".foot{margin-top:28px;font-size:.8rem;color:#7a8694;border-top:1px solid #e8edf2;padding-top:12px}" +
+"@media print{.noprint{display:none}body{padding:0}}" +
+".pbtn{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:.95rem;cursor:pointer}" +
+"</style></head><body>" +
+"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<h1>CANAMED — Session Impact Report</h1>" +
+"<p class='sub'>Session <strong>" + _impactEsc(typeof sessionNum !== "undefined" ? sessionNum : "—") +
+"</strong> · generated " + _impactEsc(when.toLocaleString()) + "</p>" +
+
+"<h2>At a glance</h2><div class='kpis'>" +
+"<div class='kpi'><div class='v'>" + m.present + "</div><div class='l'>participants present</div></div>" +
+"<div class='kpi'><div class='v'>" + m.roomCount + "</div><div class='l'>active rooms</div></div>" +
+"<div class='kpi'><div class='v'>" + m.contribPct + "%</div><div class='l'>actively contributing</div></div>" +
+"<div class='kpi'><div class='v'>" + accTxt + "</div><div class='l'>decisions reached the safest answer</div></div>" +
+"</div>" +
+
+"<h2>Participation &amp; equity</h2>" +
+"<p>" + m.contributing + " of " + m.present + " present participants actively contributed (" +
+m.contribPct + "%). Mean contribution balance (Gini) across rooms with enough activity to measure: <strong>" +
+giniTxt + "</strong> — 0 is perfectly even, 1 is one person carrying the room. " +
+m.unevenRooms + " room(s) flagged as uneven for facilitator follow-up.</p>" +
+"<p class='note'>Equity is a first-class outcome of this design: the platform measures whether <em>every</em> student engages, not just the average — directly relevant to inclusive-teaching and the cross-cultural (Caen × Nagoya) cohort.</p>" +
+
+"<h2>Decision quality (clinical-reasoning proxy)</h2>" +
+(decRows ? "<table><thead><tr><th>Team decision</th><th class='num'>safest</th><th class='num'>%</th></tr></thead><tbody>" +
+  decRows + "</tbody></table>" +
+  "<p>Across all committed team decisions, <strong>" + accTxt +
+  "</strong> reached the safest option. These are deliberate, discussed choices on hard communication/ethics calls — a reasoning signal, not recall.</p>"
+  : "<p>No team decisions were locked in yet.</p>") +
+
+"<h2>Engagement</h2><div class='kpis'>" +
+"<div class='kpi'><div class='v'>" + m.answers + "</div><div class='l'>group answers contributed</div></div>" +
+"<div class='kpi'><div class='v'>" + m.hypotheses + "</div><div class='l'>working hypotheses</div></div>" +
+"<div class='kpi'><div class='v'>" + m.decisionsCommitted + "</div><div class='l'>team decisions committed</div></div>" +
+"</div>" +
+
+"<h2>Per-room appendix</h2>" +
+(roomRows ? "<table><thead><tr><th>Room</th><th class='num'>contributing</th><th class='num'>balance</th>" +
+  "<th class='num'>answers</th><th class='num'>decisions</th><th class='num'>score</th></tr></thead><tbody>" +
+  roomRows + "</tbody></table>" : "<p>No room activity recorded.</p>") +
+
+"<div class='foot'><p><strong>Methodology &amp; privacy.</strong> Figures are computed client-side from this " +
+"session's live data and are <strong>aggregate and pseudonymous</strong> — no individual is named. " +
+"Decision accuracy counts a room's <em>committed</em> choice against the clinically-safest option defined " +
+"in the case. Satisfaction and knowledge gain (pre/post) are captured separately via the session " +
+"questionnaire and pre/post tests. This report is intended as supporting evidence of communication-skills " +
+"teaching activity and student engagement.</p></div>" +
+"</body></html>";
+
+  // Open in a new window (user-gesture, so not popup-blocked). Fall back to a
+  // downloadable .html file if the browser blocks the popup.
+  let w = null;
+  try { w = window.open("", "_blank"); } catch (e) { /* blocked */ }
+  if (w && w.document) {
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+  } else {
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "CANAMED_Session" + (typeof sessionNum !== "undefined" ? sessionNum : "") + "_impact_report.html";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+  if (typeof toast === "function") toast("📊 Impact report generated.");
 }
 
 function downloadAllAnswers() {
