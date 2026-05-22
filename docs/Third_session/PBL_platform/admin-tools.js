@@ -149,6 +149,15 @@ var CANAMED_COMPETENCY_MAP = {
   function generateAccreditationReport() {
     const rows = competencyRows();
     const when = new Date();
+    const g = (typeof window._knowledgeGain === "function") ? window._knowledgeGain() : {};
+    const gainBlock = (g && g.nPaired)
+      ? "<h2>Knowledge gain (pre → post)</h2><p>Among the " + g.nPaired +
+        " participant(s) who completed both tests, mean score rose from <strong>" +
+        (g.meanPrePct == null ? "—" : g.meanPrePct + "%") + "</strong> to <strong>" +
+        (g.meanPostPct == null ? "—" : g.meanPostPct + "%") + "</strong>" +
+        (g.meanNormGain == null ? "" : " (normalized gain g = <strong>" + g.meanNormGain.toFixed(2) + "</strong>)") +
+        " — direct, objective evidence of knowledge acquisition against the case learning objectives.</p>"
+      : "";
     const body = rows.map(function (r) {
       const acts = r.activities.length
         ? r.activities.map(function (a) {
@@ -181,6 +190,7 @@ var CANAMED_COMPETENCY_MAP = {
 "<h2>Competencies exercised &amp; assessed</h2>" +
 "<table><thead><tr><th>Competency (framework)</th><th>Evidenced by — activity &amp; outcome</th>" +
 "<th class='num'>safest %</th></tr></thead><tbody>" + body + "</tbody></table>" +
+gainBlock +
 "<div class='foot'>Figures are aggregate + pseudonymous, computed client-side from this session. " +
 "'Safest %' is the share of rooms whose committed team decision matched the clinically-safest option " +
 "defined in the case — a deliberate, discussed choice (reasoning evidence, not recall). Knowledge gain " +
@@ -264,6 +274,23 @@ var CANAMED_COMPETENCY_MAP = {
           committed_choice: c, correct: opt ? (opt.correct ? 1 : 0) : null });
       });
     });
+    const preMax = Array.isArray(window.PRETEST) ? window.PRETEST.length : 0;
+    const postMax = Array.isArray(window.POSTTEST) ? window.POSTTEST.length : 0;
+    // Per-room, per-participant pre/post test scores (pseudonymous: indexed,
+    // no cid/name) — the paired learning-gain inputs the SAP analysis needs.
+    const tests = [];
+    rooms.forEach(function (r) {
+      const tnode = (allRooms[r] || {}).tests || {};
+      let i = 0;
+      Object.keys(tnode).forEach(function (cid) {
+        i++;
+        const t = tnode[cid] || {};
+        const pre = (t.pre && typeof t.pre.score === "number" && !t.pre.skipped) ? t.pre.score : null;
+        const post = (t.post && typeof t.post.score === "number" && !t.post.skipped) ? t.post.score : null;
+        if (pre == null && post == null) return;
+        tests.push({ room: r, idx: r + "-" + i, pre: pre, post: post, preMax: preMax, postMax: postMax });
+      });
+    });
     const roomsOut = rooms.map(function (r) {
       const d = allRooms[r] || {};
       const part = (typeof roomParticipation === "function") ? roomParticipation(d) : {};
@@ -275,11 +302,13 @@ var CANAMED_COMPETENCY_MAP = {
       session: (typeof sessionNum !== "undefined") ? sessionNum : "",
       exportedAt: new Date().toISOString(),
       pseudonymous: true,
-      note: "Analysis-ready CANAMED export. Participants are pseudonymous (P1..Pn); no names. " +
+      note: "Analysis-ready CANAMED export. Participants are pseudonymous (P1..Pn / room-idx); no names. " +
             "Read in R with jsonlite::fromJSON(). Aligns to the study protocol/SAP: participant " +
-            "contribution metrics, room-level committed decisions (with correctness), and the " +
-            "equity (Gini) + score summary per room.",
-      participants: participants, decisions: decisions, rooms: roomsOut
+            "contribution metrics, room-level committed decisions (with correctness), per-participant " +
+            "pre/post test scores (with maxima) for paired learning-gain, and the equity (Gini) + score " +
+            "summary per room.",
+      knowledgeGain: (typeof window._knowledgeGain === "function") ? window._knowledgeGain() : null,
+      participants: participants, decisions: decisions, tests: tests, rooms: roomsOut
     };
     download(JSON.stringify(bundle, null, 2), "research_export.json", "application/json");
     if (typeof toast === "function") toast("🔬 Research export downloaded (pseudonymous JSON).");
@@ -354,6 +383,7 @@ cards +
     const meanContrib = meanOf(list.map(function (x) { return x.contribPct; }));
     const meanAcc = meanOf(list.map(function (x) { return x.decisionAccuracyPct; }));
     const meanGini = meanOf(list.map(function (x) { return x.meanGini; }));
+    const meanGain = meanOf(list.map(function (x) { return x.normGain; }));
     const when = new Date();
     const pct = function (v) { return v == null ? "—" : Math.round(v) + "%"; };
 
@@ -363,6 +393,7 @@ cards +
         "<td class='num'>" + (s.participants || 0) + "</td>" +
         "<td class='num'>" + (s.contribPct != null ? s.contribPct + "%" : "—") + "</td>" +
         "<td class='num'>" + (s.decisionAccuracyPct != null ? s.decisionAccuracyPct + "%" : "—") + "</td>" +
+        "<td class='num'>" + (s.normGain != null ? "+" + Number(s.normGain).toFixed(2) : "—") + "</td>" +
         "<td class='num'>" + (s.meanGini != null ? Number(s.meanGini).toFixed(2) : "—") + "</td></tr>";
     }).join("");
 
@@ -387,11 +418,14 @@ cards +
     "<div class='kpi'><div class='v'>" + totalParticipants + "</div><div class='l'>students trained (cumulative)</div></div>" +
     "<div class='kpi'><div class='v'>" + pct(meanContrib) + "</div><div class='l'>mean contributing</div></div>" +
     "<div class='kpi'><div class='v'>" + pct(meanAcc) + "</div><div class='l'>mean decision accuracy</div></div>" +
+    "<div class='kpi'><div class='v'>" + (meanGain == null ? "—" : "+" + meanGain.toFixed(2)) +
+      "</div><div class='l'>mean knowledge gain (g)</div></div>" +
     "<div class='kpi'><div class='v'>" + (meanGini == null ? "—" : meanGini.toFixed(2)) +
       "</div><div class='l'>mean equity (Gini)</div></div>" +
     "</div>" +
     "<h2>Sessions</h2><table><thead><tr><th>Date</th><th>Session</th><th class='num'>students</th>" +
-    "<th class='num'>contributing</th><th class='num'>decision acc.</th><th class='num'>equity</th>" +
+    "<th class='num'>contributing</th><th class='num'>decision acc.</th><th class='num'>gain g</th>" +
+    "<th class='num'>equity</th>" +
     "</tr></thead><tbody>" + rows + "</tbody></table>") +
 "<div class='foot'>Aggregate + pseudonymous, compiled from a local per-session rollup written when each " +
 "session is closed (no names, no answers; data never leaves this device). A durable copy of each session " +

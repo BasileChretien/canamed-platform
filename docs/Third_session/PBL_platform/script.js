@@ -5454,7 +5454,11 @@ function _sessionSummaryObj() {
     contribPct: (m.contribPct != null) ? m.contribPct : null,
     meanGini: (m.meanGini != null) ? Math.round(m.meanGini * 100) / 100 : null,
     decisionAccuracyPct: (m.decisionAccuracyPct != null) ? m.decisionAccuracyPct : null,
-    answers: m.answers || 0
+    answers: m.answers || 0,
+    normGain: (m.gain && m.gain.meanNormGain != null) ? m.gain.meanNormGain : null,
+    prePct: (m.gain && m.gain.meanPrePct != null) ? m.gain.meanPrePct : null,
+    postPct: (m.gain && m.gain.meanPostPct != null) ? m.gain.meanPostPct : null,
+    nPaired: (m.gain && m.gain.nPaired) ? m.gain.nPaired : 0
   };
 }
 
@@ -5476,6 +5480,47 @@ function runAdminTool(fnName) {
   } else {
     call();
   }
+}
+
+/* Pre→post knowledge gain across the cohort. Reads the per-participant test
+   scores already in allRooms (rooms/<r>/tests/<cid>/{pre,post}/score), keyed
+   by clientId; PRETEST/POSTTEST bank lengths give the maxima. Pairs a person's
+   pre + post by cid (most students keep one tab; the stableId field supports
+   stricter offline linkage). Reports mean pre%, mean post%, and Hake's
+   normalized gain g = (post% − pre%) / (100 − pre%) — the standard
+   education-research learning-gain metric. Aggregate; no names. */
+function _knowledgeGain() {
+  const rooms = (typeof _debriefRoomList === "function")
+    ? _debriefRoomList()
+    : roomNames(typeof roomCount !== "undefined" ? roomCount : 0).filter(r => allRooms[r] != null);
+  const preMax = Array.isArray(window.PRETEST) ? window.PRETEST.length : 0;
+  const postMax = Array.isArray(window.POSTTEST) ? window.POSTTEST.length : 0;
+  let nPre = 0, nPost = 0, nPaired = 0, nGain = 0;
+  let sumPre = 0, sumPost = 0, sumGain = 0;
+  rooms.forEach(r => {
+    const tests = (allRooms[r] || {}).tests || {};
+    Object.keys(tests).forEach(cid => {
+      const t = tests[cid] || {};
+      const pre = t.pre, post = t.post;
+      const preDone = pre && !pre.skipped && typeof pre.score === "number" && preMax > 0;
+      const postDone = post && !post.skipped && typeof post.score === "number" && postMax > 0;
+      if (preDone) nPre++;
+      if (postDone) nPost++;
+      if (preDone && postDone) {
+        nPaired++;
+        const prePct = (pre.score / preMax) * 100;
+        const postPct = (post.score / postMax) * 100;
+        sumPre += prePct; sumPost += postPct;
+        if (prePct < 100) { sumGain += (postPct - prePct) / (100 - prePct); nGain++; }
+      }
+    });
+  });
+  return {
+    preMax: preMax, postMax: postMax, nPre: nPre, nPost: nPost, nPaired: nPaired,
+    meanPrePct: nPaired ? Math.round(sumPre / nPaired) : null,
+    meanPostPct: nPaired ? Math.round(sumPost / nPaired) : null,
+    meanNormGain: nGain ? Math.round((sumGain / nGain) * 100) / 100 : null
+  };
 }
 
 /* ── Impact report ────────────────────────────────────────────────────────
@@ -5556,7 +5601,8 @@ function _impactMetrics() {
     contribPct: present ? Math.round((contributing / present) * 100) : 0,
     meanGini: giniN ? (giniSum / giniN) : null, unevenRooms: unevenRooms,
     answers: answers, hypotheses: hypotheses, decisionsCommitted: decisionsCommitted,
-    decisionAccuracyPct: totalCommitted ? Math.round((totalCorrect / totalCommitted) * 100) : null
+    decisionAccuracyPct: totalCommitted ? Math.round((totalCorrect / totalCommitted) * 100) : null,
+    gain: _knowledgeGain()
   };
 }
 
@@ -5576,6 +5622,8 @@ function generateImpactReport() {
     : m.meanGini.toFixed(2) + " (" +
       (m.meanGini < 0.2 ? "even" : m.meanGini < 0.4 ? "slightly uneven" : "uneven") + ")";
   const accTxt = m.decisionAccuracyPct == null ? "—" : m.decisionAccuracyPct + "%";
+  const g = m.gain || {};
+  const gainKpi = (g.meanNormGain == null) ? "—" : ("+" + g.meanNormGain.toFixed(2));
 
   const decRows = m.decAgg.map(d => {
     const pct = d.committedRooms ? Math.round((d.correctRooms / d.committedRooms) * 100) : 0;
@@ -5618,7 +5666,21 @@ function generateImpactReport() {
 "<div class='kpi'><div class='v'>" + m.roomCount + "</div><div class='l'>active rooms</div></div>" +
 "<div class='kpi'><div class='v'>" + m.contribPct + "%</div><div class='l'>actively contributing</div></div>" +
 "<div class='kpi'><div class='v'>" + accTxt + "</div><div class='l'>decisions reached the safest answer</div></div>" +
+"<div class='kpi'><div class='v'>" + gainKpi + "</div><div class='l'>knowledge gain (pre→post, g)</div></div>" +
 "</div>" +
+
+"<h2>Knowledge gain (pre → post)</h2>" +
+(g.nPaired
+  ? "<p>Among the <strong>" + g.nPaired + "</strong> participant(s) who completed BOTH the pre- and post-test, " +
+    "mean score rose from <strong>" + (g.meanPrePct == null ? "—" : g.meanPrePct + "%") + "</strong> to <strong>" +
+    (g.meanPostPct == null ? "—" : g.meanPostPct + "%") + "</strong>" +
+    (g.meanNormGain == null ? "" : ", a normalized learning gain of <strong>g = " + g.meanNormGain.toFixed(2) +
+      "</strong> (Hake's g; 0 = no gain, 1 = closed the whole gap)") + ". " +
+    "(" + g.nPre + " pre-tests, " + g.nPost + " post-tests completed.)</p>" +
+    "<p class='note'>Normalized gain is the standard education-research learning-outcome metric — the headline " +
+    "evidence that the session <em>taught</em>, not just engaged. Pre↔post are paired per participant.</p>"
+  : "<p>No paired pre/post tests are complete yet — the gain fills in once participants finish both tests. " +
+    "(" + (g.nPre || 0) + " pre, " + (g.nPost || 0) + " post completed.)</p>") +
 
 "<h2>Participation &amp; equity</h2>" +
 "<p>" + m.contributing + " of " + m.present + " present participants actively contributed (" +
