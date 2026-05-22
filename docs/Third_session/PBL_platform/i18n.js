@@ -647,6 +647,22 @@
       // their room has already entered Module A. The post-test still runs.
       "test.late-join-closed": "The pre-test closed when your room started. It's only meaningful when taken before the workshop begins — your post-test at the end of the session will still count.",
 
+      // end-of-session feedback survey (in-platform questionnaire on Wrap-up)
+      "survey.title": "Your feedback on today's session",
+      "survey.intro": "A short, anonymous questionnaire helps us improve future sessions. It's optional and does not affect your grade.",
+      "survey.start": "Start the questionnaire",
+      "survey.skip": "Skip",
+      "survey.skipped": "You skipped the questionnaire. You can still complete it if you change your mind.",
+      "survey.already-done": "You have already completed the questionnaire. Thank you!",
+      "survey.choose": "Choose…",
+      "survey.submit": "Send my answers",
+      "survey.thanks": "Thank you — your feedback helps us shape the next session. It is stored anonymously within your group.",
+      "survey.likert.1": "Strongly disagree",
+      "survey.likert.2": "Disagree",
+      "survey.likert.3": "Neutral",
+      "survey.likert.4": "Agree",
+      "survey.likert.5": "Strongly agree",
+
       // closed banner (interim, before the full session-ended screen takes over)
       "closed.title": "Session closed by the facilitator.",
       "closed.subtitle": "Thank you for taking part — your team's work has been saved.",
@@ -666,6 +682,7 @@
       "impact.button": "📊 Impact report",
       "impact.accred": "📋 Accreditation evidence",
       "impact.research": "🔬 Research export",
+      "impact.research-csv": "📊 Research export (CSV)",
       "impact.attest": "🎓 Attestations",
       "impact.program": "📈 Program overview",
       "impact.guide": "📖 Facilitator guide",

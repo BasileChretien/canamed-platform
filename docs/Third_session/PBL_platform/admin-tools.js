@@ -291,6 +291,24 @@ gainBlock +
         tests.push({ room: r, idx: r + "-" + i, pre: pre, post: post, preMax: preMax, postMax: postMax });
       });
     });
+    // Per-room, per-participant feedback-survey responses (pseudonymous: the
+    // same room-idx scheme as `tests`, no cid/name). Long format — one row per
+    // answered question — so a partial questionnaire still exports cleanly.
+    const survey = [];
+    rooms.forEach(function (r) {
+      const snode = (allRooms[r] || {}).survey || {};
+      let i = 0;
+      Object.keys(snode).forEach(function (cid) {
+        i++;
+        const s = snode[cid] || {};
+        if (s.skipped === true || !s.responses) return;
+        Object.keys(s.responses).forEach(function (qid) {
+          const resp = s.responses[qid] || {};
+          if (resp.v == null || resp.v === "") return;
+          survey.push({ room: r, idx: r + "-" + i, qid: qid, value: resp.v });
+        });
+      });
+    });
     const roomsOut = rooms.map(function (r) {
       const d = allRooms[r] || {};
       const part = (typeof roomParticipation === "function") ? roomParticipation(d) : {};
@@ -305,13 +323,150 @@ gainBlock +
       note: "Analysis-ready CANAMED export. Participants are pseudonymous (P1..Pn / room-idx); no names. " +
             "Read in R with jsonlite::fromJSON(). Aligns to the study protocol/SAP: participant " +
             "contribution metrics, room-level committed decisions (with correctness), per-participant " +
-            "pre/post test scores (with maxima) for paired learning-gain, and the equity (Gini) + score " +
-            "summary per room.",
+            "pre/post test scores (with maxima) for paired learning-gain, the end-of-session feedback " +
+            "survey responses (long format), and the equity (Gini) + score summary per room.",
       knowledgeGain: (typeof window._knowledgeGain === "function") ? window._knowledgeGain() : null,
-      participants: participants, decisions: decisions, tests: tests, rooms: roomsOut
+      participants: participants, decisions: decisions, tests: tests, survey: survey, rooms: roomsOut
     };
     download(JSON.stringify(bundle, null, 2), "research_export.json", "application/json");
     if (typeof toast === "function") toast("🔬 Research export downloaded (pseudonymous JSON).");
+  }
+
+  /* ── CSV research export ───────────────────────────────────────────────── */
+  /* Same pseudonymous data as the JSON export, but as flat CSV files that open
+     straight in Excel / read with read.csv() in R. Produces TWO files in one
+     click:
+       • participants — one row per participant: contribution metrics, paired
+         pre/post test scores (+ maxima + normalized gain), and one column per
+         feedback-survey question (the response value).
+       • decisions    — one row per room × team decision (committed choice +
+         whether it matched the clinically-safest option).
+     Heterogeneous tables don't fit one sheet, so the participant join (presence
+     ⨝ tests ⨝ survey, by the per-room participant index) is the primary file
+     and decisions ship alongside. No names; no new Firebase path. */
+  function _csvCell(v) {
+    if (v == null) return "";
+    let s = String(v);
+    // Strip CR/LF so a free-text answer can't break the row; quote always so
+    // commas, quotes and semicolons survive in any locale's Excel.
+    s = s.replace(/\r?\n/g, " ").replace(/"/g, '""');
+    return '"' + s + '"';
+  }
+  function _toCSV(headers, rows) {
+    const head = headers.map(_csvCell).join(",");
+    const body = rows.map(function (row) {
+      return headers.map(function (h) { return _csvCell(row[h]); }).join(",");
+    }).join("\r\n");
+    // BOM so Excel reads UTF-8 (accents, 日本語) correctly on open.
+    return "﻿" + head + "\r\n" + body + "\r\n";
+  }
+
+  /* Stable survey-question column order: prefer the shipped bank order, then
+     append any extra qids seen in the data (defensive against bank edits). */
+  function _surveyColumns(rooms) {
+    const cols = [];
+    const seen = {};
+    const bank = Array.isArray(window.SURVEY) ? window.SURVEY : [];
+    bank.forEach(function (item) {
+      if (item && item.id && !seen[item.id]) { seen[item.id] = 1; cols.push(item.id); }
+    });
+    rooms.forEach(function (r) {
+      const snode = (allRooms[r] || {}).survey || {};
+      Object.keys(snode).forEach(function (cid) {
+        const resp = (snode[cid] || {}).responses || {};
+        Object.keys(resp).forEach(function (qid) {
+          if (!seen[qid]) { seen[qid] = 1; cols.push(qid); }
+        });
+      });
+    });
+    return cols;
+  }
+
+  function researchCsvParticipantRows() {
+    const rooms = activeRooms();
+    const preMax = Array.isArray(window.PRETEST) ? window.PRETEST.length : 0;
+    const postMax = Array.isArray(window.POSTTEST) ? window.POSTTEST.length : 0;
+    const surveyCols = _surveyColumns(rooms);
+    const rows = [];
+    let pid = 0;
+    rooms.forEach(function (r) {
+      const d = allRooms[r] || {};
+      const pres = d.presence || {};
+      const ans = d.answers || {};
+      const tnode = d.tests || {};
+      const snode = d.survey || {};
+      // contribution + university by cid (same derivation as participantRows)
+      const contribByCid = {}, uniByCid = {};
+      ["moduleA", "moduleB"].forEach(function (mk) {
+        const m = ans[mk] || {};
+        Object.keys(m).forEach(function (k) {
+          const e = m[k]; const cid = e && e.cid;
+          if (!cid) return;
+          contribByCid[cid] = (contribByCid[cid] || 0) + 1;
+          if (e.university && !uniByCid[cid]) uniByCid[cid] = e.university;
+        });
+      });
+      const hyp = d.hypotheses || {}, hypByCid = {};
+      Object.keys(hyp).forEach(function (k) {
+        const cid = hyp[k] && hyp[k].cid; if (cid) hypByCid[cid] = (hypByCid[cid] || 0) + 1;
+      });
+      Object.keys(pres).forEach(function (cid) {
+        pid++;
+        const t = tnode[cid] || {};
+        const pre = (t.pre && typeof t.pre.score === "number" && !t.pre.skipped) ? t.pre.score : null;
+        const post = (t.post && typeof t.post.score === "number" && !t.post.skipped) ? t.post.score : null;
+        let gain = "";
+        if (pre != null && post != null && preMax && postMax) {
+          const prePct = (pre / preMax) * 100, postPct = (post / postMax) * 100;
+          gain = (prePct < 100) ? Math.round(((postPct - prePct) / (100 - prePct)) * 100) / 100 : "";
+        }
+        const a = contribByCid[cid] || 0, h = hypByCid[cid] || 0;
+        const row = {
+          session: (typeof sessionNum !== "undefined") ? sessionNum : "",
+          participant: "P" + pid, room: r,
+          university: uniByCid[cid] || "",
+          answers: a, hypotheses: h, contributed: (a + h) > 0 ? 1 : 0,
+          pre: (pre == null ? "" : pre), preMax: preMax || "",
+          post: (post == null ? "" : post), postMax: postMax || "",
+          normGain: gain
+        };
+        const sresp = (snode[cid] || {}).responses || {};
+        surveyCols.forEach(function (qid) {
+          row[qid] = (sresp[qid] && sresp[qid].v != null) ? sresp[qid].v : "";
+        });
+        rows.push(row);
+      });
+    });
+    return { rows: rows, surveyCols: surveyCols };
+  }
+
+  function generateResearchExportCSV() {
+    const built = researchCsvParticipantRows();
+    const baseCols = ["session", "participant", "room", "university", "answers", "hypotheses",
+                      "contributed", "pre", "preMax", "post", "postMax", "normGain"];
+    const headers = baseCols.concat(built.surveyCols);
+    download(_toCSV(headers, built.rows), "research_participants.csv", "text/csv");
+
+    // Room × decision table (committed team decisions + correctness).
+    const rooms = activeRooms();
+    const decList = (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [];
+    const decRows = [];
+    rooms.forEach(function (r) {
+      decList.forEach(function (dec) {
+        const v = ((allRooms[r] || {}).votes || {})[dec.id] || {};
+        const c = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
+        const opt = (c != null && dec.options) ? dec.options[c] : null;
+        decRows.push({
+          session: (typeof sessionNum !== "undefined") ? sessionNum : "",
+          room: r, decision: dec.id, module: dec.module || "",
+          committed_choice: (c == null ? "" : c),
+          correct: opt ? (opt.correct ? 1 : 0) : ""
+        });
+      });
+    });
+    download(_toCSV(["session", "room", "decision", "module", "committed_choice", "correct"], decRows),
+      "research_decisions.csv", "text/csv");
+    if (typeof toast === "function") toast("📊 CSV export downloaded (participants + decisions).");
   }
 
   /* ── Per-participant attestations ──────────────────────────────────────── */
@@ -631,8 +786,11 @@ esc(when.toLocaleString()) + "</p>" +
   window.CanamedAdminTools.competencyRows = competencyRows;     // for tests
   window.CanamedAdminTools.participantRows = participantRows;   // for tests
   window.CanamedAdminTools.generateResearchExport = generateResearchExport;
+  window.CanamedAdminTools.generateResearchExportCSV = generateResearchExportCSV;
+  window.CanamedAdminTools.researchCsvParticipantRows = researchCsvParticipantRows; // for tests
   window.CanamedAdminTools.generateAttestations = generateAttestations;
   window.generateAccreditationReport = generateAccreditationReport;
   window.generateResearchExport = generateResearchExport;
+  window.generateResearchExportCSV = generateResearchExportCSV;
   window.generateAttestations = generateAttestations;
 })();

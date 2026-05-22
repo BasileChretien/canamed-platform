@@ -306,6 +306,17 @@
                   }
                 }
               }
+            },
+            "survey": {
+              "$cid": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($cid).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($cid).val() == auth.uid)",
+                ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('stableId') || (newData.child('stableId').isString() && newData.child('stableId').val().length <= 64)))",
+                "responses": {
+                  "$qid": {
+                    ".validate": "newData.val() == null || (newData.hasChildren(['v','at']) && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000 && ((newData.child('v').isNumber() && newData.child('v').val() >= 0 && newData.child('v').val() <= 10) || (newData.child('v').isString() && newData.child('v').val().length <= 2000)))"
+                  }
+                }
+              }
             }
           }
         }
@@ -560,6 +571,17 @@
                         "$qid": {
                           ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
                         }
+                      }
+                    }
+                  }
+                },
+                "survey": {
+                  "$cid": {
+                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($cid).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($cid).val() == auth.uid)",
+                    ".validate": "newData.val() == null || (newData.child('startedAt').isNumber() && newData.child('startedAt').val() <= now + 5000 && newData.child('startedAt').val() >= now - 7200000 && (!newData.hasChild('completedAt') || (newData.child('completedAt').isNumber() && newData.child('completedAt').val() <= now + 5000 && newData.child('completedAt').val() >= newData.child('startedAt').val())) && (!newData.hasChild('skipped') || newData.child('skipped').isBoolean()) && (!newData.hasChild('stableId') || (newData.child('stableId').isString() && newData.child('stableId').val().length <= 64)))",
+                    "responses": {
+                      "$qid": {
+                        ".validate": "newData.val() == null || (newData.hasChildren(['v','at']) && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000 && ((newData.child('v').isNumber() && newData.child('v').val() >= 0 && newData.child('v').val() <= 10) || (newData.child('v').isString() && newData.child('v').val().length <= 2000)))"
                       }
                     }
                   }

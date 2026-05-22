@@ -1,0 +1,77 @@
+/* tests-e2e/survey-feedback.spec.js
+ *
+ * End-of-session feedback survey (in-platform questionnaire) + CSV export.
+ *
+ * Per the project standing instruction, UI changes get a per-device pass:
+ * this spec is wired into the desktop (chromium/firefox/webkit) projects AND
+ * the mobile-iphone / mobile-ipad / mobile-android projects (see
+ * playwright.config.js testMatch), so the survey form is exercised on all four
+ * target viewports. Runs in hermetic LocalDB mode via fixtures.forceLocalMode.
+ */
+
+// @ts-check
+const { test, expect } = require("./fixtures");
+
+test.describe("Wrap-up feedback survey", () => {
+  test("survey card + controls + CSV export button exist", async ({ page }) => {
+    await page.goto("/");
+    const info = await page.evaluate(() => ({
+      card:    !!document.getElementById("survey-card"),
+      start:   !!document.getElementById("survey-start-btn"),
+      skip:    !!document.getElementById("survey-skip-btn"),
+      body:    !!document.getElementById("survey-body"),
+      csvBtn:  !!document.getElementById("admin-research-csv-btn"),
+      bank:    Array.isArray(window.SURVEY) ? window.SURVEY.length : 0
+    }));
+    expect(info.card).toBe(true);
+    expect(info.start).toBe(true);
+    expect(info.skip).toBe(true);
+    expect(info.body).toBe(true);
+    expect(info.csvBtn).toBe(true);
+    expect(info.bank).toBeGreaterThanOrEqual(10);
+  });
+
+  test("the survey form renders likert / select / open fields + a submit", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(() => {
+      if (typeof window._mountSurveyForm !== "function") return null;
+      window._mountSurveyForm();
+      const body = document.getElementById("survey-body");
+      const likertGroups = body.querySelectorAll(".survey-likert");
+      const firstGroup = likertGroups[0];
+      const likertBtn = firstGroup ? firstGroup.querySelector(".survey-likert-opt") : null;
+      return {
+        sections: body.querySelectorAll(".survey-section").length,
+        likertGroups: likertGroups.length,
+        likertButtonsInFirst: firstGroup ? firstGroup.querySelectorAll(".survey-likert-opt").length : 0,
+        selects: body.querySelectorAll("select.survey-select").length,
+        textareas: body.querySelectorAll("textarea.survey-open").length,
+        hasSubmit: !!document.getElementById("survey-submit-btn"),
+        likertMinHeight: likertBtn ? parseInt(getComputedStyle(likertBtn).minHeight, 10) || 0 : 0
+      };
+    });
+    expect(out, "_mountSurveyForm must be exposed").not.toBeNull();
+    expect(out.sections).toBeGreaterThanOrEqual(3);
+    expect(out.likertGroups).toBeGreaterThanOrEqual(5);
+    expect(out.likertButtonsInFirst).toBe(5);          // 1..5 Likert scale
+    expect(out.selects).toBeGreaterThanOrEqual(1);     // demographics
+    expect(out.textareas).toBeGreaterThanOrEqual(1);   // open-ended
+    expect(out.hasSubmit).toBe(true);
+    // touch target — must stay tappable on the mobile/tablet viewports too.
+    // Computed min-height is layout-independent (the wrap-up stage is behind the
+    // splash on "/", so a rendered bounding-rect would read 0 here).
+    expect(out.likertMinHeight).toBeGreaterThanOrEqual(44);
+  });
+
+  test("a Likert option records a selection (aria-checked)", async ({ page }) => {
+    await page.goto("/");
+    const checked = await page.evaluate(() => {
+      window._mountSurveyForm();
+      const btn = document.querySelector(".survey-likert .survey-likert-opt");
+      if (!btn) return null;
+      btn.click();
+      return btn.getAttribute("aria-checked");
+    });
+    expect(checked).toBe("true");
+  });
+});
