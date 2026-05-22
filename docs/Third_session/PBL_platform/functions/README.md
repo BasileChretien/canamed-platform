@@ -2,9 +2,28 @@
 
 This sends **consent-gated, transactional** email (e.g. the spaced-reinforcement
 "revisit your retention quiz" reminder) when a facilitator enqueues a job at
-`sessions/<code>/mail/<id>`. The code (`index.js`) is complete; activation is
-three steps that **only you can do** (they involve billing, a secret, and DNS —
-which an assistant must never perform):
+`sessions/<code>/mail/<id>`.
+
+> ## ⛔ Status: DISABLED pending institutional approval
+> Email is intentionally kept **off** until the **university president approves**
+> it. The function is dormant by default: even with SMTP configured it will not
+> send — it records `delivery.state = "disabled"` — until an operator
+> *deliberately* flips the approval flag (step 0 below). Do **not** enable it
+> before approval.
+
+The code (`index.js`) is complete; activation is **four** steps that **only you
+can do** (they involve approval, billing, a secret, and DNS — which an assistant
+must never perform):
+
+## 0. Get institutional approval, then enable the feature
+Only after the university president signs off:
+
+```bash
+firebase functions:config:set email.enabled="true"
+```
+
+(Equivalently set `EMAIL_ENABLED=true`.) Leaving this unset keeps email off.
+
 
 ## 1. Enable the Blaze (pay-as-you-go) plan
 Cloud Functions require Blaze. Workshop volumes stay within the free monthly

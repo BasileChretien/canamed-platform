@@ -18,6 +18,7 @@ const README = fs.readFileSync(path.join(P, "functions", "README.md"), "utf8");
 const FB = fs.readFileSync(path.join(P, "firebase.json"), "utf8");
 const RULES = fs.readFileSync(path.join(P, "database.rules.json"), "utf8");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
+const COMPLIANCE = fs.readFileSync(path.join(P, "compliance.html"), "utf8");
 
 test("the Cloud Function parses, triggers on the mail queue, fails closed, is idempotent", () => {
   assert.doesNotThrow(() => new Function(FN), "functions/index.js must parse");
@@ -27,6 +28,26 @@ test("the Cloud Function parses, triggers on the mail queue, fails closed, is id
     "must be idempotent (skip already-delivered / malformed jobs)");
   assert.match(FN, /SMTP not configured/, "must fail closed when SMTP is unconfigured");
   assert.match(FN, /delivery/, "must record delivery state back on the node");
+});
+
+test("email is DISABLED by default — gated on explicit institutional approval", () => {
+  assert.match(FN, /function emailEnabled\(\)/, "must have an approval gate");
+  assert.match(FN, /email\.enabled|EMAIL_ENABLED/, "gate reads an explicit enable flag");
+  // The gate is checked BEFORE building the transport / sending.
+  const onCreate = FN.slice(FN.indexOf(".onCreate"));
+  assert.match(onCreate, /if \(!emailEnabled\(\)\)[\s\S]{0,200}return null/,
+    "must short-circuit (no send) when not enabled");
+  assert.match(onCreate, /"disabled"/, "must record a 'disabled' state when gated");
+  // Default off: enabling requires the literal string "true".
+  assert.match(FN, /=== "true"/, "must require an explicit opt-in value to enable");
+  assert.match(README, /pending institutional approval|university president/i,
+    "README must document the approval gate");
+  assert.match(README, /email\.enabled="true"/, "README must document the enable step");
+});
+
+test("the compliance statement does NOT advertise email as active", () => {
+  assert.match(COMPLIANCE, /not currently active|pending institutional approval|disabled by default/i,
+    "compliance page must state email is not active yet");
 });
 
 test("SMTP credentials are read from config/env — never hardcoded", () => {
