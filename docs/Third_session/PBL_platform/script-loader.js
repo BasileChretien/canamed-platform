@@ -108,6 +108,11 @@
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
   function ensureTour()        { return loadScript(v("tour.js")); }
   function ensureScenarioAuthor() { return loadScript(v("scenario-author.js")); }
+  // glossary.js (clinical term tooltips) — only used in Module A/B, never on
+  // the splash, so it is lazy. Idempotent; the consumer
+  // (_annotateButtonWithGlossary) no-ops gracefully until window.CANAMED_GLOSSARY
+  // exists and re-annotates on the next button render.
+  function ensureGlossary()    { return loadScript(v("glossary.js")); }
 
   // Public namespace. Single object so the rest of script.js can do
   // `window.CanamedLoader.ensureX()` without polluting the global namespace
@@ -117,7 +122,8 @@
     ensureCaseContent,
     ensureQrcode,
     ensureTour,
-    ensureScenarioAuthor
+    ensureScenarioAuthor,
+    ensureGlossary
   };
 
   // After the splash is interactive, prefetch tour.js + case-content.js in
@@ -128,6 +134,7 @@
     const fire = () => {
       ensureCaseContent().catch(() => { /* will retry on actual join */ });
       ensureTour().catch(() => { /* tour is optional */ });
+      ensureGlossary().catch(() => { /* tooltips are optional, degrade gracefully */ });
     };
     if (typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(fire, { timeout: 2000 });

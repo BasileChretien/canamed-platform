@@ -2791,13 +2791,14 @@
        so the function names are available as globals. -->
   <script src="lib.js?v=v3" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
-       _annotateButtonsWithGlossary() to attach hover tooltips to any
-       case-content button whose text contains a glossed term. Small,
-       static, public — safe to ship in the splash bundle. -->
-  <script src="glossary.js?v=v3" defer></script>
+       _annotateButtonWithGlossary() to attach tooltips to any case-content
+       button whose text contains a glossed term. It is NOT needed on the
+       splash (only in Module A/B), so it is lazy-loaded by script-loader.js
+       (idle prefetch + guaranteed before the participant Module A via the
+       join chunk-load). Keeps the splash critical bundle under budget. -->
   <!-- script-loader.js — bundle splitter. Lazy-loads case-content.js,
-       qrcode.js, tour.js and scenario-author.js on demand so the splash
-       boot stays under the perf budget (see tests-e2e/perf.spec.js).
+       glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
+       the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
   <script src="script-loader.js?v=v3" defer></script>
   <script src="script.js?v=v3" defer></script>

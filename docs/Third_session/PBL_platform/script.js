@@ -1769,7 +1769,16 @@ function joinParticipant() {
   // chunk was removed in R2-01: the room-runtime functions still live
   // inline in script.js, so there is nothing extra to await here.
   const loader = window.CanamedLoader;
-  const roomChunks = loader ? loader.ensureCaseContent() : Promise.resolve();
+  // Load case-content AND the (now lazy) glossary before the participant
+  // lands in Module A, so term tooltips are ready on first render. Glossary
+  // is non-blocking-critical (the annotator degrades gracefully), but pairing
+  // it with the case-content await guarantees it's present for Module A/B.
+  const roomChunks = loader
+    ? Promise.all([
+        loader.ensureCaseContent(),
+        loader.ensureGlossary ? loader.ensureGlossary() : Promise.resolve()
+      ])
+    : Promise.resolve();
   Promise.all([ensureSignedIn(), roomChunks]).then(() => {
     try { rebuildCaseDerived(); } catch (_) {}
     _joinParticipantAfterAuth();
