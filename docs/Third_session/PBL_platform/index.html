@@ -2429,6 +2429,19 @@
           <button id="wrapup-download-btn" class="wrapup-download-btn" type="button"
                   data-i18n="stage.wrap.download">⤓ Download my room's answers (Markdown)</button>
         </div>
+
+        <!-- Spaced-reinforcement retention check (2026-05-22): a saveable link
+             (+ scan-to-save QR) to a few-days-later self-check. Spacing is what
+             makes learning stick. The href is set to revisit.html?s=<scenario>
+             by initEndPoll(); the QR is drawn lazily via qrcode.js. -->
+        <div class="card retention-card">
+          <h3 data-i18n="stage.wrap.retention.title">🔁 Test your retention in a few days</h3>
+          <p class="hint" data-i18n="stage.wrap.retention.hint">Save this link and come back in 2–3 days for a
+            short self-check — revisiting is what makes it stick. It scores on your device; nothing is sent.</p>
+          <a id="wrapup-revisit-link" class="wrapup-download-btn" href="revisit.html" target="_blank"
+             rel="noopener" data-i18n="stage.wrap.retention.link">Open my retention check →</a>
+          <div id="wrapup-revisit-qr" class="retention-qr" aria-hidden="true"></div>
+        </div>
       </section>
     </div>
 

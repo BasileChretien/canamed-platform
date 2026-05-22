@@ -288,6 +288,13 @@ main {
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }
 .wrapup-download-btn.hidden { display: none; }
+/* Spaced-reinforcement retention card at wrap-up (link + scan-to-save QR). */
+a.wrapup-download-btn { display: inline-block; text-decoration: none; }
+.retention-qr { margin-top: var(--s-2); }
+.retention-qr:empty { display: none; }
+.retention-qr img, .retention-qr canvas {
+  border: 1px solid var(--n-200, #e1e7ed); border-radius: 8px; background: #fff;
+}
 
 /* ---------- buttons (3 roles: primary / secondary / danger) ---------- */
 /* primary */

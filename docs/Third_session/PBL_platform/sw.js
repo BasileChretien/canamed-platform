@@ -56,6 +56,10 @@ const SHELL_ASSETS = [
   "/admin-tools.js",
   "/facilitator-guide.html",
   "/compliance.html",
+  "/revisit.html",
+  "/revisit.js",
+  "/docs-page.css",
+  "/docs-page.js",
   "/platform-config.js",
   "/firebase-config.js",
   "/manifest.webmanifest"

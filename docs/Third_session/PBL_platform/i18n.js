@@ -615,6 +615,9 @@
       "stage.wrap.bye": "Once you've done the questionnaire you can close this tab. See you at Session 4!",
       "stage.wrap.room-answers": "Your room's answers",
       "stage.wrap.download": "⤓ Download my room's answers (Markdown)",
+      "stage.wrap.retention.title": "🔁 Test your retention in a few days",
+      "stage.wrap.retention.hint": "Save this link and come back in 2–3 days for a short self-check — revisiting is what makes it stick. It scores on your device; nothing is sent.",
+      "stage.wrap.retention.link": "Open my retention check →",
 
       // pre/post knowledge test (per-scenario in-platform MCQ) — optional;
       // students can always skip. Pre-test shown on the Welcome stage,
@@ -1267,6 +1270,9 @@
       "stage.wrap.bye": "Une fois le questionnaire rempli vous pouvez fermer cet onglet. Rendez-vous à la séance 4 !",
       "stage.wrap.room-answers": "Les réponses de votre salle",
       "stage.wrap.download": "⤓ Télécharger les réponses de ma salle (Markdown)",
+      "stage.wrap.retention.title": "🔁 Testez votre rétention dans quelques jours",
+      "stage.wrap.retention.hint": "Enregistrez ce lien et revenez dans 2 à 3 jours pour un court auto-test — c'est le fait d'y revenir qui ancre l'apprentissage. Le score reste sur votre appareil ; rien n'est envoyé.",
+      "stage.wrap.retention.link": "Ouvrir mon test de rétention →",
 
       "test.pre.title": "Petit test de connaissances avant la séance",
       "test.pre.intro": "Avant le début de l'atelier, votre encadrant·e a mis en place un court questionnaire à choix multiples sur le scénario que vous allez discuter. Il est anonyme au sein de votre université, facultatif, et vos réponses n'affectent pas votre note.",
@@ -1891,6 +1897,9 @@
       "stage.wrap.bye": "アンケートにご回答いただけましたら、このタブを閉じてお戻りください。セッション4でお会いしましょう!",
       "stage.wrap.room-answers": "ルームの回答",
       "stage.wrap.download": "⤓ ルームの回答をダウンロード(Markdown)",
+      "stage.wrap.retention.title": "🔁 数日後に記憶の定着をチェック",
+      "stage.wrap.retention.hint": "このリンクを保存し、2〜3日後に短いセルフチェックに戻ってきてください — 学びは「戻ってくる」ことで定着します。採点は端末内で行われ、送信はされません。",
+      "stage.wrap.retention.link": "記憶の定着チェックを開く →",
 
       "test.pre.title": "セッション前の簡単な知識チェック",
       "test.pre.intro": "本日のワークショップが始まる前に、これから議論するシナリオに関する短い選択式の確認テストをご用意しています。所属大学内では匿名で、回答は任意であり、成績には影響しません。",

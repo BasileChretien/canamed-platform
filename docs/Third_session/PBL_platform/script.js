@@ -9026,6 +9026,33 @@ function initEndPoll() {
     dlBtn.dataset.wired = "1";
     dlBtn.addEventListener("click", downloadMyRoomAnswers);
   }
+  // Spaced-reinforcement: point the retention-check link at this session's
+  // scenario + language, and draw a scan-to-save QR (lazy qrcode.js).
+  const revisit = el("wrapup-revisit-link");
+  if (revisit && !revisit.dataset.wired) {
+    revisit.dataset.wired = "1";
+    const sid = (typeof window.CURRENT_SCENARIO_ID === "string") ? window.CURRENT_SCENARIO_ID : "";
+    const lang = (typeof _curLang === "function") ? _curLang() : "en";
+    const url = "revisit.html?s=" + encodeURIComponent(sid) + "&lang=" + encodeURIComponent(lang);
+    revisit.href = url;
+    try {
+      const loader = window.CanamedLoader;
+      if (loader && loader.ensureQrcode) {
+        loader.ensureQrcode().then(() => {
+          const holder = el("wrapup-revisit-qr");
+          if (!holder || typeof QRCode === "undefined") return;   // link still works
+          holder.innerHTML = "";
+          const abs = new URL(url, location.href).href;
+          /* eslint-disable no-new */
+          new QRCode(holder, {
+            text: abs, width: 132, height: 132,
+            colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M
+          });
+          holder.setAttribute("aria-label", "QR code linking to your retention check");
+        }).catch(() => { /* QR optional — the link still works */ });
+      }
+    } catch (e) { /* QR optional */ }
+  }
   const hard = el("endpoll-hardest");
   const feel = el("endpoll-feeling");
   const btn = el("endpoll-submit");
