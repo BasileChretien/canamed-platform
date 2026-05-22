@@ -251,6 +251,7 @@ test.describe("Perf budget — splash", () => {
     const LAZY_CHUNKS = new Set([
       "case-content.js",
       "glossary.js",
+      "admin-tools.js",
       "qrcode.js",
       "tour.js",
       "scenario-author.js",
