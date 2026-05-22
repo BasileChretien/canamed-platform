@@ -190,9 +190,155 @@ var CANAMED_COMPETENCY_MAP = {
     if (typeof toast === "function") toast("📋 Accreditation evidence generated.");
   }
 
+  /* Download a text blob (research export uses this; reports use openReport). */
+  function download(text, filenameSuffix, mime) {
+    const blob = new Blob([text], { type: (mime || "text/plain") + ";charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "CANAMED_Session" +
+      (typeof sessionNum !== "undefined" ? sessionNum : "") + "_" + filenameSuffix;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
+  }
+
+  /* Per-participant rows derived from the live room data. Contribution counts
+     are keyed by clientId (cid) across both modules + hypotheses; university is
+     recovered from the participant's own answer entries (presence carries only
+     name + timestamp). Names ARE included here — callers decide whether to keep
+     them (attestations) or drop them (research export). */
+  function participantRows() {
+    const rooms = activeRooms();
+    const out = [];
+    let pid = 0;
+    rooms.forEach(function (r) {
+      const d = allRooms[r] || {};
+      const pres = d.presence || {};
+      const ans = d.answers || {};
+      const contribByCid = {}, uniByCid = {};
+      ["moduleA", "moduleB"].forEach(function (mk) {
+        const m = ans[mk] || {};
+        Object.keys(m).forEach(function (k) {
+          const e = m[k]; const cid = e && e.cid;
+          if (!cid) return;
+          contribByCid[cid] = (contribByCid[cid] || 0) + 1;
+          if (e.university && !uniByCid[cid]) uniByCid[cid] = e.university;
+        });
+      });
+      const hyp = d.hypotheses || {}, hypByCid = {};
+      Object.keys(hyp).forEach(function (k) {
+        const cid = hyp[k] && hyp[k].cid; if (cid) hypByCid[cid] = (hypByCid[cid] || 0) + 1;
+      });
+      Object.keys(pres).forEach(function (cid) {
+        pid++;
+        const p = pres[cid] || {};
+        const a = contribByCid[cid] || 0, h = hypByCid[cid] || 0;
+        out.push({
+          pid: "P" + pid, room: r,
+          name: (typeof p.name === "string") ? p.name : "",
+          university: uniByCid[cid] || "",
+          answers: a, hypotheses: h, contributed: (a + h) > 0 ? 1 : 0
+        });
+      });
+    });
+    return out;
+  }
+
+  /* ── Research export ───────────────────────────────────────────────────── */
+  /* One-click, analysis-ready, PSEUDONYMOUS JSON bundle aligned to the study
+     protocol/SAP (participants P1..Pn, room-level decisions, equity summary).
+     Read in R with jsonlite::fromJSON(). No names. */
+  function generateResearchExport() {
+    const rooms = activeRooms();
+    const participants = participantRows().map(function (p) {
+      return { pid: p.pid, room: p.room, university: p.university,
+               answers: p.answers, hypotheses: p.hypotheses, contributed: p.contributed };
+    });
+    const decisions = [];
+    const decList = (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [];
+    rooms.forEach(function (r) {
+      decList.forEach(function (dec) {
+        const v = ((allRooms[r] || {}).votes || {})[dec.id] || {};
+        const c = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
+        const opt = (c != null && dec.options) ? dec.options[c] : null;
+        decisions.push({ room: r, decision: dec.id, module: dec.module || "",
+          committed_choice: c, correct: opt ? (opt.correct ? 1 : 0) : null });
+      });
+    });
+    const roomsOut = rooms.map(function (r) {
+      const d = allRooms[r] || {};
+      const part = (typeof roomParticipation === "function") ? roomParticipation(d) : {};
+      const score = (typeof _debriefBucket === "function") ? _debriefBucket(d).total : null;
+      return { room: r, present: part.present || 0, contributing: part.contributing || 0,
+               gini: (part.gini != null ? part.gini : null), score: score };
+    });
+    const bundle = {
+      session: (typeof sessionNum !== "undefined") ? sessionNum : "",
+      exportedAt: new Date().toISOString(),
+      pseudonymous: true,
+      note: "Analysis-ready CANAMED export. Participants are pseudonymous (P1..Pn); no names. " +
+            "Read in R with jsonlite::fromJSON(). Aligns to the study protocol/SAP: participant " +
+            "contribution metrics, room-level committed decisions (with correctness), and the " +
+            "equity (Gini) + score summary per room.",
+      participants: participants, decisions: decisions, rooms: roomsOut
+    };
+    download(JSON.stringify(bundle, null, 2), "research_export.json", "application/json");
+    if (typeof toast === "function") toast("🔬 Research export downloaded (pseudonymous JSON).");
+  }
+
+  /* ── Per-participant attestations ──────────────────────────────────────── */
+  /* Printable certificates of participation + competencies practiced, one per
+     present participant (NAMED — an attestation is the student's own record;
+     distribute individually). Page-break between cards for clean printing. */
+  function generateAttestations() {
+    const rows = participantRows();
+    const when = new Date();
+    const comps = (CANAMED_COMPETENCY_MAP.competencies || [])
+      .map(function (c) { return "<li>" + esc(c.label) + " <em>(" + esc(c.framework) + ")</em></li>"; })
+      .join("");
+    const dateStr = when.toLocaleDateString();
+    const cards = (rows.length ? rows : [{ name: "", pid: "P1", room: "" }]).map(function (p) {
+      const nm = (p.name && p.name.trim()) ? p.name.trim() : "Participant " + p.pid;
+      return "<section class='cert'>" +
+        "<div class='cert-head'>CANAMED — Franco-Japanese Clinical Communication Workshop</div>" +
+        "<div class='cert-sub'>Université de Caen Normandie × Nagoya University</div>" +
+        "<p class='cert-line'>This certifies that</p>" +
+        "<div class='cert-name'>" + esc(nm) + "</div>" +
+        "<p class='cert-line'>participated in the CANAMED clinical-communication session on " +
+        esc(dateStr) + (p.room ? " (" + esc(p.room) + ")" : "") +
+        ", engaging in structured clinical reasoning and a breaking-bad-news roleplay, and practising:</p>" +
+        "<ul class='cert-comps'>" + comps + "</ul>" +
+        "<div class='cert-foot'>Session " + esc(typeof sessionNum !== "undefined" ? sessionNum : "—") +
+        " · " + esc(when.toLocaleDateString()) + " · facilitator signature: ______________________</div>" +
+        "</section>";
+    }).join("");
+
+    const html =
+"<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
+"<meta name='viewport' content='width=device-width, initial-scale=1'>" +
+"<title>CANAMED — Attestations</title><style>" + REPORT_CSS +
+".cert{border:2px solid #16335c;border-radius:12px;padding:28px 32px;margin:0 0 24px;page-break-after:always}" +
+".cert-head{font-size:1.2rem;font-weight:700;color:#16335c;text-align:center}" +
+".cert-sub{text-align:center;color:#5b6b7b;margin:2px 0 18px}" +
+".cert-line{text-align:center;margin:6px 0}.cert-name{text-align:center;font-size:1.5rem;font-weight:700;color:#2563eb;margin:6px 0}" +
+".cert-comps{max-width:520px;margin:10px auto}.cert-foot{margin-top:18px;font-size:.82rem;color:#5b6b7b;text-align:center}" +
+"</style></head><body>" +
+"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF (one per participant)</button>" +
+cards +
+"<div class='foot noprint'>One certificate per present participant. Attestations are named records — " +
+"distribute each to its student. Generated client-side; no data leaves this device.</div>" +
+"</body></html>";
+    openReport(html, "attestations");
+    if (typeof toast === "function") toast("🎓 Attestations generated (" + rows.length + ").");
+  }
+
   // Expose on window for the admin button + future tools.
   window.CanamedAdminTools = window.CanamedAdminTools || {};
   window.CanamedAdminTools.generateAccreditationReport = generateAccreditationReport;
   window.CanamedAdminTools.competencyRows = competencyRows;     // for tests
+  window.CanamedAdminTools.participantRows = participantRows;   // for tests
+  window.CanamedAdminTools.generateResearchExport = generateResearchExport;
+  window.CanamedAdminTools.generateAttestations = generateAttestations;
   window.generateAccreditationReport = generateAccreditationReport;
+  window.generateResearchExport = generateResearchExport;
+  window.generateAttestations = generateAttestations;
 })();
