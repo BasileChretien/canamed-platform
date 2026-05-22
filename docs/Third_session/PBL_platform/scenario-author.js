@@ -666,6 +666,58 @@
     out.appendChild(ul);
   }
 
+  /* Human-readable preview of the authored scenario — how it reads to
+     participants, not raw JSON. Text goes through el()'s textContent (no
+     innerHTML of user input). */
+  function renderPreview() {
+    var json = toScenarioJson();
+    var out = document.getElementById("preview-output");
+    if (!out) return;
+    out.innerHTML = "";
+    function line(label, val) {
+      var p = el("p");
+      p.appendChild(el("strong", { text: label + ": " }));
+      p.appendChild(document.createTextNode(val));
+      return p;
+    }
+    out.appendChild(el("h3", { text: (json.name && json.name.en) || "(untitled scenario)" }));
+    if (json.summary && json.summary.en) out.appendChild(el("p", { text: json.summary.en }));
+    out.appendChild(line("Module A", (json.moduleAName && json.moduleAName.en) || "—"));
+    out.appendChild(line("Module B", (json.moduleBName && json.moduleBName.en) || "—"));
+    out.appendChild(line("Case items", json.case.history.length + " history · " +
+      json.case.exam.length + " exam · " + json.case.labs.length + " labs · " +
+      json.case.prompts.length + " prompts"));
+    out.appendChild(line("Scoring stems", json.scoring.moduleA.length + " (A) · " +
+      json.scoring.moduleB.length + " (B)"));
+    out.appendChild(line("Penalties", String(json.penalties.length)));
+    var pre = (json.preTest && json.preTest.length) || 0;
+    var post = (json.postTest && json.postTest.length) || 0;
+    out.appendChild(line("Pre/post test", pre + " pre · " + post + " post" +
+      ((pre === 0 || post === 0)
+        ? "  ⚠ add a pre/post test (edit the JSON) to enable knowledge-gain measurement"
+        : "")));
+    out.appendChild(el("h4", { text: "Team decisions (" + json.decisions.length + ")" }));
+    if (!json.decisions.length) {
+      out.appendChild(el("p", { class: "field-hint", text: "No team decisions yet." }));
+    }
+    json.decisions.forEach(function (d) {
+      var card = el("div", { class: "preview-decision" });
+      card.appendChild(el("p", { class: "preview-dec-prompt",
+        text: "[" + (d.module || "?") + "] " + ((d.prompt && d.prompt.en) || "(no prompt)") }));
+      var ul = el("ul");
+      (d.options || []).forEach(function (o) {
+        var li = el("li", { text: (o.text && o.text.en) || "(no text)" });
+        if (o.correct) {
+          li.appendChild(document.createTextNode("  "));
+          li.appendChild(el("span", { class: "preview-correct", text: "✓ safest" }));
+        }
+        ul.appendChild(li);
+      });
+      card.appendChild(ul);
+      out.appendChild(card);
+    });
+  }
+
   /* ------------------------------------------------------------------ */
   /* JSON -> STATE (round-trip)                                         */
   /* ------------------------------------------------------------------ */
@@ -840,6 +892,9 @@
     document.getElementById("btn-validate").addEventListener("click", function () {
       showValidation(validate());
     });
+
+    var btnPreview = document.getElementById("btn-preview");
+    if (btnPreview) btnPreview.addEventListener("click", renderPreview);
 
     document.getElementById("btn-copy").addEventListener("click", function () {
       var snippet = makeSnippet(toScenarioJson());
