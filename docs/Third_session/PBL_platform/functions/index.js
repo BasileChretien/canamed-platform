@@ -47,6 +47,14 @@ function fromAddress() {
   return c.from || process.env.SMTP_FROM || "CANAMED <no-reply@example.org>";
 }
 
+/* Approval gate. Email stays OFF until an operator deliberately enables it
+   AFTER institutional (university president) approval. Default: disabled. */
+function emailEnabled() {
+  const c = (functions.config && functions.config().email) || {};
+  const v = (c.enabled != null ? c.enabled : process.env.EMAIL_ENABLED);
+  return String(v).toLowerCase() === "true";
+}
+
 /* sessions/<code>/mail/<id> queue. The orgs/<slug>/sessions/... tree, if used,
    needs a parallel export (same body) — see README.md. */
 exports.sendQueuedMail = functions.database
@@ -55,6 +63,21 @@ exports.sendQueuedMail = functions.database
     const job = snap.val() || {};
     // Skip malformed or already-processed jobs (idempotent on retries).
     if (!job.to || !job.subject || job.delivery) return null;
+
+    // APPROVAL GATE: email is DISABLED by default and stays dormant until the
+    // institution (university president) approves it. Beyond just configuring
+    // SMTP, an operator must DELIBERATELY flip this flag on:
+    //   firebase functions:config:set email.enabled="true"
+    // (or set EMAIL_ENABLED=true). Until then, nothing is ever sent — jobs just
+    // record that the feature is gated. This makes "keep it hidden until
+    // approved" enforced in code, not just convention.
+    if (!emailEnabled()) {
+      await snap.ref.child("delivery").set({
+        state: "disabled", at: Date.now(),
+        error: "Email feature disabled (pending institutional approval)"
+      });
+      return null;
+    }
 
     const transport = buildTransport();
     if (!transport) {

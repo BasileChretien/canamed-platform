@@ -594,9 +594,14 @@ esc(when.toLocaleString()) + "</p>" +
   /* ── Transactional email (consent-gated) ──────────────────────────────── */
   /* Enqueue one email by writing sessions/<code>/mail/<id> — the Cloud Function
      (functions/index.js) sends it. Admin-gated by the database rules (a session
-     adminPasswordHash must exist), so this is not an open relay. Used by the
-     spaced-reinforcement reminder flow; consent + a configured SMTP provider
-     are required (see functions/README.md). Returns a Promise. */
+     adminPasswordHash must exist), so this is not an open relay.
+
+     DORMANT until approved: the email feature is DISABLED by default and is not
+     wired to any UI. Even when enqueued, the Cloud Function will not send until
+     the institution (university president) approves it and an operator flips the
+     approval flag (email.enabled) — see functions/README.md. This helper exists
+     for that future, approved flow; consent + configured SMTP are also required.
+     Returns a Promise. */
   function enqueueMail(to, subject, text) {
     if (typeof db === "undefined" || !db || typeof sPath !== "function") {
       return Promise.reject(new Error("no database"));
