@@ -16,7 +16,7 @@ const COMPLIANCE = fs.readFileSync(path.join(P, "compliance.html"), "utf8");
 const GUIDE = fs.readFileSync(path.join(P, "facilitator-guide.html"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SW = fs.readFileSync(path.join(P, "sw.js"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("compliance.html is a complete page covering accessibility, data protection, security", () => {
   assert.match(COMPLIANCE, /<!doctype html>/i, "must be a full HTML document");

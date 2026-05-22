@@ -161,7 +161,21 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     ~88 KB gz of the bundle, 8 locales eager) is now firmly the next perf
 //     task — it alone would return tens of KB of headroom and is the right
 //     move before any further growth.
-const FIRST_PARTY_BYTES_LIMIT_KB = 320;
+//
+//   2026-05-22 (#48 — i18n locale lazy-load): DONE. i18n.js now ships only the
+//     inline English canonical table + the apply/detect/lazy-load logic; the
+//     other 7 locales (fr/ja/es/pt/de/ko/zh) live in locales/<lang>.js and are
+//     fetched on demand via ensureLang — only the active non-English language
+//     loads, and never on the English splash this budget measures. Measured
+//     critical bundle dropped from ~319 KB to ~255 KB gz (~64 KB reclaimed —
+//     the seven locale tables leaving the splash). DOMPurify stays eager (the
+//     consent paragraphs are sanitised on the first i18n pass). Budget
+//     TIGHTENED 320 -> 280: ~25 KB headroom over the new ~255 KB baseline,
+//     locking in the reclaimed space so it can't be silently given back, while
+//     leaving runway for in-flight feature work. The byte tally is
+//     deterministic (same source -> same gzip), so this cap behaves identically
+//     on CI and locally.
+const FIRST_PARTY_BYTES_LIMIT_KB = 280;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -265,6 +279,11 @@ test.describe("Perf budget — splash", () => {
       const path = u.replace(/^https?:\/\/[^/]+/, "")
                     .replace(/^\//, "")
                     .replace(/\?.*$/, "");
+      // Per-language i18n tables (locales/<lang>.js, #48) are fetched on
+      // demand by i18n.js's ensureLang: only the active NON-English language
+      // loads, and never on the English splash this budget measures. They are
+      // off the critical path by construction, so exclude the whole directory.
+      if (path.indexOf("locales/") === 0) return true;
       return LAZY_CHUNKS.has(path);
     };
     const firstParty = assets.filter((a) => !isThirdParty(a.url) && !isLazyChunk(a.url));

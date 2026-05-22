@@ -16,7 +16,7 @@ const path = require("node:path");
 
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX  = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
-const I18N   = fs.readFileSync(path.join(PLATFORM, "i18n.js"), "utf8");
+const I18N   = require("./_i18n_source.js").readI18nSource();
 const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 
 const OBS_KEYS = [

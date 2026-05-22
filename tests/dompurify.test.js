@@ -30,7 +30,7 @@ const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platfo
 const PURIFY = path.join(PLATFORM, "purify.min.js");
 const INDEX_HTML = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
 const PRIVACY_HTML = fs.readFileSync(path.join(PLATFORM, "privacy.html"), "utf8");
-const I18N_JS = fs.readFileSync(path.join(PLATFORM, "i18n.js"), "utf8");
+const I18N_JS = require("./_i18n_source.js").readI18nSource();
 
 // ============================================================
 // 1 — purify.min.js is the real, vendored library

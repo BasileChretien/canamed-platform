@@ -34,7 +34,7 @@ const path = require("node:path");
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT_JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 const STYLE_CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
-const I18N_JS   = fs.readFileSync(path.join(PLATFORM, "i18n.js"),   "utf8");
+const I18N_JS   = require("./_i18n_source.js").readI18nSource();
 
 // Helper: extract a function body by name from script.js source so an
 // assertion can be scoped to one function and not match incidentally

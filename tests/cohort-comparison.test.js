@@ -14,7 +14,7 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("cohortRows splits by university with per-cohort gain", () => {
   assert.match(TOOLS, /function cohortRows\(\)/, "cohortRows must exist");

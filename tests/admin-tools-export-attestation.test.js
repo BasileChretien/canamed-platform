@@ -13,7 +13,7 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("admin-tools.js still parses with the new tools", () => {
   assert.doesNotThrow(() => new Function(TOOLS));

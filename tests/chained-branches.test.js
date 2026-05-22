@@ -21,7 +21,7 @@ const path = require("node:path");
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const CASE = fs.readFileSync(path.join(P, "case-content.js"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("dec_prognosis_next is a Module B follow-up gated behind dec_prognosis", () => {
   const start = CASE.indexOf('id: "dec_prognosis_next"');

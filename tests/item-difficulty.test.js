@@ -15,7 +15,7 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("the session summary carries a per-decision correct-rate map (decAcc)", () => {
   assert.match(SCRIPT, /decAgg\.push\(\{ id: dec\.id/, "decAgg must carry the decision id");

@@ -36,7 +36,7 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v3";
+const SHELL_VERSION = "canamed-shell-v4";
 
 const SHELL_ASSETS = [
   "/",
@@ -64,6 +64,14 @@ const SHELL_ASSETS = [
   "/firebase-config.js",
   "/manifest.webmanifest"
 ];
+
+// NOTE (#48 — i18n locale lazy-load): the per-language tables in
+// /locales/<lang>.js are deliberately NOT precached here. /i18n.js carries
+// the inline English fallback (always cached above), so a fresh offline user
+// always has working English UI. Each non-English locale is fetched on demand
+// by ensureLang and then picked up by the runtime cache-on-fetch path in
+// handleSameOrigin() below, so it survives a later offline blip. Precaching
+// all 7 here would re-bloat the install we just trimmed off the splash.
 
 // Hostnames whose fetches should ALWAYS go to network (never cached) —
 // these are dynamic, auth-tokened, and stateful.
