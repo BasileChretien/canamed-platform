@@ -173,12 +173,25 @@
     <!-- ============= Action bar ============= -->
     <div class="author-actions">
       <button type="button" id="btn-validate" class="primary-btn">Validate</button>
+      <button type="button" id="btn-preview" class="primary-btn">Preview</button>
       <button type="button" id="btn-copy" class="primary-btn">Copy JSON snippet</button>
       <button type="button" id="btn-download" class="primary-btn">Download .json</button>
       <button type="button" id="btn-load" class="secondary-btn">Load JSON&hellip;</button>
       <button type="button" id="btn-reset" class="secondary-btn">Reset form</button>
     </div>
     <div id="validation-output" class="validation-output" aria-live="polite"></div>
+
+    <!-- Human-readable preview: renders the authored scenario the way it will
+         read to participants (vignette, modules, decisions with the safest
+         option flagged), so the author can sanity-check content, not just JSON. -->
+    <section class="author-section" id="preview-section">
+      <h2>Preview</h2>
+      <p class="field-hint"><strong>Validate</strong> checks structure; <strong>Preview</strong> shows how
+        the scenario reads. To <strong>play-test</strong> it end-to-end: use <em>Copy JSON snippet</em> (or
+        <em>Download .json</em>), then on the platform choose <em>Create a session → Custom scenario</em>,
+        paste it, and join your own session in a second browser tab.</p>
+      <div id="preview-output" class="preview-output" aria-live="polite"></div>
+    </section>
 
     <!-- ============= Live JSON preview ============= -->
     <section class="author-section">

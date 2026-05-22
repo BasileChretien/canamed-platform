@@ -384,3 +384,12 @@ input:focus, textarea:focus, select:focus {
   gap: 10px;
   margin-top: 12px;
 }
+
+/* Human-readable scenario preview (Preview button). */
+.preview-output { margin-top: 8px; }
+.preview-output:empty { display: none; }
+.preview-output h3 { margin: 6px 0 2px; }
+.preview-output h4 { margin: 14px 0 4px; }
+.preview-decision { border: 1px solid #e1e7ed; border-radius: 8px; padding: 8px 12px; margin: 6px 0; background: #f7f9fb; }
+.preview-dec-prompt { font-weight: 600; margin: 0 0 4px; }
+.preview-correct { color: #1d6b3f; font-weight: 600; font-size: 0.85em; }
