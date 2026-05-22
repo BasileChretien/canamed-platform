@@ -3188,9 +3188,182 @@ var FACILITATOR_NOTES = {
   }
 };
 
+/* ===================== END-OF-SESSION FEEDBACK SURVEY ======================
+ * The subjective questionnaire, captured IN-PLATFORM (not a link-out) so the
+ * facilitator gets the feedback in the same pseudonymous CSV/JSON export as the
+ * pre/post knowledge tests. Rendered on the Wrap-up stage by renderSurvey() in
+ * script.js, stored at /sessions/{code}/rooms/{room}/survey/{cid}:
+ *   { startedAt, completedAt, skipped, stableId, responses:{ qid:{ v, at } } }
+ * `v` is a Likert integer 1..5, a single-choice string, or free text. Optional
+ * and skippable — it never blocks closing the session.
+ *
+ * This bank is SCENARIO-INDEPENDENT (one shared instrument across all cases),
+ * so it lives as a single global rather than per-scenario. Item shape:
+ *   { id, type: "single" | "likert" | "open",
+ *     section: { en, fr, ja },           // group heading (printed when it changes)
+ *     q:       { en, fr, ja },           // the prompt
+ *     options: [ { v, text:{en,fr,ja} } ]   // "single" only
+ *   }
+ * Likert items use a fixed 1=Strongly disagree … 5=Strongly agree scale whose
+ * end labels come from the survey.likert.* i18n chrome keys. Edit freely; keep
+ * the { en, fr, ja } wrap and the { id, type } shape intact. The English is the
+ * canonical fallback (tc() shows it when fr/ja are empty). */
+var SURVEY = [
+  /* — Demographics ——————————————————————————————————————————————— */
+  { id: "demo_university", type: "single",
+    section: { en: "About you", fr: "Vous concernant", ja: "あなたについて" },
+    q: { en: "Which university are you from?",
+         fr: "De quelle université venez-vous ?",
+         ja: "どちらの大学に所属していますか?" },
+    options: [
+      { v: "Caen",   text: { en: "Caen",   fr: "Caen",   ja: "カーン大学" } },
+      { v: "Nagoya", text: { en: "Nagoya", fr: "Nagoya", ja: "名古屋大学" } },
+      { v: "Other",  text: { en: "Other",  fr: "Autre",  ja: "その他" } }
+    ] },
+  { id: "demo_year", type: "single",
+    section: { en: "About you", fr: "Vous concernant", ja: "あなたについて" },
+    q: { en: "Year of study",
+         fr: "Année d'études",
+         ja: "学年" },
+    options: [
+      { v: "2", text: { en: "Year 2", fr: "2e année", ja: "2年" } },
+      { v: "3", text: { en: "Year 3", fr: "3e année", ja: "3年" } },
+      { v: "4", text: { en: "Year 4", fr: "4e année", ja: "4年" } },
+      { v: "5", text: { en: "Year 5", fr: "5e année", ja: "5年" } },
+      { v: "6", text: { en: "Year 6", fr: "6e année", ja: "6年" } }
+    ] },
+
+  /* — Learning & engagement (Likert) ————————————————————————————— */
+  { id: "learn_reasoning", type: "likert",
+    section: { en: "Learning & engagement", fr: "Apprentissage et engagement", ja: "学びと関与" },
+    q: { en: "I learned something new about clinical reasoning.",
+         fr: "J'ai appris quelque chose de nouveau sur le raisonnement clinique.",
+         ja: "臨床推論について新しいことを学んだ。" } },
+  { id: "learn_drugrequest", type: "likert",
+    section: { en: "Learning & engagement", fr: "Apprentissage et engagement", ja: "学びと関与" },
+    q: { en: "I am more confident about how to respond when a patient requests a specific medication.",
+         fr: "Je me sens plus à l'aise pour répondre lorsqu'un patient demande un médicament précis.",
+         ja: "患者が特定の薬を求めてきたときの対応に、より自信が持てるようになった。" } },
+  { id: "learn_imaging", type: "likert",
+    section: { en: "Learning & engagement", fr: "Apprentissage et engagement", ja: "学びと関与" },
+    q: { en: "I better understand when investigations (such as imaging) are, and are not, indicated.",
+         fr: "Je comprends mieux quand des examens (comme l'imagerie) sont indiqués ou non.",
+         ja: "画像検査などの検査が適応となる場合とそうでない場合を、より理解できた。" } },
+
+  /* — Responsible prescribing & communication (Likert) ——————————— */
+  { id: "rp_chronicpain", type: "likert",
+    section: { en: "Responsible prescribing & communication", fr: "Prescription responsable et communication", ja: "責任ある処方とコミュニケーション" },
+    q: { en: "I feel better prepared to manage chronic pain without relying on strong opioids.",
+         fr: "Je me sens mieux préparé·e à prendre en charge une douleur chronique sans recourir aux opioïdes forts.",
+         ja: "強オピオイドに頼らずに慢性疼痛を管理する準備が、より整ったと感じる。" } },
+  { id: "rp_breakbadnews", type: "likert",
+    section: { en: "Responsible prescribing & communication", fr: "Prescription responsable et communication", ja: "責任ある処方とコミュニケーション" },
+    q: { en: "I feel more prepared to break bad news to a patient.",
+         fr: "Je me sens mieux préparé·e à annoncer une mauvaise nouvelle à un patient.",
+         ja: "患者に悪い知らせを伝える準備が、より整ったと感じる。" } },
+  { id: "rp_familywithhold", type: "likert",
+    section: { en: "Responsible prescribing & communication", fr: "Prescription responsable et communication", ja: "責任ある処方とコミュニケーション" },
+    q: { en: "I better understand how to respond when a family asks me to withhold information from a patient.",
+         fr: "Je comprends mieux comment réagir lorsqu'une famille me demande de cacher une information au patient.",
+         ja: "家族から患者に情報を伏せるよう求められたときの対応を、より理解できた。" } },
+
+  /* — Online PBL platform (Likert) ——————————————————————————————— */
+  { id: "plat_easy", type: "likert",
+    section: { en: "The online PBL platform", fr: "La plateforme d'APP en ligne", ja: "オンラインPBLプラットフォーム" },
+    q: { en: "The online platform was easy to use.",
+         fr: "La plateforme en ligne était facile à utiliser.",
+         ja: "オンラインプラットフォームは使いやすかった。" } },
+  { id: "plat_stepbystep", type: "likert",
+    section: { en: "The online PBL platform", fr: "La plateforme d'APP en ligne", ja: "オンラインPBLプラットフォーム" },
+    q: { en: "The platform helped me work through the clinical decisions step by step.",
+         fr: "La plateforme m'a aidé·e à dérouler les décisions cliniques étape par étape.",
+         ja: "プラットフォームは臨床判断を段階的に進める助けになった。" } },
+  { id: "plat_group", type: "likert",
+    section: { en: "The online PBL platform", fr: "La plateforme d'APP en ligne", ja: "オンラインPBLプラットフォーム" },
+    q: { en: "Working through the case as a group on the platform improved my learning.",
+         fr: "Travailler le cas en groupe sur la plateforme a amélioré mon apprentissage.",
+         ja: "プラットフォーム上でグループとして症例に取り組んだことで、学びが深まった。" } },
+
+  /* — Intercultural experience (Likert) ——————————————————————————— */
+  { id: "ic_international", type: "likert",
+    section: { en: "Intercultural experience", fr: "Expérience interculturelle", ja: "異文化体験" },
+    q: { en: "Working with international students improved my learning.",
+         fr: "Travailler avec des étudiants internationaux a amélioré mon apprentissage.",
+         ja: "海外の学生と協働したことで、学びが深まった。" } },
+  { id: "ic_cultural", type: "likert",
+    section: { en: "Intercultural experience", fr: "Expérience interculturelle", ja: "異文化体験" },
+    q: { en: "I gained insights into cultural differences in medicine (e.g. prescribing, disclosing a diagnosis).",
+         fr: "J'ai pris conscience de différences culturelles en médecine (p. ex. la prescription, l'annonce d'un diagnostic).",
+         ja: "医療における文化的な違い(処方、診断の告知など)について理解が得られた。" } },
+
+  /* — Language & communication (Likert) ——————————————————————————— */
+  { id: "lang_english", type: "likert",
+    section: { en: "Language & communication", fr: "Langue et communication", ja: "言語とコミュニケーション" },
+    q: { en: "Using English made me want to improve my English skills.",
+         fr: "Utiliser l'anglais m'a donné envie d'améliorer mon niveau d'anglais.",
+         ja: "英語を使ったことで、英語力を高めたいと思うようになった。" } },
+  { id: "lang_confident", type: "likert",
+    section: { en: "Language & communication", fr: "Langue et communication", ja: "言語とコミュニケーション" },
+    q: { en: "I felt confident expressing myself during the session.",
+         fr: "Je me suis senti·e à l'aise pour m'exprimer pendant la séance.",
+         ja: "セッション中、自分の考えを表現することに自信を持てた。" } },
+
+  /* — Roleplay & PBL format (Likert) ——————————————————————————————— */
+  { id: "pbl_realistic", type: "likert",
+    section: { en: "Roleplay & PBL format", fr: "Jeu de rôle et format APP", ja: "ロールプレイとPBL形式" },
+    q: { en: "The roleplay scenarios felt realistic and relevant.",
+         fr: "Les scénarios de jeu de rôle semblaient réalistes et pertinents.",
+         ja: "ロールプレイのシナリオは現実的で適切だと感じた。" } },
+  { id: "pbl_morepbl", type: "likert",
+    section: { en: "Roleplay & PBL format", fr: "Jeu de rôle et format APP", ja: "ロールプレイとPBL形式" },
+    q: { en: "I would like to see more PBL and roleplay in my medical training.",
+         fr: "J'aimerais voir davantage d'APP et de jeux de rôle dans ma formation médicale.",
+         ja: "医学教育の中で、PBLやロールプレイをもっと取り入れてほしい。" } },
+
+  /* — Motivation & global perspective (Likert) ———————————————————— */
+  { id: "mot_internship", type: "likert",
+    section: { en: "Motivation & global perspective", fr: "Motivation et perspective internationale", ja: "モチベーションと国際的視野" },
+    q: { en: "I am now more interested in pursuing an internship abroad.",
+         fr: "Je suis désormais plus intéressé·e par un stage à l'étranger.",
+         ja: "海外での実習・インターンシップにより興味を持つようになった。" } },
+  { id: "mot_global", type: "likert",
+    section: { en: "Motivation & global perspective", fr: "Motivation et perspective internationale", ja: "モチベーションと国際的視野" },
+    q: { en: "This session helped me understand global health perspectives.",
+         fr: "Cette séance m'a aidé·e à comprendre des perspectives de santé mondiale.",
+         ja: "このセッションは、グローバルヘルスの視点を理解する助けになった。" } },
+
+  /* — Open-ended ————————————————————————————————————————————————— */
+  { id: "open_platform", type: "open",
+    section: { en: "Your comments", fr: "Vos commentaires", ja: "ご意見" },
+    q: { en: "What did you think of the online platform — what worked well, and what should be improved?",
+         fr: "Qu'avez-vous pensé de la plateforme en ligne — ce qui a bien fonctionné et ce qui devrait être amélioré ?",
+         ja: "オンラインプラットフォームについてどう感じましたか — うまくいった点、改善すべき点は?" } },
+  { id: "open_request", type: "open",
+    section: { en: "Your comments", fr: "Vos commentaires", ja: "ご意見" },
+    q: { en: "What did you learn about handling a patient's request for a specific drug, or about prescribing responsibly?",
+         fr: "Qu'avez-vous appris sur la gestion d'une demande de médicament précis, ou sur la prescription responsable ?",
+         ja: "特定の薬を求める患者への対応や、責任ある処方について何を学びましたか?" } },
+  { id: "open_compare", type: "open",
+    section: { en: "Your comments", fr: "Vos commentaires", ja: "ご意見" },
+    q: { en: "What did the France–Japan comparison teach you about how the two countries differ (prescribing, imaging, disclosing a diagnosis)?",
+         fr: "Que vous a appris la comparaison France–Japon sur les différences entre les deux pays (prescription, imagerie, annonce d'un diagnostic) ?",
+         ja: "フランスと日本の比較から、両国の違い(処方、画像検査、診断の告知)について何を学びましたか?" } },
+  { id: "open_improve", type: "open",
+    section: { en: "Your comments", fr: "Vos commentaires", ja: "ご意見" },
+    q: { en: "What should be improved in future CaNaMED sessions?",
+         fr: "Qu'est-ce qui devrait être amélioré dans les prochaines séances CaNaMED ?",
+         ja: "今後のCaNaMEDセッションで改善すべき点は何ですか?" } },
+  { id: "open_final", type: "open",
+    section: { en: "Your comments", fr: "Vos commentaires", ja: "ご意見" },
+    q: { en: "Any final thoughts or suggestions?",
+         fr: "Une dernière réflexion ou suggestion ?",
+         ja: "最後に、ご意見やご提案があればお書きください。" } }
+];
+
 /* the default scenario is whichever sits first in the registry - this is what
    case-content.js leaves in the globals when script.js starts up. Once a
    session is unlocked, script.js calls applyScenario() with the session's
    chosen scenarioId (or its custom content) and swaps these globals out. */
 window.FACILITATOR_NOTES = FACILITATOR_NOTES;
+window.SURVEY = SURVEY;
 window.CANAMED_DEFAULT_SCENARIO_ID = "chronic-pain-opioids";

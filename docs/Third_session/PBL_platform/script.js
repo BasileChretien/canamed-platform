@@ -2277,6 +2277,224 @@ function _renderTestCard(which) {
   });
 }
 
+/* ===================== END-OF-SESSION FEEDBACK SURVEY =====================
+ * The subjective questionnaire (Likert + single-choice + open-ended), captured
+ * in-platform on the Wrap-up stage and stored alongside the pre/post tests at
+ *   /sessions/{code}/rooms/{room}/survey/{cid}:
+ *     { startedAt, completedAt, skipped, stableId, responses:{ qid:{ v, at } } }
+ * The bank is window.SURVEY (case-content.js). Optional + skippable; never
+ * blocks closing the session. Mirrors the pre/post test card lifecycle, but
+ * renders one scrollable form (a survey gives no per-item feedback, so the
+ * one-question-at-a-time runner the tests use would only add friction). */
+function _surveyBank() {
+  return Array.isArray(window.SURVEY) ? window.SURVEY : [];
+}
+function _surveyRef() {
+  // survey lives under the room subtree, keyed by clientId (per-tab), exactly
+  // like the tests node — so the admin export can read both the same way.
+  if (!db || !sessionNum || !myRoom || !clientId) return null;
+  return db.ref(sPath("rooms/" + myRoom + "/survey/" + clientId));
+}
+function _loadSurveyStatus() {
+  const ref = _surveyRef();
+  if (!ref) return Promise.resolve(null);
+  return ref.once("value").then(snap => snap.val()).catch(() => null);
+}
+function _saveSurveyStart() {
+  const ref = _surveyRef();
+  if (!ref) return Promise.resolve(false);
+  return ref.child("startedAt").transaction(cur => (cur == null ? Date.now() : undefined))
+    .then(() => {
+      if (typeof stableId === "string" && stableId) ref.child("stableId").set(stableId).catch(() => {});
+      return true;
+    }).catch(() => false);
+}
+function _saveSurveySkipped() {
+  const ref = _surveyRef();
+  if (!ref) return Promise.resolve(false);
+  return ref.transaction(cur => {
+    const now = Date.now();
+    const prev = cur || {};
+    const next = Object.assign({}, prev, { startedAt: prev.startedAt || now, skipped: true });
+    if (typeof stableId === "string" && stableId) next.stableId = stableId;
+    return next;
+  }).then(() => true).catch(e => { console.warn("survey skip failed", e); return false; });
+}
+function _saveSurveyComplete(responses) {
+  const ref = _surveyRef();
+  if (!ref) return Promise.resolve(false);
+  const update = { completedAt: Date.now() };
+  Object.keys(responses).forEach(qid => { update["responses/" + qid] = responses[qid]; });
+  return ref.update(update).then(() => true).catch(e => { console.warn("survey save failed", e); return false; });
+}
+
+/* Build the scrollable survey form into #survey-body. Exposed for E2E so a
+   test can mount it without a live wrap-up stage. */
+function _mountSurveyForm() {
+  const body = el("survey-body");
+  const bank = _surveyBank();
+  if (!body || !bank.length) return;
+  body.innerHTML = "";
+  body.classList.remove("hidden");
+  const lang = _curLang();
+  const form = document.createElement("div");
+  form.className = "survey-form";
+  const getters = {};
+  let lastSection = null;
+  bank.forEach(item => {
+    const secText = item.section ? tc(item.section, lang) : "";
+    if (secText && secText !== lastSection) {
+      lastSection = secText;
+      const h = document.createElement("h4");
+      h.className = "survey-section";
+      h.textContent = secText;
+      form.appendChild(h);
+    }
+    const field = document.createElement("div");
+    field.className = "survey-field";
+    const q = document.createElement("p");
+    q.className = "survey-q";
+    q.textContent = tc(item.q, lang);
+    field.appendChild(q);
+
+    if (item.type === "likert") {
+      const scale = document.createElement("div");
+      scale.className = "survey-likert";
+      scale.setAttribute("role", "radiogroup");
+      scale.setAttribute("aria-label", tc(item.q, lang));
+      const picked = { v: null };
+      for (let n = 1; n <= 5; n++) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "survey-likert-opt";
+        b.textContent = String(n);
+        b.setAttribute("role", "radio");
+        b.setAttribute("aria-label", n + " — " + _tFmt("survey.likert." + n));
+        b.setAttribute("aria-checked", "false");
+        b.addEventListener("click", () => {
+          picked.v = n;
+          Array.from(scale.children).forEach((c, i) => {
+            if (c.classList.contains("survey-likert-opt")) c.setAttribute("aria-checked", (i + 1) === n ? "true" : "false");
+          });
+        });
+        scale.appendChild(b);
+      }
+      field.appendChild(scale);
+      const ends = document.createElement("div");
+      ends.className = "survey-likert-ends";
+      const lo = document.createElement("span"); lo.textContent = _tFmt("survey.likert.1");
+      const hi = document.createElement("span"); hi.textContent = _tFmt("survey.likert.5");
+      ends.appendChild(lo); ends.appendChild(hi);
+      field.appendChild(ends);
+      getters[item.id] = () => picked.v;
+    } else if (item.type === "single") {
+      const sel = document.createElement("select");
+      sel.className = "survey-select";
+      sel.setAttribute("aria-label", tc(item.q, lang));
+      const ph = document.createElement("option");
+      ph.value = ""; ph.textContent = _tFmt("survey.choose");
+      sel.appendChild(ph);
+      (item.options || []).forEach(o => {
+        const op = document.createElement("option");
+        op.value = o.v; op.textContent = tc(o.text, lang);
+        sel.appendChild(op);
+      });
+      field.appendChild(sel);
+      getters[item.id] = () => (sel.value || null);
+    } else {
+      const ta = document.createElement("textarea");
+      ta.className = "survey-open";
+      ta.rows = 3; ta.maxLength = 2000;
+      ta.setAttribute("aria-label", tc(item.q, lang));
+      field.appendChild(ta);
+      getters[item.id] = () => (ta.value || "").trim();
+    }
+    form.appendChild(field);
+  });
+  body.appendChild(form);
+
+  const submit = document.createElement("button");
+  submit.type = "button";
+  submit.className = "teams-btn survey-submit";
+  submit.id = "survey-submit-btn";
+  submit.textContent = _tFmt("survey.submit");
+  submit.addEventListener("click", () => {
+    submit.disabled = true;
+    const responses = {};
+    Object.keys(getters).forEach(qid => {
+      const v = getters[qid]();
+      if (v === null || v === undefined || v === "") return;
+      responses[qid] = { v: v, at: Date.now() };
+    });
+    _saveSurveyComplete(responses).then(() => {
+      body.innerHTML = "";
+      const done = document.createElement("p");
+      done.className = "survey-thanks";
+      done.textContent = _tFmt("survey.thanks");
+      body.appendChild(done);
+    }).catch(() => { submit.disabled = false; });
+  });
+  body.appendChild(submit);
+}
+
+/* Mount the survey card on the Wrap-up stage. Hidden for room admins (they get
+   the all-rooms export) and when no bank ships. Mirrors _renderTestCard(). */
+function renderSurvey() {
+  const card = el("survey-card");
+  if (!card) return;
+  const bank = _surveyBank();
+  if (!bank.length || !myRoom || isRoomAdmin) {
+    card.classList.add("hidden");
+    return;
+  }
+  card.classList.remove("hidden");
+  _loadSurveyStatus().then(rec => {
+    const startBtn = el("survey-start-btn");
+    const skipBtn = el("survey-skip-btn");
+    const body = el("survey-body");
+    const intro = el("survey-card-intro");
+    if (!startBtn || !skipBtn || !body) return;
+    const completed = rec && typeof rec.completedAt === "number";
+    const skipped = rec && rec.skipped === true;
+    if (completed) {
+      if (intro) intro.textContent = _tFmt("survey.already-done");
+      startBtn.classList.add("hidden");
+      skipBtn.classList.add("hidden");
+      body.classList.add("hidden");
+      body.innerHTML = "";
+      return;
+    }
+    if (skipped) {
+      if (intro) intro.textContent = _tFmt("survey.skipped");
+      startBtn.classList.remove("hidden");
+      skipBtn.classList.add("hidden");
+    } else {
+      startBtn.classList.remove("hidden");
+      skipBtn.classList.remove("hidden");
+    }
+    if (!startBtn.dataset.bound) {
+      startBtn.dataset.bound = "1";
+      startBtn.addEventListener("click", () => {
+        _saveSurveyStart();
+        startBtn.classList.add("hidden");
+        skipBtn.classList.add("hidden");
+        _mountSurveyForm();
+      });
+    }
+    if (!skipBtn.dataset.bound) {
+      skipBtn.dataset.bound = "1";
+      skipBtn.addEventListener("click", () => {
+        _saveSurveySkipped();
+        startBtn.classList.remove("hidden");
+        skipBtn.classList.add("hidden");
+        body.classList.add("hidden");
+        body.innerHTML = "";
+        if (intro) intro.textContent = _tFmt("survey.skipped");
+      });
+    }
+  });
+}
+
 /* the wrap-up "your team did well" card - every room leaves with a named set
    of strengths and the cohort's shared total, so finishing not-#1 still feels
    like a real achievement. */
@@ -3047,6 +3265,11 @@ function enterAdminApp() {
   if (researchBtn && !researchBtn.dataset.wired) {
     researchBtn.dataset.wired = "1";
     researchBtn.addEventListener("click", () => runAdminTool("generateResearchExport"));
+  }
+  const researchCsvBtn = el("admin-research-csv-btn");
+  if (researchCsvBtn && !researchCsvBtn.dataset.wired) {
+    researchCsvBtn.dataset.wired = "1";
+    researchCsvBtn.addEventListener("click", () => runAdminTool("generateResearchExportCSV"));
   }
   const attestBtn = el("admin-attest-btn");
   if (attestBtn && !attestBtn.dataset.wired) {
@@ -5930,6 +6153,7 @@ function renderStage() {
   // not ship a question bank or when the user is an admin viewing a room.
   if (viewStage === 0) renderPreTest();
   if (viewStage === STAGE_COUNT - 1) renderPostTest();
+  if (viewStage === STAGE_COUNT - 1) renderSurvey();
   renderObjectives();   // the objectives panel tracks the module the room is on
   renderDecisions();    // the team-decision cards for Module A and Module B
   // per-stage "chapter" accent + the "do this now" line
@@ -6670,6 +6894,10 @@ if (typeof window !== "undefined") {
     viewStage = parseInt(n, 10) || 0;
     roomStage = Math.max(roomStage, viewStage);
   };
+  // Wrap-up feedback survey — exposed so E2E can mount the form and assert the
+  // rendered fields without a live wrap-up stage / Firebase round-trip.
+  window.renderSurvey = renderSurvey;
+  window._mountSurveyForm = _mountSurveyForm;
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
