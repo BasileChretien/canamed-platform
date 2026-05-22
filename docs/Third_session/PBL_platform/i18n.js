@@ -933,8 +933,15 @@
     return _currentLang || detectLang();
   }
 
+  // Returns a Promise that resolves once the language is active AND the DOM
+  // (plus any canamed:langchange-driven dynamic re-render) reflects it. For
+  // English or an already-loaded locale that's synchronous (a resolved
+  // promise); for a not-yet-loaded locale it resolves after the chunk loads
+  // and applyI18n + the langchange re-render have run. Callers that need the
+  // switch to be complete before reading translated content can `await` it
+  // (e.g. `await window.setLang('fr')`); fire-and-forget callers ignore it.
   function setLang(lang) {
-    if (SUPPORTED.indexOf(lang) < 0) return;
+    if (SUPPORTED.indexOf(lang) < 0) return Promise.resolve();
     // R3 (Léa step 11): persist + sync the dropdown unconditionally so a
     // user who picks their already-active language still records the
     // choice in localStorage (matters when detection picked the wrong
@@ -948,7 +955,7 @@
       // applyI18n would be a no-op; still emit the event so listeners that
       // rely on it (e.g. the lobby join-btn tooltip) can re-sync defensively.
       dispatchLangChange(lang);
-      return;
+      return Promise.resolve();
     }
     if (typeof document !== "undefined" && document.documentElement) {
       document.documentElement.setAttribute("lang", lang);
@@ -957,20 +964,22 @@
       // Locale already in memory — swap synchronously, no flash.
       applyI18n();
       dispatchLangChange(lang);
-    } else {
-      // Locale not loaded yet. Deliberately DON'T re-apply now: doing so would
-      // briefly fall back to English (t() falls back per-key), a worse flash
-      // than simply leaving the previous language on screen until the real
-      // translation arrives. Fetch it, then apply once.
-      ensureLang(lang).then(() => {
-        // The user may have switched again before this resolved — only apply
-        // if this is still the active language.
-        if (_currentLang === lang) {
-          applyI18n();
-          dispatchLangChange(lang);
-        }
-      }).catch(() => { /* load failed — UI stays on the previous language */ });
+      return Promise.resolve();
     }
+    // Locale not loaded yet. Deliberately DON'T re-apply now: doing so would
+    // briefly fall back to English (t() falls back per-key), a worse flash
+    // than simply leaving the previous language on screen until the real
+    // translation arrives. Fetch it, then apply once. Never rejects — a load
+    // failure leaves the UI on the previous language (English copy is inline),
+    // which is acceptable, and keeps `await setLang(...)` from throwing.
+    return ensureLang(lang).then(() => {
+      // The user may have switched again before this resolved — only apply
+      // if this is still the active language.
+      if (_currentLang === lang) {
+        applyI18n();
+        dispatchLangChange(lang);
+      }
+    }).catch(() => { /* load failed — UI stays on the previous language */ });
   }
 
   // Map a named link to a language-specific URL. R3 deep-i18n: privacy.html

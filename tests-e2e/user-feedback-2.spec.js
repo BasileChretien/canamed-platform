@@ -249,7 +249,7 @@ test.describe("Bug 3 — language switcher re-renders dynamic case content", () 
   test("switching lang while in-room re-renders the finding-button labels",
     async ({ page }) => {
       await page.goto("/");
-      const result = await page.evaluate(() => {
+      const result = await page.evaluate(async () => {
         // Land in stage 1 with the case buttons rendered.
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
         const splash = document.getElementById("splash");
@@ -271,7 +271,10 @@ test.describe("Bug 3 — language switcher re-renders dynamic case content", () 
         // Switch to French. The Bug 3 fix wires a canamed:langchange
         // listener that re-calls buildButtons (which reads
         // `tc(item.q, _curLang())`), so the button text re-flows.
-        if (typeof window.setLang === "function") window.setLang("fr");
+        // #48: French is now a lazy-loaded locale chunk, so setLang() is
+        // async — await it so the fr table has loaded and the langchange
+        // re-render has run before we read the (recreated) button text.
+        if (typeof window.setLang === "function") await window.setLang("fr");
         // Re-fetch since buildButtons() recreates the DOM nodes.
         const afterFr = document.querySelector(
           '.req-btn[data-id="history:0"]');
