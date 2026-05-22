@@ -661,6 +661,7 @@
       // post-session debrief — facilitator dashboard panel
       "debrief.toggle": "Open debrief",
       "impact.button": "📊 Impact report",
+      "impact.accred": "📋 Accreditation evidence",
       "debrief.toggle-close": "Close debrief",
       "debrief.title": "Session debrief",
       "debrief.subtitle": "Aggregate stats across all rooms — useful for the wrap-up conversation.",
@@ -1295,6 +1296,7 @@
 
       "debrief.toggle": "Ouvrir le bilan",
       "impact.button": "📊 Rapport d'impact",
+      "impact.accred": "📋 Preuves de compétences",
       "debrief.toggle-close": "Fermer le bilan",
       "debrief.title": "Bilan de la séance",
       "debrief.subtitle": "Statistiques agrégées sur toutes les salles — utiles pour la discussion de débriefing.",
@@ -1911,6 +1913,7 @@
 
       "debrief.toggle": "振り返りを開く",
       "impact.button": "📊 インパクトレポート",
+      "impact.accred": "📋 コンピテンシー評価の証跡",
       "debrief.toggle-close": "振り返りを閉じる",
       "debrief.title": "セッション振り返り",
       "debrief.subtitle": "全ルーム横断の集計データ — 振り返り討論に役立ちます。",

@@ -113,6 +113,10 @@
   // (_annotateButtonWithGlossary) no-ops gracefully until window.CANAMED_GLOSSARY
   // exists and re-annotates on the next button render.
   function ensureGlossary()    { return loadScript(v("glossary.js")); }
+  // admin-tools.js — facilitator/decision-maker reports (accreditation
+  // evidence, research export, attestations, program rollup). Lazy: only an
+  // admin who opens the dashboard needs it, never the student splash.
+  function ensureAdminTools() { return loadScript(v("admin-tools.js")); }
 
   // Public namespace. Single object so the rest of script.js can do
   // `window.CanamedLoader.ensureX()` without polluting the global namespace
@@ -123,7 +127,8 @@
     ensureQrcode,
     ensureTour,
     ensureScenarioAuthor,
-    ensureGlossary
+    ensureGlossary,
+    ensureAdminTools
   };
 
   // After the splash is interactive, prefetch tour.js + case-content.js in

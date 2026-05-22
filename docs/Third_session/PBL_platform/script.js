@@ -3035,6 +3035,14 @@ function enterAdminApp() {
     impactBtn.dataset.wired = "1";
     impactBtn.addEventListener("click", generateImpactReport);
   }
+  // Admin-tools buttons (accreditation evidence, …) — the report code lives in
+  // the lazy admin-tools.js chunk; ensure it's loaded, then invoke. A brief
+  // toast covers the (usually sub-second) load.
+  const accredBtn = el("admin-accred-btn");
+  if (accredBtn && !accredBtn.dataset.wired) {
+    accredBtn.dataset.wired = "1";
+    accredBtn.addEventListener("click", () => runAdminTool("generateAccreditationReport"));
+  }
   const closeBtn = el("admin-close-btn");
   if (closeBtn && !closeBtn.dataset.wired) {
     closeBtn.dataset.wired = "1";
@@ -5395,6 +5403,26 @@ function renderClosedState(closed) {
       if (typeof leaveAndReload === "function") leaveAndReload();
       else { try { localStorage.removeItem("canamed_session"); } catch (e) {} location.reload(); }
     });
+  }
+}
+
+/* Lazy-load admin-tools.js (accreditation evidence, research export,
+   attestations, program rollup), then invoke one of its exported functions.
+   Keeps those heavy report generators off the splash critical path. */
+function runAdminTool(fnName) {
+  const call = () => {
+    const fn = (window.CanamedAdminTools && window.CanamedAdminTools[fnName]) || window[fnName];
+    if (typeof fn === "function") fn();
+    else if (typeof toast === "function") toast("Report tool unavailable.");
+  };
+  const loader = window.CanamedLoader;
+  if (loader && loader.ensureAdminTools) {
+    if (typeof toast === "function") toast("⏳ Preparing…");
+    loader.ensureAdminTools().then(call).catch(() => {
+      if (typeof toast === "function") toast("Could not load the report tools — check your connection.");
+    });
+  } else {
+    call();
   }
 }
 
