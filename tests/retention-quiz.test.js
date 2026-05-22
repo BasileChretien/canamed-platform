@@ -20,7 +20,7 @@ const DOCJS = fs.readFileSync(path.join(P, "docs-page.js"), "utf8");
 const INDEX = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const SW = fs.readFileSync(path.join(P, "sw.js"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 const COMPLIANCE = fs.readFileSync(path.join(P, "compliance.html"), "utf8");
 
 test("revisit.html is a CSP-compliant standalone page (external css + scripts)", () => {

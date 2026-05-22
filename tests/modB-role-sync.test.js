@@ -17,7 +17,7 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const RULES  = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8"));
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const INDEX  = fs.readFileSync(path.join(P, "index.html"), "utf8");
-const I18N   = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N   = require("./_i18n_source.js").readI18nSource();
 
 const sessRoom = RULES.rules.sessions["$sessionId"].rooms["$roomId"];
 const orgRoom  = RULES.rules.orgs["$orgSlug"].sessions["$sessionId"].rooms["$roomId"];

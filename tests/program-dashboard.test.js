@@ -17,7 +17,7 @@ const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const RULES = fs.readFileSync(path.join(P, "database.rules.json"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("closeSession persists a pseudonymous summary (local rollup + durable DB copy)", () => {
   assert.match(SCRIPT, /const PROGRAM_SESSIONS_KEY = "canamed_program_sessions"/, "rollup key must exist");

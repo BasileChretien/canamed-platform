@@ -18,7 +18,7 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX  = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const CSS    = fs.readFileSync(path.join(P, "style.css"), "utf8");
-const I18N   = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N   = require("./_i18n_source.js").readI18nSource();
 
 test("Module B is wrapped in a two-column layout with a sticky answers column", () => {
   // The columns wrap exists with the modB-columns class + col-left/col-right.

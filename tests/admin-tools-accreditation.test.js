@@ -22,7 +22,7 @@ const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const LOADER = fs.readFileSync(path.join(P, "script-loader.js"), "utf8");
 const PERF = fs.readFileSync(path.join(P, "..", "..", "..", "tests-e2e", "perf.spec.js"), "utf8");
 const SW = fs.readFileSync(path.join(P, "sw.js"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("admin-tools.js is syntactically valid (parses with new Function)", () => {
   // Strip nothing — the file is a classic script; it must at least parse.

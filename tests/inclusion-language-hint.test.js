@@ -15,7 +15,7 @@ const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX = fs.readFileSync(path.join(P, "index.html"), "utf8");
-const I18N  = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N  = require("./_i18n_source.js").readI18nSource();
 
 test("the language hint reassures students they're not marked on English (en/fr/ja)", () => {
   // en + fr + ja must all carry the no-language-penalty message.

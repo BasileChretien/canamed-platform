@@ -18,7 +18,7 @@ const path = require("node:path");
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
-const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("the admin dashboard exposes an Impact report button, wired to the generator", () => {
   assert.match(HTML, /id="admin-impact-btn"/, "the impact-report button must exist");
