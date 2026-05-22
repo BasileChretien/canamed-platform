@@ -1872,6 +1872,18 @@ footer {
 .stage-indicator { font-weight: 700; font-size: 1.05rem; }
 .stage-wait { color: var(--muted); font-size: 0.9rem; }
 .stage-controls { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; row-gap: 6px; }
+/* Self-service doc links (facilitator guide, compliance) in the admin chrome. */
+.admin-doc-link {
+  font-size: 0.85rem;
+  color: var(--primary);
+  text-decoration: none;
+  border: 1px solid var(--n-300, #c7d0d9);
+  border-radius: var(--r-md);
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+.admin-doc-link:hover { background: var(--n-50, #f3f6f9); text-decoration: underline; }
+.admin-doc-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .admin-controls { display: flex; gap: 6px; }
 
 .presence-line {
