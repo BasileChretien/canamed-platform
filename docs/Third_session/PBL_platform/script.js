@@ -3058,6 +3058,11 @@ function enterAdminApp() {
     programBtn.dataset.wired = "1";
     programBtn.addEventListener("click", () => runAdminTool("generateProgramDashboard"));
   }
+  const itemDiffBtn = el("admin-itemdiff-btn");
+  if (itemDiffBtn && !itemDiffBtn.dataset.wired) {
+    itemDiffBtn.dataset.wired = "1";
+    itemDiffBtn.addEventListener("click", () => runAdminTool("generateItemDifficulty"));
+  }
   const closeBtn = el("admin-close-btn");
   if (closeBtn && !closeBtn.dataset.wired) {
     closeBtn.dataset.wired = "1";
@@ -5458,7 +5463,13 @@ function _sessionSummaryObj() {
     normGain: (m.gain && m.gain.meanNormGain != null) ? m.gain.meanNormGain : null,
     prePct: (m.gain && m.gain.meanPrePct != null) ? m.gain.meanPrePct : null,
     postPct: (m.gain && m.gain.meanPostPct != null) ? m.gain.meanPostPct : null,
-    nPaired: (m.gain && m.gain.nPaired) ? m.gain.nPaired : 0
+    nPaired: (m.gain && m.gain.nPaired) ? m.gain.nPaired : 0,
+    // Per-decision correct-rate for this session (id → %), so the cross-session
+    // item-difficulty view can see which decisions consistently trip rooms up.
+    decAcc: (m.decAgg || []).reduce(function (acc, d) {
+      if (d.id && d.committedRooms > 0) acc[d.id] = Math.round((d.correctRooms / d.committedRooms) * 100);
+      return acc;
+    }, {})
   };
 }
 
@@ -5589,7 +5600,7 @@ function _impactMetrics() {
       if (opt && opt.correct) correctRooms++;
     });
     if (committedRooms > 0) {
-      decAgg.push({ prompt: tc(dec.prompt, _curLang()), module: dec.module || "",
+      decAgg.push({ id: dec.id, prompt: tc(dec.prompt, _curLang()), module: dec.module || "",
                     committedRooms: committedRooms, correctRooms: correctRooms });
       totalCommitted += committedRooms; totalCorrect += correctRooms;
     }

@@ -436,8 +436,79 @@ cards +
     if (typeof toast === "function") toast("📈 Program overview generated (" + list.length + " sessions).");
   }
 
+  /* ── Item difficulty (curriculum feedback) ─────────────────────────────── */
+  /* Which team decisions consistently trip rooms up — the curriculum-improvement
+     view. Aggregates per-decision correct-rate across the program rollup
+     (summary.decAcc, written on close) AND the current live session, keyed by
+     decision id, sorted hardest-first, with a reteach/watch flag. Tells the
+     facilitator what to redesign or reteach. Aggregate + pseudonymous. */
+  function itemDifficultyRows() {
+    const agg = {}; // decId -> { sum, n }
+    (programSessions() || []).forEach(function (s) {
+      const da = s.decAcc || {};
+      Object.keys(da).forEach(function (id) {
+        if (typeof da[id] !== "number") return;
+        if (!agg[id]) agg[id] = { sum: 0, n: 0 };
+        agg[id].sum += da[id]; agg[id].n++;
+      });
+    });
+    const promptById = {};
+    const live = (typeof window._impactMetrics === "function")
+      ? (window._impactMetrics().decAgg || []) : [];
+    live.forEach(function (d) {
+      if (!d.id) return;
+      promptById[d.id] = d.prompt;
+      if (d.committedRooms > 0) {
+        if (!agg[d.id]) agg[d.id] = { sum: 0, n: 0 };
+        agg[d.id].sum += Math.round((d.correctRooms / d.committedRooms) * 100);
+        agg[d.id].n++;
+      }
+    });
+    return Object.keys(agg).map(function (id) {
+      return { id: id, prompt: promptById[id] || id,
+               pct: Math.round(agg[id].sum / agg[id].n), n: agg[id].n };
+    }).sort(function (a, b) { return a.pct - b.pct; });
+  }
+  function generateItemDifficulty() {
+    const items = itemDifficultyRows();
+    const when = new Date();
+    const flag = function (p) {
+      return p < 60 ? "<span class='tag' style='background:#fde8e8;color:#9b1c1c'>reteach</span>"
+           : p < 80 ? "<span class='tag' style='background:#fef3cd;color:#8a5a00'>watch</span>"
+           : "<span class='tag' style='background:#e8f5ec;color:#1d6b3f'>solid</span>";
+    };
+    const rows = items.map(function (it) {
+      return "<tr><td>" + esc(it.prompt) + "</td><td class='num'>" + it.pct + "%</td>" +
+        "<td class='num'>" + it.n + "</td><td>" + flag(it.pct) + "</td></tr>";
+    }).join("");
+    const html =
+"<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
+"<meta name='viewport' content='width=device-width, initial-scale=1'>" +
+"<title>CANAMED — Item Difficulty</title><style>" + REPORT_CSS + "</style></head><body>" +
+"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<h1>CANAMED — Item Difficulty (curriculum feedback)</h1>" +
+"<p class='sub'>Decisions ranked hardest-first · across the live session + your closed-session rollup · " +
+esc(when.toLocaleString()) + "</p>" +
+(items.length
+  ? "<p class='note'>The lower the safest-answer rate, the more a decision is tripping teams up — a signal " +
+    "to reteach the underlying concept or revisit the item's wording/options. 'n' is how many sessions " +
+    "(live + rollup) contributed.</p>" +
+    "<table><thead><tr><th>Team decision</th><th class='num'>safest %</th><th class='num'>n</th>" +
+    "<th>status</th></tr></thead><tbody>" + rows + "</tbody></table>"
+  : "<p class='note'>No committed decisions yet — this view fills in from the live session and from each " +
+    "session you close. It then shows which decisions consistently trip rooms up, so you know what to reteach.</p>") +
+"<div class='foot'>Aggregate + pseudonymous. Per-decision correct-rate = share of rooms whose committed " +
+"team decision matched the clinically-safest option. Use this to target curriculum revision.</div>" +
+"</body></html>";
+    openReport(html, "item_difficulty");
+    if (typeof toast === "function") toast("🧭 Item-difficulty report generated.");
+  }
+
   // Expose on window for the admin button + future tools.
   window.CanamedAdminTools = window.CanamedAdminTools || {};
+  window.CanamedAdminTools.itemDifficultyRows = itemDifficultyRows;   // for tests
+  window.CanamedAdminTools.generateItemDifficulty = generateItemDifficulty;
+  window.generateItemDifficulty = generateItemDifficulty;
   window.CanamedAdminTools.programSessions = programSessions;  // for tests
   window.CanamedAdminTools.generateProgramDashboard = generateProgramDashboard;
   window.generateProgramDashboard = generateProgramDashboard;
