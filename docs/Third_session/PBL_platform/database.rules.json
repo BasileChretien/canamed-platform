@@ -79,6 +79,11 @@
           ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
           ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
         },
+        "summary": {
+          ".read": "auth != null",
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists()",
+          ".validate": "newData.val() == null || (newData.child('at').isNumber() && (!newData.hasChild('participants') || newData.child('participants').isNumber()) && (!newData.hasChild('rooms') || newData.child('rooms').isNumber()))"
+        },
         "roomCount": {
           ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('started').val() != true",
           ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 20"
@@ -359,6 +364,11 @@
               ".read": "auth != null",
               ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
               ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+            },
+            "summary": {
+              ".read": "auth != null",
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()",
+              ".validate": "newData.val() == null || (newData.child('at').isNumber() && (!newData.hasChild('participants') || newData.child('participants').isNumber()) && (!newData.hasChild('rooms') || newData.child('rooms').isNumber()))"
             },
             "roomCount": {
               ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('started').val() != true",
