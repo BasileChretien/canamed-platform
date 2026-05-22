@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CANAMED — Compliance & Accessibility Statement</title>
+  <meta name="description" content="CANAMED platform: accessibility (WCAG/RGAA), data protection (GDPR/APPI), security and hosting statement.">
+  <style>
+    *{box-sizing:border-box}
+    body{font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d2733;max-width:820px;margin:0 auto;padding:36px 22px;background:#fff}
+    h1{font-size:1.7rem;margin:0 0 2px;color:#16335c}
+    h2{font-size:1.2rem;margin:28px 0 8px;border-bottom:2px solid #2563eb;padding-bottom:4px;color:#16335c}
+    .sub{color:#5b6b7b;margin:0 0 18px}
+    ul{margin:6px 0 6px 0;padding-left:1.3em}li{margin:3px 0}
+    .badge{display:inline-block;font-size:.8rem;font-weight:600;background:#e8f5ec;color:#1d6b3f;border:1px solid #b6e0c5;border-radius:6px;padding:2px 9px;margin:2px 4px 2px 0}
+    .note{font-size:.9rem;color:#5b6b7b;background:#f7f9fb;border-left:3px solid #2563eb;padding:11px 13px;border-radius:6px;margin:12px 0}
+    a{color:#2563eb}
+    .foot{margin-top:30px;font-size:.85rem;color:#7a8694;border-top:1px solid #e8edf2;padding-top:12px}
+    @media print{body{padding:0}}
+  </style>
+</head>
+<body>
+  <h1>CANAMED — Compliance &amp; Accessibility Statement</h1>
+  <p class="sub">Franco-Japanese clinical-communication training platform · Université de Caen Normandie × Nagoya University</p>
+
+  <p>
+    <span class="badge">WCAG 2.1 AA target</span>
+    <span class="badge">GDPR (EU)</span>
+    <span class="badge">APPI (Japan)</span>
+    <span class="badge">No third-party trackers</span>
+    <span class="badge">Owned source code</span>
+  </p>
+
+  <h2>Accessibility</h2>
+  <ul>
+    <li><strong>Target standard:</strong> WCAG 2.1 level AA (aligned with the French RGAA criteria).</li>
+    <li><strong>Automated testing in CI:</strong> every change is scanned with axe-core (via <code>@axe-core/playwright</code>); the build fails on any <em>serious</em> or <em>critical</em> WCAG 2.1 AA violation on the splash, lobby, waiting room and privacy pages.</li>
+    <li><strong>Per-device testing:</strong> the interface is tested on desktop (Chromium, Firefox, WebKit) and on iPhone / iPad / Android viewport emulation for every UI change.</li>
+    <li><strong>Built-in accommodations:</strong> adjustable font size, light / dark / high-contrast themes, reduced-motion support, keyboard-operable controls (WAI-ARIA radio/listbox patterns), screen-reader labelling, and a 24×24 px minimum touch-target size.</li>
+    <li><strong>Inclusion by design:</strong> a fully trilingual interface (English / French / Japanese, with five further locales), explicit "you are assessed on your reasoning, not your English" guidance, and a one-tap "I'd rather observe" option in the roleplay.</li>
+    <li><strong>Known limitations &amp; feedback:</strong> long-tail moderate/minor findings are tracked in the project's accessibility audit. To report a barrier, contact the maintainer (see the privacy notice).</li>
+  </ul>
+
+  <h2>Data protection (GDPR &amp; APPI)</h2>
+  <ul>
+    <li><strong>Lawful basis &amp; consent:</strong> participation and (separately) research use are opt-in, recorded with explicit, versioned consent before any data is collected.</li>
+    <li><strong>Data minimisation:</strong> the platform collects only what the workshop needs — a chosen display name, university, year, English level, and the answers/decisions made during the session. No special-category health data about the participant is collected.</li>
+    <li><strong>Pseudonymisation:</strong> exports and all reporting (impact report, accreditation evidence, research export, program overview) are aggregate and pseudonymous by default — no individual is named. A facilitator pseudonymisation toggle is available for the raw answer export.</li>
+    <li><strong>Authentication:</strong> students join via anonymous authentication — no account, email or password is required of participants.</li>
+    <li><strong>Retention &amp; rights:</strong> session data is retained per the documented retention policy and can be exported (right of access) or deleted on request. See the <a href="privacy.html">privacy notice</a> for the full statement, contacts and your rights under GDPR / APPI.</li>
+    <li><strong>Residency:</strong> data is stored on Google Firebase. Sessions can be run in either institution's project.</li>
+  </ul>
+
+  <h2>Security</h2>
+  <ul>
+    <li><strong>Content Security Policy</strong> (<code>script-src 'self'</code>) with all dependencies vendored locally — no third-party script origins.</li>
+    <li><strong>Output sanitisation:</strong> all rich-text rendered from translation tables is sanitised with a locally-vendored DOMPurify.</li>
+    <li><strong>Server-side authorization:</strong> Firebase Realtime Database security rules enforce write-once bindings, owner-keyed writes, and admin-gated session controls; abuse protection via Firebase App Check (reCAPTCHA).</li>
+    <li><strong>No third-party analytics or advertising trackers.</strong></li>
+    <li><strong>Continuous verification:</strong> the security rules are exercised against the Firebase emulator in CI on every change.</li>
+  </ul>
+
+  <h2>Sustainability &amp; ownership</h2>
+  <ul>
+    <li><strong>Cost:</strong> runs on Firebase's free (Spark) tier for typical workshop sizes — no licensing fees.</li>
+    <li><strong>No vendor lock-in:</strong> the institution owns the source code; the platform is a static site plus a database with open security rules.</li>
+    <li><strong>Offline-tolerant:</strong> a service worker pre-caches the application shell for resilience on conference-grade Wi-Fi.</li>
+  </ul>
+
+  <div class="note">This statement is provided to support institutional governance, data-protection (DPO) review and
+  accreditation (HCERES / JACME). It is generated from the platform's actual configuration and test suite; the
+  maintainer can supply the underlying audit artefacts on request.</div>
+
+  <p><a href="index.html">← Back to the platform</a> · <a href="privacy.html">Privacy notice</a> · <a href="facilitator-guide.html">Facilitator guide</a></p>
+
+  <div class="foot">CANAMED platform · compliance &amp; accessibility statement. Last reviewed alongside the live build.</div>
+</body>
+</html>

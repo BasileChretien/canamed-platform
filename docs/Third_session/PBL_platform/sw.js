@@ -54,6 +54,8 @@ const SHELL_ASSETS = [
   "/case-content.js",
   "/glossary.js",
   "/admin-tools.js",
+  "/facilitator-guide.html",
+  "/compliance.html",
   "/platform-config.js",
   "/firebase-config.js",
   "/manifest.webmanifest"
