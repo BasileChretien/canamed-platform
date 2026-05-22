@@ -660,6 +660,7 @@
 
       // post-session debrief — facilitator dashboard panel
       "debrief.toggle": "Open debrief",
+      "impact.button": "📊 Impact report",
       "debrief.toggle-close": "Close debrief",
       "debrief.title": "Session debrief",
       "debrief.subtitle": "Aggregate stats across all rooms — useful for the wrap-up conversation.",
@@ -1293,6 +1294,7 @@
       "offline.banner": "Vous êtes hors ligne. Tentative de reconnexion…",
 
       "debrief.toggle": "Ouvrir le bilan",
+      "impact.button": "📊 Rapport d'impact",
       "debrief.toggle-close": "Fermer le bilan",
       "debrief.title": "Bilan de la séance",
       "debrief.subtitle": "Statistiques agrégées sur toutes les salles — utiles pour la discussion de débriefing.",
@@ -1908,6 +1910,7 @@
       "offline.banner": "オフラインです。再接続を試みています…",
 
       "debrief.toggle": "振り返りを開く",
+      "impact.button": "📊 インパクトレポート",
       "debrief.toggle-close": "振り返りを閉じる",
       "debrief.title": "セッション振り返り",
       "debrief.subtitle": "全ルーム横断の集計データ — 振り返り討論に役立ちます。",
