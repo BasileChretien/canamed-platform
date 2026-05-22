@@ -52,6 +52,7 @@ const SHELL_ASSETS = [
   "/localdb.js",
   "/script.js",
   "/case-content.js",
+  "/glossary.js",
   "/platform-config.js",
   "/firebase-config.js",
   "/manifest.webmanifest"

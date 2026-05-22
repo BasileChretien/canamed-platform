@@ -135,6 +135,19 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     progressive-disclosure markup + a11y settings-focus JS (~2 KB gz).
 //     The "lazy-load i18n locales" refactor remains the right next move
 //     before the budget grows further.
+//
+//   2026-05-22: Round-5 feature batch (chained branching, swap-and-replay
+//     roleplay, the "I'd rather observe" + agree-stance student affordances,
+//     the facilitator session-pacing roll-up) added ~2 KB gz across
+//     script.js / i18n.js / style.css and pushed the critical bundle to
+//     314 KB — over budget. Rather than BUMP, we SPLIT (per this file's
+//     standing policy): glossary.js (~4.5 KB gz, only used in Module A/B,
+//     never on the splash) moved from the eager bundle to a lazy chunk
+//     (script-loader.js idle prefetch + guaranteed before participant
+//     Module A via the join chunk-load). That brings the critical bundle
+//     back to ~310 KB, under the unchanged 312 budget — a net splash
+//     speedup. The "lazy-load i18n locales" refactor is still the next
+//     move when this budget is next threatened.
 const FIRST_PARTY_BYTES_LIMIT_KB = 312;
 
 test.describe("Perf budget — splash", () => {
@@ -224,6 +237,7 @@ test.describe("Perf budget — splash", () => {
     // visible, just not budget-failing.
     const LAZY_CHUNKS = new Set([
       "case-content.js",
+      "glossary.js",
       "qrcode.js",
       "tour.js",
       "scenario-author.js",
