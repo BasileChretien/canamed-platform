@@ -3043,6 +3043,16 @@ function enterAdminApp() {
     accredBtn.dataset.wired = "1";
     accredBtn.addEventListener("click", () => runAdminTool("generateAccreditationReport"));
   }
+  const researchBtn = el("admin-research-btn");
+  if (researchBtn && !researchBtn.dataset.wired) {
+    researchBtn.dataset.wired = "1";
+    researchBtn.addEventListener("click", () => runAdminTool("generateResearchExport"));
+  }
+  const attestBtn = el("admin-attest-btn");
+  if (attestBtn && !attestBtn.dataset.wired) {
+    attestBtn.dataset.wired = "1";
+    attestBtn.addEventListener("click", () => runAdminTool("generateAttestations"));
+  }
   const closeBtn = el("admin-close-btn");
   if (closeBtn && !closeBtn.dataset.wired) {
     closeBtn.dataset.wired = "1";
