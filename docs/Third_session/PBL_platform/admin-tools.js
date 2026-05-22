@@ -504,8 +504,98 @@ esc(when.toLocaleString()) + "</p>" +
     if (typeof toast === "function") toast("🧭 Item-difficulty report generated.");
   }
 
+  /* ── Cohort comparison (Caen × Nagoya quasi-experiment) ────────────────── */
+  /* Splits the live session by university — the same intervention across two
+     cohorts is a built-in natural experiment. Per cohort: contributors, mean
+     contributions, and paired pre→post knowledge gain. University is taken from
+     each participant's own answer entries (the reliable client-side source);
+     participants with no answer fall into "unknown". Aggregate + pseudonymous. */
+  function cohortRows() {
+    const rooms = activeRooms();
+    const preMax = Array.isArray(window.PRETEST) ? window.PRETEST.length : 0;
+    const postMax = Array.isArray(window.POSTTEST) ? window.POSTTEST.length : 0;
+    const byUni = {};
+    rooms.forEach(function (r) {
+      const d = allRooms[r] || {};
+      const ans = d.answers || {};
+      const uniByCid = {}, ansByCid = {};
+      ["moduleA", "moduleB"].forEach(function (mk) {
+        const m = ans[mk] || {};
+        Object.keys(m).forEach(function (k) {
+          const e = m[k]; const cid = e && e.cid;
+          if (!cid) return;
+          ansByCid[cid] = (ansByCid[cid] || 0) + 1;
+          if (e.university && !uniByCid[cid]) uniByCid[cid] = e.university;
+        });
+      });
+      const tests = d.tests || {};
+      Object.keys(ansByCid).forEach(function (cid) {
+        const uni = uniByCid[cid] || "unknown";
+        const b = byUni[uni] = byUni[uni] ||
+          { n: 0, answers: 0, prePctSum: 0, postPctSum: 0, gainSum: 0, nGain: 0, nPaired: 0 };
+        b.n++; b.answers += ansByCid[cid] || 0;
+        const t = tests[cid] || {};
+        const pre = t.pre, post = t.post;
+        if (pre && !pre.skipped && typeof pre.score === "number" &&
+            post && !post.skipped && typeof post.score === "number" && preMax && postMax) {
+          const prePct = (pre.score / preMax) * 100, postPct = (post.score / postMax) * 100;
+          b.prePctSum += prePct; b.postPctSum += postPct; b.nPaired++;
+          if (prePct < 100) { b.gainSum += (postPct - prePct) / (100 - prePct); b.nGain++; }
+        }
+      });
+    });
+    return Object.keys(byUni).map(function (uni) {
+      const b = byUni[uni];
+      return {
+        uni: uni, n: b.n,
+        meanAnswers: b.n ? Math.round((b.answers / b.n) * 10) / 10 : 0,
+        prePct: b.nPaired ? Math.round(b.prePctSum / b.nPaired) : null,
+        postPct: b.nPaired ? Math.round(b.postPctSum / b.nPaired) : null,
+        gain: b.nGain ? Math.round((b.gainSum / b.nGain) * 100) / 100 : null,
+        nPaired: b.nPaired
+      };
+    }).sort(function (a, b) { return b.n - a.n; });
+  }
+  function generateCohortComparison() {
+    const cohorts = cohortRows();
+    const when = new Date();
+    const rows = cohorts.map(function (c) {
+      return "<tr><td><strong>" + esc(c.uni) + "</strong></td>" +
+        "<td class='num'>" + c.n + "</td>" +
+        "<td class='num'>" + c.meanAnswers + "</td>" +
+        "<td class='num'>" + (c.prePct == null ? "—" : c.prePct + "%") + "</td>" +
+        "<td class='num'>" + (c.postPct == null ? "—" : c.postPct + "%") + "</td>" +
+        "<td class='num'>" + (c.gain == null ? "—" : "+" + c.gain.toFixed(2)) +
+        " <span class='tag'>n=" + c.nPaired + "</span></td></tr>";
+    }).join("");
+    const html =
+"<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
+"<meta name='viewport' content='width=device-width, initial-scale=1'>" +
+"<title>CANAMED — Cohort Comparison</title><style>" + REPORT_CSS + "</style></head><body>" +
+"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<h1>CANAMED — Cohort Comparison</h1>" +
+"<p class='sub'>By university · the same intervention across cohorts (a built-in natural experiment) · " +
+esc(when.toLocaleString()) + "</p>" +
+(cohorts.length
+  ? "<table><thead><tr><th>Cohort</th><th class='num'>participants</th>" +
+    "<th class='num'>mean contributions</th><th class='num'>pre %</th><th class='num'>post %</th>" +
+    "<th class='num'>gain g</th></tr></thead><tbody>" + rows + "</tbody></table>" +
+    "<p class='note'>This Caen × Nagoya split is your strongest research asset: two cohorts, one " +
+    "intervention. Treat the gains as comparable in magnitude (the tests may differ in content), and read " +
+    "the per-cohort paired N before interpreting. University is taken from each participant's contributions.</p>"
+  : "<p class='note'>No cohort data yet — this fills in as participants contribute and complete the tests.</p>") +
+"<div class='foot'>Aggregate + pseudonymous, computed client-side from the live session. Participants whose " +
+"university could not be determined from their contributions appear under 'unknown'.</div>" +
+"</body></html>";
+    openReport(html, "cohort_comparison");
+    if (typeof toast === "function") toast("🌍 Cohort comparison generated.");
+  }
+
   // Expose on window for the admin button + future tools.
   window.CanamedAdminTools = window.CanamedAdminTools || {};
+  window.CanamedAdminTools.cohortRows = cohortRows;                   // for tests
+  window.CanamedAdminTools.generateCohortComparison = generateCohortComparison;
+  window.generateCohortComparison = generateCohortComparison;
   window.CanamedAdminTools.itemDifficultyRows = itemDifficultyRows;   // for tests
   window.CanamedAdminTools.generateItemDifficulty = generateItemDifficulty;
   window.generateItemDifficulty = generateItemDifficulty;

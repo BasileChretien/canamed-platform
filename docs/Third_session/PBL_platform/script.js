@@ -3063,6 +3063,11 @@ function enterAdminApp() {
     itemDiffBtn.dataset.wired = "1";
     itemDiffBtn.addEventListener("click", () => runAdminTool("generateItemDifficulty"));
   }
+  const cohortBtn = el("admin-cohort-btn");
+  if (cohortBtn && !cohortBtn.dataset.wired) {
+    cohortBtn.dataset.wired = "1";
+    cohortBtn.addEventListener("click", () => runAdminTool("generateCohortComparison"));
+  }
   const closeBtn = el("admin-close-btn");
   if (closeBtn && !closeBtn.dataset.wired) {
     closeBtn.dataset.wired = "1";
