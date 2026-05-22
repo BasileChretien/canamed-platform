@@ -3053,6 +3053,11 @@ function enterAdminApp() {
     attestBtn.dataset.wired = "1";
     attestBtn.addEventListener("click", () => runAdminTool("generateAttestations"));
   }
+  const programBtn = el("admin-program-btn");
+  if (programBtn && !programBtn.dataset.wired) {
+    programBtn.dataset.wired = "1";
+    programBtn.addEventListener("click", () => runAdminTool("generateProgramDashboard"));
+  }
   const closeBtn = el("admin-close-btn");
   if (closeBtn && !closeBtn.dataset.wired) {
     closeBtn.dataset.wired = "1";
@@ -4950,6 +4955,14 @@ function closeSession() {
     })
     .then(result => {
       if (result !== "written") return;
+      // Persist a pseudonymous program summary: a durable DB copy (rules-guarded
+      // /summary) AND a local rollup entry kept across close, so the Program
+      // overview can aggregate this session later. Best-effort — never blocks.
+      try {
+        const summary = _sessionSummaryObj();
+        recordProgramSession(summary);
+        if (db) db.ref(sPath("summary")).set(summary).catch(() => { /* rules/offline */ });
+      } catch (e) { /* non-fatal */ }
       // write succeeded - update the button + drop this session from the
       // local "my open sessions" tracker (the reaper list won't show it
       // anymore on next splash visit).
@@ -5414,6 +5427,35 @@ function renderClosedState(closed) {
       else { try { localStorage.removeItem("canamed_session"); } catch (e) {} location.reload(); }
     });
   }
+}
+
+/* Program-session rollup: a durable LOCAL record of each session the
+   facilitator closes (kept across close, unlike the open-session reaper list),
+   so the cross-session Program overview aggregates with no DB round-trips.
+   Pseudonymous aggregate numbers only — never names or answers. */
+const PROGRAM_SESSIONS_KEY = "canamed_program_sessions";
+function recordProgramSession(summary) {
+  if (!summary || !summary.code) return;
+  try {
+    let list = JSON.parse(localStorage.getItem(PROGRAM_SESSIONS_KEY)) || [];
+    if (!Array.isArray(list)) list = [];
+    const i = list.findIndex(s => s && s.code === summary.code);
+    if (i >= 0) list[i] = summary; else list.push(summary);
+    localStorage.setItem(PROGRAM_SESSIONS_KEY, JSON.stringify(list.slice(-300)));
+  } catch (e) { /* storage blocked — non-fatal */ }
+}
+function _sessionSummaryObj() {
+  const m = (typeof _impactMetrics === "function") ? _impactMetrics() : {};
+  return {
+    code: (typeof sessionNum !== "undefined" && sessionNum) ? sessionNum : "",
+    at: Date.now(),
+    participants: m.present || 0,
+    rooms: m.roomCount || 0,
+    contribPct: (m.contribPct != null) ? m.contribPct : null,
+    meanGini: (m.meanGini != null) ? Math.round(m.meanGini * 100) / 100 : null,
+    decisionAccuracyPct: (m.decisionAccuracyPct != null) ? m.decisionAccuracyPct : null,
+    answers: m.answers || 0
+  };
 }
 
 /* Lazy-load admin-tools.js (accreditation evidence, research export,

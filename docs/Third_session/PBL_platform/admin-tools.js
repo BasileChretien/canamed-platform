@@ -331,8 +331,82 @@ cards +
     if (typeof toast === "function") toast("🎓 Attestations generated (" + rows.length + ").");
   }
 
+  /* ── Program overview (cross-session) ──────────────────────────────────── */
+  /* Reads the durable LOCAL program-session rollup (written by closeSession in
+     script.js, kept across close) and aggregates it into a program-level
+     report — cumulative students trained, sessions run, and the satisfaction-
+     proxy / equity / decision-quality trend. This is the "is the whole PROGRAM
+     working?" view a décideur wants, above the per-session impact report.
+     Aggregate + pseudonymous; data never leaves the device. */
+  function programSessions() {
+    try {
+      const list = JSON.parse(localStorage.getItem("canamed_program_sessions"));
+      return Array.isArray(list) ? list : [];
+    } catch (e) { return []; }
+  }
+  function generateProgramDashboard() {
+    const list = programSessions().slice().sort(function (a, b) { return (a.at || 0) - (b.at || 0); });
+    const meanOf = function (vals) {
+      const v = vals.filter(function (x) { return x != null; });
+      return v.length ? (v.reduce(function (s, x) { return s + x; }, 0) / v.length) : null;
+    };
+    const totalParticipants = list.reduce(function (s, x) { return s + (x.participants || 0); }, 0);
+    const meanContrib = meanOf(list.map(function (x) { return x.contribPct; }));
+    const meanAcc = meanOf(list.map(function (x) { return x.decisionAccuracyPct; }));
+    const meanGini = meanOf(list.map(function (x) { return x.meanGini; }));
+    const when = new Date();
+    const pct = function (v) { return v == null ? "—" : Math.round(v) + "%"; };
+
+    const rows = list.map(function (s) {
+      const d = s.at ? new Date(s.at).toLocaleDateString() : "—";
+      return "<tr><td>" + esc(d) + "</td><td>" + esc(s.code || "—") + "</td>" +
+        "<td class='num'>" + (s.participants || 0) + "</td>" +
+        "<td class='num'>" + (s.contribPct != null ? s.contribPct + "%" : "—") + "</td>" +
+        "<td class='num'>" + (s.decisionAccuracyPct != null ? s.decisionAccuracyPct + "%" : "—") + "</td>" +
+        "<td class='num'>" + (s.meanGini != null ? Number(s.meanGini).toFixed(2) : "—") + "</td></tr>";
+    }).join("");
+
+    const empty = list.length === 0;
+    const html =
+"<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
+"<meta name='viewport' content='width=device-width, initial-scale=1'>" +
+"<title>CANAMED — Program Overview</title><style>" + REPORT_CSS +
+".kpis{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}" +
+".kpi{flex:1 1 150px;border:1px solid #e1e7ed;border-radius:10px;padding:12px 14px;background:#f7f9fb}" +
+".kpi .v{font-size:1.7rem;font-weight:700;color:#16335c}.kpi .l{font-size:.8rem;color:#5b6b7b}" +
+"</style></head><body>" +
+"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<h1>CANAMED — Program Overview</h1>" +
+"<p class='sub'>Across all closed sessions on this device · generated " + esc(when.toLocaleString()) + "</p>" +
+(empty
+  ? "<p class='note'>No closed sessions are recorded on this device yet. This overview fills in " +
+    "automatically each time you run and close a session — then it shows the whole programme's " +
+    "reach and trend at a glance (cumulative students, satisfaction-proxy, equity, decision quality).</p>"
+  : "<div class='kpis'>" +
+    "<div class='kpi'><div class='v'>" + list.length + "</div><div class='l'>sessions run</div></div>" +
+    "<div class='kpi'><div class='v'>" + totalParticipants + "</div><div class='l'>students trained (cumulative)</div></div>" +
+    "<div class='kpi'><div class='v'>" + pct(meanContrib) + "</div><div class='l'>mean contributing</div></div>" +
+    "<div class='kpi'><div class='v'>" + pct(meanAcc) + "</div><div class='l'>mean decision accuracy</div></div>" +
+    "<div class='kpi'><div class='v'>" + (meanGini == null ? "—" : meanGini.toFixed(2)) +
+      "</div><div class='l'>mean equity (Gini)</div></div>" +
+    "</div>" +
+    "<h2>Sessions</h2><table><thead><tr><th>Date</th><th>Session</th><th class='num'>students</th>" +
+    "<th class='num'>contributing</th><th class='num'>decision acc.</th><th class='num'>equity</th>" +
+    "</tr></thead><tbody>" + rows + "</tbody></table>") +
+"<div class='foot'>Aggregate + pseudonymous, compiled from a local per-session rollup written when each " +
+"session is closed (no names, no answers; data never leaves this device). A durable copy of each session " +
+"summary is also stored under the session's <code>/summary</code> node for cross-device reporting. Use " +
+"this as program-level evidence of reach and trend for leadership / accreditation.</div>" +
+"</body></html>";
+    openReport(html, "program_overview");
+    if (typeof toast === "function") toast("📈 Program overview generated (" + list.length + " sessions).");
+  }
+
   // Expose on window for the admin button + future tools.
   window.CanamedAdminTools = window.CanamedAdminTools || {};
+  window.CanamedAdminTools.programSessions = programSessions;  // for tests
+  window.CanamedAdminTools.generateProgramDashboard = generateProgramDashboard;
+  window.generateProgramDashboard = generateProgramDashboard;
   window.CanamedAdminTools.generateAccreditationReport = generateAccreditationReport;
   window.CanamedAdminTools.competencyRows = competencyRows;     // for tests
   window.CanamedAdminTools.participantRows = participantRows;   // for tests
