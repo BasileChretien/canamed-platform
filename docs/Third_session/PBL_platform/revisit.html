@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CANAMED — Retention Check</title>
+  <meta name="description" content="A few-days-later retention self-check for your CANAMED clinical-communication session.">
+  <link rel="stylesheet" href="docs-page.css">
+</head>
+<body>
+  <h1>CANAMED — Retention Check</h1>
+  <p class="sub" id="revisit-scenario">Loading your quiz…</p>
+  <p class="note">A short self-check a few days after your workshop — <strong>spacing</strong> is what makes
+    learning stick, so coming back to this is part of the method, not a test you can fail. Your answers are
+    scored on this device and stay here.</p>
+  <div id="revisit-app"></div>
+  <p><a href="index.html">← Back to the platform</a></p>
+  <div class="foot">CANAMED retention check · scored on your device · no data leaves your browser.</div>
+  <!-- case-content.js populates window.CANAMED_SCENARIOS; revisit.js reads the
+       scenario's post-test and runs the self-check. Both deferred (order
+       preserved), external (CSP: script-src 'self', no inline). -->
+  <script src="case-content.js?v=v3" defer></script>
+  <script src="revisit.js?v=v3" defer></script>
+</body>
+</html>

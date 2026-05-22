@@ -33,7 +33,13 @@ test("compliance.html is a complete page covering accessibility, data protection
 
 test("facilitator-guide.html is a printable 5-step quick-start", () => {
   assert.match(GUIDE, /<!doctype html>/i, "must be a full HTML document");
-  assert.match(GUIDE, /window\.print\(\)/, "must offer Print / Save as PDF");
+  // CSP-compliant: external stylesheet + a data-print button wired by docs-page.js
+  // (no inline <style> / onclick — production CSP is style-src/script-src 'self').
+  assert.match(GUIDE, /<link rel="stylesheet" href="docs-page\.css">/, "must use the external stylesheet");
+  assert.match(GUIDE, /data-print/, "must offer a (CSP-safe) Print button");
+  assert.doesNotMatch(GUIDE, /<style>/, "must not use an inline <style> block (blocked by prod CSP)");
+  assert.doesNotMatch(GUIDE, /onclick=/, "must not use inline onclick (blocked by prod CSP)");
+  assert.match(GUIDE, /src="docs-page\.js"/, "must load the print-wiring script");
   const steps = (GUIDE.match(/<li>/g) || []).length;
   assert.ok(steps >= 5, "must have a multi-step structure (got " + steps + " <li>)");
   // Mentions the core flow + the reports it produces.

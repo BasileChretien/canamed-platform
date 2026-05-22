@@ -5,26 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CANAMED — Facilitator Quick-Start</title>
   <meta name="description" content="Run a CANAMED clinical-communication session in 5 steps — create, brief, run the modules, watch the dashboard, close + report.">
-  <style>
-    *{box-sizing:border-box}
-    body{font:16px/1.6 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d2733;max-width:820px;margin:0 auto;padding:36px 22px;background:#fff}
-    h1{font-size:1.7rem;margin:0 0 2px;color:#16335c}
-    h2{font-size:1.2rem;margin:26px 0 8px;border-bottom:2px solid #2563eb;padding-bottom:4px;color:#16335c}
-    .sub{color:#5b6b7b;margin:0 0 14px}
-    ol.steps{counter-reset:s;list-style:none;padding:0;margin:14px 0}
-    ol.steps>li{position:relative;padding:12px 14px 12px 52px;margin:0 0 10px;border:1px solid #e1e7ed;border-radius:10px;background:#f7f9fb}
-    ol.steps>li::before{counter-increment:s;content:counter(s);position:absolute;left:12px;top:12px;width:28px;height:28px;border-radius:50%;background:#2563eb;color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center}
-    .step-h{font-weight:700;color:#16335c}
-    ul{margin:6px 0;padding-left:1.2em}li{margin:2px 0}
-    .tip{font-size:.92rem;background:#eef6ef;border-left:3px solid #2e7d4f;padding:9px 12px;border-radius:6px;margin:10px 0}
-    .pbtn{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:.95rem;cursor:pointer}
-    a{color:#2563eb}
-    .foot{margin-top:28px;font-size:.85rem;color:#7a8694;border-top:1px solid #e8edf2;padding-top:12px}
-    @media print{.noprint{display:none}body{padding:0}}
-  </style>
+  <!-- External stylesheet (production CSP is style-src 'self' — no inline). -->
+  <link rel="stylesheet" href="docs-page.css">
 </head>
 <body>
-  <button class="pbtn noprint" onclick="window.print()">🖨 Print / Save as PDF</button>
+  <button class="pbtn noprint" type="button" data-print>🖨 Print / Save as PDF</button>
   <h1>CANAMED — Facilitator Quick-Start</h1>
   <p class="sub">Run a clinical-communication session end-to-end. No technical setup — it works in any modern browser.</p>
 
@@ -87,5 +72,7 @@
 
   <p><a href="index.html">← Back to the platform</a> · <a href="compliance.html">Compliance &amp; accessibility</a> · <a href="privacy.html">Privacy notice</a></p>
   <div class="foot">CANAMED platform · facilitator quick-start. Print this and keep it by the lectern.</div>
+  <!-- wires [data-print] → window.print() without inline JS (CSP: script-src 'self'). -->
+  <script src="docs-page.js" defer></script>
 </body>
 </html>
