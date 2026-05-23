@@ -652,3 +652,79 @@ for (const mod of ["moduleA", "moduleB"]) {
     assert.ok(v.includes("'by'") && v.includes("'at'"), "org edit snapshot must carry {by, at}: " + v);
   });
 }
+
+// =============================================================
+// FINDING-01 (ballots) — stableId ownership guard
+// SIMULATION_EDGE_CASES.md / CLAUDE.md "Known security follow-ups"
+// =============================================================
+//
+// Ballots are keyed by stableId (script.js castVote/ballotKey), not the
+// per-tab clientId, so the original clientMapping ownership guard never
+// covered them — any authenticated participant could overwrite a peer's
+// ballot to swing a team tally. The fix adds a parallel stableIdMapping
+// (stableId -> auth.uid, write-once) and gates ballot writes on ownership
+// via *either* mapping (stableId for normal writes, clientId for the
+// legacy-cleanup remove path in castVote). A tolerant "unclaimed" branch
+// preserves first-write so a brand-new participant's first ballot lands
+// even before the binding round-trips.
+
+const ORG_SESSION = rules.rules.orgs.$orgSlug.sessions.$sessionId;
+const ORG_ROOM = ORG_SESSION.rooms.$roomId;
+
+test("rules: stableIdMapping/$stableId is write-once and bound to auth.uid", () => {
+  const node = SESSION.stableIdMapping && SESSION.stableIdMapping.$stableId;
+  assert.ok(node, "/sessions/$sessionId/stableIdMapping/$stableId must be declared");
+  assert.ok(node[".write"].includes("auth != null"),
+    "stableIdMapping write must require auth: " + node[".write"]);
+  assert.ok(node[".write"].includes("!data.exists()"),
+    "stableIdMapping must be write-once so a peer can't re-bind a claimed id: " + node[".write"]);
+  assert.ok(node[".write"].includes("'closed'"),
+    "stableIdMapping write must be refused once the session is closed: " + node[".write"]);
+  assert.ok(node[".validate"].includes("newData.val() == auth.uid"),
+    "stableIdMapping value must equal the writer's auth.uid: " + node[".validate"]);
+  // read is membership-gated, same as clientMapping
+  assert.ok(node[".read"].includes("members") && node[".read"].includes("hasChild(auth.uid)"),
+    "stableIdMapping read must be membership-gated: " + node[".read"]);
+});
+
+test("rules: /orgs stableIdMapping mirrors the session-level rule (org-scoped)", () => {
+  const node = ORG_SESSION.stableIdMapping && ORG_SESSION.stableIdMapping.$stableId;
+  assert.ok(node, "/orgs/$orgSlug/sessions/$sessionId/stableIdMapping/$stableId must be declared");
+  assert.ok(node[".write"].includes("!data.exists()"),
+    "org stableIdMapping must be write-once: " + node[".write"]);
+  assert.ok(node[".write"].includes("root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed')"),
+    "org stableIdMapping closed-guard must reference the org-scoped session: " + node[".write"]);
+  assert.ok(node[".validate"].includes("newData.val() == auth.uid"),
+    "org stableIdMapping value must equal the writer's auth.uid: " + node[".validate"]);
+});
+
+test("rules: votes/ballots/$clientId write is ownership-guarded (no more ballot stuffing)", () => {
+  const w = ROOM.votes.$voteId.ballots.$clientId[".write"];
+  assert.ok(w.includes("auth != null"), "ballot write must require auth: " + w);
+  assert.ok(w.includes("'closed'"), "ballot write must keep the closed-session guard: " + w);
+  // ownership is enforced via BOTH mappings: stableId (normal key) and
+  // clientId (legacy-cleanup remove path).
+  assert.ok(w.includes("child('stableIdMapping').child($clientId).val() == auth.uid"),
+    "ballot write must accept the stableId owner: " + w);
+  assert.ok(w.includes("child('clientMapping').child($clientId).val() == auth.uid"),
+    "ballot write must accept the clientId owner (legacy cleanup): " + w);
+  // tolerant first-write: an unclaimed key (neither mapping present) is
+  // still writable so a brand-new participant's first ballot lands.
+  assert.ok(w.includes("!root.child('sessions').child($sessionId).child('stableIdMapping').child($clientId).exists()"),
+    "ballot write must allow an unclaimed stableId (first write): " + w);
+  assert.ok(w.includes("!root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists()"),
+    "ballot write must allow an unclaimed clientId (first write): " + w);
+});
+
+test("rules: /orgs votes/ballots ownership guard is org-scoped", () => {
+  const w = ORG_ROOM.votes.$voteId.ballots.$clientId[".write"];
+  assert.ok(w.includes("auth != null") && w.includes("'closed'"),
+    "org ballot write must keep auth + closed guards: " + w);
+  assert.ok(w.includes("root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('stableIdMapping').child($clientId).val() == auth.uid"),
+    "org ballot write must accept the org-scoped stableId owner: " + w);
+  assert.ok(w.includes("root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid"),
+    "org ballot write must accept the org-scoped clientId owner: " + w);
+  // must NOT leak into the legacy /sessions/ subtree
+  assert.ok(!w.includes("root.child('sessions').child($sessionId).child('stableIdMapping')"),
+    "org ballot guard must not reference the legacy /sessions subtree: " + w);
+});

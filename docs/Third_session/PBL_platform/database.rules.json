@@ -139,6 +139,14 @@
           }
         },
 
+        "stableIdMapping": {
+          "$stableId": {
+            ".read": "auth != null && root.child('sessions').child($sessionId).child('members').hasChild(auth.uid)",
+            ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
+            ".validate": "newData.isString() && newData.val() == auth.uid"
+          }
+        },
+
         "rooms": {
           "$roomId": {
             "events": {
@@ -259,7 +267,7 @@
               "$voteId": {
                 "ballots": {
                   "$clientId": {
-                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && ((!root.child('sessions').child($sessionId).child('stableIdMapping').child($clientId).exists() && !root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists()) || root.child('sessions').child($sessionId).child('stableIdMapping').child($clientId).val() == auth.uid || root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                     ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
                   }
                 },
@@ -448,6 +456,14 @@
               }
             },
 
+            "stableIdMapping": {
+              "$stableId": {
+                ".read": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('members').hasChild(auth.uid)",
+                ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.isString() && newData.val() == auth.uid"
+              }
+            },
+
             "audit": {
               "$entryId": {
                 ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
@@ -563,7 +579,7 @@
                   "$voteId": {
                     "ballots": {
                       "$clientId": {
-                        ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                        ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && ((!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('stableIdMapping').child($clientId).exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).exists()) || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('stableIdMapping').child($clientId).val() == auth.uid || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                         ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
                       }
                     },
