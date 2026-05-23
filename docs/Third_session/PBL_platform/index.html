@@ -691,7 +691,8 @@
       <label><span data-i18n="lobby.name-label">Your name (a first name or nickname is fine)</span>
         <input type="text" id="name-input"
                data-i18n="lobby.name-placeholder" data-i18n-attr="placeholder"
-               placeholder="e.g. Alice / Akari" maxlength="40" />
+               placeholder="e.g. Alice / Akari" maxlength="40"
+               autocomplete="name" required aria-required="true" />
       </label>
       <!-- Anti-coercion grade-note promoted into the lobby (above the consent
            block) so participants read it BEFORE they tick the consent box.
@@ -749,10 +750,11 @@
 
       <div class="lobby-section">
         <h3 data-i18n="lobby.join-title">Join as a participant</h3>
-        <p class="lobby-hint" data-i18n="lobby.join-hint">You will be placed in a Franco-Japanese room automatically -
+        <p class="lobby-hint" id="lobby-join-hint" data-i18n="lobby.join-hint">You will be placed in a Franco-Japanese room automatically -
           balanced by university, year and English level.</p>
         <label><span data-i18n="lobby.uni-label">University</span>
-          <select id="uni-input">
+          <select id="uni-input" autocomplete="organization"
+                  required aria-required="true" aria-describedby="lobby-join-hint">
             <option value="" selected disabled
                     data-i18n="lobby.uni-placeholder">Select your university…</option>
             <option value="Caen">Université de Caen Normandie (France)</option>
@@ -771,7 +773,7 @@
           </select>
         </label>
         <label><span data-i18n="lobby.english-label">English level (CEFR self-assessment)</span>
-          <select id="english-input">
+          <select id="english-input" aria-describedby="lobby-english-hint">
             <option value="A2">A2 - Elementary</option>
             <option value="B1">B1 - Intermediate</option>
             <option value="B2" selected>B2 - Upper intermediate</option>
@@ -779,7 +781,7 @@
             <option value="C2">C2 - Proficient</option>
           </select>
         </label>
-        <p class="lobby-hint" data-i18n="lobby.english-hint">CEFR levels: A2 elementary &middot; B1 intermediate &middot;
+        <p class="lobby-hint" id="lobby-english-hint" data-i18n="lobby.english-hint">CEFR levels: A2 elementary &middot; B1 intermediate &middot;
           B2 upper-intermediate (can discuss complex topics) &middot; C1 advanced &middot;
           C2 proficient. Pick the closest - it is only used to balance the rooms.</p>
 
@@ -2875,6 +2877,11 @@
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
   <script src="lib.js?v=v4" defer></script>
+  <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
+       room names, time-since, reduced-motion) carved out of script.js for
+       unit-testability. Must load BEFORE script.js so the helpers are
+       global by the time the engine runs. -->
+  <script src="pure-utils.js?v=v4" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the

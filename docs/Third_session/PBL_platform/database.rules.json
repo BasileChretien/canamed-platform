@@ -243,13 +243,23 @@
               "moduleA": {
                 "$entryId": {
                   ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
-                  ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                  ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))",
+                  "edits": {
+                    "$editId": {
+                      ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
+                    }
+                  }
                 }
               },
               "moduleB": {
                 "$entryId": {
                   ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
-                  ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                  ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))",
+                  "edits": {
+                    "$editId": {
+                      ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
+                    }
+                  }
                 }
               }
             },
@@ -545,13 +555,23 @@
                   "moduleA": {
                     "$entryId": {
                       ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
-                      ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                      ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))",
+                      "edits": {
+                        "$editId": {
+                          ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
+                        }
+                      }
                     }
                   },
                   "moduleB": {
                     "$entryId": {
                       ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
-                      ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
+                      ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))",
+                      "edits": {
+                        "$editId": {
+                          ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
+                        }
+                      }
                     }
                   }
                 },
