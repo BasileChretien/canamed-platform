@@ -56,9 +56,15 @@ Console (a human with project access), surfaced 2026-05-20:
    blocks once the monthly Actions minute pool resets or billing is raised.
 
 ## Known security follow-ups (code, tracked)
-- `votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
+- ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
-  binding.
+  binding.~~ **Fixed:** added `stableIdMapping/$stableId → auth.uid` (write-once,
+  mirrors `clientMapping`) under both `/sessions` and `/orgs`; the
+  `votes/ballots/$clientId` write rule now requires ownership via either
+  mapping (with a tolerant first-write branch). Client binds it in the join
+  chain (`claimStableIdMapping`). Covered by `tests/rules.test.js` (structural)
+  and `tests-e2e/emulator/rules-smoke.spec.js` (functional: peer overwrite
+  denied, owner write + own-key first-write allowed).
 - Server-side admin-password verification (FINDING-07): `adminPasswordHash`
   is readable by any authenticated user (hash oracle). The architecturally
   correct fix is a Cloud Function that compares server-side and returns a
