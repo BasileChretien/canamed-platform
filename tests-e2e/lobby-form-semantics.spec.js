@@ -1,6 +1,6 @@
-/* tests-e2e/lobby-a11y.spec.js
+/* tests-e2e/lobby-form-semantics.spec.js
  *
- * WCAG 2.1 AA form-semantics regression for the lobby join form.
+ * WCAG 2.1 AA form-semantics regression for the lobby join + profile-setup forms.
  *
  * ACCESSIBILITY_AUDIT.md §5 flagged that the participant-join inputs
  * carried a visible <label> but none of the machine-readable form
@@ -42,5 +42,18 @@ test.describe("Lobby form accessibility (WCAG 1.3.5 / 3.3.1 / 3.3.2)", () => {
     const eng = page.locator("#english-input");
     await expect(eng).toHaveAttribute("aria-describedby", "lobby-english-hint");
     await expect(page.locator("#lobby-english-hint")).toHaveCount(1);
+  });
+
+  // ACCESSIBILITY_AUDIT.md §5 item 7 — the Google-profile setup form is a
+  // second data-entry surface that also needs identify-input-purpose.
+  test("profile-setup form inputs expose autocomplete (WCAG 1.3.5)", async ({ page }) => {
+    await page.goto("/");
+
+    const name = page.locator("#splash-prof-name");
+    await expect(name).toHaveAttribute("autocomplete", "name");
+    await expect(name).toHaveAttribute("aria-required", "true");
+
+    const uni = page.locator("#splash-prof-uni");
+    await expect(uni).toHaveAttribute("autocomplete", "organization");
   });
 });
