@@ -263,6 +263,12 @@
                 }
               }
             },
+            "answersDeleted": {
+              "$pushId": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
+                ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('module').isString() && newData.child('module').val().length <= 16 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('cid') || newData.child('cid').isString()) && (!newData.hasChild('bulletKey') || (newData.child('bulletKey').isString() && newData.child('bulletKey').val().length <= 40)) && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40))"
+              }
+            },
             "votes": {
               "$voteId": {
                 "ballots": {
@@ -573,6 +579,12 @@
                         }
                       }
                     }
+                  }
+                },
+                "answersDeleted": {
+                  "$pushId": {
+                    ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
+                    ".validate": "newData.child('text').isString() && newData.child('text').val().length <= 1000 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('module').isString() && newData.child('module').val().length <= 16 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('cid') || newData.child('cid').isString()) && (!newData.hasChild('bulletKey') || (newData.child('bulletKey').isString() && newData.child('bulletKey').val().length <= 40)) && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40))"
                   }
                 },
                 "votes": {
