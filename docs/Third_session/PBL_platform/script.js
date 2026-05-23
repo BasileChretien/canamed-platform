@@ -9043,10 +9043,24 @@ function editAnswer(moduleKey, entry, li) {
     if (done) return;
     done = true;
     const v = input.value.trim();
-    refAnswers[moduleKey].child(entry.id).once("value").then(snap => {
-      if (snap.val() == null) { renderAnswers(moduleKey); return; }   // deleted meanwhile
+    const ref = refAnswers[moduleKey].child(entry.id);
+    ref.once("value").then(snap => {
+      const cur = snap.val();
+      if (cur == null) { renderAnswers(moduleKey); return; }   // deleted meanwhile
       if (!v) return deleteAnswer(moduleKey, entry.id);
-      return refAnswers[moduleKey].child(entry.id).child("text").set(v);
+      const priorText = (cur && typeof cur.text === "string") ? cur.text : "";
+      if (priorText === v) return;   // no-op edit — nothing to record
+      // Research integrity (point 4): edits used to overwrite `text` in place,
+      // losing a point's wording history. Snapshot the SUPERSEDED text into an
+      // append-only `edits` log BEFORE overwriting, so researchers can see how
+      // the group's reasoning evolved. `text` still holds the current value, so
+      // every existing render/export path is unchanged.
+      return ref.child("edits").push({ text: priorText, by: myName, at: Date.now() })
+        .then(() => ref.child("text").set(v))
+        .then(() => logEvent(myRoom, "answer.edit." + moduleKey, {
+          by: myName, fromLen: priorText.length, toLen: v.length,
+          bulletKey: (cur && cur.bulletKey) || ""
+        }));
     }).catch(e => {
       console.error("Edit failed", e);
       alert(tFallback("room.answer.err.edit-failed",
@@ -9071,7 +9085,21 @@ function editAnswer(moduleKey, entry, li) {
   input.select();
 }
 function deleteAnswer(moduleKey, id) {
-  return refAnswers[moduleKey].child(id).remove().catch(e => {
+  const ref = refAnswers[moduleKey].child(id);
+  // Research integrity (point 4): record the removal in the append-only event
+  // log (metadata only — the body is never copied into events, per the
+  // event-sourcing privacy rule) so the trail still shows that a point was
+  // withdrawn, by whom, and when. The live answer is then hard-removed as
+  // before. (Full deleted-body retention would need a soft-delete tombstone
+  // with render/export filtering — tracked as a follow-up.)
+  return ref.once("value").then(snap => {
+    const cur = snap.val();
+    return ref.remove().then(() => {
+      if (cur) logEvent(myRoom, "answer.delete." + moduleKey, {
+        by: myName, len: (cur.text || "").length, bulletKey: cur.bulletKey || ""
+      });
+    });
+  }).catch(e => {
     console.error("Delete failed", e);
     alert(tFallback("room.answer.err.delete-failed",
       "That point could not be deleted — check your connection and try again."));

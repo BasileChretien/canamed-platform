@@ -614,3 +614,41 @@ test("rules: per-room /answerReplies/$entryId/$replyId requires auth + 400-char 
   assert.match(node[".validate"], /disagree|support/,
     "counter-bullet stance must be a closed-set string when present");
 });
+
+// =============================================================
+// Point 4 — append-only answer edit history (research integrity)
+// =============================================================
+//
+// editAnswer used to overwrite `text` in place, losing a point's wording
+// history. The fix snapshots each superseded version into an `edits/$editId`
+// log under the answer entry (the client uses push() ids, so it is
+// append-only by convention). Write authority is INHERITED from the answer
+// entry's own `.write` (collaborative: any room participant; refused once
+// closed) — an RTDB ancestor write-grant cascades and cannot be revoked at
+// the child, so the `edits` node itself only carries a bounding `.validate`.
+// These tests pin that the snapshot shape stays bounded so a participant
+// can't smuggle an unbounded blob into the answers tree.
+
+const ORG_ANSWERS = rules.rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId.answers;
+
+for (const mod of ["moduleA", "moduleB"]) {
+  test(`rules: /answers/${mod}/$entryId/edits snapshot shape is bounded`, () => {
+    const edits = ROOM.answers[mod].$entryId.edits;
+    assert.ok(edits && edits.$editId, `/rooms/$roomId/answers/${mod}/$entryId/edits/$editId must be declared`);
+    const v = edits.$editId[".validate"];
+    assert.match(v, /child\('text'\)\.val\(\)\.length <= 1000/,
+      "superseded text must be capped at 1000 chars: " + v);
+    assert.ok(v.includes("'by'") && v.includes("'at'"),
+      "edit snapshot must carry {by, at}: " + v);
+    // freshness guard so a stale/forged timestamp can't be planted
+    assert.match(v, /child\('at'\)\.val\(\) <= now \+ 5000/, "edit `at` must be near server now: " + v);
+  });
+
+  test(`rules: /orgs /answers/${mod}/$entryId/edits snapshot shape is bounded`, () => {
+    const edits = ORG_ANSWERS[mod].$entryId.edits;
+    assert.ok(edits && edits.$editId, `org /answers/${mod}/$entryId/edits/$editId must be declared`);
+    const v = edits.$editId[".validate"];
+    assert.match(v, /child\('text'\)\.val\(\)\.length <= 1000/, "org edit text must be capped at 1000: " + v);
+    assert.ok(v.includes("'by'") && v.includes("'at'"), "org edit snapshot must carry {by, at}: " + v);
+  });
+}
