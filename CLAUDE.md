@@ -31,7 +31,9 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 ## Operational reminders — ACTION REQUIRED (cannot be done in code)
 
 These are the Round-3 security follow-ups that require the Firebase / GCP
-Console (a human with project access), surfaced 2026-05-20:
+Console (a human with project access), surfaced 2026-05-20. **Items 1 & 2
+were completed 2026-05-23; item 3 (retention cron) is the only one still
+outstanding.**
 
 1. **Firebase App Check → Enforce mode (HIGH).** App Check (reCAPTCHA v3) is
    wired client-side but enforcement is set in the Console. Until the
@@ -39,13 +41,17 @@ Console (a human with project access), surfaced 2026-05-20:
    stolen anonymous-auth token still reaches the DB without attestation.
    - Console → App Check → app `canamed-69785` → confirm site key matches
      `CANAMED_RECAPTCHA_SITE_KEY` in `firebase-config.js` → click **Enforce**
-     next to Realtime Database. Record the date here once done.
+     next to Realtime Database.
+   - ✅ **Done 2026-05-23** — Realtime Database switched from *Monitor* to
+     *Enforce*; unattested tokens are now rejected at the DB.
 
 2. **Restrict the API key (HIGH).** The Firebase web API key is necessarily
    public in the served HTML, but it should be locked down:
    - GCP Console → Credentials → the browser key → Application restrictions =
      HTTP referrers (`canamed.web.app`, `*.firebaseapp.com`); API
      restrictions = only the Firebase services actually used.
+   - ✅ **Done 2026-05-23** — browser key locked to HTTP referrers and scoped
+     to only the Firebase services in use.
 
 3. **Re-enable retention cron schedules (private CANAMED repo).** The 4 PII
    workflows on `BasileChretien/CANAMED` (backup-sessions, cleanup-stale-
