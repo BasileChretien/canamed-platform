@@ -2877,6 +2877,11 @@
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
   <script src="lib.js?v=v4" defer></script>
+  <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
+       room names, time-since, reduced-motion) carved out of script.js for
+       unit-testability. Must load BEFORE script.js so the helpers are
+       global by the time the engine runs. -->
+  <script src="pure-utils.js?v=v4" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the

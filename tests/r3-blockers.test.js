@@ -25,6 +25,9 @@ const i18n = require("../docs/Third_session/PBL_platform/i18n.js");
 
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT_JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
+// roomNames() was extracted into pure-utils.js (bestRoomFor in script.js still
+// depends on it), so the sandbox below pulls its source from there.
+const PURE_UTILS = fs.readFileSync(path.join(PLATFORM, "pure-utils.js"), "utf8");
 const RULES = JSON.parse(fs.readFileSync(path.join(PLATFORM, "database.rules.json"), "utf8"));
 
 // ============================================================
@@ -216,7 +219,7 @@ function loadBestRoomFor() {
   // Inline-extract the function source + its roomNames dependency, then
   // eval it in a sandboxed module-like context. Keeps this test free of
   // a DOM/Firebase setup while still exercising the live source.
-  const m = SCRIPT_JS.match(/function roomNames\(count\) \{[\s\S]*?return out;\s*\}/);
+  const m = PURE_UTILS.match(/function roomNames\(count\) \{[\s\S]*?return out;\s*\}/);
   const fn = SCRIPT_JS.match(/function bestRoomFor\(person, assignedPool, roomCount\) \{[\s\S]*?\n\}/);
   if (!m || !fn) throw new Error("Could not extract bestRoomFor + roomNames from script.js");
   // eslint-disable-next-line no-new-func

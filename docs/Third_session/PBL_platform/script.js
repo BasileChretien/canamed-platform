@@ -277,15 +277,7 @@ function tFallback(key, en) {
   }
   return en;
 }
-const COLORS = ["#2E9FDF", "#E7B800", "#1e8449", "#c0392b", "#8e44ad",
-                "#e67e22", "#16a085", "#2c3e50", "#d81b60", "#00838f"];
 const ENG_RANK = { A2: 0, B1: 1, B2: 2, C1: 3, C2: 4 };
-function roomNames(count) {
-  const out = [];
-  for (let i = 1; i <= count; i++) out.push("Room " + i);
-  return out;
-}
-
 /* ===================== SCORING ===================== */
 /* Points reward good clinical reasoning, the ORDER decisions are taken, the
  * CHOICES made, and the KEY IDEAS the team writes in its answers - never speed.
@@ -459,23 +451,9 @@ function familyHits(family, text) {
 }
 
 /* ===================== HELPERS ===================== */
-function hashStr(str, seed = 0) {
-  let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed;
-  for (let i = 0; i < str.length; i++) {
-    const ch = str.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
-}
-const _colorCache = {};
-function colorFor(name) {
-  if (!name) return "#6b7785";
-  return _colorCache[name] ||
-    (_colorCache[name] = COLORS[parseInt(hashStr(name).slice(0, 8), 16) % COLORS.length]);
-}
+/* hashStr / colorFor (+ COLORS), roomNames, minsSince and reducedMotion now
+   live in pure-utils.js, loaded before this file. They remain available as
+   globals, so calls below are unchanged. See ARCHITECTURE/script-js-map.md. */
 function el(id) { return document.getElementById(id); }
 /* show a "Saved" confirmation element, then hide it again after ms */
 function flashSaved(elId, ms) {
@@ -695,10 +673,6 @@ function canamedConfirm(opts) {
 window.canamedConfirm = canamedConfirm;
 
 /* ===================== FUN: confetti, count-up, toast ===================== */
-function reducedMotion() {
-  try { return matchMedia("(prefers-reduced-motion: reduce)").matches; }
-  catch (e) { return false; }
-}
 /* a CSS-only confetti burst - brand-coloured pieces in three shapes, varied
    size and arc. `big` = a fuller burst for the rare shared-goal moment. */
 function burst(big) {
@@ -4061,10 +4035,6 @@ function setRoomStage(r, from, to) {
 }
 /* approximate planned minutes per stage, for the dashboard "over time" cue */
 const STAGE_MINUTES = [20, 40, 40, 15];
-function minsSince(ts) {
-  if (!ts) return null;
-  return Math.floor((Date.now() - ts) / 60000);
-}
 function roomProgress(data) {
   const revealed = (data.moduleA && data.moduleA.revealed) || {};
   const aCount = Object.keys((data.answers && data.answers.moduleA) || {}).length;

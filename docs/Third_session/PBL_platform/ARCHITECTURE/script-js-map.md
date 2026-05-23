@@ -9,6 +9,7 @@
 | Chunk                | When loaded                                   | Status |
 |----------------------|-----------------------------------------------|--------|
 | `script.js`          | deferred on splash                            | Active (still holds room + admin runtimes; migration deferred) |
+| `pure-utils.js`      | deferred on splash (after `lib.js`)           | Active — pure helpers extracted from `script.js` (`hashStr`, `colorFor`/`COLORS`, `roomNames`, `minsSince`, `reducedMotion`); browser globals + `require()`-able. Seed for further pure-helper extraction. Unit-tested in `tests/pure-utils.test.js`. |
 | `script-loader.js`   | deferred on splash                            | Active — exposes `window.CanamedLoader.ensure*()` |
 | `case-content.js`    | lazy via `ensureCaseContent()` / idle prefetch| Out of splash bundle |
 | `qrcode.js`          | lazy via `ensureQrcode()` on QR paint         | Out of splash bundle |

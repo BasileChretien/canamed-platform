@@ -5,7 +5,7 @@
   "description": "CaNaMED Franco-Japanese medical-education platform — research analysis + the live web app.",
   "scripts": {
     "test": "node --test tests/*.test.js",
-    "test:coverage": "c8 --reporter=text --reporter=lcov --reporter=html --include='docs/Third_session/PBL_platform/lib.js' --include='docs/Third_session/PBL_platform/i18n.js' --include='docs/Third_session/PBL_platform/localdb.js' --include='docs/Third_session/PBL_platform/telemetry.js' node --test tests/*.test.js",
+    "test:coverage": "c8 --reporter=text --reporter=lcov --reporter=html --include='docs/Third_session/PBL_platform/lib.js' --include='docs/Third_session/PBL_platform/i18n.js' --include='docs/Third_session/PBL_platform/localdb.js' --include='docs/Third_session/PBL_platform/telemetry.js' --include='docs/Third_session/PBL_platform/pure-utils.js' node --test tests/*.test.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "serve:platform": "node scripts/serve-platform.js",
