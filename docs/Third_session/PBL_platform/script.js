@@ -1836,6 +1836,30 @@ function claimClientMapping() {
   }
 }
 
+/* R3 FINDING-01 (ballots): bind this person's stableId to auth.uid, write-once.
+ * Ballots are keyed by stableId (see ballotKey / castVote), so the per-tab
+ * clientMapping guard cannot protect them — a peer could otherwise overwrite
+ * another participant's ballot to swing a team tally. This parallel
+ * stableIdMapping is what the votes/ballots .write rule consults: once a
+ * stableId is bound here, only its owner (or, until then, the first writer)
+ * can write a ballot under that key. Best-effort + idempotent, exactly like
+ * claimClientMapping: a refresh re-resolves the same stableId and the
+ * write-once rule refuses the re-set (PERMISSION_DENIED is swallowed). */
+function claimStableIdMapping() {
+  if (!db || !currentUser || !currentUser.uid || !sessionNum ||
+      typeof stableId !== "string" || !stableId) {
+    return Promise.resolve();
+  }
+  try {
+    return db.ref(sPath("stableIdMapping/" + stableId)).set(currentUser.uid).catch(e => {
+      try { console.warn("claimStableIdMapping skipped (continuing):", e && e.code); } catch (_) {}
+    });
+  } catch (e) {
+    try { console.warn("claimStableIdMapping threw (continuing):", e); } catch (_) {}
+    return Promise.resolve();
+  }
+}
+
 function _joinParticipantAfterAuth() {
   // user may have hit "Leave" while we were waiting for auth
   if (!joined) return;
@@ -1848,6 +1872,7 @@ function _joinParticipantAfterAuth() {
   // owner-only write rules accept our own pool/presence/typing/tests writes.
   claimMembership("participant")
     .then(() => claimClientMapping())
+    .then(() => claimStableIdMapping())
     .then(() => {
       if (!joined) return; // user left while membership write was in-flight
       _joinParticipantWireUp();

@@ -88,6 +88,91 @@ test("rules: create → join → advance round-trips through the real emulator",
   }
 });
 
+/* Wait until the app has finished its anonymous sign-in so a write carries
+   an auth.uid. Returns the signed-in uid. */
+async function waitForUid(page) {
+  await page.waitForFunction(() => {
+    try {
+      return !!(window.firebase && firebase.auth && firebase.auth().currentUser);
+    } catch (_) { return false; }
+  }, { timeout: 20_000 });
+  return page.evaluate(() => firebase.auth().currentUser.uid);
+}
+
+/* Attempt a write through the REAL rules; resolves "ALLOWED" or the
+   PERMISSION_DENIED code/message. */
+function tryWrite(page, path, value) {
+  return page.evaluate(async ({ p, v }) => {
+    try {
+      await firebase.database().ref(p).set(v);
+      return "ALLOWED";
+    } catch (e) {
+      return (e && (e.code || e.message)) || "DENIED";
+    }
+  }, { p: path, v: value });
+}
+
+test("rules: FINDING-01 — a peer cannot overwrite a ballot bound to another stableId", async ({ page, browser }) => {
+  // Unique session/key per run: stableIdMapping is write-once, so reusing a
+  // key across runs (with a different uid) would spuriously fail.
+  const code = "rul-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = "Room 1";
+  const voteId = "d1";
+  const victimKey = "s_victim_" + Math.floor(Math.random() * 1e9); // owner A's stableId
+  const attackerKey = "s_attacker_" + Math.floor(Math.random() * 1e9);
+  const ballotPath = (k) =>
+    `sessions/${code}/rooms/${room}/votes/${voteId}/ballots/${k}`;
+  const bindPath = (k) => `sessions/${code}/stableIdMapping/${k}`;
+
+  // ---- Owner A ----
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+
+  // A joins as a member so the membership-gated session .read (R2-09) lets
+  // A read its own ballot back at the end; this also mirrors a real voter.
+  expect(await tryWrite(page, `sessions/${code}/members/${uidA}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+
+  // A binds its stableId (write-once, value must equal auth.uid) then casts.
+  expect(await tryWrite(page, bindPath(victimKey), uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, ballotPath(victimKey), { choice: 1, at: Date.now() }))
+    .toBe("ALLOWED");
+
+  // ---- Peer B (a second anonymous uid) ----
+  // A fresh, isolated context — NOT context.newPage() — so B gets its own
+  // empty storage and signs in as a DISTINCT anonymous user (a new page in
+  // the same context would reuse A's persisted anonymous session).
+  const ctxB = await browser.newContext();
+  const tab2 = await ctxB.newPage();
+  await useEmulator(tab2);
+  await tab2.goto("/");
+  const uidB = await waitForUid(tab2);
+  expect(uidB).not.toBe(uidA); // distinct anonymous identities
+
+  // B tries to overwrite A's claimed ballot → DENIED (the FINDING-01 fix).
+  const overwrite = await tryWrite(tab2, ballotPath(victimKey), { choice: 9, at: Date.now() });
+  expect(overwrite).not.toBe("ALLOWED");
+  expect(String(overwrite)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+
+  // B tries to steal the binding itself → DENIED (write-once).
+  const rebind = await tryWrite(tab2, bindPath(victimKey), uidB);
+  expect(rebind).not.toBe("ALLOWED");
+
+  // But B CAN cast under its own unclaimed key (first-write tolerance keeps
+  // the happy path working before the binding round-trips).
+  expect(await tryWrite(tab2, ballotPath(attackerKey), { choice: 2, at: Date.now() }))
+    .toBe("ALLOWED");
+
+  // And A's ballot is unchanged (B's overwrite never landed).
+  const finalChoice = await page.evaluate(async (p) => {
+    const snap = await firebase.database().ref(p).get();
+    return snap.val() && snap.val().choice;
+  }, ballotPath(victimKey));
+  expect(finalChoice).toBe(1);
+
+  await ctxB.close();
+});
+
 test("rules: a write to a denied path is rejected (rules ARE enforced)", async ({ page }) => {
   await page.goto("/");
   // Wait for the app to finish anonymous sign-in so a write is even attempted.
