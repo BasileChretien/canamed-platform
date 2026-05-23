@@ -255,6 +255,12 @@
       "splash.enter.previous-session-ended": "Your previous session has ended. Enter a new code from your facilitator.",
       "splash.created.create-another": "Create another",
       "splash.created.open-admin": "Open admin dashboard →",
+      // D21 — one-time recovery code shown on the created view.
+      "splash.created.recovery-title": "Recovery code — write this down now",
+      "splash.created.recovery-copy": "Copy",
+      "splash.created.recovery-warn": "This is the ONLY way to reset the session password if you forget it. It will not be shown again. Keep it private — anyone who has it can reset this session’s password.",
+      "splash.created.recovery-copied": "Recovery code copied!",
+      "splash.created.recovery-copy-fail": "Couldn’t copy — write the recovery code down manually.",
 
       // lobby — participant join form (after entering a code)
       "lobby.join-title": "Join as a participant",
@@ -296,11 +302,16 @@
       // R3-D3: confirm-password label/placeholder + R3-D2: forgot link.
       "lobby.new-pass-confirm-label": "Confirm new password",
       "lobby.new-pass-confirm-placeholder": "confirm new password",
-      "lobby.forgot-pass-link": "Forgot the password? Reset with super-admin key ›",
+      "lobby.forgot-pass-link": "Need to set or recover the admin password? ›",
       "lobby.superadmin.disabled": "Super-admin is disabled on this deployment.",
       "lobby.superadmin.bad-key": "Incorrect super-admin key.",
       "lobby.superadmin.no-new-pass": "Enter a new session password to set.",
       "lobby.superadmin.confirm-mismatch": "The two password fields do not match — please re-type the new password.",
+      // D21 — recovery-code field + reset error messages.
+      "lobby.recovery-code-label": "Recovery code (to reset a forgotten password)",
+      "lobby.recovery-code-placeholder": "xxxx-xxxx-xxxx",
+      "lobby.superadmin.bad-recovery": "That recovery code doesn’t match this session. Check the code you saved when the session was created.",
+      "lobby.superadmin.db-error": "Could not reach the session database.",
       "lobby.save-pass-btn": "Save password & open dashboard",
       // join-form validation messages (shown in the lobby hint line)
       "lobby.err.name-required": "Enter your name.",

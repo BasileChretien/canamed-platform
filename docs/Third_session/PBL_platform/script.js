@@ -1558,12 +1558,12 @@ function initLobby() {
       }, 30);
     });
   }
-  // "Forgot the password? Reset with super-admin key" link — was
-  // added in R3-D2 but its click handler was never wired (user report
-  // 2026-05-18: "This button does not work"). Opens the same
-  // superadmin-panel that the existing toggle opens, plus brings
-  // the super-admin key input into focus so the recovery flow feels
-  // intentional, not just "we re-routed you to the setup panel".
+  // "Need to set or recover the admin password?" link (R3-D2). Opens the
+  // superadmin-panel and focuses the first relevant field. D21: the panel
+  // is now a RECOVERY surface that works without a super-admin key, so we
+  // focus the super-admin key input only when a key is actually configured;
+  // otherwise we jump straight to the recovery-code input, which is the real
+  // gate for resetting a forgotten password.
   const forgotLink = el("forgot-pass-link");
   const superPanel = el("superadmin-panel");
   if (forgotLink && superPanel) {
@@ -1571,26 +1571,36 @@ function initLobby() {
       superPanel.classList.remove("hidden");
       const toggle = el("superadmin-toggle");
       if (toggle) toggle.setAttribute("aria-expanded", "true");
-      // Defer focus by a tick so the panel has laid out before
-      // we steal focus — otherwise some browsers ignore the focus()
-      // call on a freshly-unhidden element.
+      // Defer focus by a tick so the panel has laid out before we steal
+      // focus — otherwise some browsers ignore the focus() call on a
+      // freshly-unhidden element.
       setTimeout(() => {
-        const keyInput = el("superadmin-key-input");
-        if (keyInput) {
-          try { keyInput.scrollIntoView({ behavior: "smooth", block: "center" }); }
-          catch (_) { try { keyInput.scrollIntoView(); } catch (__) {} }
-          try { keyInput.focus(); } catch (e) {}
+        const target = SUPERADMIN_KEY
+          ? el("superadmin-key-input")
+          : (el("recovery-code-input") || el("new-pass-input"));
+        if (target) {
+          try { target.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          catch (_) { try { target.scrollIntoView(); } catch (__) {} }
+          try { target.focus(); } catch (e) {}
         }
       }, 0);
     });
   }
   el("set-pass-btn").addEventListener("click", joinSuperAdmin);
-  // If super-admin is disabled on this deployment, hide BOTH entry
-  // points (the toggle AND the "forgot password" link) — without this
-  // the link still showed and would open an empty panel.
+  // D21 — the recovery-code path works WITHOUT a super-admin key, so the
+  // "Need to set or recover the password?" link must stay available on a
+  // key-less (public) deployment. Only the legacy key-framed toggle and the
+  // now-meaningless super-admin key field are hidden when no key is set.
   if (!SUPERADMIN_KEY) {
-    el("superadmin-toggle").classList.add("hidden");
-    if (forgotLink) forgotLink.classList.add("hidden");
+    const sToggle = el("superadmin-toggle");
+    if (sToggle) sToggle.classList.add("hidden");
+    // Hide the super-admin key input + its label (the closest <label>
+    // ancestor) so the panel shows only the password + recovery fields.
+    const keyInput = el("superadmin-key-input");
+    if (keyInput) {
+      const keyLabel = keyInput.closest("label") || keyInput;
+      keyLabel.classList.add("hidden");
+    }
   }
   initSoundToggle();
 }
@@ -3095,67 +3105,105 @@ function joinSuperAdmin() {
   if (!myName) return;
   const key = el("superadmin-key-input").value;
   const newPass = el("new-pass-input").value;
-  // refuse explicitly when super-admin is disabled in this deployment - the
-  // comparison-against-null path below would still reject any non-null
-  // submission, but a clear error message avoids confusion
-  if (!SUPERADMIN_KEY) {
-    el("admin-hint").textContent = "Super-admin is disabled on this deployment.";
+  const confirmEl = el("new-pass-confirm-input");
+  const confirmPass = confirmEl ? confirmEl.value : null;
+  const recoveryEl = el("recovery-code-input");
+  // Normalise the recovery code: trim + lowercase (the alphabet is lowercase)
+  // so a facilitator who pastes "ABCD-EFGH-JKMN" or adds spaces still matches.
+  const recoveryCode = recoveryEl ? (recoveryEl.value || "").trim().toLowerCase() : "";
+
+  // D21 — the SUPERADMIN_KEY is no longer the security boundary for a
+  // password RESET; the per-session recovery code is (it gates
+  // _superadminReset in the rules, which gates the adminPasswordHash
+  // overwrite). The key, when a deployment sets one, is kept as an
+  // additional client-side gate on this panel — but the public deployment
+  // sets it to null, and the recovery-code path MUST work there. So we only
+  // enforce the key when one is configured; we never hard-stop on a null key.
+  if (SUPERADMIN_KEY && key !== SUPERADMIN_KEY) {
+    el("admin-hint").textContent =
+      tFallback("lobby.superadmin.bad-key", "Incorrect super-admin key.");
     return;
   }
-  if (key !== SUPERADMIN_KEY) {
-    el("admin-hint").textContent = "Incorrect super-admin key."; return;
+  if (!newPass) {
+    el("admin-hint").textContent =
+      tFallback("lobby.superadmin.no-new-pass", "Enter a new session password to set.");
+    return;
   }
-  if (!newPass) { el("admin-hint").textContent = "Enter a new session password to set."; return; }
+  // R3-D3 — confirm field guards against a silent typo in the new password.
+  if (confirmEl && confirmPass !== newPass) {
+    el("admin-hint").textContent =
+      tFallback("lobby.superadmin.confirm-mismatch",
+        "The two password fields do not match — please re-type the new password.");
+    return;
+  }
   dbInit();
-  // Round-2 rules require auth != null on every write; super-admin needs
-  // to be signed in before setting the first password hash.
+  // Round-2 rules require auth != null on every write; we must be signed in
+  // before any session write (including the first password hash).
   //
-  // D21 recovery flow: if a hash already exists (forgotten-password case
-  // during a live session), the new rule for adminPasswordHash refuses a
-  // bare overwrite. The super-admin must first write a fresh
-  // `_superadminReset` flag (requestedAt within ±5s of server `now`); the
-  // adminPasswordHash rule then allows a single overwrite within 30s. We
-  // clear the flag after the overwrite to keep the door shut.
+  // D21 recovery flow: if a hash already EXISTS (forgotten-password case
+  // during a live session), the adminPasswordHash rule refuses a bare
+  // overwrite. The reset must first write a fresh `_superadminReset` flag
+  // whose `code` equals the unreadable /recovery/.../code; the rule then
+  // allows a single hash overwrite within its 30s window. We clear the flag
+  // afterwards to shut the door early (the window self-expires regardless).
   //
-  // SECURITY NOTE: SUPERADMIN_KEY is verified client-side only; an
-  // attacker with the database URL + the key in their own browser can
-  // still trigger this path. This is the same threat model as the
-  // initial-password set. A stronger gate (Firebase Custom Claims via a
-  // Cloud Function checking the key server-side) would require Blaze.
-  // The in-rules approach above bounds the overwrite window and creates
-  // a visible `_superadminReset` audit trail in the DB.
+  // SECURITY NOTE: the recovery code is the real gate. It is generated with
+  // ~59.5 bits of entropy, shown to the creator exactly once, and stored in
+  // the unreadable /recovery subtree — so a participant who only knows the
+  // (spoken-aloud) session code cannot read it, cannot inject one (the
+  // /recovery write is locked once a password exists), and therefore cannot
+  // pass the _superadminReset rule. A wrong/blank code is rejected by the
+  // rules as a generic permission error, which we translate into a helpful
+  // hint below rather than claiming success.
   ensureSignedIn()
     .then(() => hashPassword(newPass, sessionNum))
     .then(h => {
       const refHash = db.ref(sPath("adminPasswordHash"));
       return refHash.once("value").then(snap => {
-        if (!snap.exists()) {
-          // initial set — the existing !data.exists() branch of the rule
-          // allows this without a reset flag
+        // Use snap.val() != null (not snap.exists()) so this works against
+        // BOTH Firebase and the LOCAL-mode LocalDB snapshot (which exposes
+        // .val() but not .exists()) — matching createSession's check.
+        const hashExists = snap.val() != null;
+        if (!hashExists) {
+          // initial set — the rule's !data.exists() branch allows this
+          // without a reset flag or recovery code. Works on key-less
+          // deployments too (auth is the only requirement).
           return refHash.set(h);
         }
-        // overwrite path — write the freshness-bounded flag, set the hash,
-        // then clear the flag. If any step fails, the catch below surfaces
-        // a generic "could not reach" hint and the operator can retry.
-        //
+        // OVERWRITE path — requires the recovery code. Validate it is
+        // non-empty client-side so we can show a clear message instead of a
+        // bare permission error (the rule rejects an empty/wrong code).
+        if (!recoveryCode) {
+          const err = new Error("recovery-code-required");
+          err._canamedRecovery = true;
+          throw err;
+        }
         // R3-D1 fix: use firebase.database.ServerValue.TIMESTAMP rather than
-        // Date.now() so a client clock that is skewed beyond ±5 s of server
-        // time still passes the rule's freshness window. The rule compares
-        // requestedAt against the server `now` — Date.now() reads the local
-        // wall-clock, which routinely drifts on unplugged laptops, after
-        // long sleeps, or with a dead CMOS battery. Falling back to
-        // Date.now() preserves behaviour in non-Firebase test contexts.
+        // Date.now() so a client clock skewed beyond ±5 s of server time still
+        // passes the rule's freshness window. Falling back to Date.now()
+        // preserves behaviour in non-Firebase test contexts.
         const refReset = db.ref(sPath("_superadminReset"));
         const TS = (typeof firebase !== "undefined" &&
           firebase.database && firebase.database.ServerValue &&
           firebase.database.ServerValue.TIMESTAMP) || Date.now();
-        return refReset.set({ requestedAt: TS, by: myName })
+        // The payload now MUST carry the recovery code — the rule compares it
+        // against /recovery/.../code and rejects the write if it differs.
+        return refReset.set({ requestedAt: TS, by: myName, code: recoveryCode })
           .then(() => refHash.set(h))
           .then(() => refReset.remove())
           .catch(err => {
             // best-effort flag cleanup; the rule's 30s window self-expires
             // even if remove() fails, so the door re-closes automatically
             try { refReset.remove(); } catch (_) {}
+            // A PERMISSION_DENIED here means the recovery code did not match
+            // (the rule compares it to the unreadable /recovery/.../code). Tag
+            // it so the outer catch shows the recovery-specific hint. Any other
+            // failure (e.g. a transient network error) keeps the generic
+            // db-error hint. Either way we never enter admin on a failed write.
+            const code = (err && (err.code || err.message)) || "";
+            if (/permission_denied|denied/i.test(String(code))) {
+              err._canamedRecovery = true;
+            }
             throw err;
           });
       });
@@ -3169,7 +3217,16 @@ function joinSuperAdmin() {
       enterAdminApp(); startAdmin();
     });
   }).catch(e => {
-    el("admin-hint").textContent = "Could not reach the session database.";
+    if (e && e._canamedRecovery) {
+      // Either no code was entered, or the write was rejected because the
+      // code did not match this session's recovery code.
+      el("admin-hint").textContent =
+        tFallback("lobby.superadmin.bad-recovery",
+          "That recovery code doesn't match this session. Check the code you saved when the session was created.");
+    } else {
+      el("admin-hint").textContent =
+        tFallback("lobby.superadmin.db-error", "Could not reach the session database.");
+    }
     console.error(e);
   });
 }
@@ -3394,29 +3451,58 @@ function enterAdminApp() {
     const targetSession = (el("change-session-input").value || "").trim()
       .replace(/[^a-zA-Z0-9_-]/g, "");
     if (!np || !targetSession) return;
-    // D21 recovery: if the target session already has a hash, the rule
-    // requires a fresh _superadminReset flag (see joinSuperAdmin comment
-    // above and database.rules.json for full rationale).
+    const recoveryEl = el("change-recovery-input");
+    // Normalise (trim + lowercase) — the recovery alphabet is lowercase.
+    const recoveryCode = recoveryEl ? (recoveryEl.value || "").trim().toLowerCase() : "";
+    // D21 recovery: pre-provisioning a NEW session number (no hash yet) needs
+    // no code — the rule's !data.exists() branch allows it. OVERWRITING an
+    // existing session's password requires that session's recovery code: the
+    // rule gates _superadminReset on the code matching the unreadable
+    // /recovery/.../code, and the hash overwrite on a fresh _superadminReset.
     hashPassword(np, targetSession)
       .then(h => {
         const refHash = db.ref(oPath(targetSession, "adminPasswordHash"));
         return refHash.once("value").then(snap => {
-          if (!snap.exists()) return refHash.set(h);
+          // .val() != null works against both Firebase and the LocalDB
+          // snapshot (no .exists()); matches createSession's check.
+          if (snap.val() == null) return refHash.set(h);
+          if (!recoveryCode) {
+            const err = new Error("recovery-code-required");
+            err._canamedRecovery = true;
+            throw err;
+          }
           const refReset = db.ref(oPath(targetSession, "_superadminReset"));
-          return refReset.set({ requestedAt: Date.now(), by: myName || "superadmin" })
+          // ServerValue.TIMESTAMP (R3-D1) so a skewed client clock still
+          // passes the rule's ±5s freshness window; Date.now() fallback for
+          // non-Firebase test contexts.
+          const TS = (typeof firebase !== "undefined" &&
+            firebase.database && firebase.database.ServerValue &&
+            firebase.database.ServerValue.TIMESTAMP) || Date.now();
+          return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode })
             .then(() => refHash.set(h))
             .then(() => refReset.remove())
-            .catch(err => { try { refReset.remove(); } catch (_) {} throw err; });
+            .catch(err => {
+              try { refReset.remove(); } catch (_) {}
+              const code = (err && (err.code || err.message)) || "";
+              if (/permission_denied|denied/i.test(String(code))) err._canamedRecovery = true;
+              throw err;
+            });
         });
       })
       .then(() => {
         el("change-pass-input").value = "";
+        if (recoveryEl) recoveryEl.value = "";
         const ok = el("change-pass-ok");
         ok.textContent = "Saved for Session " + targetSession;
         flashSaved("change-pass-ok", 2000);
       }).catch(e => {
       console.error("Set password failed", e);
-      alert("Could not save the password - check your connection and try again.");
+      if (e && e._canamedRecovery) {
+        alert(tFallback("lobby.superadmin.bad-recovery",
+          "That recovery code doesn't match this session. Check the code you saved when the session was created."));
+      } else {
+        alert("Could not save the password - check your connection and try again.");
+      }
     });
   });
   el("sidebar-dashboard-btn").addEventListener("click", backToDashboard);
@@ -10387,7 +10473,13 @@ function wireSplash() {
     }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    createSession(name, label, pass, scenarioId, customJson).then(code => {
+    createSession(name, label, pass, scenarioId, customJson).then(result => {
+      // createSession resolves { code, recoveryCode }. The recoveryCode is
+      // a one-time secret we surface ONCE on the created view and never
+      // persist (it cannot be read back from the DB), so the facilitator
+      // must write it down now.
+      const code = result.code;
+      const recoveryCode = result.recoveryCode;
       // remember the credentials for the one-click "Open admin dashboard"
       window._splashJustCreated = { code: code, name: name, pass: pass };
       // Persist a clone-friendly summary of this session's setup so the
@@ -10427,6 +10519,12 @@ function wireSplash() {
         } catch (e) { console.warn("Clone-write skipped", e); }
       }
       el("splash-shown-code").textContent = code.toUpperCase();
+      // Surface the one-time recovery code prominently. This is the ONLY
+      // moment it is ever visible — it is stored in the unreadable
+      // /recovery subtree and can never be fetched back, so the facilitator
+      // must record it now. The block stays visible until "Create another"
+      // or page reload.
+      showRecoveryCode(recoveryCode);
       paintJoinQr(code);
       splashShowView("created");
       cHint.textContent = "";
@@ -10557,7 +10655,16 @@ function wireSplash() {
       "Couldn't copy — share the code above instead.");
   });
   if (el("splash-create-another")) el("splash-create-another")
-    .addEventListener("click", () => { window._splashJustCreated = null; splashShowView("create"); });
+    .addEventListener("click", () => {
+      window._splashJustCreated = null;
+      // Hide + clear the previous recovery code so it never lingers on
+      // screen for the next session's created view.
+      const rWrap = el("splash-recovery-wrap");
+      if (rWrap) rWrap.hidden = true;
+      const rCode = el("splash-recovery-code");
+      if (rCode) rCode.textContent = "—";
+      splashShowView("create");
+    });
   if (el("splash-go-admin")) el("splash-go-admin")
     .addEventListener("click", () => {
       const c = window._splashJustCreated;
@@ -10711,6 +10818,44 @@ function loadScenarioTemplate() {
   ta.value = JSON.stringify(template, null, 2);
 }
 
+/* Surface the one-time per-session recovery code on the created view. The
+   code is never readable from the DB (it lives in the unreadable /recovery
+   subtree), so this is the ONLY moment the facilitator can record it. */
+function showRecoveryCode(recoveryCode) {
+  const wrap = el("splash-recovery-wrap");
+  const codeNode = el("splash-recovery-code");
+  if (!codeNode) return;
+  codeNode.textContent = recoveryCode || "—";
+  if (wrap) wrap.hidden = false;
+  const copyBtn = el("splash-recovery-copy");
+  const hint = el("splash-recovery-copy-hint");
+  if (copyBtn && !copyBtn.dataset.wired) {
+    copyBtn.dataset.wired = "1";
+    copyBtn.addEventListener("click", () => {
+      const code = (codeNode.textContent || "").trim();
+      const okMsg = tFallback("splash.created.recovery-copied", "Recovery code copied!");
+      const failMsg = tFallback("splash.created.recovery-copy-fail",
+        "Couldn't copy — write the recovery code down manually.");
+      const done = () => {
+        if (!hint) return;
+        hint.textContent = okMsg;
+        hint.className = "splash-hint ok";
+        setTimeout(() => { hint.textContent = ""; }, 2400);
+      };
+      const fail = () => {
+        if (!hint) return;
+        hint.textContent = failMsg;
+        hint.className = "splash-hint err";
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(code).then(done).catch(fail);
+      } else {
+        fail();
+      }
+    });
+  }
+}
+
 /* generate a unique code, write the session's marker + scenario choice +
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
@@ -10726,11 +10871,24 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
     const code = generateSessionCode();
     return db.ref(oPath(code, "created")).once("value").then(snap => {
       if ((snap.val() != null)) return tryOne(tries + 1);
+      // D21 hardening — per-session recovery code. Generated here, shown
+      // to the facilitator ONCE (returned alongside the session code), and
+      // written to the UNREADABLE top-level /recovery subtree. The database
+      // rules only allow this write while the session has no
+      // adminPasswordHash yet (write-once, pre-password binding), so it MUST
+      // land in the same initial batch that runs BEFORE the hash is set.
+      // Possession of this code is later the only way to overwrite a
+      // forgotten password (see joinSuperAdmin's recovery path). It lives
+      // outside the session subtree, so it never appears in archives/exports.
+      const recoveryCode = generateRecoveryCode();
       // write the markers - `created` first so a half-finished create is still
       // recognisable (and easy to clean up), then the password hash
       const at = Date.now();
       const writes = [
-        db.ref(oPath(code, "created")).set({ by: creatorName, at: at })
+        db.ref(oPath(code, "created")).set({ by: creatorName, at: at }),
+        // recovery/sessions/<code> or recovery/orgs/<slug>/sessions/<code>
+        // — exactly matching the rule tree (recovery/ + _sessionPrefix + code).
+        db.ref("recovery/" + oPath(code)).set({ code: recoveryCode })
       ];
       if (workshopLabel) {
         writes.push(db.ref(oPath(code, "workshopLabel")).set(workshopLabel));
@@ -10743,7 +10901,7 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       return Promise.all(writes)
         .then(() => hashPassword(password, code))
         .then(h => db.ref(oPath(code, "adminPasswordHash")).set(h))
-        .then(() => code);
+        .then(() => ({ code: code, recoveryCode: recoveryCode }));
     });
   };
   return tryOne(0);

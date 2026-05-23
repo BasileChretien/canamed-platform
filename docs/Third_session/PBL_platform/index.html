@@ -506,6 +506,30 @@
             Or scan the QR with a phone
           </p>
         </div>
+        <!-- D21 — one-time recovery code. Shown ONLY here (it is stored in
+             the unreadable /recovery subtree and can never be fetched back),
+             so the facilitator must record it now. It is the sole way to
+             reset the session password if it is later forgotten. -->
+        <div class="splash-recovery" id="splash-recovery-wrap" role="group"
+             aria-labelledby="splash-recovery-title" hidden>
+          <p class="splash-recovery-title" id="splash-recovery-title"
+             data-i18n="splash.created.recovery-title">
+            Recovery code &mdash; write this down now
+          </p>
+          <div class="splash-recovery-display" aria-live="polite">
+            <span id="splash-recovery-code">&mdash;</span>
+            <button type="button" id="splash-recovery-copy"
+                    data-i18n="splash.created.recovery-copy"
+                    title="Copy recovery code">Copy</button>
+          </div>
+          <p class="splash-recovery-warn" data-i18n="splash.created.recovery-warn">
+            This is the ONLY way to reset the session password if you forget it.
+            It will not be shown again. Keep it private &mdash; anyone who has it
+            can reset this session&rsquo;s password.
+          </p>
+          <p class="splash-hint" id="splash-recovery-copy-hint"
+             role="status" aria-live="polite"></p>
+        </div>
         <div class="splash-row">
           <button type="button" class="splash-link" id="splash-create-another"
                   data-i18n="splash.created.create-another">
@@ -888,6 +912,21 @@
                      data-i18n="lobby.new-pass-confirm-placeholder" data-i18n-attr="placeholder"
                      aria-label="Confirm new session password"
                      placeholder="confirm new password" />
+            </label>
+            <!-- D21 — recovery-code field. To OVERWRITE a forgotten password
+                 the new database rules require the per-session recovery code
+                 (shown once at creation) to be presented; it gates
+                 _superadminReset, which in turn gates the adminPasswordHash
+                 overwrite. The super-admin key alone can no longer reset a
+                 password — and on public deployments the key is null, so this
+                 field is the only working recovery path. Leave it blank when
+                 setting the password for the FIRST time (no hash yet). -->
+            <label><span data-i18n="lobby.recovery-code-label">Recovery code (to reset a forgotten password)</span>
+              <input type="text" id="recovery-code-input"
+                     data-i18n="lobby.recovery-code-placeholder" data-i18n-attr="placeholder"
+                     aria-label="Session recovery code"
+                     autocomplete="off" autocapitalize="off" spellcheck="false"
+                     placeholder="xxxx-xxxx-xxxx" />
             </label>
             <button id="set-pass-btn"
                     data-i18n="lobby.save-pass-btn">Save password &amp; open dashboard</button>
@@ -2651,6 +2690,14 @@
       </label>
       <input type="password" id="change-pass-input" placeholder="new session password"
              aria-label="New session password" />
+      <!-- D21 — overwriting an EXISTING session's password requires that
+           session's one-time recovery code (the rules gate the reset on it).
+           Leave blank when pre-provisioning a brand-new session number that
+           has no password yet. -->
+      <input type="text" id="change-recovery-input"
+             placeholder="recovery code (only to overwrite an existing password)"
+             aria-label="Session recovery code"
+             autocomplete="off" autocapitalize="off" spellcheck="false" />
       <button id="change-pass-btn">Set password</button>
       <span id="change-pass-ok" class="copy-ok hidden">Saved</span>
       <div class="purge-row">
