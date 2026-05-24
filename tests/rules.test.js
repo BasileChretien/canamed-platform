@@ -728,3 +728,49 @@ test("rules: /orgs votes/ballots ownership guard is org-scoped", () => {
   assert.ok(!w.includes("root.child('sessions').child($sessionId).child('stableIdMapping')"),
     "org ballot guard must not reference the legacy /sessions subtree: " + w);
 });
+
+// =============================================================
+// FINDING-07 — admin password hash oracle (free fix)
+// =============================================================
+//
+// The real PBKDF2 hash now lives in the top-level adminSecrets/<code> tree,
+// which has NO read rule (root is .read:false) — so it is unreadable by every
+// client, closing the offline brute-force oracle. Login verifies via a
+// proof-write: the rule allows a write to proof/<uid> only when the submitted
+// candidate equals the stored hash (compared server-side). A non-secret random
+// marker stays at sessions/<code>/adminPasswordHash so the existence-based
+// admin-gated rules keep working.
+
+test("rules: adminSecrets subtree grants NO read to any client (oracle closed)", () => {
+  const node = rules.rules.adminSecrets;
+  assert.ok(node, "/adminSecrets must be declared");
+  // No .read anywhere on the path → unreadable (root .read is false).
+  assert.strictEqual(node[".read"], undefined, "/adminSecrets must not grant .read");
+  const code = node.$code;
+  assert.ok(code, "/adminSecrets/$code must exist");
+  assert.strictEqual(code[".read"], undefined, "/adminSecrets/$code must not grant .read");
+  assert.strictEqual(code.hash[".read"], undefined, "/adminSecrets/$code/hash must not grant .read");
+  assert.ok(code.proof && code.proof.$uid, "/adminSecrets/$code/proof/$uid must exist");
+  assert.strictEqual(code.proof.$uid[".read"], undefined,
+    "/adminSecrets/$code/proof/$uid must not grant .read");
+});
+
+test("rules: adminSecrets/$code/hash is write-once + _superadminReset-gated + format-validated", () => {
+  const h = rules.rules.adminSecrets.$code.hash;
+  assert.ok(h[".write"].includes("auth != null"), "hash write must require auth: " + h[".write"]);
+  assert.ok(h[".write"].includes("!data.exists()"), "hash must be write-once: " + h[".write"]);
+  assert.ok(h[".write"].includes("_superadminReset") && h[".write"].includes("now - 30000"),
+    "hash overwrite must be gated by a fresh _superadminReset (30s window): " + h[".write"]);
+  // same format guard as the legacy field (PBKDF2 v2$ envelope OR SHA-256 hex)
+  assert.match(h[".validate"], /v2\[\$\]\[0-9\]\+\[\$\]\[0-9a-f\]\+/);
+  assert.match(h[".validate"], /\[0-9a-f\]\{64\}/);
+});
+
+test("rules: adminSecrets/$code/proof/$uid verifies by server-side compare, owner-bound", () => {
+  const p = rules.rules.adminSecrets.$code.proof.$uid;
+  const w = p[".write"];
+  assert.ok(w.includes("auth != null"), "proof write must require auth: " + w);
+  assert.ok(w.includes("$uid == auth.uid"), "proof must be owner-bound: " + w);
+  assert.ok(w.includes("newData.val() == root.child('adminSecrets').child($code).child('hash').val()"),
+    "proof write must compare the candidate to the stored hash server-side: " + w);
+});
