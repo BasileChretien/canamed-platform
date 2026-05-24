@@ -347,6 +347,21 @@
       }
     },
 
+    "adminSecrets": {
+      "$code": {
+        "hash": {
+          ".write": "auth != null && (!data.exists() || (root.child('sessions').child($code).child('_superadminReset').exists() && root.child('sessions').child($code).child('_superadminReset').child('requestedAt').isNumber() && root.child('sessions').child($code).child('_superadminReset').child('requestedAt').val() >= now - 30000 && root.child('sessions').child($code).child('_superadminReset').child('requestedAt').val() <= now + 5000))",
+          ".validate": "newData.isString() && (newData.val().matches(/^[0-9a-f]{64}$/) || newData.val().matches(/^v2[$][0-9]+[$][0-9a-f]+$/))"
+        },
+        "proof": {
+          "$uid": {
+            ".write": "auth != null && $uid == auth.uid && newData.isString() && newData.val() == root.child('adminSecrets').child($code).child('hash').val()",
+            ".validate": "newData.isString() && (newData.val().matches(/^[0-9a-f]{64}$/) || newData.val().matches(/^v2[$][0-9]+[$][0-9a-f]+$/))"
+          }
+        }
+      }
+    },
+
     "orgs": {
       "$orgSlug": {
         ".validate": "$orgSlug.matches(/^[a-z0-9-]+$/)",
