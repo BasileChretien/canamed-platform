@@ -9150,19 +9150,29 @@ function editAnswer(moduleKey, entry, li) {
 }
 function deleteAnswer(moduleKey, id) {
   const ref = refAnswers[moduleKey].child(id);
-  // Research integrity (point 4): record the removal in the append-only event
-  // log (metadata only — the body is never copied into events, per the
-  // event-sourcing privacy rule) so the trail still shows that a point was
-  // withdrawn, by whom, and when. The live answer is then hard-removed as
-  // before. (Full deleted-body retention would need a soft-delete tombstone
-  // with render/export filtering — tracked as a follow-up.)
+  // Research integrity: snapshot the body into the append-only
+  // rooms/<room>/answersDeleted log BEFORE removing it, so a withdrawn point
+  // is recoverable for analysis. This is deliberately a SEPARATE log (not an
+  // in-place tombstone): the live answer still disappears from the room and
+  // correctly stops contributing to scoring, while the text survives for
+  // researchers. A metadata-only "answer.delete" event is also recorded in
+  // the activity stream (no body there, per the event-sourcing privacy rule).
   return ref.once("value").then(snap => {
     const cur = snap.val();
-    return ref.remove().then(() => {
-      if (cur) logEvent(myRoom, "answer.delete." + moduleKey, {
-        by: myName, len: (cur.text || "").length, bulletKey: cur.bulletKey || ""
+    const archive = (cur && db && typeof myRoom === "string" && myRoom)
+      ? db.ref(sPath("rooms/" + myRoom + "/answersDeleted")).push({
+          text: (cur.text || ""), by: myName, module: moduleKey, at: Date.now(),
+          cid: clientId, bulletKey: cur.bulletKey || "",
+          university: cur.university || ""
+        }).catch(e => { console.warn("answersDeleted archive failed", e && e.code); })
+      : Promise.resolve();
+    return Promise.resolve(archive)
+      .then(() => ref.remove())
+      .then(() => {
+        if (cur) logEvent(myRoom, "answer.delete." + moduleKey, {
+          by: myName, len: (cur.text || "").length, bulletKey: cur.bulletKey || ""
+        });
       });
-    });
   }).catch(e => {
     console.error("Delete failed", e);
     alert(tFallback("room.answer.err.delete-failed",

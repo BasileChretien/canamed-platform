@@ -359,9 +359,10 @@ up. Items are roughly ordered by impact × effort.
    `--nagoya-600` (#2e9fdf) is ~3.0:1 which is below 4.5:1.
    Either darken the primary or use a darker text colour on
    primary fills. WCAG 1.4.3.
-7. Add explicit `autocomplete="given-name"`, `"organization"`,
-   `"family-name"` on the profile-setup form fields so browsers
-   can offer auto-fill. WCAG 1.3.5.
+7. ✅ **Done.** `autocomplete` is now set on the profile-setup form
+   (`#splash-prof-name` → `name`, `#splash-prof-uni` → `organization`)
+   and on the lobby join form (see §5.2). WCAG 1.3.5. Covered by
+   `tests-e2e/lobby-form-semantics.spec.js` across desktop + mobile.
 8. Add a "Focus the first lobby field" announcement when the
    splash transitions to the lobby (currently the focus stays
    on the Enter button that got clicked).

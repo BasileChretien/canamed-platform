@@ -774,3 +774,39 @@ test("rules: adminSecrets/$code/proof/$uid verifies by server-side compare, owne
   assert.ok(w.includes("newData.val() == root.child('adminSecrets').child($code).child('hash').val()"),
     "proof write must compare the candidate to the stored hash server-side: " + w);
 });
+
+// =============================================================
+// answersDeleted — research-integrity retention of withdrawn points
+// =============================================================
+//
+// deleteAnswer() snapshots a removed point's body into the append-only
+// rooms/$roomId/answersDeleted log before hard-removing it from the live
+// answers tree (so scoring/render are unaffected, but the text survives for
+// analysis). rooms/$roomId carries no blanket .write, so the append-only
+// !data.exists() guard here is actually enforced (unlike answers/$entryId/edits,
+// whose write authority cascades from the collaborative entry rule).
+
+test("rules: /rooms/$roomId/answersDeleted is append-only + bounded", () => {
+  const node = ROOM.answersDeleted && ROOM.answersDeleted.$pushId;
+  assert.ok(node, "/rooms/$roomId/answersDeleted/$pushId must be declared");
+  const w = node[".write"];
+  assert.ok(w.includes("auth != null"), "answersDeleted write must require auth: " + w);
+  assert.ok(w.includes("!data.exists()"),
+    "answersDeleted must be append-only — a withdrawn point can't be rewritten: " + w);
+  assert.ok(w.includes("'closed'"),
+    "answersDeleted write must be refused once the session is closed: " + w);
+  const v = node[".validate"];
+  assert.match(v, /child\('text'\)\.val\(\)\.length <= 1000/, "deleted body capped at 1000: " + v);
+  assert.ok(v.includes("'module'") && v.includes("'by'") && v.includes("'at'"),
+    "answersDeleted must carry {module, by, at}: " + v);
+  assert.match(v, /child\('at'\)\.val\(\) <= now \+ 5000/, "deleted `at` must be near server now: " + v);
+});
+
+test("rules: /orgs /rooms/$roomId/answersDeleted mirrors append-only + org-scoped", () => {
+  const node = ORG_ROOM.answersDeleted && ORG_ROOM.answersDeleted.$pushId;
+  assert.ok(node, "org /rooms/$roomId/answersDeleted/$pushId must be declared");
+  const w = node[".write"];
+  assert.ok(w.includes("!data.exists()"), "org answersDeleted must be append-only: " + w);
+  assert.ok(w.includes("root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed')"),
+    "org answersDeleted closed-guard must reference the org-scoped session: " + w);
+});
