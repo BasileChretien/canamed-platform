@@ -306,12 +306,13 @@
                    data-i18n="splash.profile.name-label">Your name (first name or nickname)</label>
             <input type="text" id="splash-prof-name" maxlength="40"
                    data-i18n="splash.profile.name-placeholder" data-i18n-attr="placeholder"
-                   placeholder="e.g. Alice / Akari" required />
+                   placeholder="e.g. Alice / Akari" required
+                   autocomplete="name" aria-required="true" />
           </div>
           <div class="splash-field">
             <label for="splash-prof-uni"
                    data-i18n="splash.profile.uni-label">University</label>
-            <select id="splash-prof-uni"></select>
+            <select id="splash-prof-uni" autocomplete="organization"></select>
           </div>
           <div class="splash-field">
             <label for="splash-prof-year"
