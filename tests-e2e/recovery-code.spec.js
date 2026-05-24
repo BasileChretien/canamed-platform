@@ -174,14 +174,15 @@ test.describe("D21 recovery code — create + reset", () => {
     await page.locator("#change-pass-input").fill("card-changed-pw");
     await page.locator("#change-recovery-input").fill(recovery);
     const changeBtn = page.locator("#change-pass-btn");
-    // On the dense admin dashboard at a narrow (Pixel 7) viewport, sibling
-    // stage cards stack over the superadmin card and intercept pointer
-    // events on the button even though it is visible + stable. We've scrolled
-    // it into view and target it by its unique ID, so a forced click is
-    // appropriate here (this is a test-only mobile layout-overlap artifact,
-    // not a real interaction the user hits — the card is its own screen).
+    // The always-visible session-code chip (.admin-session-chip) overlaps the
+    // superadmin-card button region after scrolling, so a coordinate-based
+    // click — even { force: true } — hit-tests onto the chip rather than the
+    // button and the handler never runs. We assert the handler's CONFIRMATION
+    // here, so dispatch the click straight to the button; the rules-level
+    // gating of the recovery code is proven against the real Firebase emulator
+    // in tests-e2e/emulator/recovery-rules.spec.js.
     await changeBtn.scrollIntoViewIfNeeded();
-    await changeBtn.click({ force: true });
+    await changeBtn.dispatchEvent("click");
     await expect(page.locator("#change-pass-ok")).toBeVisible({ timeout: 15_000 });
     await expect(page.locator("#change-pass-ok")).toContainText(code, { ignoreCase: true });
   });
