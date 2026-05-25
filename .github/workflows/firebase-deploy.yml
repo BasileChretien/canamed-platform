@@ -1,18 +1,20 @@
-# Auto-deploy the CANAMED platform to Firebase on every push to main that
-# touches the platform folder. Uses the service-account JSON the Firebase init
-# wizard already put into the repo as a GitHub Actions secret.
+# Auto-deploy the CANAMED platform to Firebase on every push to main.
+# Uses the service-account JSON the Firebase init wizard already put into
+# the repo as a GitHub Actions secret.
 #
 # Manual `firebase deploy` from a developer machine continues to work; this
 # workflow just keeps the live site in sync with `main` automatically.
+#
+# Triggers on EVERY push to main (no path filter): dependency bumps and
+# CI-only changes will redeploy byte-identical hosting content (a harmless
+# no-op), but the live site is guaranteed to always match main. The
+# concurrency group below collapses bursts so only the latest push deploys.
 
 name: Deploy CANAMED to Firebase
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'docs/Third_session/PBL_platform/**'
-      - '.github/workflows/firebase-deploy.yml'
   # let us trigger a deploy by hand from the Actions tab when needed
   workflow_dispatch:
 
