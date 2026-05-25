@@ -66,7 +66,7 @@ window.CANAMED_SUPERADMIN_KEY = null;
  * Set to null to disable — the platform still works, just without this
  * layer. See README.md → "Enabling App Check" for the full step-by-step.
  */
-window.CANAMED_RECAPTCHA_SITE_KEY = "6Lemg-wsAAAAAKIkv6KorbZu0iUz_q3e36wrlFiQ";
+window.CANAMED_RECAPTCHA_SITE_KEY = null;
 
 /* PERFORMANCE MONITORING (optional, recommended for research deployments).
  *
