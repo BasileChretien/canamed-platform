@@ -3217,7 +3217,10 @@ function joinSuperAdmin() {
         ? db.ref(adminSecretPath(sessionNum, "hash"))
         : refMarker;   // org path (deferred): the hash stays at the session path
       return refMarker.once("value").then(snap => {
-        if (!snap.exists()) {
+        // snap.val() == null (NOT snap.exists()) so this works against BOTH
+        // Firebase and the LOCAL-mode LocalDB snapshot (which exposes .val()
+        // but not .exists()) — equivalent to !exists() on Firebase.
+        if (snap.val() == null) {
           // initial set — the !data.exists() branch of the rule allows this
           // without a reset flag or recovery code. On the legacy path also
           // drop the readable marker so existence checks + future resets work.
@@ -3524,7 +3527,9 @@ function enterAdminApp() {
         const refMarker = db.ref(oPath(targetSession, "adminPasswordHash"));
         const refSecret = legacy ? db.ref(adminSecretPath(targetSession, "hash")) : refMarker;
         return refMarker.once("value").then(snap => {
-          if (!snap.exists()) {
+          // snap.val() == null (NOT snap.exists()) for LOCAL-mode LocalDB
+          // compatibility (no .exists() there); equivalent on Firebase.
+          if (snap.val() == null) {
             // initial set / pre-provision a new session number — no code needed
             return legacy
               ? Promise.all([refSecret.set(h), refMarker.set(randomAdminMarker())])
