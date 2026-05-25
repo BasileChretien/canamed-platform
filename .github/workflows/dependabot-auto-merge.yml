@@ -1,0 +1,56 @@
+# Auto-merge for Dependabot pull requests.
+#
+# Dependabot opens dependency-bump PRs (npm + github-actions, see
+# .github/dependabot.yml). This workflow turns on GitHub's native
+# auto-merge for them so they merge themselves once the required CI gates
+# pass (Unit tests + the Playwright matrix + Rules E2E) — no manual
+# merge-button babysitting.
+#
+# Policy:
+#   - github-actions bumps: auto-merge any version jump (incl. major).
+#     These touch only CI tooling and are fully exercised by the matrix.
+#   - npm bumps: auto-merge patch + minor only. A major (potentially
+#     breaking) bump to a dependency that ships from the deploy source is
+#     left for a human to review and merge by hand.
+#
+# main is the deploy source for canamed-69785.web.app and is protected
+# (PR required, CI required, no direct push). Auto-merge respects every
+# branch-protection gate: it only removes the final manual click once all
+# gates are green, and it can never merge anything CI rejects.
+#
+# Security: triggered on `pull_request` (not pull_request_target) and the
+# job never checks out or runs PR code, so the elevated token is never
+# exposed to untrusted code. GITHUB_TOKEN permissions are scoped to
+# exactly what `gh pr merge --auto` needs.
+
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    name: Enable auto-merge
+    runs-on: ubuntu-latest
+    if: ${{ github.event.pull_request.user.login == 'dependabot[bot]' }}
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge
+        # Auto-merge unless it is a non-actions semver-major bump.
+        # github-actions majors are allowed; npm majors are held for
+        # manual review.
+        if: >-
+          steps.meta.outputs.update-type != 'version-update:semver-major' ||
+          steps.meta.outputs.package-ecosystem == 'github_actions'
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
