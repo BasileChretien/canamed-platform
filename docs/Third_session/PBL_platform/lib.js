@@ -637,6 +637,38 @@
   }
 
   // ---------------------------------------------------------------
+  // generateRecoveryCode
+  // ---------------------------------------------------------------
+  // A one-time per-session SECRET shown to the facilitator at creation
+  // time and never again (it is stored under the unreadable top-level
+  // /recovery subtree, so no client can read it back). Possession of
+  // this code is the ONLY way to overwrite a forgotten admin password:
+  // the database rules require the value written to _superadminReset.code
+  // to equal /recovery/.../code before adminPasswordHash may be replaced.
+  //
+  // Same construction as generateSessionCode (crypto.getRandomValues +
+  // modulo-bias rejection over the unambiguous 31-char alphabet), but
+  // 12 characters formatted as "xxxx-xxxx-xxxx" (14 incl. dashes — well
+  // within the rule's 8..60-char bound). 31^12 ≈ 7.9e17 ≈ 59.5 bits of
+  // entropy — a value an attacker cannot feasibly guess inside the 30 s
+  // overwrite window the rule allows, and far stronger than the 6-char
+  // session code (which is NOT a secret — it is read aloud to a room).
+  function generateRecoveryCode() {
+    const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+    const cutoff = Math.floor(256 / alphabet.length) * alphabet.length;
+    const chars = [];
+    while (chars.length < 12) {
+      const buf = new Uint8Array(12 - chars.length);
+      crypto.getRandomValues(buf);
+      for (let i = 0; i < buf.length && chars.length < 12; i++) {
+        if (buf[i] < cutoff) chars.push(alphabet[buf[i] % alphabet.length]);
+      }
+    }
+    const s = chars.join("");
+    return s.slice(0, 4) + "-" + s.slice(4, 8) + "-" + s.slice(8, 12);
+  }
+
+  // ---------------------------------------------------------------
   // assignRooms — initial Caen×Nagoya pairing at session start
   // ---------------------------------------------------------------
   //
@@ -715,6 +747,7 @@
     hashPassword: hashPassword,
     verifyPassword: verifyPassword,
     generateSessionCode: generateSessionCode,
+    generateRecoveryCode: generateRecoveryCode,
     computeCohortCounts: computeCohortCounts,
     localCountryName: localCountryName,
     buildCohortPair: buildCohortPair,

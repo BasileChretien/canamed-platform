@@ -730,6 +730,124 @@ test("rules: /orgs votes/ballots ownership guard is org-scoped", () => {
 });
 
 // =============================================================
+// D21 (hardened) — per-session recovery code gates the password reset
+// =============================================================
+//
+// The original D21 reset only required a fresh _superadminReset flag, which
+// ANY authenticated participant could write — so any participant who knew the
+// (spoken-aloud) session code could hijack the admin password. The fix adds
+// an UNREADABLE top-level /recovery subtree holding a per-session secret,
+// written ONCE at creation (before any adminPasswordHash exists), and makes
+// both _superadminReset.write require the written `code` to equal
+// /recovery/.../code. These tests pin that contract so a future edit can't
+// silently drop the recovery binding and re-open the hijack path.
+
+test("rules: /recovery subtree is unreadable at the top level", () => {
+  const recovery = rules.rules.recovery;
+  assert.ok(recovery && typeof recovery === "object",
+    "/recovery top-level rule must be declared");
+  assert.strictEqual(recovery[".read"], false,
+    "/recovery must be unreadable (.read:false) so no client can fetch a code back");
+  assert.strictEqual(recovery[".write"], false,
+    "/recovery top-level .write must be denied by default (only the per-session leaf is writable)");
+});
+
+test("rules: /recovery/sessions/$sessionId is write-once, pre-password, unreadable, code 8..60", () => {
+  const node = rules.rules.recovery.sessions["$sessionId"];
+  assert.ok(node, "/recovery/sessions/$sessionId must be declared");
+  // unreadable
+  assert.strictEqual(node[".read"], false,
+    "/recovery/sessions/$sessionId must be unreadable");
+  const w = node[".write"];
+  assert.ok(w.includes("auth != null"),
+    "recovery write must require auth: " + w);
+  // write-once: only when the node does not yet exist
+  assert.ok(w.includes("!data.exists()"),
+    "recovery write must be write-once (!data.exists()): " + w);
+  // pre-password binding: only writable while the session has no adminPasswordHash
+  assert.ok(w.includes("adminPasswordHash"),
+    "recovery write must be gated on the session having no adminPasswordHash yet: " + w);
+  assert.ok(w.includes("!root.child('sessions').child($sessionId).child('adminPasswordHash').exists()"),
+    "recovery write must reference the matching session's adminPasswordHash: " + w);
+  // validate: code is a string of length 8..60
+  const v = node[".validate"];
+  assert.ok(v.includes("'code'") && v.includes("isString"),
+    "recovery validate must require a string `code`: " + v);
+  assert.match(v, /length >= 8/, "recovery code must be >= 8 chars: " + v);
+  assert.match(v, /length <= 60/, "recovery code must be <= 60 chars: " + v);
+});
+
+test("rules: /recovery/orgs/$orgSlug/sessions/$sessionId mirrors the session-scoped recovery rule", () => {
+  const orgRecovery = rules.rules.recovery.orgs &&
+    rules.rules.recovery.orgs["$orgSlug"] &&
+    rules.rules.recovery.orgs["$orgSlug"].sessions &&
+    rules.rules.recovery.orgs["$orgSlug"].sessions["$sessionId"];
+  assert.ok(orgRecovery, "/recovery/orgs/$orgSlug/sessions/$sessionId must be declared (org mirror)");
+  assert.strictEqual(orgRecovery[".read"], false,
+    "org recovery node must be unreadable");
+  const w = orgRecovery[".write"];
+  assert.ok(w.includes("auth != null"), "org recovery write must require auth: " + w);
+  assert.ok(w.includes("!data.exists()"), "org recovery write must be write-once: " + w);
+  // pre-password binding must reference the ORG-scoped adminPasswordHash, not the legacy one
+  assert.ok(w.includes("!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()"),
+    "org recovery write must reference the org-scoped adminPasswordHash: " + w);
+  const v = orgRecovery[".validate"];
+  assert.ok(v.includes("'code'"), "org recovery validate must require `code`: " + v);
+  assert.match(v, /length >= 8/);
+  assert.match(v, /length <= 60/);
+});
+
+test("rules: /sessions _superadminReset.write requires the recovery code to match", () => {
+  const w = rules.rules.sessions["$sessionId"]._superadminReset[".write"];
+  // the write must consult the unreadable recovery subtree
+  assert.ok(w.includes("root.child('recovery').child('sessions').child($sessionId).child('code')"),
+    "_superadminReset write must reference /recovery/sessions/$sessionId/code: " + w);
+  // and require the written code to EQUAL the stored recovery code
+  assert.ok(w.includes("newData.child('code').val() == root.child('recovery').child('sessions').child($sessionId).child('code').val()"),
+    "_superadminReset write must require the submitted code to equal the stored recovery code: " + w);
+});
+
+test("rules: /sessions _superadminReset.validate requires a code field (8..60)", () => {
+  const v = rules.rules.sessions["$sessionId"]._superadminReset[".validate"];
+  assert.ok(v.includes("'code'"), "_superadminReset validate must require a `code` field: " + v);
+  assert.ok(v.includes("hasChildren(['requestedAt','by','code'])"),
+    "_superadminReset validate must require {requestedAt, by, code}: " + v);
+  assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/,
+    "_superadminReset code must be >= 8 chars: " + v);
+  assert.match(v, /child\('code'\)\.val\(\)\.length <= 60/,
+    "_superadminReset code must be <= 60 chars: " + v);
+});
+
+test("rules: /orgs _superadminReset.write requires the org-scoped recovery code to match", () => {
+  const w = rules.rules.orgs["$orgSlug"].sessions["$sessionId"]._superadminReset[".write"];
+  assert.ok(w.includes("root.child('recovery').child('orgs').child($orgSlug).child('sessions').child($sessionId).child('code')"),
+    "/orgs _superadminReset write must reference /recovery/orgs/$orgSlug/sessions/$sessionId/code: " + w);
+  assert.ok(w.includes("newData.child('code').val() == root.child('recovery').child('orgs').child($orgSlug).child('sessions').child($sessionId).child('code').val()"),
+    "/orgs _superadminReset write must require the submitted code to equal the org-scoped recovery code: " + w);
+});
+
+test("rules: /orgs _superadminReset.validate requires a code field (8..60)", () => {
+  const v = rules.rules.orgs["$orgSlug"].sessions["$sessionId"]._superadminReset[".validate"];
+  assert.ok(v.includes("'code'"), "/orgs _superadminReset validate must require a `code` field: " + v);
+  assert.ok(v.includes("hasChildren(['requestedAt','by','code'])"),
+    "/orgs _superadminReset validate must require {requestedAt, by, code}: " + v);
+  assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/);
+  assert.match(v, /child\('code'\)\.val\(\)\.length <= 60/);
+});
+
+test("rules: /recovery is NOT under the readable session subtree (no cascade leak)", () => {
+  // The recovery code MUST live OUTSIDE /sessions/$sessionId — the session's
+  // .read cascades to members, so storing the code there would leak it to any
+  // participant. Guard against a future refactor moving it under the session.
+  const session = rules.rules.sessions["$sessionId"];
+  assert.strictEqual(session.recovery, undefined,
+    "recovery code must NOT live under /sessions/$sessionId (its .read cascades to members)");
+  const orgSession = rules.rules.orgs["$orgSlug"].sessions["$sessionId"];
+  assert.strictEqual(orgSession.recovery, undefined,
+    "recovery code must NOT live under /orgs/$orgSlug/sessions/$sessionId either");
+});
+
+// =============================================================
 // FINDING-07 — admin password hash oracle (free fix)
 // =============================================================
 //

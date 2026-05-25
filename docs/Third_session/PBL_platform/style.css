@@ -3738,6 +3738,62 @@ body.locked > footer { display: none !important; }
 #splash-copy-code:hover { background: var(--primary); color: #fff; }
 .splash-ok { color: var(--ok); margin-right: 6px; }
 
+/* D21 — one-time recovery code block on the created-success view. Amber
+   "important, write this down" framing distinguishes it from the blue
+   session-code block: the session code is read aloud to a room, the
+   recovery code is a SECRET shown exactly once. */
+.splash-recovery {
+  margin: 18px 0 4px;
+  padding: 16px 18px;
+  background: linear-gradient(180deg, rgba(231,184,0,0.14), rgba(231,184,0,0.05));
+  border: 1.5px solid var(--warn, #E7B800);
+  border-radius: var(--r-md);
+  text-align: center;
+}
+.splash-recovery-title {
+  margin: 0 0 8px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--warn-strong, #8a6d00);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.splash-recovery-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 4px 0 8px;
+}
+#splash-recovery-code {
+  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font-size: clamp(1.2rem, 3.4vw, 1.7rem);
+  font-weight: 800;
+  letter-spacing: 0.10em;
+  color: var(--warn-strong, #8a6d00);
+  user-select: all;
+}
+#splash-recovery-copy {
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.86rem;
+  color: var(--warn-strong, #8a6d00);
+  background: var(--card);
+  border: 1.5px solid var(--warn, #E7B800);
+  padding: 8px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              color var(--dur-base, .18s) var(--ease-out, ease);
+}
+#splash-recovery-copy:hover { background: var(--warn, #E7B800); color: #1a1a1a; }
+.splash-recovery-warn {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--muted, #6a665d);
+}
+
 /* --- the small "Session ABC-DEF" badge that appears on the lobby once
        a session has been locked in via the splash --- */
 .session-badge {
