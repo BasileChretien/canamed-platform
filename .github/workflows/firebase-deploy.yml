@@ -9,6 +9,11 @@
 # CI-only changes will redeploy byte-identical hosting content (a harmless
 # no-op), but the live site is guaranteed to always match main. The
 # concurrency group below collapses bursts so only the latest push deploys.
+#
+# SAFETY GATE: the deploy job first waits for this commit's required CI
+# checks to all pass, and aborts if any fail — so an untested commit (e.g.
+# an admin direct-push that bypassed branch protection) never reaches the
+# live site. Manual `workflow_dispatch` runs skip the gate (escape hatch).
 
 name: Deploy CANAMED to Firebase
 
@@ -17,6 +22,11 @@ on:
     branches: [main]
   # let us trigger a deploy by hand from the Actions tab when needed
   workflow_dispatch:
+
+# read-only token: checkout (contents) + reading this commit's check-runs
+permissions:
+  contents: read
+  checks: read
 
 # only one deploy at a time - cancel any in-flight run if a new push lands
 concurrency:
@@ -28,6 +38,64 @@ jobs:
     name: Deploy hosting + database rules
     runs-on: ubuntu-latest
     steps:
+      # Gate: never ship an untested commit. Wait for this commit's required
+      # status checks (the same set branch protection enforces for merges) to
+      # all conclude SUCCESS before deploying; abort if any fails. Skipped for
+      # manual workflow_dispatch runs. Self-contained (GitHub API via gh) — no
+      # third-party actions in the deploy path. Keep REQUIRED in sync with the
+      # branch-protection required status checks.
+      - name: Wait for required CI to pass on this commit
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          REQUIRED=(
+            "node --test"
+            "Playwright (chromium)"
+            "Playwright (a11y)"
+            "Playwright (firefox)"
+            "Playwright (mobile-ipad)"
+            "Playwright (mobile-iphone)"
+            "Playwright (perf)"
+            "Playwright (webkit)"
+          )
+          echo "Gating deploy on ${#REQUIRED[@]} required checks for $SHA"
+          deadline=$(( SECONDS + 900 ))
+          while true; do
+            runs="$(gh api "repos/$REPO/commits/$SHA/check-runs" --paginate \
+              --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv')"
+            pending=0
+            failed=""
+            for name in "${REQUIRED[@]}"; do
+              line="$(printf '%s\n' "$runs" | awk -F'\t' -v n="$name" '$1==n{print; exit}')"
+              if [ -z "$line" ]; then pending=1; continue; fi
+              status="$(printf '%s' "$line" | cut -f2)"
+              concl="$(printf '%s' "$line" | cut -f3)"
+              if [ "$status" != "completed" ]; then
+                pending=1
+              elif [ "$concl" != "success" ]; then
+                failed="$failed '$name'($concl)"
+              fi
+            done
+            if [ -n "$failed" ]; then
+              printf '%s%s%s\n' '::' 'error::' "Required check(s) failed:$failed — deployment aborted."
+              exit 1
+            fi
+            if [ "$pending" -eq 0 ]; then
+              echo "All required checks passed — proceeding to deploy."
+              break
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              printf '%s%s%s\n' '::' 'error::' "Timed out (15 min) waiting for required checks."
+              exit 1
+            fi
+            echo "Required checks still pending; re-checking in 20s..."
+            sleep 20
+          done
+
       - name: Check out the repository
         uses: actions/checkout@v6
 
