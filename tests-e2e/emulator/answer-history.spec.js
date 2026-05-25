@@ -63,3 +63,37 @@ test("rules: answer edit history is appended + bounded (point 4)", async ({ page
   }, entry);
   expect(recovered).toBe("v0");
 });
+
+test("rules: deleted answer body is retained append-only in answersDeleted", async ({ page }) => {
+  const code = "del-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = "Room 1";
+  const delPath = `sessions/${code}/rooms/${room}/answersDeleted/d1`;
+
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+
+  // A withdrawn point's body is archived here before the live entry is removed.
+  expect(await tryWrite(page, delPath,
+    { text: "a withdrawn clinical point", by: "A", module: "moduleA", at: Date.now() }))
+    .toBe("ALLOWED");
+
+  // Append-only: a second write to the SAME id is denied (history can't be rewritten).
+  const rewrite = await tryWrite(page, delPath,
+    { text: "tampered", by: "A", module: "moduleA", at: Date.now() });
+  expect(rewrite).not.toBe("ALLOWED");
+  expect(String(rewrite)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+
+  // Over-long body is rejected by .validate.
+  const tooLong = await tryWrite(page, `sessions/${code}/rooms/${room}/answersDeleted/d2`,
+    { text: "x".repeat(1001), by: "A", module: "moduleA", at: Date.now() });
+  expect(tooLong).not.toBe("ALLOWED");
+
+  // The archived body is recoverable by a member.
+  const body = await page.evaluate(async (p) => {
+    const snap = await firebase.database().ref(p + "/text").get();
+    return snap.val();
+  }, delPath);
+  expect(body).toBe("a withdrawn clinical point");
+});

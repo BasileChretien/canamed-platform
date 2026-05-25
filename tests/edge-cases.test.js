@@ -34,9 +34,11 @@ test("script: joinSuperAdmin writes _superadminReset before overwriting hash", (
   // here breaks loudly.
   assert.match(SCRIPT, /_superadminReset/,
     "joinSuperAdmin must reference _superadminReset to satisfy the new rule");
-  // The write order matters: refReset.set(...).then(() => refHash.set(...)).
-  // Look for the canonical sequence (whitespace-tolerant).
-  const seq = /refReset\.set\([^)]*\)[\s\S]*?\.then\(\(\) => refHash\.set\(h\)\)/;
+  // The write order matters: refReset.set(...).then(() => refSecret.set(h)).
+  // (FINDING-07 renamed the hash ref to refSecret — on the legacy path it
+  // points at the unreadable adminSecrets/<code>/hash; the reset-flag-first
+  // ordering is unchanged.) Look for the canonical sequence (ws-tolerant).
+  const seq = /refReset\.set\([^)]*\)[\s\S]*?\.then\(\(\) => refSecret\.set\(h\)\)/;
   assert.match(SCRIPT, seq,
     "joinSuperAdmin must set the reset flag BEFORE writing the new hash");
 });

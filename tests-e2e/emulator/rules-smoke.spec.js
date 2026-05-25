@@ -173,6 +173,41 @@ test("rules: FINDING-01 — a peer cannot overwrite a ballot bound to another st
   await ctxB.close();
 });
 
+test("rules: FINDING-07 — admin hash is unreadable; login verifies by proof-write", async ({ page }) => {
+  const code = "sec-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const realHash = "v2$100000$" + "ab".repeat(32);   // 64 hex → valid envelope
+  const wrongHash = "v2$100000$" + "cd".repeat(32);
+
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  // Join as a member — proves the oracle is closed even for session members.
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+
+  // The real hash is stored in adminSecrets (write-once, allowed first time).
+  expect(await tryWrite(page, `adminSecrets/${code}/hash`, realHash)).toBe("ALLOWED");
+
+  // It is UNREADABLE — a member's read is denied (no .read on adminSecrets).
+  const readBack = await page.evaluate(async (p) => {
+    try { const s = await firebase.database().ref(p).get(); return "READ:" + JSON.stringify(s.val()); }
+    catch (e) { return (e && (e.code || e.message)) || "DENIED"; }
+  }, `adminSecrets/${code}/hash`);
+  expect(readBack).not.toContain("READ:");
+  expect(String(readBack)).toMatch(/permission_denied|denied/i);
+
+  // Proof-write with the CORRECT hash → allowed (verification succeeds).
+  expect(await tryWrite(page, `adminSecrets/${code}/proof/${uid}`, realHash)).toBe("ALLOWED");
+
+  // Proof-write with a WRONG hash → denied (wrong password).
+  const wrong = await tryWrite(page, `adminSecrets/${code}/proof/${uid}`, wrongHash);
+  expect(wrong).not.toBe("ALLOWED");
+  expect(String(wrong)).toMatch(/permission_denied|denied/i);
+
+  // Hash is write-once: overwrite without a fresh _superadminReset is denied.
+  const overwrite = await tryWrite(page, `adminSecrets/${code}/hash`, wrongHash);
+  expect(overwrite).not.toBe("ALLOWED");
+});
+
 test("rules: a write to a denied path is rejected (rules ARE enforced)", async ({ page }) => {
   await page.goto("/");
   // Wait for the app to finish anonymous sign-in so a write is even attempted.

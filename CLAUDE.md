@@ -71,10 +71,20 @@ outstanding.**
   chain (`claimStableIdMapping`). Covered by `tests/rules.test.js` (structural)
   and `tests-e2e/emulator/rules-smoke.spec.js` (functional: peer overwrite
   denied, owner write + own-key first-write allowed).
-- Server-side admin-password verification (FINDING-07): `adminPasswordHash`
-  is readable by any authenticated user (hash oracle). The architecturally
-  correct fix is a Cloud Function that compares server-side and returns a
-  short-lived token — needs the Blaze plan.
+- ~~Server-side admin-password verification (FINDING-07): `adminPasswordHash`
+  is readable by any authenticated user (hash oracle).~~ **Fixed (free, no
+  Blaze):** the real PBKDF2 hash now lives in the top-level `adminSecrets/<code>`
+  tree, which has no `.read` rule (root is `.read:false`) so it is unreadable
+  by every client — closing the offline oracle even for session members. Login
+  verifies by a **proof-write**: the client writes its candidate hash to
+  `adminSecrets/<code>/proof/<uid>` and the rule allows it only when the
+  candidate equals the stored hash (compared server-side; hash never sent to a
+  client). A non-secret random marker stays at `sessions/<code>/adminPasswordHash`
+  so the existence-based admin-gated rules keep working. Gated to the live
+  `sessions/` deployment in `shared` mode (LOCAL keeps read-verify; org-scoped
+  sessions deferred — no live org deployments). See `verifyAdminPassword`,
+  `useAdminSecrets`, the create/recovery flows, and `tests/rules.test.js` +
+  `tests-e2e/emulator/rules-smoke.spec.js` (FINDING-07).
 - `pool/$clientId/room` is intentionally writable by any authenticated user
   (admin room-assignment + self-assign); residual room-griefing is accepted
   until a cryptographic admin identity exists.

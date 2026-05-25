@@ -875,6 +875,61 @@ function _sessionPrefix(slug) {
 }
 function oPath(code, p) { return _sessionPrefix(currentOrg) + code + (p ? "/" + p : ""); }
 function sPath(p) { return oPath(sessionNum, p); }
+
+/* FINDING-07 (admin-password hash oracle) — free fix.
+ *
+ * The real PBKDF2 hash used to live at sessions/<code>/adminPasswordHash,
+ * which is readable by any session member (the membership .read cascades and
+ * cannot be revoked at a child). A member could read it and brute-force the
+ * facilitator's password offline. The fix moves the REAL hash into the
+ * top-level `adminSecrets/<code>` tree, which has NO read rule (root is
+ * .read:false) so it is unreadable by every client. Login verifies by a
+ * "proof write": the client writes its candidate hash to
+ * adminSecrets/<code>/proof/<uid>; the rule allows the write ONLY when the
+ * candidate equals the stored hash (compared server-side) — so a successful
+ * write means the password was correct, and the hash itself is never sent to
+ * any client. A non-secret RANDOM marker stays at the old readable path so the
+ * existence checks the admin-gated rules + recovery rely on keep working.
+ *
+ * Scope: the live legacy `sessions/` deployment only. Org-scoped sessions keep
+ * the prior read-verify scheme for now (no live org deployments). */
+// Use the adminSecrets scheme only on the live, rules-enforced legacy
+// `sessions/` deployment. LOCAL mode (LocalDB) has no security rules, so a
+// proof-write would always succeed there — LOCAL keeps the legacy read-verify
+// path (the real hash sits at adminPasswordHash). Org-scoped sessions are
+// deferred (no live org deployments yet).
+function useAdminSecrets() {
+  return MODE === "shared" && _sessionPrefix(currentOrg) === "sessions/";
+}
+function adminSecretPath(code, leaf) { return "adminSecrets/" + code + (leaf ? "/" + leaf : ""); }
+function randomAdminMarker() {
+  // 32 random bytes -> 64 lowercase hex, which satisfies the existing
+  // adminPasswordHash .validate (legacy SHA-256 shape) while revealing
+  // nothing about the password.
+  const b = new Uint8Array(32);
+  crypto.getRandomValues(b);
+  return Array.from(b).map(x => x.toString(16).padStart(2, "0")).join("");
+}
+/* Verify a typed admin password. Returns "ok" | "wrong" | "none".
+ * Legacy-org sessions try the proof-write first; on denial they fall back to
+ * the read-verify path, which transparently handles (a) a new session with a
+ * wrong password (verifies against the random marker -> "wrong") and (b) an
+ * older session that predates adminSecrets (verifies against its real hash). */
+function verifyAdminPassword(pass) {
+  const legacyVerify = () => db.ref(sPath("adminPasswordHash")).once("value").then(snap => {
+    const stored = snap.val();
+    if (!stored) return "none";
+    return verifyPassword(pass, sessionNum, stored).then(ok => ok ? "ok" : "wrong");
+  });
+  return hashPassword(pass, sessionNum).then(candidate => {
+    if (useAdminSecrets() && currentUser && currentUser.uid) {
+      return db.ref(adminSecretPath(sessionNum, "proof/" + currentUser.uid)).set(candidate)
+        .then(() => "ok")
+        .catch(() => legacyVerify());   // denied: wrong pw OR pre-adminSecrets session
+    }
+    return legacyVerify();
+  });
+}
 let myName = null, myUniversity = null, myYear = null, myEnglish = null;
 let myConsent = null;            // { workshop, research, version, at }
 let myRoom = null;
@@ -3048,21 +3103,17 @@ function joinAdmin() {
   const btnLabel = btn.textContent;
   btn.disabled = true; btn.textContent = "Checking…";
   const restore = () => { btn.disabled = false; btn.textContent = btnLabel; };
-  // Wait for anonymous (or identified) sign-in so the password-hash read
-  // succeeds under Round-2 rules (session .read requires auth != null).
-  ensureSignedIn().then(() =>
-    db.ref(sPath("adminPasswordHash")).once("value")
-  ).then(snap => {
-    const stored = snap.val();
-    if (!stored) {
-      el("admin-hint").textContent =
-        "No admin password set yet - the super admin must set one first.";
-      restore(); return;
-    }
-    // verifyPassword handles both the new PBKDF2 ("v2$…") format and any
-    // legacy raw-SHA-256 hash; comparison is constant-time
-    return verifyPassword(pass, sessionNum, stored).then(ok => {
-      if (!ok) {
+  // Wait for anonymous (or identified) sign-in so the proof-write / fallback
+  // read succeeds under Round-2 rules (session .read requires auth != null).
+  ensureSignedIn()
+    .then(() => verifyAdminPassword(pass))   // FINDING-07: server-side proof-write (hash never read)
+    .then(status => {
+      if (status === "none") {
+        el("admin-hint").textContent =
+          "No admin password set yet - the super admin must set one first.";
+        restore(); return;
+      }
+      if (status !== "ok") {
         el("admin-hint").textContent = "Incorrect password.";
         restore(); return;
       }
@@ -3088,7 +3139,6 @@ function joinAdmin() {
         try { rebuildCaseDerived(); } catch (_) {}
         enterAdminApp(); startAdmin();
       });
-    });
   }).catch(e => {
     el("admin-hint").textContent = "Could not reach the session database.";
     console.error(e);
@@ -3158,17 +3208,22 @@ function joinSuperAdmin() {
   ensureSignedIn()
     .then(() => hashPassword(newPass, sessionNum))
     .then(h => {
-      const refHash = db.ref(sPath("adminPasswordHash"));
-      return refHash.once("value").then(snap => {
-        // Use snap.val() != null (not snap.exists()) so this works against
-        // BOTH Firebase and the LOCAL-mode LocalDB snapshot (which exposes
-        // .val() but not .exists()) — matching createSession's check.
-        const hashExists = snap.val() != null;
-        if (!hashExists) {
-          // initial set — the rule's !data.exists() branch allows this
-          // without a reset flag or recovery code. Works on key-less
-          // deployments too (auth is the only requirement).
-          return refHash.set(h);
+      const refMarker = db.ref(sPath("adminPasswordHash"));
+      // FINDING-07: on the legacy path the REAL hash lives in the unreadable
+      // adminSecrets tree; sessions/<code>/adminPasswordHash is only a
+      // readable non-secret marker. adminSecrets is unreadable, so we use the
+      // (readable) marker's existence to decide initial-set vs reset.
+      const refSecret = useAdminSecrets()
+        ? db.ref(adminSecretPath(sessionNum, "hash"))
+        : refMarker;   // org path (deferred): the hash stays at the session path
+      return refMarker.once("value").then(snap => {
+        if (!snap.exists()) {
+          // initial set — the !data.exists() branch of the rule allows this
+          // without a reset flag or recovery code. On the legacy path also
+          // drop the readable marker so existence checks + future resets work.
+          return useAdminSecrets()
+            ? Promise.all([refSecret.set(h), refMarker.set(randomAdminMarker())])
+            : refSecret.set(h);
         }
         // OVERWRITE path — requires the recovery code. Validate it is
         // non-empty client-side so we can show a clear message instead of a
@@ -3186,10 +3241,11 @@ function joinSuperAdmin() {
         const TS = (typeof firebase !== "undefined" &&
           firebase.database && firebase.database.ServerValue &&
           firebase.database.ServerValue.TIMESTAMP) || Date.now();
-        // The payload now MUST carry the recovery code — the rule compares it
-        // against /recovery/.../code and rejects the write if it differs.
+        // FINDING-07 + recovery: the reset payload MUST carry the recovery code
+        // (the rule compares it against /recovery/.../code), and the real hash
+        // is written to the unreadable adminSecrets tree (refSecret).
         return refReset.set({ requestedAt: TS, by: myName, code: recoveryCode })
-          .then(() => refHash.set(h))
+          .then(() => refSecret.set(h))
           .then(() => refReset.remove())
           .catch(err => {
             // best-effort flag cleanup; the rule's 30s window self-expires
@@ -3461,11 +3517,22 @@ function enterAdminApp() {
     // /recovery/.../code, and the hash overwrite on a fresh _superadminReset.
     hashPassword(np, targetSession)
       .then(h => {
-        const refHash = db.ref(oPath(targetSession, "adminPasswordHash"));
-        return refHash.once("value").then(snap => {
-          // .val() != null works against both Firebase and the LocalDB
-          // snapshot (no .exists()); matches createSession's check.
-          if (snap.val() == null) return refHash.set(h);
+        // FINDING-07: legacy path stores the real hash in unreadable
+        // adminSecrets/<code>/hash + a readable random marker; the readable
+        // marker's existence decides initial-set vs reset.
+        const legacy = useAdminSecrets();
+        const refMarker = db.ref(oPath(targetSession, "adminPasswordHash"));
+        const refSecret = legacy ? db.ref(adminSecretPath(targetSession, "hash")) : refMarker;
+        return refMarker.once("value").then(snap => {
+          if (!snap.exists()) {
+            // initial set / pre-provision a new session number — no code needed
+            return legacy
+              ? Promise.all([refSecret.set(h), refMarker.set(randomAdminMarker())])
+              : refSecret.set(h);
+          }
+          // OVERWRITE an existing session's password — requires that session's
+          // recovery code (the rule gates _superadminReset on it). Validate it
+          // is non-empty client-side for a clear message vs a bare denial.
           if (!recoveryCode) {
             const err = new Error("recovery-code-required");
             err._canamedRecovery = true;
@@ -3479,7 +3546,7 @@ function enterAdminApp() {
             firebase.database && firebase.database.ServerValue &&
             firebase.database.ServerValue.TIMESTAMP) || Date.now();
           return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode })
-            .then(() => refHash.set(h))
+            .then(() => refSecret.set(h))
             .then(() => refReset.remove())
             .catch(err => {
               try { refReset.remove(); } catch (_) {}
@@ -9167,19 +9234,29 @@ function editAnswer(moduleKey, entry, li) {
 }
 function deleteAnswer(moduleKey, id) {
   const ref = refAnswers[moduleKey].child(id);
-  // Research integrity (point 4): record the removal in the append-only event
-  // log (metadata only — the body is never copied into events, per the
-  // event-sourcing privacy rule) so the trail still shows that a point was
-  // withdrawn, by whom, and when. The live answer is then hard-removed as
-  // before. (Full deleted-body retention would need a soft-delete tombstone
-  // with render/export filtering — tracked as a follow-up.)
+  // Research integrity: snapshot the body into the append-only
+  // rooms/<room>/answersDeleted log BEFORE removing it, so a withdrawn point
+  // is recoverable for analysis. This is deliberately a SEPARATE log (not an
+  // in-place tombstone): the live answer still disappears from the room and
+  // correctly stops contributing to scoring, while the text survives for
+  // researchers. A metadata-only "answer.delete" event is also recorded in
+  // the activity stream (no body there, per the event-sourcing privacy rule).
   return ref.once("value").then(snap => {
     const cur = snap.val();
-    return ref.remove().then(() => {
-      if (cur) logEvent(myRoom, "answer.delete." + moduleKey, {
-        by: myName, len: (cur.text || "").length, bulletKey: cur.bulletKey || ""
+    const archive = (cur && db && typeof myRoom === "string" && myRoom)
+      ? db.ref(sPath("rooms/" + myRoom + "/answersDeleted")).push({
+          text: (cur.text || ""), by: myName, module: moduleKey, at: Date.now(),
+          cid: clientId, bulletKey: cur.bulletKey || "",
+          university: cur.university || ""
+        }).catch(e => { console.warn("answersDeleted archive failed", e && e.code); })
+      : Promise.resolve();
+    return Promise.resolve(archive)
+      .then(() => ref.remove())
+      .then(() => {
+        if (cur) logEvent(myRoom, "answer.delete." + moduleKey, {
+          by: myName, len: (cur.text || "").length, bulletKey: cur.bulletKey || ""
+        });
       });
-    });
   }).catch(e => {
     console.error("Delete failed", e);
     alert(tFallback("room.answer.err.delete-failed",
@@ -10900,7 +10977,20 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       }
       return Promise.all(writes)
         .then(() => hashPassword(password, code))
-        .then(h => db.ref(oPath(code, "adminPasswordHash")).set(h))
+        .then(h => {
+          if (useAdminSecrets()) {
+            // FINDING-07: store the REAL hash in the unreadable adminSecrets
+            // tree; put only a non-secret random marker at the readable
+            // session path so the existence-based admin-gated rules and the
+            // super-admin recovery flow keep working without exposing the
+            // password hash to participants.
+            return Promise.all([
+              db.ref(adminSecretPath(code, "hash")).set(h),
+              db.ref(oPath(code, "adminPasswordHash")).set(randomAdminMarker())
+            ]);
+          }
+          return db.ref(oPath(code, "adminPasswordHash")).set(h);   // org path: unchanged (deferred)
+        })
         .then(() => ({ code: code, recoveryCode: recoveryCode }));
     });
   };

@@ -846,3 +846,85 @@ test("rules: /recovery is NOT under the readable session subtree (no cascade lea
   assert.strictEqual(orgSession.recovery, undefined,
     "recovery code must NOT live under /orgs/$orgSlug/sessions/$sessionId either");
 });
+
+// =============================================================
+// FINDING-07 — admin password hash oracle (free fix)
+// =============================================================
+//
+// The real PBKDF2 hash now lives in the top-level adminSecrets/<code> tree,
+// which has NO read rule (root is .read:false) — so it is unreadable by every
+// client, closing the offline brute-force oracle. Login verifies via a
+// proof-write: the rule allows a write to proof/<uid> only when the submitted
+// candidate equals the stored hash (compared server-side). A non-secret random
+// marker stays at sessions/<code>/adminPasswordHash so the existence-based
+// admin-gated rules keep working.
+
+test("rules: adminSecrets subtree grants NO read to any client (oracle closed)", () => {
+  const node = rules.rules.adminSecrets;
+  assert.ok(node, "/adminSecrets must be declared");
+  // No .read anywhere on the path → unreadable (root .read is false).
+  assert.strictEqual(node[".read"], undefined, "/adminSecrets must not grant .read");
+  const code = node.$code;
+  assert.ok(code, "/adminSecrets/$code must exist");
+  assert.strictEqual(code[".read"], undefined, "/adminSecrets/$code must not grant .read");
+  assert.strictEqual(code.hash[".read"], undefined, "/adminSecrets/$code/hash must not grant .read");
+  assert.ok(code.proof && code.proof.$uid, "/adminSecrets/$code/proof/$uid must exist");
+  assert.strictEqual(code.proof.$uid[".read"], undefined,
+    "/adminSecrets/$code/proof/$uid must not grant .read");
+});
+
+test("rules: adminSecrets/$code/hash is write-once + _superadminReset-gated + format-validated", () => {
+  const h = rules.rules.adminSecrets.$code.hash;
+  assert.ok(h[".write"].includes("auth != null"), "hash write must require auth: " + h[".write"]);
+  assert.ok(h[".write"].includes("!data.exists()"), "hash must be write-once: " + h[".write"]);
+  assert.ok(h[".write"].includes("_superadminReset") && h[".write"].includes("now - 30000"),
+    "hash overwrite must be gated by a fresh _superadminReset (30s window): " + h[".write"]);
+  // same format guard as the legacy field (PBKDF2 v2$ envelope OR SHA-256 hex)
+  assert.match(h[".validate"], /v2\[\$\]\[0-9\]\+\[\$\]\[0-9a-f\]\+/);
+  assert.match(h[".validate"], /\[0-9a-f\]\{64\}/);
+});
+
+test("rules: adminSecrets/$code/proof/$uid verifies by server-side compare, owner-bound", () => {
+  const p = rules.rules.adminSecrets.$code.proof.$uid;
+  const w = p[".write"];
+  assert.ok(w.includes("auth != null"), "proof write must require auth: " + w);
+  assert.ok(w.includes("$uid == auth.uid"), "proof must be owner-bound: " + w);
+  assert.ok(w.includes("newData.val() == root.child('adminSecrets').child($code).child('hash').val()"),
+    "proof write must compare the candidate to the stored hash server-side: " + w);
+});
+
+// =============================================================
+// answersDeleted — research-integrity retention of withdrawn points
+// =============================================================
+//
+// deleteAnswer() snapshots a removed point's body into the append-only
+// rooms/$roomId/answersDeleted log before hard-removing it from the live
+// answers tree (so scoring/render are unaffected, but the text survives for
+// analysis). rooms/$roomId carries no blanket .write, so the append-only
+// !data.exists() guard here is actually enforced (unlike answers/$entryId/edits,
+// whose write authority cascades from the collaborative entry rule).
+
+test("rules: /rooms/$roomId/answersDeleted is append-only + bounded", () => {
+  const node = ROOM.answersDeleted && ROOM.answersDeleted.$pushId;
+  assert.ok(node, "/rooms/$roomId/answersDeleted/$pushId must be declared");
+  const w = node[".write"];
+  assert.ok(w.includes("auth != null"), "answersDeleted write must require auth: " + w);
+  assert.ok(w.includes("!data.exists()"),
+    "answersDeleted must be append-only — a withdrawn point can't be rewritten: " + w);
+  assert.ok(w.includes("'closed'"),
+    "answersDeleted write must be refused once the session is closed: " + w);
+  const v = node[".validate"];
+  assert.match(v, /child\('text'\)\.val\(\)\.length <= 1000/, "deleted body capped at 1000: " + v);
+  assert.ok(v.includes("'module'") && v.includes("'by'") && v.includes("'at'"),
+    "answersDeleted must carry {module, by, at}: " + v);
+  assert.match(v, /child\('at'\)\.val\(\) <= now \+ 5000/, "deleted `at` must be near server now: " + v);
+});
+
+test("rules: /orgs /rooms/$roomId/answersDeleted mirrors append-only + org-scoped", () => {
+  const node = ORG_ROOM.answersDeleted && ORG_ROOM.answersDeleted.$pushId;
+  assert.ok(node, "org /rooms/$roomId/answersDeleted/$pushId must be declared");
+  const w = node[".write"];
+  assert.ok(w.includes("!data.exists()"), "org answersDeleted must be append-only: " + w);
+  assert.ok(w.includes("root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed')"),
+    "org answersDeleted closed-guard must reference the org-scoped session: " + w);
+});
