@@ -13,6 +13,9 @@ playwright-report/
 test-results/
 playwright/.cache/
 
+# c8 coverage output (npm run test:coverage) — local artefact, never tracked
+coverage/
+
 # scripts/sim/simulate-session.js produces these — the harness itself is
 # tracked; each run's screenshots + report are local artefacts.
 sim-output/screens-*/
