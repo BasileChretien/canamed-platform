@@ -6297,34 +6297,173 @@ function downloadAllAnswersMarkdown() {
   URL.revokeObjectURL(a.href);
 }
 
-/* Student-facing export — Round-4 (sim: students asked to take their team's
- * answers away). Exports ONLY the participant's own room as Markdown, read
- * fresh from the room subtree (the student is a member, so the read is
+/* Escape the markdown control chars (incl. the table pipe) so a free-text
+   answer can never break the document structure. */
+function _mdEsc(s) {
+  return String(s == null ? "" : s).replace(/([*_`#|\[\]])/g, "\\$1");
+}
+/* Resolve a revealed item id ("history:2", "exam:0", "labs:0") back to the
+   case content (button label + result text) in the active language, so the
+   student's takeaway carries the actual clinical information, not just ids. */
+function _caseItemById(itemId, lang) {
+  const m = /^([a-zA-Z]+):(\d+)$/.exec(itemId || "");
+  if (!m) return null;
+  const group = (typeof CASE !== "undefined" && CASE) ? CASE[m[1]] : null;
+  const item = Array.isArray(group) ? group[parseInt(m[2], 10)] : null;
+  if (!item) return null;
+  return { q: tc(item.q, lang), a: tc(item.a, lang) };
+}
+
+/* Student-facing end-of-session takeaway. Round-4 began as a plain group-answer
+ * dump; the dry-run (2026-05-26) asked for the FULL record a student can revise
+ * from: the clinical information the team gathered (historical context), the
+ * discussion guidelines, the team's committed decisions + teaching points, the
+ * student's OWN responses (answers / hypotheses / votes), the whole group's
+ * answers, and the recap. Exports ONLY the participant's own room as Markdown,
+ * read fresh from the room subtree (the student is a member, so the read is
  * allowed). Distinct from the admin export above, which dumps every room. */
 function downloadMyRoomAnswers() {
   if (!db || !myRoom) return;
   db.ref(sPath("rooms/" + myRoom)).once("value").then(snap => {
     const data = snap.val() || {};
+    const lang = (typeof _curLang === "function") ? _curLang() : "en";
     const ans = data.answers || {};
+    const reveals = (data.moduleA || {}).revealed || {};
+    const hyps = (data.moduleA || {}).hypotheses || data.hypotheses || {};
+    const votes = data.votes || {};
+    const me = (typeof myName === "string" && myName) ? myName : "";
+    const decList = []
+      .concat((typeof window !== "undefined" && Array.isArray(window.DECISIONS)) ? window.DECISIONS
+        : (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [])
+      .concat((typeof DECISIONS_B !== "undefined" && Array.isArray(DECISIONS_B)) ? DECISIONS_B : []);
+    const decById = {};
+    decList.forEach(d => { if (d && d.id) decById[d.id] = d; });
+    const decPrompt = (dec, id) => _mdEsc(dec && dec.prompt ? tc(dec.prompt, lang) : id);
+
     const lines = [];
-    lines.push("# CaNaMED Session " + sessionNum + " — " + myRoom + " group answers");
+    lines.push("# CaNaMED — my session takeaway");
     lines.push("");
+    lines.push("- **Session:** " + _mdEsc(sessionNum));
+    lines.push("- **Room / team:** " + _mdEsc(myRoom) + (data.teamName ? " — " + _mdEsc(data.teamName) : ""));
+    if (me) lines.push("- **Name:** " + _mdEsc(me));
     lines.push("- **Exported:** " + new Date().toLocaleString());
-    if (data.teamName) lines.push("- **Team:** " + data.teamName);
     lines.push("");
+
+    // 1. Historical context — the clinical information the team gathered, in
+    //    the order it was opened.
+    lines.push("## The case — clinical information gathered");
+    const revealSeq = Object.keys(reveals)
+      .map(id => ({ id: id, by: (reveals[id] || {}).by || "", at: (reveals[id] || {}).at || 0 }))
+      .sort((a, b) => a.at - b.at);
+    if (!revealSeq.length) {
+      lines.push("_(nothing was opened)_");
+    } else {
+      revealSeq.forEach((e, i) => {
+        const it = _caseItemById(e.id, lang);
+        if (it) lines.push("- **" + (i + 1) + ". " + _mdEsc(it.q) + "** — " + _mdEsc(it.a) +
+          (e.by ? "  _(opened by " + _mdEsc(e.by) + ")_" : ""));
+      });
+    }
+    lines.push("");
+
+    // 2. Discussion guidelines — the prompts that framed the debate.
+    const prompts = (typeof CASE !== "undefined" && CASE && Array.isArray(CASE.prompts)) ? CASE.prompts : [];
+    if (prompts.length) {
+      lines.push("## Discussion guidelines");
+      prompts.forEach(p => lines.push("- " + _mdEsc(tc(p, lang))));
+      lines.push("");
+    }
+
+    // 3. The team's committed decisions (group common responses) + teaching points.
+    const decIds = Object.keys(votes);
+    if (decIds.length) {
+      lines.push("## Your team's decisions");
+      lines.push("");
+      lines.push("| Decision | Team's choice | Safest? |");
+      lines.push("| --- | --- | --- |");
+      decIds.forEach(decId => {
+        const dec = decById[decId] || {};
+        const v = votes[decId] || {};
+        const ci = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
+        const opt = (ci != null && dec.options) ? dec.options[ci] : null;
+        lines.push("| " + decPrompt(dec, decId) + " | " + _mdEsc(opt ? tc(opt.text, lang) : "—") +
+          " | " + (opt ? (opt.correct ? "yes" : "no") : "—") + " |");
+      });
+      lines.push("");
+      const teaching = [];
+      decIds.forEach(decId => {
+        const dec = decById[decId] || {};
+        const v = votes[decId] || {};
+        const ci = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
+        const opt = (ci != null && dec.options) ? dec.options[ci] : null;
+        const why = (opt && opt.why) ? tc(opt.why, lang) : (dec.why ? tc(dec.why, lang) : "");
+        if (why) teaching.push("- **" + decPrompt(dec, decId) + ":** " + _mdEsc(why));
+      });
+      if (teaching.length) { lines.push("### Teaching points"); teaching.forEach(t => lines.push(t)); lines.push(""); }
+    }
+
+    // 4. The student's OWN responses.
+    lines.push("## My responses");
+    let mineAny = false;
     [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
-      lines.push("## " + pair[1]);
+      const mine = entriesSorted(ans[pair[0]]).filter(e => e.cid === clientId);
+      if (mine.length) {
+        mineAny = true;
+        lines.push("### " + pair[1] + " — my answers");
+        mine.forEach(e => lines.push("- " + _mdEsc(e.text)));
+      }
+    });
+    const myHyps = Object.keys(hyps).map(k => hyps[k]).filter(h => h && h.cid === clientId);
+    if (myHyps.length) {
+      mineAny = true;
+      lines.push("### My hypotheses");
+      myHyps.forEach(h => lines.push("- " + _mdEsc(h.text)));
+    }
+    const myVotes = [];
+    decIds.forEach(decId => {
+      const dec = decById[decId] || {};
+      const b = ((votes[decId] || {}).ballots || {})[clientId];
+      if (b && typeof b.choice === "number" && dec.options) {
+        const opt = dec.options[b.choice];
+        myVotes.push("- **" + decPrompt(dec, decId) + ":** " + _mdEsc(opt ? tc(opt.text, lang) : "?") +
+          (opt && opt.correct ? " (safest)" : ""));
+      }
+    });
+    if (myVotes.length) { mineAny = true; lines.push("### My votes"); myVotes.forEach(l => lines.push(l)); }
+    if (!mineAny) lines.push("_(no individual responses recorded)_");
+    lines.push("");
+
+    // 5. The whole group's answers (everyone in the room).
+    lines.push("## Group answers (everyone in the room)");
+    [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
+      lines.push("### " + pair[1]);
       const entries = entriesSorted(ans[pair[0]]);
       if (!entries.length) lines.push("_(no points recorded)_");
-      else entries.forEach(e => lines.push("- **" + (e.by || "?") +
-        (e.university ? " / " + e.university : "") + ":** " +
-        String(e.text || "").replace(/([*_`#|])/g, "\\$1")));
+      else entries.forEach(e => lines.push("- **" + _mdEsc(e.by || "?") +
+        (e.university ? " / " + _mdEsc(e.university) : "") + ":** " + _mdEsc(e.text)));
       lines.push("");
     });
+
+    // 6. Recap — the team's score, what went well, what to remember.
+    lines.push("## Recap");
+    try {
+      const sc = data.score || (typeof roomScore !== "undefined" ? roomScore : null) || {};
+      lines.push("- **Team score:** " + scoreTotal({ score: sc }) + " points");
+      const wins = Object.keys(sc.auto || {}).map(scoreEventMeta)
+        .filter(m => m && m.tier !== "micro").map(m => m.title);
+      if (wins.length) { lines.push("- **What your team did well:**"); wins.forEach(w => lines.push("  - " + _mdEsc(w))); }
+      const lessons = Object.keys(sc.penalties || {}).map(penaltyMeta).filter(Boolean);
+      if (lessons.length) {
+        lines.push("- **Worth remembering for next time:**");
+        lessons.forEach(m => lines.push("  - " + _mdEsc(m.title) + (m.why ? " — " + _mdEsc(m.why) : "")));
+      }
+    } catch (_) { /* recap is best-effort — never block the download */ }
+    lines.push("");
+
     const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "CaNaMED_" + myRoom + "_answers.md";
+    a.download = "CaNaMED_" + myRoom + "_my-takeaway.md";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

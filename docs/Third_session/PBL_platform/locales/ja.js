@@ -441,7 +441,7 @@
   "stage.wrap.questionnaire-fallback": "ファシリテーターからアンケートのリンクが共有されます。",
   "stage.wrap.bye": "アンケートにご回答いただけましたら、このタブを閉じてお戻りください。セッション4でお会いしましょう!",
   "stage.wrap.room-answers": "ルームの回答",
-  "stage.wrap.download": "⤓ ルームの回答をダウンロード(Markdown)",
+  "stage.wrap.download": "⤓ セッションのまとめをダウンロード(Markdown)",
   "stage.wrap.retention.title": "🔁 数日後に記憶の定着をチェック",
   "stage.wrap.retention.hint": "このリンクを保存し、2〜3日後に短いセルフチェックに戻ってきてください — 学びは「戻ってくる」ことで定着します。採点は端末内で行われ、送信はされません。",
   "stage.wrap.retention.link": "記憶の定着チェックを開く →",
