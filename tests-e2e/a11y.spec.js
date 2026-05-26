@@ -233,6 +233,16 @@ test.describe("Accessibility (axe-core)", () => {
       // in-page canamed-modal instead of native confirm — auto-click
       // its OK button so this test exercises the real flow without UI.
       await page.addInitScript(() => {
+        // Suppress the onboarding tours. This room-view test is the only a11y
+        // case that enters a room, which triggers the student tour overlay —
+        // and axe would scan it mid fade-in (reduced opacity → blended colours
+        // that fail contrast even though the tour passes at full opacity). The
+        // tour is incidental here; we want axe on the actual room view.
+        try {
+          localStorage.setItem("canamed_tour_done", "v1");
+          localStorage.setItem("canamed_tour_admin_done", "v1");
+          localStorage.setItem("canamed_tour_student_done", "v1");
+        } catch (e) {}
         const tryAccept = () => {
           const dlg = document.getElementById("canamed-modal");
           if (dlg && dlg.open) {
@@ -271,6 +281,13 @@ test.describe("Accessibility (axe-core)", () => {
         try {
           localStorage.removeItem("canamed_session");
           localStorage.removeItem("canamed_resume");
+          // Suppress the student tour the participant gets on room entry — axe
+          // would otherwise scan it mid fade-in (blended low-opacity colours
+          // that fail contrast though it passes at full opacity). We want axe
+          // on the room view itself.
+          localStorage.setItem("canamed_tour_done", "v1");
+          localStorage.setItem("canamed_tour_admin_done", "v1");
+          localStorage.setItem("canamed_tour_student_done", "v1");
         } catch (e) {}
         function pin(name, value) {
           Object.defineProperty(window, name, {

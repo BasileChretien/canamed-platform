@@ -1002,7 +1002,7 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .role-replay-round {
   font-size: 0.86rem;
   font-weight: 600;
-  color: var(--n-600, #41506180);
+  color: var(--muted, #4d5b6a);
 }
 .role-replay-btn {
   margin-left: auto;
