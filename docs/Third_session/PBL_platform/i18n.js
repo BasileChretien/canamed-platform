@@ -669,6 +669,7 @@
       "survey.skipped": "You skipped the questionnaire. You can still complete it if you change your mind.",
       "survey.already-done": "You have already completed the questionnaire. Thank you!",
       "survey.choose": "Choose…",
+      "survey.prefilled": "Filled in from your profile — edit if it's not right.",
       "survey.submit": "Send my answers",
       "survey.thanks": "Thank you — your feedback helps us shape the next session. It is stored anonymously within your group.",
       "survey.likert.1": "Strongly disagree",
