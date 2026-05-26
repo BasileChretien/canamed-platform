@@ -190,6 +190,9 @@
       "splash.profile.year-label": "Year of study",
       "splash.profile.english-label": "English level (CEFR self-assessment)",
       "splash.profile.submit": "Save and continue →",
+      "splash.profile.role-label": "I am a…",
+      "splash.profile.role-student": "Student",
+      "splash.profile.role-facilitator": "Facilitator",
 
       // splash — create-session view (facilitator)
       "splash.create.title": "Create a CANAMED session",

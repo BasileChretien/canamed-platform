@@ -11199,6 +11199,8 @@ function handleAuthStateChange(user) {
       // first sign-in for this identified account → guide them through profile setup
       if (!profile || !profile.name) {
         populateProfileSelects("splash-prof-uni");
+        setRoleRadio("splash-prof-role", (profile && profile.role) || "student");
+        applyProfileRoleVisibility("splash-prof-role", "splash-prof-student-fields");
         // pre-fill what Google gave us: displayName for the name, email otherwise
         const nm = el("splash-prof-name");
         if (nm && !nm.value) {
@@ -11307,17 +11309,47 @@ function paintUserChip() {
   }
 }
 
+/* Role-aware profile helpers. The profile form serves both students and
+   facilitators; facilitators only need name + institution, so the
+   student-only fields (year of study, English level) are hidden for them. */
+function selectedRole(radioName) {
+  const sel = document.querySelector('input[name="' + radioName + '"]:checked');
+  return sel ? sel.value : "student";
+}
+function setRoleRadio(radioName, value) {
+  const r = document.querySelector(
+    'input[name="' + radioName + '"][value="' + (value || "student") + '"]');
+  if (r) r.checked = true;
+}
+function applyProfileRoleVisibility(radioName, studentFieldsId) {
+  const fields = el(studentFieldsId);
+  if (fields) fields.hidden = (selectedRole(radioName) === "facilitator");
+}
+/* Build the saveProfile payload for the given role. Facilitators null out
+   the student-only fields so a student→facilitator switch doesn't leave
+   stale year/English behind. */
+function profileUpdatesForRole(role, name, uni, yearEl, englishEl) {
+  if (role === "facilitator") {
+    return { name: name, university: uni, role: "facilitator", year: null, english: null };
+  }
+  return {
+    name: name, university: uni, role: "student",
+    year: parseInt(el(yearEl).value, 10) || 1,
+    english: (el(englishEl).value || "B2").trim()
+  };
+}
+
 /* Profile-setup submit (right after sign-up) */
 function profileSetupSubmit() {
   const hint = el("splash-profile-setup-hint");
+  const role = selectedRole("splash-prof-role");
   const name = (el("splash-prof-name").value || "").trim();
   const uni = (el("splash-prof-uni").value || "").trim();
-  const year = parseInt(el("splash-prof-year").value, 10) || 1;
-  const english = (el("splash-prof-english").value || "B2").trim();
   if (!name) { splashHintErr(hint, "Enter your name."); return; }
   if (!uni) { splashHintErr(hint, "Pick your university."); return; }
   splashHintOk(hint, "Saving your profile…");
-  saveProfile({ name: name, university: uni, year: year, english: english }).then(() => {
+  const updates = profileUpdatesForRole(role, name, uni, "splash-prof-year", "splash-prof-english");
+  saveProfile(updates).then(() => {
     splashHintOk(hint, "");
     paintUserChip();
     splashShowView("enter");
@@ -11353,6 +11385,8 @@ function openAccountDialog() {
     if (currentProfile.year) el("account-year").value = String(currentProfile.year);
     if (currentProfile.english) el("account-english").value = currentProfile.english;
   }
+  setRoleRadio("account-role", (currentProfile && currentProfile.role) || "student");
+  applyProfileRoleVisibility("account-role", "account-student-fields");
   splashHintOk(el("account-action-hint"), "");
   loadHistoryForDialog();
   dialogShow(dlg);
@@ -11400,12 +11434,12 @@ function loadHistoryForDialog() {
 
 function accountSaveBtn() {
   const hint = el("account-action-hint");
+  const role = selectedRole("account-role");
   const name = (el("account-name").value || "").trim();
   const uni = (el("account-uni").value || "").trim();
-  const year = parseInt(el("account-year").value, 10) || 1;
-  const english = (el("account-english").value || "B2").trim();
   if (!name) { splashHintErr(hint, "Enter your name."); return; }
-  saveProfile({ name: name, university: uni, year: year, english: english }).then(() => {
+  const updates = profileUpdatesForRole(role, name, uni, "account-year", "account-english");
+  saveProfile(updates).then(() => {
     splashHintOk(hint, "Profile saved.");
     paintUserChip();
     applyProfileToJoinForm();
@@ -11492,6 +11526,14 @@ function wireAccountUI() {
   // profile-setup (runs once, right after the first Google sign-in)
   if (el("splash-profile-setup-form")) el("splash-profile-setup-form")
     .addEventListener("submit", e => { e.preventDefault(); profileSetupSubmit(); });
+
+  // role toggle: hide the student-only fields (year / English) for facilitators
+  document.querySelectorAll('input[name="splash-prof-role"]').forEach(r =>
+    r.addEventListener("change", () =>
+      applyProfileRoleVisibility("splash-prof-role", "splash-prof-student-fields")));
+  document.querySelectorAll('input[name="account-role"]').forEach(r =>
+    r.addEventListener("change", () =>
+      applyProfileRoleVisibility("account-role", "account-student-fields")));
 
   // header chip + account dialog
   if (el("user-chip")) el("user-chip").addEventListener("click", openAccountDialog);
