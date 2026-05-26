@@ -36,7 +36,7 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v5";
+const SHELL_VERSION = "canamed-shell-v6";
 
 const SHELL_ASSETS = [
   "/",
@@ -122,6 +122,7 @@ self.addEventListener("fetch", (event) => {
     (h) => url.hostname === h || url.hostname.endsWith("." + h)
   );
   if (isNetworkOnly) return; // SW doesn't intercept
+  if (url.origin === self.location.origin && url.pathname.startsWith("/__/")) return; // Firebase Auth reserved paths: never cache/intercept
 
   // Same-origin shell: cache-first, fall through to network, then 504.
   if (url.origin === self.location.origin) {
