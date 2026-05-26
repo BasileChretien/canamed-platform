@@ -7012,27 +7012,18 @@ function reveal(id) {
 }
 function renderButtons() {
   const gateOK = prereqsMet();
-  // PBL 7-jump scaffold (2026-05-18 specialist panel): Investigations
-  // are locked until the team has at least one working hypothesis.
-  // Hypotheses come BEFORE data gathering — that's the missing
-  // pedagogical step. History + Examination stay open (you gather
-  // information to FORM hypotheses); Investigations is where you
-  // test them.
-  const hypoOK = (typeof hypothesesUnlocked === "function")
-    ? hypothesesUnlocked() : true;
+  // Dry-run change (2026-05-26): investigations (imaging + bloods) are NO
+  // LONGER hard-locked behind "add a working hypothesis first". Ordering a
+  // test is a real clinical choice the team can get wrong — every imaging /
+  // bloods item carries a penalty (pen_mri / pen_xray / pen_bloods / pen_ct),
+  // so a premature or un-indicated order costs points instead of being blocked.
+  // Only the clinical SYNTHESIS (SYNTH_ID, labs:0) stays gated, and only on the
+  // red-flag screen (gateOK) — see the SYNTH_ID branch below. Hypotheses remain
+  // pedagogically encouraged (the coach still nudges them) but no longer gate
+  // the panel.
   document.querySelectorAll(".req-btn").forEach(btn => {
     const id = btn.dataset.id;
     btn.classList.toggle("done", !!revealed[id]);
-    // Investigations panel — disable EVERY button (not just SYNTH_ID)
-    // when no hypothesis is recorded yet. The .chart-investigations
-    // .is-locked class handles the visual fade; we also disable the
-    // buttons here so the click doesn't fire even with keyboard focus.
-    const isInv = id && id.indexOf("labs:") === 0;
-    if (isInv && !hypoOK && !revealed[id]) {
-      btn.disabled = true;
-      btn.title = "Add a working hypothesis above to unlock Investigations.";
-      return;   // skip the SYNTH-specific + isImaging branches below
-    }
     if (id === SYNTH_ID) {
       const locked = !gateOK && !revealed[id];
       btn.disabled = locked;
@@ -8621,7 +8612,7 @@ function updateModANextStep() {
   } else if (revealedCount >= 2 && hypoCount === 0) {
     textEl.textContent = _coachT("modA.coach.add-hypothesis",
       "You've gathered some info — now agree on at least one working hypothesis " +
-      "above (what do you suspect?). Investigations unlock once you have one.");
+      "above (what do you suspect?) before you commit to investigations and a plan.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
   } else if (!keyDone) {
@@ -8735,31 +8726,15 @@ function initCoachDismiss() {
 }
 
 /* ===================== WORKING HYPOTHESES (PBL 7-jump scaffold) ===================== */
-/* Cross-room synced (refHypotheses). Students MUST agree on at least
- * one hypothesis before Investigations unlock — this enforces the
- * classical PBL "brainstorm BEFORE data gathering" step, the missing
- * pedagogical move the 2026-05-18 specialist panel flagged. */
+/* Cross-room synced (refHypotheses). Hypotheses are pedagogically encouraged —
+ * the coach nudges the team to brainstorm before committing to investigations
+ * and a plan — but they no longer hard-gate the Investigations panel (dry-run
+ * 2026-05-26: ordering a test is a real choice that can be wrong + penalised,
+ * not a step to unlock). Only the synthesis is gated, on the red-flag screen. */
 
 function hypothesisCount() {
   return Object.keys(hypotheses || {}).length;
 }
-/* Investigations unlock gate — was "≥1 hypothesis recorded" (a gate
- * satisfiable by typing 'back pain' to unlock the panel; trained
- * gaming, not reasoning). Specialist panel 2026-05-19 recommended
- * extending it to ALSO require the red-flag screen: history:1
- * (serious-cause screen), history:2 (cauda equina screen), exam:3
- * (leg neuro). The same items SYNTH_PREREQS already enforces for the
- * synthesis step — applying them earlier means students cannot
- * order an MRI without first ruling out the emergencies NICE NG59
- * is written to catch. */
-function redFlagScreenDone() {
-  const need = ["history:1", "history:2", "exam:3"];
-  return need.every(id => !!revealed[id]);
-}
-function hypothesesUnlocked() {
-  return hypothesisCount() > 0 && redFlagScreenDone();
-}
-
 /* "First impressions (optional)" — sim 2026-05-19 UX-practitioner
  * recommendation. A small textarea at the top of the Module A chart
  * that lets a Y3/first-timer note their gut-feel BEFORE asking the
@@ -8849,12 +8824,15 @@ function renderHypotheses() {
     }
     list.appendChild(li);
   });
-  // Investigations gate — visible lock state on the panel.
+  // Investigations are clickable at any time now (dry-run 2026-05-26) — the
+  // panel is never locked. The hint is a standing "order with a reason" advisory
+  // shown until the synthesis is done; the synthesis button gates itself on the
+  // red-flag screen (see renderButtons), and each imaging button shows its own
+  // premature-order warning.
   const inv = el("chart-investigations");
   const hint = el("investigations-locked-hint");
-  const unlocked = hypothesesUnlocked();
-  if (inv) inv.classList.toggle("is-locked", !unlocked);
-  if (hint) hint.classList.toggle("hidden", unlocked);
+  if (inv) inv.classList.remove("is-locked");
+  if (hint) hint.classList.toggle("hidden", !!revealed[SYNTH_ID]);
 }
 
 /* Module B role picker (local-only). The HTML chips are radio buttons;
