@@ -546,6 +546,7 @@
       "modB.role.observer.name": "Observer",
       "modB.role.clash": "Two of you picked the same role — decide together so everyone has a part.",
       "modB.role.deselect-hint": "Picked the wrong role? Tap it again to clear your choice.",
+      "modB.role.objective-label": "Your private brief — only you see this:",
       "modB.replay.round1": "Round 1 — first run",
       "modB.replay.roundN": "Round {n}",
       "modB.replay.swap": "🔄 Swap roles & replay",

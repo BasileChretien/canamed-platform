@@ -8781,6 +8781,40 @@ function renderHypotheses() {
  * doesn't lose the assignment. Cross-room sync (everyone seeing each
  * other's picks) is a future PR. Idempotent — safe to call on every
  * wireRoomUI invocation; uses a `_wired` flag to bind once. */
+/* Reveal the picked role's brief in the PRIVATE objective panel — only on the
+   device of the student who chose it. The role chips deliberately show just the
+   NAME now (printing the full brief on every chip leaked the patient's hidden
+   stance and the family's secret request to the physician before the scene).
+   Reuses the role's existing modB.role.<role>.brief key: we point the panel's
+   text node at that key and re-run applyI18n so the brief renders sanitised
+   (DOMPurify, via the data-i18n-html path) AND stays translated when the user
+   switches language (the global applyI18n() re-touches this node like any
+   other). Passing a falsy role hides the panel (no role held). */
+function showRoleObjective(role) {
+  if (typeof document === "undefined") return;
+  const panel = el("modB-role-objective");
+  if (!panel) return;
+  const textEl = el("modB-role-objective-text");
+  if (role && textEl) {
+    const key = "modB.role." + role + ".brief";
+    textEl.setAttribute("data-i18n", key);
+    textEl.setAttribute("data-i18n-html", "");
+    if (typeof window !== "undefined" && typeof window.applyI18n === "function") {
+      window.applyI18n(panel);   // sanitised innerHTML + language-aware
+    } else if (typeof window !== "undefined" && typeof window.t === "function") {
+      textEl.textContent = window.t(key);  // no-DOM/no-i18n fallback (loses emphasis, still safe)
+    }
+    panel.classList.remove("hidden");
+  } else {
+    if (textEl) {
+      textEl.removeAttribute("data-i18n");
+      textEl.removeAttribute("data-i18n-html");
+      textEl.textContent = "";
+    }
+    panel.classList.add("hidden");
+  }
+}
+
 function initRolePicker() {
   const picker = el("modB-role-picker");
   if (!picker || picker._wired) return;
@@ -8793,6 +8827,7 @@ function initRolePicker() {
     if (saved) {
       chips.forEach(c => c.setAttribute("aria-checked",
         c.dataset.role === saved ? "true" : "false"));
+      showRoleObjective(saved);   // re-show the restored role's private brief
     }
   } catch (e) { /* localStorage may be blocked; OK */ }
   // Single selection routine shared by click AND arrow keys. Per the
@@ -8802,6 +8837,7 @@ function initRolePicker() {
   const select = chip => {
     chips.forEach(c => c.setAttribute("aria-checked", "false"));
     chip.setAttribute("aria-checked", "true");
+    showRoleObjective(chip.dataset.role);   // reveal MY private brief only
     try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
     // Publish my pick so the room sees it live (double-claim becomes visible).
     // Best-effort: keyed by clientId, the rule lets me write only my own slot.
@@ -8823,6 +8859,7 @@ function initRolePicker() {
   // select-only (the APG radio pattern); only a pointer re-tap toggles off.
   const deselect = chip => {
     chip.setAttribute("aria-checked", "false");
+    showRoleObjective(null);   // no role held → hide the private brief
     try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
     try {
       if (refRoleChoices && clientId && !isRoomAdmin) refRoleChoices.child(clientId).remove();
@@ -8991,6 +9028,7 @@ function applyRoleSwap(steps, round) {
   if (next) {
     chips.forEach(c =>
       c.setAttribute("aria-checked", c.dataset.role === next ? "true" : "false"));
+    showRoleObjective(next);   // swap-and-replay: reveal the rotated role's brief
     try { localStorage.setItem("canamed_modB_role", next); } catch (e) {}
     try {
       if (MODE === "shared" && refRoleChoices && clientId && !isRoomAdmin) {

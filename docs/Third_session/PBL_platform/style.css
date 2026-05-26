@@ -964,8 +964,26 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   box-shadow: 0 1px 4px rgba(46,159,223,.18);
 }
 .role-chip-name { font-weight: 700; font-size: 0.95rem; }
-.role-chip-brief { font-size: 0.84rem; color: var(--muted); line-height: 1.4; }
-.role-chip[aria-checked="true"] .role-chip-brief { color: var(--ink); }
+
+/* Private per-role objective panel — shown only on the device of the student
+   who picked the role (the brief used to print on every chip, leaking hidden
+   stances). Styled as a soft callout under the picker. */
+.role-objective {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--nagoya-50);
+  border: 1px solid var(--primary);
+  border-radius: var(--r-md);
+}
+.role-objective-label {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--primary);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.role-objective-text { margin: 0; font-size: 0.92rem; line-height: 1.45; color: var(--ink); }
 
 /* Live role-pick sync: who has claimed each role + a double-pick flag. */
 .role-chip-claimants {

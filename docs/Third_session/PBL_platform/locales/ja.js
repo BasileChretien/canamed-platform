@@ -372,6 +372,7 @@
   "modB.role.observer.name": "観察者",
   "modB.role.clash": "二人が同じ役を選びました — 全員に役が行き渡るよう話し合って決めましょう。",
   "modB.role.deselect-hint": "役を間違えましたか? もう一度タップすると選択を解除できます。",
+  "modB.role.objective-label": "あなただけの指示 — 他の人には見えません：",
   "modB.replay.round1": "ラウンド1 — 最初の実演",
   "modB.replay.roundN": "ラウンド{n}",
   "modB.replay.swap": "🔄 役を交代して再演",

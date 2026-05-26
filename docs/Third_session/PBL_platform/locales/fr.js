@@ -372,6 +372,7 @@
   "modB.role.observer.name": "Observateur·rice",
   "modB.role.clash": "Vous avez choisi le même rôle à deux — mettez-vous d'accord pour que chacun·e ait un rôle.",
   "modB.role.deselect-hint": "Mauvais rôle ? Touchez-le à nouveau pour annuler votre choix.",
+  "modB.role.objective-label": "Votre consigne privée — vous seul·e la voyez :",
   "modB.replay.round1": "Tour 1 — première manche",
   "modB.replay.roundN": "Tour {n}",
   "modB.replay.swap": "🔄 Échanger les rôles et rejouer",

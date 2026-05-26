@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v18";
+  var SHELL_VERSION = "v19";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   function ensureCaseContent() { return loadScript(v("case-content.js")); }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
