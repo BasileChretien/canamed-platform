@@ -21,7 +21,7 @@
  */
 window.CANAMED_FIREBASE = {
   apiKey: "AIzaSyB_7d4rCWsVSUAaL17Jcjy3v2s_n5uJVUg",
-  authDomain: "canamed-69785.firebaseapp.com",
+  authDomain: "canamed-69785.web.app",
   databaseURL: "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app",
   projectId: "canamed-69785",
   storageBucket: "canamed-69785.firebasestorage.app",
