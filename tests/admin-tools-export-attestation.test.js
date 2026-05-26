@@ -29,12 +29,12 @@ test("participantRows derives per-cid contributions + university from the live d
   assert.match(fn, /contributed/, "must flag whether the participant contributed");
 });
 
-test("research export is pseudonymous, SAP-aligned JSON for the R pipeline", () => {
+test("research export is identifiable (per consent), SAP-aligned JSON for the R pipeline", () => {
   assert.match(TOOLS, /function generateResearchExport\(\)/, "the export fn must exist");
   const fn = TOOLS.slice(TOOLS.indexOf("function generateResearchExport"),
     TOOLS.indexOf("function generateAttestations"));
-  assert.match(fn, /pseudonymous: true/, "the bundle must declare pseudonymity");
-  assert.doesNotMatch(fn, /name:/, "the exported participant rows must NOT carry names");
+  assert.match(fn, /pseudonymous: false/, "the bundle must declare it is identifiable");
+  assert.match(fn, /name: p\.name/, "the exported participant rows must carry names (identifiable)");
   assert.match(fn, /participants:.*decisions:.*rooms:|participants: participants/s,
     "must bundle participants + decisions + rooms");
   assert.match(fn, /jsonlite::fromJSON/, "must document the R read path");

@@ -5295,6 +5295,13 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
     --line-strong: #324760;
     --ink: #f1eee6;
     --muted: #b3ab99;
+    /* warm-neutral surface tints -> dark elevations. Without this the panels
+       that paint with them (.spikes-strip, .recap-table th + even rows,
+       dashboard hovers) kept a LIGHT background while ink flipped to near-white
+       — ~1.1:1, the "SPIKES/recap unreadable in dark mode" dry-run report. */
+    --n-25:  #131c26;
+    --n-50:  #18222e;
+    --n-100: #1d2937;
     /* See html[data-theme="dark"] for note-token rationale. */
     --note-bg:    #161e2a;
     --note-line:  #2c3a52;
@@ -5354,6 +5361,11 @@ html[data-theme="dark"] {
   --line-strong: #324760;
   --ink: #f1eee6;
   --muted: #b3ab99;
+  /* warm-neutral surface tints -> dark elevations (keeps light ink readable on
+     .spikes-strip, .recap-table th + even rows; see media-query block above). */
+  --n-25:  #131c26;
+  --n-50:  #18222e;
+  --n-100: #1d2937;
   /* Consultation-note "paper chart" tokens override — see :root for
      rationale. The warm-paper colour collapses to a deeper card so the
      theme-aware text stays readable. */
