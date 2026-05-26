@@ -8108,18 +8108,35 @@ function renderDecisions() {
   // Surfaces a one-liner via toast() so the team sees a new decision opened
   // without auto-stealing focus. Skipped on the initial paint (empty tracker).
   allUnlockedNow.forEach(id => {
-    if (!lastUnlockedDecisionIds.has(id) && lastUnlockedDecisionIds.size > 0) {
-      const d = (typeof DECISIONS !== "undefined" ? DECISIONS : []).find(x => x.id === id);
-      if (d && typeof toast === "function") {
-        const lang = _curLang();
-        toast("🗳️ " + (typeof window.t === "function" ?
-              (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
-                ? window.t("modA.decision.unlocked")
-                : "A new team decision just opened")
-              : "A new team decision just opened"),
-              tc(d.prompt, lang));
-      }
+    if (lastUnlockedDecisionIds.has(id) || lastUnlockedDecisionIds.size === 0) return;
+    const d = (typeof DECISIONS !== "undefined" ? DECISIONS : []).find(x => x.id === id);
+    if (!d) return;
+    const lang = _curLang();
+    if (typeof toast === "function") {
+      toast("🗳️ " + (typeof window.t === "function" ?
+            (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
+              ? window.t("modA.decision.unlocked")
+              : "A new team decision just opened")
+            : "A new team decision just opened"),
+            tc(d.prompt, lang));
     }
+    // Auto-open the decide-together / vote panel when a vote becomes due
+    // (dry-run: students missed that a decision had opened). Module A's panel
+    // lives in the right-column "decisions" tab; Module B's is always visible.
+    // Guard: never yank focus from someone mid-answer (the unlock fires for the
+    // whole room, possibly while a teammate is typing their bullet).
+    const typing = document.activeElement &&
+      /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
+    if (d.module === "A" && activeRcolTab !== "decisions" && !typing &&
+        typeof switchRcolTab === "function") {
+      switchRcolTab("decisions");
+    }
+    try {
+      const box = el("decisions-" + (d.module || "A"));
+      if (box && !typing && typeof box.scrollIntoView === "function") {
+        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    } catch (_) { /* scrollIntoView unsupported / detached — non-fatal */ }
   });
   lastUnlockedDecisionIds = allUnlockedNow;
 }
@@ -8600,7 +8617,7 @@ function updateModBNextStep() {
   } else if (modBAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modB.coach.roleplay",
       "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion " +
-      "with the prompts below. The observer reads them aloud.");
+      "with the prompts below.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-2", "play", ["setup"]);
   } else if (!allBulletsCovered) {
@@ -8800,8 +8817,23 @@ function initRolePicker() {
     // Coach updates: role-picked drives Module B's setup→play transition.
     if (typeof updateModBNextStep === "function") updateModBNextStep();
   };
+  // Allow UN-selecting a role (dry-run: "allow unselecting a role"). Re-tapping
+  // the role you already hold clears it — back to no role — and retracts the
+  // live pick so the room no longer shows you in it. Keyboard navigation stays
+  // select-only (the APG radio pattern); only a pointer re-tap toggles off.
+  const deselect = chip => {
+    chip.setAttribute("aria-checked", "false");
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    try {
+      if (refRoleChoices && clientId && !isRoomAdmin) refRoleChoices.child(clientId).remove();
+    } catch (e) { /* offline / rules — the local clear still stands */ }
+    if (typeof updateModBNextStep === "function") updateModBNextStep();
+  };
   chips.forEach(chip => {
-    chip.addEventListener("click", () => select(chip));
+    chip.addEventListener("click", () => {
+      if (chip.getAttribute("aria-checked") === "true") deselect(chip);
+      else select(chip);
+    });
     // arrow-key navigation inside the radiogroup — select-on-move
     chip.addEventListener("keydown", e => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
