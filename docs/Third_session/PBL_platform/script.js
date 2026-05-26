@@ -1245,7 +1245,10 @@ function dbInit() {
             // anon link clashed with an existing account — sign in with that
             // Google credential directly (anon-uid history is forfeited, same
             // as the popup path's credential-already-in-use fallback).
-            auth.signInWithCredential(e.credential).catch(() => {});
+            auth.signInWithCredential(e.credential).catch(err => {
+              const hint = el("splash-account-hint");
+              if (hint) splashHintErr(hint, authErrorMessage(err));
+            });
             return;
           }
           if (e && e.code && e.code !== "auth/no-auth-event") {
@@ -11116,14 +11119,17 @@ function signInWithProvider(name) {
     return;
   }
   splashHintOk(hint, "Opening " + pretty + " sign-in…");
-  // Round-2: if the user is currently anonymous, upgrade (link) the
-  // existing uid so users/{uid}/history survives the sign-in. If linking
-  // fails because the credential is already attached to another account
-  // (auth/credential-already-in-use, auth/email-already-in-use), fall
-  // back to a plain signInWithPopup so the user can still get into the
-  // app — they'll lose history written under the anon uid in that case.
+  // Round-2: if the user is currently anonymous, upgrade (link) the existing
+  // uid so users/{uid}/history survives the sign-in. If linking fails because
+  // the Google account already exists as its own user
+  // (auth/credential-already-in-use / email-already-in-use) — i.e. any
+  // returning signed-in user — sign in AS that account with the credential the
+  // error carries. Direct credential sign-in needs no popup, so it can't be
+  // popup-blocked. (History under the throwaway anon uid is forfeited.)
   const cur = auth.currentUser;
   const popupSignIn = () => auth.signInWithPopup(provider);
+  const salvageSignIn = e =>
+    (e && e.credential) ? auth.signInWithCredential(e.credential) : popupSignIn();
   // If the browser blocks the popup (common outside Incognito), fall back to a
   // full-page redirect — no popup blocker can stop it, and it completes
   // reliably now that auth is first-party (authDomain = web.app). The matching
@@ -11143,8 +11149,10 @@ function signInWithProvider(name) {
   const link = (cur && cur.isAnonymous)
     ? cur.linkWithPopup(provider).catch(e => {
         if (e && (e.code === "auth/credential-already-in-use" ||
-                  e.code === "auth/email-already-in-use" ||
-                  e.code === "auth/provider-already-linked")) {
+                  e.code === "auth/email-already-in-use")) {
+          return salvageSignIn(e);
+        }
+        if (e && e.code === "auth/provider-already-linked") {
           return popupSignIn();
         }
         throw e;
