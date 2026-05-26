@@ -700,6 +700,7 @@
       "impact.accred": "📋 Accreditation evidence",
       "impact.research": "🔬 Research export",
       "impact.research-csv": "📊 Research export (CSV)",
+      "impact.roster": "📧 Email roster (CSV)",
       "impact.attest": "🎓 Attestations",
       "impact.program": "📈 Program overview",
       "impact.guide": "📖 Facilitator guide",

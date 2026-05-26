@@ -906,9 +906,59 @@ esc(when.toLocaleString()) + "</p>" +
     });
   }
 
+  /* #14 — facilitator-only email roster export. Reads the /rosters subtree
+     (which the rules let ONLY the session creator read), and downloads it as
+     an IDENTIFIABLE CSV (uid, email, name, university, at). The roster lives
+     OUTSIDE the peer-readable session tree, and is captured only for
+     Google-signed-in participants who gave research consent. Kept as a
+     SEPARATE artifact from the pseudonymous research export — email is the
+     most sensitive field, so it is downloaded deliberately and labelled. */
+  function generateEmailRoster() {
+    if (typeof db === "undefined" || !db || typeof oPath !== "function") {
+      if (typeof toast === "function") toast("Database not ready.");
+      return;
+    }
+    const code = (typeof sessionNum !== "undefined") ? sessionNum : null;
+    if (!code) { if (typeof toast === "function") toast("No session open."); return; }
+    db.ref("rosters/" + oPath(code)).once("value").then(function (snap) {
+      const r = snap.val() || {};
+      const uids = Object.keys(r);
+      if (!uids.length) {
+        if (typeof toast === "function") {
+          toast("No participant emails captured yet — only participants signed in with Google who consented to research appear here.");
+        }
+        return;
+      }
+      const esc = function (s) {
+        s = (s == null ? "" : String(s));
+        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+      };
+      const lines = ["uid,email,name,university,recorded_at"];
+      uids.forEach(function (uid) {
+        const e = r[uid] || {};
+        lines.push([
+          esc(uid), esc(e.email), esc(e.name), esc(e.university),
+          esc(typeof e.at === "number" ? new Date(e.at).toISOString() : "")
+        ].join(","));
+      });
+      download(lines.join("\n"), "research_email_roster.csv", "text/csv");
+      if (typeof toast === "function") {
+        toast("📧 Email roster downloaded (" + uids.length + " participant" +
+              (uids.length === 1 ? "" : "s") + "). Identifiable — store securely.");
+      }
+    }).catch(function (e) {
+      if (typeof toast === "function") {
+        toast("Could not read the roster. Only the facilitator who CREATED this session (signed in with the same Google account) can read participant emails.");
+      }
+      try { console.warn("generateEmailRoster read failed:", e && (e.code || e.message)); } catch (_) {}
+    });
+  }
+
   // Expose on window for the admin button + future tools.
   window.CanamedAdminTools = window.CanamedAdminTools || {};
   window.CanamedAdminTools.enqueueMail = enqueueMail;
+  window.CanamedAdminTools.generateEmailRoster = generateEmailRoster;
+  window.generateEmailRoster = generateEmailRoster;
   window.CanamedAdminTools.cohortRows = cohortRows;                   // for tests
   window.CanamedAdminTools.generateCohortComparison = generateCohortComparison;
   window.generateCohortComparison = generateCohortComparison;
