@@ -260,7 +260,7 @@ gainBlock +
   function generateResearchExport() {
     const rooms = activeRooms();
     const participants = participantRows().map(function (p) {
-      return { pid: p.pid, room: p.room, university: p.university,
+      return { pid: p.pid, name: p.name, room: p.room, university: p.university,
                answers: p.answers, hypotheses: p.hypotheses, contributed: p.contributed };
     });
     const decisions = [];
@@ -319,8 +319,9 @@ gainBlock +
     const bundle = {
       session: (typeof sessionNum !== "undefined") ? sessionNum : "",
       exportedAt: new Date().toISOString(),
-      pseudonymous: true,
-      note: "Analysis-ready CANAMED export. Participants are pseudonymous (P1..Pn / room-idx); no names. " +
+      pseudonymous: false,
+      note: "Analysis-ready CANAMED export. IDENTIFIABLE: participant rows carry name (and university); " +
+            "linked to each participant for research per the consent the participants gave. " +
             "Read in R with jsonlite::fromJSON(). Aligns to the study protocol/SAP: participant " +
             "contribution metrics, room-level committed decisions (with correctness), per-participant " +
             "pre/post test scores (with maxima) for paired learning-gain, the end-of-session feedback " +
@@ -423,7 +424,9 @@ gainBlock +
         const a = contribByCid[cid] || 0, h = hypByCid[cid] || 0;
         const row = {
           session: (typeof sessionNum !== "undefined") ? sessionNum : "",
-          participant: "P" + pid, room: r,
+          participant: "P" + pid,
+          name: (pres[cid] && typeof pres[cid].name === "string") ? pres[cid].name : "",
+          room: r,
           university: uniByCid[cid] || "",
           answers: a, hypotheses: h, contributed: (a + h) > 0 ? 1 : 0,
           pre: (pre == null ? "" : pre), preMax: preMax || "",
@@ -569,7 +572,7 @@ gainBlock +
   function generateResearchExportCSV() {
     const idx = _participantIndex();
     const built = researchCsvParticipantRows();
-    const baseCols = ["session", "participant", "room", "university", "answers", "hypotheses",
+    const baseCols = ["session", "participant", "name", "room", "university", "answers", "hypotheses",
                       "contributed", "pre", "preMax", "post", "postMax", "normGain"];
     download(_toCSV(baseCols.concat(built.surveyCols), built.rows), "research_participants.csv", "text/csv");
 
