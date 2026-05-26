@@ -440,7 +440,7 @@
   "stage.wrap.questionnaire-fallback": "Votre encadrant·e partagera le lien du questionnaire.",
   "stage.wrap.bye": "Une fois le questionnaire rempli vous pouvez fermer cet onglet. Rendez-vous à la séance 4 !",
   "stage.wrap.room-answers": "Les réponses de votre salle",
-  "stage.wrap.download": "⤓ Télécharger les réponses de ma salle (Markdown)",
+  "stage.wrap.download": "⤓ Télécharger mon récapitulatif de séance (Markdown)",
   "stage.wrap.retention.title": "🔁 Testez votre rétention dans quelques jours",
   "stage.wrap.retention.hint": "Enregistrez ce lien et revenez dans 2 à 3 jours pour un court auto-test — c'est le fait d'y revenir qui ancre l'apprentissage. Le score reste sur votre appareil ; rien n'est envoyé.",
   "stage.wrap.retention.link": "Ouvrir mon test de rétention →",

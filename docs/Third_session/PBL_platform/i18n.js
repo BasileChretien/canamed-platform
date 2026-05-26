@@ -628,7 +628,7 @@
       "stage.wrap.questionnaire-fallback": "Your facilitator will share the questionnaire link.",
       "stage.wrap.bye": "Once you've done the questionnaire you can close this tab. See you at Session 4!",
       "stage.wrap.room-answers": "Your room's answers",
-      "stage.wrap.download": "⤓ Download my room's answers (Markdown)",
+      "stage.wrap.download": "⤓ Download my session takeaway (Markdown)",
       "stage.wrap.retention.title": "🔁 Test your retention in a few days",
       "stage.wrap.retention.hint": "Save this link and come back in 2–3 days for a short self-check — revisiting is what makes it stick. It scores on your device; nothing is sent.",
       "stage.wrap.retention.link": "Open my retention check →",
