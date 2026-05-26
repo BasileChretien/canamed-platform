@@ -2251,8 +2251,14 @@ function _mountTestRunner(which) {
       skipBtn.className = "ghost-btn";
       skipBtn.textContent = _tFmt("test.skip-question");
       skipBtn.addEventListener("click", () => {
-        state.answered = true;
-        state.picked = -1;     // marker for "skipped" — no points awarded
+        // Skip = move past this question without grading, revealing the
+        // answer, or recording the picked option. (Previously it set
+        // answered=true, which rendered the graded feedback — showing
+        // "Incorrect" and the correct answer — so a skip looked like a
+        // submitted wrong answer.) No points are awarded for a skip.
+        state.index += 1;
+        state.picked = null;
+        state.answered = false;
         render();
       });
       controls.appendChild(skipBtn);
@@ -6778,7 +6784,7 @@ function renderButtons() {
       const locked = !gateOK && !revealed[id];
       btn.disabled = locked;
       btn.title = locked
-        ? "First screen serious causes, screen for cauda equina, and examine the legs"
+        ? "First screen the red flags by asking the patient and/or by examination"
         : "";
     }
     // imaging buttons: a soft "order matters" cue while the red-flag screen is

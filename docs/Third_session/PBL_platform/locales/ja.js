@@ -417,7 +417,7 @@
   "modA.glossary.marker-label": "やさしい言葉の説明があります",
   "modA.chart.exam.title": "診察",
   "modA.chart.investigations.title": "検査と総合判断",
-  "modA.chart.investigations.locked-hint": "🔒 ロック中 — まずレッドフラッグ(重篤な原因+馬尾症候群+下肢神経)をスクリーニングし、上で作業仮説を追加してください。",
+  "modA.chart.investigations.locked-hint": "🔒 ロック中 — まず問診や診察でレッドフラッグをスクリーニングし、上で作業仮説を追加してください。",
   "modA.coach.add-hypothesis": "情報を集めましたね — 次は少なくとも1つの作業仮説 (何を疑うか) を上で合意してください。仮説があると検査が解禁されます。",
   "modA.coach.read-case": "下の症例を読んでから、左のボタン (問診 / 診察 / 検査) のいずれかをタップして情報収集を始めてください。",
   "modA.coach.gather": "症例情報の収集を続けてください — 準備ができたら臨床総合判断 (レッドフラッグ確認) を完了してディスカッション項目を解放しましょう。",
