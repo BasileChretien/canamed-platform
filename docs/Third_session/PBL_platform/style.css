@@ -4259,6 +4259,11 @@ body.session-ended-shown { overflow: hidden; }
   background: var(--card, #fff); color: inherit;
 }
 .survey-open { resize: vertical; min-height: 64px; }
+/* pre-filled-from-profile hint (theme token so it stays legible in dark / high-contrast) */
+.survey-prefill-hint {
+  margin: var(--s-1, 4px) 0 0; font-size: 0.8rem;
+  color: var(--ink-muted, #5a6b7a);
+}
 .survey-submit { margin-top: var(--s-3); }
 .survey-thanks {
   text-align: center; padding: var(--s-3) 0; font-weight: 600;

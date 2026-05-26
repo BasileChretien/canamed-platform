@@ -2422,6 +2422,25 @@ function _saveSurveyComplete(responses) {
   return ref.update(update).then(() => true).catch(e => { console.warn("survey save failed", e); return false; });
 }
 
+/* Resolve a survey item's `prefill` key to the value the participant already
+   gave on the join form, so the questionnaire never re-asks it (dry-run
+   feedback 2026-05-26). Prefer the post-join globals; fall back to the live
+   join inputs (still in the DOM, also restored on resume) so the value is
+   available even before a global is set. Returns "" when unknown. */
+function _surveyProfileVal(key) {
+  if (key === "university") {
+    if (typeof myUniversity === "string" && myUniversity) return myUniversity;
+    const i = el("uni-input");
+    return (i && typeof i.value === "string" && i.value) ? i.value : "";
+  }
+  if (key === "year") {
+    if (myYear != null && !isNaN(myYear) && myYear) return String(myYear);
+    const i = el("year-input");
+    return (i && i.value) ? String(i.value) : "";
+  }
+  return "";
+}
+
 /* Build the scrollable survey form into #survey-body. Exposed for E2E so a
    test can mount it without a live wrap-up stage. */
 function _mountSurveyForm() {
@@ -2494,6 +2513,19 @@ function _mountSurveyForm() {
         sel.appendChild(op);
       });
       field.appendChild(sel);
+      // Pre-fill from the join profile so we never re-ask university/year
+      // (dry-run feedback). Stays editable: a wrong join entry can be corrected.
+      if (item.prefill) {
+        const pv = _surveyProfileVal(item.prefill);
+        if (pv && Array.from(sel.options).some(o => o.value === pv)) {
+          sel.value = pv;
+          field.classList.add("survey-prefilled");
+          const hint = document.createElement("p");
+          hint.className = "survey-prefill-hint";
+          hint.textContent = _tFmt("survey.prefilled");
+          field.appendChild(hint);
+        }
+      }
       getters[item.id] = () => (sel.value || null);
     } else {
       const ta = document.createElement("textarea");

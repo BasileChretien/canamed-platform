@@ -472,6 +472,7 @@
   "survey.skipped": "Vous avez passé le questionnaire. Vous pouvez encore le remplir si vous changez d'avis.",
   "survey.already-done": "Vous avez déjà rempli le questionnaire. Merci !",
   "survey.choose": "Choisir…",
+  "survey.prefilled": "Rempli depuis votre profil — corrigez si besoin.",
   "survey.submit": "Envoyer mes réponses",
   "survey.thanks": "Merci — votre retour nous aide à façonner la prochaine séance. Il est enregistré de façon anonyme au sein de votre groupe.",
   "survey.likert.1": "Pas du tout d'accord",
