@@ -7969,18 +7969,35 @@ function renderDecisions() {
   // Surfaces a one-liner via toast() so the team sees a new decision opened
   // without auto-stealing focus. Skipped on the initial paint (empty tracker).
   allUnlockedNow.forEach(id => {
-    if (!lastUnlockedDecisionIds.has(id) && lastUnlockedDecisionIds.size > 0) {
-      const d = (typeof DECISIONS !== "undefined" ? DECISIONS : []).find(x => x.id === id);
-      if (d && typeof toast === "function") {
-        const lang = _curLang();
-        toast("🗳️ " + (typeof window.t === "function" ?
-              (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
-                ? window.t("modA.decision.unlocked")
-                : "A new team decision just opened")
-              : "A new team decision just opened"),
-              tc(d.prompt, lang));
-      }
+    if (lastUnlockedDecisionIds.has(id) || lastUnlockedDecisionIds.size === 0) return;
+    const d = (typeof DECISIONS !== "undefined" ? DECISIONS : []).find(x => x.id === id);
+    if (!d) return;
+    const lang = _curLang();
+    if (typeof toast === "function") {
+      toast("🗳️ " + (typeof window.t === "function" ?
+            (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
+              ? window.t("modA.decision.unlocked")
+              : "A new team decision just opened")
+            : "A new team decision just opened"),
+            tc(d.prompt, lang));
     }
+    // Auto-open the decide-together / vote panel when a vote becomes due
+    // (dry-run: students missed that a decision had opened). Module A's panel
+    // lives in the right-column "decisions" tab; Module B's is always visible.
+    // Guard: never yank focus from someone mid-answer (the unlock fires for the
+    // whole room, possibly while a teammate is typing their bullet).
+    const typing = document.activeElement &&
+      /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
+    if (d.module === "A" && activeRcolTab !== "decisions" && !typing &&
+        typeof switchRcolTab === "function") {
+      switchRcolTab("decisions");
+    }
+    try {
+      const box = el("decisions-" + (d.module || "A"));
+      if (box && !typing && typeof box.scrollIntoView === "function") {
+        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }
+    } catch (_) { /* scrollIntoView unsupported / detached — non-fatal */ }
   });
   lastUnlockedDecisionIds = allUnlockedNow;
 }
