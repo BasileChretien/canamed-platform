@@ -19,7 +19,7 @@ async function loadAdminTools(page) {
 }
 
 test.describe("Admin tools — research export + attestations", () => {
-  test("research export downloads pseudonymous, SAP-aligned JSON", async ({ page }) => {
+  test("research export downloads identifiable, SAP-aligned JSON", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });
     await loadAdminTools(page);
@@ -32,13 +32,14 @@ test.describe("Admin tools — research export + attestations", () => {
 
     const p = await download.path();
     const bundle = JSON.parse(fs.readFileSync(p, "utf8"));
-    expect(bundle.pseudonymous, "export must be pseudonymous").toBe(true);
+    // Export is now IDENTIFIABLE (per the participants' research consent).
+    expect(bundle.pseudonymous, "export is identifiable, not pseudonymous").toBe(false);
     expect(Array.isArray(bundle.participants), "must carry a participants array").toBe(true);
     expect(Array.isArray(bundle.decisions), "must carry a decisions array").toBe(true);
     expect(Array.isArray(bundle.rooms), "must carry a rooms array").toBe(true);
-    // No participant row may carry a name field (pseudonymity).
+    // Identifiable export: participant rows carry a name field.
     for (const row of bundle.participants) {
-      expect(row.name, "participant rows must not carry names").toBeUndefined();
+      expect(row, "participant rows carry a name field").toHaveProperty("name");
     }
   });
 
