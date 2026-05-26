@@ -42,6 +42,24 @@ test.describe("Admin tools — research export + attestations", () => {
     }
   });
 
+  test("CSV export downloads the linked analysis files (runs without error)", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    await loadAdminTools(page);
+
+    const names = [];
+    page.on("download", (d) => names.push(d.suggestedFilename()));
+    // Throws (rejects the evaluate) if any of the new reveal/vote/free-text/
+    // codebook builders hit a runtime error on the live data shapes.
+    await page.evaluate(() => window.generateResearchExportCSV());
+    await page.waitForTimeout(1000);
+
+    for (const f of ["research_participants.csv", "research_reveals.csv", "research_votes.csv",
+                     "research_freetext.csv", "research_decisions.csv", "research_codebook.csv"]) {
+      expect(names.some((n) => n.endsWith(f)), "must download " + f + " (got " + names.join(", ") + ")").toBe(true);
+    }
+  });
+
   test("attestations open a printable, named certificate page", async ({ page, context }) => {
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });

@@ -440,33 +440,166 @@ gainBlock +
     return { rows: rows, surveyCols: surveyCols };
   }
 
+  /* Pseudonymous per-room participant index: assigns P1..Pn over presence cids
+     in the SAME order as researchCsvParticipantRows(), and maps cid + name → pid
+     so the detail files (reveals / votes / free-text) link back to a participant
+     without exposing names. */
+  function _participantIndex() {
+    const rooms = activeRooms();
+    const pidByRoomCid = {}, pidByRoomName = {};
+    let pid = 0;
+    rooms.forEach(function (r) {
+      const pres = (allRooms[r] || {}).presence || {};
+      pidByRoomCid[r] = {}; pidByRoomName[r] = {};
+      Object.keys(pres).forEach(function (cid) {
+        pid++;
+        const p = "P" + pid;
+        pidByRoomCid[r][cid] = p;
+        const nm = (pres[cid] && typeof pres[cid].name === "string") ? pres[cid].name : "";
+        if (nm && !pidByRoomName[r][nm]) pidByRoomName[r][nm] = p;
+      });
+    });
+    return { pidByRoomCid: pidByRoomCid, pidByRoomName: pidByRoomName };
+  }
+  const _sess = function () { return (typeof sessionNum !== "undefined") ? sessionNum : ""; };
+
+  /* Reveals — the clinical action log: which item each participant opened and
+     WHEN (so order is recoverable by sorting `at`). Reveals are stored with the
+     revealer's name only; we map name→pid to keep the file pseudonymous. */
+  function _revealRows(idx) {
+    const rows = [];
+    activeRooms().forEach(function (r) {
+      const node = (((allRooms[r] || {}).moduleA) || {}).revealed || {};
+      const seq = Object.keys(node).map(function (item) {
+        return { item: item, by: (node[item] || {}).by || "", at: (node[item] || {}).at || 0 };
+      }).sort(function (a, b) { return a.at - b.at; });
+      seq.forEach(function (e, i) {
+        rows.push({ session: _sess(), room: r,
+          participant: (idx.pidByRoomName[r] || {})[e.by] || "",
+          item: e.item, at: e.at, order: i + 1 });
+      });
+    });
+    return rows;
+  }
+
+  /* Individual ballots — every participant's own vote on each team decision,
+     plus the choice the team finally committed. */
+  function _voteRows(idx) {
+    const rows = [];
+    const decList = (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [];
+    const decById = {}; decList.forEach(function (d) { decById[d.id] = d; });
+    activeRooms().forEach(function (r) {
+      const votes = (allRooms[r] || {}).votes || {};
+      Object.keys(votes).forEach(function (decId) {
+        const v = votes[decId] || {}; const dec = decById[decId] || {};
+        const committed = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : "";
+        const ballots = v.ballots || {};
+        Object.keys(ballots).forEach(function (cid) {
+          const b = ballots[cid] || {};
+          const choice = (typeof b.choice === "number") ? b.choice : "";
+          const opt = (choice !== "" && dec.options) ? dec.options[choice] : null;
+          rows.push({ session: _sess(), room: r, decision: decId, module: dec.module || "",
+            participant: (idx.pidByRoomCid[r] || {})[cid] || "",
+            choice: choice, choice_correct: opt ? (opt.correct ? 1 : 0) : "",
+            committed_team_choice: committed });
+        });
+      });
+    });
+    return rows;
+  }
+
+  /* Free-text — the actual words participants wrote (Module A/B answers and the
+     working hypotheses), not just counts. */
+  function _freetextRows(idx) {
+    const rows = [];
+    activeRooms().forEach(function (r) {
+      const d = allRooms[r] || {};
+      ["moduleA", "moduleB"].forEach(function (mk) {
+        const m = (d.answers || {})[mk] || {};
+        Object.keys(m).forEach(function (k) {
+          const e = m[k] || {}; const text = (e.text != null) ? e.text : (e.value != null ? e.value : "");
+          if (text === "") return;
+          rows.push({ session: _sess(), room: r,
+            participant: (idx.pidByRoomCid[r] || {})[e.cid] || "",
+            type: mk + "-answer", key: k, text: text });
+        });
+      });
+      const hyp = (d.moduleA || {}).hypotheses || d.hypotheses || {};
+      Object.keys(hyp).forEach(function (k) {
+        const e = hyp[k] || {}; const text = (e.text != null) ? e.text : "";
+        if (text === "") return;
+        rows.push({ session: _sess(), room: r,
+          participant: (idx.pidByRoomCid[r] || {})[e.cid] || "",
+          type: "hypothesis", key: k, text: text });
+      });
+    });
+    return rows;
+  }
+
+  /* Codebook — the data dictionary: what every coded value means (decision
+     options + correctness, survey questions, test maxima, file/field notes). */
+  function _codebookRows() {
+    const rows = [];
+    const lang = "en";
+    const tcf = (typeof tc === "function") ? tc : function (x) { return (x && x.en != null) ? x.en : x; };
+    const decList = (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [];
+    decList.forEach(function (dec) {
+      (dec.options || []).forEach(function (opt, i) {
+        rows.push({ table: "votes/decisions", field: dec.id, code: i,
+          meaning: tcf(opt.text, lang), extra: (opt.correct ? "clinically-safest option" : ""),
+          module: dec.module || "" });
+      });
+    });
+    const survey = Array.isArray(window.SURVEY) ? window.SURVEY : [];
+    survey.forEach(function (q) {
+      rows.push({ table: "participants (survey columns)", field: q.id, code: "value",
+        meaning: tcf(q.q || q.text || q.label, lang), extra: q.scale ? ("scale: " + q.scale) : "", module: "" });
+    });
+    rows.push({ table: "participants", field: "pre/post", code: "0..max",
+      meaning: "Pre/post knowledge-test score; preMax/postMax give the maximum.", extra: "", module: "" });
+    rows.push({ table: "participants", field: "normGain", code: "0..1",
+      meaning: "Normalized learning gain (post%-pre%)/(100-pre%).", extra: "", module: "" });
+    rows.push({ table: "reveals", field: "order", code: "1..n",
+      meaning: "Sequence in which the participant opened clinical items (sort key = at).", extra: "", module: "A" });
+    rows.push({ table: "ALL", field: "participant", code: "P1..Pn",
+      meaning: "Pseudonymous per-room participant id; join every file on this.", extra: "", module: "" });
+    return rows;
+  }
+
   function generateResearchExportCSV() {
+    const idx = _participantIndex();
     const built = researchCsvParticipantRows();
     const baseCols = ["session", "participant", "room", "university", "answers", "hypotheses",
                       "contributed", "pre", "preMax", "post", "postMax", "normGain"];
-    const headers = baseCols.concat(built.surveyCols);
-    download(_toCSV(headers, built.rows), "research_participants.csv", "text/csv");
+    download(_toCSV(baseCols.concat(built.surveyCols), built.rows), "research_participants.csv", "text/csv");
+
+    download(_toCSV(["session", "room", "participant", "item", "at", "order"], _revealRows(idx)),
+      "research_reveals.csv", "text/csv");
+    download(_toCSV(["session", "room", "decision", "module", "participant", "choice",
+      "choice_correct", "committed_team_choice"], _voteRows(idx)), "research_votes.csv", "text/csv");
+    download(_toCSV(["session", "room", "participant", "type", "key", "text"], _freetextRows(idx)),
+      "research_freetext.csv", "text/csv");
 
     // Room × decision table (committed team decisions + correctness).
-    const rooms = activeRooms();
     const decList = (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [];
     const decRows = [];
-    rooms.forEach(function (r) {
+    activeRooms().forEach(function (r) {
       decList.forEach(function (dec) {
         const v = ((allRooms[r] || {}).votes || {})[dec.id] || {};
         const c = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
         const opt = (c != null && dec.options) ? dec.options[c] : null;
-        decRows.push({
-          session: (typeof sessionNum !== "undefined") ? sessionNum : "",
-          room: r, decision: dec.id, module: dec.module || "",
-          committed_choice: (c == null ? "" : c),
-          correct: opt ? (opt.correct ? 1 : 0) : ""
-        });
+        decRows.push({ session: _sess(), room: r, decision: dec.id, module: dec.module || "",
+          committed_choice: (c == null ? "" : c), correct: opt ? (opt.correct ? 1 : 0) : "" });
       });
     });
     download(_toCSV(["session", "room", "decision", "module", "committed_choice", "correct"], decRows),
       "research_decisions.csv", "text/csv");
-    if (typeof toast === "function") toast("📊 CSV export downloaded (participants + decisions).");
+
+    download(_toCSV(["table", "field", "code", "meaning", "extra", "module"], _codebookRows()),
+      "research_codebook.csv", "text/csv");
+    if (typeof toast === "function") {
+      toast("📊 CSV export downloaded (participants, reveals, votes, free-text, decisions, codebook).");
+    }
   }
 
   /* ── Per-participant attestations ──────────────────────────────────────── */
