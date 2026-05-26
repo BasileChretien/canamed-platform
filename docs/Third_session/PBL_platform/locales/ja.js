@@ -495,6 +495,7 @@
   "impact.accred": "📋 コンピテンシー評価の証跡",
   "impact.research": "🔬 研究データ書き出し",
   "impact.research-csv": "📊 研究データ書き出し（CSV）",
+  "impact.roster": "📧 メール名簿（CSV）",
   "impact.attest": "🎓 修了証",
   "impact.program": "📈 プログラム全体の概要",
   "impact.guide": "📖 ファシリテーターガイド",

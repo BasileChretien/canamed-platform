@@ -495,6 +495,7 @@
   "impact.accred": "📋 Preuves de compétences",
   "impact.research": "🔬 Export recherche",
   "impact.research-csv": "📊 Export recherche (CSV)",
+  "impact.roster": "📧 Liste d'e-mails (CSV)",
   "impact.attest": "🎓 Attestations",
   "impact.program": "📈 Vue d'ensemble du programme",
   "impact.guide": "📖 Guide de l'animateur",

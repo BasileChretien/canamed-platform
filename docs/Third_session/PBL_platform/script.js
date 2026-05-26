@@ -1932,10 +1932,42 @@ function _joinParticipantAfterAuth() {
   claimMembership("participant")
     .then(() => claimClientMapping())
     .then(() => claimStableIdMapping())
+    .then(() => writeRoster())
     .then(() => {
       if (!joined) return; // user left while membership write was in-flight
       _joinParticipantWireUp();
     });
+}
+
+/* #14 — capture the participant's email into the facilitator-only /rosters
+ * subtree, which lives OUTSIDE the peer-readable session tree so other
+ * participants never see it (the session .read is "any member"; names are
+ * already member-visible, but email is new PII and must not be). Only for
+ * signed-in (Google) participants who gave RESEARCH consent — the consent
+ * copy states "If you sign in with Google, your email is also recorded" and
+ * that identifiable data is linked for research and seen only by the study
+ * facilitators. Anonymous joiners have no email and write nothing. Keyed by
+ * auth.uid; the rosters rule lets a participant write ONLY their own entry
+ * and only the session creator (creatorUid) read the roster. Best-effort: a
+ * legacy DB without the rosters rule, or a participant who declined research,
+ * simply writes nothing and the join continues. */
+function writeRoster() {
+  if (!db || !currentUser || !currentUser.uid || !sessionNum) return Promise.resolve();
+  if (currentUser.isAnonymous || !currentUser.email) return Promise.resolve();
+  if (!myConsent || myConsent.research !== true) return Promise.resolve();
+  try {
+    const entry = { email: String(currentUser.email).slice(0, 254), at: Date.now() };
+    if (myName) entry.name = String(myName).slice(0, 120);
+    if (myUniversity) entry.university = String(myUniversity).slice(0, 120);
+    return db.ref("rosters/" + sPath(currentUser.uid)).set(entry).catch(e => {
+      // Tolerated: legacy DBs without the rosters rule, or a creatorUid the
+      // emulator hasn't set — the workshop join continues regardless.
+      try { console.warn("writeRoster skipped (continuing):", e && e.code); } catch (_) {}
+    });
+  } catch (e) {
+    try { console.warn("writeRoster threw (continuing):", e); } catch (_) {}
+    return Promise.resolve();
+  }
 }
 
 function _joinParticipantWireUp() {
@@ -3447,6 +3479,11 @@ function enterAdminApp() {
   if (researchCsvBtn && !researchCsvBtn.dataset.wired) {
     researchCsvBtn.dataset.wired = "1";
     researchCsvBtn.addEventListener("click", () => runAdminTool("generateResearchExportCSV"));
+  }
+  const rosterBtn = el("admin-roster-btn");
+  if (rosterBtn && !rosterBtn.dataset.wired) {
+    rosterBtn.dataset.wired = "1";
+    rosterBtn.addEventListener("click", () => runAdminTool("generateEmailRoster"));
   }
   const attestBtn = el("admin-attest-btn");
   if (attestBtn && !attestBtn.dataset.wired) {
@@ -11308,6 +11345,16 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
         // — exactly matching the rule tree (recovery/ + _sessionPrefix + code).
         db.ref("recovery/" + oPath(code)).set({ code: recoveryCode })
       ];
+      // creatorUid — the gate for the facilitator-only /rosters email subtree.
+      // Write-once, set to OUR uid, in this pre-password create batch (the rule
+      // rejects it once adminPasswordHash exists or if it isn't our own uid).
+      // A stable (Google) uid lets the facilitator return later to read the
+      // roster; an anonymous creator still gets a working gate for this session.
+      const _creatorUid = (auth && auth.currentUser && auth.currentUser.uid) ||
+                          (currentUser && currentUser.uid) || null;
+      if (_creatorUid) {
+        writes.push(db.ref(oPath(code, "creatorUid")).set(_creatorUid));
+      }
       if (workshopLabel) {
         writes.push(db.ref(oPath(code, "workshopLabel")).set(workshopLabel));
       }
