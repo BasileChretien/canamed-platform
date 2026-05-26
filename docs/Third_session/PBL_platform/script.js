@@ -4189,13 +4189,18 @@ function startSession() {
       };
       checkBalance().then(okBalance => {
         if (!okBalance) return;
-        const updates = [];
+        // Single atomic multi-path write: every room assignment + roomCount +
+        // started commit together, or not at all. The old code wrote each
+        // room separately and only set `started` AFTER all of them resolved —
+        // so one transient write blip rejected Promise.all and left the
+        // session half-started (rooms assigned but `started` never set, so the
+        // facilitator stayed stuck on the waiting room). One update() is also
+        // a single round-trip, far less exposed to a connection blip.
+        const updates = { roomCount: rc, started: true };
         Object.keys(assignment).forEach(cid => {
-          updates.push(refPool.child(cid).child("room").set(assignment[cid]));
+          updates["pool/" + cid + "/room"] = assignment[cid];
         });
-        Promise.all(updates).then(() => {
-          return Promise.all([refRoomCount.set(rc), refStarted.set(true)]);
-        }).then(() => {
+        db.ref(sPath("")).update(updates).then(() => {
           // Remember this session's room count so the next "Clone last
           // workshop" includes it as a default.
           saveLastWorkshop({ roomCount: rc });
