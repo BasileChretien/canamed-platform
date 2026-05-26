@@ -74,45 +74,53 @@ test.describe("Module A hypothesis-block placement (specialist consensus)", () =
     expect(info.beforeHistory, "impressions must come BEFORE history in the DOM").toBe(true);
   });
 
-  test("Investigations unlock gate requires hypothesis AND red-flag screen", async ({ page }) => {
+  test("Investigations are clickable any time; only the synthesis is red-flag-gated", async ({ page }) => {
+    // Dry-run 2026-05-26: investigations (imaging + bloods) are no longer
+    // hypothesis-locked — ordering one prematurely is penalised, not blocked.
+    // The clinical synthesis (labs:0) stays gated on the red-flag screen.
     await page.goto("/");
     const out = await page.evaluate(async () => {
       if (!window.CanamedLoader || !window.CanamedLoader.ensureCaseContent) return "no-loader";
       await window.CanamedLoader.ensureCaseContent();
-      // Empty state: no hypothesis, no reveals.
-      if (window._test_setRevealed) window._test_setRevealed({});
-      const before = window.hypothesesUnlocked();
-      // Type a hypothesis without doing any reveals — used to unlock
-      // Investigations; the new gate must keep it locked.
-      if (window._test_setHypotheses) window._test_setHypotheses({ fake: { text: "back pain", at: Date.now() } });
-      const afterHypoOnly = window.hypothesesUnlocked();
-      // Now do the red-flag screen items but DROP the hypothesis.
       if (window._test_setHypotheses) window._test_setHypotheses({});
+      const disabled = (sel) => {
+        const b = document.querySelector(sel);
+        return b ? b.disabled : null;
+      };
+      // Empty state — no hypothesis, no reveals.
+      if (window._test_setRevealed) window._test_setRevealed({});
+      if (typeof window.buildButtons === "function") window.buildButtons();
+      if (typeof window.renderButtons === "function") window.renderButtons();
+      const imagingNoState = disabled('.req-btn[data-id="labs:1"]');
+      const synthNoState = disabled('.req-btn[data-id="labs:0"]');
+      // After the red-flag screen — synthesis unlocks; imaging stays clickable.
       if (window._test_setRevealed) window._test_setRevealed({
         "history:1": { at: 1, by: "t" },
         "history:2": { at: 1, by: "t" },
         "exam:3":    { at: 1, by: "t" }
       });
-      const afterRedflagOnly = window.hypothesesUnlocked();
-      // Now BOTH.
-      if (window._test_setHypotheses) window._test_setHypotheses({ fake: { text: "back pain", at: Date.now() } });
-      const afterBoth = window.hypothesesUnlocked();
-      return { before, afterHypoOnly, afterRedflagOnly, afterBoth };
+      if (typeof window.renderButtons === "function") window.renderButtons();
+      const imagingAfter = disabled('.req-btn[data-id="labs:1"]');
+      const synthAfter = disabled('.req-btn[data-id="labs:0"]');
+      return { imagingNoState, synthNoState, imagingAfter, synthAfter };
     });
-    expect(out.before, "no hypothesis + no reveals → locked").toBe(false);
-    expect(out.afterHypoOnly, "hypothesis alone must NOT unlock — sim2026-05-19 specialist-panel decision").toBe(false);
-    expect(out.afterRedflagOnly, "red-flag screen alone must NOT unlock").toBe(false);
-    expect(out.afterBoth, "hypothesis + red-flag screen → unlocked").toBe(true);
+    expect(out.imagingNoState, "imaging is clickable even with no hypothesis / no red-flag screen").toBe(false);
+    expect(out.synthNoState, "synthesis stays gated until the red-flag screen is done").toBe(true);
+    expect(out.imagingAfter, "imaging stays clickable").toBe(false);
+    expect(out.synthAfter, "synthesis unlocks once the red-flag screen is complete").toBe(false);
   });
 
-  test("Locked-state hint copy mentions BOTH the red-flag screen AND the hypothesis", async ({ page }) => {
+  test("Investigations hint reframes ordering as a penalised choice, not a lock", async ({ page }) => {
     await page.goto("/");
     const t = await page.evaluate(() => {
       const h = document.getElementById("investigations-locked-hint");
       return h ? (h.textContent || "") : "";
     });
+    // New copy: investigations are open; the synthesis is what gates on red flags.
     expect(t).toMatch(/red flag|red-flag|cauda|leg neuro|drapeau|レッドフラッグ/i);
-    expect(t).toMatch(/hypothesis|hypothèse|hypothèses|仮説/i);
+    expect(t).toMatch(/synthesis|synthèse|総合判断|any time|tout moment|いつでも/i);
+    // Must NOT present the panel as locked any more.
+    expect(t).not.toMatch(/🔒|Locked|Verrouillé|ロック中/);
   });
 });
 
