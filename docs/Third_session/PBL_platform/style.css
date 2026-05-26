@@ -1002,7 +1002,7 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .role-replay-round {
   font-size: 0.86rem;
   font-weight: 600;
-  color: var(--n-600, #41506180);
+  color: var(--muted, #4d5b6a);
 }
 .role-replay-btn {
   margin-left: auto;
@@ -4185,7 +4185,7 @@ body.session-ended-shown { overflow: hidden; }
 .test-option {
   display: flex; align-items: flex-start; gap: var(--s-2);
   padding: 10px 14px; border: 2px solid var(--border, #d5dde4);
-  border-radius: var(--r-md, 10px); background: var(--card-soft, #fff);
+  border-radius: var(--r-md, 10px); background: var(--card, #fff);
   cursor: pointer; text-align: left; font: inherit; color: inherit;
   transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
               background var(--dur-base, .18s) var(--ease-out, ease);
@@ -4240,7 +4240,7 @@ body.session-ended-shown { overflow: hidden; }
 .survey-likert-opt {
   flex: 1 1 0; min-width: 0; min-height: 44px;
   border: 2px solid var(--border, #d5dde4); border-radius: var(--r-md, 10px);
-  background: var(--card-soft, #fff); color: inherit; font: inherit; font-weight: 700;
+  background: var(--card, #fff); color: inherit; font: inherit; font-weight: 700;
   cursor: pointer;
   transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
               background var(--dur-base, .18s) var(--ease-out, ease);
@@ -4256,7 +4256,7 @@ body.session-ended-shown { overflow: hidden; }
 .survey-select, .survey-open {
   width: 100%; padding: 10px 12px; font: inherit;
   border: 2px solid var(--border, #d5dde4); border-radius: var(--r-md, 10px);
-  background: var(--card-soft, #fff); color: inherit;
+  background: var(--card, #fff); color: inherit;
 }
 .survey-open { resize: vertical; min-height: 64px; }
 .survey-submit { margin-top: var(--s-3); }

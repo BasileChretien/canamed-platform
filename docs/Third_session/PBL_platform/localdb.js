@@ -110,6 +110,18 @@
       this._db._write(tree);
       return Promise.resolve();
     }
+    // Firebase-style multi-path update: each key is a (possibly slash-
+    // separated) path relative to this ref; siblings not named are left
+    // intact. Single read-modify-write so subscribers fire once.
+    update(obj) {
+      if (!obj || typeof obj !== "object") return Promise.resolve();
+      const tree = this._db._read();
+      Object.keys(obj).forEach((k) => {
+        this._db._setAt(tree, this._path + "/" + k, obj[k]);
+      });
+      this._db._write(tree);
+      return Promise.resolve();
+    }
     remove() { return this.set(null); }
     push(val) {
       const key = "-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
