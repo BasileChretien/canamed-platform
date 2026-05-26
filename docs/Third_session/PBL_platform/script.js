@@ -1965,7 +1965,11 @@ function _joinParticipantWireUp() {
   // log this session under the signed-in user's history (if any); silent
   // no-op for anonymous joiners
   pushSessionToHistory(sessionNum);
-  refMyPool.onDisconnect().remove();
+  // Membership is persistent: do NOT arm onDisconnect().remove() here. On
+  // mobile, locking the screen or switching apps drops the connection, and an
+  // onDisconnect-remove would eject the student from their room every time.
+  // They now stay in the session across disconnects and reconnect on wake.
+  // (The cancel() above clears any stale removal armed by an older build.)
   saveResume(resumeRoom);
 
   refRoomCount.on("value", snap => { roomCount = snap.val() || 4; });
@@ -1977,9 +1981,10 @@ function _joinParticipantWireUp() {
     pool = snap.val() || {};
     renderWaitingList();
     const mine = pool[clientId];
-    // A stale onDisconnect from a previous tab or a reload can wipe our entry
-    // moments after we re-set it. If we are joined but missing, re-assert -
-    // keeping any room we were already placed in.
+    // Safety net: if we are joined but our entry is missing (e.g. a stale
+    // onDisconnect-remove armed by an older build fired, or an admin action),
+    // re-assert it — keeping any room we were already placed in. Cancel any
+    // leftover server-side removal so it cannot wipe us again.
     if (!mine && joined) {
       try { refMyPool.onDisconnect().cancel(); } catch (e) {}
       refMyPool.set({
@@ -1988,7 +1993,6 @@ function _joinParticipantWireUp() {
         consent: myConsent,
         stableId: stableId   // R2-24/25: persistent per-person id
       });
-      refMyPool.onDisconnect().remove();
       return;
     }
     if (mine && mine.room && !myRoom) enterRoom(mine.room, false);
@@ -4189,13 +4193,18 @@ function startSession() {
       };
       checkBalance().then(okBalance => {
         if (!okBalance) return;
-        const updates = [];
+        // Single atomic multi-path write: every room assignment + roomCount +
+        // started commit together, or not at all. The old code wrote each
+        // room separately and only set `started` AFTER all of them resolved —
+        // so one transient write blip rejected Promise.all and left the
+        // session half-started (rooms assigned but `started` never set, so the
+        // facilitator stayed stuck on the waiting room). One update() is also
+        // a single round-trip, far less exposed to a connection blip.
+        const updates = { roomCount: rc, started: true };
         Object.keys(assignment).forEach(cid => {
-          updates.push(refPool.child(cid).child("room").set(assignment[cid]));
+          updates["pool/" + cid + "/room"] = assignment[cid];
         });
-        Promise.all(updates).then(() => {
-          return Promise.all([refRoomCount.set(rc), refStarted.set(true)]);
-        }).then(() => {
+        db.ref(sPath("")).update(updates).then(() => {
           // Remember this session's room count so the next "Clone last
           // workshop" includes it as a default.
           saveLastWorkshop({ roomCount: rc });
