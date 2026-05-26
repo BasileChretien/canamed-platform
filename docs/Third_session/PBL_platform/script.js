@@ -8461,7 +8461,7 @@ function updateModBNextStep() {
   } else if (modBAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modB.coach.roleplay",
       "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion " +
-      "with the prompts below. The observer reads them aloud.");
+      "with the prompts below.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-2", "play", ["setup"]);
   } else if (!allBulletsCovered) {
@@ -8661,8 +8661,23 @@ function initRolePicker() {
     // Coach updates: role-picked drives Module B's setup→play transition.
     if (typeof updateModBNextStep === "function") updateModBNextStep();
   };
+  // Allow UN-selecting a role (dry-run: "allow unselecting a role"). Re-tapping
+  // the role you already hold clears it — back to no role — and retracts the
+  // live pick so the room no longer shows you in it. Keyboard navigation stays
+  // select-only (the APG radio pattern); only a pointer re-tap toggles off.
+  const deselect = chip => {
+    chip.setAttribute("aria-checked", "false");
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    try {
+      if (refRoleChoices && clientId && !isRoomAdmin) refRoleChoices.child(clientId).remove();
+    } catch (e) { /* offline / rules — the local clear still stands */ }
+    if (typeof updateModBNextStep === "function") updateModBNextStep();
+  };
   chips.forEach(chip => {
-    chip.addEventListener("click", () => select(chip));
+    chip.addEventListener("click", () => {
+      if (chip.getAttribute("aria-checked") === "true") deselect(chip);
+      else select(chip);
+    });
     // arrow-key navigation inside the radiogroup — select-on-move
     chip.addEventListener("keydown", e => {
       if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;

@@ -474,7 +474,7 @@
       "stage.modB.framework.realign": "<strong>Realign</strong> — ask the <em>patient</em> how much they want to know and who they want involved (this is SPIKES' \"Invitation\"). The family's worry becomes part of the conversation, not a secret kept from the patient.",
 
       "stage.modB.phase3.title": "Phase 3 — The exchange (15 min)",
-      "stage.modB.phase3.ground-rule": "<strong>Ground rule (an observer reads this aloud):</strong> we are comparing <em>practices and how they are changing</em>, not ranking countries. Neither model is \"the advanced one\". Speak about what you have actually seen or been taught — and it is completely fine to say \"I'm not sure, this is changing.\"",
+      "stage.modB.phase3.ground-rule": "<strong>Ground rule for this discussion (Phase 3):</strong> we are comparing <em>practices and how they are changing</em>, not ranking countries. Neither model is \"the advanced one\". Speak about what you have actually seen or been taught — and it is completely fine to say \"I'm not sure, this is changing.\"",
       "stage.modB.phase3.intro": "An observer reads these out one at a time — for each, make sure both a Caen and a Nagoya voice answers:",
       "stage.modB.phase3.q1": "<strong>Who is the information for?</strong> When there is serious news, who is told <em>first</em> — the patient or the family? Is that what the law says, the textbook says, or what actually happens on the ward? Name one way France and Japan are the <strong>same</strong> and one way they <strong>differ</strong>.",
       "stage.modB.phase3.q2": "<strong>Has it changed?</strong> Was disclosure done differently 20–30 years ago? (Japan: cancer-diagnosis disclosure rose from under ~30% in the early 1990s to ~94% by 2016. France: the 2002 <em>loi Kouchner</em> changed patients' information rights.) Why do norms change — law, generations, expectations?",
@@ -545,6 +545,7 @@
       "modB.role.family.brief": "Partway through — not at the start — quietly take the physician aside and ask them not to tell your parent everything.",
       "modB.role.observer.name": "Observer",
       "modB.role.clash": "Two of you picked the same role — decide together so everyone has a part.",
+      "modB.role.deselect-hint": "Picked the wrong role? Tap it again to clear your choice.",
       "modB.replay.round1": "Round 1 — first run",
       "modB.replay.roundN": "Round {n}",
       "modB.replay.swap": "🔄 Swap roles & replay",
@@ -615,7 +616,7 @@
       "modA.coach.btn.open-answers": "Open Group answers →",
       "modA.coach.synthesis-unlocked": "✓ <strong>Synthesis done — Phase 3 is open.</strong> The 6 discussion prompts are below. Both Caen and Nagoya voices must speak on each comparison prompt.",
       "modB.coach.pick-role": "Pick your role below before starting the roleplay. The observer keeps time.",
-      "modB.coach.roleplay": "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion with the prompts below. The observer reads them aloud.",
+      "modB.coach.roleplay": "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion with the prompts below.",
       "modB.coach.bullets-partial": "Capturing bullets — {n} still to add to cover all 3.",
       "modB.coach.bullets-complete": "✓ All 3 bullets covered. Add more refinements or wait for your facilitator.",
 
