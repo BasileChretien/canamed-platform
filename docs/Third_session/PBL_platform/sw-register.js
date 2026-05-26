@@ -13,14 +13,35 @@
 (function () {
   if (!("serviceWorker" in navigator)) return;
 
+  // Auto-reload to the freshly-deployed version when an updated Service Worker
+  // takes control — but ONLY when the user is still on the splash (not inside
+  // an active workshop) and ONLY for a genuine update (a controller already
+  // existed; never the very first install). This stops returning users from
+  // being stranded on a stale cached build, without interrupting anyone
+  // mid-session. The SW uses skipWaiting()+clients.claim(), so a new version
+  // fires controllerchange shortly after the page loads.
+  var _reloadingForUpdate = false;
+  var _hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", function () {
+    if (_reloadingForUpdate || !_hadController) return;
+    var splash = document.getElementById("splash");
+    var onSplash = !!splash &&
+      !splash.classList.contains("hidden") && splash.hidden !== true;
+    if (!onSplash) return; // mid-session — don't yank the user out; they pick
+                           // up the new version next time they're on the splash
+    _reloadingForUpdate = true;
+    window.location.reload();
+  });
+
   // Register on window.load so the SW install doesn't race the first paint.
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("sw.js")
       .then(function (reg) {
-        // If a new SW is found, prompt the user once installed (don't auto-
-        // reload mid-session — that would kick them out of an active workshop)
+        // Periodically check for a new SW. When one installs it activates
+        // (skipWaiting) and the controllerchange handler above auto-reloads
+        // the page if the user is on the splash.
         if (reg.update) {
-          // Check for updates every hour; the user can also force reload.
+          // Check for updates every hour; navigating/reopening also checks.
           setInterval(function () { reg.update().catch(function () {}); }, 60 * 60 * 1000);
         }
       })
