@@ -1069,8 +1069,12 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   padding: 9px 12px;
   font-size: 0.9rem;
   border-radius: var(--r-md);
-  background: #e8f5ec;
-  border-left: 3px solid #2e7d4f;
+  /* Themed tokens (not hardcoded light hex) so the "you're observing now"
+     message stays legible in dark + high-contrast — the light hex #e8f5ec
+     with color:var(--ink) was near-white-on-light-green in dark mode
+     (dry-run #5, the observer-message gap the --n-* remap didn't cover). */
+  background: var(--ok-50);
+  border-left: 3px solid var(--ok-strong);
   color: var(--ink);
 }
 

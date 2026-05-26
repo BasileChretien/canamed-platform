@@ -53,3 +53,20 @@ test("the affected Module B panels still paint with the neutral tokens (so the r
   assert.match(CSS, /\.recap-table tbody tr:nth-child\(even\)\s*\{[^}]*background:\s*var\(--n-25\)/,
     ".recap-table even rows must paint with var(--n-25)");
 });
+
+test("the observer reassurance message is themed, not a hardcoded light surface", () => {
+  // Dry-run #5 also flagged the observer/role message. .role-observe-reassure
+  // (the "you're observing now" note) used a HARDCODED light-green background
+  // with color:var(--ink) → near-white-on-light-green in dark mode. It must
+  // paint with theme tokens so it adapts across light / dark / high-contrast.
+  const m = CSS.match(/\.role-observe-reassure\s*\{[^}]*\}/);
+  assert.ok(m, ".role-observe-reassure rule must exist");
+  const rule = m[0];
+  assert.doesNotMatch(rule, /background:\s*#[0-9a-fA-F]{3,6}/,
+    ".role-observe-reassure must not hardcode a light background hex (breaks dark mode)");
+  assert.match(rule, /background:\s*var\(--ok-50\b/,
+    ".role-observe-reassure should paint with the themed --ok-50 surface (remapped dark)");
+  // --ok-50 must be remapped in the forced dark block (so the message goes dark too)
+  const darkBlock = (CSS.match(/html\[data-theme="dark"\]\s*\{[^}]*\}/) || [""])[0];
+  assert.match(darkBlock, /--ok-50:/, "the dark theme must remap --ok-50 to a dark elevation");
+});

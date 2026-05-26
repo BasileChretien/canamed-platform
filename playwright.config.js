@@ -91,12 +91,12 @@ module.exports = defineConfig({
     {
       name: "mobile-iphone",
       use: { ...devices["iPhone 14 Pro"] },
-      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime)\.spec\.js$/
+      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark)\.spec\.js$/
     },
     {
       name: "mobile-ipad",
       use: { ...devices["iPad Pro 11"] },
-      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime)\.spec\.js$/
+      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark)\.spec\.js$/
     },
     // Pixel 7 (Android Chrome) emulation pass — user feedback (Bug 3)
     // reported the Module A findings reveal was invisible on Android
@@ -107,7 +107,7 @@ module.exports = defineConfig({
     {
       name: "mobile-android",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(?:android-findings|lazy-locale-consent|survey-feedback|lobby-form-semantics|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime)\.spec\.js$/
+      testMatch: /(?:android-findings|lazy-locale-consent|survey-feedback|lobby-form-semantics|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark)\.spec\.js$/
     }
   ],
   // Auto-start the static server before the suite runs; auto-shut down after.
