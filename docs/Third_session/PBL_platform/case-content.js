@@ -156,7 +156,26 @@ var CASE = {
            ja: "本当にそこまで痛みがひどいのですか?ストレスや気のせいではありませんか?" },
       a: { en: "His face hardens. \"So you don't believe me either. Everyone keeps saying that. That is exactly why I want a real painkiller.\" (The consultation has just lost its therapeutic alliance: he is now defending the reality of his pain instead of working with you. Suggesting pain is imagined or 'just stress' is dismissive, not a screen for psychological factors.)",
            fr: "Son visage se ferme. « Alors vous non plus vous ne me croyez pas. Tout le monde n'arrête pas de dire ça. C'est exactement pour ça que je veux un vrai antalgique. » (La consultation vient de perdre son alliance thérapeutique : il défend désormais la réalité de sa douleur au lieu de travailler avec vous. Suggérer que la douleur est imaginaire ou « juste du stress » est dévalorisant, ce n'est pas un dépistage des facteurs psychologiques.)",
-           ja: "彼の表情がこわばります。「先生も私の言うことを信じてくれないんですね。みんな同じことを言うんです。だからこそ、ちゃんとした鎮痛薬が欲しいんですよ。」(診察はたった今、治療同盟を失いました:彼はあなたと協力するのではなく、自分の痛みの現実性を守ろうとしています。痛みが「気のせい」や「ただのストレス」だと示唆することは、相手を軽視する態度であり、心理社会的因子のスクリーニングにはなりません。)" } }
+           ja: "彼の表情がこわばります。「先生も私の言うことを信じてくれないんですね。みんな同じことを言うんです。だからこそ、ちゃんとした鎮痛薬が欲しいんですよ。」(診察はたった今、治療同盟を失いました:彼はあなたと協力するのではなく、自分の痛みの現実性を守ろうとしています。痛みが「気のせい」や「ただのストレス」だと示唆することは、相手を軽視する態度であり、心理社会的因子のスクリーニングにはなりません。)" } },
+    /* --- Round-3 dry-run (2026-05-26): two further deliberately POOR moves so
+       students have more wrong options to choose and learn from. Appended at the
+       END (indices 11 and 12) so existing indices, SYNTH_PREREQS and the
+       PENALTIES references stay valid. PENALTIES below references 11 and 12. */
+    { q: { en: "Reassure him right now that this is \"definitely nothing serious\" — before you've finished screening for red flags.",
+           fr: "Rassurez-le immédiatement en lui disant que « ce n'est sûrement rien de grave » — avant même d'avoir terminé le dépistage des drapeaux rouges.",
+           ja: "レッドフラッグのスクリーニングを終える前に、「これはきっと何も重大なものではありません」と今すぐ患者を安心させる。" },
+      a: { en: "He looks relieved for a moment, then uneasy: \"But you haven't really checked me over yet…\" (You have closed the assessment with a promise you cannot yet make. Premature reassurance — before the red-flag screen and examination are complete — both risks missing a serious cause and rings hollow to an anxious patient, deepening his worry rather than easing it.)",
+           fr: "Il paraît soulagé un instant, puis mal à l'aise : « Mais vous ne m'avez pas encore vraiment examiné… » (Vous avez clos l'évaluation par une promesse que vous ne pouvez pas encore tenir. Une réassurance prématurée — avant d'avoir terminé le dépistage des drapeaux rouges et l'examen — risque à la fois de passer à côté d'une cause grave et de sonner faux pour un patient anxieux, aggravant son inquiétude au lieu de l'apaiser.)",
+           ja: "彼は一瞬ほっとした表情を見せますが、すぐに不安そうになります:「でも、まだちゃんと診てもらっていませんよね…」(あなたはまだできない約束で評価を打ち切ってしまいました。レッドフラッグのスクリーニングと診察を終える前の早すぎる安心づけは、重大な原因を見落とすリスクがあると同時に、不安な患者には空虚に響き、不安を和らげるどころか深めてしまいます。)" },
+      cite: { en: "NICE NG59 — complete the assessment before reassuring",
+              fr: "HAS 2019 / NICE NG59 — évaluer avant de rassurer",
+              ja: "NICE NG59 — 安心させる前に評価を完了する" } },
+    { q: { en: "Cut the conversation short and refer him straight to the pain clinic, so it is no longer your problem.",
+           fr: "Écourtez la conversation et adressez-le directement au centre de la douleur, pour que ce ne soit plus votre problème.",
+           ja: "会話を切り上げ、彼をすぐにペインクリニックに紹介して、自分の担当する問題ではなくする。" },
+      a: { en: "\"So you're passing me on as well.\" He leaves deflated. (Reflexly referring red-flag-free, non-specific low-back pain — without exploring the request, screening, or starting first-line care — abandons the therapeutic relationship and medicalises a problem best held in primary care. Referral is for red flags, diagnostic doubt, or failed first-line management.)",
+           fr: "« Alors vous aussi, vous vous débarrassez de moi. » Il repart abattu. (Adresser par réflexe une lombalgie non spécifique sans drapeau rouge — sans explorer la demande, dépister, ni instaurer un traitement de première intention — abandonne la relation thérapeutique et médicalise un problème qui relève des soins primaires. L'adressage est justifié par des drapeaux rouges, un doute diagnostique ou l'échec du traitement de première ligne.)",
+           ja: "「先生も私を厄介払いするんですね。」彼は落胆して帰っていきます。(レッドフラッグのない非特異的腰痛を、要望を掘り下げることも、スクリーニングも、第一選択の治療を始めることもせずに反射的に紹介することは、治療関係を放棄し、本来プライマリ・ケアで扱うべき問題を医療化してしまいます。紹介が適応となるのは、レッドフラッグ、診断的な疑い、または第一選択治療が無効だった場合です。)" } }
   ],
   exam: [
     { q: { en: "General observation and gait",
@@ -203,7 +222,16 @@ var CASE = {
            ja: "心血管系および呼吸器系の完全な診察" },
       a: { en: "Heart sounds normal, no murmur, chest clear, no peripheral oedema. (There is nothing in the history pointing to cardiac or respiratory disease and this has cost the consultation 5 minutes. A focused examination is not the same as a scattergun examination — the latter signals to the patient that you are searching at random.)",
            fr: "Bruits du cœur normaux, pas de souffle, auscultation pulmonaire claire, pas d'œdème périphérique. (Rien dans l'anamnèse n'oriente vers une pathologie cardiaque ou respiratoire et cela a coûté 5 minutes à la consultation. Un examen ciblé n'est pas la même chose qu'un examen au hasard — ce dernier signale au patient que vous cherchez à l'aveugle.)",
-           ja: "心音は正常、雑音なし、呼吸音清明、末梢浮腫なし。(病歴には心疾患や呼吸器疾患を示唆する所見はなく、この診察に5分を費やしてしまいました。焦点を絞った診察と網羅的な「手当たり次第」の診察は別物です — 後者は、医師が当てずっぽうに探している印象を患者に与えてしまいます。)" } }
+           ja: "心音は正常、雑音なし、呼吸音清明、末梢浮腫なし。(病歴には心疾患や呼吸器疾患を示唆する所見はなく、この診察に5分を費やしてしまいました。焦点を絞った診察と網羅的な「手当たり次第」の診察は別物です — 後者は、医師が当てずっぽうに探している印象を患者に与えてしまいます。)" } },
+    /* --- Round-3 dry-run (2026-05-26): a further deliberately POOR exam move.
+       Appended at the END (index 7) so existing indices stay valid; PENALTIES
+       below references exam:7. */
+    { q: { en: "Press hard and repeatedly on the most tender spot to \"see how bad it really is.\"",
+           fr: "Appuyez fort et à plusieurs reprises sur le point le plus douloureux pour « voir à quel point ça fait vraiment mal ».",
+           ja: "最も痛む部位を強く繰り返し押して、「本当にどれくらい痛いのか確かめる」。" },
+      a: { en: "He flinches and pulls away, his trust visibly dented. (Deliberately provoking pain to \"test\" a patient is not an examination technique — gentle palpation already gave you the information, and forcing painful pressure yields nothing new while causing avoidable distress and signalling that you doubt him. Examine as gently as the question allows.)",
+           fr: "Il sursaute et se dérobe, sa confiance visiblement entamée. (Provoquer délibérément la douleur pour « tester » un patient n'est pas une technique d'examen — la palpation douce vous a déjà renseigné, et forcer une pression douloureuse n'apporte rien de nouveau tout en causant une détresse évitable et en signalant que vous doutez de lui. Examinez aussi doucement que la question le permet.)",
+           ja: "彼はびくっとして体を引き、信頼が目に見えて損なわれます。(患者を「試す」ために意図的に痛みを誘発することは診察手技ではありません — 軟らかい触診ですでに必要な情報は得られており、痛みを伴う圧迫を強いても新たな情報は得られず、避けられる苦痛を与え、患者を疑っているという印象を示すだけです。問いに必要な範囲で、できるだけ優しく診察してください。)" } }
   ],
   labs: [
     { q: { en: "Clinical synthesis and red-flag review  (unlocks the discussion prompts)",
@@ -518,7 +546,56 @@ var PENALTIES = [
            ja: "病歴には心疾患や呼吸器疾患を示唆する所見はないため、完全な心血管・呼吸器" +
                "の診察は焦点を絞った精査ではありません — 医師が当てずっぽうに探している" +
                "印象を患者に与え、本症例で本当に必要だった他の部分に充てるべき診察時間を" +
-               "消費してしまいます。" } }
+               "消費してしまいます。" } },
+  /* --- Round-3 dry-run (2026-05-26): penalties for the three new poor moves
+     (history:11, history:12, exam:7). --- */
+  { id: "pen_reassure", item: "history:11", points: 10,
+    title: { en: "Reassured him before completing the red-flag screen",
+             fr: "A rassuré avant d'avoir terminé le dépistage des drapeaux rouges",
+             ja: "レッドフラッグのスクリーニングを終える前に安心させた" },
+    why: { en: "Reassurance before the red-flag screen and examination are complete can " +
+               "miss a serious cause and rings hollow to an anxious patient — so it deepens " +
+               "worry rather than easing it. Screen and examine first, then reassure on the " +
+               "evidence.",
+           fr: "Rassurer avant d'avoir terminé le dépistage des drapeaux rouges et l'examen " +
+               "peut faire manquer une cause grave et sonne faux pour un patient anxieux — " +
+               "cela aggrave l'inquiétude au lieu de l'apaiser. Dépistez et examinez d'abord, " +
+               "puis rassurez sur des éléments concrets.",
+           ja: "レッドフラッグのスクリーニングと診察を終える前の安心づけは、重大な原因を" +
+               "見落としかねず、不安な患者には空虚に響きます — 不安を和らげるどころか深めて" +
+               "しまいます。まずスクリーニングと診察を行い、その根拠に基づいて安心させ" +
+               "ましょう。" } },
+  { id: "pen_refer", item: "history:12", points: 8,
+    title: { en: "Referred reflexively instead of exploring and managing",
+             fr: "A adressé par réflexe au lieu d'explorer et de prendre en charge",
+             ja: "探索・対応せずに反射的に紹介した" },
+    why: { en: "Reflex referral of red-flag-free, non-specific low-back pain — without " +
+               "exploring the request, screening or starting first-line care — abandons the " +
+               "relationship and medicalises a primary-care problem. Refer for red flags, " +
+               "diagnostic doubt, or failed first-line management.",
+           fr: "Adresser par réflexe une lombalgie non spécifique sans drapeau rouge — sans " +
+               "explorer la demande, dépister ni instaurer un traitement de première intention " +
+               "— abandonne la relation et médicalise un problème de soins primaires. Adressez " +
+               "pour des drapeaux rouges, un doute diagnostique ou un échec de première ligne.",
+           ja: "レッドフラッグのない非特異的腰痛を、要望の探索・スクリーニング・第一選択" +
+               "治療の開始を行わずに反射的に紹介することは、関係を放棄し、プライマリ・ケアの" +
+               "問題を医療化します。紹介はレッドフラッグ、診断的な疑い、または第一選択治療の" +
+               "無効時に行いましょう。" } },
+  { id: "pen_provoke", item: "exam:7", points: 10,
+    title: { en: "Provoked pain deliberately during the examination",
+             fr: "A provoqué délibérément la douleur pendant l'examen",
+             ja: "診察中に意図的に痛みを誘発した" },
+    why: { en: "Forcing painful pressure to \"test\" a patient is not an examination " +
+               "technique — gentle palpation already gave you the information, and the extra " +
+               "pain yields nothing while causing avoidable distress and signalling disbelief. " +
+               "Examine as gently as the question allows.",
+           fr: "Forcer une pression douloureuse pour « tester » un patient n'est pas une " +
+               "technique d'examen — la palpation douce vous a déjà renseigné, et la douleur " +
+               "supplémentaire n'apporte rien tout en causant une détresse évitable et en " +
+               "signalant de l'incrédulité. Examinez aussi doucement que possible.",
+           ja: "患者を「試す」ために痛みを伴う圧迫を強いることは診察手技ではありません — " +
+               "軟らかい触診ですでに情報は得られており、余計な痛みは何ももたらさず、避け" +
+               "られる苦痛を与え、不信を示すだけです。できるだけ優しく診察しましょう。" } }
 ];
 
 /* ===================== TEAM DECISIONS - vote together ======================
