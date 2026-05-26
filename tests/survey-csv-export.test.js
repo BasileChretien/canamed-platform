@@ -102,14 +102,18 @@ test("survey CSS ships with touch-sized likert controls", () => {
 });
 
 /* ── CSV research export (admin-tools.js) ──────────────────────────────── */
-test("CSV export functions exist and ship two flat files", () => {
+test("CSV export functions exist and ship the linked analysis files", () => {
   assert.match(TOOLS, /function generateResearchExportCSV\(\)/, "generateResearchExportCSV must exist");
   assert.match(TOOLS, /function researchCsvParticipantRows\(\)/, "researchCsvParticipantRows must exist");
   assert.match(TOOLS, /function _toCSV\(/, "_toCSV serializer must exist");
-  const gen = TOOLS.slice(TOOLS.indexOf("function generateResearchExportCSV"),
-    TOOLS.indexOf("function generateResearchExportCSV") + 1600);
+  const start = TOOLS.indexOf("function generateResearchExportCSV");
+  const gen = TOOLS.slice(start, start + 4000);
   assert.match(gen, /research_participants\.csv/, "must download a participants CSV");
+  assert.match(gen, /research_reveals\.csv/, "must download a reveals CSV (clinical action log + order)");
+  assert.match(gen, /research_votes\.csv/, "must download an individual-votes CSV");
+  assert.match(gen, /research_freetext\.csv/, "must download a free-text CSV");
   assert.match(gen, /research_decisions\.csv/, "must download a decisions CSV");
+  assert.match(gen, /research_codebook\.csv/, "must download a codebook CSV");
 });
 
 test("CSV joins pre/post scores + survey responses per participant", () => {

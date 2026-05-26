@@ -42,6 +42,24 @@ test.describe("Admin tools — research export + attestations", () => {
     }
   });
 
+  test("CSV export downloads the linked analysis files (runs without error)", async ({ page }) => {
+    await page.goto("/");
+    await page.waitForSelector(".splash", { state: "visible" });
+    await loadAdminTools(page);
+
+    let downloads = 0;
+    page.on("download", () => { downloads++; });
+    // Resolves only if every new builder (reveals / votes / free-text / codebook)
+    // runs without a runtime error on the live data shapes — a throw would
+    // reject this evaluate. That's the real check here.
+    await page.evaluate(() => window.generateResearchExportCSV());
+    // A single download fires reliably cross-browser; WebKit is flaky about
+    // *multiple* rapid programmatic downloads, so we only assert that the
+    // export produced output. The full six-file set is locked by the static
+    // unit test (tests/survey-csv-export.test.js).
+    await expect.poll(() => downloads, { timeout: 4000 }).toBeGreaterThan(0);
+  });
+
   test("attestations open a printable, named certificate page", async ({ page, context }) => {
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });
