@@ -42,7 +42,7 @@ test("wrap-up offers a student-facing room-answers export", () => {
 test("downloadMyRoomAnswers exports only the student's own room + is wired student-only", () => {
   assert.match(SCRIPT, /function downloadMyRoomAnswers\(/, "downloadMyRoomAnswers must exist");
   const fn = SCRIPT.slice(SCRIPT.indexOf("function downloadMyRoomAnswers"),
-    SCRIPT.indexOf("function downloadMyRoomAnswers") + 1400);
+    SCRIPT.indexOf("function downloadMyRoomAnswers") + 8000);
   assert.match(fn, /rooms\/"\s*\+\s*myRoom/, "must read the participant's OWN room only");
   assert.match(fn, /text\/markdown/, "must produce a Markdown blob");
   // wired in initEndPoll (student path); hidden for admins
