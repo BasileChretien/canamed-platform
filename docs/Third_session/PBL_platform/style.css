@@ -3644,6 +3644,36 @@ body.locked > footer { display: none !important; }
   font-weight: 400;
   color: var(--muted);
 }
+/* Role toggle (student / facilitator) in the profile forms */
+.splash-rolelabel {
+  font-size: 0.86rem;
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: var(--ink);
+}
+.splash-role-toggle { display: flex; gap: 8px; }
+.splash-role-opt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 12px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--card);
+  border: 2px solid var(--border, #d5dde4);
+  border-radius: var(--r-md, 10px);
+  cursor: pointer;
+}
+.splash-role-opt:has(input:checked) {
+  border-color: var(--accent, #e08a1e);
+  background: var(--accent-soft, rgba(224, 138, 30, 0.12));
+}
+.splash-role-opt input { margin: 0; }
+#splash-prof-student-fields[hidden],
+#account-student-fields[hidden] { display: none !important; }
 .splash-field input {
   padding: 10px 12px;
   font: inherit;
