@@ -6771,6 +6771,30 @@ function _makeReqBtn(group, i) {
   return btn;
 }
 
+/* Build the display-only clinical-category clusters for a History/Examination
+   section. Returns [{ key, label, indices:[origIdx,…] }, …] in first-appearance
+   (original-index) order, or null when NO item in the section carries a `group`
+   (custom scenarios without categories → caller uses the flat / overflow
+   fallback). `label` is the translatable {en,fr,ja} (or plain string); clusters
+   are keyed by the canonical EN value so the grouping is stable across language
+   switches (when buildButtons re-runs on canamed:langchange). Indices are the
+   ORIGINAL array positions, so the reveal IDs (group:index) never move. */
+function _categoryClusters(group) {
+  const items = (typeof CASE !== "undefined" && CASE && CASE[group]) || [];
+  const order = [];
+  const byKey = {};
+  let any = false;
+  for (let i = 0; i < items.length; i++) {
+    const g = items[i] && items[i].group;
+    if (!g) continue;
+    any = true;
+    const key = (typeof g === "string") ? g : (g.en || JSON.stringify(g));
+    if (!byKey[key]) { byKey[key] = { key: key, label: g, indices: [] }; order.push(key); }
+    byKey[key].indices.push(i);
+  }
+  return any ? order.map(k => byKey[k]) : null;
+}
+
 function buildButtons() {
   ["history", "exam", "labs"].forEach(group => {
     const container = el("group-" + group);
@@ -6783,9 +6807,67 @@ function buildButtons() {
                     (myRoom || "lobby") + ":" + group;
     const order = _seededShuffleIndexes(CASE[group].length, seedStr);
 
+    // Investigations stay flat — the gated synthesis + the imaging/bloods are
+    // few and the gating already structures them; no clinical-category split.
+    if (group === "labs") {
+      order.forEach(i => container.appendChild(_makeReqBtn(group, i)));
+      return;
+    }
+
+    // History & Examination: cluster the reveal buttons by their display-only
+    // clinical `group` category (2026-05-26 dry-run — the ~13-button History
+    // wall reads better as a few labelled clinical clusters). Purely a render
+    // grouping: item indices/IDs are untouched, so SYNTH_PREREQS and PENALTIES
+    // stay valid. Categories appear in clinical (first-appearance) order;
+    // buttons WITHIN a category keep the per-room shuffle, so students still
+    // can't learn "the Nth button is the answer". Deliberately-wrong moves are
+    // interspersed into the relevant clinical category (not a tell-tale bucket).
+    const clusters = _categoryClusters(group);
+    if (clusters) {
+      const _t = (key, fb) => {
+        if (typeof window !== "undefined" && typeof window.t === "function") {
+          const v = window.t(key);
+          if (v && v !== key) return v;
+        }
+        return fb;
+      };
+      const placed = {};
+      clusters.forEach(cluster => {
+        const sub = document.createElement("div");
+        sub.className = "req-category";
+        sub.setAttribute("role", "group");
+        const label = (typeof tc === "function") ? tc(cluster.label, _curLang())
+                                                 : (cluster.label.en || cluster.key);
+        const heading = document.createElement("p");
+        heading.className = "req-category-label";
+        heading.textContent = label;
+        sub.setAttribute("aria-label", label);
+        sub.appendChild(heading);
+        order.forEach(i => {
+          if (cluster.indices.indexOf(i) !== -1) {
+            sub.appendChild(_makeReqBtn(group, i));
+            placed[i] = true;
+          }
+        });
+        container.appendChild(sub);
+      });
+      // Safety net: never drop an item that lacks a category (e.g. a partially
+      // categorised custom scenario) — render any leftovers, in shuffle order.
+      const leftover = order.filter(i => !placed[i]);
+      if (leftover.length) {
+        const extra = document.createElement("div");
+        extra.className = "req-category req-category-other";
+        extra.setAttribute("role", "group");
+        leftover.forEach(i => extra.appendChild(_makeReqBtn(group, i)));
+        container.appendChild(extra);
+      }
+      return;
+    }
+
     // Dense History group → sub-cluster the overflow into a collapsed,
     // labelled <details> so the at-once count drops without removing
-    // any option (round4-a11y Rec 4).
+    // any option (round4-a11y Rec 4). Fallback for category-less scenarios
+    // (custom JSON authored without `group` fields).
     if (group === "history" && order.length > HISTORY_VISIBLE_COUNT + 1) {
       const _t = (key, fallback) => {
         if (typeof window !== "undefined" && typeof window.t === "function") {

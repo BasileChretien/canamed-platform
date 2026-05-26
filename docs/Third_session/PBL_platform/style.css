@@ -1452,6 +1452,26 @@ html[data-theme="dark"] .next-step-coach {
   gap: var(--s-2, 6px);
 }
 
+/* Clinical-category clusters (2026-05-26): History / Examination reveal
+   buttons are grouped under a small category heading so the dense button wall
+   reads as a few labelled clinical sections. Display-only — item indices are
+   unchanged. Each .req-category stacks its buttons exactly like a .btn-group. */
+.req-category {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2, 6px);
+  margin-top: var(--s-3, 10px);
+}
+.req-category:first-child { margin-top: 0; }
+.req-category-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 /* Inline citation badges on revealed findings — sim 2026-05-19
    feature for `checks_evidence` personas. Sits between the answer
    body and the author byline; visually de-emphasized but tappable. */
