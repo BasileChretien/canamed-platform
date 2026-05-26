@@ -9,7 +9,7 @@
         ".write": "auth != null && auth.uid == $uid",
 
         "profile": {
-          ".validate": "newData.val() == null || (newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('updatedAt').isNumber())"
+          ".validate": "newData.val() == null || (newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && (!newData.hasChild('year') || newData.child('year').isNumber()) && (!newData.hasChild('english') || (newData.child('english').isString() && newData.child('english').val().length <= 4)) && (!newData.hasChild('role') || (newData.child('role').isString() && newData.child('role').val().length <= 20)) && newData.child('updatedAt').isNumber())"
         },
 
         "history": {
