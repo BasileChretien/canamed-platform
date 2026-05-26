@@ -603,7 +603,7 @@
       "modA.glossary.marker-label": "has a plain-language definition",
       "modA.chart.exam.title": "Examination",
       "modA.chart.investigations.title": "Investigations & synthesis",
-      "modA.chart.investigations.locked-hint": "🔒 Locked — first screen the red flags (serious causes + cauda equina + leg neuro) AND add a working hypothesis above.",
+      "modA.chart.investigations.locked-hint": "🔒 Locked — first screen the red flags by asking the patient and/or by examination, AND add a working hypothesis above.",
       "modA.coach.add-hypothesis": "You've gathered some info — now agree on at least one working hypothesis above (what do you suspect?). Investigations unlock once you have one.",
       "modA.coach.read-case": "Read the case below, then tap any button on the left (Ask the patient / Examine / Investigations) to start gathering info.",
       "modA.coach.gather": "Keep gathering case info — when you're ready, complete the clinical synthesis (red-flag review) to unlock the Discussion prompts.",

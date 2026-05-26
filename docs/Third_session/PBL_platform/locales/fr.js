@@ -417,7 +417,7 @@
   "modA.glossary.marker-label": "comporte une définition en langage simple",
   "modA.chart.exam.title": "Examen clinique",
   "modA.chart.investigations.title": "Investigations & synthèse",
-  "modA.chart.investigations.locked-hint": "🔒 Verrouillé — vérifiez d'abord les drapeaux rouges (causes graves + queue de cheval + examen neuro des MI) ET ajoutez une hypothèse de travail ci-dessus.",
+  "modA.chart.investigations.locked-hint": "🔒 Verrouillé — recherchez d'abord les drapeaux rouges par l'interrogatoire et/ou l'examen clinique, ET ajoutez une hypothèse de travail ci-dessus.",
   "modA.coach.add-hypothesis": "Vous avez recueilli quelques informations — mettez-vous d'accord sur au moins une hypothèse de travail ci-dessus (qu'est-ce que vous suspectez ?). Les investigations se débloqueront ensuite.",
   "modA.coach.read-case": "Lisez le cas ci-dessous, puis appuyez sur un bouton à gauche (Interroger / Examiner / Investiguer) pour commencer à recueillir des informations.",
   "modA.coach.gather": "Continuez à recueillir des informations — quand vous serez prêt·e·s, complétez la synthèse clinique (revue des drapeaux rouges) pour débloquer les questions de discussion.",

@@ -6784,7 +6784,7 @@ function renderButtons() {
       const locked = !gateOK && !revealed[id];
       btn.disabled = locked;
       btn.title = locked
-        ? "First screen serious causes, screen for cauda equina, and examine the legs"
+        ? "First screen the red flags by asking the patient and/or by examination"
         : "";
     }
     // imaging buttons: a soft "order matters" cue while the red-flag screen is
