@@ -63,6 +63,34 @@ test.describe("Wrap-up feedback survey", () => {
     expect(out.likertMinHeight).toBeGreaterThanOrEqual(44);
   });
 
+  test("the demographic questions are pre-filled from the join profile", async ({ page }) => {
+    await page.goto("/");
+    const r = await page.evaluate(() => {
+      // simulate a participant who already gave university + year on the join form
+      const uni = document.getElementById("uni-input");
+      const yr = document.getElementById("year-input");
+      if (uni) uni.value = "Caen";
+      if (yr) yr.value = "4";
+      window._mountSurveyForm();
+      const body = document.getElementById("survey-body");
+      const sels = Array.from(body.querySelectorAll("select.survey-select"));
+      return {
+        uniInputSet: uni ? uni.value : null,
+        yrInputSet: yr ? yr.value : null,
+        selectValues: sels.map(s => s.value),
+        hints: body.querySelectorAll(".survey-prefill-hint").length
+      };
+    });
+    // sanity: the join inputs actually carry the seeded values
+    expect(r.uniInputSet).toBe("Caen");
+    expect(r.yrInputSet).toBe("4");
+    // the questionnaire arrives pre-answered — no re-asking
+    expect(r.selectValues, "university must be pre-filled").toContain("Caen");
+    expect(r.selectValues, "year must be pre-filled").toContain("4");
+    // both demographic fields are flagged as pre-filled
+    expect(r.hints).toBeGreaterThanOrEqual(2);
+  });
+
   test("a Likert option records a selection (aria-checked)", async ({ page }) => {
     await page.goto("/");
     const checked = await page.evaluate(() => {

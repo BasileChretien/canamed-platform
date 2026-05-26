@@ -3210,7 +3210,10 @@ var FACILITATOR_NOTES = {
  * canonical fallback (tc() shows it when fr/ja are empty). */
 var SURVEY = [
   /* — Demographics ——————————————————————————————————————————————— */
-  { id: "demo_university", type: "single",
+  // `prefill` ties the item to the join-profile value (resolved by
+  // _surveyProfileVal in script.js) so the questionnaire never re-asks what we
+  // already collected on the join form — it arrives pre-answered + editable.
+  { id: "demo_university", type: "single", prefill: "university",
     section: { en: "About you", fr: "Vous concernant", ja: "あなたについて" },
     q: { en: "Which university are you from?",
          fr: "De quelle université venez-vous ?",
@@ -3220,17 +3223,21 @@ var SURVEY = [
       { v: "Nagoya", text: { en: "Nagoya", fr: "Nagoya", ja: "名古屋大学" } },
       { v: "Other",  text: { en: "Other",  fr: "Autre",  ja: "その他" } }
     ] },
-  { id: "demo_year", type: "single",
+  // Options mirror index.html #year-input (1..7, 7 = postgraduate/resident) so
+  // every join-form year value pre-fills cleanly.
+  { id: "demo_year", type: "single", prefill: "year",
     section: { en: "About you", fr: "Vous concernant", ja: "あなたについて" },
     q: { en: "Year of study",
          fr: "Année d'études",
          ja: "学年" },
     options: [
+      { v: "1", text: { en: "Year 1", fr: "1re année", ja: "1年" } },
       { v: "2", text: { en: "Year 2", fr: "2e année", ja: "2年" } },
       { v: "3", text: { en: "Year 3", fr: "3e année", ja: "3年" } },
       { v: "4", text: { en: "Year 4", fr: "4e année", ja: "4年" } },
       { v: "5", text: { en: "Year 5", fr: "5e année", ja: "5年" } },
-      { v: "6", text: { en: "Year 6", fr: "6e année", ja: "6年" } }
+      { v: "6", text: { en: "Year 6", fr: "6e année", ja: "6年" } },
+      { v: "7", text: { en: "Postgraduate / Resident", fr: "Post-graduate / interne", ja: "卒後・研修医" } }
     ] },
 
   /* — Learning & engagement (Likert) ————————————————————————————— */
