@@ -1236,6 +1236,23 @@ function dbInit() {
         // kick off anonymous sign-in if no current user. ensureSignedIn()
         // is idempotent — calling it again from joinParticipant is safe.
         ensureSignedIn();
+        // Complete a redirect-based sign-in when the user returns from the
+        // provider (the popup-blocked fallback in signInWithProvider). On
+        // success handleAuthStateChange drives the UI; surface real errors.
+        auth.getRedirectResult().catch(e => {
+          if (e && (e.code === "auth/credential-already-in-use" ||
+                    e.code === "auth/email-already-in-use") && e.credential) {
+            // anon link clashed with an existing account — sign in with that
+            // Google credential directly (anon-uid history is forfeited, same
+            // as the popup path's credential-already-in-use fallback).
+            auth.signInWithCredential(e.credential).catch(() => {});
+            return;
+          }
+          if (e && e.code && e.code !== "auth/no-auth-event") {
+            const hint = el("splash-account-hint");
+            if (hint) splashHintErr(hint, authErrorMessage(e));
+          }
+        });
       }
     } catch (e) { console.warn("Auth init failed", e); }
   } else {
@@ -11107,6 +11124,22 @@ function signInWithProvider(name) {
   // app — they'll lose history written under the anon uid in that case.
   const cur = auth.currentUser;
   const popupSignIn = () => auth.signInWithPopup(provider);
+  // If the browser blocks the popup (common outside Incognito), fall back to a
+  // full-page redirect — no popup blocker can stop it, and it completes
+  // reliably now that auth is first-party (authDomain = web.app). The matching
+  // getRedirectResult() handler in dbInit() finishes the sign-in on return.
+  const popupBlocked = e => e && (
+    e.code === "auth/popup-blocked" ||
+    e.code === "auth/cancelled-popup-request" ||
+    e.code === "auth/operation-not-supported-in-this-environment" ||
+    e.code === "auth/web-storage-unsupported");
+  const redirectSignIn = () => {
+    splashHintOk(hint, "Redirecting to " + pretty + "…");
+    const c = auth.currentUser;
+    return (c && c.isAnonymous)
+      ? c.linkWithRedirect(provider)
+      : auth.signInWithRedirect(provider);
+  };
   const link = (cur && cur.isAnonymous)
     ? cur.linkWithPopup(provider).catch(e => {
         if (e && (e.code === "auth/credential-already-in-use" ||
@@ -11120,7 +11153,13 @@ function signInWithProvider(name) {
   link.then(() => {
     // handleAuthStateChange takes over from here
     splashHintOk(hint, "");
-  }).catch(e => splashHintErr(hint, authErrorMessage(e)));
+  }).catch(e => {
+    if (popupBlocked(e)) {
+      redirectSignIn().catch(err => splashHintErr(hint, authErrorMessage(err)));
+      return;
+    }
+    splashHintErr(hint, authErrorMessage(e));
+  });
 }
 
 /* Returns a promise that resolves once auth.currentUser is non-null. If
