@@ -81,6 +81,38 @@ test.describe("Module A — reveal buttons clustered by clinical category", () =
     expect(await page.locator("#group-labs .req-btn").count()).toBeGreaterThan(0);
   });
 
+  test("each category is a collapsible <details> — first open, rest collapsed", async ({ page }) => {
+    await renderChart(page);
+
+    for (const group of ["history", "exam"]) {
+      // Categories are <details> elements (so they open/close).
+      const detailsCount = await page.locator(`#group-${group} details.req-category`).count();
+      const catCount = await page.locator(`#group-${group} .req-category`).count();
+      expect(detailsCount, `${group} categories must be <details>`).toBe(catCount);
+      expect(detailsCount).toBeGreaterThanOrEqual(2);
+
+      // First category open as an entry point; every later one collapsed so
+      // the section isn't a wall of buttons + answers at once.
+      const opens = await page.locator(`#group-${group} .req-category`)
+        .evaluateAll(els => els.map(e => e.open));
+      expect(opens[0], `first ${group} category should start open`).toBe(true);
+      expect(opens.slice(1).every(o => o === false),
+        `later ${group} categories should start collapsed`).toBe(true);
+    }
+  });
+
+  test("a collapsed category's buttons are hidden until its summary is clicked", async ({ page }) => {
+    await renderChart(page);
+    // The second history category is collapsed by default → its buttons are
+    // not visible. Clicking its summary reveals them. (Exam's top-level
+    // <details> is collapsed, so we use History which defaults open.)
+    const secondCat = page.locator("#group-history .req-category").nth(1);
+    const firstBtn = secondCat.locator(".req-btn").first();
+    await expect(firstBtn).toBeHidden();
+    await secondCat.locator("summary.req-category-label").click();
+    await expect(firstBtn).toBeVisible();
+  });
+
   test("category headings re-translate on language switch", async ({ page }) => {
     await renderChart(page);
     const first = page.locator("#group-history .req-category-label").first();
