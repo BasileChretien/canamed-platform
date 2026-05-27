@@ -1072,7 +1072,7 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
-    refObservers = null, refAnswerReplies = null, refChat = null, refPoll = null,
+    refObservers = null, refAnswerReplies = null, refPoll = null,
     refRoleChoices = null,
     refReplayRound = null,
     refClosed = null;
@@ -2790,7 +2790,6 @@ function wireRoomUI() {
   initCallProf();
   initLeave();
   initObserver();
-  initSideChat();
   initEndPoll();
   initTeamName();
   initRolePicker();
@@ -2955,7 +2954,6 @@ function teardownRoom() {
     if (refRoleChoices) refRoleChoices.off();
     if (refReplayRound) refReplayRound.off();
     if (refAnswerReplies) refAnswerReplies.off();
-    if (refChat) refChat.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
     // NOTE: refClosed is session-scoped (not room-scoped). It is owned by
@@ -2982,12 +2980,10 @@ function startRoom() {
   refTeamName = db.ref(base + "/teamName");
   refLeaderboard = db.ref(sPath("rooms"));
   // Sim 2026-05-19 features — per-room observer flags, free-text reply
-  // threads on group-answers, in-room side-chat. Refs declared here so
-  // every room transition wires/teardowns them in lock-step with the
-  // existing per-room subscribers.
+  // threads on group-answers. Refs declared here so every room transition
+  // wires/teardowns them in lock-step with the existing per-room subscribers.
   refObservers = db.ref(base + "/observers");
   refAnswerReplies = db.ref(base + "/answerReplies");
-  refChat = db.ref(base + "/chat");
   // Module B role-pick sync (roleplay review 2026-05-20): each student
   // writes their OWN choice keyed by clientId (protected by the same
   // clientMapping ownership rule as presence/typing); everyone in the room
@@ -9884,64 +9880,6 @@ function initEndPoll() {
       if (thanks) thanks.classList.remove("hidden");
       setTimeout(() => { btn.disabled = false; }, 1500);
     }).catch(() => { btn.disabled = false; });
-  });
-}
-
-/* Per-room side-chat — sim 2026-05-19 (Sayaka, Mei): "A private side-
- * chat with just my room (separate from group-answers) for clarifying
- * questions." Light-touch UI: collapsed by default, expands to a
- * scroll-pane of messages + a one-line input. Messages live at
- * /sessions/{code}/rooms/{room}/chat/{msgId} (push id). */
-function initSideChat() {
-  const panel = el("rcol-p-chat");
-  if (!panel || isRoomAdmin) return;
-  if (panel.dataset.wired === "1") return;
-  panel.dataset.wired = "1";
-  const list = el("chat-list");
-  const input = el("chat-input");
-  const send = el("chat-send");
-  if (!list || !input || !send) return;
-
-  if (refChat) {
-    refChat.on("value", snap => {
-      const msgs = snap.val() || {};
-      const sorted = Object.keys(msgs)
-        .map(k => Object.assign({ id: k }, msgs[k]))
-        .filter(m => m && m.text)
-        .sort((a, b) => (a.at || 0) - (b.at || 0))
-        .slice(-50);   // last 50 only
-      list.innerHTML = "";
-      sorted.forEach(m => {
-        const li = document.createElement("li");
-        li.className = "chat-msg" + (m.cid === clientId ? " me" : "");
-        const who = document.createElement("strong");
-        who.textContent = m.by || "?";
-        const txt = document.createElement("span");
-        txt.textContent = " " + m.text;
-        li.appendChild(who);
-        li.appendChild(txt);
-        list.appendChild(li);
-      });
-      list.scrollTop = list.scrollHeight;
-    });
-  }
-
-  function sendMessage() {
-    const text = (input.value || "").trim();
-    if (!text) return;
-    refChat.push({
-      text: text.slice(0, 500),
-      by: (myName || "anon").slice(0, 40),
-      cid: clientId,
-      at: Date.now()
-    }).then(() => { input.value = ""; }).catch(() => {});
-  }
-  send.addEventListener("click", sendMessage);
-  input.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
   });
 }
 
