@@ -70,12 +70,12 @@ test.describe("Module B — synced phase flow", () => {
 
   test("prev/next buttons and chip jumps move the synced phase", async ({ page }) => {
     await setupModB(page);
-    // After a CLICK the phase handler re-renders asynchronously, so a one-shot
-    // shown() read races the render on the slow CI runner (flaked on
-    // mobile-ipad at "chip jump lands on bullets"). Use auto-retrying
-    // expect(locator) assertions, which poll until is-phase-hidden clears.
-    // (The setModBPhase()-driven tests above are fine: page.evaluate resolves
-    // only after the synchronous re-render, so there's no race there.)
+    // The phase-chip click listener is on the inner <button.phase-step-btn>,
+    // NOT the <li.phase-step[data-phase]> wrapper. Clicking the wrapper lands
+    // on the button at desktop/iPhone geometry but MISSES it at iPad width
+    // (the li's centre falls outside the button), so the jump never fired and
+    // mobile-ipad failed deterministically. Click the button itself. Paired
+    // with auto-retrying expect(locator) assertions in case the re-render lags.
     // Next → phase 2 (play): the observer checklist becomes visible.
     await page.click("#modB-phase-next");
     await expect(page.locator("#stage-2 #observer-checklist").first(), "observer checklist shows in play")
@@ -83,8 +83,8 @@ test.describe("Module B — synced phase flow", () => {
     const playCurrent = await page.evaluate(() =>
       document.querySelector('#stage-2 .phase-step[data-phase="play"]').classList.contains("is-current"));
     expect(playCurrent).toBe(true);
-    // Jump straight to Phase 4 by tapping its chip.
-    await page.click('#stage-2 .phase-step[data-phase="bullets"]');
+    // Jump straight to Phase 4 by tapping its chip's button.
+    await page.click('#stage-2 .phase-step[data-phase="bullets"] .phase-step-btn');
     await expect(page.locator("#stage-2 .answers-card-bulleted").first(), "chip jump lands on bullets")
       .not.toHaveClass(/is-phase-hidden/);
   });
