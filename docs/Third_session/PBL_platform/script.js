@@ -2893,6 +2893,7 @@ function enterRoom(roomName, asAdmin) {
   lastAnswerCount = { moduleA: 0, moduleB: 0 };
   lastDecisionBallotCount = 0;
   promptsWereUnlocked = false;
+  promptsWereDone = false;
   if (typeof switchRcolTab === "function") switchRcolTab("findings");
   el("late-banner").classList.add("hidden");
 
@@ -7447,6 +7448,7 @@ function updateDiscussionTabLock(unlocked) {
 }
 
 let promptsWereUnlocked = false;
+let promptsWereDone = false;   // fire-once guard for auto-opening Group answers
 function renderPrompts() {
   const unlocked = keyRevealed();
   el("prompts-locked").classList.toggle("hidden", unlocked);
@@ -7486,12 +7488,30 @@ function renderPrompts() {
     done.classList.remove("hidden");
     setTabBadge("tab-badge-discussion", "✓");
     if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(true);
+    // Debate finished: the team cycled every Exchange prompt. promptCursor is
+    // RTDB-synced, so this fires for the whole room — auto-open Group answers
+    // once so they land on capturing their final bullets (dry-run 2026-05-27:
+    // students didn't notice the "final answers" tab). Guard typing; don't
+    // re-yank someone who already moved to answers.
+    if (!promptsWereDone) {
+      promptsWereDone = true;
+      const _typing = document.activeElement &&
+        /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
+      if (activeRcolTab !== "answers" && !_typing &&
+          typeof switchRcolTab === "function") {
+        switchRcolTab("answers");
+      } else {
+        nudgeRcolTab("answers");
+      }
+    }
     return;
   }
 
   // Progressive single-prompt view.
   progressive.classList.remove("hidden");
   done.classList.add("hidden");
+  // Re-arm the "debate done" auto-open if the team steps back into the prompts.
+  promptsWereDone = false;
 
   const currentEl = el("prompt-progress-current");
   const totalEl = el("prompt-progress-total");
@@ -7563,19 +7583,18 @@ function renderPrompts() {
   if (unlocked && !promptsWereUnlocked) {
     promptsWereUnlocked = true;
     nudgeRcolTab("discussion");
-    // Auto-switch the local user to the Discussion panel + show the
-    // "synthesis unlocked" banner. Only when the synthesis was just
-    // revealed (this is the !promptsWereUnlocked branch) so it doesn't
-    // re-fire on subsequent renders. Skipped if the user has already
-    // navigated to Discussion (no surprise scroll) or is on Group
-    // answers / another tab they actively chose to be on. Safer to
-    // switch only when the user is on the default Findings tab — most
-    // users haven't actively navigated away yet.
-    // Auto-switch to Discussion ONLY when the user is on Decisions
-    // (the new default tab after removing "What we're finding"). If
-    // they've actively navigated elsewhere — Group answers — we don't
-    // yank their view.
-    if (activeRcolTab === "decisions" && typeof switchRcolTab === "function") {
+    // Auto-open the Debate (Discussion) panel the moment the synthesis
+    // unlocks the Exchange prompts. Fires once (the !promptsWereUnlocked
+    // guard) so it never re-yanks on later renders. Dry-run 2026-05-27:
+    // students completed the synthesis but didn't notice the Exchange had
+    // opened, so this now fires from ANY tab (previously only when the user
+    // happened to be on Decisions). Guards: don't steal focus from someone
+    // typing, and don't drag a team that's already moved on to Group answers
+    // back to the prompts.
+    const _typing = document.activeElement &&
+      /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
+    if (activeRcolTab !== "answers" && activeRcolTab !== "discussion" &&
+        !_typing && typeof switchRcolTab === "function") {
       switchRcolTab("discussion");
     }
     const banner = el("synthesis-unlocked-banner");
