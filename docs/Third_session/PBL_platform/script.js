@@ -6401,6 +6401,102 @@ function downloadCertificatePdf() {
     .then(() => { if (btn) btn.disabled = false; });
 }
 
+/* Gather the session's reference cards (historical context, guidelines, recap
+   tables) from the LIVE DOM into structured booklet sections — single source of
+   truth (the same cards students read in-session), so no per-scenario content
+   is duplicated in the PDF code. */
+function _bookletBlocks(node, blocks) {
+  const tag = node.tagName;
+  if (!tag) return;
+  if (tag === "P") {
+    const t = node.textContent.replace(/\s+/g, " ").trim();
+    if (t) blocks.push({ type: "p", text: t });
+  } else if (tag === "H4" || tag === "H5") {
+    const t = node.textContent.replace(/\s+/g, " ").trim();
+    if (t) blocks.push({ type: "sub", text: t });
+  } else if (tag === "UL" || tag === "OL") {
+    const items = Array.from(node.querySelectorAll(":scope > li"))
+      .map(li => li.textContent.replace(/\s+/g, " ").trim()).filter(Boolean);
+    if (items.length) blocks.push({ type: "ul", items: items });
+  } else if (tag === "TABLE") {
+    const rows = Array.from(node.querySelectorAll("tr")).map(tr =>
+      Array.from(tr.querySelectorAll("th,td")).map(c => c.textContent.replace(/\s+/g, " ").trim()));
+    if (rows.length) blocks.push({ type: "table", rows: rows, header: !!node.querySelector("thead") });
+  } else if (node.children && node.children.length) {
+    Array.from(node.children).forEach(c => _bookletBlocks(c, blocks));
+  }
+}
+function _collectBookletSections() {
+  const sel = "#stage-1 .history-card, #stage-1 .guidelines-card, #stage-1 .recap-card, " +
+              "#stage-2 .history-card, #stage-2 .guidelines-card, #stage-2 .recap-card";
+  const out = [];
+  document.querySelectorAll(sel).forEach(card => {
+    const sum = card.querySelector("summary");
+    const title = sum ? sum.textContent.replace(/\s+/g, " ").trim() : "";
+    const blocks = [];
+    Array.from(card.children).forEach(ch => {
+      if (ch.tagName === "SUMMARY") return;
+      _bookletBlocks(ch, blocks);
+    });
+    if (title || blocks.length) out.push({ title: title, blocks: blocks });
+  });
+  return out;
+}
+/* This team's points, headline (non-micro) achievements, and the cross-room
+   comparison — all read from the live roomScore / allRooms, no new schema. */
+function _bookletTeamData() {
+  const wins = [];
+  try {
+    const earned = (roomScore && roomScore.auto) || {};
+    Object.keys(earned).forEach(ev => {
+      const meta = (typeof scoreEventMeta === "function") ? scoreEventMeta(ev) : null;
+      if (meta && meta.tier !== "micro" && meta.title) wins.push(meta.title);
+    });
+  } catch (_) { /* roomScore not ready — booklet still renders without wins */ }
+  let cohort = [];
+  try {
+    const rooms = (typeof roomNames === "function") ? roomNames(roomCount) : [];
+    cohort = rooms
+      .filter(r => allRooms[r] != null)
+      .map(r => ({ label: r, score: (typeof scoreTotal === "function") ? scoreTotal(allRooms[r]) : 0, you: r === myRoom }))
+      .sort((a, b) => (b.score || 0) - (a.score || 0));
+  } catch (_) { /* leaderboard not ready */ }
+  return {
+    name: (typeof teamName === "string" && teamName) ? teamName : (myRoom || ""),
+    score: (typeof scoreTotal === "function" && roomScore) ? scoreTotal(roomScore) : 0,
+    wins: wins.slice(0, 8),
+    cohort: cohort
+  };
+}
+/* Student study-booklet (PDF) — designed multi-page revision aid. Lazy-loads
+   pdfmake on click, like the certificate. */
+function downloadStudyBookletPdf() {
+  const btn = el("wrapup-booklet-btn");
+  if (btn) btn.disabled = true;
+  const loader = window.CanamedLoader || {};
+  const data = {
+    name: myName || "",
+    sessionCode: sessionNum || "",
+    dateStr: new Date().toLocaleDateString(),
+    partnership: "Université de Caen Normandie × Nagoya University",
+    sections: _collectBookletSections(),
+    team: _bookletTeamData()
+  };
+  if (typeof toast === "function") toast("⏳ Preparing your study booklet…");
+  Promise.resolve()
+    .then(() => loader.ensurePdfmake ? loader.ensurePdfmake() : Promise.reject(new Error("loader")))
+    .then(() => loader.ensureStudentPdf())
+    .then(() => {
+      if (window.CanamedPdf && typeof window.CanamedPdf.booklet === "function") {
+        window.CanamedPdf.booklet(data);
+      }
+    })
+    .catch(() => {
+      if (typeof toast === "function") toast("Couldn't prepare the PDF — check your connection and try again.", "", "loss");
+    })
+    .then(() => { if (btn) btn.disabled = false; });
+}
+
 function downloadMyRoomAnswers() {
   if (!db || !myRoom) return;
   db.ref(sPath("rooms/" + myRoom)).once("value").then(snap => {
@@ -9865,6 +9961,12 @@ function initEndPoll() {
   if (certBtn && !certBtn.dataset.wired) {
     certBtn.dataset.wired = "1";
     certBtn.addEventListener("click", downloadCertificatePdf);
+  }
+  // Student study booklet (PDF) — designed revision aid.
+  const bookletBtn = el("wrapup-booklet-btn");
+  if (bookletBtn && !bookletBtn.dataset.wired) {
+    bookletBtn.dataset.wired = "1";
+    bookletBtn.addEventListener("click", downloadStudyBookletPdf);
   }
   // Spaced-reinforcement: point the retention-check link at this session's
   // scenario + language, and draw a scan-to-save QR (lazy qrcode.js).
