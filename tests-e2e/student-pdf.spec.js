@@ -46,6 +46,46 @@ test.describe("Student PDFs — certificate of attendance", () => {
     expect(doc.json).toContain("Breaking bad news (SPIKES)");
     expect(doc.json).toContain("Shared decision-making");
     expect(doc.json).toContain("CERTIFICATE OF ATTENDANCE");
+    // Session-3 asks: state the language, and carry the director's signature.
+    expect(doc.json).toContain("Language of instruction: English");
+    expect(doc.json).toContain("Dr. Basile Chr");          // Chrétien (accent-safe match)
+  });
+
+  test("the certificate embeds a provided signature image, else falls back to a line", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      // 1x1 transparent PNG data URL stands in for the real signature scan.
+      const px = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+      const withSig = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A", signatureDataUrl: px }));
+      const noSig = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A" }));
+      return { hasImg: withSig.includes(px), withSig: withSig, noSig: noSig };
+    });
+    // With a signature provided → the image is embedded.
+    expect(out.hasImg, "a provided signatureDataUrl must be embedded as an image").toBe(true);
+    // The signature name appears regardless.
+    expect(out.withSig).toContain("Dr. Basile Chr");
+    expect(out.noSig).toContain("Dr. Basile Chr");
+  });
+
+  test("pdfmake renders the certificate with an embedded signature image (chromium smoke)", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
+    await page.goto("/");
+    // A real (valid) 120x40 RGBA PNG stands in for the scanned signature, so this
+    // exercises pdfmake's image pipeline — not just the docDefinition shape.
+    const SIG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAAoCAYAAAA16j4lAAAAo0lEQVR4nO3WsQ0CAAhFQYZwEudx/zW0sbaBBIQrrvsFyWuIx/P1/oofbP50M/o4m5rALNZ+AAIjMAIfFZM/QJv8ZvRxNjWBWaz9AARGYAQ+KiZ/gDb5zejjbGoCs1j7AQiMwAh8VEz+AG3ym9HH2dQEZrH2AxAYgRH4qJj8AdrkN6OPs6kJzGLtByAwAiPwUTH5A7TJb0YfZ1MTmMXaD0BgEj6WGiz04w+4+QAAAABJRU5ErkJggg==";
+    const out = await page.evaluate(async (sig) => {
+      await window.CanamedLoader.ensurePdfmake();
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildCertificateDocDefinition({ name: "Test Student", signatureDataUrl: sig });
+      return await new Promise((resolve) => {
+        try { window.pdfMake.createPdf(d).getBlob((b) => resolve({ ok: true, size: b.size, type: b.type })); }
+        catch (e) { resolve({ ok: false, why: String(e) }); }
+      });
+    }, SIG);
+    expect(out.ok, out.why || "").toBe(true);
+    expect(out.size).toBeGreaterThan(1000);
+    expect(out.type).toContain("pdf");
   });
 
   test("pdfmake renders a non-empty PDF blob (chromium smoke)", async ({ page, browserName }) => {
@@ -55,6 +95,8 @@ test.describe("Student PDFs — certificate of attendance", () => {
       await window.CanamedLoader.ensurePdfmake();
       await window.CanamedLoader.ensureStudentPdf();
       if (!window.pdfMake || typeof window.pdfMake.createPdf !== "function") return { ok: false, why: "no pdfMake" };
+      // Default cert (no signature image yet) → exercises the new design with the
+      // signature-line fallback, the gold seal + corner flourishes, and columns.
       const d = window.CanamedPdf.buildCertificateDocDefinition({ name: "Test Student", competencies: ["A"] });
       return await new Promise((resolve) => {
         try {
