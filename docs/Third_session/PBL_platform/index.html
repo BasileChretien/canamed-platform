@@ -2501,6 +2501,17 @@
                   data-i18n="stage.wrap.download">⤓ Download my room's answers (Markdown)</button>
         </div>
 
+        <!-- Take-home PDFs (2026-05-27). A professional certificate of
+             attendance, generated client-side via pdfmake (lazy-loaded on
+             click). Student-only; wired in initEndPoll(). The designed study
+             booklet button is added to this card by a follow-up PR. -->
+        <div class="card take-home-card">
+          <h3 data-i18n="stage.wrap.takehome.title">🎓 Take it with you</h3>
+          <p class="hint" data-i18n="stage.wrap.takehome.hint">A professional certificate of attendance you can download and keep.</p>
+          <button id="wrapup-cert-btn" class="wrapup-download-btn" type="button"
+                  data-i18n="stage.wrap.cert">🎓 Download your certificate of attendance (PDF)</button>
+        </div>
+
         <!-- Spaced-reinforcement retention check (2026-05-22): a saveable link
              (+ scan-to-save QR) to a few-days-later self-check. Spacing is what
              makes learning stick. The href is set to revisit.html?s=<scenario>

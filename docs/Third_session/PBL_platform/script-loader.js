@@ -117,6 +117,17 @@
   // evidence, research export, attestations, program rollup). Lazy: only an
   // admin who opens the dashboard needs it, never the student splash.
   function ensureAdminTools() { return loadScript(v("admin-tools.js")); }
+  // pdfmake — client-side PDF, ~2.2 MB, only needed when a participant
+  // downloads a PDF at wrap-up. Lazy, and deliberately NOT version-suffixed:
+  // the vendored bundle is immutable, so the browser caches it across deploys
+  // (a ?v= bump would force a pointless 2 MB re-download). vfs_fonts.js MUST
+  // load after pdfmake.min.js (it assigns window.pdfMake.vfs).
+  function ensurePdfmake() {
+    return loadScript("pdfmake.min.js").then(function () { return loadScript("vfs_fonts.js"); });
+  }
+  // student-pdf.js — our certificate + study-booklet generators. Version-
+  // suffixed (it changes with deploys). Caller must ensurePdfmake() first.
+  function ensureStudentPdf() { return loadScript(v("student-pdf.js")); }
 
   // Public namespace. Single object so the rest of script.js can do
   // `window.CanamedLoader.ensureX()` without polluting the global namespace
@@ -128,7 +139,9 @@
     ensureTour,
     ensureScenarioAuthor,
     ensureGlossary,
-    ensureAdminTools
+    ensureAdminTools,
+    ensurePdfmake,
+    ensureStudentPdf
   };
 
   // After the splash is interactive, prefetch tour.js + case-content.js in
