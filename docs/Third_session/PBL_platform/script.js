@@ -2207,6 +2207,9 @@ function _mountTestRunner(which) {
     if (state.index >= bank.length) {
       // Final score panel
       _saveTestComplete(which, state.score);
+      // Combined wrap-up: finishing the POST-test unlocks the questionnaire
+      // right below, so the two read as one end-of-session task.
+      if (which === "post" && typeof renderSurvey === "function") renderSurvey();
       const wrap = document.createElement("div");
       wrap.className = "test-result";
       const h = document.createElement("p");
@@ -2398,6 +2401,9 @@ function _renderTestCard(which) {
         body.classList.add("hidden");
         body.innerHTML = "";
         if (intro) intro.textContent = _tFmt("test.skipped");
+        // Combined wrap-up: skipping the POST-test still unlocks the
+        // questionnaire (the student may want to give feedback even so).
+        if (which === "post" && typeof renderSurvey === "function") renderSurvey();
       });
     }
   });
@@ -2597,6 +2603,16 @@ function _mountSurveyForm() {
 
 /* Mount the survey card on the Wrap-up stage. Hidden for room admins (they get
    the all-rooms export) and when no bank ships. Mirrors _renderTestCard(). */
+/* Combined wrap-up gate (2026-05-27): the questionnaire is grouped WITH the
+   post-test — it only becomes available once the post-test is done or skipped,
+   so the student completes them as one task (post-test → feedback) instead of
+   seeing two competing cards. A scenario that ships no post-test shows the
+   questionnaire straight away. Pure (no DOM/Firebase) so it is unit-testable. */
+function _surveyReadyAfterPostTest(postBankLen, postRec) {
+  if (!postBankLen) return true;
+  return !!(postRec && (typeof postRec.completedAt === "number" || postRec.skipped === true));
+}
+
 function renderSurvey() {
   const card = el("survey-card");
   if (!card) return;
@@ -2605,51 +2621,58 @@ function renderSurvey() {
     card.classList.add("hidden");
     return;
   }
-  card.classList.remove("hidden");
-  _loadSurveyStatus().then(rec => {
-    const startBtn = el("survey-start-btn");
-    const skipBtn = el("survey-skip-btn");
-    const body = el("survey-body");
-    const intro = el("survey-card-intro");
-    if (!startBtn || !skipBtn || !body) return;
-    const completed = rec && typeof rec.completedAt === "number";
-    const skipped = rec && rec.skipped === true;
-    if (completed) {
-      if (intro) intro.textContent = _tFmt("survey.already-done");
-      startBtn.classList.add("hidden");
-      skipBtn.classList.add("hidden");
-      body.classList.add("hidden");
-      body.innerHTML = "";
-      return;
-    }
-    if (skipped) {
-      if (intro) intro.textContent = _tFmt("survey.skipped");
-      startBtn.classList.remove("hidden");
-      skipBtn.classList.add("hidden");
-    } else {
-      startBtn.classList.remove("hidden");
-      skipBtn.classList.remove("hidden");
-    }
-    if (!startBtn.dataset.bound) {
-      startBtn.dataset.bound = "1";
-      startBtn.addEventListener("click", () => {
-        _saveSurveyStart();
+  const postBank = _testBank("post");
+  const gate = postBank.length
+    ? _loadTestStatus("post").then(r => _surveyReadyAfterPostTest(postBank.length, r))
+    : Promise.resolve(true);
+  gate.then(ready => {
+    if (!ready) { card.classList.add("hidden"); return; }
+    card.classList.remove("hidden");
+    _loadSurveyStatus().then(rec => {
+      const startBtn = el("survey-start-btn");
+      const skipBtn = el("survey-skip-btn");
+      const body = el("survey-body");
+      const intro = el("survey-card-intro");
+      if (!startBtn || !skipBtn || !body) return;
+      const completed = rec && typeof rec.completedAt === "number";
+      const skipped = rec && rec.skipped === true;
+      if (completed) {
+        if (intro) intro.textContent = _tFmt("survey.already-done");
         startBtn.classList.add("hidden");
-        skipBtn.classList.add("hidden");
-        _mountSurveyForm();
-      });
-    }
-    if (!skipBtn.dataset.bound) {
-      skipBtn.dataset.bound = "1";
-      skipBtn.addEventListener("click", () => {
-        _saveSurveySkipped();
-        startBtn.classList.remove("hidden");
         skipBtn.classList.add("hidden");
         body.classList.add("hidden");
         body.innerHTML = "";
+        return;
+      }
+      if (skipped) {
         if (intro) intro.textContent = _tFmt("survey.skipped");
-      });
-    }
+        startBtn.classList.remove("hidden");
+        skipBtn.classList.add("hidden");
+      } else {
+        startBtn.classList.remove("hidden");
+        skipBtn.classList.remove("hidden");
+      }
+      if (!startBtn.dataset.bound) {
+        startBtn.dataset.bound = "1";
+        startBtn.addEventListener("click", () => {
+          _saveSurveyStart();
+          startBtn.classList.add("hidden");
+          skipBtn.classList.add("hidden");
+          _mountSurveyForm();
+        });
+      }
+      if (!skipBtn.dataset.bound) {
+        skipBtn.dataset.bound = "1";
+        skipBtn.addEventListener("click", () => {
+          _saveSurveySkipped();
+          startBtn.classList.remove("hidden");
+          skipBtn.classList.add("hidden");
+          body.classList.add("hidden");
+          body.innerHTML = "";
+          if (intro) intro.textContent = _tFmt("survey.skipped");
+        });
+      }
+    });
   });
 }
 
@@ -7367,6 +7390,8 @@ if (typeof window !== "undefined") {
   // rendered fields without a live wrap-up stage / Firebase round-trip.
   window.renderSurvey = renderSurvey;
   window._mountSurveyForm = _mountSurveyForm;
+  // Pure gate for the combined post-test → questionnaire flow (E2E-asserted).
+  window._surveyReadyAfterPostTest = _surveyReadyAfterPostTest;
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
