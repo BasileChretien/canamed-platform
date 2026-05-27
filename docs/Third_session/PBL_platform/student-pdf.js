@@ -20,6 +20,23 @@
     return (v != null && String(v).trim()) ? String(v).trim() : (fallback || "");
   }
 
+  /* Strip emoji / pictographs from text destined for the PDF. pdfmake's bundled
+   * font is Roboto, which has no colour-emoji glyphs, so a 📋 / ✓ / 🇫🇷 in a card
+   * heading or recap cell renders as an empty "tofu" box. The live cards use
+   * these decoratively; the booklet reads cleaner without them. Keeps ordinary
+   * punctuation, accents and dashes (— …) untouched. */
+  function _deEmoji(v) {
+    if (v == null) return "";
+    return String(v)
+      .replace(/[\u{1F000}-\u{1FAFF}]/gu, "")   // emoji & pictographs (📋 🎯 🗳️ …)
+      .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")   // regional-indicator flags (🇫🇷 🇯🇵)
+      .replace(/[\u{2600}-\u{27BF}]/gu, "")     // misc symbols + dingbats (✓ ✗ ☀ ✏)
+      .replace(/[\u{2B00}-\u{2BFF}]/gu, "")      // misc symbols & arrows (⭐ ⬆)
+      .replace(/[\u{FE00}-\u{FE0F}\u{200D}]/gu, "") // variation selectors + ZWJ
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
   /* A4 landscape certificate of attendance. Pure: returns the pdfmake doc. */
   function buildCertificateDocDefinition(data) {
     data = data || {};
@@ -100,12 +117,14 @@
     var out = [];
     (blocks || []).forEach(function (b) {
       if (!b) return;
-      if (b.type === "p" && b.text) out.push({ text: b.text, style: "para" });
-      else if (b.type === "sub" && b.text) out.push({ text: b.text, style: "h3" });
-      else if (b.type === "ul" && Array.isArray(b.items) && b.items.length) out.push({ ul: b.items, style: "list" });
-      else if (b.type === "table" && Array.isArray(b.rows) && b.rows.length) {
+      if (b.type === "p" && b.text) out.push({ text: _deEmoji(b.text), style: "para" });
+      else if (b.type === "sub" && b.text) out.push({ text: _deEmoji(b.text), style: "h3" });
+      else if (b.type === "ul" && Array.isArray(b.items) && b.items.length) {
+        out.push({ ul: b.items.map(_deEmoji).filter(Boolean), style: "list" });
+      } else if (b.type === "table" && Array.isArray(b.rows) && b.rows.length) {
+        var body = b.rows.map(function (row) { return row.map(_deEmoji); });
         out.push({
-          table: { headerRows: b.header ? 1 : 0, widths: b.rows[0].map(function () { return "*"; }), body: b.rows },
+          table: { headerRows: b.header ? 1 : 0, widths: b.rows[0].map(function () { return "*"; }), body: body },
           layout: "lightHorizontalLines", style: "table", margin: [0, 4, 0, 12]
         });
       }
@@ -128,23 +147,38 @@
     content.push({ canvas: [{ type: "line", x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: 3, lineColor: BRAND.gold }], alignment: "center", margin: [0, 8, 0, 0] });
     content.push({ text: "Session study booklet", style: "coverTitle" });
     content.push({ text: partnership, style: "coverSub" });
-    if (name) content.push({ text: "Prepared for " + name, style: "coverName", margin: [0, 28, 0, 0] });
+    if (name) content.push({ text: "Prepared for " + _deEmoji(name), style: "coverName", margin: [0, 28, 0, 0] });
     content.push({ text: "Session " + sessionCode + "  ·  " + dateStr, style: "coverMeta" });
     content.push({ text: "Keep this to revise from — the historical background, the guideline standards, and a quick recap of each module.", style: "coverBlurb", margin: [60, 40, 60, 0] });
 
-    // Reference sections (from the live session cards)
+    // Clickable table of contents on its own page. Each heading below opts in
+    // with tocItem:true, so pdfmake generates the entries + page numbers and
+    // links each one to its heading (clickable in any PDF viewer).
+    content.push({ text: "Contents", style: "tocTitle", pageBreak: "before" });
+    content.push({ canvas: [{ type: "line", x1: 0, y1: 0, x2: 120, y2: 0, lineWidth: 2.5, lineColor: BRAND.gold }], margin: [0, 6, 0, 16] });
+    content.push({ toc: { textStyle: "tocEntry", numberStyle: "tocPage" } });
+
+    // A small accent rule under a section heading, for a cleaner look.
+    function headingRule() {
+      return { canvas: [{ type: "line", x1: 0, y1: 0, x2: 64, y2: 0, lineWidth: 2, lineColor: BRAND.accent }], margin: [0, 0, 0, 10] };
+    }
+
+    // Reference sections (from the live session cards). Each starts a fresh page
+    // so the TOC stands alone and sections don't run together.
     sections.forEach(function (sec, i) {
-      content.push({ text: sec.title || "", style: "h1", pageBreak: i === 0 ? "before" : undefined });
+      content.push({ text: _deEmoji(sec.title) || ("Section " + (i + 1)), style: "h1", tocItem: true, tocStyle: "tocEntry", pageBreak: "before" });
+      content.push(headingRule());
       _sectionBlocks(sec.blocks).forEach(function (blk) { content.push(blk); });
     });
 
     // Your team
-    content.push({ text: "Your team", style: "h1", pageBreak: "before" });
-    if (team.name) content.push({ text: team.name, style: "teamName" });
+    content.push({ text: "Your team", style: "h1", tocItem: true, tocStyle: "tocEntry", pageBreak: "before" });
+    content.push(headingRule());
+    if (team.name) content.push({ text: _deEmoji(team.name), style: "teamName" });
     if (typeof team.score === "number") content.push({ text: team.score + " points earned today", style: "teamScore" });
     if (Array.isArray(team.wins) && team.wins.length) {
       content.push({ text: "What your team did well", style: "h2" });
-      content.push({ ul: team.wins, style: "list" });
+      content.push({ ul: team.wins.map(_deEmoji).filter(Boolean), style: "list" });
     }
     if (Array.isArray(team.cohort) && team.cohort.length) {
       content.push({ text: "How the room compares", style: "h2" });
@@ -152,7 +186,7 @@
       var rows = team.cohort.map(function (r) {
         var w = Math.max(2, Math.round(((r.score || 0) / max) * 150));
         return [
-          { text: (r.label || "") + (r.you ? "  ← your team" : ""), bold: !!r.you, color: r.you ? BRAND.accent : BRAND.ink },
+          { text: _deEmoji(r.label || "") + (r.you ? "  ← your team" : ""), bold: !!r.you, color: r.you ? BRAND.accent : BRAND.ink },
           { text: String(r.score || 0), alignment: "right" },
           { canvas: [{ type: "rect", x: 0, y: 3, w: w, h: 9, r: 2, color: r.you ? BRAND.accent : BRAND.line }] }
         ];
@@ -177,6 +211,9 @@
         coverName:   { fontSize: 14, bold: true, alignment: "center" },
         coverMeta:   { fontSize: 11, color: BRAND.muted, alignment: "center", margin: [0, 4, 0, 0] },
         coverBlurb:  { fontSize: 11, color: BRAND.muted, alignment: "center", italics: true },
+        tocTitle:    { fontSize: 24, bold: true, color: BRAND.ink, margin: [0, 0, 0, 0] },
+        tocEntry:    { fontSize: 12.5, color: BRAND.ink, margin: [0, 5, 0, 5] },
+        tocPage:     { fontSize: 12.5, color: BRAND.muted },
         h1:          { fontSize: 18, bold: true, color: BRAND.ink, margin: [0, 6, 0, 8] },
         h2:          { fontSize: 14, bold: true, color: BRAND.accent, margin: [0, 14, 0, 6] },
         h3:          { fontSize: 12, bold: true, color: BRAND.ink, margin: [0, 8, 0, 4] },
