@@ -67,3 +67,78 @@ test.describe("Student PDFs — certificate of attendance", () => {
     expect(out.type).toContain("pdf");
   });
 });
+
+test.describe("Student PDFs — study booklet", () => {
+  test("the booklet button is present + builder + collector exposed", async ({ page }) => {
+    await page.goto("/");
+    const info = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      return {
+        btn: !!document.getElementById("wrapup-booklet-btn"),
+        builder: !!(window.CanamedPdf && typeof window.CanamedPdf.buildBookletDocDefinition === "function"),
+        collector: typeof window._collectBookletSections === "function"
+      };
+    });
+    expect(info.btn, "#wrapup-booklet-btn must exist").toBe(true);
+    expect(info.builder).toBe(true);
+    expect(info.collector).toBe(true);
+  });
+
+  test("the live session reference cards are collected into booklet sections", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(() => {
+      const secs = window._collectBookletSections();
+      return { n: secs.length, hasTitles: secs.every(s => typeof s.title === "string"),
+               hasBlocks: secs.some(s => Array.isArray(s.blocks) && s.blocks.length > 0),
+               hasTable: secs.some(s => (s.blocks || []).some(b => b.type === "table")) };
+    });
+    // Module A + Module B each ship history + guidelines + recap reference cards.
+    expect(out.n, "should collect several reference sections").toBeGreaterThanOrEqual(2);
+    expect(out.hasBlocks).toBe(true);
+    expect(out.hasTable, "recap cards contribute tables").toBe(true);
+  });
+
+  test("the booklet docDefinition embeds reference sections + the team comparison", async ({ page }) => {
+    await page.goto("/");
+    const doc = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildBookletDocDefinition({
+        name: "Akari", sessionCode: "ABC-DEF",
+        sections: [{ title: "Historical context", blocks: [
+          { type: "p", text: "Truth-telling norms changed over time." },
+          { type: "table", header: true, rows: [["Country", "Norm"], ["France", "autonomy first"]] }
+        ] }],
+        team: { name: "Room 1", score: 120, wins: ["Reached the clinical synthesis"],
+                cohort: [{ label: "Room 1", score: 120, you: true }, { label: "Room 2", score: 90 }] }
+      });
+      return JSON.stringify(d);
+    });
+    expect(doc).toContain("Session study booklet");
+    expect(doc).toContain("Historical context");
+    expect(doc).toContain("Truth-telling norms changed over time.");
+    expect(doc).toContain("autonomy first");
+    expect(doc).toContain("Your team");
+    expect(doc).toContain("your team");                 // the "← your team" marker
+    expect(doc).toContain("Reached the clinical synthesis");
+  });
+
+  test("pdfmake renders a non-empty booklet PDF (chromium smoke)", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
+    await page.goto("/");
+    const out = await page.evaluate(async () => {
+      await window.CanamedLoader.ensurePdfmake();
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildBookletDocDefinition({
+        name: "T", sections: [{ title: "S", blocks: [{ type: "p", text: "x" }] }],
+        team: { name: "R1", score: 10, wins: [], cohort: [{ label: "R1", score: 10, you: true }] }
+      });
+      return await new Promise((resolve) => {
+        try { window.pdfMake.createPdf(d).getBlob((b) => resolve({ ok: true, size: b.size, type: b.type })); }
+        catch (e) { resolve({ ok: false, why: String(e) }); }
+      });
+    });
+    expect(out.ok, out.why || "").toBe(true);
+    expect(out.size).toBeGreaterThan(1000);
+    expect(out.type).toContain("pdf");
+  });
+});

@@ -2501,13 +2501,15 @@
                   data-i18n="stage.wrap.download">⤓ Download my room's answers (Markdown)</button>
         </div>
 
-        <!-- Take-home PDFs (2026-05-27). A professional certificate of
-             attendance, generated client-side via pdfmake (lazy-loaded on
-             click). Student-only; wired in initEndPoll(). The designed study
-             booklet button is added to this card by a follow-up PR. -->
+        <!-- Take-home PDFs (2026-05-27). Two client-side PDFs via pdfmake
+             (lazy-loaded on click): a designed study booklet to revise from
+             and a certificate of attendance. Student-only; wired in
+             initEndPoll(). -->
         <div class="card take-home-card">
           <h3 data-i18n="stage.wrap.takehome.title">🎓 Take it with you</h3>
-          <p class="hint" data-i18n="stage.wrap.takehome.hint">A professional certificate of attendance you can download and keep.</p>
+          <p class="hint" data-i18n="stage.wrap.takehome.hint">Two PDFs to keep: a study booklet to revise from, and your certificate of attendance.</p>
+          <button id="wrapup-booklet-btn" class="wrapup-download-btn" type="button"
+                  data-i18n="stage.wrap.booklet">📘 Download the study booklet (PDF)</button>
           <button id="wrapup-cert-btn" class="wrapup-download-btn" type="button"
                   data-i18n="stage.wrap.cert">🎓 Download your certificate of attendance (PDF)</button>
         </div>
