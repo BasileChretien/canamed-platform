@@ -8859,18 +8859,14 @@ function initModBPhaseNav() {
   const prev = el("modB-phase-prev"), next = el("modB-phase-next");
   if (prev && !prev._wired) { prev._wired = true; prev.addEventListener("click", () => setModBPhase(modBPhase - 1)); }
   if (next && !next._wired) { next._wired = true; next.addEventListener("click", () => setModBPhase(modBPhase + 1)); }
-  // Make the phase-stepper chips jump to a phase (free nav 1↔4).
+  // Make the phase-stepper chips jump to a phase (free nav 1↔4). Each chip is a
+  // real <button> inside its <li>, so it's natively keyboard-operable and the
+  // <ol> keeps valid <li>-only children (axe `list` rule).
   const stepper = document.querySelector("#stage-2 .phase-stepper");
   if (stepper && !stepper._wired) {
     stepper._wired = true;
-    Array.from(stepper.querySelectorAll(".phase-step")).forEach((chip, idx) => {
-      chip.setAttribute("role", "button");
-      chip.setAttribute("tabindex", "0");
-      const go = () => setModBPhase(idx);
-      chip.addEventListener("click", go);
-      chip.addEventListener("keydown", e => {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
-      });
+    Array.from(stepper.querySelectorAll(".phase-step-btn")).forEach((btn, idx) => {
+      btn.addEventListener("click", () => setModBPhase(idx));
     });
   }
   const ep = el("modB-exchange-prev"), en = el("modB-exchange-next");

@@ -856,23 +856,40 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .phase-step {
   flex: 1 1 140px;
   display: flex;
+  list-style: none;
+  position: relative;
+}
+/* The interactive chip is a real <button> inside the <li> (keeps the <ol>
+   valid for axe + gives native keyboard operation). It carries the chip's
+   visual styling; the is-current / is-done classes live on the parent <li>. */
+.phase-step-btn {
+  display: flex;
   align-items: center;
   gap: 8px;
+  width: 100%;
   padding: 6px 10px;
+  border: 0;
   border-radius: var(--r-sm);
   background: transparent;
   color: var(--muted);
+  font-family: inherit;
   font-size: 0.86rem;
   line-height: 1.25;
-  position: relative;
+  text-align: left;
+  cursor: pointer;
 }
-.phase-step.is-current {
+.phase-step-btn:hover { background: var(--surface-sunk, #f3f0e8); color: var(--ink); }
+.phase-step-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+.phase-step.is-current .phase-step-btn {
   background: var(--card);
   color: var(--ink);
   font-weight: 600;
   box-shadow: 0 0 0 1px var(--primary) inset;
 }
-.phase-step.is-done {
+.phase-step.is-done .phase-step-btn {
   color: var(--ok-strong);
 }
 .phase-step-num {
@@ -907,14 +924,6 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
-/* Module B synced phases (2026-05-27): chips are clickable to jump 1↔4. */
-.phase-step[role="button"] { cursor: pointer; }
-.phase-step[role="button"]:hover { background: var(--surface-sunk, #f3f0e8); color: var(--ink); }
-.phase-step[role="button"]:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-
 /* Generic per-phase visibility toggle (Module B): a section/prompt not in the
    current phase is removed from the flow entirely. */
 .is-phase-hidden { display: none !important; }
