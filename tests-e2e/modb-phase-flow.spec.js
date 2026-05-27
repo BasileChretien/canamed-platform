@@ -1,0 +1,101 @@
+/* tests-e2e/modb-phase-flow.spec.js
+ *
+ * Module B synced-phase redesign (2026-05-27): the room moves through the four
+ * phases together (any participant can advance), only the current phase's
+ * action sections show, and the six Phase-3 prompts appear one at a time.
+ *
+ * Driven via the global render/setter functions with the LOCAL fallback (no
+ * room / Firebase needed): setModBPhase / setModBExchangeCursor mutate the
+ * module state and re-render synchronously when no ref is wired. Listed in the
+ * mobile testMatch in playwright.config.js so it runs per-device.
+ */
+
+// @ts-check
+const { test, expect } = require("./fixtures.js");
+
+async function setupModB(page) {
+  await page.goto("/");
+  await page.evaluate(() => {
+    document.body.classList.remove("locked");
+    const splash = document.getElementById("splash");
+    if (splash) splash.classList.add("hidden");
+    const app = document.getElementById("app");
+    if (app) app.classList.remove("hidden");
+    ["stage-0", "stage-1", "stage-3"].forEach(id => {
+      const n = document.getElementById(id);
+      if (n) n.classList.add("hidden");
+    });
+    const s2 = document.getElementById("stage-2");
+    if (s2) s2.classList.remove("hidden");
+    // Wire the phase nav + paint the initial (setup) phase.
+    if (window.initModBPhaseNav) window.initModBPhaseNav();
+  });
+}
+
+// A section is "shown" when it exists and is not phase-hidden.
+function shown(page, sel) {
+  return page.evaluate(s => {
+    const n = document.querySelector("#stage-2 " + s);
+    return !!n && !n.classList.contains("is-phase-hidden");
+  }, sel);
+}
+
+test.describe("Module B — synced phase flow", () => {
+  test("Phase 1 (setup) shows the situation + role picker, hides later-phase sections", async ({ page }) => {
+    await setupModB(page);
+    expect(await shown(page, ".vignette"), "vignette shows in setup").toBe(true);
+    expect(await shown(page, "#modB-role-picker"), "role picker shows in setup").toBe(true);
+    expect(await shown(page, "#observer-checklist"), "observer checklist hidden in setup").toBe(false);
+    expect(await shown(page, ".prompts-card-modB"), "prompts hidden in setup").toBe(false);
+    expect(await shown(page, ".answers-card-bulleted"), "answers form hidden in setup").toBe(false);
+    // Reference material stays available in every phase.
+    expect(await shown(page, ".spikes-strip"), "SPIKES reference always shows").toBe(true);
+  });
+
+  test("Phase 3 (exchange) shows the prompts, hides setup sections; reference stays", async ({ page }) => {
+    await setupModB(page);
+    await page.evaluate(() => window.setModBPhase(2));
+    expect(await shown(page, ".prompts-card-modB"), "prompts show in exchange").toBe(true);
+    expect(await shown(page, ".vignette"), "vignette hidden in exchange").toBe(false);
+    expect(await shown(page, "#modB-role-picker"), "role picker hidden in exchange").toBe(false);
+    expect(await shown(page, ".spikes-strip"), "SPIKES reference still shows").toBe(true);
+  });
+
+  test("Phase 4 (bullets) shows the group-answers form", async ({ page }) => {
+    await setupModB(page);
+    await page.evaluate(() => window.setModBPhase(3));
+    expect(await shown(page, ".answers-card-bulleted"), "answers form shows in bullets").toBe(true);
+    expect(await shown(page, ".prompts-card-modB"), "prompts hidden in bullets").toBe(false);
+  });
+
+  test("prev/next buttons and chip jumps move the synced phase", async ({ page }) => {
+    await setupModB(page);
+    // Next → phase 2 (play): the observer checklist becomes visible.
+    await page.click("#modB-phase-next");
+    expect(await shown(page, "#observer-checklist"), "observer checklist shows in play").toBe(true);
+    const playCurrent = await page.evaluate(() =>
+      document.querySelector('#stage-2 .phase-step[data-phase="play"]').classList.contains("is-current"));
+    expect(playCurrent).toBe(true);
+    // Jump straight to Phase 4 by tapping its chip.
+    await page.click('#stage-2 .phase-step[data-phase="bullets"]');
+    expect(await shown(page, ".answers-card-bulleted"), "chip jump lands on bullets").toBe(true);
+  });
+
+  test("Phase 3 prompts appear one at a time and reach a done state", async ({ page }) => {
+    await setupModB(page);
+    await page.evaluate(() => window.setModBPhase(2));   // exchange
+    const visibleCount = () =>
+      page.locator("#modB-exchange-list > li:not(.is-phase-hidden)").count();
+    expect(await visibleCount(), "exactly one prompt visible at the start").toBe(1);
+    // The first visible prompt is q1.
+    await expect(page.locator("#modB-exchange-list > li:not(.is-phase-hidden)"))
+      .toContainText(/Who is the information for/i);
+    // Advance to the last prompt (index 5) — still exactly one visible.
+    await page.evaluate(() => window.setModBExchangeCursor(5));
+    expect(await visibleCount(), "still one prompt visible near the end").toBe(1);
+    // Past the last prompt → done state, list hidden.
+    await page.evaluate(() => window.setModBExchangeCursor(6));
+    expect(await visibleCount(), "no prompts visible once done").toBe(0);
+    await expect(page.locator("#modB-exchange-done")).toBeVisible();
+  });
+});

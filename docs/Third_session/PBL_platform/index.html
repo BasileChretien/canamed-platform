@@ -1475,17 +1475,6 @@
                 <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
                 <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
               </button>
-              <!-- Sim 2026-05-19 (Sayaka, Mei): "A private side-chat
-                   with just my room (separate from group-answers) for
-                   clarifying questions." Hidden-by-default tab —
-                   surfaces a thin chat surface scoped to this room only.
-                   Messages live at /rooms/{room}/chat. -->
-              <button class="rcol-tab" type="button" data-tab="chat"
-                      role="tab" aria-selected="false" aria-controls="rcol-p-chat">
-                <span class="rcol-tab-icon" aria-hidden="true">💭</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.chat">Side-chat</span>
-                <span class="rcol-tab-badge" id="tab-badge-chat" hidden></span>
-              </button>
             </div>
 
             <div class="rcol-panel is-active" id="rcol-p-decisions"
@@ -1695,39 +1684,6 @@
               </div>
             </section>
             </div><!-- /answers panel -->
-
-            <!-- Side-chat panel — sim 2026-05-19 (Sayaka, Mei).
-                 Light surface: scroll-pane of last 50 messages + a
-                 one-line input. Wired by initSideChat(). -->
-            <div class="rcol-panel" id="rcol-p-chat" hidden
-                 role="tabpanel" data-panel="chat" aria-labelledby="rcol-tab-chat">
-              <section class="card chat-card">
-                <p class="chat-intro"
-                   data-i18n="rcol.chat.intro">
-                  Private side-chat for your room — for clarifying questions,
-                  glossary checks, side-thoughts. Messages stay within this
-                  room only.
-                </p>
-                <p class="hint answer-input-language-hint"
-                   data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
-                <!-- Round-2 a11y: role="log" + aria-atomic="false" so SR
-                     users hear ONLY new messages, not the whole list re-read.
-                     renderChat() appends individual <li>s, which matches the
-                     log pattern. -->
-                <ul class="chat-list" id="chat-list"
-                    aria-label="Side-chat messages"
-                    role="log" aria-live="polite" aria-atomic="false"></ul>
-                <div class="chat-input-row">
-                  <input type="text" id="chat-input" maxlength="500"
-                         data-i18n="rcol.chat.placeholder"
-                         data-i18n-attr="placeholder"
-                         placeholder="Type a quick message…"
-                         aria-label="Side-chat message" />
-                  <button id="chat-send" type="button"
-                          data-i18n="rcol.chat.send">Send</button>
-                </div>
-              </section>
-            </div>
           </div>
         </div>
 
@@ -1904,27 +1860,50 @@
         <nav class="phase-stepper" aria-label="Module B phases">
           <ol class="phase-stepper-list">
             <li class="phase-step is-current" data-phase="setup">
-              <span class="phase-step-num">1</span>
-              <span class="phase-step-label" data-i18n="stage.modB.phase1.title">Phase 1 — Set up</span>
-              <span class="phase-step-time" data-i18n="modB.phase.setup.time">6 min</span>
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">1</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase1.title">Phase 1 — Set up</span>
+                <span class="phase-step-time" data-i18n="modB.phase.setup.time">6 min</span>
+              </button>
             </li>
             <li class="phase-step" data-phase="play">
-              <span class="phase-step-num">2</span>
-              <span class="phase-step-label" data-i18n="stage.modB.phase2.title">Phase 2 — Play it out</span>
-              <span class="phase-step-time" data-i18n="modB.phase.play.time">12 + 3 min</span>
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">2</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase2.title">Phase 2 — Play it out</span>
+                <span class="phase-step-time" data-i18n="modB.phase.play.time">12 + 3 min</span>
+              </button>
             </li>
             <li class="phase-step" data-phase="exchange">
-              <span class="phase-step-num">3</span>
-              <span class="phase-step-label" data-i18n="stage.modB.phase3.title">Phase 3 — The exchange</span>
-              <span class="phase-step-time" data-i18n="modB.phase.exchange.time">15 min</span>
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">3</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase3.title">Phase 3 — The exchange</span>
+                <span class="phase-step-time" data-i18n="modB.phase.exchange.time">15 min</span>
+              </button>
             </li>
             <li class="phase-step" data-phase="bullets">
-              <span class="phase-step-num">4</span>
-              <span class="phase-step-label" data-i18n="stage.modB.phase4.title">Phase 4 — Write bullets</span>
-              <span class="phase-step-time" data-i18n="modB.phase.bullets.time">5 min</span>
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">4</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase4.title">Phase 4 — Write bullets</span>
+                <span class="phase-step-time" data-i18n="modB.phase.bullets.time">5 min</span>
+              </button>
             </li>
           </ol>
         </nav>
+
+        <!-- Synced phase navigation (2026-05-27): the room's phase is shared via
+             RTDB (rooms/$room/moduleB/phase); any participant can move it with
+             Prev/Next or by tapping a phase chip above. Only the current phase's
+             action sections show (applyModBPhaseVisibility); reference material
+             (SPIKES, useful sentences, history, guidelines, recap) stays
+             available throughout. -->
+        <div class="phase-nav" id="modB-phase-nav">
+          <button class="phase-nav-btn" id="modB-phase-prev" type="button"
+                  data-i18n="modB.phase.prev">← Previous</button>
+          <span class="phase-nav-indicator" id="modB-phase-indicator"
+                role="status" aria-live="polite"></span>
+          <button class="phase-nav-btn" id="modB-phase-next" type="button"
+                  data-i18n="modB.phase.next">Next →</button>
+        </div>
 
         <div class="next-step-coach" id="modB-next-step" role="status" aria-live="polite">
           <span class="next-step-icon" aria-hidden="true">👉</span>
@@ -2152,14 +2131,14 @@
              discrete prompt cards. -->
         <section class="card prompts-card prompts-card-modB">
           <p class="banner-rule banner-compare"
-             data-i18n="stage.modB.phase3.ground-rule" data-i18n-html><strong>Ground rule
-            (an observer reads this aloud):</strong> we are comparing <em>practices and how
+             data-i18n="stage.modB.phase3.ground-rule" data-i18n-html><strong>Ground rule for
+            this discussion (Phase 3):</strong> we are comparing <em>practices and how
             they are changing</em>, not ranking countries. Neither model is "the advanced one".
             Speak about what you have actually seen or been taught &mdash; and it is completely
             fine to say "I'm not sure, this is changing."</p>
-          <p class="hint" data-i18n="stage.modB.phase3.intro">An observer reads these out one
+          <p class="hint" data-i18n="stage.modB.phase3.intro">Take the prompts one
             at a time &mdash; for each, make sure both a Caen and a Nagoya voice answers:</p>
-          <ol class="discussion-q-list">
+          <ol class="discussion-q-list" id="modB-exchange-list">
             <li data-i18n="stage.modB.phase3.q1" data-i18n-html><strong>Who is the information for?</strong> When there is serious news, who is
               told <em>first</em> &mdash; the patient or the family? Is that what the law says,
               the textbook says, or what actually happens on the ward? Name one way France and
@@ -2185,6 +2164,20 @@
               member? saying the diagnosis out loud? not fixing the distress?)? What does that
               difference tell you?</li>
           </ol>
+          <!-- Phase-3 one-at-a-time (2026-05-27): the 6 prompts above are shown
+               one at a time, synced across the room via rooms/$room/moduleB/
+               exchangeCursor. Any participant can move Prev/Next; renderModBExchange()
+               toggles which <li> is visible + this counter / done state. -->
+          <div class="exchange-nav" id="modB-exchange-nav">
+            <button class="exchange-nav-btn" id="modB-exchange-prev" type="button"
+                    data-i18n="modB.exchange.prev">← Previous</button>
+            <span class="exchange-nav-counter" id="modB-exchange-counter"
+                  role="status" aria-live="polite"></span>
+            <button class="exchange-nav-btn" id="modB-exchange-next" type="button"
+                    data-i18n="modB.exchange.next">Next →</button>
+          </div>
+          <p class="exchange-done hidden" id="modB-exchange-done"
+             data-i18n="modB.exchange.done">✓ You've worked through all six prompts. Move to Phase 4 to write your team's bullets.</p>
         </section>
 
         <details class="card history-card">

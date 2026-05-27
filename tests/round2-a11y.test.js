@@ -19,9 +19,6 @@
  *
  *   A5  dismiss() restores focus to the activeElement captured on start().
  *
- *   A6  #chat-list carries role="log" + aria-atomic="false" so SR users
- *       only hear NEW chat lines, not the whole list re-read.
- *
  *   A7  .consultation-note has aria-labelledby tying it to its h3.
  *
  *   A8  --n-500 contrast bumped (≈5.6:1 minimum on --bg).
@@ -125,17 +122,6 @@ test("Round2-A5: tour.dismiss() restores focus to the opener", () => {
     "dismiss() must call opener.focus() to restore keyboard focus");
 });
 
-// ------------------------------------------------------------------
-// A6 — chat-list role=log + aria-atomic=false
-// ------------------------------------------------------------------
-test("Round2-A6: #chat-list uses role='log' + aria-atomic='false'", () => {
-  assert.match(INDEX_HTML,
-    /id="chat-list"[\s\S]{0,200}?role="log"/,
-    "#chat-list must declare role='log' so SR users hear only new messages");
-  assert.match(INDEX_HTML,
-    /id="chat-list"[\s\S]{0,200}?aria-atomic="false"/,
-    "#chat-list must declare aria-atomic='false' to avoid re-reading whole log");
-});
 
 // ------------------------------------------------------------------
 // A7 — consultation-note accessible name

@@ -303,6 +303,16 @@
                 }
               }
             },
+            "moduleB": {
+              "phase": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 3)"
+              },
+              "exchangeCursor": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 20)"
+              }
+            },
             "answers": {
               "moduleA": {
                 "$entryId": {
@@ -365,12 +375,6 @@
               "$clientId": {
                 ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
                 ".validate": "newData.val() == null || (newData.hasChildren(['role','name','at']) && newData.child('role').isString() && newData.child('role').val().length <= 20 && newData.child('name').isString() && newData.child('name').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 7200000)"
-              }
-            },
-            "chat": {
-              "$msgId": {
-                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
-                ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 500 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000)"
               }
             },
             "tests": {

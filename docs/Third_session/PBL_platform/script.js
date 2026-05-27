@@ -316,12 +316,18 @@ const SCORE_AUTO = {
     title: "Safety first — screened before scanning",
     did: "You screened the serious causes, screened for cauda equina and examined the legs BEFORE ordering any scan.",
     why: "That is the order real practice demands — rule out danger first, image only with a reason." },
+  // NB: these milestone toasts fire for EVERY teammate when the synced score
+  // changes (and re-fire on resync after a phone unlock / tab refocus). So the
+  // `did` text must celebrate the PROCESS STEP, never announce the clinical
+  // OUTCOME — otherwise a passive teammate gets the answer handed to them
+  // without reasoning it (dry-run 2026-05-27: a locked phone unlocked to "your
+  // team found the diagnosis").
   synthesis: { points: 10, tier: "milestone", module: "A",
     title: "Reached the clinical synthesis",
-    did: "Your room pulled the findings together into a working diagnosis." },
+    did: "Your room finished the red-flag synthesis step — the Exchange prompts are now open." },
   restraint: { points: 20, tier: "milestone", module: "A",
     title: "Diagnostic restraint",
-    did: "You reached a diagnosis without ordering imaging that is not indicated.",
+    did: "You held off on imaging that isn't indicated here.",
     why: "Unnecessary scans find harmless age-related changes that worry patients and lead to more tests." },
   exchangeA: { points: 20, tier: "milestone", module: "A",
     title: "Two universities in the conversation",
@@ -1026,6 +1032,8 @@ let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees 
 let promptCursor = 0;
 let promptReplies = {};
 let _promptReplyTimer = null;
+let modBPhase = 0;          // Module B synced phase index (0..3) — room-shared
+let modBExchangeCursor = 0; // Module B Phase-3 prompt index (0..5, 6 = done) — room-shared
 let callForHelp = null;
 let teamsLink = "";
 let quizLink = "";          // end-of-session questionnaire link
@@ -1072,9 +1080,10 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
-    refObservers = null, refAnswerReplies = null, refChat = null, refPoll = null,
+    refObservers = null, refAnswerReplies = null, refPoll = null,
     refRoleChoices = null,
     refReplayRound = null,
+    refModBPhase = null, refModBExchangeCursor = null,
     refClosed = null;
 
 /* Swap-and-replay loop state (Module B). `replayRound` is the current
@@ -1462,6 +1471,8 @@ function wireLanguageSwitcher() {
       callIfFn("renderFindings");
       callIfFn("renderPrompts");
       callIfFn("renderDecisions");
+      callIfFn("renderModBPhase");
+      callIfFn("renderModBExchange");
       callIfFn("renderObjectives");
       callIfFn("renderLeaderboard");
       callIfFn("renderScore");
@@ -2207,6 +2218,9 @@ function _mountTestRunner(which) {
     if (state.index >= bank.length) {
       // Final score panel
       _saveTestComplete(which, state.score);
+      // Combined wrap-up: finishing the POST-test unlocks the questionnaire
+      // right below, so the two read as one end-of-session task.
+      if (which === "post" && typeof renderSurvey === "function") renderSurvey();
       const wrap = document.createElement("div");
       wrap.className = "test-result";
       const h = document.createElement("p");
@@ -2398,6 +2412,9 @@ function _renderTestCard(which) {
         body.classList.add("hidden");
         body.innerHTML = "";
         if (intro) intro.textContent = _tFmt("test.skipped");
+        // Combined wrap-up: skipping the POST-test still unlocks the
+        // questionnaire (the student may want to give feedback even so).
+        if (which === "post" && typeof renderSurvey === "function") renderSurvey();
       });
     }
   });
@@ -2597,6 +2614,16 @@ function _mountSurveyForm() {
 
 /* Mount the survey card on the Wrap-up stage. Hidden for room admins (they get
    the all-rooms export) and when no bank ships. Mirrors _renderTestCard(). */
+/* Combined wrap-up gate (2026-05-27): the questionnaire is grouped WITH the
+   post-test — it only becomes available once the post-test is done or skipped,
+   so the student completes them as one task (post-test → feedback) instead of
+   seeing two competing cards. A scenario that ships no post-test shows the
+   questionnaire straight away. Pure (no DOM/Firebase) so it is unit-testable. */
+function _surveyReadyAfterPostTest(postBankLen, postRec) {
+  if (!postBankLen) return true;
+  return !!(postRec && (typeof postRec.completedAt === "number" || postRec.skipped === true));
+}
+
 function renderSurvey() {
   const card = el("survey-card");
   if (!card) return;
@@ -2605,51 +2632,58 @@ function renderSurvey() {
     card.classList.add("hidden");
     return;
   }
-  card.classList.remove("hidden");
-  _loadSurveyStatus().then(rec => {
-    const startBtn = el("survey-start-btn");
-    const skipBtn = el("survey-skip-btn");
-    const body = el("survey-body");
-    const intro = el("survey-card-intro");
-    if (!startBtn || !skipBtn || !body) return;
-    const completed = rec && typeof rec.completedAt === "number";
-    const skipped = rec && rec.skipped === true;
-    if (completed) {
-      if (intro) intro.textContent = _tFmt("survey.already-done");
-      startBtn.classList.add("hidden");
-      skipBtn.classList.add("hidden");
-      body.classList.add("hidden");
-      body.innerHTML = "";
-      return;
-    }
-    if (skipped) {
-      if (intro) intro.textContent = _tFmt("survey.skipped");
-      startBtn.classList.remove("hidden");
-      skipBtn.classList.add("hidden");
-    } else {
-      startBtn.classList.remove("hidden");
-      skipBtn.classList.remove("hidden");
-    }
-    if (!startBtn.dataset.bound) {
-      startBtn.dataset.bound = "1";
-      startBtn.addEventListener("click", () => {
-        _saveSurveyStart();
+  const postBank = _testBank("post");
+  const gate = postBank.length
+    ? _loadTestStatus("post").then(r => _surveyReadyAfterPostTest(postBank.length, r))
+    : Promise.resolve(true);
+  gate.then(ready => {
+    if (!ready) { card.classList.add("hidden"); return; }
+    card.classList.remove("hidden");
+    _loadSurveyStatus().then(rec => {
+      const startBtn = el("survey-start-btn");
+      const skipBtn = el("survey-skip-btn");
+      const body = el("survey-body");
+      const intro = el("survey-card-intro");
+      if (!startBtn || !skipBtn || !body) return;
+      const completed = rec && typeof rec.completedAt === "number";
+      const skipped = rec && rec.skipped === true;
+      if (completed) {
+        if (intro) intro.textContent = _tFmt("survey.already-done");
         startBtn.classList.add("hidden");
-        skipBtn.classList.add("hidden");
-        _mountSurveyForm();
-      });
-    }
-    if (!skipBtn.dataset.bound) {
-      skipBtn.dataset.bound = "1";
-      skipBtn.addEventListener("click", () => {
-        _saveSurveySkipped();
-        startBtn.classList.remove("hidden");
         skipBtn.classList.add("hidden");
         body.classList.add("hidden");
         body.innerHTML = "";
+        return;
+      }
+      if (skipped) {
         if (intro) intro.textContent = _tFmt("survey.skipped");
-      });
-    }
+        startBtn.classList.remove("hidden");
+        skipBtn.classList.add("hidden");
+      } else {
+        startBtn.classList.remove("hidden");
+        skipBtn.classList.remove("hidden");
+      }
+      if (!startBtn.dataset.bound) {
+        startBtn.dataset.bound = "1";
+        startBtn.addEventListener("click", () => {
+          _saveSurveyStart();
+          startBtn.classList.add("hidden");
+          skipBtn.classList.add("hidden");
+          _mountSurveyForm();
+        });
+      }
+      if (!skipBtn.dataset.bound) {
+        skipBtn.dataset.bound = "1";
+        skipBtn.addEventListener("click", () => {
+          _saveSurveySkipped();
+          startBtn.classList.remove("hidden");
+          skipBtn.classList.add("hidden");
+          body.classList.add("hidden");
+          body.innerHTML = "";
+          if (intro) intro.textContent = _tFmt("survey.skipped");
+        });
+      }
+    });
   });
 }
 
@@ -2790,10 +2824,10 @@ function wireRoomUI() {
   initCallProf();
   initLeave();
   initObserver();
-  initSideChat();
   initEndPoll();
   initTeamName();
   initRolePicker();
+  initModBPhaseNav();
   initCoachDismiss();
   initHypotheses();
   // Initial coach paint — set the text + stepper-state from current
@@ -2880,6 +2914,7 @@ function enterRoom(roomName, asAdmin) {
   roomScore = {}; teamName = ""; celebratedEvents = {}; penalisedEvents = {};
   roomVotes = {}; committedDecisions = {}; firstVoteFire = true;
   firstScoreFire = true; wrapCelebrated = false;
+  modBPhase = 0; modBExchangeCursor = 0;
   // reset in-platform test runtime — a re-join is a fresh attempt UI-side
   // (the DB record per clientId still drives "already done" detection)
   _TEST_RUNTIME.pre = null; _TEST_RUNTIME.post = null;
@@ -2893,6 +2928,7 @@ function enterRoom(roomName, asAdmin) {
   lastAnswerCount = { moduleA: 0, moduleB: 0 };
   lastDecisionBallotCount = 0;
   promptsWereUnlocked = false;
+  promptsWereDone = false;
   if (typeof switchRcolTab === "function") switchRcolTab("findings");
   el("late-banner").classList.add("hidden");
 
@@ -2954,8 +2990,9 @@ function teardownRoom() {
     if (refObservers) refObservers.off();
     if (refRoleChoices) refRoleChoices.off();
     if (refReplayRound) refReplayRound.off();
+    if (refModBPhase) refModBPhase.off();
+    if (refModBExchangeCursor) refModBExchangeCursor.off();
     if (refAnswerReplies) refAnswerReplies.off();
-    if (refChat) refChat.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
     // NOTE: refClosed is session-scoped (not room-scoped). It is owned by
@@ -2982,12 +3019,10 @@ function startRoom() {
   refTeamName = db.ref(base + "/teamName");
   refLeaderboard = db.ref(sPath("rooms"));
   // Sim 2026-05-19 features — per-room observer flags, free-text reply
-  // threads on group-answers, in-room side-chat. Refs declared here so
-  // every room transition wires/teardowns them in lock-step with the
-  // existing per-room subscribers.
+  // threads on group-answers. Refs declared here so every room transition
+  // wires/teardowns them in lock-step with the existing per-room subscribers.
   refObservers = db.ref(base + "/observers");
   refAnswerReplies = db.ref(base + "/answerReplies");
-  refChat = db.ref(base + "/chat");
   // Module B role-pick sync (roleplay review 2026-05-20): each student
   // writes their OWN choice keyed by clientId (protected by the same
   // clientMapping ownership rule as presence/typing); everyone in the room
@@ -3024,6 +3059,23 @@ function startRoom() {
   refReplayRound = db.ref(base + "/roleplayRound");
   refReplayRound.on("value", snap => {
     try { handleReplayRound(snap.val(), true); } catch (_) {}
+  });
+
+  // Module B synced phase + Phase-3 exchange cursor (2026-05-27): the whole
+  // room moves through the four phases together and steps through the six
+  // Phase-3 prompts one at a time. Any participant can advance either (the
+  // write rules only require auth + an open session, like promptCursor).
+  refModBPhase = db.ref(base + "/moduleB/phase");
+  refModBPhase.on("value", snap => {
+    const v = snap.val();
+    modBPhase = (typeof v === "number" && v >= 0 && v <= 3) ? Math.floor(v) : 0;
+    if (typeof renderModBPhase === "function") renderModBPhase();
+  });
+  refModBExchangeCursor = db.ref(base + "/moduleB/exchangeCursor");
+  refModBExchangeCursor.on("value", snap => {
+    const v = snap.val();
+    modBExchangeCursor = (typeof v === "number" && v >= 0) ? Math.floor(v) : 0;
+    if (typeof renderModBExchange === "function") renderModBExchange();
   });
 
   refStage.on("value", snap => {
@@ -6911,23 +6963,36 @@ function buildButtons() {
         return fb;
       };
       const placed = {};
-      clusters.forEach(cluster => {
-        const sub = document.createElement("div");
+      clusters.forEach((cluster, ci) => {
+        // Each clinical category is a collapsible <details> (summary = the
+        // category label) so students can close categories they're done with
+        // and the section isn't a wall of buttons + revealed answers all at
+        // once (dry-run 2026-05-27). The first category of each section starts
+        // open as an entry point; the rest collapse. Re-rendering (room change
+        // / langchange) resets to this default, which is fine — it's a fresh
+        // build, not a state we need to persist.
+        const sub = document.createElement("details");
         sub.className = "req-category";
-        sub.setAttribute("role", "group");
+        if (ci === 0) sub.open = true;
         const label = (typeof tc === "function") ? tc(cluster.label, _curLang())
                                                  : (cluster.label.en || cluster.key);
-        const heading = document.createElement("p");
+        const heading = document.createElement("summary");
         heading.className = "req-category-label";
         heading.textContent = label;
-        sub.setAttribute("aria-label", label);
         sub.appendChild(heading);
+        // Buttons live in an inner wrapper that carries the group semantics
+        // (role/aria-label) — the <details> itself owns the disclosure role.
+        const items = document.createElement("div");
+        items.className = "req-category-items";
+        items.setAttribute("role", "group");
+        items.setAttribute("aria-label", label);
         order.forEach(i => {
           if (cluster.indices.indexOf(i) !== -1) {
-            sub.appendChild(_makeReqBtn(group, i));
+            items.appendChild(_makeReqBtn(group, i));
             placed[i] = true;
           }
         });
+        sub.appendChild(items);
         container.appendChild(sub);
       });
       // Safety net: never drop an item that lacks a category (e.g. a partially
@@ -7409,6 +7474,8 @@ if (typeof window !== "undefined") {
   // rendered fields without a live wrap-up stage / Firebase round-trip.
   window.renderSurvey = renderSurvey;
   window._mountSurveyForm = _mountSurveyForm;
+  // Pure gate for the combined post-test → questionnaire flow (E2E-asserted).
+  window._surveyReadyAfterPostTest = _surveyReadyAfterPostTest;
 }
 
 /* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
@@ -7489,6 +7556,7 @@ function updateDiscussionTabLock(unlocked) {
 }
 
 let promptsWereUnlocked = false;
+let promptsWereDone = false;   // fire-once guard for auto-opening Group answers
 function renderPrompts() {
   const unlocked = keyRevealed();
   el("prompts-locked").classList.toggle("hidden", unlocked);
@@ -7528,12 +7596,30 @@ function renderPrompts() {
     done.classList.remove("hidden");
     setTabBadge("tab-badge-discussion", "✓");
     if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(true);
+    // Debate finished: the team cycled every Exchange prompt. promptCursor is
+    // RTDB-synced, so this fires for the whole room — auto-open Group answers
+    // once so they land on capturing their final bullets (dry-run 2026-05-27:
+    // students didn't notice the "final answers" tab). Guard typing; don't
+    // re-yank someone who already moved to answers.
+    if (!promptsWereDone) {
+      promptsWereDone = true;
+      const _typing = document.activeElement &&
+        /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
+      if (activeRcolTab !== "answers" && !_typing &&
+          typeof switchRcolTab === "function") {
+        switchRcolTab("answers");
+      } else {
+        nudgeRcolTab("answers");
+      }
+    }
     return;
   }
 
   // Progressive single-prompt view.
   progressive.classList.remove("hidden");
   done.classList.add("hidden");
+  // Re-arm the "debate done" auto-open if the team steps back into the prompts.
+  promptsWereDone = false;
 
   const currentEl = el("prompt-progress-current");
   const totalEl = el("prompt-progress-total");
@@ -7605,19 +7691,18 @@ function renderPrompts() {
   if (unlocked && !promptsWereUnlocked) {
     promptsWereUnlocked = true;
     nudgeRcolTab("discussion");
-    // Auto-switch the local user to the Discussion panel + show the
-    // "synthesis unlocked" banner. Only when the synthesis was just
-    // revealed (this is the !promptsWereUnlocked branch) so it doesn't
-    // re-fire on subsequent renders. Skipped if the user has already
-    // navigated to Discussion (no surprise scroll) or is on Group
-    // answers / another tab they actively chose to be on. Safer to
-    // switch only when the user is on the default Findings tab — most
-    // users haven't actively navigated away yet.
-    // Auto-switch to Discussion ONLY when the user is on Decisions
-    // (the new default tab after removing "What we're finding"). If
-    // they've actively navigated elsewhere — Group answers — we don't
-    // yank their view.
-    if (activeRcolTab === "decisions" && typeof switchRcolTab === "function") {
+    // Auto-open the Debate (Discussion) panel the moment the synthesis
+    // unlocks the Exchange prompts. Fires once (the !promptsWereUnlocked
+    // guard) so it never re-yanks on later renders. Dry-run 2026-05-27:
+    // students completed the synthesis but didn't notice the Exchange had
+    // opened, so this now fires from ANY tab (previously only when the user
+    // happened to be on Decisions). Guards: don't steal focus from someone
+    // typing, and don't drag a team that's already moved on to Group answers
+    // back to the prompts.
+    const _typing = document.activeElement &&
+      /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
+    if (activeRcolTab !== "answers" && activeRcolTab !== "discussion" &&
+        !_typing && typeof switchRcolTab === "function") {
       switchRcolTab("discussion");
     }
     const banner = el("synthesis-unlocked-banner");
@@ -8761,30 +8846,135 @@ function updateModBNextStep() {
   const allBulletsCovered = ["family-sentence", "differ-converge", "practice-change"]
     .every(k => bulletsCovered.has(k));
 
+  // NB: the phase stepper is now driven by the synced room phase
+  // (renderModBPhase), so the coach only supplies guidance text — it no longer
+  // sets the stepper state (that would fight the shared phase).
   if (!rolePicked) {
     textEl.textContent = _coachT("modB.coach.pick-role",
       "Pick your role below before starting the roleplay. The observer keeps time.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-2", "setup", []);
   } else if (modBAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modB.coach.roleplay",
       "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion " +
       "with the prompts below.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-2", "play", ["setup"]);
   } else if (!allBulletsCovered) {
     const remaining = 3 - bulletsCovered.size;
     const tpl = _coachT("modB.coach.bullets-partial",
       "Capturing bullets — {n} still to add to cover all 3.");
     textEl.textContent = tpl.replace("{n}", String(remaining));
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-2", "bullets", ["setup", "play", "exchange"]);
   } else {
     textEl.textContent = _coachT("modB.coach.bullets-complete",
       "✓ All 3 bullets covered. Add more refinements or wait for your facilitator.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-2", "bullets", ["setup", "play", "exchange"]);
   }
+}
+
+/* ===================== MODULE B — SYNCED PHASE FLOW (2026-05-27) =============
+ * The room moves through the four phases together (rooms/$room/moduleB/phase,
+ * 0..3) and steps through the six Phase-3 prompts one at a time
+ * (rooms/$room/moduleB/exchangeCursor). Any participant can advance either.
+ * Only the CURRENT phase's action sections are shown; reference material
+ * (SPIKES strip, useful sentences, history, guidelines, recap) stays visible
+ * throughout (those sections carry no entry in MODB_PHASE_SECTIONS). */
+const MODB_PHASES = ["setup", "play", "exchange", "bullets"];
+// selector (scoped to #stage-2) → the phases in which that action section shows
+const MODB_PHASE_SECTIONS = [
+  { sel: ".vignette",              phases: ["setup"] },
+  { sel: ".safety-note",           phases: ["setup"] },
+  { sel: "#modB-role-picker",      phases: ["setup", "play"] },
+  { sel: "#observer-checklist",    phases: ["play"] },
+  { sel: ".micro-framework-card",  phases: ["play"] },
+  { sel: ".prompts-card-modB",     phases: ["exchange"] },
+  { sel: ".answers-card-bulleted", phases: ["bullets"] }
+];
+
+function applyModBPhaseVisibility(phaseKey) {
+  const stage = document.getElementById("stage-2");
+  if (!stage) return;
+  MODB_PHASE_SECTIONS.forEach(({ sel, phases }) => {
+    stage.querySelectorAll(sel).forEach(node => {
+      node.classList.toggle("is-phase-hidden", phases.indexOf(phaseKey) === -1);
+    });
+  });
+}
+
+function _modBT(key, fallback, vars) {
+  let s = fallback;
+  if (typeof window !== "undefined" && typeof window.t === "function") {
+    const v = window.t(key);
+    if (v && v !== key) s = v;
+  }
+  if (vars) Object.keys(vars).forEach(k => { s = s.replace("{" + k + "}", String(vars[k])); });
+  return s;
+}
+
+function renderModBPhase() {
+  const phaseKey = MODB_PHASES[modBPhase] || "setup";
+  applyModBPhaseVisibility(phaseKey);
+  setPhaseStepperState("stage-2", phaseKey, MODB_PHASES.slice(0, modBPhase));
+  const prev = el("modB-phase-prev"), next = el("modB-phase-next");
+  if (prev) prev.disabled = modBPhase <= 0;
+  if (next) next.disabled = modBPhase >= MODB_PHASES.length - 1;
+  const ind = el("modB-phase-indicator");
+  if (ind) ind.textContent = _modBT("modB.phase.indicator", "Phase {n} / 4", { n: modBPhase + 1 });
+}
+
+function setModBPhase(idx) {
+  const n = Math.max(0, Math.min(MODB_PHASES.length - 1, idx | 0));
+  if (refModBPhase) refModBPhase.set(n).catch(() => {});
+  else { modBPhase = n; renderModBPhase(); }   // LOCAL/solo fallback
+}
+
+function renderModBExchange() {
+  const list = el("modB-exchange-list");
+  if (!list) return;
+  const items = Array.from(list.querySelectorAll("li"));
+  const total = items.length;
+  const cursor = Math.max(0, Math.min(modBExchangeCursor, total));
+  const isDone = total > 0 && cursor >= total;
+  items.forEach((li, i) => li.classList.toggle("is-phase-hidden", i !== cursor));
+  list.classList.toggle("is-phase-hidden", isDone);
+  const done = el("modB-exchange-done");
+  if (done) done.classList.toggle("hidden", !isDone);
+  const nav = el("modB-exchange-nav");
+  if (nav) nav.classList.toggle("hidden", isDone);
+  const counter = el("modB-exchange-counter");
+  if (counter) counter.textContent = isDone ? ""
+    : _modBT("modB.exchange.counter", "Prompt {n} / {total}", { n: cursor + 1, total: total });
+  const prev = el("modB-exchange-prev"), next = el("modB-exchange-next");
+  if (prev) prev.disabled = cursor <= 0;
+  if (next) next.disabled = isDone;
+}
+
+function setModBExchangeCursor(n) {
+  const v = Math.max(0, Math.min(20, n | 0));
+  if (refModBExchangeCursor) refModBExchangeCursor.set(v).catch(() => {});
+  else { modBExchangeCursor = v; renderModBExchange(); }
+}
+
+/* Wire the synced phase + exchange navigation. Idempotent (per-element _wired
+ * flag) so repeated wireRoomUI calls don't stack handlers. */
+function initModBPhaseNav() {
+  const prev = el("modB-phase-prev"), next = el("modB-phase-next");
+  if (prev && !prev._wired) { prev._wired = true; prev.addEventListener("click", () => setModBPhase(modBPhase - 1)); }
+  if (next && !next._wired) { next._wired = true; next.addEventListener("click", () => setModBPhase(modBPhase + 1)); }
+  // Make the phase-stepper chips jump to a phase (free nav 1↔4). Each chip is a
+  // real <button> inside its <li>, so it's natively keyboard-operable and the
+  // <ol> keeps valid <li>-only children (axe `list` rule).
+  const stepper = document.querySelector("#stage-2 .phase-stepper");
+  if (stepper && !stepper._wired) {
+    stepper._wired = true;
+    Array.from(stepper.querySelectorAll(".phase-step-btn")).forEach((btn, idx) => {
+      btn.addEventListener("click", () => setModBPhase(idx));
+    });
+  }
+  const ep = el("modB-exchange-prev"), en = el("modB-exchange-next");
+  if (ep && !ep._wired) { ep._wired = true; ep.addEventListener("click", () => setModBExchangeCursor(modBExchangeCursor - 1)); }
+  if (en && !en._wired) { en._wired = true; en.addEventListener("click", () => setModBExchangeCursor(modBExchangeCursor + 1)); }
+  renderModBPhase();
+  renderModBExchange();
 }
 
 /* Wire the × dismiss buttons on both coach cards. Idempotent (uses
@@ -9932,64 +10122,6 @@ function initEndPoll() {
       if (thanks) thanks.classList.remove("hidden");
       setTimeout(() => { btn.disabled = false; }, 1500);
     }).catch(() => { btn.disabled = false; });
-  });
-}
-
-/* Per-room side-chat — sim 2026-05-19 (Sayaka, Mei): "A private side-
- * chat with just my room (separate from group-answers) for clarifying
- * questions." Light-touch UI: collapsed by default, expands to a
- * scroll-pane of messages + a one-line input. Messages live at
- * /sessions/{code}/rooms/{room}/chat/{msgId} (push id). */
-function initSideChat() {
-  const panel = el("rcol-p-chat");
-  if (!panel || isRoomAdmin) return;
-  if (panel.dataset.wired === "1") return;
-  panel.dataset.wired = "1";
-  const list = el("chat-list");
-  const input = el("chat-input");
-  const send = el("chat-send");
-  if (!list || !input || !send) return;
-
-  if (refChat) {
-    refChat.on("value", snap => {
-      const msgs = snap.val() || {};
-      const sorted = Object.keys(msgs)
-        .map(k => Object.assign({ id: k }, msgs[k]))
-        .filter(m => m && m.text)
-        .sort((a, b) => (a.at || 0) - (b.at || 0))
-        .slice(-50);   // last 50 only
-      list.innerHTML = "";
-      sorted.forEach(m => {
-        const li = document.createElement("li");
-        li.className = "chat-msg" + (m.cid === clientId ? " me" : "");
-        const who = document.createElement("strong");
-        who.textContent = m.by || "?";
-        const txt = document.createElement("span");
-        txt.textContent = " " + m.text;
-        li.appendChild(who);
-        li.appendChild(txt);
-        list.appendChild(li);
-      });
-      list.scrollTop = list.scrollHeight;
-    });
-  }
-
-  function sendMessage() {
-    const text = (input.value || "").trim();
-    if (!text) return;
-    refChat.push({
-      text: text.slice(0, 500),
-      by: (myName || "anon").slice(0, 40),
-      cid: clientId,
-      at: Date.now()
-    }).then(() => { input.value = ""; }).catch(() => {});
-  }
-  send.addEventListener("click", sendMessage);
-  input.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
   });
 }
 
