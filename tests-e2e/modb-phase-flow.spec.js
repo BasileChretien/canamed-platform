@@ -70,15 +70,23 @@ test.describe("Module B — synced phase flow", () => {
 
   test("prev/next buttons and chip jumps move the synced phase", async ({ page }) => {
     await setupModB(page);
+    // After a CLICK the phase handler re-renders asynchronously, so a one-shot
+    // shown() read races the render on the slow CI runner (flaked on
+    // mobile-ipad at "chip jump lands on bullets"). Use auto-retrying
+    // expect(locator) assertions, which poll until is-phase-hidden clears.
+    // (The setModBPhase()-driven tests above are fine: page.evaluate resolves
+    // only after the synchronous re-render, so there's no race there.)
     // Next → phase 2 (play): the observer checklist becomes visible.
     await page.click("#modB-phase-next");
-    expect(await shown(page, "#observer-checklist"), "observer checklist shows in play").toBe(true);
+    await expect(page.locator("#stage-2 #observer-checklist").first(), "observer checklist shows in play")
+      .not.toHaveClass(/is-phase-hidden/);
     const playCurrent = await page.evaluate(() =>
       document.querySelector('#stage-2 .phase-step[data-phase="play"]').classList.contains("is-current"));
     expect(playCurrent).toBe(true);
     // Jump straight to Phase 4 by tapping its chip.
     await page.click('#stage-2 .phase-step[data-phase="bullets"]');
-    expect(await shown(page, ".answers-card-bulleted"), "chip jump lands on bullets").toBe(true);
+    await expect(page.locator("#stage-2 .answers-card-bulleted").first(), "chip jump lands on bullets")
+      .not.toHaveClass(/is-phase-hidden/);
   });
 
   test("Phase 3 prompts appear one at a time and reach a done state", async ({ page }) => {
