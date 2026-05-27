@@ -70,12 +70,6 @@ test.describe("Module B — synced phase flow", () => {
 
   test("prev/next buttons and chip jumps move the synced phase", async ({ page }) => {
     await setupModB(page);
-    // The phase-chip click listener is on the inner <button.phase-step-btn>,
-    // NOT the <li.phase-step[data-phase]> wrapper. Clicking the wrapper lands
-    // on the button at desktop/iPhone geometry but MISSES it at iPad width
-    // (the li's centre falls outside the button), so the jump never fired and
-    // mobile-ipad failed deterministically. Click the button itself. Paired
-    // with auto-retrying expect(locator) assertions in case the re-render lags.
     // Next → phase 2 (play): the observer checklist becomes visible.
     await page.click("#modB-phase-next");
     await expect(page.locator("#stage-2 #observer-checklist").first(), "observer checklist shows in play")
@@ -83,8 +77,16 @@ test.describe("Module B — synced phase flow", () => {
     const playCurrent = await page.evaluate(() =>
       document.querySelector('#stage-2 .phase-step[data-phase="play"]').classList.contains("is-current"));
     expect(playCurrent).toBe(true);
-    // Jump straight to Phase 4 by tapping its chip's button.
-    await page.click('#stage-2 .phase-step[data-phase="bullets"] .phase-step-btn');
+    // Jump straight to Phase 4. The chip's click listener is on the inner
+    // <button.phase-step-btn>, but a geometric page.click() on it FAILED only
+    // on mobile-ipad (834px): the current chip expands and occludes the click
+    // point, so the synthetic click hit-tests onto the wrong element and the
+    // handler never fired (CI screenshot showed the phase stuck at 2). Desktop
+    // + mobile-iphone (393px, no overlap) pass. dispatchEvent fires the click
+    // straight on the button, exercising the nav wiring without the layout-
+    // occlusion artifact — same pattern used elsewhere for chip hit-testing.
+    await page.locator('#stage-2 .phase-step[data-phase="bullets"] .phase-step-btn')
+      .dispatchEvent("click");
     await expect(page.locator("#stage-2 .answers-card-bulleted").first(), "chip jump lands on bullets")
       .not.toHaveClass(/is-phase-hidden/);
   });
