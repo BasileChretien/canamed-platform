@@ -316,12 +316,18 @@ const SCORE_AUTO = {
     title: "Safety first — screened before scanning",
     did: "You screened the serious causes, screened for cauda equina and examined the legs BEFORE ordering any scan.",
     why: "That is the order real practice demands — rule out danger first, image only with a reason." },
+  // NB: these milestone toasts fire for EVERY teammate when the synced score
+  // changes (and re-fire on resync after a phone unlock / tab refocus). So the
+  // `did` text must celebrate the PROCESS STEP, never announce the clinical
+  // OUTCOME — otherwise a passive teammate gets the answer handed to them
+  // without reasoning it (dry-run 2026-05-27: a locked phone unlocked to "your
+  // team found the diagnosis").
   synthesis: { points: 10, tier: "milestone", module: "A",
     title: "Reached the clinical synthesis",
-    did: "Your room pulled the findings together into a working diagnosis." },
+    did: "Your room finished the red-flag synthesis step — the Exchange prompts are now open." },
   restraint: { points: 20, tier: "milestone", module: "A",
     title: "Diagnostic restraint",
-    did: "You reached a diagnosis without ordering imaging that is not indicated.",
+    did: "You held off on imaging that isn't indicated here.",
     why: "Unnecessary scans find harmless age-related changes that worry patients and lead to more tests." },
   exchangeA: { points: 20, tier: "milestone", module: "A",
     title: "Two universities in the conversation",
