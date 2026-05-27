@@ -50,9 +50,12 @@ test.describe("shell CSP + perf-SDK vendoring", () => {
     expect(headerConnect[1]).toContain("https://www.gstatic.com");
   });
 
+  // matches src="fb-timings.min.js" with an optional ?v=vNN cache-buster
+  const PERF_SRC_RE = /src="fb-timings\.min\.js(?:\?v=v\d+)?"/;
+
   test("perf SDK is vendored first-party, not loaded from gstatic", () => {
     const html = read("index.html");
-    expect(html).toContain(`src="${PERF_SDK_FILE}"`);
+    expect(html).toMatch(PERF_SRC_RE);
     // must NOT regress to the blocker-tripping gstatic URL
     expect(html).not.toContain(GSTATIC_PERF_URL);
     // and the file must actually exist on disk
@@ -63,7 +66,7 @@ test.describe("shell CSP + perf-SDK vendoring", () => {
     const html = read("index.html");
     // grab the integrity attr on the fb-timings.min.js script tag
     const tag = html.match(
-      new RegExp(`<script[^>]*src="${PERF_SDK_FILE}"[^>]*>`, "i")
+      /<script[^>]*src="fb-timings\.min\.js(?:\?v=v\d+)?"[^>]*>/i
     );
     expect(tag, "fb-timings.min.js script tag").not.toBeNull();
     const sri = tag[0].match(/integrity="sha384-([^"]+)"/);
