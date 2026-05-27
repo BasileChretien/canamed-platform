@@ -303,6 +303,16 @@
                 }
               }
             },
+            "moduleB": {
+              "phase": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 3)"
+              },
+              "exchangeCursor": {
+                ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 20)"
+              }
+            },
             "answers": {
               "moduleA": {
                 "$entryId": {

@@ -471,7 +471,7 @@
 
       "stage.modB.phase3.title": "Phase 3 — The exchange (15 min)",
       "stage.modB.phase3.ground-rule": "<strong>Ground rule for this discussion (Phase 3):</strong> we are comparing <em>practices and how they are changing</em>, not ranking countries. Neither model is \"the advanced one\". Speak about what you have actually seen or been taught — and it is completely fine to say \"I'm not sure, this is changing.\"",
-      "stage.modB.phase3.intro": "An observer reads these out one at a time — for each, make sure both a Caen and a Nagoya voice answers:",
+      "stage.modB.phase3.intro": "Take the prompts one at a time — for each, make sure both a Caen and a Nagoya voice answers:",
       "stage.modB.phase3.q1": "<strong>Who is the information for?</strong> When there is serious news, who is told <em>first</em> — the patient or the family? Is that what the law says, the textbook says, or what actually happens on the ward? Name one way France and Japan are the <strong>same</strong> and one way they <strong>differ</strong>.",
       "stage.modB.phase3.q2": "<strong>Has it changed?</strong> Was disclosure done differently 20–30 years ago? (Japan: cancer-diagnosis disclosure rose from under ~30% in the early 1990s to ~94% by 2016. France: the 2002 <em>loi Kouchner</em> changed patients' information rights.) Why do norms change — law, generations, expectations?",
       "stage.modB.phase3.q3": "<strong>The family's quiet request — what did you actually do, and why?</strong> Would a typical doctor in France respond the same way as one in Japan? What is each most worried about — lying to the patient, or harming the patient? Is \"protecting someone from bad news\" love, or taking away their choice — or both?",
@@ -486,6 +486,15 @@
       "stage.modB.phase4.b3": "One thing each of you will do differently, in your own country, because of this discussion.",
 
       "stage.modB.answers.title": "Group answers — Module B",
+
+      // Module B — synced phase navigation + Phase-3 one-at-a-time (2026-05-27)
+      "modB.phase.prev": "← Previous",
+      "modB.phase.next": "Next →",
+      "modB.phase.indicator": "Phase {n} / 4",
+      "modB.exchange.prev": "← Previous",
+      "modB.exchange.next": "Next →",
+      "modB.exchange.counter": "Prompt {n} / {total}",
+      "modB.exchange.done": "✓ You've worked through all six prompts. Move to Phase 4 to write your team's bullets.",
 
       // ────────────────────────────────────────────────────────────────
       // Natural-flow refactor (2026-05-18): the Module A "instructions"
