@@ -491,6 +491,15 @@
 
       "stage.modB.answers.title": "Group answers — Module B",
 
+      // Module B — synced phase navigation + Phase-3 one-at-a-time (2026-05-27)
+      "modB.phase.prev": "← Previous",
+      "modB.phase.next": "Next →",
+      "modB.phase.indicator": "Phase {n} / 4",
+      "modB.exchange.prev": "← Previous",
+      "modB.exchange.next": "Next →",
+      "modB.exchange.counter": "Prompt {n} / {total}",
+      "modB.exchange.done": "✓ You've worked through all six prompts. Move to Phase 4 to write your team's bullets.",
+
       // ────────────────────────────────────────────────────────────────
       // Natural-flow refactor (2026-05-18): the Module A "instructions"
       // and Module B "instructions-open" walls were replaced with a

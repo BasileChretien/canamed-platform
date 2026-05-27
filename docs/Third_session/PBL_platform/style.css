@@ -907,6 +907,83 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
+/* Module B synced phases (2026-05-27): chips are clickable to jump 1↔4. */
+.phase-step[role="button"] { cursor: pointer; }
+.phase-step[role="button"]:hover { background: var(--surface-sunk, #f3f0e8); color: var(--ink); }
+.phase-step[role="button"]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Generic per-phase visibility toggle (Module B): a section/prompt not in the
+   current phase is removed from the flow entirely. */
+.is-phase-hidden { display: none !important; }
+
+/* Synced phase prev/next bar */
+.phase-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin: 8px 0 4px;
+  flex-wrap: wrap;
+}
+.phase-nav-btn {
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: var(--r-sm, 8px);
+  border: 1px solid var(--line-strong, #c9bd9c);
+  background: var(--card, #fff);
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+.phase-nav-btn:hover:not(:disabled) { background: var(--surface-sunk, #f3f0e8); }
+.phase-nav-btn:disabled { opacity: 0.45; cursor: default; }
+.phase-nav-indicator {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 6.5em;
+  text-align: center;
+}
+
+/* Phase-3 one-at-a-time prompt navigation */
+.exchange-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+.exchange-nav-btn {
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: var(--r-sm, 8px);
+  border: 1px solid var(--line-strong, #c9bd9c);
+  background: var(--card, #fff);
+  color: var(--ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+.exchange-nav-btn:hover:not(:disabled) { background: var(--surface-sunk, #f3f0e8); }
+.exchange-nav-btn:disabled { opacity: 0.45; cursor: default; }
+.exchange-nav-counter {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.exchange-done {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm, 8px);
+  background: var(--ok-50, #e8f5ec);
+  color: var(--ok-strong, #1c7c4a);
+  font-weight: 600;
+}
 
 /* "Everyone talks" reminder under the vignette in Module A. */
 .everyone-talks {
