@@ -6,9 +6,9 @@
  * of these tests require a full session flow — they just assert that
  * the controls exist, are wired, and behave correctly in isolation.
  *
- * The four schema-needing features (observer, side-chat, end-poll,
- * counter-bullet) are validated against the rule schema in
- * tests/rules.test.js separately; this suite covers the UI contract.
+ * The schema-needing features (observer, end-poll, counter-bullet) are
+ * validated against the rule schema in tests/rules.test.js separately;
+ * this suite covers the UI contract.
  */
 
 // @ts-check
@@ -255,22 +255,6 @@ test.describe("'I'm just observing' panic button", () => {
     expect(info, "observer button must exist").not.toBeNull();
     expect(info.hidden).toBe(false);
     expect(info.height).toBeGreaterThanOrEqual(40);
-  });
-});
-
-test.describe("Side-chat tab + input", () => {
-  test("rcol-tab[data-tab='chat'] + #chat-list + #chat-input + #chat-send exist", async ({ page }) => {
-    await page.goto("/");
-    const info = await page.evaluate(() => ({
-      tab:   !!document.querySelector(".rcol-tab[data-tab='chat']"),
-      list:  !!document.getElementById("chat-list"),
-      input: !!document.getElementById("chat-input"),
-      send:  !!document.getElementById("chat-send")
-    }));
-    expect(info.tab).toBe(true);
-    expect(info.list).toBe(true);
-    expect(info.input).toBe(true);
-    expect(info.send).toBe(true);
   });
 });
 

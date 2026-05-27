@@ -1567,39 +1567,6 @@ body[data-observer="1"] #modB-next-step {
   filter: grayscale(0.4);
 }
 
-/* --- Side-chat panel --- */
-.chat-card { padding: 12px; }
-.chat-intro {
-  margin: 0 0 10px;
-  color: var(--muted);
-  font-size: 0.88rem;
-}
-.chat-list {
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-  background: var(--surface-sunk, #f9f7f1);
-  border: 1px solid var(--line, #e2dccf);
-  border-radius: var(--r-sm, 8px);
-  font-size: 0.92rem;
-  line-height: 1.4;
-}
-.chat-msg { margin: 0 0 4px; }
-.chat-msg.me { color: var(--primary, #1763a6); }
-.chat-input-row {
-  display: flex;
-  gap: 8px;
-}
-#chat-input {
-  flex: 1;
-  padding: 8px 10px;
-  border-radius: var(--r-sm, 8px);
-  border: 1px solid var(--line-strong, #c9bd9c);
-}
-#chat-send { min-height: 44px; }
-
 /* --- End-of-session poll --- */
 .endpoll-card {
   border-left: 4px solid var(--accent, #e08a1e);
