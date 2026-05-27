@@ -7559,6 +7559,7 @@ if (typeof window !== "undefined") {
   window._test_setRoomCount     = function (n) { roomCount = parseInt(n, 10) || 1; };
   window._test_setAllRooms      = function (m) { allRooms = m || {}; };
   window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
+  window._test_setRoomVotes     = function (m) { roomVotes = m || {}; };
   window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
   window._test_setViewStage     = function (n) {
     // Drive both viewStage and roomStage so renderStage's lock/coach
@@ -7701,11 +7702,19 @@ function renderPrompts() {
       promptsWereDone = true;
       const _typing = document.activeElement &&
         /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
-      if (activeRcolTab !== "answers" && !_typing &&
+      // Dry-run 2026-05-27: teams worked through the discussion but finished the
+      // module without ever casting the "decide together" vote — an always-open
+      // Module A decision never fires the locked→unlocked auto-open, and the
+      // synthesis/discussion auto-switches pull the team off the Decisions tab.
+      // So if a Module A vote is still open and uncommitted, send them to the
+      // vote first; only fall through to Group answers once it's settled.
+      const _target = (typeof hasOpenUncommittedModuleAVote === "function" &&
+        hasOpenUncommittedModuleAVote()) ? "decisions" : "answers";
+      if (activeRcolTab !== _target && !_typing &&
           typeof switchRcolTab === "function") {
-        switchRcolTab("answers");
+        switchRcolTab(_target);
       } else {
-        nudgeRcolTab("answers");
+        nudgeRcolTab(_target);
       }
     }
     return;
@@ -8338,6 +8347,26 @@ function decisionUnlocked(d) {
   return { unlocked: unmet.length === 0, unmet: unmet };
 }
 
+/* True when the active case has at least one Module A "decide together" vote
+ * that is unlocked (votable now) but the team has not yet committed. Used to
+ * route the team back to the Decisions tab when they finish the discussion
+ * prompts, so an open vote is never silently skipped. Cases whose Module A
+ * carries no vote (e.g. breaking-bad-news, where the votes live in Module B)
+ * return false and the team flows straight on to Group answers. */
+function hasOpenUncommittedModuleAVote() {
+  const list = (typeof DECISIONS !== "undefined" ? DECISIONS : [])
+    .filter(d => d && d.module === "A");
+  if (!list.length) return false;
+  return list.some(d => {
+    const gate = (typeof decisionUnlocked === "function")
+      ? decisionUnlocked(d) : { unlocked: true };
+    if (!gate.unlocked) return false;
+    const v = (typeof roomVotes !== "undefined" && roomVotes[d.id]) || {};
+    const committed = v.committed && typeof v.committed.choice === "number";
+    return !committed;
+  });
+}
+
 /* Build the human-readable "ready when…" hint for a locked decision.
  * Goes through the unmet requirements and renders each one in the
  * active UI language. Falls back to English wording when i18n is
@@ -8380,6 +8409,12 @@ function decisionUnlockHint(unmet) {
 /* Track which Module A decisions were previously unlocked so we can
  * fire a coach-card "🗳️ A new decision opened" nudge on transitions. */
 let lastUnlockedDecisionIds = new Set();
+
+/* Track whether every open Module A vote has just become committed, so that
+ * once the team has both finished the discussion AND settled their vote we can
+ * complete the flow by opening Group answers (the #109 "don't miss the final
+ * answers" goal, now sequenced AFTER the vote rather than skipping it). */
+let lastModuleAVotesAllCommitted = false;
 
 function renderDecisions() {
   // Combined across modules: which decisions are unlocked right now. Chained
@@ -8472,6 +8507,25 @@ function renderDecisions() {
     } catch (_) { /* scrollIntoView unsupported / detached — non-fatal */ }
   });
   lastUnlockedDecisionIds = allUnlockedNow;
+
+  // Complete the Module A flow: once the team has worked through the discussion
+  // (promptsWereDone) AND there is no open uncommitted Module A vote left, open
+  // Group answers — but only on the transition into that settled state, so it
+  // fires once and never yanks a teammate mid-answer.
+  const moduleAVotes = (typeof DECISIONS !== "undefined" ? DECISIONS : [])
+    .filter(d => d && d.module === "A");
+  const moduleASettled = moduleAVotes.length > 0 &&
+    (typeof hasOpenUncommittedModuleAVote !== "function" || !hasOpenUncommittedModuleAVote());
+  if (moduleASettled && !lastModuleAVotesAllCommitted && promptsWereDone) {
+    const _typing = document.activeElement &&
+      /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
+    if (activeRcolTab !== "answers" && !_typing && typeof switchRcolTab === "function") {
+      switchRcolTab("answers");
+    } else if (typeof nudgeRcolTab === "function") {
+      nudgeRcolTab("answers");
+    }
+  }
+  lastModuleAVotesAllCommitted = moduleASettled;
 }
 
 /* Slim locked-state placeholder for a decision that hasn't yet met its

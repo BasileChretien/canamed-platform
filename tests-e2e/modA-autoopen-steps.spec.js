@@ -65,20 +65,43 @@ test.describe("Module A — steps auto-open as the flow advances", () => {
     expect(active, "Discussion should auto-open once the synthesis unlocks").toBe(true);
   });
 
-  test("finishing the Exchange prompts auto-opens Group answers", async ({ page }) => {
+  test("finishing the discussion with an OPEN Module A vote opens the Decisions panel", async ({ page }) => {
     await setupModA(page);
     const active = await page.evaluate(() => {
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       const total = ((window._test_getCase() && window._test_getCase().prompts) || []).length;
+      window._test_setRoomVotes({});          // vote still open (no commit)
       window._test_setPromptCursor(0);
       if (window.switchRcolTab) window.switchRcolTab("decisions");
       window.renderPrompts();                // lands on Discussion
       window._test_setPromptCursor(total);    // team cycled every prompt
-      window.renderPrompts();                // → done → auto-open answers
+      window.renderPrompts();                // → done → route to the open vote
+      const p = document.querySelector('.rcol-panel[data-panel="decisions"]');
+      return !!(p && p.classList.contains("is-active") && !p.hidden);
+    });
+    expect(active, "an unsettled 'decide together' vote must be surfaced before Group answers").toBe(true);
+  });
+
+  test("once the Module A vote is committed, finishing the discussion opens Group answers", async ({ page }) => {
+    await setupModA(page);
+    const active = await page.evaluate(() => {
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      const total = ((window._test_getCase() && window._test_getCase().prompts) || []).length;
+      // Commit every unlocked Module A vote, then finish the discussion.
+      const votes = {};
+      (window.DECISIONS || []).filter(d => d && d.module === "A").forEach(d => {
+        votes[d.id] = { committed: { choice: 0, at: Date.now() } };
+      });
+      window._test_setRoomVotes(votes);
+      window._test_setPromptCursor(0);
+      if (window.switchRcolTab) window.switchRcolTab("decisions");
+      window.renderPrompts();                // lands on Discussion
+      window._test_setPromptCursor(total);    // team cycled every prompt
+      window.renderPrompts();                // → done → vote settled → answers
       const p = document.querySelector('.rcol-panel[data-panel="answers"]');
       return !!(p && p.classList.contains("is-active") && !p.hidden);
     });
-    expect(active, "Group answers should auto-open once the debate is done").toBe(true);
+    expect(active, "Group answers should open once the vote is settled").toBe(true);
   });
 
   test("auto-open does not steal focus while someone is typing", async ({ page }) => {
