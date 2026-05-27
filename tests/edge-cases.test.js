@@ -116,11 +116,15 @@ test("index.html: style.css and theme-init.js carry the cache-buster", () => {
 test("script-loader.js: lazy-loaded chunks also carry ?v= cache-buster", () => {
   assert.match(LOADER, /SHELL_VERSION\s*=\s*"[^"]+"/,
     "loader must define a SHELL_VERSION constant for chunk cache-busting");
-  // Every ensureXxx() must route through v(…) so the suffix is uniform.
-  // Cheap check: every loadScript("file.js") call should use v(…).
-  const direct = LOADER.match(/loadScript\("[^"]+\.js"\)/g) || [];
+  // Every ensureXxx() must route through v(…) so the suffix is uniform — EXCEPT
+  // the immutable vendored bundles (pdfmake.min.js + vfs_fonts.js, ~2 MB), which
+  // are deliberately un-versioned so the browser caches them across deploys
+  // rather than re-downloading 2 MB on every SHELL_VERSION bump.
+  const VENDOR_EXEMPT = ["pdfmake.min.js", "vfs_fonts.js"];
+  const direct = (LOADER.match(/loadScript\("[^"]+\.js"\)/g) || [])
+    .filter(s => !VENDOR_EXEMPT.some(v => s.indexOf(v) !== -1));
   assert.deepStrictEqual(direct, [],
-    "All ensure*() lazy loaders must wrap the URL in v(...) so chunks get ?v=: " + direct.join(", "));
+    "All ensure*() lazy loaders (except immutable vendored bundles) must wrap the URL in v(...) so chunks get ?v=: " + direct.join(", "));
 });
 
 // =============================================================

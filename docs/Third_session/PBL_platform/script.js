@@ -6359,6 +6359,48 @@ function _caseItemById(itemId, lang) {
  * answers, and the recap. Exports ONLY the participant's own room as Markdown,
  * read fresh from the room subtree (the student is a member, so the read is
  * allowed). Distinct from the admin export above, which dumps every room. */
+/* Competencies printed on the student certificate. Kept here (not pulled from
+   admin-tools' CANAMED_COMPETENCY_MAP) so the student PDF path never loads the
+   facilitator chunk; the labels mirror that map's session-3 competencies. */
+var CERT_COMPETENCIES = [
+  "Information gathering & shared decision-making",
+  "Hypothesis-driven clinical reasoning",
+  "Responsible, evidence-based prescribing",
+  "Empathic response & acknowledging emotion (SPIKES)",
+  "Breaking bad news with a clear plan",
+  "Respecting patient autonomy across cultures"
+];
+
+/* Student certificate of attendance (PDF). Lazy-loads pdfmake (~2.2 MB) then
+   our generator, only on click. Best-effort: a network failure (e.g. offline)
+   surfaces a toast rather than a dead button. */
+function downloadCertificatePdf() {
+  const btn = el("wrapup-cert-btn");
+  if (btn) btn.disabled = true;
+  const loader = window.CanamedLoader || {};
+  const data = {
+    name: myName || "",
+    sessionCode: sessionNum || "",
+    sessionLabel: "",
+    dateStr: new Date().toLocaleDateString(),
+    partnership: "Université de Caen Normandie × Nagoya University",
+    competencies: CERT_COMPETENCIES
+  };
+  if (typeof toast === "function") toast("⏳ Preparing your certificate…");
+  Promise.resolve()
+    .then(() => loader.ensurePdfmake ? loader.ensurePdfmake() : Promise.reject(new Error("loader")))
+    .then(() => loader.ensureStudentPdf())
+    .then(() => {
+      if (window.CanamedPdf && typeof window.CanamedPdf.certificate === "function") {
+        window.CanamedPdf.certificate(data);
+      }
+    })
+    .catch(() => {
+      if (typeof toast === "function") toast("Couldn't prepare the PDF — check your connection and try again.", "", "loss");
+    })
+    .then(() => { if (btn) btn.disabled = false; });
+}
+
 function downloadMyRoomAnswers() {
   if (!db || !myRoom) return;
   db.ref(sPath("rooms/" + myRoom)).once("value").then(snap => {
@@ -9817,6 +9859,12 @@ function initEndPoll() {
   if (dlBtn && !dlBtn.dataset.wired) {
     dlBtn.dataset.wired = "1";
     dlBtn.addEventListener("click", downloadMyRoomAnswers);
+  }
+  // Student certificate of attendance (PDF) — lazy-loads pdfmake on click.
+  const certBtn = el("wrapup-cert-btn");
+  if (certBtn && !certBtn.dataset.wired) {
+    certBtn.dataset.wired = "1";
+    certBtn.addEventListener("click", downloadCertificatePdf);
   }
   // Spaced-reinforcement: point the retention-check link at this session's
   // scenario + language, and draw a scan-to-save QR (lazy qrcode.js).
