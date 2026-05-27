@@ -615,14 +615,6 @@ test("rules: per-room /moduleB/exchangeCursor is an auth-guarded number (Phase-3
   assert.match(node[".validate"], /isNumber/);
 });
 
-test("rules: per-room /chat/$msgId requires auth + closed-session guard + 500-char cap", () => {
-  assert.ok(ROOM.chat, "rules must declare /rooms/$roomId/chat");
-  const node = ROOM.chat.$msgId;
-  assert.match(node[".write"], /auth != null/);
-  assert.match(node[".write"], /closed/);
-  assert.match(node[".validate"], /500/, "chat message body must be capped at 500 chars");
-});
-
 test("rules: per-room /answerReplies/$entryId/$replyId requires auth + 400-char cap", () => {
   assert.ok(ROOM.answerReplies, "rules must declare /rooms/$roomId/answerReplies");
   const node = ROOM.answerReplies.$entryId.$replyId;

@@ -1475,17 +1475,6 @@
                 <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
                 <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
               </button>
-              <!-- Sim 2026-05-19 (Sayaka, Mei): "A private side-chat
-                   with just my room (separate from group-answers) for
-                   clarifying questions." Hidden-by-default tab —
-                   surfaces a thin chat surface scoped to this room only.
-                   Messages live at /rooms/{room}/chat. -->
-              <button class="rcol-tab" type="button" data-tab="chat"
-                      role="tab" aria-selected="false" aria-controls="rcol-p-chat">
-                <span class="rcol-tab-icon" aria-hidden="true">💭</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.chat">Side-chat</span>
-                <span class="rcol-tab-badge" id="tab-badge-chat" hidden></span>
-              </button>
             </div>
 
             <div class="rcol-panel is-active" id="rcol-p-decisions"
@@ -1695,39 +1684,6 @@
               </div>
             </section>
             </div><!-- /answers panel -->
-
-            <!-- Side-chat panel — sim 2026-05-19 (Sayaka, Mei).
-                 Light surface: scroll-pane of last 50 messages + a
-                 one-line input. Wired by initSideChat(). -->
-            <div class="rcol-panel" id="rcol-p-chat" hidden
-                 role="tabpanel" data-panel="chat" aria-labelledby="rcol-tab-chat">
-              <section class="card chat-card">
-                <p class="chat-intro"
-                   data-i18n="rcol.chat.intro">
-                  Private side-chat for your room — for clarifying questions,
-                  glossary checks, side-thoughts. Messages stay within this
-                  room only.
-                </p>
-                <p class="hint answer-input-language-hint"
-                   data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
-                <!-- Round-2 a11y: role="log" + aria-atomic="false" so SR
-                     users hear ONLY new messages, not the whole list re-read.
-                     renderChat() appends individual <li>s, which matches the
-                     log pattern. -->
-                <ul class="chat-list" id="chat-list"
-                    aria-label="Side-chat messages"
-                    role="log" aria-live="polite" aria-atomic="false"></ul>
-                <div class="chat-input-row">
-                  <input type="text" id="chat-input" maxlength="500"
-                         data-i18n="rcol.chat.placeholder"
-                         data-i18n-attr="placeholder"
-                         placeholder="Type a quick message…"
-                         aria-label="Side-chat message" />
-                  <button id="chat-send" type="button"
-                          data-i18n="rcol.chat.send">Send</button>
-                </div>
-              </section>
-            </div>
           </div>
         </div>
 

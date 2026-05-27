@@ -162,12 +162,12 @@ var CASE = {
            fr: "Il a l'air surpris mais content : « Des comprimés, je suppose — merci, docteur. » (Vous venez de promettre un opioïde fort avant d'avoir évalué la douleur, dépisté les drapeaux rouges ou élaboré un plan partagé avec lui — et vous avez fait du reste de la consultation la confirmation de cette promesse, plutôt que l'exploration de la demande.)",
            ja: "彼は驚きながらも嬉しそうな表情で言います:「錠剤で、お願いします — ありがとうございます、先生。」(あなたは痛みの評価も、レッドフラッグのスクリーニングも、共有された計画づくりも行わないまま、強オピオイドを約束してしまいました — そして残りの診察は、要望を掘り下げるのではなく、その約束を確認するだけのものになってしまいました。)" } },
     { group: { en: "Ideas, concerns & the medication request", fr: "Idées, préoccupations et la demande de médicament", ja: "考え・心配ごとと薬剤の要望" },
-      q: { en: "Are you sure the pain is really that bad? Could it just be stress, or in your head?",
-           fr: "Êtes-vous sûr que la douleur est vraiment si forte ? Ne serait-ce pas du stress, ou dans votre tête ?",
-           ja: "本当にそこまで痛みがひどいのですか?ストレスや気のせいではありませんか?" },
-      a: { en: "His face hardens. \"So you don't believe me either. Everyone keeps saying that. That is exactly why I want a real painkiller.\" (The consultation has just lost its therapeutic alliance: he is now defending the reality of his pain instead of working with you. Suggesting pain is imagined or 'just stress' is dismissive, not a screen for psychological factors.)",
-           fr: "Son visage se ferme. « Alors vous non plus vous ne me croyez pas. Tout le monde n'arrête pas de dire ça. C'est exactement pour ça que je veux un vrai antalgique. » (La consultation vient de perdre son alliance thérapeutique : il défend désormais la réalité de sa douleur au lieu de travailler avec vous. Suggérer que la douleur est imaginaire ou « juste du stress » est dévalorisant, ce n'est pas un dépistage des facteurs psychologiques.)",
-           ja: "彼の表情がこわばります。「先生も私の言うことを信じてくれないんですね。みんな同じことを言うんです。だからこそ、ちゃんとした鎮痛薬が欲しいんですよ。」(診察はたった今、治療同盟を失いました:彼はあなたと協力するのではなく、自分の痛みの現実性を守ろうとしています。痛みが「気のせい」や「ただのストレス」だと示唆することは、相手を軽視する態度であり、心理社会的因子のスクリーニングにはなりません。)" } },
+      q: { en: "Agree to a short \"trial\" of oxycodone now and review in two weeks, to keep him onside.",
+           fr: "Accepter un court « essai » d'oxycodone maintenant, à réévaluer dans deux semaines, pour le garder de votre côté.",
+           ja: "彼との関係を保つため、まずオキシコドンを短期間「試して」みることに同意し、2週間後に再評価する。" },
+      a: { en: "He looks relieved and grateful — but the script has now been started. (A short 'trial' feels like a reasonable compromise, yet starting a strong opioid for chronic non-specific low-back pain — no red flags, first-line care not yet tried — has limited benefit and real risks of tolerance and dependence, and a two-week 'trial' is hard to stop once begun. The evidence does not support opioids here; the task is to explore the request and build a non-opioid plan together.)",
+           fr: "Il paraît soulagé et reconnaissant — mais l'ordonnance est désormais lancée. (Un court « essai » semble un compromis raisonnable, pourtant débuter un opioïde fort dans une lombalgie chronique non spécifique — sans drapeau rouge, sans avoir essayé le traitement de première intention — apporte un bénéfice limité et de réels risques de tolérance et de dépendance, et un « essai » de deux semaines est difficile à arrêter une fois commencé. Les données ne soutiennent pas les opioïdes ici ; le travail consiste à explorer la demande et à construire ensemble un plan sans opioïde.)",
+           ja: "彼は安堵し、感謝した様子です — しかし、もう処方は始まってしまいました。(短期間の「試し」は妥当な妥協に思えますが、慢性非特異的腰痛 — レッドフラッグなし、第一選択治療も未試行 — に対して強オピオイドを開始することは、得られる利益は限られ、耐性・依存という現実的なリスクを伴います。そして2週間の「試し」は、いったん始めると中止が難しいものです。ここではエビデンスはオピオイドを支持しません;すべきことは、要望を掘り下げ、オピオイドに頼らない計画を一緒に作ることです。)" } },
     /* --- Round-3 dry-run (2026-05-26): two further deliberately POOR moves so
        students have more wrong options to choose and learn from. Appended at the
        END (indices 11 and 12) so existing indices, SYNTH_PREREQS and the
@@ -189,6 +189,37 @@ var CASE = {
       a: { en: "\"So you're passing me on as well.\" He leaves deflated. (Reflexly referring red-flag-free, non-specific low-back pain — without exploring the request, screening, or starting first-line care — abandons the therapeutic relationship and medicalises a problem best held in primary care. Referral is for red flags, diagnostic doubt, or failed first-line management.)",
            fr: "« Alors vous aussi, vous vous débarrassez de moi. » Il repart abattu. (Adresser par réflexe une lombalgie non spécifique sans drapeau rouge — sans explorer la demande, dépister, ni instaurer un traitement de première intention — abandonne la relation thérapeutique et médicalise un problème qui relève des soins primaires. L'adressage est justifié par des drapeaux rouges, un doute diagnostique ou l'échec du traitement de première ligne.)",
            ja: "「先生も私を厄介払いするんですね。」彼は落胆して帰っていきます。(レッドフラッグのない非特異的腰痛を、要望を掘り下げることも、スクリーニングも、第一選択の治療を始めることもせずに反射的に紹介することは、治療関係を放棄し、本来プライマリ・ケアで扱うべき問題を医療化してしまいます。紹介が適応となるのは、レッドフラッグ、診断的な疑い、または第一選択治療が無効だった場合です。)" } }
+    ,
+    /* --- Round-4 dry-run (2026-05-27): subtler deliberately-poor history moves
+       so each sub-category offers plausible-but-wrong options (the earlier
+       distractors were too obviously wrong). Appended at the END (indices 13,
+       14, 15) so existing indices + SYNTH_PREREQS stay valid; PENALTIES below
+       references history:13/14/15. */
+    { group: { en: "History & background", fr: "Anamnèse et antécédents", ja: "病歴と背景" },
+      q: { en: "Reassure him that 8 months \"isn't that long\" for back pain and it will most likely settle on its own.",
+           fr: "Le rassurer en disant que 8 mois « ce n'est pas si long » pour un mal de dos et que cela va très probablement se résorber tout seul.",
+           ja: "腰痛なら8か月は「そんなに長くはない」、おそらく自然に治まるだろうと安心させる。" },
+      a: { en: "He nods politely but looks unconvinced: \"That's what I keep being told…\" (Telling a patient with 8 months of pain and clear distress that it 'isn't that long' minimises his experience and ignores the yellow flags — fear of movement, low mood, broken sleep — that are actually driving his presentation. Blanket reassurance that skips those concerns rarely reassures, and can leave him feeling unheard.)",
+           fr: "Il hoche poliment la tête mais paraît peu convaincu : « C'est ce qu'on n'arrête pas de me dire… » (Dire à un patient qui souffre depuis 8 mois et manifestement en détresse que « ce n'est pas si long » minimise son vécu et ignore les drapeaux jaunes — peur du mouvement, humeur basse, sommeil haché — qui sont en réalité au cœur de son tableau. Une réassurance globale qui élude ces préoccupations rassure rarement et peut le laisser avec le sentiment de ne pas être entendu.)",
+           ja: "彼は礼儀正しくうなずきますが、納得していない様子です:「みんなにそう言われるんです…」(8か月痛みが続き、明らかに苦しんでいる患者に「そんなに長くない」と言うことは、その体験を軽視し、彼の症状の根底にあるイエローフラッグ — 運動恐怖、抑うつ気分、途切れる睡眠 — を無視しています。これらの懸念を飛ばした一律の安心づけは、ほとんど安心につながらず、患者に「話を聞いてもらえなかった」という思いを残しかねません。)" } },
+    { group: { en: "History & background", fr: "Anamnèse et antécédents", ja: "病歴と背景" },
+      q: { en: "Treat the visit mainly as a sick-note request and focus on certifying time off work.",
+           fr: "Traiter la consultation surtout comme une demande d'arrêt de travail et se concentrer sur la délivrance d'un certificat d'arrêt.",
+           ja: "受診を主に診断書(休職)の依頼として扱い、休職を証明することに重点を置く。" },
+      a: { en: "\"So you think I should stop working?\" he asks, uncertain. (Framing the consultation around time off — rather than active rehabilitation — reinforces the activity avoidance that already has him off the gym and barely walking. For chronic non-specific low-back pain, staying active and at work where possible is part of the treatment; prolonged rest and sick leave predict worse outcomes.)",
+           fr: "« Alors vous pensez que je devrais arrêter de travailler ? » demande-t-il, hésitant. (Centrer la consultation sur l'arrêt de travail — plutôt que sur la rééducation active — renforce l'évitement de l'activité qui le tient déjà éloigné de la salle de sport et le fait à peine marcher. Dans la lombalgie chronique non spécifique, rester actif et au travail quand c'est possible fait partie du traitement ; le repos prolongé et l'arrêt de travail prédisent de moins bons résultats.)",
+           ja: "「では、仕事を休んだほうがいいということですか?」と彼は不安げに尋ねます。(診察を(積極的なリハビリではなく)休職を中心に組み立てることは、すでにジムに行けず、ほとんど歩けなくなっている彼の活動回避をさらに強めます。慢性非特異的腰痛では、可能な範囲で活動的でいて仕事を続けることが治療の一部です;長期の安静と休職は、より悪い転帰を予測します。)" } },
+    { group: { en: "Red-flag & serious-cause screen", fr: "Dépistage des drapeaux rouges", ja: "レッドフラッグ(重篤な原因)のスクリーニング" },
+      q: { en: "Offer to arrange an MRI \"to be safe and to reassure him\", since he is worried something serious is being missed.",
+           fr: "Proposer d'organiser une IRM « par sécurité et pour le rassurer », puisqu'il craint qu'on passe à côté de quelque chose de grave.",
+           ja: "重大なものを見落とされているのではと心配しているので、「念のため、そして本人を安心させるために」MRIを手配すると申し出る。" },
+      a: { en: "He brightens: \"Yes — that would put my mind at rest.\" (But ordering imaging you don't clinically need, to reassure rather than to answer a question, usually backfires: a scan with no indication commonly shows incidental age-related changes that increase worry, prompt further tests, and reinforce the belief that something is structurally wrong. Reassurance comes from a careful assessment and a clear explanation — not from an unnecessary scan.)",
+           fr: "Il s'illumine : « Oui — ça me rassurerait. » (Mais prescrire une imagerie dont vous n'avez pas besoin sur le plan clinique, pour rassurer plutôt que pour répondre à une question, se retourne généralement contre vous : un examen sans indication montre souvent des modifications fortuites liées à l'âge qui augmentent l'inquiétude, déclenchent d'autres examens et renforcent la croyance qu'il y a un problème structurel. La réassurance vient d'une évaluation soigneuse et d'une explication claire — pas d'un examen inutile.)",
+           ja: "彼は表情を明るくします:「ええ — それなら安心できます。」(しかし、臨床的に必要のない画像検査を、疑問に答えるためではなく安心させるために出すことは、たいてい裏目に出ます:適応のない検査は、しばしば偶発的な加齢性変化を写し出し、不安を高め、追加検査を招き、「構造的に何か問題がある」という思い込みを強めます。安心は、丁寧な評価と分かりやすい説明から生まれるのであって、不要な検査からではありません。)",
+           },
+      cite: { en: "NICE NG59 — do not offer imaging in non-specific low-back pain",
+              fr: "HAS 2019 / NICE NG59 — pas d'imagerie dans la lombalgie non spécifique",
+              ja: "NICE NG59 — 非特異的腰痛では画像検査を行わない" } }
   ],
   exam: [
     { group: { en: "General examination", fr: "Examen général", ja: "全身の診察" },
@@ -253,6 +284,24 @@ var CASE = {
       a: { en: "He flinches and pulls away, his trust visibly dented. (Deliberately provoking pain to \"test\" a patient is not an examination technique — gentle palpation already gave you the information, and forcing painful pressure yields nothing new while causing avoidable distress and signalling that you doubt him. Examine as gently as the question allows.)",
            fr: "Il sursaute et se dérobe, sa confiance visiblement entamée. (Provoquer délibérément la douleur pour « tester » un patient n'est pas une technique d'examen — la palpation douce vous a déjà renseigné, et forcer une pression douloureuse n'apporte rien de nouveau tout en causant une détresse évitable et en signalant que vous doutez de lui. Examinez aussi doucement que la question le permet.)",
            ja: "彼はびくっとして体を引き、信頼が目に見えて損なわれます。(患者を「試す」ために意図的に痛みを誘発することは診察手技ではありません — 軟らかい触診ですでに必要な情報は得られており、痛みを伴う圧迫を強いても新たな情報は得られず、避けられる苦痛を与え、患者を疑っているという印象を示すだけです。問いに必要な範囲で、できるだけ優しく診察してください。)" } }
+    ,
+    /* --- Round-4 dry-run (2026-05-27): subtler deliberately-poor exam moves.
+       Appended at the END (indices 8, 9) so existing indices + SYNTH_PREREQS
+       (exam:3) stay valid; PENALTIES below references exam:8/9. */
+    { group: { en: "Spine examination", fr: "Examen du rachis", ja: "脊椎の診察" },
+      q: { en: "Ask him to flex and extend repeatedly to the very limit, to \"see how bad it really gets\".",
+           fr: "Lui demander de se pencher en avant et en arrière de façon répétée jusqu'à l'extrême limite, pour « voir jusqu'où ça va vraiment ».",
+           ja: "前屈と後屈を限界まで繰り返してもらい、「実際どこまでひどくなるか確かめる」。" },
+      a: { en: "He grimaces and guards after a couple of repetitions. (A single, gentle range-of-movement check already gave you what you need. Pushing a guarded patient repeatedly to the limit adds pain without adding clinical information, and reinforces his fear that movement will damage his back — the opposite of what the management plan should do.)",
+           fr: "Il grimace et se protège après quelques répétitions. (Une seule évaluation douce des amplitudes vous a déjà donné l'information nécessaire. Pousser de façon répétée jusqu'à la limite un patient en protection ajoute de la douleur sans apporter d'information clinique, et renforce sa peur que le mouvement n'abîme son dos — l'inverse de ce que doit viser le plan de prise en charge.)",
+           ja: "数回繰り返すと、彼は顔をしかめて体をかばいます。(一度の軟らかい可動域チェックで、必要な情報はすでに得られています。かばっている患者を限界まで繰り返し動かすことは、臨床的な情報を増やさずに痛みだけを加え、「動くと腰を傷める」という彼の恐怖を強めます — 治療計画が目指すべきものとは正反対です。)" } },
+    { group: { en: "Neurological & regional examination", fr: "Examen neurologique et régional", ja: "神経学的・局所の診察" },
+      q: { en: "Add a full upper-limb neurological examination as well, to be thorough.",
+           fr: "Ajouter aussi un examen neurologique complet des membres supérieurs, par souci d'exhaustivité.",
+           ja: "念のため、上肢の完全な神経学的診察も追加する。" },
+      a: { en: "Upper-limb power, tone, reflexes and sensation are all normal. (Thoroughness is not the same as a focused examination. Nothing in this presentation points to the cervical cord or the upper limbs; examining them adds time and a veneer of rigour without changing the assessment, and makes the consultation feel like an undirected search.)",
+           fr: "Force, tonus, réflexes et sensibilité des membres supérieurs sont tous normaux. (L'exhaustivité n'est pas un examen ciblé. Rien dans ce tableau n'oriente vers la moelle cervicale ou les membres supérieurs ; les examiner ajoute du temps et un vernis de rigueur sans rien changer à l'évaluation, et donne à la consultation l'allure d'une recherche sans direction.)",
+           ja: "上肢の筋力・筋緊張・反射・感覚はいずれも正常です。(網羅性は、焦点を絞った診察とは異なります。本症例に頸髄や上肢を示唆する所見は何もありません;それらを診察しても、評価を変えないまま時間と「厳密そうな見かけ」を加えるだけで、診察を当てもない探索のように感じさせてしまいます。)" } }
   ],
   labs: [
     { q: { en: "Clinical synthesis and red-flag review  (unlocks the discussion prompts)",
@@ -517,24 +566,25 @@ var PENALTIES = [
                "前に強オピオイドの処方に同意することは、まさに依存症を生み出す処方パターン" +
                "です。診察の残りは要望の掘り下げではなく、その約束を実行することを中心に" +
                "回ることになります — それがチームが減点される理由です。" } },
-  { id: "pen_dismiss", item: "history:10", points: 10,
-    title: { en: "Suggested the pain was imagined or 'just stress'",
-             fr: "A suggéré que la douleur était imaginaire ou « juste du stress »",
-             ja: "痛みは気のせい、または「ただのストレス」だと示唆した" },
-    why: { en: "Telling a patient their pain might be in their head dismisses their " +
-               "experience, damages the therapeutic relationship and is not a screen " +
-               "for psychological factors (yellow flags are explored, not " +
-               "accused). The consultation has lost its alliance - that costs " +
-               "points.",
-           fr: "Dire à un patient que sa douleur est peut-être imaginaire dévalorise " +
-               "son vécu, abîme la relation thérapeutique et ne constitue pas un dépistage " +
-               "des facteurs psychologiques (les drapeaux jaunes s'explorent, ils ne se " +
-               "reprochent pas). La consultation a perdu son alliance — cela coûte des " +
-               "points.",
-           ja: "患者に痛みが気のせいかもしれないと伝えることは、患者の体験を軽視し、" +
-               "治療関係を損ない、心理社会的因子のスクリーニングにもなりません (イエロー" +
-               "フラッグは探るものであって、非難するものではありません)。診察は治療" +
-               "同盟を失いました — それが減点につながります。" } },
+  { id: "pen_dismiss", item: "history:10", points: 12,
+    title: { en: "Started an opioid 'trial' with no indication",
+             fr: "A débuté un « essai » d'opioïde sans indication",
+             ja: "適応なしにオピオイドの「試し」を開始した" },
+    why: { en: "A short 'trial' of a strong opioid feels like a reasonable compromise, " +
+               "but for chronic non-specific low-back pain — no red flags, first-line " +
+               "care not yet tried — opioids have limited benefit and real risks of " +
+               "tolerance and dependence, and a 'trial' is hard to stop once begun. " +
+               "Explore the request and build a non-opioid plan instead.",
+           fr: "Un court « essai » d'opioïde fort semble un compromis raisonnable, mais " +
+               "dans une lombalgie chronique non spécifique — sans drapeau rouge, sans " +
+               "traitement de première intention encore essayé — les opioïdes ont un " +
+               "bénéfice limité et de réels risques de tolérance et de dépendance, et un " +
+               "« essai » est difficile à arrêter une fois commencé. Explorez la demande " +
+               "et construisez plutôt un plan sans opioïde.",
+           ja: "強オピオイドの短期間の「試し」は妥当な妥協に見えますが、レッドフラッグが" +
+               "なく第一選択治療も未試行の慢性非特異的腰痛では、オピオイドの利益は限られ、" +
+               "耐性・依存という現実的なリスクを伴います。そして「試し」はいったん始めると" +
+               "中止が困難です。要望を掘り下げ、オピオイドに頼らない計画を作りましょう。" } },
   /* --- examination: the two deliberately wrong choices --- */
   { id: "pen_dre", item: "exam:5", points: 12,
     title: { en: "Performed a rectal examination with no indication",
@@ -616,7 +666,92 @@ var PENALTIES = [
                "signalant de l'incrédulité. Examinez aussi doucement que possible.",
            ja: "患者を「試す」ために痛みを伴う圧迫を強いることは診察手技ではありません — " +
                "軟らかい触診ですでに情報は得られており、余計な痛みは何ももたらさず、避け" +
-               "られる苦痛を与え、不信を示すだけです。できるだけ優しく診察しましょう。" } }
+               "られる苦痛を与え、不信を示すだけです。できるだけ優しく診察しましょう。" } },
+  /* --- Round-4 dry-run (2026-05-27): penalties for the subtler poor moves
+     (history:13/14/15, exam:8/9). Smaller deductions than the blunt errors —
+     these are plausible-but-suboptimal, not egregious. --- */
+  { id: "pen_minimise", item: "history:13", points: 6,
+    title: { en: "Minimised his pain with blanket reassurance",
+             fr: "A minimisé sa douleur par une réassurance globale",
+             ja: "一律の安心づけで痛みを過小評価した" },
+    why: { en: "Telling a distressed patient that 8 months 'isn't that long' minimises his " +
+               "experience and skips the yellow flags (fear of movement, low mood, poor " +
+               "sleep) that are driving his presentation. Acknowledge the impact first, then " +
+               "reassure on the evidence of a careful assessment.",
+           fr: "Dire à un patient en détresse que 8 mois « ce n'est pas si long » minimise son " +
+               "vécu et élude les drapeaux jaunes (peur du mouvement, humeur basse, mauvais " +
+               "sommeil) qui sont au cœur de son tableau. Reconnaissez d'abord l'impact, puis " +
+               "rassurez sur la base d'une évaluation soigneuse.",
+           ja: "苦しんでいる患者に8か月は「そんなに長くない」と言うことは、その体験を" +
+               "過小評価し、症状の根底にあるイエローフラッグ(運動恐怖、抑うつ気分、睡眠不良)" +
+               "を飛ばしてしまいます。まず影響を受け止め、その上で丁寧な評価に基づいて" +
+               "安心させましょう。" } },
+  { id: "pen_sicknote", item: "history:14", points: 8,
+    title: { en: "Framed the visit around time off, reinforcing avoidance",
+             fr: "A centré la consultation sur l'arrêt de travail, renforçant l'évitement",
+             ja: "受診を休職中心に組み立て、活動回避を強めた" },
+    why: { en: "Centring the consultation on a sick note — rather than active rehabilitation " +
+               "— reinforces the activity avoidance already harming him. In chronic " +
+               "non-specific low-back pain, staying active and at work where possible is part " +
+               "of the treatment; prolonged rest and sick leave predict worse outcomes.",
+           fr: "Centrer la consultation sur un arrêt de travail — plutôt que sur la " +
+               "rééducation active — renforce l'évitement de l'activité qui lui nuit déjà. " +
+               "Dans la lombalgie chronique non spécifique, rester actif et au travail quand " +
+               "c'est possible fait partie du traitement ; le repos prolongé et l'arrêt " +
+               "prédisent de moins bons résultats.",
+           ja: "診察を(積極的なリハビリではなく)診断書中心に組み立てることは、すでに彼を" +
+               "害している活動回避を強めます。慢性非特異的腰痛では、可能な範囲で活動的でいて" +
+               "仕事を続けることが治療の一部です;長期の安静と休職はより悪い転帰を予測します。" } },
+  { id: "pen_reassure_scan", item: "history:15", points: 10,
+    title: { en: "Offered imaging to reassure, with no indication",
+             fr: "A proposé une imagerie pour rassurer, sans indication",
+             ja: "適応なしに、安心のための画像検査を申し出た" },
+    why: { en: "Ordering a scan you don't clinically need — to reassure rather than answer a " +
+               "question — usually backfires: with no indication it commonly shows incidental " +
+               "age-related changes that increase worry, trigger more tests and reinforce the " +
+               "belief that something is structurally wrong. Reassurance comes from the " +
+               "assessment and explanation, not the scan.",
+           fr: "Prescrire un examen dont vous n'avez pas besoin sur le plan clinique — pour " +
+               "rassurer plutôt que pour répondre à une question — se retourne généralement " +
+               "contre vous : sans indication, il montre souvent des modifications fortuites " +
+               "liées à l'âge qui augmentent l'inquiétude, déclenchent d'autres examens et " +
+               "renforcent la croyance en un problème structurel. La réassurance vient de " +
+               "l'évaluation et de l'explication, pas de l'examen.",
+           ja: "臨床的に必要のない検査を、疑問に答えるためではなく安心のために出すことは、" +
+               "たいてい裏目に出ます:適応がなければ、しばしば偶発的な加齢性変化を写し出し、" +
+               "不安を高め、追加検査を招き、構造的な問題があるという思い込みを強めます。" +
+               "安心は評価と説明から生まれるのであって、検査からではありません。" } },
+  { id: "pen_provoke_rom", item: "exam:8", points: 8,
+    title: { en: "Pushed range of movement to provoke pain",
+             fr: "A forcé les amplitudes pour provoquer la douleur",
+             ja: "可動域を限界まで強いて痛みを誘発した" },
+    why: { en: "A single gentle range-of-movement check already gave you what you need. " +
+               "Repeatedly pushing a guarded patient to the limit adds pain without adding " +
+               "clinical information and reinforces his fear that movement will damage his " +
+               "back — the opposite of the management plan's goal.",
+           fr: "Une seule évaluation douce des amplitudes vous a déjà donné l'information " +
+               "nécessaire. Pousser de façon répétée un patient en protection jusqu'à la " +
+               "limite ajoute de la douleur sans information clinique et renforce sa peur que " +
+               "le mouvement n'abîme son dos — l'inverse de l'objectif du plan de prise en " +
+               "charge.",
+           ja: "一度の軟らかい可動域チェックで必要な情報はすでに得られています。かばっている" +
+               "患者を限界まで繰り返し動かすことは、臨床情報を増やさずに痛みを加え、" +
+               "「動くと腰を傷める」という恐怖を強めます — 治療計画の目標とは正反対です。" } },
+  { id: "pen_scattergun_neuro", item: "exam:9", points: 6,
+    title: { en: "Added an unindicated upper-limb neuro exam",
+             fr: "A ajouté un examen neuro des membres supérieurs non indiqué",
+             ja: "適応のない上肢神経診察を追加した" },
+    why: { en: "Thoroughness is not the same as a focused examination. Nothing here points to " +
+               "the cervical cord or the upper limbs; examining them adds time and a veneer of " +
+               "rigour without changing the assessment, and makes the consultation feel like " +
+               "an undirected search.",
+           fr: "L'exhaustivité n'est pas un examen ciblé. Rien ici n'oriente vers la moelle " +
+               "cervicale ou les membres supérieurs ; les examiner ajoute du temps et un " +
+               "vernis de rigueur sans rien changer à l'évaluation, et donne à la consultation " +
+               "l'allure d'une recherche sans direction.",
+           ja: "網羅性は焦点を絞った診察とは異なります。本症例に頸髄や上肢を示唆する所見は" +
+               "何もありません;それらを診察しても評価を変えないまま時間と「厳密そうな見かけ」" +
+               "を加えるだけで、診察を当てもない探索のように感じさせます。" } }
 ];
 
 /* ===================== TEAM DECISIONS - vote together ======================

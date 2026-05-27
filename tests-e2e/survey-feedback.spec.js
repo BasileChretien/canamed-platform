@@ -91,6 +91,27 @@ test.describe("Wrap-up feedback survey", () => {
     expect(r.hints).toBeGreaterThanOrEqual(2);
   });
 
+  test("the questionnaire is gated behind the post-test (combined wrap-up flow)", async ({ page }) => {
+    await page.goto("/");
+    const r = await page.evaluate(() => {
+      const f = window._surveyReadyAfterPostTest;
+      if (typeof f !== "function") return null;
+      return {
+        noPostTest:      f(0, null),                       // no post-test → show now
+        postPending:     f(10, null),                      // post-test exists, untouched → wait
+        postPendingRec:  f(10, { startedAt: 1 }),          // started but not done → wait
+        postCompleted:   f(10, { completedAt: 123 }),      // done → show
+        postSkipped:     f(10, { skipped: true })          // skipped → show
+      };
+    });
+    expect(r, "_surveyReadyAfterPostTest must be exposed").not.toBeNull();
+    expect(r.noPostTest).toBe(true);
+    expect(r.postPending).toBe(false);
+    expect(r.postPendingRec).toBe(false);
+    expect(r.postCompleted).toBe(true);
+    expect(r.postSkipped).toBe(true);
+  });
+
   test("a Likert option records a selection (aria-checked)", async ({ page }) => {
     await page.goto("/");
     const checked = await page.evaluate(() => {
