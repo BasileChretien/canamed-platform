@@ -6865,23 +6865,36 @@ function buildButtons() {
         return fb;
       };
       const placed = {};
-      clusters.forEach(cluster => {
-        const sub = document.createElement("div");
+      clusters.forEach((cluster, ci) => {
+        // Each clinical category is a collapsible <details> (summary = the
+        // category label) so students can close categories they're done with
+        // and the section isn't a wall of buttons + revealed answers all at
+        // once (dry-run 2026-05-27). The first category of each section starts
+        // open as an entry point; the rest collapse. Re-rendering (room change
+        // / langchange) resets to this default, which is fine — it's a fresh
+        // build, not a state we need to persist.
+        const sub = document.createElement("details");
         sub.className = "req-category";
-        sub.setAttribute("role", "group");
+        if (ci === 0) sub.open = true;
         const label = (typeof tc === "function") ? tc(cluster.label, _curLang())
                                                  : (cluster.label.en || cluster.key);
-        const heading = document.createElement("p");
+        const heading = document.createElement("summary");
         heading.className = "req-category-label";
         heading.textContent = label;
-        sub.setAttribute("aria-label", label);
         sub.appendChild(heading);
+        // Buttons live in an inner wrapper that carries the group semantics
+        // (role/aria-label) — the <details> itself owns the disclosure role.
+        const items = document.createElement("div");
+        items.className = "req-category-items";
+        items.setAttribute("role", "group");
+        items.setAttribute("aria-label", label);
         order.forEach(i => {
           if (cluster.indices.indexOf(i) !== -1) {
-            sub.appendChild(_makeReqBtn(group, i));
+            items.appendChild(_makeReqBtn(group, i));
             placed[i] = true;
           }
         });
+        sub.appendChild(items);
         container.appendChild(sub);
       });
       // Safety net: never drop an item that lacks a category (e.g. a partially

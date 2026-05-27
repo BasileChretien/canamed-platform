@@ -1459,11 +1459,10 @@ html[data-theme="dark"] .next-step-coach {
 /* Clinical-category clusters (2026-05-26): History / Examination reveal
    buttons are grouped under a small category heading so the dense button wall
    reads as a few labelled clinical sections. Display-only — item indices are
-   unchanged. Each .req-category stacks its buttons exactly like a .btn-group. */
+   unchanged. Each category is a collapsible <details> (2026-05-27 dry-run): the
+   summary is the clinical label, and its buttons live in .req-category-items so
+   students can close categories they're done with. */
 .req-category {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s-2, 6px);
   margin-top: var(--s-3, 10px);
 }
 .req-category:first-child { margin-top: 0; }
@@ -1474,6 +1473,21 @@ html[data-theme="dark"] .next-step-coach {
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  cursor: pointer;
+  padding: var(--s-1, 4px) 0;
+  list-style: revert;   /* keep the native disclosure triangle (global reset hides it) */
+}
+.req-category-label:hover { color: var(--ink, #2a2a2a); }
+.req-category-label:focus-visible {
+  outline: 2px solid var(--primary, #1763a6);
+  outline-offset: 2px;
+  border-radius: var(--r-sm, 6px);
+}
+.req-category-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2, 6px);
+  margin-top: var(--s-2, 6px);
 }
 
 /* Inline citation badges on revealed findings — sim 2026-05-19
