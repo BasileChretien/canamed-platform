@@ -144,7 +144,7 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@1.3";   // bumped to force redeploy w/ Node 22 runtime
+const PROMPT_VERSION = "modA-llm@1.4";   // bumped to force redeploy of `enforceAppCheck: false` — previous attempts skipped
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
