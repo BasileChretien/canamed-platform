@@ -83,6 +83,7 @@ function emailEnabled() {
 exports.sendQueuedMail = onValueCreated({
   ref: "/sessions/{code}/mail/{id}",
   region: "europe-west1",        // co-located with the trigger (EU-resident data)
+  runtime: "nodejs22",           // explicit override; setGlobalOptions can be ignored on `update` ops
   secrets: [SMTP_PASS]
 }, async (event) => {
   const snap = event.data;
@@ -273,6 +274,7 @@ function _extractContent(j) {
 
 exports.hfPatient = onCall({
   region: "us-central1",
+  runtime: "nodejs22",          // explicit override; setGlobalOptions can be ignored on `update` ops
   enforceAppCheck: true,
   // consumeAppCheckToken intentionally FALSE (2026-05-28 review H7):
   // single-use consumption was rejecting legitimate workshop turns under
