@@ -495,6 +495,7 @@
       "modB.exchange.next": "Next →",
       "modB.exchange.counter": "Prompt {n} / {total}",
       "modB.exchange.done": "✓ You've worked through all six prompts. Move to Phase 4 to write your team's bullets.",
+      "modB.exchange.reply.placeholder": "Type a short note from your group's discussion — anyone in the room can edit and it autosaves.",
 
       // ────────────────────────────────────────────────────────────────
       // Natural-flow refactor (2026-05-18): the Module A "instructions"
