@@ -76,6 +76,7 @@
     var sigName = _str(data.signatureName, "Dr. Basile Chrétien");
     var sigTitle = _str(data.signatureTitle, "On behalf of the CaNaMED team");
     var certId = _str(data.certId, "");   // verification id (optional; QR + text when present)
+    var verifyUrl = _str(data.verifyUrl, ""); // public verify URL — QR encodes this when set, else the bare id
 
     var did = "attended the CaNaMED Franco-Japanese medical-education workshop"
       + (sessionLabel ? " — " + sessionLabel : "")
@@ -137,7 +138,7 @@
               ] },
             certId
               ? { width: "auto", alignment: "center", margin: [12, 0, 12, 0], stack: [
-                    { qr: certId, fit: 60, foreground: BRAND.ink, eccLevel: "M", alignment: "center" },
+                    { qr: (verifyUrl || certId), fit: 60, foreground: BRAND.ink, eccLevel: "M", alignment: "center" },
                     { text: "Verification ID", style: "certLbl", alignment: "center", margin: [0, 3, 0, 0] },
                     { text: certId, style: "certId", alignment: "center" }
                   ] }

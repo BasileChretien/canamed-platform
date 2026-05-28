@@ -163,6 +163,23 @@
       // (es/pt/de/ko/zh fall back to the EN body).
       "privacy.lang-not-available": "A full translation of this privacy policy in your selected language is not yet available. The English text below is the legally binding version. A reviewed <a href=\"privacy.html?lang=fr\">French</a> or <a href=\"privacy.html?lang=ja\">Japanese</a> version is also available.",
 
+      // verify.html — public certificate verification page (PIS v2 §18)
+      "verify.title": "Verify a CaNaMED certificate",
+      "verify.subtitle": "Confirm a certificate is genuine",
+      "verify.back": "← Back to the CaNaMED platform",
+      "verify.intro": "Enter the <strong>Verification ID</strong> printed on the certificate <strong>and</strong> the name on it. The page confirms whether they match a real CaNaMED certificate. The name is never published — only \"valid\" or \"no match\" is returned.",
+      "verify.id-label": "Verification ID",
+      "verify.name-label": "Name on the certificate",
+      "verify.button": "Verify",
+      "verify.required": "Please enter both the Verification ID and the name on the certificate.",
+      "verify.bad-format": "That doesn't look like a CaNaMED verification ID (expected CNM-XXXXX-XXXXX).",
+      "verify.checking": "Checking…",
+      "verify.valid": "✓ Valid: this is a real CaNaMED certificate",
+      "verify.no-match": "The name you entered does not match the certificate with that ID.",
+      "verify.not-found": "No CaNaMED certificate with that Verification ID.",
+      "verify.unavailable": "Verification is temporarily unavailable. Please try again later.",
+      "verify.privacy-note": "See section 18 of the <a href=\"privacy.html\">privacy policy</a> for what is stored, the retention period and how to remove an entry.",
+
       // splash — enter-code view (participants)
       "splash.enter.label": "Enter the session code your facilitator gave you",
       "splash.enter.placeholder": "e.g. ABC-DEF",

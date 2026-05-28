@@ -1766,7 +1766,7 @@ function readSession(hintId) {
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
    participant consented to. */
-const CONSENT_NOTICE_VERSION = "PIS-v1-2026-05";
+const CONSENT_NOTICE_VERSION = "PIS-v2-2026-05";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */
 function joinParticipant() {
@@ -1778,6 +1778,7 @@ function joinParticipant() {
   // analysis pipelines can skip participants who opted out
   const cWorkshop = !!(el("consent-workshop") && el("consent-workshop").checked);
   const cResearch = !!(el("consent-research") && el("consent-research").checked);
+  const cVerification = !!(el("consent-verification") && el("consent-verification").checked);
   if (!cWorkshop) {
     el("lobby-hint").textContent = tt(
       "lobby.consent-required-hint",
@@ -1807,6 +1808,7 @@ function joinParticipant() {
   myConsent = {
     workshop: cWorkshop,
     research: cResearch,
+    verification: cVerification,
     version: CONSENT_NOTICE_VERSION,
     at: Date.now()
   };
@@ -6439,26 +6441,78 @@ function downloadCertificatePdf() {
   const btn = el("wrapup-cert-btn");
   if (btn) btn.disabled = true;
   const loader = window.CanamedLoader || {};
-  const data = {
-    name: myName || "",
-    sessionCode: sessionNum || "",
-    sessionLabel: "",
-    dateStr: new Date().toLocaleDateString(),
-    partnership: "Université de Caen Normandie × Nagoya University",
-    competencies: CERT_COMPETENCIES,
-    // Deterministic verification id from (session, participant). The SAME value
-    // is recomputed in the facilitator's research export / attestation list
-    // (admin-tools participantRows), so a certificate can be checked against
-    // those records. Seeded on clientId — the key presence is stored under.
-    certId: (typeof canamedCertId === "function")
-      ? canamedCertId((sessionNum || "") + "|" + (clientId || ""))
-      : ""
-  };
+
+  // ID strategy:
+  //   • Facilitator-only verification (default, no extra consent): deterministic
+  //     id from (session, clientId) — recomputed in the research export so the
+  //     facilitator can check (name, id) against their records.
+  //   • Public verification (participant ticked the 3rd "make my certificate
+  //     independently verifiable" box, PIS v2 §18): a cryptographically random
+  //     id written write-once to /credentials/<id>, with only a one-way hash of
+  //     (name, session) — the public verify page confirms a match without ever
+  //     publishing the name. Cached per (session, clientId) in localStorage so
+  //     re-downloads keep the SAME id.
+  const wantVerify = !!(myConsent && myConsent.verification === true);
+  const detId = (typeof canamedCertId === "function")
+    ? canamedCertId((sessionNum || "") + "|" + (clientId || "")) : "";
+
+  function resolveCertId() {
+    if (!wantVerify) return Promise.resolve({ certId: detId, verifyUrl: "" });
+    if (typeof firebase === "undefined" || typeof randomCredentialId !== "function" ||
+        typeof credentialNameHash !== "function") {
+      return Promise.resolve({ certId: detId, verifyUrl: "" });
+    }
+    const cacheKey = "canamed_cred_" + (sessionNum || "") + "_" + (clientId || "");
+    const ID_RE = /^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/;
+    let cached = null;
+    try { cached = localStorage.getItem(cacheKey); } catch (e) { /* incognito etc. */ }
+    if (cached && ID_RE.test(cached)) {
+      return Promise.resolve({ certId: cached, verifyUrl: _verifyUrl(cached) });
+    }
+    return credentialNameHash(myName || "", sessionNum || "").then(function (nameHash) {
+      function attempt(triesLeft) {
+        const id = randomCredentialId();
+        const sessionLabel = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
+          typeof CANAMED_CONFIG.workshopName === "string")
+          ? String(CANAMED_CONFIG.workshopName).slice(0, 80) : "";
+        const payload = {
+          nameHash: nameHash,
+          session: (sessionNum || "").slice(0, 40),
+          sessionLabel: sessionLabel,
+          at: Date.now(),
+          retentionUntil: Date.now() + 10 * 365.25 * 24 * 60 * 60 * 1000
+        };
+        return firebase.database().ref("credentials/" + id).set(payload).then(function () {
+          try { localStorage.setItem(cacheKey, id); } catch (e) { /* non-fatal */ }
+          return { certId: id, verifyUrl: _verifyUrl(id) };
+        }, function (err) {
+          if (triesLeft > 0) return attempt(triesLeft - 1);
+          console.warn("credential write failed — falling back to deterministic id", err);
+          return { certId: detId, verifyUrl: "" };
+        });
+      }
+      return attempt(2);
+    }, function () {
+      return { certId: detId, verifyUrl: "" };
+    });
+  }
+
   if (typeof toast === "function") toast("⏳ Preparing your certificate…");
   Promise.resolve()
     .then(() => loader.ensurePdfmake ? loader.ensurePdfmake() : Promise.reject(new Error("loader")))
     .then(() => loader.ensureStudentPdf())
-    .then(() => {
+    .then(resolveCertId)
+    .then(function (id) {
+      const data = {
+        name: myName || "",
+        sessionCode: sessionNum || "",
+        sessionLabel: "",
+        dateStr: new Date().toLocaleDateString(),
+        partnership: "Université de Caen Normandie × Nagoya University",
+        competencies: CERT_COMPETENCIES,
+        certId: id.certId,
+        verifyUrl: id.verifyUrl
+      };
       if (window.CanamedPdf && typeof window.CanamedPdf.certificate === "function") {
         window.CanamedPdf.certificate(data);
       }
@@ -6467,6 +6521,18 @@ function downloadCertificatePdf() {
       if (typeof toast === "function") toast("Couldn't prepare the PDF — check your connection and try again.", "", "loss");
     })
     .then(() => { if (btn) btn.disabled = false; });
+}
+
+// Verify-page URL for a given credential id. Pegs to the live host (the cert
+// is taken offline + scanned anywhere), with a sensible fallback to whatever
+// origin served the platform — useful for staging and local dev.
+function _verifyUrl(id) {
+  const host = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
+    typeof CANAMED_CONFIG.verifyOrigin === "string" && CANAMED_CONFIG.verifyOrigin)
+    ? CANAMED_CONFIG.verifyOrigin
+    : (typeof location !== "undefined" && location.origin) ? location.origin
+    : "https://canamed-69785.web.app";
+  return host.replace(/\/+$/, "") + "/verify.html?id=" + encodeURIComponent(id);
 }
 
 /* Gather the session's reference cards (historical context, guidelines, recap

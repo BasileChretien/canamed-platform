@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light" />
+  <title>CaNaMED — Verify a certificate</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="privacy.css" />
+  <!-- Public verification page (PIS v2 §18). The verifier types the certificate
+       ID and the name printed on the certificate; the page reads the credential
+       node by exact ID, hashes the typed name + session, and confirms a match.
+       The name is never published; only "valid" / "no match" is returned. -->
+  <script src="purify.min.js" defer></script>
+  <script src="i18n.js" defer></script>
+  <script src="pure-utils.js?v=v25" defer></script>
+  <!-- Firebase compat SDK (self-hosting via gstatic; allowed by our CSP). The
+       /credentials/<id> rule is .read:true so no sign-in is required. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js" defer></script>
+  <script src="firebase-config.js?v=v25" defer></script>
+  <script src="verify.js?v=v25" defer></script>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="brand-lockup">
+        <svg class="brand-mark" viewBox="0 0 100 100" role="img" aria-label="CaNaMED">
+          <path class="arc-n" d="M32 18.8 A36 36 0 0 1 68 81.2" fill="none" stroke-width="9" stroke-linecap="round" />
+          <path class="arc-c" d="M32 81.2 A36 36 0 0 1 68 18.8" fill="none" stroke-width="9" stroke-linecap="round" />
+          <circle class="heart" cx="50" cy="14" r="6.5" />
+        </svg>
+        <div>
+          <h1 data-i18n="verify.title">Verify a CaNaMED certificate</h1>
+          <p class="sub" data-i18n="verify.subtitle">Confirm a certificate is genuine</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="privacy">
+    <p class="meta">
+      <a href="index.html" data-i18n="verify.back">← Back to the CaNaMED platform</a>
+    </p>
+
+    <p data-i18n="verify.intro">Enter the <strong>Verification ID</strong> printed on the certificate <strong>and</strong> the name on it. The page confirms whether they match a real CaNaMED certificate. The name is never published &mdash; only &ldquo;valid&rdquo; or &ldquo;no match&rdquo; is returned.</p>
+
+    <form id="verify-form" class="verify-form" autocomplete="off" novalidate>
+      <label class="verify-field">
+        <span class="verify-label" data-i18n="verify.id-label">Verification ID</span>
+        <input type="text" id="verify-id"
+               placeholder="CNM-XXXXX-XXXXX"
+               pattern="^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$"
+               spellcheck="false" autocapitalize="characters" inputmode="text"
+               required />
+      </label>
+      <label class="verify-field">
+        <span class="verify-label" data-i18n="verify.name-label">Name on the certificate</span>
+        <input type="text" id="verify-name" required spellcheck="false" />
+      </label>
+      <button type="submit" id="verify-submit" class="primary"
+              data-i18n="verify.button">Verify</button>
+    </form>
+
+    <p id="verify-result" class="verify-result" role="status" aria-live="polite"></p>
+
+    <p class="meta meta-bottom" data-i18n="verify.privacy-note" data-i18n-html>
+      See section 18 of the <a href="privacy.html">privacy policy</a> for what is stored, the retention period and how to remove an entry.
+    </p>
+  </main>
+</body>
+</html>
