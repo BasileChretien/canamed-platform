@@ -3222,6 +3222,31 @@ function startRoom() {
       if (typeof snap.val() !== "number") return refStage.set(0);
     }).catch(e => console.error("Stage init failed", e));
   }
+
+  // Per-room uid membership claim (introduced 2026-05-28 with the LLM-patient
+  // pilot). Write-once `rooms/<roomId>/uidMembers/<uid> = true`; the chat +
+  // scoring rules require this entry to read/write the LLM chat transcript,
+  // so a session-member who is NOT in this room cannot peek at its chat.
+  // Best-effort and safe to ignore on failure — only the LLM chat depends
+  // on it, and that path stays in stub mode for users without the claim.
+  try {
+    const auth = (typeof firebase !== "undefined" && firebase.auth) ? firebase.auth() : null;
+    const uid = auth && auth.currentUser && auth.currentUser.uid;
+    if (uid) {
+      db.ref(base + "/uidMembers/" + uid).transaction(cur => (cur == null ? true : undefined));
+    }
+  } catch (e) { /* LOCAL mode or auth not ready — chat falls back to stub */ }
+
+  // Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
+  // flag is on AND the IIFEs in modA-llm-init.js exposed window.modALLMInit
+  // (eager <script> tags in index.html). Failure here must NEVER block
+  // room entry — wrapped in try/catch and the function returns false when
+  // the flag is off, leaving the legacy click-button UI untouched.
+  try {
+    if (typeof window.modALLMInit === "function") window.modALLMInit();
+  } catch (e) {
+    console.warn("[modA LLM] init failed:", e);
+  }
 }
 
 /* ===================== ADMIN ===================== */

@@ -12,7 +12,7 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self';
                  script-src 'self' https://www.gstatic.com https://apis.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
-                 connect-src 'self' https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://accounts.google.com https://content-firebaseappcheck.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+                 connect-src 'self' https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://*.cloudfunctions.net https://*.run.app https://accounts.google.com https://content-firebaseappcheck.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
                  frame-src 'self' https://canamed-69785.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
                  style-src 'self';
                  img-src 'self' data: https://www.googleusercontent.com https://lh3.googleusercontent.com;
@@ -2996,6 +2996,17 @@
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
   <script src="script-loader.js?v=v25" defer></script>
+  <!-- Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
+       flag is on (URL ?llm=1 or localStorage canamedModALLM=1). The four
+       files are independent of each other except for load order:
+       modA-question-scoring relies on SCORING from case-content.js (loaded
+       lazily); the bridge and init are activated only after startRoom().
+       Kept as classic scripts (not modules) to share the global namespace
+       with script.js, same as every other file in this platform. -->
+  <script src="modA-question-scoring.js?v=v25" defer></script>
+  <script src="modA-llm-prompts.js?v=v25" defer></script>
+  <script src="modA-llm-bridge.js?v=v25" defer></script>
+  <script src="modA-llm-init.js?v=v25" defer></script>
   <script src="script.js?v=v25" defer></script>
   <!-- case-content.js, qrcode.js, tour.js and scenario-author.js are NOT
        in the initial HTML on purpose — they're injected by
