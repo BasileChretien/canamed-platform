@@ -328,6 +328,7 @@
   "modB.exchange.next": "Suivant →",
   "modB.exchange.counter": "Question {n} / {total}",
   "modB.exchange.done": "✓ Vous avez parcouru les six questions. Passez à la phase 4 pour rédiger les points de votre équipe.",
+  "modB.exchange.reply.placeholder": "Notez brièvement ce que votre groupe en a dit — n'importe qui dans la salle peut éditer et la sauvegarde est automatique.",
   "stage.modB.phase3.q1": "<strong>À qui est destinée l'information ?</strong> Quand la nouvelle est grave, qui est informé <em>en premier</em> — le patient ou la famille ? Est-ce ce que dit la loi, ce que dit le manuel, ou ce qui se passe réellement dans le service ? Nommez une chose commune entre la France et le Japon, et une chose qui <strong>diffère</strong>.",
   "stage.modB.phase3.q2": "<strong>Cela a-t-il changé ?</strong> L'annonce était-elle différente il y a 20 à 30 ans ? (Japon : la divulgation du diagnostic de cancer est passée de moins de ~30 % au début des années 1990 à ~94 % en 2016. France : la <em>loi Kouchner</em> de 2002 a transformé les droits à l'information.) Pourquoi les normes changent-elles — loi, générations, attentes ?",
   "stage.modB.phase3.q3": "<strong>La demande discrète de la famille — qu'avez-vous fait, et pourquoi ?</strong> Un médecin français répondrait-il de la même manière qu'un médecin japonais ? De quoi chacun a-t-il le plus peur — mentir au patient, ou lui faire du mal ? « Protéger quelqu'un d'une mauvaise nouvelle » est-ce de l'amour, ou lui retirer son choix — ou les deux ?",

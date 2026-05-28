@@ -208,6 +208,31 @@ test("rules: FINDING-07 — admin hash is unreadable; login verifies by proof-wr
   expect(overwrite).not.toBe("ALLOWED");
 });
 
+test("rules: a participant can save a Module B Phase-3 exchange reply, with validation enforced", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "exr-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const path = `sessions/${code}/rooms/Room 1/moduleB/exchangeReplies/0/${uid}`;
+
+  // A well-formed group note for the current prompt is allowed (mirrors the
+  // proven moduleA/promptReplies rule).
+  expect(await tryWrite(page, path, {
+    text: "In France the patient is told first; in Japan the family is often told first.",
+    by: "Emu Student", cid: uid, at: Date.now()
+  })).toBe("ALLOWED");
+
+  // Empty text is rejected (.validate requires length > 0).
+  const empty = await tryWrite(page, path, { text: "", by: "Emu", cid: uid, at: Date.now() });
+  expect(empty).not.toBe("ALLOWED");
+
+  // Over-long text (> 600) is rejected.
+  const long = await tryWrite(page, path, { text: "x".repeat(601), by: "Emu", cid: uid, at: Date.now() });
+  expect(long).not.toBe("ALLOWED");
+
+  // Clearing the note (null) is allowed — that's how the autosave deletes.
+  expect(await tryWrite(page, path, null)).toBe("ALLOWED");
+});
+
 test("rules: a write to a denied path is rejected (rules ARE enforced)", async ({ page }) => {
   await page.goto("/");
   // Wait for the app to finish anonymous sign-in so a write is even attempted.

@@ -16,11 +16,54 @@
 
   var BRAND = { ink: "#16335c", accent: "#2563eb", muted: "#5b6b7b", gold: "#e7b800", line: "#c9bd9c" };
 
+  /* The workshop director's signature, as a base64 PNG data URL (transparent
+   * background, ~600×200). Empty by default — drop the scan in here (or pass
+   * data.signatureDataUrl) and the certificate renders the real signature above
+   * the name; until then it falls back to a blank signature line. */
+  var SIGNATURE_DATAURL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMcAAABZCAYAAACKaTD1AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAACEJSURBVHhe7d11qyxH1wXw93PlIySEkD8SCEkgStw9N+7u7u7u7u7u7u5u/fIrWJd6mpl7Ro9NLyi6p6e81t61966ec/6v6dChQ090wtGhQx90wtED//77b0n//fdfSX///Xfz119/lWc//fRTuf/999+bP//8s/n444+bTz75pPn+++9LXs/++OOPkuRLHUkdlg464agQoZAQ+5dffimCAa6fffZZ8/zzzzcXX3xxc/TRRzdnn312c9111zWXX355c8UVVzQ33HBD8+ijjzZffvll89tvvzX//PNPJxxLGJ1wVEBmggGE4auvvmqeeeaZ5pprrimCcM455zS33HJL2SkQ3S5BCD7//PPm1VdfbR577LHmqquuas4888zmiCOOaD766KNOOJYwOuFogTn00ksvFYIfd9xxza233to8++yzRQCYVITBVT4CZHeJiWW3+eGHH8r1ww8/bE444YROOJYwZko4kFayOyCqe8S2Y/AZbr/99uaCCy4o2v/tt99euYsMg5hk6nzxxRebyy67bKXwSB0GQ1uptNN8YKaEA2ElZI3m//XXX4vZtGLFiuaOO+5oPv300/I9go8CC5ey2rID/fjjj+WzXafDYGgLQzvNB2ZKOGj1ONj8ibvuuqs41rfddlshdCJMYAGQexTYIbSj/CmnnNJ888035fOoAjeLaAtDO80HZm7nsFPwIy666KLmueeeK58Jzc8//1y+d++Z+1EWwe6gnHpc7Rzq+vbbb4t/0mEwRAj6pfnAshKO7ApgApGStqbJkf/xxx8vQiEC5btp+AAJ4ar766+/LtEt0A8CM4sIobObZhd1DdHt2nVKmaSFwLISjkysibcISc4ehGKffvrpEk3yDImnQVYLaecBZyDOPLSnLX2bBZiD7JyQdQjcR2mZKz6Za50iFEkLgWW3c2RRXBHzyiuvLGZUwrARHpjGpGtD/SJV2TUihGl3uSPzTwisSdZFoEPAw2Gq9SAEBMS8RAj6pYXAshKOTCRNdP/99xehYOtbGELhKlkQCzYNs8pCExAhXK+WIAQgykIt8kLBXNipHYaaC6atkHl8L/ORdcjaJGUt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";
+
   function _str(v, fallback) {
     return (v != null && String(v).trim()) ? String(v).trim() : (fallback || "");
   }
 
-  /* A4 landscape certificate of attendance. Pure: returns the pdfmake doc. */
+  /* A small vector gold seal/rosette (concentric rings + an 8-point burst),
+   * drawn with pdfmake canvas so it needs no image or font. Centred at (cx,cy). */
+  function _seal(cx, cy) {
+    var burst = [];
+    for (var i = 0; i < 8; i++) {
+      var a = (Math.PI / 4) * i;
+      burst.push({ type: "line",
+        x1: cx + Math.cos(a) * 9, y1: cy + Math.sin(a) * 9,
+        x2: cx + Math.cos(a) * 19, y2: cy + Math.sin(a) * 19,
+        lineWidth: 1.4, lineColor: BRAND.gold });
+    }
+    return [
+      { type: "ellipse", x: cx, y: cy, r1: 27, r2: 27, lineWidth: 1.2, lineColor: BRAND.gold },
+      { type: "ellipse", x: cx, y: cy, r1: 21, r2: 21, lineWidth: 0.8, lineColor: BRAND.gold },
+      { type: "ellipse", x: cx, y: cy, r1: 6, r2: 6, color: BRAND.gold }
+    ].concat(burst);
+  }
+
+  /* Strip emoji / pictographs from text destined for the PDF. pdfmake's bundled
+   * font is Roboto, which has no colour-emoji glyphs, so a 📋 / ✓ / 🇫🇷 in a card
+   * heading or recap cell renders as an empty "tofu" box. The live cards use
+   * these decoratively; the booklet reads cleaner without them. Keeps ordinary
+   * punctuation, accents and dashes (— …) untouched. */
+  function _deEmoji(v) {
+    if (v == null) return "";
+    return String(v)
+      .replace(/[\u{1F000}-\u{1FAFF}]/gu, "")   // emoji & pictographs (📋 🎯 🗳️ …)
+      .replace(/[\u{1F1E6}-\u{1F1FF}]/gu, "")   // regional-indicator flags (🇫🇷 🇯🇵)
+      .replace(/[\u{2600}-\u{27BF}]/gu, "")     // misc symbols + dingbats (✓ ✗ ☀ ✏)
+      .replace(/[\u{2B00}-\u{2BFF}]/gu, "")      // misc symbols & arrows (⭐ ⬆)
+      .replace(/[\u{FE00}-\u{FE0F}\u{200D}]/gu, "") // variation selectors + ZWJ
+      .replace(/\s{2,}/g, " ")
+      .trim();
+  }
+
+  /* A4 landscape certificate of attendance. Pure: returns the pdfmake doc.
+   * Honours data.signatureDataUrl (base64 PNG) → SIGNATURE_DATAURL fallback;
+   * with no image it draws a blank signature line instead. */
   function buildCertificateDocDefinition(data) {
     data = data || {};
     var name = _str(data.name, "Participant");
@@ -29,27 +72,43 @@
     var sessionLabel = _str(data.sessionLabel, "");
     var sessionCode = _str(data.sessionCode, "—");
     var comps = Array.isArray(data.competencies) ? data.competencies.filter(Boolean) : [];
+    var sigUrl = _str(data.signatureDataUrl, SIGNATURE_DATAURL);
+    var sigName = _str(data.signatureName, "Dr. Basile Chrétien");
+    var sigTitle = _str(data.signatureTitle, "On behalf of the CaNaMED team");
 
     var did = "attended the CaNaMED Franco-Japanese medical-education workshop"
       + (sessionLabel ? " — " + sessionLabel : "")
       + " on " + dateStr + ", taking part in structured clinical reasoning and a "
       + "breaking-bad-news roleplay, and practising:";
 
+    // Signature mark: the scanned signature if supplied, else a blank ruled line.
+    var sigMark = sigUrl
+      ? { image: sigUrl, fit: [190, 64], margin: [0, 0, 0, 2] }
+      : { canvas: [{ type: "line", x1: 0, y1: 56, x2: 200, y2: 56, lineWidth: 0.8, lineColor: BRAND.ink }] };
+
     return {
       pageSize: "A4",
       pageOrientation: "landscape",
-      pageMargins: [64, 70, 64, 56],
+      pageMargins: [70, 58, 70, 52],
       info: { title: "CaNaMED — Certificate of Attendance", author: "CaNaMED" },
       defaultStyle: { font: "Roboto", color: BRAND.ink, fontSize: 12 },
-      // Decorative double border + a gold accent rule under the wordmark.
+      // Decorative double border, gold corner flourishes + a faint gold seal.
       background: function (currentPage, pageSize) {
+        var W = pageSize.width, H = pageSize.height, m = 22, m2 = 30, c = 26;
         return {
           canvas: [
-            { type: "rect", x: 22, y: 22, w: pageSize.width - 44, h: pageSize.height - 44,
-              lineWidth: 2, lineColor: BRAND.ink },
-            { type: "rect", x: 30, y: 30, w: pageSize.width - 60, h: pageSize.height - 60,
-              lineWidth: 0.75, lineColor: BRAND.line }
-          ]
+            { type: "rect", x: m, y: m, w: W - 2 * m, h: H - 2 * m, lineWidth: 2, lineColor: BRAND.ink },
+            { type: "rect", x: m2, y: m2, w: W - 2 * m2, h: H - 2 * m2, lineWidth: 0.75, lineColor: BRAND.line },
+            // four gold corner brackets
+            { type: "line", x1: m2, y1: m2 + c, x2: m2, y2: m2, lineWidth: 2, lineColor: BRAND.gold },
+            { type: "line", x1: m2, y1: m2, x2: m2 + c, y2: m2, lineWidth: 2, lineColor: BRAND.gold },
+            { type: "line", x1: W - m2 - c, y1: m2, x2: W - m2, y2: m2, lineWidth: 2, lineColor: BRAND.gold },
+            { type: "line", x1: W - m2, y1: m2, x2: W - m2, y2: m2 + c, lineWidth: 2, lineColor: BRAND.gold },
+            { type: "line", x1: m2, y1: H - m2 - c, x2: m2, y2: H - m2, lineWidth: 2, lineColor: BRAND.gold },
+            { type: "line", x1: m2, y1: H - m2, x2: m2 + c, y2: H - m2, lineWidth: 2, lineColor: BRAND.gold },
+            { type: "line", x1: W - m2 - c, y1: H - m2, x2: W - m2, y2: H - m2, lineWidth: 2, lineColor: BRAND.gold },
+            { type: "line", x1: W - m2, y1: H - m2 - c, x2: W - m2, y2: H - m2, lineWidth: 2, lineColor: BRAND.gold }
+          ].concat(_seal(W - 96, H - 104))
         };
       },
       content: [
@@ -58,13 +117,26 @@
         { canvas: [{ type: "line", x1: 0, y1: 0, x2: 120, y2: 0, lineWidth: 2.5, lineColor: BRAND.gold }],
           alignment: "center", margin: [0, 6, 0, 0] },
         { text: partnership, style: "subtitle" },
-        { text: "This certifies that", style: "line", margin: [0, 26, 0, 2] },
+        { text: "This certifies that", style: "line", margin: [0, 20, 0, 2] },
         { text: name, style: "name" },
-        { text: did, style: "line", margin: [70, 10, 70, 6], alignment: "center" },
+        { text: did, style: "line", margin: [70, 8, 70, 6], alignment: "center" },
         comps.length
           ? { ul: comps, style: "comps", margin: [0, 0, 0, 0] }
           : { text: "" },
-        { text: "Issued " + dateStr + "  ·  Session " + sessionCode, style: "foot", margin: [0, 30, 0, 0] }
+        { text: "Language of instruction: English", style: "lang", margin: [0, 12, 0, 0] },
+        // Signature (left) + issue details (right), anchored toward the foot.
+        { columns: [
+            { width: "*", stack: [
+                sigMark,
+                { canvas: [{ type: "line", x1: 0, y1: 0, x2: 200, y2: 0, lineWidth: 0.8, lineColor: BRAND.ink }], margin: [0, 0, 0, 3] },
+                { text: sigName, style: "sigName" },
+                { text: sigTitle, style: "sigTitle" }
+              ] },
+            { width: "auto", stack: [
+                { text: "Issued " + dateStr, style: "foot", alignment: "right" },
+                { text: "Session " + sessionCode, style: "foot", alignment: "right" }
+              ] }
+          ], columnGap: 24, margin: [0, 26, 0, 0] }
       ],
       styles: {
         kicker:   { fontSize: 11, characterSpacing: 3, color: BRAND.muted, alignment: "center", bold: true },
@@ -73,7 +145,10 @@
         line:     { fontSize: 12, alignment: "center", lineHeight: 1.3 },
         name:     { fontSize: 26, bold: true, color: BRAND.accent, alignment: "center", margin: [0, 4, 0, 4] },
         comps:    { fontSize: 12, color: BRAND.ink },
-        foot:     { fontSize: 10, color: BRAND.muted, alignment: "center" }
+        lang:     { fontSize: 10.5, italics: true, color: BRAND.muted, alignment: "center" },
+        sigName:  { fontSize: 12, bold: true, color: BRAND.ink },
+        sigTitle: { fontSize: 9.5, color: BRAND.muted },
+        foot:     { fontSize: 10, color: BRAND.muted }
       }
     };
   }
@@ -100,12 +175,14 @@
     var out = [];
     (blocks || []).forEach(function (b) {
       if (!b) return;
-      if (b.type === "p" && b.text) out.push({ text: b.text, style: "para" });
-      else if (b.type === "sub" && b.text) out.push({ text: b.text, style: "h3" });
-      else if (b.type === "ul" && Array.isArray(b.items) && b.items.length) out.push({ ul: b.items, style: "list" });
-      else if (b.type === "table" && Array.isArray(b.rows) && b.rows.length) {
+      if (b.type === "p" && b.text) out.push({ text: _deEmoji(b.text), style: "para" });
+      else if (b.type === "sub" && b.text) out.push({ text: _deEmoji(b.text), style: "h3" });
+      else if (b.type === "ul" && Array.isArray(b.items) && b.items.length) {
+        out.push({ ul: b.items.map(_deEmoji).filter(Boolean), style: "list" });
+      } else if (b.type === "table" && Array.isArray(b.rows) && b.rows.length) {
+        var body = b.rows.map(function (row) { return row.map(_deEmoji); });
         out.push({
-          table: { headerRows: b.header ? 1 : 0, widths: b.rows[0].map(function () { return "*"; }), body: b.rows },
+          table: { headerRows: b.header ? 1 : 0, widths: b.rows[0].map(function () { return "*"; }), body: body },
           layout: "lightHorizontalLines", style: "table", margin: [0, 4, 0, 12]
         });
       }
@@ -128,23 +205,38 @@
     content.push({ canvas: [{ type: "line", x1: 0, y1: 0, x2: 140, y2: 0, lineWidth: 3, lineColor: BRAND.gold }], alignment: "center", margin: [0, 8, 0, 0] });
     content.push({ text: "Session study booklet", style: "coverTitle" });
     content.push({ text: partnership, style: "coverSub" });
-    if (name) content.push({ text: "Prepared for " + name, style: "coverName", margin: [0, 28, 0, 0] });
+    if (name) content.push({ text: "Prepared for " + _deEmoji(name), style: "coverName", margin: [0, 28, 0, 0] });
     content.push({ text: "Session " + sessionCode + "  ·  " + dateStr, style: "coverMeta" });
     content.push({ text: "Keep this to revise from — the historical background, the guideline standards, and a quick recap of each module.", style: "coverBlurb", margin: [60, 40, 60, 0] });
 
-    // Reference sections (from the live session cards)
+    // Clickable table of contents on its own page. Each heading below opts in
+    // with tocItem:true, so pdfmake generates the entries + page numbers and
+    // links each one to its heading (clickable in any PDF viewer).
+    content.push({ text: "Contents", style: "tocTitle", pageBreak: "before" });
+    content.push({ canvas: [{ type: "line", x1: 0, y1: 0, x2: 120, y2: 0, lineWidth: 2.5, lineColor: BRAND.gold }], margin: [0, 6, 0, 16] });
+    content.push({ toc: { textStyle: "tocEntry", numberStyle: "tocPage" } });
+
+    // A small accent rule under a section heading, for a cleaner look.
+    function headingRule() {
+      return { canvas: [{ type: "line", x1: 0, y1: 0, x2: 64, y2: 0, lineWidth: 2, lineColor: BRAND.accent }], margin: [0, 0, 0, 10] };
+    }
+
+    // Reference sections (from the live session cards). Each starts a fresh page
+    // so the TOC stands alone and sections don't run together.
     sections.forEach(function (sec, i) {
-      content.push({ text: sec.title || "", style: "h1", pageBreak: i === 0 ? "before" : undefined });
+      content.push({ text: _deEmoji(sec.title) || ("Section " + (i + 1)), style: "h1", tocItem: true, tocStyle: "tocEntry", pageBreak: "before" });
+      content.push(headingRule());
       _sectionBlocks(sec.blocks).forEach(function (blk) { content.push(blk); });
     });
 
     // Your team
-    content.push({ text: "Your team", style: "h1", pageBreak: "before" });
-    if (team.name) content.push({ text: team.name, style: "teamName" });
+    content.push({ text: "Your team", style: "h1", tocItem: true, tocStyle: "tocEntry", pageBreak: "before" });
+    content.push(headingRule());
+    if (team.name) content.push({ text: _deEmoji(team.name), style: "teamName" });
     if (typeof team.score === "number") content.push({ text: team.score + " points earned today", style: "teamScore" });
     if (Array.isArray(team.wins) && team.wins.length) {
       content.push({ text: "What your team did well", style: "h2" });
-      content.push({ ul: team.wins, style: "list" });
+      content.push({ ul: team.wins.map(_deEmoji).filter(Boolean), style: "list" });
     }
     if (Array.isArray(team.cohort) && team.cohort.length) {
       content.push({ text: "How the room compares", style: "h2" });
@@ -152,7 +244,7 @@
       var rows = team.cohort.map(function (r) {
         var w = Math.max(2, Math.round(((r.score || 0) / max) * 150));
         return [
-          { text: (r.label || "") + (r.you ? "  ← your team" : ""), bold: !!r.you, color: r.you ? BRAND.accent : BRAND.ink },
+          { text: _deEmoji(r.label || "") + (r.you ? "  ← your team" : ""), bold: !!r.you, color: r.you ? BRAND.accent : BRAND.ink },
           { text: String(r.score || 0), alignment: "right" },
           { canvas: [{ type: "rect", x: 0, y: 3, w: w, h: 9, r: 2, color: r.you ? BRAND.accent : BRAND.line }] }
         ];
@@ -177,6 +269,9 @@
         coverName:   { fontSize: 14, bold: true, alignment: "center" },
         coverMeta:   { fontSize: 11, color: BRAND.muted, alignment: "center", margin: [0, 4, 0, 0] },
         coverBlurb:  { fontSize: 11, color: BRAND.muted, alignment: "center", italics: true },
+        tocTitle:    { fontSize: 24, bold: true, color: BRAND.ink, margin: [0, 0, 0, 0] },
+        tocEntry:    { fontSize: 12.5, color: BRAND.ink, margin: [0, 5, 0, 5] },
+        tocPage:     { fontSize: 12.5, color: BRAND.muted },
         h1:          { fontSize: 18, bold: true, color: BRAND.ink, margin: [0, 6, 0, 8] },
         h2:          { fontSize: 14, bold: true, color: BRAND.accent, margin: [0, 14, 0, 6] },
         h3:          { fontSize: 12, bold: true, color: BRAND.ink, margin: [0, 8, 0, 4] },
