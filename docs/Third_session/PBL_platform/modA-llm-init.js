@@ -20,6 +20,23 @@
   "use strict";
   if (typeof window === "undefined") return;
 
+  // Auto-promote ?llm=1 to localStorage as soon as this script loads.
+  // Reason: the platform's join flow (splash → lobby → session → room) is a
+  // multi-step internal navigation. The original URL's query string gets
+  // stripped along the way, so by the time startRoom() calls modALLMInit(),
+  // ?llm=1 is gone and the flag check fails. Persisting to localStorage on
+  // FIRST page-load makes the flag survive the entire flow.
+  try {
+    var _initialParams = new URLSearchParams(location.search);
+    if (_initialParams.get("llm") === "1" && window.localStorage) {
+      localStorage.setItem("canamedModALLM", "1");
+    }
+    // Opt-out path: ?llm=0 clears the flag (for facilitator demos / debug).
+    if (_initialParams.get("llm") === "0" && window.localStorage) {
+      localStorage.removeItem("canamedModALLM");
+    }
+  } catch (_) { /* private mode / locked-down env — fall back to URL-only check */ }
+
   function _flagOn() {
     try {
       var p = new URLSearchParams(location.search);
