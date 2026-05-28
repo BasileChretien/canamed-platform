@@ -185,7 +185,23 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     downloadCertificatePdf, gated on the new third consent tickbox).
 //     verify.html itself is a separate entry — not on the splash critical
 //     path, not counted here.
-const FIRST_PARTY_BYTES_LIMIT_KB = 285;
+//
+//   2026-05-28: Module A LLM-patient pilot — bumped to 320. NET +20 KB gz:
+//     four new eager scripts on the splash bundle (modA-question-scoring.js
+//     ~2 KB, modA-llm-prompts.js ~3 KB, modA-llm-bridge.js ~4 KB,
+//     modA-llm-init.js ~3 KB), plus the new SCORING.moduleA_questions +
+//     moduleA_question_penalties blocks in case-content.js with EN/FR/JA
+//     keyword stems (~3 KB), plus the modA.chat.* i18n keys (~3 KB), plus
+//     the chat panel CSS in style.css (~2 KB). Justification: the LLM
+//     pilot is a deliberately-eager feature — it MUST be loaded by the
+//     time startRoom() runs (mid-flow, not on idle prefetch) or the chat
+//     panel can't mount when the student lands in Module A. Lazy-loading
+//     via script-loader.js IS the right long-term move (the four files
+//     are NOT splash-critical — they're idle until a user is actively in
+//     a room with the ?llm=1 flag on); tracked as follow-up work post-
+//     pilot. For now the +20 KB buys "feature loads in time, no race
+//     conditions, no extra ensure*() complexity in the join chain."
+const FIRST_PARTY_BYTES_LIMIT_KB = 320;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

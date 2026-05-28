@@ -158,6 +158,7 @@ var CASE = {
       q: { en: "So, shall I write the oxycodone now — tablets or patches?",
            fr: "Alors, je vous prescris l'oxycodone tout de suite — comprimés ou patchs ?",
            ja: "では、オキシコドンを今すぐ処方しましょうか — 錠剤と貼付剤、どちらにしますか?" },
+      narratorOnly: true,
       a: { en: "He looks startled but pleased: \"Tablets, I suppose - thank you, doctor.\" (You have just promised a strong opioid before assessing his pain, screening red flags or agreeing a plan with him - and you have made the rest of the consultation about confirming that promise, not exploring the request.)",
            fr: "Il a l'air surpris mais content : « Des comprimés, je suppose — merci, docteur. » (Vous venez de promettre un opioïde fort avant d'avoir évalué la douleur, dépisté les drapeaux rouges ou élaboré un plan partagé avec lui — et vous avez fait du reste de la consultation la confirmation de cette promesse, plutôt que l'exploration de la demande.)",
            ja: "彼は驚きながらも嬉しそうな表情で言います:「錠剤で、お願いします — ありがとうございます、先生。」(あなたは痛みの評価も、レッドフラッグのスクリーニングも、共有された計画づくりも行わないまま、強オピオイドを約束してしまいました — そして残りの診察は、要望を掘り下げるのではなく、その約束を確認するだけのものになってしまいました。)" } },
@@ -165,6 +166,7 @@ var CASE = {
       q: { en: "Agree to a short \"trial\" of oxycodone now and review in two weeks, to keep him onside.",
            fr: "Accepter un court « essai » d'oxycodone maintenant, à réévaluer dans deux semaines, pour le garder de votre côté.",
            ja: "彼との関係を保つため、まずオキシコドンを短期間「試して」みることに同意し、2週間後に再評価する。" },
+      narratorOnly: true,
       a: { en: "He looks relieved and grateful — but the script has now been started. (A short 'trial' feels like a reasonable compromise, yet starting a strong opioid for chronic non-specific low-back pain — no red flags, first-line care not yet tried — has limited benefit and real risks of tolerance and dependence, and a two-week 'trial' is hard to stop once begun. The evidence does not support opioids here; the task is to explore the request and build a non-opioid plan together.)",
            fr: "Il paraît soulagé et reconnaissant — mais l'ordonnance est désormais lancée. (Un court « essai » semble un compromis raisonnable, pourtant débuter un opioïde fort dans une lombalgie chronique non spécifique — sans drapeau rouge, sans avoir essayé le traitement de première intention — apporte un bénéfice limité et de réels risques de tolérance et de dépendance, et un « essai » de deux semaines est difficile à arrêter une fois commencé. Les données ne soutiennent pas les opioïdes ici ; le travail consiste à explorer la demande et à construire ensemble un plan sans opioïde.)",
            ja: "彼は安堵し、感謝した様子です — しかし、もう処方は始まってしまいました。(短期間の「試し」は妥当な妥協に思えますが、慢性非特異的腰痛 — レッドフラッグなし、第一選択治療も未試行 — に対して強オピオイドを開始することは、得られる利益は限られ、耐性・依存という現実的なリスクを伴います。そして2週間の「試し」は、いったん始めると中止が難しいものです。ここではエビデンスはオピオイドを支持しません;すべきことは、要望を掘り下げ、オピオイドに頼らない計画を一緒に作ることです。)" } },
@@ -176,6 +178,7 @@ var CASE = {
       q: { en: "Reassure him right now that this is \"definitely nothing serious\" — before you've finished screening for red flags.",
            fr: "Rassurez-le immédiatement en lui disant que « ce n'est sûrement rien de grave » — avant même d'avoir terminé le dépistage des drapeaux rouges.",
            ja: "レッドフラッグのスクリーニングを終える前に、「これはきっと何も重大なものではありません」と今すぐ患者を安心させる。" },
+      narratorOnly: true,
       a: { en: "He looks relieved for a moment, then uneasy: \"But you haven't really checked me over yet…\" (You have closed the assessment with a promise you cannot yet make. Premature reassurance — before the red-flag screen and examination are complete — both risks missing a serious cause and rings hollow to an anxious patient, deepening his worry rather than easing it.)",
            fr: "Il paraît soulagé un instant, puis mal à l'aise : « Mais vous ne m'avez pas encore vraiment examiné… » (Vous avez clos l'évaluation par une promesse que vous ne pouvez pas encore tenir. Une réassurance prématurée — avant d'avoir terminé le dépistage des drapeaux rouges et l'examen — risque à la fois de passer à côté d'une cause grave et de sonner faux pour un patient anxieux, aggravant son inquiétude au lieu de l'apaiser.)",
            ja: "彼は一瞬ほっとした表情を見せますが、すぐに不安そうになります:「でも、まだちゃんと診てもらっていませんよね…」(あなたはまだできない約束で評価を打ち切ってしまいました。レッドフラッグのスクリーニングと診察を終える前の早すぎる安心づけは、重大な原因を見落とすリスクがあると同時に、不安な患者には空虚に響き、不安を和らげるどころか深めてしまいます。)" },
@@ -186,6 +189,7 @@ var CASE = {
       q: { en: "Cut the conversation short and refer him straight to the pain clinic, so it is no longer your problem.",
            fr: "Écourtez la conversation et adressez-le directement au centre de la douleur, pour que ce ne soit plus votre problème.",
            ja: "会話を切り上げ、彼をすぐにペインクリニックに紹介して、自分の担当する問題ではなくする。" },
+      narratorOnly: true,
       a: { en: "\"So you're passing me on as well.\" He leaves deflated. (Reflexly referring red-flag-free, non-specific low-back pain — without exploring the request, screening, or starting first-line care — abandons the therapeutic relationship and medicalises a problem best held in primary care. Referral is for red flags, diagnostic doubt, or failed first-line management.)",
            fr: "« Alors vous aussi, vous vous débarrassez de moi. » Il repart abattu. (Adresser par réflexe une lombalgie non spécifique sans drapeau rouge — sans explorer la demande, dépister, ni instaurer un traitement de première intention — abandonne la relation thérapeutique et médicalise un problème qui relève des soins primaires. L'adressage est justifié par des drapeaux rouges, un doute diagnostique ou l'échec du traitement de première ligne.)",
            ja: "「先生も私を厄介払いするんですね。」彼は落胆して帰っていきます。(レッドフラッグのない非特異的腰痛を、要望を掘り下げることも、スクリーニングも、第一選択の治療を始めることもせずに反射的に紹介することは、治療関係を放棄し、本来プライマリ・ケアで扱うべき問題を医療化してしまいます。紹介が適応となるのは、レッドフラッグ、診断的な疑い、または第一選択治療が無効だった場合です。)" } }
@@ -199,6 +203,7 @@ var CASE = {
       q: { en: "Reassure him that 8 months \"isn't that long\" for back pain and it will most likely settle on its own.",
            fr: "Le rassurer en disant que 8 mois « ce n'est pas si long » pour un mal de dos et que cela va très probablement se résorber tout seul.",
            ja: "腰痛なら8か月は「そんなに長くはない」、おそらく自然に治まるだろうと安心させる。" },
+      narratorOnly: true,
       a: { en: "He nods politely but looks unconvinced: \"That's what I keep being told…\" (Telling a patient with 8 months of pain and clear distress that it 'isn't that long' minimises his experience and ignores the yellow flags — fear of movement, low mood, broken sleep — that are actually driving his presentation. Blanket reassurance that skips those concerns rarely reassures, and can leave him feeling unheard.)",
            fr: "Il hoche poliment la tête mais paraît peu convaincu : « C'est ce qu'on n'arrête pas de me dire… » (Dire à un patient qui souffre depuis 8 mois et manifestement en détresse que « ce n'est pas si long » minimise son vécu et ignore les drapeaux jaunes — peur du mouvement, humeur basse, sommeil haché — qui sont en réalité au cœur de son tableau. Une réassurance globale qui élude ces préoccupations rassure rarement et peut le laisser avec le sentiment de ne pas être entendu.)",
            ja: "彼は礼儀正しくうなずきますが、納得していない様子です:「みんなにそう言われるんです…」(8か月痛みが続き、明らかに苦しんでいる患者に「そんなに長くない」と言うことは、その体験を軽視し、彼の症状の根底にあるイエローフラッグ — 運動恐怖、抑うつ気分、途切れる睡眠 — を無視しています。これらの懸念を飛ばした一律の安心づけは、ほとんど安心につながらず、患者に「話を聞いてもらえなかった」という思いを残しかねません。)" } },
@@ -206,6 +211,7 @@ var CASE = {
       q: { en: "Treat the visit mainly as a sick-note request and focus on certifying time off work.",
            fr: "Traiter la consultation surtout comme une demande d'arrêt de travail et se concentrer sur la délivrance d'un certificat d'arrêt.",
            ja: "受診を主に診断書(休職)の依頼として扱い、休職を証明することに重点を置く。" },
+      narratorOnly: true,
       a: { en: "\"So you think I should stop working?\" he asks, uncertain. (Framing the consultation around time off — rather than active rehabilitation — reinforces the activity avoidance that already has him off the gym and barely walking. For chronic non-specific low-back pain, staying active and at work where possible is part of the treatment; prolonged rest and sick leave predict worse outcomes.)",
            fr: "« Alors vous pensez que je devrais arrêter de travailler ? » demande-t-il, hésitant. (Centrer la consultation sur l'arrêt de travail — plutôt que sur la rééducation active — renforce l'évitement de l'activité qui le tient déjà éloigné de la salle de sport et le fait à peine marcher. Dans la lombalgie chronique non spécifique, rester actif et au travail quand c'est possible fait partie du traitement ; le repos prolongé et l'arrêt de travail prédisent de moins bons résultats.)",
            ja: "「では、仕事を休んだほうがいいということですか?」と彼は不安げに尋ねます。(診察を(積極的なリハビリではなく)休職を中心に組み立てることは、すでにジムに行けず、ほとんど歩けなくなっている彼の活動回避をさらに強めます。慢性非特異的腰痛では、可能な範囲で活動的でいて仕事を続けることが治療の一部です;長期の安静と休職は、より悪い転帰を予測します。)" } },
@@ -213,6 +219,7 @@ var CASE = {
       q: { en: "Offer to arrange an MRI \"to be safe and to reassure him\", since he is worried something serious is being missed.",
            fr: "Proposer d'organiser une IRM « par sécurité et pour le rassurer », puisqu'il craint qu'on passe à côté de quelque chose de grave.",
            ja: "重大なものを見落とされているのではと心配しているので、「念のため、そして本人を安心させるために」MRIを手配すると申し出る。" },
+      narratorOnly: true,
       a: { en: "He brightens: \"Yes — that would put my mind at rest.\" (But ordering imaging you don't clinically need, to reassure rather than to answer a question, usually backfires: a scan with no indication commonly shows incidental age-related changes that increase worry, prompt further tests, and reinforce the belief that something is structurally wrong. Reassurance comes from a careful assessment and a clear explanation — not from an unnecessary scan.)",
            fr: "Il s'illumine : « Oui — ça me rassurerait. » (Mais prescrire une imagerie dont vous n'avez pas besoin sur le plan clinique, pour rassurer plutôt que pour répondre à une question, se retourne généralement contre vous : un examen sans indication montre souvent des modifications fortuites liées à l'âge qui augmentent l'inquiétude, déclenchent d'autres examens et renforcent la croyance qu'il y a un problème structurel. La réassurance vient d'une évaluation soigneuse et d'une explication claire — pas d'un examen inutile.)",
            ja: "彼は表情を明るくします:「ええ — それなら安心できます。」(しかし、臨床的に必要のない画像検査を、疑問に答えるためではなく安心させるために出すことは、たいてい裏目に出ます:適応のない検査は、しばしば偶発的な加齢性変化を写し出し、不安を高め、追加検査を招き、「構造的に何か問題がある」という思い込みを強めます。安心は、丁寧な評価と分かりやすい説明から生まれるのであって、不要な検査からではありません。)",
@@ -458,6 +465,119 @@ var SCORING = {
                ja: "二つの制度の収束を見出した" },
       any: ["converg", "changing", "has changed", "moving toward", "moving towards",
             "both systems", "more similar", "used to"] }
+  ],
+
+  /* ===================== moduleA_questions ==================================
+   * Free-text history-taking scoring (the LLM-patient pilot — 2026-05-28). When
+   * the chat mode is on, students TYPE their questions to Mr Lefebvre instead
+   * of clicking pre-defined items. Each typed question is scored against the
+   * `any` keyword stems below; an `unlocks` field, if present, mirrors a
+   * `reveal()` of the matching legacy item id so the deterministic red-flag
+   * gate (script.js SYNTH_PREREQS) stays exact even when the LLM-patient
+   * voices the answer.
+   *
+   * The `any` stems span EN/FR/JA because the chat input is multilingual —
+   * unlike the deliberation matcher (which is English-only). Matching is
+   * case-insensitive substring; once-only per room (the bridge persists
+   * awarded ids at sessions/<code>/rooms/<r>/modA/scoring/awarded/<id>).
+   * ========================================================================== */
+  moduleA_questions: [
+    { id: "qr_redflags", points: 8, unlocks: "history:1",
+      label: { en: "Screened systemic red flags",
+               fr: "A recherché les drapeaux rouges systémiques",
+               ja: "全身性レッドフラッグをスクリーニング" },
+      any: ["fever", "weight loss", "night pain", "trauma", "cancer", "history of cancer",
+            "red flag", "fièvre", "perte de poids", "douleur nocturne", "traumatis",
+            "drapeau rouge", "発熱", "体重減少", "夜間", "外傷", "がん", "癌"] },
+
+    { id: "qr_cauda", points: 10, unlocks: "history:2",
+      label: { en: "Screened cauda equina",
+               fr: "A recherché un syndrome de la queue de cheval",
+               ja: "馬尾症候群のスクリーニング" },
+      any: ["saddle", "perineal", "incontinen", "bladder", "bowel", "numbness in the",
+            "selle", "périnée", "vessie", "intestin", "anesthésie en selle",
+            "queue de cheval", "馬尾", "失禁", "サドル", "鞍状", "膀胱", "排便", "排尿"] },
+
+    { id: "qr_neuro", points: 6, unlocks: "exam:3",
+      label: { en: "Neurological exam / leg symptoms",
+               fr: "Examen neurologique / symptômes des jambes",
+               ja: "神経学的診察・下肢症状" },
+      any: ["reflex", "strength", "sensation", "straight leg", "lasègue", "lasegue",
+            "weakness", "tingling", "numbness in the leg", "radiat",
+            "réflexe", "force motrice", "sensibilité", "élévation de jambe", "faiblesse",
+            "irradi", "engourdiss",
+            "反射", "筋力", "感覚", "下肢", "しびれ", "放散"] },
+
+    { id: "qr_yellow", points: 6,
+      label: { en: "Asked about mood / sleep / work (yellow flags)",
+               fr: "A interrogé l'humeur, le sommeil, le travail (drapeaux jaunes)",
+               ja: "気分・睡眠・仕事を確認 (イエローフラッグ)" },
+      any: ["mood", "sleep", "stress", "worry", "worried", "anxious", "depress",
+            "how is work", "at work", "fear of",
+            "humeur", "sommeil", "inquiet", "anxieux", "anxiété", "déprim", "travail",
+            "気分", "睡眠", "ストレス", "不安", "仕事", "心配"] },
+
+    { id: "qr_paincx", points: 4,
+      label: { en: "Characterised the pain",
+               fr: "A caractérisé la douleur",
+               ja: "痛みの特徴を確認" },
+      any: ["when did", "how long", "worse with", "better with", "what brings", "what makes",
+            "where exactly", "describe the pain", "radiat",
+            "depuis quand", "depuis combien", "qu'est-ce qui aggrave", "qu'est-ce qui soulage",
+            "où exactement", "décri",
+            "いつから", "どのくらい", "何で悪化", "何で軽減", "どこ"] },
+
+    { id: "qr_meds", points: 4,
+      label: { en: "Took medication / allergy history",
+               fr: "A pris l'historique médicamenteux et allergique",
+               ja: "薬剤・アレルギー歴を確認" },
+      any: ["medication", "allerg", "what have you tried", "any drugs",
+            "any tablets", "any pills", "what do you take",
+            "médicament", "allergie", "qu'avez-vous essayé",
+            "薬", "アレルギー", "服用"] },
+
+    { id: "qr_opioid_handling", points: 8,
+      label: { en: "Explored the oxycodone request",
+               fr: "A exploré la demande d'oxycodone",
+               ja: "オキシコドン要望を掘り下げた" },
+      any: ["why oxycod", "why this", "what makes you want", "what do you hope",
+            "what concerns you", "tell me more about", "what do you expect",
+            "pourquoi l'oxycod", "qu'attendez-vous", "qu'espérez-vous",
+            "なぜオキシ", "なぜそれ", "何を期待", "どう思って"] },
+
+    { id: "qr_pmh_social", points: 4,
+      label: { en: "Past medical / social history",
+               fr: "Antécédents médicaux / sociaux",
+               ja: "既往歴・社会歴を確認" },
+      any: ["past medical", "any other illness", "any surgery", "smok", "alcohol",
+            "family history", "live with", "exercise habits",
+            "antécédent", "tabac", "alcool", "antécédents familiaux", "vivez",
+            "既往", "手術", "喫煙", "飲酒", "家族歴"] }
+  ],
+
+  /* ===================== moduleA_question_penalties =========================
+   * Same matcher path; fires when the student SAYS something they shouldn't —
+   * promising opioids before any workup, or dismissing the patient. Once-only
+   * per room. (-= points, capped at floor 0 by the existing total-score math.)
+   * ========================================================================== */
+  moduleA_question_penalties: [
+    { id: "pen_chat_prescribe", points: 14,
+      label: { en: "Promised oxycodone before any workup",
+               fr: "A promis l'oxycodone avant tout bilan",
+               ja: "評価前にオキシコドンを約束した" },
+      any: ["i'll prescribe oxycod", "i will prescribe oxycod", "i can give you oxycod",
+            "let me prescribe oxycod", "i'll write you oxycod", "yes to oxycod",
+            "je vais vous prescrire de l'oxycod", "je vous prescris de l'oxycod",
+            "オキシコドンを処方", "オキシコドンを出"] },
+
+    { id: "pen_chat_dismissive", points: 6,
+      label: { en: "Dismissive language to the patient",
+               fr: "Langage minimisant envers le patient",
+               ja: "患者を軽視する表現" },
+      any: ["just back pain", "nothing serious", "it's all in your head",
+            "it is all in your head", "stop complaining", "man up",
+            "juste un mal de dos", "rien de grave", "c'est dans la tête",
+            "ただの腰痛", "心配ない", "気のせい"] }
   ]
 };
 

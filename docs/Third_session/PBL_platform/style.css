@@ -6675,3 +6675,163 @@ body.locked .global-settings { display: none; }
   .global-settings-panel { min-width: 220px; right: -6px; }
 }
 
+/* ── Module A LLM-patient chat (2026-05-28) ──────────────────────────────
+ * Mounted by modA-llm-init.js into #chart-section-history when the
+ * `?llm=1` feature flag is on. Defaults match the existing chart-section
+ * look (light card, blue accent) so the panel doesn't visually shout
+ * "BETA". The disclosure banner is always visible (privacy-first).
+ *
+ * The mobile-iphone / mobile-ipad / mobile-android viewports stack the
+ * transcript above the input — see the @media block at the bottom.
+ */
+.moda-chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--card-border, #d6e4f0);
+  border-radius: 10px;
+  background: var(--card-bg, #fafdff);
+  margin-top: 6px;
+}
+.moda-chat-disclosure {
+  font-size: 12px;
+  color: var(--muted-fg, #4d5b6c);
+  background: var(--accent-bg-subtle, #eef5fb);
+  border-left: 3px solid var(--accent, #1763a6);
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.moda-chat-disclosure a { color: var(--accent, #1763a6); }
+.moda-chat-consent {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+}
+.moda-chat-consent-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent, #1763a6);
+  background: var(--card-bg-inset, #fff);
+  color: var(--accent, #1763a6);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+}
+.moda-chat-consent-btn:hover { background: var(--accent-bg-subtle, #eef5fb); }
+.moda-chat-transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 120px;
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--card-bg-inset, #ffffff);
+  border: 1px solid var(--card-border, #e4ecf3);
+  border-radius: 6px;
+}
+.moda-chat-bub {
+  max-width: 86%;
+  padding: 6px 10px;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.35;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+}
+.moda-chat-bub-user {
+  align-self: flex-end;
+  background: var(--accent, #1763a6);
+  color: #fff;
+  border-bottom-right-radius: 4px;
+}
+.moda-chat-bub-assistant {
+  align-self: flex-start;
+  background: var(--bub-bg, #eef2f6);
+  color: var(--fg, #1a2330);
+  border-bottom-left-radius: 4px;
+}
+.moda-chat-form {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+}
+.moda-chat-form textarea {
+  flex: 1 1 auto;
+  resize: vertical;
+  min-height: 38px;
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--card-border, #d6e4f0);
+  border-radius: 6px;
+  background: var(--card-bg-inset, #fff);
+}
+.moda-chat-form textarea:disabled {
+  background: var(--card-bg, #f3f6f9);
+  opacity: 0.7;
+}
+.moda-chat-form button {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--accent, #1763a6);
+  background: var(--accent, #1763a6);
+  color: #fff;
+  cursor: pointer;
+  font: inherit;
+}
+.moda-chat-form button:disabled { cursor: wait; opacity: 0.6; }
+.moda-chat-status {
+  min-height: 18px;
+  font-size: 12px;
+  color: var(--muted-fg, #4d5b6c);
+}
+.moda-chat-status[data-kind="warn"]  { color: #a05a00; }
+.moda-chat-status[data-kind="error"] { color: var(--danger, #b00020); }
+
+/* Mobile: tighten paddings + collapse the textarea + button to a column
+   so the send button stays reachable above the fold. */
+@media (max-width: 600px) {
+  .moda-chat-panel { padding: 8px; gap: 6px; }
+  .moda-chat-transcript { max-height: 240px; }
+  .moda-chat-form { flex-direction: column; align-items: stretch; }
+  .moda-chat-form button { padding: 10px; }
+}
+
+/* Honour reduced-motion: kill the auto-scroll smooth behaviour. The JS uses
+   plain scrollTop = scrollHeight (no smooth) so nothing to disable here,
+   but keep the rule explicit for future maintenance. */
+@media (prefers-reduced-motion: reduce) {
+  .moda-chat-transcript { scroll-behavior: auto; }
+}
+
+/* High-contrast theme: trade subtle accents for the on-token. */
+body.theme-high-contrast .moda-chat-panel,
+body[data-theme="high-contrast"] .moda-chat-panel {
+  border-color: var(--fg, #000);
+  background: var(--card-bg, #fff);
+}
+body.theme-high-contrast .moda-chat-bub-assistant,
+body[data-theme="high-contrast"] .moda-chat-bub-assistant {
+  background: var(--card-bg-inset, #fff);
+  border: 1px solid var(--fg, #000);
+}
+
+/* === Chat-only mode for HISTORY (2026-05-28) ==============================
+ * When the LLM-patient pilot is active (body has .moda-llm-active), the
+ * chat panel is the canonical interface for HISTORY-TAKING only. The
+ * Examination, Investigations and Synthesis buttons stay click-based —
+ * the LLM doesn't know exam findings (we excluded CASE.exam from its
+ * facts to prevent fabrication) and the investigations carry per-item
+ * penalty logic tied to specific button clicks. User confirmed this
+ * split 2026-05-28: "For the examinations and investigations, how
+ * should we do btw? Maybe keep it".
+ *
+ * `display: none !important` (not the `hidden` attribute) because
+ * buildButtons() in script.js rebuilds .btn-group children on every
+ * `revealed` change. A body-class CSS rule survives DOM rebuilds; a
+ * one-shot `.hidden = true` gets blown away on the next render.
+ */
+body.moda-llm-active #group-history {
+  display: none !important;
+}

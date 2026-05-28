@@ -61,6 +61,62 @@ outstanding.**
    the manual cadence slip more than a few days. Uncomment the `schedule:`
    blocks once the monthly Actions minute pool resets or billing is raised.
 
+4. **Module A LLM-patient pilot (2026-05-28) — DORMANT until operator activates.**
+   The free-text chat with Mr Lefebvre (via HF Inference Providers, proxied
+   by a Firebase Cloud Function) is fully wired in code but stays in stub
+   mode (canned answers from `case-content.js`) until **every** step below
+   is done. Mid-state activation is intentionally impossible: code refuses
+   to call HF without the flag, function returns `{state:"disabled"}` without
+   the config flip, browser stays in stub mode without the SDK script tag.
+   - **a. Privacy notice update (PIS v2 → v3)** — disclose Hugging Face as a
+     sub-processor (US/EU), transient processing, no PII; re-consent banner
+     on next session join. The in-product `modA.chat.disclosure` banner is
+     already legally adequate (names HF, region, "do not type personal
+     info") but the formal PIS doc must match.
+   - **b. Enable Blaze** + set a **$1 budget alert** in GCP Console →
+     Billing → Budgets & alerts. Workshop volumes stay deep inside the
+     Cloud Functions free tier (~300 turns vs 2M/mo allowance) — Blaze is
+     required for Cloud Functions, not for any real spend.
+   - **c. Set the HF token + flag (params API, NOT the deprecated
+     functions:config commands):**
+     ```bash
+     # Secret — prompts for the hf_... value, stored in Google Secret Manager
+     firebase functions:secrets:set HF_TOKEN
+     ```
+     Then create `docs/Third_session/PBL_platform/functions/.env` with:
+     ```
+     MODA_LLM_ENABLED=true
+     HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+     HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct
+     ```
+     `.env` is git-ignored (use `.env.<projectId>` for per-project overrides).
+     The lang-aware `_hfModel()` routes JA traffic to Qwen — Mistral-7B's
+     Japanese is too weak for in-character roleplay.
+   - **d. Add `firebase-functions-compat.js` to `index.html`** — exactly
+     after `firebase-app-check-compat.js`, with the precomputed integrity
+     hash. The SDK script is NOT eagerly loaded today because adding an
+     unverified script would lower the platform's security floor; the
+     operator opts in by editing index.html when ready:
+     ```html
+     <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-functions-compat.js"
+             integrity="sha384-0e6ckm3xAVRuudHvqdLzPYsVoBYmqB3xnx4uw9owqugEc3FyhMYiwmB7SjWACApm"
+             crossorigin="anonymous"></script>
+     ```
+     Without this tag, the bridge stays in stub mode even with the function
+     deployed.
+   - **e. Deploy:**
+     ```bash
+     cd docs/Third_session/PBL_platform/functions && npm install && cd ..
+     firebase deploy --only functions,database,hosting
+     ```
+   - **Panic button:** edit `functions/.env` and flip
+     `MODA_LLM_ENABLED=false`, then `firebase deploy --only functions`.
+     Returns `{state:"disabled"}` within ~30s; all clients seamlessly
+     fall back to the local stub patient.
+   - **Pilot gate:** the chat UI itself stays hidden unless a user passes
+     `?llm=1` in the URL or sets `localStorage.canamedModALLM=1`. The
+     facilitator controls who sees it during the pilot window.
+
 ## Known security follow-ups (code, tracked)
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
@@ -88,3 +144,11 @@ outstanding.**
 - `pool/$clientId/room` is intentionally writable by any authenticated user
   (admin room-assignment + self-assign); residual room-griefing is accepted
   until a cryptographic admin identity exists.
+- Module A `scoring/awarded/<famId>` is client-writable (write-once, bounded
+  points, requires uidMembers membership). A teammate with dev tools can
+  still pre-award their own room — accepted because this is collaborative
+  pedagogy, not assessment. The 2026-05-28 review noted that the per-room
+  `uidMembers` gate closes the cross-room griefing path that existed when
+  the chat first landed; only same-room self-awarding remains. Server-side
+  scoring would require returning `awards: [...]` from `hfPatient` and
+  writing them via admin SDK — deferred.

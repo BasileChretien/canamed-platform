@@ -1,12 +1,14 @@
 {
   "name": "canamed-functions",
-  "description": "CANAMED transactional email Cloud Function (consent-gated reminders).",
+  "description": "CANAMED transactional email Cloud Function + Module A LLM-patient broker.",
   "private": true,
-  "engines": { "node": "20" },
+  "engines": {
+    "node": "22"
+  },
   "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^12.0.0",
-    "firebase-functions": "^5.0.0",
+    "firebase-admin": "^13.10.0",
+    "firebase-functions": "^7.2.5",
     "nodemailer": "^6.9.0"
   }
 }

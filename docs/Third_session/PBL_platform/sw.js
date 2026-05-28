@@ -36,7 +36,7 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v25";
+const SHELL_VERSION = "canamed-shell-v26";
 
 const SHELL_ASSETS = [
   "/",
@@ -52,6 +52,10 @@ const SHELL_ASSETS = [
   "/localdb.js",
   "/script.js",
   "/case-content.js",
+  "/modA-question-scoring.js",
+  "/modA-llm-prompts.js",
+  "/modA-llm-bridge.js",
+  "/modA-llm-init.js",
   "/glossary.js",
   "/admin-tools.js",
   "/facilitator-guide.html",

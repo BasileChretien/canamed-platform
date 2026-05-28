@@ -15,7 +15,7 @@
     "test:e2e:rules": "node scripts/sim/build-emulator-rules.js && npx firebase emulators:exec --only database,auth --config docs/Third_session/PBL_platform/firebase.emulator.json --project canamed-sim \"npx playwright test --config=playwright.emulator.config.js\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.3",
