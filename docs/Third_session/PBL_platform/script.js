@@ -1034,6 +1034,8 @@ let promptReplies = {};
 let _promptReplyTimer = null;
 let modBPhase = 0;          // Module B synced phase index (0..3) — room-shared
 let modBExchangeCursor = 0; // Module B Phase-3 prompt index (0..5, 6 = done) — room-shared
+let modBExchangeReplies = {}; // Module B Phase-3: prompt index → cid → {text,by,cid,at} — room-shared
+let _modBExchangeReplyTimer = null;
 let callForHelp = null;
 let teamsLink = "";
 let quizLink = "";          // end-of-session questionnaire link
@@ -1083,7 +1085,7 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refObservers = null, refAnswerReplies = null, refPoll = null,
     refRoleChoices = null,
     refReplayRound = null,
-    refModBPhase = null, refModBExchangeCursor = null,
+    refModBPhase = null, refModBExchangeCursor = null, refModBExchangeReplies = null,
     refClosed = null;
 
 /* Swap-and-replay loop state (Module B). `replayRound` is the current
@@ -2914,7 +2916,7 @@ function enterRoom(roomName, asAdmin) {
   roomScore = {}; teamName = ""; celebratedEvents = {}; penalisedEvents = {};
   roomVotes = {}; committedDecisions = {}; firstVoteFire = true;
   firstScoreFire = true; wrapCelebrated = false;
-  modBPhase = 0; modBExchangeCursor = 0;
+  modBPhase = 0; modBExchangeCursor = 0; modBExchangeReplies = {};
   // reset in-platform test runtime — a re-join is a fresh attempt UI-side
   // (the DB record per clientId still drives "already done" detection)
   _TEST_RUNTIME.pre = null; _TEST_RUNTIME.post = null;
@@ -2992,6 +2994,7 @@ function teardownRoom() {
     if (refReplayRound) refReplayRound.off();
     if (refModBPhase) refModBPhase.off();
     if (refModBExchangeCursor) refModBExchangeCursor.off();
+    if (refModBExchangeReplies) refModBExchangeReplies.off();
     if (refAnswerReplies) refAnswerReplies.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
@@ -3075,6 +3078,12 @@ function startRoom() {
   refModBExchangeCursor.on("value", snap => {
     const v = snap.val();
     modBExchangeCursor = (typeof v === "number" && v >= 0) ? Math.floor(v) : 0;
+    if (typeof renderModBExchange === "function") renderModBExchange();
+  });
+  // Phase-3 answer entry: per-prompt group notes, mirroring moduleA/promptReplies.
+  refModBExchangeReplies = db.ref(base + "/moduleB/exchangeReplies");
+  refModBExchangeReplies.on("value", snap => {
+    modBExchangeReplies = snap.val() || {};
     if (typeof renderModBExchange === "function") renderModBExchange();
   });
 
@@ -7560,6 +7569,7 @@ if (typeof window !== "undefined") {
   window._test_setAllRooms      = function (m) { allRooms = m || {}; };
   window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
   window._test_setRoomVotes     = function (m) { roomVotes = m || {}; };
+  window._test_setModBExchangeReplies = function (m) { modBExchangeReplies = m || {}; };
   window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
   window._test_setViewStage     = function (n) {
     // Drive both viewStage and roomStage so renderStage's lock/coach
@@ -9096,6 +9106,50 @@ function renderModBExchange() {
   const prev = el("modB-exchange-prev"), next = el("modB-exchange-next");
   if (prev) prev.disabled = cursor <= 0;
   if (next) next.disabled = isDone;
+
+  // Answer entry for the CURRENT prompt. Hidden on the done screen; otherwise
+  // restore the newest note across the room (anyone can edit, last-write-wins on
+  // display — the full per-author log is preserved for research/export). Don't
+  // clobber the box while this client is the one typing in it.
+  const replyArea = el("modB-exchange-reply-area");
+  if (replyArea) replyArea.classList.toggle("hidden", isDone);
+  const replyEl = el("modB-exchange-reply");
+  if (replyEl && !isDone && !replyEl.matches(":focus")) {
+    const repliesForThisPrompt = (modBExchangeReplies && modBExchangeReplies[cursor]) || {};
+    let latest = null;
+    Object.keys(repliesForThisPrompt).forEach(cid => {
+      const r = repliesForThisPrompt[cid];
+      if (r && (!latest || (r.at || 0) > (latest.at || 0))) latest = r;
+    });
+    replyEl.value = (latest && latest.text) || "";
+  }
+}
+
+/* Debounced autosave for the Module B Phase-3 answer box, mirroring Module A's
+ * _onPromptReplyInput / _flushPromptReply. Synced via
+ * refModBExchangeReplies/$cursor/$cid. */
+function _onModBExchangeReplyInput() {
+  if (_modBExchangeReplyTimer) clearTimeout(_modBExchangeReplyTimer);
+  _modBExchangeReplyTimer = setTimeout(_flushModBExchangeReply, 600);
+}
+
+function _flushModBExchangeReply() {
+  if (_modBExchangeReplyTimer) { clearTimeout(_modBExchangeReplyTimer); _modBExchangeReplyTimer = null; }
+  const replyEl = el("modB-exchange-reply");
+  if (!replyEl || !refModBExchangeReplies) return;
+  const text = (replyEl.value || "").trim().slice(0, 600);
+  const cursor = modBExchangeCursor || 0;
+  const path = refModBExchangeReplies.child(String(cursor)).child(clientId);
+  if (text === "") {
+    path.remove().catch(() => {});
+    return;
+  }
+  path.set({
+    text: text,
+    by: myName || "",
+    cid: clientId,
+    at: Date.now()
+  }).catch(e => console.error("modB exchange reply save failed", e));
 }
 
 function setModBExchangeCursor(n) {
@@ -9120,9 +9174,17 @@ function initModBPhaseNav() {
       btn.addEventListener("click", () => setModBPhase(idx));
     });
   }
+  // Flush the current prompt's note BEFORE moving the cursor, so the debounced
+  // autosave can never land against the wrong prompt index (mirrors Module A).
   const ep = el("modB-exchange-prev"), en = el("modB-exchange-next");
-  if (ep && !ep._wired) { ep._wired = true; ep.addEventListener("click", () => setModBExchangeCursor(modBExchangeCursor - 1)); }
-  if (en && !en._wired) { en._wired = true; en.addEventListener("click", () => setModBExchangeCursor(modBExchangeCursor + 1)); }
+  if (ep && !ep._wired) { ep._wired = true; ep.addEventListener("click", () => { _flushModBExchangeReply(); setModBExchangeCursor(modBExchangeCursor - 1); }); }
+  if (en && !en._wired) { en._wired = true; en.addEventListener("click", () => { _flushModBExchangeReply(); setModBExchangeCursor(modBExchangeCursor + 1); }); }
+  const reply = el("modB-exchange-reply");
+  if (reply && !reply._wired) {
+    reply._wired = true;
+    reply.addEventListener("input", _onModBExchangeReplyInput);
+    reply.addEventListener("blur", _flushModBExchangeReply);
+  }
   renderModBPhase();
   renderModBExchange();
 }

@@ -46,6 +46,47 @@ test.describe("Student PDFs — certificate of attendance", () => {
     expect(doc.json).toContain("Breaking bad news (SPIKES)");
     expect(doc.json).toContain("Shared decision-making");
     expect(doc.json).toContain("CERTIFICATE OF ATTENDANCE");
+    // Session-3 asks: state the language, and carry the director's signature.
+    expect(doc.json).toContain("Language of instruction: English");
+    expect(doc.json).toContain("Dr. Basile Chr");          // Chrétien (accent-safe match)
+  });
+
+  test("the certificate embeds the director's signature (default) and honours an override", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const px = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
+      const withSig = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A", signatureDataUrl: px }));
+      const dflt = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A" }));
+      return { hasOverride: withSig.includes(px), withSig: withSig, dflt: dflt };
+    });
+    // An explicit signatureDataUrl overrides the baked-in default.
+    expect(out.hasOverride, "a provided signatureDataUrl must be embedded as an image").toBe(true);
+    // The default cert now carries the baked-in signature PNG (SIGNATURE_DATAURL).
+    expect(out.dflt, "default cert must embed the real signature PNG").toContain("data:image/png;base64,");
+    // The signature name appears regardless.
+    expect(out.withSig).toContain("Dr. Basile Chr");
+    expect(out.dflt).toContain("Dr. Basile Chr");
+  });
+
+  test("pdfmake renders the certificate with an embedded signature image (chromium smoke)", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
+    await page.goto("/");
+    // A real (valid) 120x40 RGBA PNG stands in for the scanned signature, so this
+    // exercises pdfmake's image pipeline — not just the docDefinition shape.
+    const SIG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAHgAAAAoCAYAAAA16j4lAAAAo0lEQVR4nO3WsQ0CAAhFQYZwEudx/zW0sbaBBIQrrvsFyWuIx/P1/oofbP50M/o4m5rALNZ+AAIjMAIfFZM/QJv8ZvRxNjWBWaz9AARGYAQ+KiZ/gDb5zejjbGoCs1j7AQiMwAh8VEz+AG3ym9HH2dQEZrH2AxAYgRH4qJj8AdrkN6OPs6kJzGLtByAwAiPwUTH5A7TJb0YfZ1MTmMXaD0BgEj6WGiz04w+4+QAAAABJRU5ErkJggg==";
+    const out = await page.evaluate(async (sig) => {
+      await window.CanamedLoader.ensurePdfmake();
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildCertificateDocDefinition({ name: "Test Student", signatureDataUrl: sig });
+      return await new Promise((resolve) => {
+        try { window.pdfMake.createPdf(d).getBlob((b) => resolve({ ok: true, size: b.size, type: b.type })); }
+        catch (e) { resolve({ ok: false, why: String(e) }); }
+      });
+    }, SIG);
+    expect(out.ok, out.why || "").toBe(true);
+    expect(out.size).toBeGreaterThan(1000);
+    expect(out.type).toContain("pdf");
   });
 
   test("pdfmake renders a non-empty PDF blob (chromium smoke)", async ({ page, browserName }) => {
@@ -55,6 +96,8 @@ test.describe("Student PDFs — certificate of attendance", () => {
       await window.CanamedLoader.ensurePdfmake();
       await window.CanamedLoader.ensureStudentPdf();
       if (!window.pdfMake || typeof window.pdfMake.createPdf !== "function") return { ok: false, why: "no pdfMake" };
+      // Default cert (no signature image yet) → exercises the new design with the
+      // signature-line fallback, the gold seal + corner flourishes, and columns.
       const d = window.CanamedPdf.buildCertificateDocDefinition({ name: "Test Student", competencies: ["A"] });
       return await new Promise((resolve) => {
         try {
@@ -122,14 +165,67 @@ test.describe("Student PDFs — study booklet", () => {
     expect(doc).toContain("Reached the clinical synthesis");
   });
 
-  test("pdfmake renders a non-empty booklet PDF (chromium smoke)", async ({ page, browserName }) => {
+  test("the booklet has a clickable table of contents (toc node + tocItem headings)", async ({ page }) => {
+    await page.goto("/");
+    const doc = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildBookletDocDefinition({
+        name: "Akari", sessionCode: "ABC-DEF",
+        sections: [{ title: "Historical context", blocks: [{ type: "p", text: "x" }] },
+                   { title: "Guidelines", blocks: [{ type: "p", text: "y" }] }],
+        team: { name: "Room 1", score: 10, wins: [], cohort: [] }
+      });
+      const content = d.content || [];
+      return {
+        hasContents: JSON.stringify(content).includes("Contents"),
+        tocNodes: content.filter(n => n && n.toc).length,
+        tocItems: content.filter(n => n && n.tocItem === true).map(n => n.text)
+      };
+    });
+    expect(doc.hasContents, "a 'Contents' page is present").toBe(true);
+    expect(doc.tocNodes, "exactly one pdfmake toc node").toBe(1);
+    expect(doc.tocItems).toContain("Historical context");
+    expect(doc.tocItems).toContain("Guidelines");
+    expect(doc.tocItems).toContain("Your team");
+  });
+
+  test("emoji/smileys are stripped from titles, text, lists and tables", async ({ page }) => {
+    await page.goto("/");
+    const doc = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildBookletDocDefinition({
+        name: "🙂 Akari",
+        sections: [{ title: "📋 Historical context 🇫🇷", blocks: [
+          { type: "p", text: "Truth-telling ✅ changed 🎯." },
+          { type: "ul", items: ["✓ first point", "🚩 second"] },
+          { type: "table", header: true, rows: [["Country 🇯🇵", "Norm"], ["France", "autonomy ⭐"]] }
+        ] }],
+        team: { name: "Room 1 🏆", score: 1, wins: ["🎉 win"], cohort: [{ label: "Room 1 🇫🇷", score: 1, you: true }] }
+      });
+      return JSON.stringify(d);
+    });
+    // Readable text is preserved …
+    expect(doc).toContain("Historical context");
+    expect(doc).toContain("Truth-telling");
+    expect(doc).toContain("autonomy");
+    expect(doc).toContain("first point");
+    // … but no emoji / pictographs survive (they render as tofu in Roboto).
+    const emoji = /[\u{1F000}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
+    expect(emoji.test(doc), "no emoji should remain in the booklet doc").toBe(false);
+  });
+
+  test("pdfmake renders a non-empty booklet PDF with a TOC (chromium smoke)", async ({ page, browserName }) => {
     test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
     await page.goto("/");
     const out = await page.evaluate(async () => {
       await window.CanamedLoader.ensurePdfmake();
       await window.CanamedLoader.ensureStudentPdf();
       const d = window.CanamedPdf.buildBookletDocDefinition({
-        name: "T", sections: [{ title: "S", blocks: [{ type: "p", text: "x" }] }],
+        name: "T 🙂",
+        sections: [
+          { title: "📋 Section one", blocks: [{ type: "p", text: "x" }] },
+          { title: "Section two", blocks: [{ type: "p", text: "y" }] }
+        ],
         team: { name: "R1", score: 10, wins: [], cohort: [{ label: "R1", score: 10, you: true }] }
       });
       return await new Promise((resolve) => {
