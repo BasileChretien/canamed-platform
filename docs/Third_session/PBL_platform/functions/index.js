@@ -139,12 +139,19 @@ const HF_DEFAULT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3";
 const HF_DEFAULT_MODEL_JA = "Qwen/Qwen2.5-7B-Instruct";
 const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 const MAX_BODY_MESSAGES = 16;
-const MAX_BODY_CHARS    = 4000;
+// 12000 chars across all messages. The system prompt alone is ~3800 chars
+// (identity + style rules + 9 patient-voice facts + few-shot anchor); the
+// previous 4000 cap left no headroom for transcript context, so the second
+// chat turn was always failing 400 "invalid-argument". 12000 fits ~6 turns
+// of chat (each ~200-400 chars) on top of the system prompt — matches the
+// bridge's contextTurns: 6 default. Mistral-7B handles 32k tokens (~120k
+// chars), so no upstream concern.
+const MAX_BODY_CHARS    = 12000;
 const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@1.5";   // bumped to force redeploy: fix roomId regex to accept spaces (real rooms are "Room 1" etc)
+const PROMPT_VERSION = "modA-llm@1.6";   // bumped to force redeploy: raise MAX_BODY_CHARS 4000→12000 (system prompt was at the limit)
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
