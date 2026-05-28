@@ -175,7 +175,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     leaving runway for in-flight feature work. The byte tally is
 //     deterministic (same source -> same gzip), so this cap behaves identically
 //     on CI and locally.
-const FIRST_PARTY_BYTES_LIMIT_KB = 280;
+//   - 285 KB after the public certificate-verification feature (PIS v2 §18 +
+//     /credentials + verify.html). NET +2 KB gz on the splash bundle: ~+1 KB
+//     in i18n.js (the new lobby.consent-verification paragraph + 14 verify.*
+//     UI keys in EN — the FR/JA copies live in the lazy locales and don't
+//     touch the splash), ~+1 KB in pure-utils.js (randomCredentialId +
+//     normalizeName + credentialNameHash for the public verify flow), and
+//     ~+0.3 KB in script.js (the credential write-once flow in
+//     downloadCertificatePdf, gated on the new third consent tickbox).
+//     verify.html itself is a separate entry — not on the splash critical
+//     path, not counted here.
+const FIRST_PARTY_BYTES_LIMIT_KB = 285;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
