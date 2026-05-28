@@ -3253,6 +3253,17 @@ function startRoom() {
   window.sessionNum = sessionNum;
   window.db = db;
   window.viewStage = viewStage;
+  // SYNTH_ID / prereqsMet are needed for the chat-mode auto-synthesis
+  // trigger (the synthesis button is hidden in LLM mode, so the bridge
+  // calls reveal(SYNTH_ID) automatically once prereqsMet returns true).
+  // revealed is mutable script-state; expose it via a getter so the LLM
+  // init reads the live value, not a snapshot at startRoom() time.
+  window.SYNTH_ID = SYNTH_ID;
+  window.prereqsMet = prereqsMet;
+  Object.defineProperty(window, "revealed", {
+    get: function () { return revealed; },
+    configurable: true
+  });
   try {
     if (typeof window.modALLMInit === "function") window.modALLMInit();
   } catch (e) {

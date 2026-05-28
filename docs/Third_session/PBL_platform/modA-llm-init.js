@@ -203,8 +203,14 @@
     var refs = _refs();
     if (!refs) return false;
 
-    // Visually swap: hide the button list, mount the chat panel.
-    if (btnGroup) btnGroup.hidden = true;
+    // Chat-only mode (user request 2026-05-28): the legacy click-button
+    // workup (Ask the patient / Examine / Investigations / Synthesis) is
+    // entirely replaced by the chat. We add a body class so the CSS
+    // selector hides ALL four button groups uniformly — buildButtons()
+    // re-creates them after this runs, so a one-shot `.hidden = true`
+    // gets blown away on the next render. A CSS class on <body> is
+    // robust against any DOM rebuild.
+    document.body.classList.add("moda-llm-active");
     var panel = _mountChatUI(host);
     var transcriptEl = panel.querySelector("#modA-chat-transcript");
     var inputEl = panel.querySelector("#modA-chat-input");
@@ -252,6 +258,24 @@
         if (typeof window.reveal === "function") {
           try { window.reveal(legacyId); } catch (_) { /* defensive */ }
         }
+        // Auto-trigger synthesis once all SYNTH_PREREQS are met. In
+        // chat-only mode the synthesis button is hidden, so the legacy
+        // "click to synthesise" path is unreachable. We replicate the
+        // unlock here: when prereqsMet() flips to true, reveal SYNTH_ID
+        // (labs:0) once, which unlocks the Discussion prompts via the
+        // existing pipeline. setTimeout(..., 200) gives the just-fired
+        // reveal time to land in `revealed[]` before we re-check.
+        setTimeout(function () {
+          try {
+            if (typeof window.prereqsMet === "function" &&
+                typeof window.SYNTH_ID === "string" &&
+                window.prereqsMet() &&
+                !(window.revealed && window.revealed[window.SYNTH_ID]) &&
+                typeof window.reveal === "function") {
+              window.reveal(window.SYNTH_ID);
+            }
+          } catch (_) { /* defensive */ }
+        }, 200);
       },
       persistTurn: function (role, content) {
         refs.chat.push({ role: role, content: content, at: Date.now() });

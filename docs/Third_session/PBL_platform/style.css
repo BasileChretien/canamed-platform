@@ -6816,3 +6816,31 @@ body[data-theme="high-contrast"] .moda-chat-bub-assistant {
   background: var(--card-bg-inset, #fff);
   border: 1px solid var(--fg, #000);
 }
+
+/* === Chat-only mode (2026-05-28) ===========================================
+ * When the LLM-patient pilot is active (body has .moda-llm-active), the
+ * chat panel is the canonical interface for the whole case workup. The
+ * legacy click buttons (Ask the patient / Examine / Investigations /
+ * Synthesis) are visually removed.
+ *
+ * `display: none !important` (not the `hidden` attribute) because
+ * buildButtons() in script.js rebuilds .btn-group children on every
+ * `revealed` change. A one-shot `.hidden = true` gets blown away on
+ * each render — a body-class CSS rule survives all DOM rebuilds.
+ */
+body.moda-llm-active #group-history,
+body.moda-llm-active #group-exam,
+body.moda-llm-active #group-labs {
+  display: none !important;
+}
+/* Add a subtle "the chat above is the interface" hint to the now-empty
+ * Examination and Investigations sections, so students aren't confused
+ * by empty headings. Pure CSS via ::after on the section's summary line. */
+body.moda-llm-active #chart-section-exam > summary::after,
+body.moda-llm-active #chart-investigations > summary::after {
+  content: " — handled in chat above";
+  font-style: italic;
+  color: var(--muted-fg, #4d5b6c);
+  font-weight: normal;
+  margin-left: 8px;
+}
