@@ -318,7 +318,10 @@ exports.hfPatient = onCall({
   //   - Per-session rate limit (250 turns/hr in RTDB)
   //   - Server-side session-membership check (_verifyMembership)
   //   - HF token stays in Secret Manager, never reaches the client
-  enforceAppCheck: APP_CHECK_ENFORCE.value(),
+  // Pass the Param directly (NOT .value()) — firebase-functions v7
+  // resolves it at deploy time. Calling .value() in config triggered a
+  // deprecation warning ("This is usually a mistake").
+  enforceAppCheck: APP_CHECK_ENFORCE,
   consumeAppCheckToken: false,
   secrets: [HF_TOKEN],
   memory: "256MiB",            // v2 uses MiB; Gen 2 minimum
