@@ -2927,6 +2927,16 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"
           integrity="sha384-Ybv3lGuy/hHZj1VLzE7e+sawyrFSbMuEQaKRSfC9W4Q8MK+k/zQKNrxNVagHhXAj"
           crossorigin="anonymous"></script>
+  <!-- Firebase Functions (compat) — only used by the Module A LLM-patient
+       pilot (`hfPatient` callable). The bridge wires up
+       `firebase.functions().httpsCallable("hfPatient")` during startRoom();
+       without this script the chat stays in stub mode (canned answers, no
+       real LLM call). Integrity hash computed against v10.12.5 on
+       2026-05-28 — if you bump the Firebase SDK version, recompute the
+       hash with `curl ... | openssl dgst -sha384 -binary | openssl base64 -A`. -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"
+          integrity="sha384-dl8gTN2pDiuvgHrzW5Zb1btHv3Y2g2RAGe+oZPnyV8yqolnsEg/TBN/fKf97tmac"
+          crossorigin="anonymous"></script>
   <!-- Firebase Performance Monitoring — collects real-user load times
        (TTFB, FCP, page load, custom traces). Useful research-side:
        "did the platform feel laggy to Nagoya students vs Caen students?"

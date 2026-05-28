@@ -19,7 +19,12 @@
  */
 "use strict";
 
-const functions = require("firebase-functions");
+// firebase-functions v6: explicit /v1 import opts into the v1 API surface
+// (functions.https.onCall, functions.database.ref, runWith, etc). The bare
+// require("firebase-functions") still works but logs a deprecation warning
+// on v6+. v2 migration is a separate future PR — see
+// https://firebase.google.com/docs/functions/2nd-gen-upgrade
+const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
