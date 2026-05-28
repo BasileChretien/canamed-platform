@@ -57,7 +57,7 @@
     var comps = Array.isArray(data.competencies) ? data.competencies.filter(Boolean) : [];
     var sigUrl = _str(data.signatureDataUrl, SIGNATURE_DATAURL);
     var sigName = _str(data.signatureName, "Dr. Basile Chrétien");
-    var sigTitle = _str(data.signatureTitle, "Workshop Director, CaNaMED");
+    var sigTitle = _str(data.signatureTitle, "On behalf of the CaNaMED team");
 
     var did = "attended the CaNaMED Franco-Japanese medical-education workshop"
       + (sessionLabel ? " — " + sessionLabel : "")
