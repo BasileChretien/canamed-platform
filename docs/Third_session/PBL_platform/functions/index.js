@@ -275,12 +275,18 @@ function _extractContent(j) {
 exports.hfPatient = onCall({
   region: "us-central1",
   runtime: "nodejs22",          // explicit override; setGlobalOptions can be ignored on `update` ops
-  enforceAppCheck: true,
-  // consumeAppCheckToken intentionally FALSE (2026-05-28 review H7):
-  // single-use consumption was rejecting legitimate workshop turns under
-  // load (token churn vs HF latency). Replay protection here is low-value
-  // because the real abuse defence is the per-uid + per-session rate
-  // limits below; the App Check signal alone keeps bots out.
+  // enforceAppCheck DISABLED (2026-05-28 pilot): the platform's client-side
+  // App Check is OFF in this deployment (CANAMED_RECAPTCHA_SITE_KEY not set
+  // in firebase-config.js), so every callable invocation would return
+  // `unauthenticated` if we enforced. The real abuse defences here are:
+  //   - Anonymous Auth required (request.auth check below)
+  //   - Per-uid rate limit (40 turns/hr in RTDB)
+  //   - Per-session rate limit (250 turns/hr in RTDB)
+  //   - Server-side session-membership check (_verifyMembership)
+  //   - HF token stays in Secret Manager, never reaches the client
+  // Re-enable once App Check is wired client-side (App Check token must
+  // flow through firebase-config.js → initializeAppCheck → SDK).
+  enforceAppCheck: false,
   consumeAppCheckToken: false,
   secrets: [HF_TOKEN],
   memory: "256MiB",            // v2 uses MiB; Gen 2 minimum

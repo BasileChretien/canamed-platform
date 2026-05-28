@@ -98,6 +98,12 @@ if (typeof window === "undefined") { var window = globalThis; }
     for (var i = 0; i < caseObj.history.length; i++) {
       var it = caseObj.history[i];
       if (!it || !it.q || !it.a) continue;
+      // Skip narratorOnly entries — these are third-person stage directions
+      // ("He flinches and pulls away") for the click-mode UI's bad-move
+      // consequences, not first-person patient speech. Letting the stub
+      // surface them produced replies like "He looks relieved for a moment,
+      // then uneasy..." in response to "Do you have pain when you pee?".
+      if (it.narratorOnly) continue;
       var qText = "";
       ["en", "fr", "ja"].forEach(function (L) {
         var v = it.q && it.q[L];

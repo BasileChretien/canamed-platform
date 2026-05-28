@@ -6817,30 +6817,21 @@ body[data-theme="high-contrast"] .moda-chat-bub-assistant {
   border: 1px solid var(--fg, #000);
 }
 
-/* === Chat-only mode (2026-05-28) ===========================================
+/* === Chat-only mode for HISTORY (2026-05-28) ==============================
  * When the LLM-patient pilot is active (body has .moda-llm-active), the
- * chat panel is the canonical interface for the whole case workup. The
- * legacy click buttons (Ask the patient / Examine / Investigations /
- * Synthesis) are visually removed.
+ * chat panel is the canonical interface for HISTORY-TAKING only. The
+ * Examination, Investigations and Synthesis buttons stay click-based —
+ * the LLM doesn't know exam findings (we excluded CASE.exam from its
+ * facts to prevent fabrication) and the investigations carry per-item
+ * penalty logic tied to specific button clicks. User confirmed this
+ * split 2026-05-28: "For the examinations and investigations, how
+ * should we do btw? Maybe keep it".
  *
  * `display: none !important` (not the `hidden` attribute) because
  * buildButtons() in script.js rebuilds .btn-group children on every
- * `revealed` change. A one-shot `.hidden = true` gets blown away on
- * each render — a body-class CSS rule survives all DOM rebuilds.
+ * `revealed` change. A body-class CSS rule survives DOM rebuilds; a
+ * one-shot `.hidden = true` gets blown away on the next render.
  */
-body.moda-llm-active #group-history,
-body.moda-llm-active #group-exam,
-body.moda-llm-active #group-labs {
+body.moda-llm-active #group-history {
   display: none !important;
-}
-/* Add a subtle "the chat above is the interface" hint to the now-empty
- * Examination and Investigations sections, so students aren't confused
- * by empty headings. Pure CSS via ::after on the section's summary line. */
-body.moda-llm-active #chart-section-exam > summary::after,
-body.moda-llm-active #chart-investigations > summary::after {
-  content: " — handled in chat above";
-  font-style: italic;
-  color: var(--muted-fg, #4d5b6c);
-  font-weight: normal;
-  margin-left: 8px;
 }
