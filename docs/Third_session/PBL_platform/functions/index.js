@@ -157,7 +157,7 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@1.7";   // bumped to force redeploy: trim stop[] to 4 + surface HF response body in errors
+const PROMPT_VERSION = "modA-llm@2.0";   // narrative context + opioid-seeking stance + 2-turn few-shot + relaxed common-knowledge rule
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
