@@ -118,9 +118,11 @@ exports.sendQueuedMail = functions.database
  *   - Auth is required (`enforceAppCheck: true` + Auth context check below);
  *     anonymous Firebase Auth is enough — that is what every classroom
  *     student uses.
- *   - The HF token NEVER reaches a client. It is read from
- *     functions.config().hf.token (or HF_TOKEN env var) — set via the
- *     Firebase CLI, never committed.
+ *   - The HF token NEVER reaches a client. It is stored in Google Secret
+ *     Manager via `firebase functions:secrets:set HF_TOKEN` — never in
+ *     source, never in Runtime Config (which Firebase deprecated in
+ *     favour of the params API). Set once; rotated by re-running the
+ *     command. Secret Manager bills ~6¢/month per secret version.
  *   - Per-user rate limit (RTDB counter) prevents API-bill griefing.
  *   - Body size limits + reply size limits + reply sanitisation are applied
  *     server-side so an LLM response cannot blow up the client.
@@ -131,12 +133,15 @@ exports.sendQueuedMail = functions.database
  *
  * APPROVAL GATE: dormant until an operator deliberately opts in (mirrors
  * the email function pattern). Even with a token set, this function refuses
- * to call HF until `functions.config().moda.llm === "true"`. */
+ * to call HF until the `MODA_LLM_ENABLED` param is "true" — set via the
+ * params API (see functions/README.md). */
+
+const { defineString, defineSecret, defineBoolean } = require("firebase-functions/params");
 
 const HF_DEFAULT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3";
 /* Mistral-7B's Japanese is weak (byte-level CJK tokenisation, drops out of role
  * mid-reply). JA traffic routes to a Qwen variant by default — same OpenAI-
- * compat surface, much stronger JA. Override via functions.config().hf.modelJa. */
+ * compat surface, much stronger JA. Override via the HF_MODEL_JA param. */
 const HF_DEFAULT_MODEL_JA = "Qwen/Qwen2.5-7B-Instruct";
 const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 const MAX_BODY_MESSAGES = 16;
@@ -147,27 +152,29 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const SESSION_RATE_LIMIT_TURNS = 250;    // turns per session per window
 const PROMPT_VERSION = "modA-llm@1.1";   // bump when STYLE_RULES change
 
-function _modAllmEnabled() {
-  const c = (functions.config && functions.config().moda) || {};
-  const v = (c.llm != null ? c.llm : process.env.MODA_LLM);
-  return String(v).toLowerCase() === "true";
-}
-function _hfToken() {
-  const c = (functions.config && functions.config().hf) || {};
-  return c.token || process.env.HF_TOKEN || "";
-}
-function _hfUrl() {
-  const c = (functions.config && functions.config().hf) || {};
-  return c.url || process.env.HF_URL || HF_DEFAULT_URL;
-}
-/* Lang-aware model picker. Mistral-7B for EN/FR (well-tuned + cheaper) and a
- * JA-capable model for JA. Operator can override either via config. */
+/* === Params (Firebase functions/params API, replacing the deprecated
+ *      Runtime Config / functions.config() that shuts down March 2027) ===
+ *
+ * Parameter resolution at deploy time (in this order):
+ *   1. .env.<projectId> file in functions/   (per-project override)
+ *   2. .env file in functions/               (default)
+ *   3. interactive prompt during `firebase deploy --only functions`
+ *   4. the `default:` below
+ *
+ * Secrets (HF_TOKEN) are exempt from .env — they live in Google Secret
+ * Manager, are set via `firebase functions:secrets:set HF_TOKEN`, and are
+ * only readable inside a function that declared them in runWith.secrets.
+ */
+const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
+const HF_TOKEN         = defineSecret("HF_TOKEN");
+const HF_URL           = defineString("HF_URL",       { default: HF_DEFAULT_URL });
+const HF_MODEL         = defineString("HF_MODEL",     { default: HF_DEFAULT_MODEL });
+const HF_MODEL_JA      = defineString("HF_MODEL_JA",  { default: HF_DEFAULT_MODEL_JA });
+
+/* Lang-aware model picker. Resolves .value() each call — cheap, supports
+ * runtime param overrides. */
 function _hfModel(lang) {
-  const c = (functions.config && functions.config().hf) || {};
-  if (lang === "ja") {
-    return c.modelJa || process.env.HF_MODEL_JA || HF_DEFAULT_MODEL_JA;
-  }
-  return c.model || process.env.HF_MODEL || HF_DEFAULT_MODEL;
+  return lang === "ja" ? HF_MODEL_JA.value() : HF_MODEL.value();
 }
 
 function _sanitiseReply(s) {
@@ -321,7 +328,11 @@ exports.hfPatient = functions
     // limits below; the App Check signal alone keeps bots out.
     consumeAppCheckToken: false,
     memory: "256MB",
-    timeoutSeconds: 30
+    timeoutSeconds: 30,
+    // Bind the HF_TOKEN secret so this function can read it via .value()
+    // at runtime. Functions that don't declare a secret can't read it,
+    // even if they're in the same file.
+    secrets: [HF_TOKEN]
   })
   .https.onCall(async (data, context) => {
     const startedAt = Date.now();
@@ -329,11 +340,11 @@ exports.hfPatient = functions
     const lang = String(body.lang || "en").slice(0, 2);
 
     // 1) Approval gate — DORMANT by default. Even with a valid token, this
-    //    function returns a structured "disabled" response until an operator
-    //    explicitly flips the flag (see functions/README.md).
-    if (!_modAllmEnabled()) {
+    //    function returns a structured "disabled" response until the operator
+    //    flips the MODA_LLM_ENABLED param to true (see functions/README.md).
+    if (MODA_LLM_ENABLED.value() !== true) {
       return { reply: "", state: "disabled",
-               error: "moda.llm feature flag is off" };
+               error: "MODA_LLM_ENABLED param is off" };
     }
 
     // 2) Auth — every classroom user signs in anonymously; that is enough.
@@ -368,9 +379,9 @@ exports.hfPatient = functions
     // 6) HF token must be configured. If it isn't, return a structured error
     //    so the client falls back to the local stub patient (chat keeps
     //    working — facilitator sees the fallback banner).
-    const token = _hfToken();
+    const token = HF_TOKEN.value();
     if (!token) {
-      return { reply: "", state: "error", error: "HF token not configured" };
+      return { reply: "", state: "error", error: "HF_TOKEN secret not configured" };
     }
 
     // 7) Call HF with bounded retry on 503/429/520/524 (H6). Sampling params
@@ -397,7 +408,7 @@ exports.hfPatient = functions
     });
     try {
       const { res, attempt } = await _hfCallWithRetry(
-        _hfUrl(),
+        HF_URL.value(),
         { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
         reqBody,
         ctrl.signal,

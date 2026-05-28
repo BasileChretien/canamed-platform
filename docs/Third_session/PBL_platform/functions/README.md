@@ -132,14 +132,34 @@ the patient's reply. The HF token NEVER reaches the client.
   model via `hf.model` config below.
 - Set a **$1 budget alert** on the Firebase Console to catch any surprise.
 
-### 0. Get institutional approval, then enable the feature
-Only after sign-off:
+> **Note (2026):** Firebase has deprecated `functions:config:*` (shuts down
+> March 2027). This function uses the modern **params API** instead — secrets
+> via Google Secret Manager, non-secrets via `.env` files or the
+> `defineString`/`defineBoolean` defaults baked into `index.js`. The commands
+> below are the new flow.
 
-```bash
-firebase functions:config:set moda.llm="true"
+### 0. Get institutional approval, then enable the feature
+Only after sign-off, set the boolean param. Two equivalent options:
+
+**Option A — `.env` file (recommended, version-controllable per environment):**
+
+Create `functions/.env` (or `.env.<projectId>` for per-project overrides)
+with:
+
+```
+MODA_LLM_ENABLED=true
+HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct
 ```
 
-(Equivalently set `MODA_LLM=true`.) Until this is set the function returns
+`.env` is in `.gitignore`. `.env.<projectId>` is **per-project** and only
+applies to that Firebase project — useful if you have separate dev / staging
+/ prod projects.
+
+**Option B — interactive at deploy time:**
+
+If `MODA_LLM_ENABLED` is not in `.env`, `firebase deploy --only functions`
+prompts for it. Until this param is `true` the function returns
 `{ state: "disabled" }` regardless of the rest of the configuration.
 
 ### 1. Enable the Blaze (pay-as-you-go) plan
@@ -148,19 +168,33 @@ allowance — enabling Blaze does NOT mean spending money. Set a **$1 budget
 alert** at the same time (GCP Console → Billing → Budgets & alerts) so any
 runaway is caught instantly.
 
-### 2. Set the HF token (never commit it)
-Sign up for a free Hugging Face account, create an Access Token with the
-"Make calls to Inference Providers" permission, and store it server-side:
+> Secret Manager (used for `HF_TOKEN` below) bills ~$0.06/month per active
+> secret version. Negligible, but it's why a Blaze upgrade is required —
+> Spark-plan projects can't use Secret Manager.
+
+### 2. Set the HF token (Secret Manager, never .env, never source)
+Sign up for a free Hugging Face account at https://huggingface.co/settings/tokens
+and create a **Fine-grained** Access Token with **only** "Make calls to
+Inference Providers" ticked. Then in a terminal at the repo root:
 
 ```bash
-firebase functions:config:set \
-  hf.token="hf_xxxxxxxxxxxxxxxxxxxxx" \
-  hf.model="mistralai/Mistral-7B-Instruct-v0.3"
+firebase functions:secrets:set HF_TOKEN
 ```
 
-Optional: override the endpoint with `hf.url` if you want a self-hosted
-HF Space instead of the public router. The function expects an OpenAI-
-compatible `/v1/chat/completions` body.
+The CLI prompts for the value — paste the `hf_...` string when asked.
+The token is stored in **Google Secret Manager**, encrypted at rest, and
+mounted into the function's runtime memory only when invoked. It NEVER
+lands in source, `.env`, or Runtime Config.
+
+To rotate later: run the same command — it creates a new version and old
+ones can be disabled via the GCP Console (Secret Manager → HF_TOKEN).
+
+To verify the secret was created (does NOT print the value):
+
+```bash
+firebase functions:secrets:access HF_TOKEN  # prints decoded value to YOUR terminal only — don't paste
+firebase functions:secrets:get  HF_TOKEN    # metadata only, safe to share
+```
 
 ### 3. Add the Firebase Functions SDK to `index.html` (with integrity hash)
 The browser needs `firebase-functions-compat` to call the callable. Add this
@@ -231,10 +265,22 @@ firebase database:get /metrics/hfPatient/usage --shallow
 
 ### Turning it OFF instantly (panic button)
 
+Edit `functions/.env` (or `.env.<projectId>`) and flip:
+
+```
+MODA_LLM_ENABLED=false
+```
+
+Then redeploy:
+
 ```bash
-firebase functions:config:set moda.llm="false"
 firebase deploy --only functions
 ```
 
 The function returns `{ state: "disabled" }` within ~30s of the deploy
 completing. Clients seamlessly fall back to the local stub patient.
+
+**Even faster panic button** — disable the App Check requirement at the
+Firebase Console (App Check → hfPatient → unenforce) to make every call
+immediately fail with `unauthenticated`. The bridge falls back to stub on
+the very next turn. Re-enforce when you've cleaned up.

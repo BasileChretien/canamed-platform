@@ -77,14 +77,19 @@ outstanding.**
      Billing → Budgets & alerts. Workshop volumes stay deep inside the
      Cloud Functions free tier (~300 turns vs 2M/mo allowance) — Blaze is
      required for Cloud Functions, not for any real spend.
-   - **c. Set HF token + model + flag:**
+   - **c. Set the HF token + flag (params API, NOT the deprecated
+     functions:config commands):**
      ```bash
-     firebase functions:config:set \
-       moda.llm="true" \
-       hf.token="hf_xxxxxxxxxxxxxxxxxxxxx" \
-       hf.model="mistralai/Mistral-7B-Instruct-v0.3" \
-       hf.modelJa="Qwen/Qwen2.5-7B-Instruct"
+     # Secret — prompts for the hf_... value, stored in Google Secret Manager
+     firebase functions:secrets:set HF_TOKEN
      ```
+     Then create `docs/Third_session/PBL_platform/functions/.env` with:
+     ```
+     MODA_LLM_ENABLED=true
+     HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+     HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct
+     ```
+     `.env` is git-ignored (use `.env.<projectId>` for per-project overrides).
      The lang-aware `_hfModel()` routes JA traffic to Qwen — Mistral-7B's
      Japanese is too weak for in-character roleplay.
    - **d. Add `firebase-functions-compat.js` to `index.html`** — exactly
@@ -104,10 +109,10 @@ outstanding.**
      cd docs/Third_session/PBL_platform/functions && npm install && cd ..
      firebase deploy --only functions,database,hosting
      ```
-   - **Panic button:**
-     `firebase functions:config:set moda.llm="false" && firebase deploy --only functions`
-     returns `{state:"disabled"}` within ~30s; all clients seamlessly fall
-     back to the local stub patient.
+   - **Panic button:** edit `functions/.env` and flip
+     `MODA_LLM_ENABLED=false`, then `firebase deploy --only functions`.
+     Returns `{state:"disabled"}` within ~30s; all clients seamlessly
+     fall back to the local stub patient.
    - **Pilot gate:** the chat UI itself stays hidden unless a user passes
      `?llm=1` in the URL or sets `localStorage.canamedModALLM=1`. The
      facilitator controls who sees it during the pilot window.
