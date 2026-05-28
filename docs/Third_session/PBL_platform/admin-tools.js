@@ -246,7 +246,9 @@ gainBlock +
           pid: "P" + pid, room: r,
           name: (typeof p.name === "string") ? p.name : "",
           university: uniByCid[cid] || "",
-          answers: a, hypotheses: h, contributed: (a + h) > 0 ? 1 : 0
+          answers: a, hypotheses: h, contributed: (a + h) > 0 ? 1 : 0,
+          certId: (typeof canamedCertId === "function")
+            ? canamedCertId(((typeof sessionNum !== "undefined") ? sessionNum : "") + "|" + cid) : ""
         });
       });
     });
@@ -425,6 +427,8 @@ gainBlock +
         const row = {
           session: (typeof sessionNum !== "undefined") ? sessionNum : "",
           participant: "P" + pid,
+          certId: (typeof canamedCertId === "function")
+            ? canamedCertId(((typeof sessionNum !== "undefined") ? sessionNum : "") + "|" + cid) : "",
           name: (pres[cid] && typeof pres[cid].name === "string") ? pres[cid].name : "",
           room: r,
           university: uniByCid[cid] || "",
@@ -572,7 +576,7 @@ gainBlock +
   function generateResearchExportCSV() {
     const idx = _participantIndex();
     const built = researchCsvParticipantRows();
-    const baseCols = ["session", "participant", "name", "room", "university", "answers", "hypotheses",
+    const baseCols = ["session", "participant", "certId", "name", "room", "university", "answers", "hypotheses",
                       "contributed", "pre", "preMax", "post", "postMax", "normGain"];
     download(_toCSV(baseCols.concat(built.surveyCols), built.rows), "research_participants.csv", "text/csv");
 
@@ -629,6 +633,7 @@ gainBlock +
         "<ul class='cert-comps'>" + comps + "</ul>" +
         "<div class='cert-foot'>Session " + esc(typeof sessionNum !== "undefined" ? sessionNum : "—") +
         " · " + esc(when.toLocaleDateString()) + " · facilitator signature: ______________________</div>" +
+        (p.certId ? "<div class='cert-vid'>Verification ID: <strong>" + esc(p.certId) + "</strong></div>" : "") +
         "</section>";
     }).join("");
 
@@ -641,6 +646,7 @@ gainBlock +
 ".cert-sub{text-align:center;color:#5b6b7b;margin:2px 0 18px}" +
 ".cert-line{text-align:center;margin:6px 0}.cert-name{text-align:center;font-size:1.5rem;font-weight:700;color:#2563eb;margin:6px 0}" +
 ".cert-comps{max-width:520px;margin:10px auto}.cert-foot{margin-top:18px;font-size:.82rem;color:#5b6b7b;text-align:center}" +
+".cert-vid{margin-top:6px;font-size:.8rem;color:#16335c;text-align:center;letter-spacing:.04em}" +
 "</style></head><body>" +
 "<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF (one per participant)</button>" +
 cards +

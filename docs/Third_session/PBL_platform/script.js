@@ -6445,7 +6445,14 @@ function downloadCertificatePdf() {
     sessionLabel: "",
     dateStr: new Date().toLocaleDateString(),
     partnership: "Université de Caen Normandie × Nagoya University",
-    competencies: CERT_COMPETENCIES
+    competencies: CERT_COMPETENCIES,
+    // Deterministic verification id from (session, participant). The SAME value
+    // is recomputed in the facilitator's research export / attestation list
+    // (admin-tools participantRows), so a certificate can be checked against
+    // those records. Seeded on clientId — the key presence is stored under.
+    certId: (typeof canamedCertId === "function")
+      ? canamedCertId((sessionNum || "") + "|" + (clientId || ""))
+      : ""
   };
   if (typeof toast === "function") toast("⏳ Preparing your certificate…");
   Promise.resolve()

@@ -69,6 +69,43 @@ test.describe("Student PDFs — certificate of attendance", () => {
     expect(out.dflt).toContain("Dr. Basile Chr");
   });
 
+  test("the certificate carries a verification QR + ID when one is issued (and neither when not)", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const id = (typeof window.canamedCertId === "function")
+        ? window.canamedCertId("ABC-DEF|client-xyz") : "CNM-AAAAA-BBBBB";
+      const withId = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A", certId: id }));
+      const noId = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A" }));
+      return { id: id, withId: withId, noId: noId };
+    });
+    // Issued cert: the id text + a pdfmake QR node are present.
+    expect(out.withId).toContain(out.id);
+    expect(out.withId).toContain("Verification ID");
+    expect(out.withId).toContain('"qr"');
+    // No id supplied → no QR node and no id line.
+    expect(out.noId).not.toContain('"qr"');
+    expect(out.noId).not.toContain("Verification ID");
+  });
+
+  test("pdfmake renders the certificate with the verification QR (chromium smoke)", async ({ page, browserName }) => {
+    test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
+    await page.goto("/");
+    const out = await page.evaluate(async () => {
+      await window.CanamedLoader.ensurePdfmake();
+      await window.CanamedLoader.ensureStudentPdf();
+      const id = window.canamedCertId ? window.canamedCertId("ABC-DEF|client-xyz") : "CNM-AAAAA-BBBBB";
+      const d = window.CanamedPdf.buildCertificateDocDefinition({ name: "Test Student", certId: id });
+      return await new Promise((resolve) => {
+        try { window.pdfMake.createPdf(d).getBlob((b) => resolve({ ok: true, size: b.size, type: b.type })); }
+        catch (e) { resolve({ ok: false, why: String(e) }); }
+      });
+    });
+    expect(out.ok, out.why || "").toBe(true);
+    expect(out.size).toBeGreaterThan(1000);
+    expect(out.type).toContain("pdf");
+  });
+
   test("pdfmake renders the certificate with an embedded signature image (chromium smoke)", async ({ page, browserName }) => {
     test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
     await page.goto("/");

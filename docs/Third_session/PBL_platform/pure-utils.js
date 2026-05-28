@@ -78,5 +78,27 @@
     catch (e) { return false; }
   }
 
-  return { COLORS, hashStr, colorFor, roomNames, minsSince, reducedMotion };
+  // Crockford base-32 alphabet (no I, L, O, U — avoids transcription ambiguity).
+  const _CROCK = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+  // Deterministic certificate ID for a (session, participant) seed, e.g.
+  // canamedCertId(sessionCode + "|" + clientId) → "CNM-7K2QF-9X4A
+  // The SAME inputs always produce the SAME id, so the student's downloaded
+  // certificate and the facilitator's research export / attestation list agree
+  // on it WITHOUT any extra storage — the export is the registry, and a cert is
+  // "real" iff its (name, id) pair is in that list. NOTE: this is deterministic
+  // and the algorithm is public, so it is NOT forgery-proof against someone who
+  // can both guess a participant's clientId AND fabricate a registry entry —
+  // it's sized for FACILITATOR-checked verification, where membership in the
+  // export is the source of truth. If a PUBLIC self-service lookup is ever
+  // added, switch to a random id persisted server-side (to prevent enumeration).
+  function canamedCertId(seed) {
+    const hex = hashStr(String(seed == null ? "" : seed));   // ~53-bit hex
+    let n = parseInt(hex, 16) || 0;                            // within 2^53 (safe)
+    let s = "";
+    for (let i = 0; i < 10; i++) { s = _CROCK[n % 32] + s; n = Math.floor(n / 32); }
+    return "CNM-" + s.slice(0, 5) + "-" + s.slice(5, 10);
+  }
+
+  return { COLORS, hashStr, colorFor, roomNames, minsSince, reducedMotion, canamedCertId };
 });

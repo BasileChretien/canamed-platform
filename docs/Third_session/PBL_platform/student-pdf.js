@@ -75,6 +75,7 @@
     var sigUrl = _str(data.signatureDataUrl, SIGNATURE_DATAURL);
     var sigName = _str(data.signatureName, "Dr. Basile Chrétien");
     var sigTitle = _str(data.signatureTitle, "On behalf of the CaNaMED team");
+    var certId = _str(data.certId, "");   // verification id (optional; QR + text when present)
 
     var did = "attended the CaNaMED Franco-Japanese medical-education workshop"
       + (sessionLabel ? " — " + sessionLabel : "")
@@ -124,7 +125,9 @@
           ? { ul: comps, style: "comps", margin: [0, 0, 0, 0] }
           : { text: "" },
         { text: "Language of instruction: English", style: "lang", margin: [0, 12, 0, 0] },
-        // Signature (left) + issue details (right), anchored toward the foot.
+        // Foot row: signature (left) · verification QR+ID (centre, when issued) ·
+        // issue details (right). The QR + id let the certificate be checked
+        // against the CaNaMED facilitator's records.
         { columns: [
             { width: "*", stack: [
                 sigMark,
@@ -132,11 +135,21 @@
                 { text: sigName, style: "sigName" },
                 { text: sigTitle, style: "sigTitle" }
               ] },
+            certId
+              ? { width: "auto", alignment: "center", margin: [12, 0, 12, 0], stack: [
+                    { qr: certId, fit: 60, foreground: BRAND.ink, eccLevel: "M", alignment: "center" },
+                    { text: "Verification ID", style: "certLbl", alignment: "center", margin: [0, 3, 0, 0] },
+                    { text: certId, style: "certId", alignment: "center" }
+                  ] }
+              : { width: 0, text: "" },
             { width: "auto", stack: [
                 { text: "Issued " + dateStr, style: "foot", alignment: "right" },
-                { text: "Session " + sessionCode, style: "foot", alignment: "right" }
+                { text: "Session " + sessionCode, style: "foot", alignment: "right" },
+                certId
+                  ? { text: "Verify with the CaNaMED team", style: "footSmall", alignment: "right", margin: [0, 4, 0, 0] }
+                  : { text: "" }
               ] }
-          ], columnGap: 24, margin: [0, 26, 0, 0] }
+          ], columnGap: 22, margin: [0, 24, 0, 0] }
       ],
       styles: {
         kicker:   { fontSize: 11, characterSpacing: 3, color: BRAND.muted, alignment: "center", bold: true },
@@ -148,7 +161,10 @@
         lang:     { fontSize: 10.5, italics: true, color: BRAND.muted, alignment: "center" },
         sigName:  { fontSize: 12, bold: true, color: BRAND.ink },
         sigTitle: { fontSize: 9.5, color: BRAND.muted },
-        foot:     { fontSize: 10, color: BRAND.muted }
+        foot:     { fontSize: 10, color: BRAND.muted },
+        footSmall:{ fontSize: 8, italics: true, color: BRAND.muted },
+        certLbl:  { fontSize: 7.5, characterSpacing: 1.5, color: BRAND.muted },
+        certId:   { fontSize: 11, bold: true, color: BRAND.ink, characterSpacing: 0.5 }
       }
     };
   }
