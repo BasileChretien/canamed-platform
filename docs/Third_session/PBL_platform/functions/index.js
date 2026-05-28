@@ -28,9 +28,17 @@
 
 const { onValueCreated } = require("firebase-functions/v2/database");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { setGlobalOptions } = require("firebase-functions/v2");
 const { defineString, defineSecret, defineBoolean } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
+
+// Force Node 22 explicitly. Without this, firebase-tools v13.x defaults Gen 2
+// functions to Node 20 even when package.json says engines.node="22" — the
+// engines field is a hint, not a directive, for Gen 2. setGlobalOptions
+// applies to every function in this file. (Per-function `runtime` works too
+// but is more verbose.)
+setGlobalOptions({ runtime: "nodejs22" });
 
 admin.initializeApp();
 
@@ -135,7 +143,7 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@1.2";
+const PROMPT_VERSION = "modA-llm@1.3";   // bumped to force redeploy w/ Node 22 runtime
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
