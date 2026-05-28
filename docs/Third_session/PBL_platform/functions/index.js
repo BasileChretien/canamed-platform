@@ -144,7 +144,7 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@1.4";   // bumped to force redeploy of `enforceAppCheck: false` — previous attempts skipped
+const PROMPT_VERSION = "modA-llm@1.5";   // bumped to force redeploy: fix roomId regex to accept spaces (real rooms are "Room 1" etc)
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
@@ -221,8 +221,14 @@ async function _verifyMembership(uid, body) {
   const roomId = String(body && body.roomId   || "").trim();
   const orgSlug = body && body.orgSlug ? String(body.orgSlug).trim() : "";
   if (!code || !roomId) return null;
+  // Session codes are human-typed slugs (e.g. "jzh-wnj") so they stay strict.
   if (!/^[A-Za-z0-9_-]{1,40}$/.test(code))   return null;
-  if (!/^[A-Za-z0-9_-]{1,40}$/.test(roomId)) return null;
+  // Room names CAN contain spaces — the platform uses keys like "Room 1",
+  // "Room 2" (with a space) in Firebase RTDB. The previous strict regex
+  // rejected every legitimate room and threw permission-denied → 403.
+  // Allow any character EXCEPT Firebase RTDB-forbidden ones: . # $ [ ] /
+  // (which can't appear in valid RTDB keys anyway), and cap length at 40.
+  if (!/^[^.#$\[\]/]{1,40}$/.test(roomId)) return null;
   if (orgSlug && !/^[A-Za-z0-9_-]{1,40}$/.test(orgSlug)) return null;
 
   const path = orgSlug
