@@ -3242,6 +3242,17 @@ function startRoom() {
   // (eager <script> tags in index.html). Failure here must NEVER block
   // room entry — wrapped in try/catch and the function returns false when
   // the flag is off, leaving the legacy click-button UI untouched.
+  //
+  // Bridge needs sessionNum / myRoom / db / viewStage on window, but
+  // those are declared with `let` at script-top (line 868, 941, 1012,
+  // 1056), so they live in the script's lexical scope and never reach
+  // window. Re-export them here so modALLMInit can read them via
+  // window.<name>. This is the single-line bridge between script.js's
+  // module-style state and the LLM init's window-accessor pattern.
+  window.myRoom = myRoom;
+  window.sessionNum = sessionNum;
+  window.db = db;
+  window.viewStage = viewStage;
   try {
     if (typeof window.modALLMInit === "function") window.modALLMInit();
   } catch (e) {
