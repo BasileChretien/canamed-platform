@@ -67,28 +67,3 @@ window.CANAMED_SUPERADMIN_KEY = null;
  * layer. See README.md → "Enabling App Check" for the full step-by-step.
  */
 window.CANAMED_RECAPTCHA_SITE_KEY = "6Lemg-wsAAAAAKIkv6KorbZu0iUz_q3e36wrlFiQ";
-
-/* PERFORMANCE MONITORING (optional, recommended for research deployments).
- *
- * Firebase Performance Monitoring auto-collects real-user timings — page
- * load, first contentful paint, time-to-first-byte, and every network
- * request. Useful research-side: "did Nagoya students experience the
- * platform as laggier than Caen students?" answers are visible in the
- * Firebase Console → Performance dashboard within ~24 h of the next
- * session.
- *
- * Privacy note: Performance Monitoring collects timing data, not content.
- * No participant text / consent / IDs are sent. Aggregate data only.
- * Still — disclose this in privacy.html if you turn it on, alongside the
- * other Firebase services. The privacy doc references this already.
- *
- * Set to true to enable. Default false so the SDK script is loaded but
- * inert; you can flip this without redeploying the SDK script tag.
- */
-// Currently false: the GCP API-key restriction (allowed services list) does
-// not include firebaselogging.googleapis.com, so uploads return 503 and the
-// SDK spams `Performance: Tries left: N.` retries in the console. Flip back
-// to true after whitelisting Firelog/Performance on the browser API key in
-// GCP Console → Credentials. The SDK script tag stays loaded either way, so
-// this is a one-line redeploy when ready.
-window.CANAMED_PERF_MONITORING = false;

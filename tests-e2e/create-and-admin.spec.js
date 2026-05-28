@@ -90,7 +90,6 @@ test.describe("Create-session + admin flow", () => {
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
       window.CANAMED_SUPERADMIN_KEY = "e2e-super-admin";
     });
     await tab2.goto("/");

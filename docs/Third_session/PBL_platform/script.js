@@ -1155,27 +1155,6 @@ function initAppCheck() {
   }
 }
 
-/* Firebase Performance Monitoring activation. No-op when
-   window.CANAMED_PERF_MONITORING isn't truthy (the script tag still
-   loads the SDK but doesn't call .performance(), so no traces ship).
-   Auto-tracks page load + each network request — we don't add custom
-   traces in code yet. Privacy: timing-only, no content. */
-let _perfActivated = false;
-function initPerfMonitoring() {
-  if (_perfActivated) return;
-  if (!window.CANAMED_PERF_MONITORING) return;
-  if (!firebase.performance) {
-    console.warn("[CaNaMED] Perf monitoring requested but the SDK didn't load.");
-    return;
-  }
-  try {
-    firebase.performance();
-    _perfActivated = true;
-  } catch (e) {
-    console.warn("[CaNaMED] Perf monitoring activation failed", e);
-  }
-}
-
 /* Firebase-emulator wiring (sim + integration-test use).
  *
  * When window.CANAMED_EMULATOR is set to
@@ -1224,10 +1203,6 @@ function dbInit() {
     // and reCAPTCHA can't reach the Google verification endpoint in tests
     // (which would otherwise spam the console with appCheck/recaptcha-error).
     if (!_isEmulatorMode()) initAppCheck();
-    // Performance Monitoring is similarly opt-in via the firebase-config
-    // flag. Safe to activate before database/auth — it just attaches to
-    // the global window.fetch / XMLHttpRequest for timing capture.
-    initPerfMonitoring();
     db = firebase.database();
     // Emulator hookup: when window.CANAMED_EMULATOR is set to
     // { host: "127.0.0.1", dbPort: 9000, authPort: 9099 }, point the

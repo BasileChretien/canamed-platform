@@ -57,7 +57,6 @@ test.describe("Lobby density — admin section no longer carries duplicate contr
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
       window.CANAMED_SUPERADMIN_KEY = "e2e-super-admin";
     });
     await openLobby(tab2, code);
@@ -93,7 +92,6 @@ test.describe("Lobby density — admin section no longer carries duplicate contr
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
       window.CANAMED_SUPERADMIN_KEY = "e2e-super-admin";
     });
     await openLobby(tab2, code);

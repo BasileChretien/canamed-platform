@@ -43,7 +43,6 @@ async function openLobbyInLanguage(page, context, lang) {
     }
     pin("CANAMED_FIREBASE", null);
     pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-    pin("CANAMED_PERF_MONITORING", false);
     window.CANAMED_SUPERADMIN_KEY = "e2e-super-admin";
     try { localStorage.setItem("canamed_lang", targetLang); } catch (e) {}
   }, lang);

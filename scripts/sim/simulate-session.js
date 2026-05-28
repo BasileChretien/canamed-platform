@@ -176,7 +176,6 @@ async function getCtx(browser) {
       pin("CANAMED_FIREBASE", null);
     }
     pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-    pin("CANAMED_PERF_MONITORING", false);
     window.CANAMED_SUPERADMIN_KEY = "sim-super-admin";
     try {
       // suppress tours — they cover the real UI we want to observe

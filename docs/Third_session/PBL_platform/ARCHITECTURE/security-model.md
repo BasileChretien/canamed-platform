@@ -410,7 +410,6 @@ npm run test:local    # Same as test:e2e, uses local static server
 - [ ] CANAMED_FIREBASE is set to production credentials (not test mode)
 - [ ] CANAMED_SUPERADMIN_KEY is null (or stored in a private local copy only)
 - [ ] CANAMED_RECAPTCHA_SITE_KEY is set; SECRET KEY is in Firebase Console (not in source)
-- [ ] CANAMED_PERF_MONITORING is set appropriately (true for research, false for production)
 - [ ] database.rules.json is deployed (firebase deploy --only database)
 - [ ] firebase.json CSP headers are deployed (firebase deploy --only hosting)
 - [ ] HTTPS is enforced (check Firebase Hosting settings)

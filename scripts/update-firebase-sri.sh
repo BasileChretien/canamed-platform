@@ -62,7 +62,6 @@ declare -a FILES=(
   "firebase-database-compat.js"
   "firebase-auth-compat.js"
   "firebase-app-check-compat.js"
-  "firebase-performance-compat.js"
 )
 
 TMPDIR="$(mktemp -d)"

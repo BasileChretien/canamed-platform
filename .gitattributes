@@ -5,6 +5,5 @@
 # CRLF version is deployed. Treating them as binary keeps the bytes
 # identical to what's stored in git (and what was hashed for the SRI).
 *.min.js binary
-docs/Third_session/PBL_platform/fb-timings.min.js binary
 docs/Third_session/PBL_platform/firebase-*-compat.js binary
 docs/Third_session/PBL_platform/pdfmake/*.js binary

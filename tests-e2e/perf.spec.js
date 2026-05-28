@@ -280,13 +280,7 @@ test.describe("Perf budget — splash", () => {
     // Sum first-party bytes only. Anything served from gstatic / google.com /
     // recaptcha is the SDK CDN and excluded from our app-bytes budget.
     const isThirdParty = (u) =>
-      /^https?:\/\/(www\.)?(gstatic|google|recaptcha|googletagmanager)\.com\//.test(u) ||
-      // Firebase Performance SDK: vendored first-party (fb-timings.min.js) to
-      // dodge tracker blocklists, but it's the same third-party Firebase SDK
-      // that used to load from gstatic — keep it out of the OUR-code budget
-      // (it's optional telemetry, gated off in tests, not needed for splash
-      // interactivity). Still surfaced under third_party_kb_gz diagnostics.
-      /\/fb-timings\.min\.js(\?|$)/.test(u);
+      /^https?:\/\/(www\.)?(gstatic|google|recaptcha|googletagmanager)\.com\//.test(u);
     // Lazy-loaded chunks fetched by script-loader.js's idle prefetch are
     // NOT critical-path: the splash is interactive without them. They are
     // captured in the test's response stream because Chrome's idle window
