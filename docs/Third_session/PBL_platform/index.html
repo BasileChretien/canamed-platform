@@ -2168,6 +2168,16 @@
                one at a time, synced across the room via rooms/$room/moduleB/
                exchangeCursor. Any participant can move Prev/Next; renderModBExchange()
                toggles which <li> is visible + this counter / done state. -->
+          <!-- Phase-3 answer entry (2026-05-27): students record a short note
+               from their discussion for the CURRENT prompt. Synced across the
+               room via rooms/$room/moduleB/exchangeReplies/$cursor/$cid, mirroring
+               Module A's prompt-reply (anyone in the room can edit, autosaves). -->
+          <div class="prompt-reply-area" id="modB-exchange-reply-area">
+            <textarea id="modB-exchange-reply" maxlength="600"
+                      data-i18n="modB.exchange.reply.placeholder"
+                      data-i18n-attr="placeholder"
+                      placeholder="Type a short note from your group's discussion — anyone in the room can edit and it autosaves."></textarea>
+          </div>
           <div class="exchange-nav" id="modB-exchange-nav">
             <button class="exchange-nav-btn" id="modB-exchange-prev" type="button"
                     data-i18n="modB.exchange.prev">← Previous</button>
