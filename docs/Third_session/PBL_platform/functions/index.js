@@ -1,183 +1,148 @@
-/* CANAMED — email Cloud Function (consent-gated transactional mail).
+/* CANAMED Cloud Functions — Gen 2 (firebase-functions v2 API).
  *
- * WHAT: when an admin enqueues a mail job at sessions/<code>/mail/<id> (e.g. a
- * spaced-reinforcement "revisit your retention quiz" reminder to a participant
- * who opted in), this function sends it via SMTP and records the delivery state
- * back on the node. Idempotent (skips anything already delivered).
+ * Two functions live in this codebase:
+ *   1. sendQueuedMail — dormant transactional-email pipeline (consent-gated
+ *      revisit reminders). Stays disabled until institutional approval.
+ *   2. hfPatient — Module A LLM-patient broker. Calls Hugging Face Inference
+ *      Providers; dormant until MODA_LLM_ENABLED=true.
  *
- * SECURITY / PRIVACY:
- *   - SMTP credentials are read from runtime config (functions.config().smtp.*)
- *     or environment — NEVER hardcoded. See functions/README.md for setup.
- *   - The mail queue is ADMIN-WRITE-ONLY at the database-rules layer (a session's
- *     adminPasswordHash must exist), so this is not an open relay: only a
- *     facilitator can enqueue, and only for addresses a participant consented to.
- *   - Recipient + subject + body length are validated by the rules before this
- *     ever runs; this function additionally fails closed if SMTP is unconfigured.
+ * Migrated from v1 → v2 on 2026-05-28. Reasons:
+ *   - Cloud Functions Gen 1 caps at Node 20 (decommissioned 2026-10-30);
+ *     Gen 2 supports Node 22+.
+ *   - firebase-functions v1 surface (functions.https.onCall, runWith) is
+ *     deprecated; firebase-tools warns on every deploy.
+ *   - Gen 2 has concurrency (one instance serves many requests), better
+ *     cold-start, cheaper per-invocation pricing.
  *
- * DEPLOY: requires the Firebase Blaze plan (Cloud Functions). This file is the
- * complete code; activation is three operator steps documented in README.md.
+ * SECURITY model (unchanged from v1 — only the API style changed):
+ *   - App Check ENFORCED on hfPatient (consumeAppCheckToken=false; see H7
+ *     of the 2026-05-28 review for why single-use is wrong here).
+ *   - HF token + SMTP password in Google Secret Manager (never in .env,
+ *     never in source). Bound per-function via `secrets: [...]`.
+ *   - Non-secret config (MODA_LLM_ENABLED, SMTP_HOST, etc.) via
+ *     defineString / defineBoolean — set in functions/.env or per-project
+ *     functions/.env.<projectId>.
+ *   - Counters-only metrics; never the user text or patient reply.
  */
 "use strict";
 
-// firebase-functions v6: explicit /v1 import opts into the v1 API surface
-// (functions.https.onCall, functions.database.ref, runWith, etc). The bare
-// require("firebase-functions") still works but logs a deprecation warning
-// on v6+. v2 migration is a separate future PR — see
-// https://firebase.google.com/docs/functions/2nd-gen-upgrade
-const functions = require("firebase-functions/v1");
+const { onValueCreated } = require("firebase-functions/v2/database");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineString, defineSecret, defineBoolean } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
 admin.initializeApp();
 
-/* Build an SMTP transport from runtime config. Returns null when unconfigured
-   so the caller can fail closed (record an error rather than crash). */
+/* ============================================================================
+ * sendQueuedMail — consent-gated transactional email (DORMANT by default).
+ *
+ * When an admin enqueues a mail job at /sessions/<code>/mail/<id> (e.g. a
+ * spaced-reinforcement "revisit your retention quiz" reminder to a participant
+ * who opted in), this function sends it via SMTP and records the delivery
+ * state back on the node. Idempotent — skips anything already delivered.
+ * ========================================================================== */
+
+const EMAIL_ENABLED = defineBoolean("EMAIL_ENABLED", { default: false });
+const SMTP_HOST     = defineString("SMTP_HOST", { default: "" });
+const SMTP_USER     = defineString("SMTP_USER", { default: "" });
+const SMTP_PASS     = defineSecret("SMTP_PASS");   // password in Secret Manager
+const SMTP_PORT     = defineString("SMTP_PORT", { default: "587" });
+const SMTP_FROM     = defineString("SMTP_FROM", { default: "CANAMED <no-reply@example.org>" });
+
 function buildTransport() {
-  const c = (functions.config && functions.config().smtp) || {};
-  const host = c.host || process.env.SMTP_HOST;
-  const user = c.user || process.env.SMTP_USER;
-  const pass = c.pass || process.env.SMTP_PASS;
-  const port = Number(c.port || process.env.SMTP_PORT || 587);
+  const host = SMTP_HOST.value();
+  const user = SMTP_USER.value();
+  const pass = SMTP_PASS.value();
+  const port = Number(SMTP_PORT.value() || 587);
   if (!host || !user || !pass) return null;
   return nodemailer.createTransport({
     host: host,
     port: port,
-    secure: port === 465,            // 465 = implicit TLS; 587 = STARTTLS
+    secure: port === 465,              // 465 = implicit TLS; 587 = STARTTLS
     auth: { user: user, pass: pass }
   });
 }
 
 function fromAddress() {
-  const c = (functions.config && functions.config().smtp) || {};
-  return c.from || process.env.SMTP_FROM || "CANAMED <no-reply@example.org>";
+  return SMTP_FROM.value() || "CANAMED <no-reply@example.org>";
 }
 
-/* Approval gate. Email stays OFF until an operator deliberately enables it
-   AFTER institutional (university president) approval. Default: disabled. */
 function emailEnabled() {
-  const c = (functions.config && functions.config().email) || {};
-  const v = (c.enabled != null ? c.enabled : process.env.EMAIL_ENABLED);
-  return String(v).toLowerCase() === "true";
+  return EMAIL_ENABLED.value() === true;
 }
 
-/* sessions/<code>/mail/<id> queue. The orgs/<slug>/sessions/... tree, if used,
-   needs a parallel export (same body) — see README.md. */
-exports.sendQueuedMail = functions.database
-  .ref("/sessions/{code}/mail/{id}")
-  .onCreate(async (snap) => {
-    const job = snap.val() || {};
-    // Skip malformed or already-processed jobs (idempotent on retries).
-    if (!job.to || !job.subject || job.delivery) return null;
+exports.sendQueuedMail = onValueCreated({
+  ref: "/sessions/{code}/mail/{id}",
+  region: "europe-west1",        // co-located with the trigger (EU-resident data)
+  secrets: [SMTP_PASS]
+}, async (event) => {
+  const snap = event.data;
+  const job = snap.val() || {};
+  // Skip malformed or already-processed jobs (idempotent on retries).
+  if (!job.to || !job.subject || job.delivery) return null;
 
-    // APPROVAL GATE: email is DISABLED by default and stays dormant until the
-    // institution (university president) approves it. Beyond just configuring
-    // SMTP, an operator must DELIBERATELY flip this flag on:
-    //   firebase functions:config:set email.enabled="true"
-    // (or set EMAIL_ENABLED=true). Until then, nothing is ever sent — jobs just
-    // record that the feature is gated. This makes "keep it hidden until
-    // approved" enforced in code, not just convention.
-    if (!emailEnabled()) {
-      await snap.ref.child("delivery").set({
-        state: "disabled", at: Date.now(),
-        error: "Email feature disabled (pending institutional approval)"
-      });
-      return null;
-    }
-
-    const transport = buildTransport();
-    if (!transport) {
-      await snap.ref.child("delivery").set({
-        state: "error", at: Date.now(), error: "SMTP not configured"
-      });
-      return null;
-    }
-
-    try {
-      await transport.sendMail({
-        from: fromAddress(),
-        to: String(job.to),
-        subject: String(job.subject),
-        text: job.text ? String(job.text) : "",
-        html: job.html ? String(job.html) : undefined
-      });
-      await snap.ref.child("delivery").set({ state: "sent", at: Date.now() });
-    } catch (e) {
-      await snap.ref.child("delivery").set({
-        state: "error", at: Date.now(),
-        error: String((e && e.message) || e).slice(0, 300)
-      });
-    }
+  // APPROVAL GATE: email is DISABLED until an operator deliberately opts in
+  // (after institutional sign-off). Set EMAIL_ENABLED=true in functions/.env.
+  if (!emailEnabled()) {
+    await snap.ref.child("delivery").set({
+      state: "disabled", at: Date.now(),
+      error: "Email feature disabled (pending institutional approval)"
+    });
     return null;
-  });
+  }
+
+  const transport = buildTransport();
+  if (!transport) {
+    await snap.ref.child("delivery").set({
+      state: "error", at: Date.now(), error: "SMTP not configured"
+    });
+    return null;
+  }
+
+  try {
+    await transport.sendMail({
+      from: fromAddress(),
+      to: String(job.to),
+      subject: String(job.subject),
+      text: job.text ? String(job.text) : "",
+      html: job.html ? String(job.html) : undefined
+    });
+    await snap.ref.child("delivery").set({ state: "sent", at: Date.now() });
+  } catch (e) {
+    await snap.ref.child("delivery").set({
+      state: "error", at: Date.now(),
+      error: String((e && e.message) || e).slice(0, 300)
+    });
+  }
+  return null;
+});
 
 /* ============================================================================
  * hfPatient — HTTPS callable that voices Mr Lefebvre via Hugging Face
- * Inference Providers (or any compatible chat-completion endpoint). Used by
- * the Module A LLM-patient pilot (modA-llm-bridge.js).
+ * Inference Providers. Used by the Module A LLM-patient pilot
+ * (modA-llm-bridge.js).
  *
- * SECURITY model:
- *   - App Check is ENFORCED at the Realtime Database (since 2026-05-23) and
- *     also REQUIRED on this callable: `consumeAppCheckToken: true` rejects
- *     any caller without a valid attestation token. The token is replay-
- *     protected (single-use) so a leaked token can't be reused.
- *   - Auth is required (`enforceAppCheck: true` + Auth context check below);
- *     anonymous Firebase Auth is enough — that is what every classroom
- *     student uses.
- *   - The HF token NEVER reaches a client. It is stored in Google Secret
- *     Manager via `firebase functions:secrets:set HF_TOKEN` — never in
- *     source, never in Runtime Config (which Firebase deprecated in
- *     favour of the params API). Set once; rotated by re-running the
- *     command. Secret Manager bills ~6¢/month per secret version.
- *   - Per-user rate limit (RTDB counter) prevents API-bill griefing.
- *   - Body size limits + reply size limits + reply sanitisation are applied
- *     server-side so an LLM response cannot blow up the client.
- *   - Only counters (uid, ts, tokensIn approx) are logged — NEVER the user
- *     text, NEVER the patient reply. (The full transcript is the room's
- *     responsibility, persisted via the existing chat path with App-Check
- *     enforced RTDB rules.)
- *
- * APPROVAL GATE: dormant until an operator deliberately opts in (mirrors
- * the email function pattern). Even with a token set, this function refuses
- * to call HF until the `MODA_LLM_ENABLED` param is "true" — set via the
- * params API (see functions/README.md). */
-
-const { defineString, defineSecret, defineBoolean } = require("firebase-functions/params");
+ * Approval gate: dormant until MODA_LLM_ENABLED=true (functions/.env).
+ * ========================================================================== */
 
 const HF_DEFAULT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3";
-/* Mistral-7B's Japanese is weak (byte-level CJK tokenisation, drops out of role
- * mid-reply). JA traffic routes to a Qwen variant by default — same OpenAI-
- * compat surface, much stronger JA. Override via the HF_MODEL_JA param. */
 const HF_DEFAULT_MODEL_JA = "Qwen/Qwen2.5-7B-Instruct";
 const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 const MAX_BODY_MESSAGES = 16;
 const MAX_BODY_CHARS    = 4000;
 const MAX_REPLY_CHARS   = 600;
-const RATE_LIMIT_TURNS  = 40;            // turns per uid per window
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const SESSION_RATE_LIMIT_TURNS = 250;    // turns per session per window
-const PROMPT_VERSION = "modA-llm@1.2";   // bump when STYLE_RULES change (also forces a non-trivial source hash so `firebase deploy` doesn't skip on package.json-only changes)
+const RATE_LIMIT_TURNS  = 40;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const SESSION_RATE_LIMIT_TURNS = 250;
+const PROMPT_VERSION = "modA-llm@1.2";
 
-/* === Params (Firebase functions/params API, replacing the deprecated
- *      Runtime Config / functions.config() that shuts down March 2027) ===
- *
- * Parameter resolution at deploy time (in this order):
- *   1. .env.<projectId> file in functions/   (per-project override)
- *   2. .env file in functions/               (default)
- *   3. interactive prompt during `firebase deploy --only functions`
- *   4. the `default:` below
- *
- * Secrets (HF_TOKEN) are exempt from .env — they live in Google Secret
- * Manager, are set via `firebase functions:secrets:set HF_TOKEN`, and are
- * only readable inside a function that declared them in runWith.secrets.
- */
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
 const HF_URL           = defineString("HF_URL",       { default: HF_DEFAULT_URL });
 const HF_MODEL         = defineString("HF_MODEL",     { default: HF_DEFAULT_MODEL });
 const HF_MODEL_JA      = defineString("HF_MODEL_JA",  { default: HF_DEFAULT_MODEL_JA });
 
-/* Lang-aware model picker. Resolves .value() each call — cheap, supports
- * runtime param overrides. */
 function _hfModel(lang) {
   return lang === "ja" ? HF_MODEL_JA.value() : HF_MODEL.value();
 }
@@ -185,21 +150,13 @@ function _hfModel(lang) {
 function _sanitiseReply(s) {
   if (s == null) return "";
   let t = String(s).trim();
-  // Strip a much broader set of leading "Patient:" / "Mr. Lefebvre, age 45:" /
-  // "Réponse:" / "[Patient response]:" / "**Patient**:" / "「" / "患者:" prefixes
-  // the model sometimes emits even with stop[] tokens in place. (M4 from the
-  // 2026-05-28 review.) Apply twice in case the model layered two wrappers.
   // Strip wrapper brackets BEFORE the JSON-shape check.
   t = t.replace(/^\s*\[[A-Za-z0-9 .,'!_'-]{1,60}\]\s*/, "");
   const ROLE_PREFIX = /^\s*[*_"'`>「『]*\s*(\[[^\]]+\]\s*)?(patient|mr\.?\s*lefebvre|le\s+patient|réponse|response|回答|患者(?:さん)?|彼)[^:：\-—\n]{0,40}\s*[:：\-—]\s*/i;
   t = t.replace(ROLE_PREFIX, "");
   t = t.replace(ROLE_PREFIX, "");
-  // Strip a leading bullet — the most common list-continuation leak.
   t = t.replace(/^\s*[-•*]\s+/, "");
-  // Trim leading/trailing quote marks the model sometimes wraps around its
-  // reply ("..." or 「...」).
   t = t.replace(/^["'「『]+/, "").replace(/["'」』]+$/, "");
-  // Reject JSON-shaped replies (the prompt forbids them).
   if (/^\s*[{[]/.test(t)) return "";
   if (t.length > MAX_REPLY_CHARS) t = t.slice(0, MAX_REPLY_CHARS - 1) + "…";
   return t.trim();
@@ -220,10 +177,6 @@ function _validateMessages(messages) {
   return true;
 }
 
-/* Fixed-window counter in RTDB. NB: renamed from "rolling" to be honest about
- * what it is — when `now - windowStart >= window`, the window resets to `now`.
- * That's good enough for a workshop (cheap, race-safe via transaction); a
- * true rolling bucket would need per-call ledger writes. */
 async function _bumpCounter(path, limit) {
   const ref = admin.database().ref(path);
   const now = Date.now();
@@ -254,10 +207,6 @@ async function _rateLimit(uid, roomCode) {
   return { ok: true };
 }
 
-/* Verify the caller is currently in the room they claim. Reads:
- *   sessions/<code>/rooms/<room>/uidMembers/<uid>  (or the orgs mirror)
- * Returns the resolved {code, roomId, orgSlug?} or null if not a member.
- * Avoids spending HF tokens on requests from users who never joined a room. */
 async function _verifyMembership(uid, body) {
   const code   = String(body && body.roomCode || "").trim();
   const roomId = String(body && body.roomId   || "").trim();
@@ -274,13 +223,9 @@ async function _verifyMembership(uid, body) {
   return snap.exists() ? { code, roomId, orgSlug } : null;
 }
 
-/* Bounded retry on HF cold-load (503) + transient overload (429/520/524).
- * Reads Retry-After / `estimated_time` when present, sleeps with capped
- * backoff so we never exceed the AbortController budget. */
 async function _hfCallWithRetry(url, headers, body, signal, totalBudgetMs) {
   const start = Date.now();
   let attempt = 0;
-  // 2 retries max; first wait is min(parsedRetry, 3s), second is min(parsedRetry, 5s).
   while (true) {
     attempt++;
     const res = await fetch(url, { method: "POST", headers, body, signal });
@@ -288,7 +233,6 @@ async function _hfCallWithRetry(url, headers, body, signal, totalBudgetMs) {
     const status = res.status;
     const isRetryable = (status === 429 || status === 503 || status === 520 || status === 524);
     if (!isRetryable || attempt >= 3) return { res, attempt };
-    // Parse Retry-After header (seconds) or estimated_time (HF body)
     let waitMs = 1500;
     const ra = res.headers.get && res.headers.get("retry-after");
     if (ra) {
@@ -302,16 +246,12 @@ async function _hfCallWithRetry(url, headers, body, signal, totalBudgetMs) {
         }
       } catch (_) { /* not JSON, ignore */ }
     }
-    // Honour overall budget — bail if a retry would blow the timeout.
     const remaining = totalBudgetMs - (Date.now() - start);
     if (remaining <= waitMs + 1000) return { res, attempt };
     await new Promise(r => setTimeout(r, waitMs));
   }
 }
 
-/* Extract a string completion from OpenAI-compat response, defensively. Some
- * HF Inference Providers (Cerebras, Sambanova on certain models) return
- * `content` as a string OR an array of {type:"text", text:"..."}. */
 function _extractContent(j) {
   const choice = j && j.choices && j.choices[0];
   if (!choice || !choice.message) return "";
@@ -323,151 +263,140 @@ function _extractContent(j) {
   return "";
 }
 
-exports.hfPatient = functions
-  .runWith({
-    enforceAppCheck: true,
-    // consumeAppCheckToken intentionally FALSE (2026-05-28 review H7):
-    // single-use consumption was rejecting legitimate workshop turns under
-    // load (token churn vs HF latency). Replay protection here is low-value
-    // because the real abuse defence is the per-uid + per-session rate
-    // limits below; the App Check signal alone keeps bots out.
-    consumeAppCheckToken: false,
-    memory: "256MB",
-    timeoutSeconds: 30,
-    // Bind the HF_TOKEN secret so this function can read it via .value()
-    // at runtime. Functions that don't declare a secret can't read it,
-    // even if they're in the same file.
-    secrets: [HF_TOKEN]
-  })
-  .https.onCall(async (data, context) => {
-    const startedAt = Date.now();
-    const body = data || {};
-    const lang = String(body.lang || "en").slice(0, 2);
+exports.hfPatient = onCall({
+  region: "us-central1",
+  enforceAppCheck: true,
+  // consumeAppCheckToken intentionally FALSE (2026-05-28 review H7):
+  // single-use consumption was rejecting legitimate workshop turns under
+  // load (token churn vs HF latency). Replay protection here is low-value
+  // because the real abuse defence is the per-uid + per-session rate
+  // limits below; the App Check signal alone keeps bots out.
+  consumeAppCheckToken: false,
+  secrets: [HF_TOKEN],
+  memory: "256MiB",            // v2 uses MiB; Gen 2 minimum
+  timeoutSeconds: 30,
+  cpu: 1,
+  // Concurrency: how many requests a single instance handles in parallel.
+  // 80 is the v2 default; works for our workload (each request is mostly
+  // I/O wait on HF). Lower if you observe CPU contention.
+  concurrency: 80
+}, async (request) => {
+  const startedAt = Date.now();
+  const body = request.data || {};
+  const lang = String(body.lang || "en").slice(0, 2);
 
-    // 1) Approval gate — DORMANT by default. Even with a valid token, this
-    //    function returns a structured "disabled" response until the operator
-    //    flips the MODA_LLM_ENABLED param to true (see functions/README.md).
-    if (MODA_LLM_ENABLED.value() !== true) {
-      return { reply: "", state: "disabled",
-               error: "MODA_LLM_ENABLED param is off" };
-    }
+  // 1) Approval gate.
+  if (MODA_LLM_ENABLED.value() !== true) {
+    return { reply: "", state: "disabled",
+             error: "MODA_LLM_ENABLED param is off" };
+  }
 
-    // 2) Auth — every classroom user signs in anonymously; that is enough.
-    if (!context.auth || !context.auth.uid) {
-      throw new functions.https.HttpsError("unauthenticated", "auth required");
-    }
-    const uid = context.auth.uid;
+  // 2) Auth required (anonymous Firebase Auth counts).
+  if (!request.auth || !request.auth.uid) {
+    throw new HttpsError("unauthenticated", "auth required");
+  }
+  const uid = request.auth.uid;
 
-    // 3) Validate input shape + sizes BEFORE doing anything else.
-    if (!_validateMessages(body.messages)) {
-      throw new functions.https.HttpsError("invalid-argument", "bad messages");
-    }
-    const messages = body.messages;
+  // 3) Validate input shape + sizes.
+  if (!_validateMessages(body.messages)) {
+    throw new HttpsError("invalid-argument", "bad messages");
+  }
+  const messages = body.messages;
 
-    // 4) Session-membership check (H8): refuse callers who are NOT currently
-    //    in the room they claim. Reads sessions/<code>/rooms/<r>/uidMembers/<uid>.
-    //    Closes the "any authed anon can spend HF tokens" hole and also
-    //    keys the per-session rate limit on a verified roomCode.
-    const member = await _verifyMembership(uid, body);
-    if (!member) {
-      throw new functions.https.HttpsError("permission-denied",
-        "not a member of the claimed room");
-    }
+  // 4) Session-membership check (H8 from the 2026-05-28 review).
+  const member = await _verifyMembership(uid, body);
+  if (!member) {
+    throw new HttpsError("permission-denied",
+      "not a member of the claimed room");
+  }
 
-    // 5) Rate-limit per uid AND per session (H2/H3 from the review).
-    const rl = await _rateLimit(uid, member.code);
-    if (!rl.ok) {
-      throw new functions.https.HttpsError(
-        "resource-exhausted", "rate limit exceeded (" + rl.scope + ")");
-    }
+  // 5) Rate-limit per uid AND per session.
+  const rl = await _rateLimit(uid, member.code);
+  if (!rl.ok) {
+    throw new HttpsError(
+      "resource-exhausted", "rate limit exceeded (" + rl.scope + ")");
+  }
 
-    // 6) HF token must be configured. If it isn't, return a structured error
-    //    so the client falls back to the local stub patient (chat keeps
-    //    working — facilitator sees the fallback banner).
-    const token = HF_TOKEN.value();
-    if (!token) {
-      return { reply: "", state: "error", error: "HF_TOKEN secret not configured" };
-    }
+  // 6) HF token must be configured.
+  const token = HF_TOKEN.value();
+  if (!token) {
+    return { reply: "", state: "error", error: "HF_TOKEN secret not configured" };
+  }
 
-    // 7) Call HF with bounded retry on 503/429/520/524 (H6). Sampling params
-    //    hardened (H3): temperature 0.3, top_p 0.9, presence_penalty 0.3,
-    //    stop[] to kill bullet + imagined-doctor continuation leaks.
-    const ctrl = new AbortController();
-    const TOTAL_BUDGET_MS = 25_000;
-    const to = setTimeout(() => ctrl.abort(), TOTAL_BUDGET_MS);
-    let raw = "", attempts = 0, httpStatus = 0, provider = "";
-    let promptTokens = 0, completionTokens = 0;
-    const reqBody = JSON.stringify({
-      model: _hfModel(lang),
-      messages,
-      max_tokens: 220,
-      temperature: 0.3,
-      top_p: 0.9,
-      presence_penalty: 0.3,
-      stop: [
-        "\nDoctor:", "\nDocteur:", "\n医師:", "\nDoctor :", "Doctor:",
-        "\n- ", "\n* ", "\n• ",
-        "[INST]", "</s>"
-      ],
-      stream: false
-    });
-    try {
-      const { res, attempt } = await _hfCallWithRetry(
-        HF_URL.value(),
-        { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
-        reqBody,
-        ctrl.signal,
-        TOTAL_BUDGET_MS);
-      clearTimeout(to);
-      attempts = attempt;
-      httpStatus = res.status;
-      provider = (res.headers && res.headers.get && res.headers.get("x-inference-provider")) || "";
-      if (!res.ok) {
-        // 4xx → caller-side problem (failed-precondition); 429 → quota; 5xx → upstream.
-        const code = (res.status === 429) ? "resource-exhausted"
-                   : (res.status >= 500)  ? "unavailable"
-                                          : "failed-precondition";
-        throw new functions.https.HttpsError(code, "hf http " + res.status);
-      }
-      const j = await res.json();
-      // Some providers signal failure with HTTP 200 + {error: "..."}; treat as upstream.
-      if (j && j.error && !j.choices) {
-        throw new functions.https.HttpsError("unavailable",
-          "hf provider error: " + String(j.error).slice(0, 200));
-      }
-      raw = _extractContent(j);
-      if (j && j.usage) {
-        promptTokens = Number(j.usage.prompt_tokens) || 0;
-        completionTokens = Number(j.usage.completion_tokens) || 0;
-      }
-    } catch (e) {
-      clearTimeout(to);
-      if (e && e.code && typeof e.code === "string") throw e; // HttpsError
-      throw new functions.https.HttpsError(
-        "internal", "hf error: " + String((e && e.message) || e).slice(0, 200));
-    }
-
-    const reply = _sanitiseReply(raw);
-    // 8) Counters only — NEVER user text, NEVER patient reply. Now includes
-    //    upstream latency, HTTP status, provider, token usage, retries —
-    //    enough for an operator to debug "why was the patient slow tonight".
-    try {
-      await admin.database().ref("metrics/hfPatient/events").push({
-        uid,
-        at: Date.now(),
-        lang,
-        msgCount: messages.length,
-        replyLen: reply.length,
-        latencyMs: Date.now() - startedAt,
-        httpStatus,
-        provider: provider.slice(0, 40),
-        promptTokens,
-        completionTokens,
-        attempts,
-        promptVersion: PROMPT_VERSION,
-        sessionCode: member.code
-      });
-    } catch (_) { /* metrics best-effort */ }
-
-    return { reply, state: "ok" };
+  // 7) Call HF with bounded retry. Sampling params hardened (H3 review):
+  //    temperature 0.3, top_p 0.9, presence_penalty 0.3, stop tokens.
+  const ctrl = new AbortController();
+  const TOTAL_BUDGET_MS = 25_000;
+  const to = setTimeout(() => ctrl.abort(), TOTAL_BUDGET_MS);
+  let raw = "", attempts = 0, httpStatus = 0, provider = "";
+  let promptTokens = 0, completionTokens = 0;
+  const reqBody = JSON.stringify({
+    model: _hfModel(lang),
+    messages,
+    max_tokens: 220,
+    temperature: 0.3,
+    top_p: 0.9,
+    presence_penalty: 0.3,
+    stop: [
+      "\nDoctor:", "\nDocteur:", "\n医師:", "\nDoctor :", "Doctor:",
+      "\n- ", "\n* ", "\n• ",
+      "[INST]", "</s>"
+    ],
+    stream: false
   });
+  try {
+    const { res, attempt } = await _hfCallWithRetry(
+      HF_URL.value(),
+      { "Authorization": "Bearer " + token, "Content-Type": "application/json" },
+      reqBody,
+      ctrl.signal,
+      TOTAL_BUDGET_MS);
+    clearTimeout(to);
+    attempts = attempt;
+    httpStatus = res.status;
+    provider = (res.headers && res.headers.get && res.headers.get("x-inference-provider")) || "";
+    if (!res.ok) {
+      const code = (res.status === 429) ? "resource-exhausted"
+                 : (res.status >= 500)  ? "unavailable"
+                                        : "failed-precondition";
+      throw new HttpsError(code, "hf http " + res.status);
+    }
+    const j = await res.json();
+    if (j && j.error && !j.choices) {
+      throw new HttpsError("unavailable",
+        "hf provider error: " + String(j.error).slice(0, 200));
+    }
+    raw = _extractContent(j);
+    if (j && j.usage) {
+      promptTokens = Number(j.usage.prompt_tokens) || 0;
+      completionTokens = Number(j.usage.completion_tokens) || 0;
+    }
+  } catch (e) {
+    clearTimeout(to);
+    if (e instanceof HttpsError) throw e;
+    throw new HttpsError(
+      "internal", "hf error: " + String((e && e.message) || e).slice(0, 200));
+  }
+
+  const reply = _sanitiseReply(raw);
+  // 8) Counters only — never user text, never patient reply.
+  try {
+    await admin.database().ref("metrics/hfPatient/events").push({
+      uid,
+      at: Date.now(),
+      lang,
+      msgCount: messages.length,
+      replyLen: reply.length,
+      latencyMs: Date.now() - startedAt,
+      httpStatus,
+      provider: provider.slice(0, 40),
+      promptTokens,
+      completionTokens,
+      attempts,
+      promptVersion: PROMPT_VERSION,
+      sessionCode: member.code
+    });
+  } catch (_) { /* metrics best-effort */ }
+
+  return { reply, state: "ok" };
+});
