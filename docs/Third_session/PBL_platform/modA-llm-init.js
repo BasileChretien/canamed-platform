@@ -181,11 +181,20 @@
     var db = window.db;
     var sPath = window.sPath;
     if (!db || typeof sPath !== "function" || !window.myRoom) return null;
-    var base = sPath("rooms/" + window.myRoom) + "/moduleA";
+    var roomBase  = sPath("rooms/" + window.myRoom);
+    var modABase  = roomBase + "/moduleA";
+    var scoreBase = roomBase + "/score";
     return {
-      chat:    db.ref(base + "/chat"),
-      awarded: db.ref(base + "/scoring/awarded"),
-      points:  db.ref(base + "/scoring/points")
+      chat:           db.ref(modABase + "/chat"),
+      awarded:        db.ref(modABase + "/scoring/awarded"),
+      points:         db.ref(modABase + "/scoring/points"),
+      // ALSO write to the platform-wide score subtree so:
+      //   - the existing scoreTotal() helper sums chat points into the room total
+      //   - the existing refScore listener fires → renderScore() → renderObjectives()
+      //     and the new awards show up in the right-column scoring sidebar
+      //     alongside the existing concept rows (SCORE_AUTO + SCORING.moduleA)
+      scoreAuto:      db.ref(scoreBase + "/auto"),
+      scorePenalties: db.ref(scoreBase + "/penalties")
     };
   }
 
@@ -241,15 +250,37 @@
         // (see database.rules.json updates in task 8).
         if (awarded[famId]) return;
         awarded[famId] = true;
+        var pts = (fam && fam.points) || 0;
+        var now = Date.now();
+        // 1. Fine-grained inspection log (one record per family, with at + points)
         refs.awarded.child(famId).transaction(function (cur) {
-          return cur == null ? { at: Date.now(), points: (fam && fam.points) || 0 } : undefined;
+          return cur == null ? { at: now, points: pts } : undefined;
+        });
+        // 2. Platform-wide score path: makes the chat award count toward the
+        //    team total via the existing scoreTotal() helper, AND triggers
+        //    renderObjectives() so the row shows up in the right-column sidebar.
+        //    Event id `chatA_<famId>` mirrors the existing `conceptA_<famId>`
+        //    convention used by SCORING.moduleA concepts.
+        refs.scoreAuto.child("chatA_" + famId).transaction(function (cur) {
+          return cur == null ? { points: pts, at: now } : undefined;
         });
       },
       onPenalty: function (famId, fam) {
         if (awarded[famId]) return;
         awarded[famId] = true;
+        var pts = (fam && fam.points) || 0;
+        var now = Date.now();
+        // 1. Fine-grained inspection log (negative points to mark it as penalty)
         refs.awarded.child(famId).transaction(function (cur) {
-          return cur == null ? { at: Date.now(), points: -((fam && fam.points) || 0) } : undefined;
+          return cur == null ? { at: now, points: -pts } : undefined;
+        });
+        // 2. Platform-wide penalty path: scoreTotal() subtracts the sum of
+        //    score/penalties from the team total. Stored as a POSITIVE value
+        //    (the math is `auto + min(manual,cap) - pen`). The renderObjectives
+        //    penalty section picks it up automatically once penaltyMeta() is
+        //    taught to look up chat-penalty IDs in SCORING.moduleA_question_penalties.
+        refs.scorePenalties.child(famId).transaction(function (cur) {
+          return cur == null ? { points: pts, at: now } : undefined;
         });
       },
       onUnlock: function (legacyId) {

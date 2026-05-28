@@ -116,6 +116,24 @@ outstanding.**
    - **Pilot gate:** the chat UI itself stays hidden unless a user passes
      `?llm=1` in the URL or sets `localStorage.canamedModALLM=1`. The
      facilitator controls who sees it during the pilot window.
+   - **Re-enable App Check on hfPatient (deferred from initial pilot):**
+     the function ships with `enforceAppCheck` driven by the
+     `APP_CHECK_ENFORCE` defineBoolean param (defaults `false`). The
+     client-side wiring is already done — `initAppCheck()` in
+     [script.js](docs/Third_session/PBL_platform/script.js) activates
+     the reCAPTCHA v3 provider as soon as a site key is set. To turn it
+     on:
+     1. Get a reCAPTCHA v3 site key at
+        https://www.google.com/recaptcha/admin — register both
+        `canamed-69785.web.app` and `canamed.web.app` as allowed sites.
+     2. Firebase Console → App Check → Apps → register
+        `canamed-69785` with the reCAPTCHA v3 provider (paste the
+        site key + secret key from step 1).
+     3. In
+        [firebase-config.js](docs/Third_session/PBL_platform/firebase-config.js),
+        set `window.CANAMED_RECAPTCHA_SITE_KEY = "<site-key>"`.
+     4. In `functions/.env`, set `APP_CHECK_ENFORCE=true`.
+     5. `firebase deploy --only functions,hosting`.
 
 ## Known security follow-ups (code, tracked)
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping

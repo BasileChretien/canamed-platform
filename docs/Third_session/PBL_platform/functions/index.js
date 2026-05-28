@@ -157,13 +157,18 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@2.0";   // narrative context + opioid-seeking stance + 2-turn few-shot + relaxed common-knowledge rule
+const PROMPT_VERSION = "modA-llm@2.1";   // bumped to force redeploy: APP_CHECK_ENFORCE param + score/auto + score/penalties wire-up
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
 const HF_URL           = defineString("HF_URL",       { default: HF_DEFAULT_URL });
 const HF_MODEL         = defineString("HF_MODEL",     { default: HF_DEFAULT_MODEL });
 const HF_MODEL_JA      = defineString("HF_MODEL_JA",  { default: HF_DEFAULT_MODEL_JA });
+// App Check enforcement toggle (2026-05-28). Defaults to false because the
+// platform's CANAMED_RECAPTCHA_SITE_KEY isn't set in firebase-config.js yet.
+// Flip to true via functions/.env once the reCAPTCHA v3 site key is wired
+// (see the hfPatient runWith block below for the full operator runbook).
+const APP_CHECK_ENFORCE = defineBoolean("APP_CHECK_ENFORCE", { default: false });
 
 function _hfModel(lang) {
   return lang === "ja" ? HF_MODEL_JA.value() : HF_MODEL.value();
@@ -294,18 +299,26 @@ function _extractContent(j) {
 exports.hfPatient = onCall({
   region: "us-central1",
   runtime: "nodejs22",          // explicit override; setGlobalOptions can be ignored on `update` ops
-  // enforceAppCheck DISABLED (2026-05-28 pilot): the platform's client-side
-  // App Check is OFF in this deployment (CANAMED_RECAPTCHA_SITE_KEY not set
-  // in firebase-config.js), so every callable invocation would return
-  // `unauthenticated` if we enforced. The real abuse defences here are:
+  // enforceAppCheck is driven by the APP_CHECK_ENFORCE defineBoolean param
+  // (see top of file). Defaults to false so the function works for the
+  // pilot while CANAMED_RECAPTCHA_SITE_KEY isn't yet set in
+  // firebase-config.js. To re-enable:
+  //   1. Get a reCAPTCHA v3 site key (https://www.google.com/recaptcha/admin)
+  //      and register canamed-69785.web.app + canamed.web.app
+  //   2. In Firebase Console → App Check → Apps → register the canamed-69785
+  //      web app with the reCAPTCHA v3 provider (paste site key + secret).
+  //   3. Set `window.CANAMED_RECAPTCHA_SITE_KEY = "<key>"` in
+  //      firebase-config.js. The client-side initAppCheck() in script.js
+  //      activates automatically when this is set.
+  //   4. In functions/.env, set `APP_CHECK_ENFORCE=true`.
+  //   5. Redeploy: `firebase deploy --only functions,hosting`.
+  // Real abuse defences when this is false:
   //   - Anonymous Auth required (request.auth check below)
   //   - Per-uid rate limit (40 turns/hr in RTDB)
   //   - Per-session rate limit (250 turns/hr in RTDB)
   //   - Server-side session-membership check (_verifyMembership)
   //   - HF token stays in Secret Manager, never reaches the client
-  // Re-enable once App Check is wired client-side (App Check token must
-  // flow through firebase-config.js → initializeAppCheck → SDK).
-  enforceAppCheck: false,
+  enforceAppCheck: APP_CHECK_ENFORCE.value(),
   consumeAppCheckToken: false,
   secrets: [HF_TOKEN],
   memory: "256MiB",            // v2 uses MiB; Gen 2 minimum

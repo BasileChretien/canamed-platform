@@ -374,6 +374,22 @@ function penaltyMeta(ev) {
       why: tc(d.option.why, lang)
     };
   }
+  // Chat-mode penalties (Module A LLM pilot 2026-05-28): the dismissive /
+  // promise-opioid penalties live in SCORING.moduleA_question_penalties,
+  // not in PENALTIES. Check there before falling through to the standard
+  // PENALTIES list so the renderObjectives penalty section displays them
+  // with the right label.
+  if (typeof SCORING !== "undefined" && SCORING.moduleA_question_penalties) {
+    const chatPen = SCORING.moduleA_question_penalties.find(pp => pp.id === ev);
+    if (chatPen) {
+      return {
+        id: ev,
+        points: chatPen.points,
+        title: tc(chatPen.label, lang),
+        why: ""    // chat penalties don't carry a "why" paragraph
+      };
+    }
+  }
   if (typeof PENALTIES === "undefined") return null;
   const p = PENALTIES.find(pp => pp.id === ev) || null;
   if (!p) return null;
@@ -8251,6 +8267,15 @@ function renderObjectives() {
     const lang = _curLang();
     (SCORING["module" + mod] || []).forEach(f =>
       rows.push({ ev: "concept" + mod + "_" + f.id, points: f.points, label: tc(f.label, lang) }));
+    // Module A LLM-patient pilot (2026-05-28): also surface the chat-based
+    // scoring families (red-flag screen, cauda equina, yellow flags, opioid
+    // handling, etc.). The bridge writes the matching `chatA_<famId>` row
+    // to score/auto when the family fires, so `done` flips automatically
+    // from the existing `earned[ev]` check below.
+    if (mod === "A") {
+      (SCORING.moduleA_questions || []).forEach(f =>
+        rows.push({ ev: "chatA_" + f.id, points: f.points, label: tc(f.label, lang) }));
+    }
   }
   let got = 0, max = 0;
   box.innerHTML = "";
