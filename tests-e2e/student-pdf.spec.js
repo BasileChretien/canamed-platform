@@ -165,14 +165,67 @@ test.describe("Student PDFs — study booklet", () => {
     expect(doc).toContain("Reached the clinical synthesis");
   });
 
-  test("pdfmake renders a non-empty booklet PDF (chromium smoke)", async ({ page, browserName }) => {
+  test("the booklet has a clickable table of contents (toc node + tocItem headings)", async ({ page }) => {
+    await page.goto("/");
+    const doc = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildBookletDocDefinition({
+        name: "Akari", sessionCode: "ABC-DEF",
+        sections: [{ title: "Historical context", blocks: [{ type: "p", text: "x" }] },
+                   { title: "Guidelines", blocks: [{ type: "p", text: "y" }] }],
+        team: { name: "Room 1", score: 10, wins: [], cohort: [] }
+      });
+      const content = d.content || [];
+      return {
+        hasContents: JSON.stringify(content).includes("Contents"),
+        tocNodes: content.filter(n => n && n.toc).length,
+        tocItems: content.filter(n => n && n.tocItem === true).map(n => n.text)
+      };
+    });
+    expect(doc.hasContents, "a 'Contents' page is present").toBe(true);
+    expect(doc.tocNodes, "exactly one pdfmake toc node").toBe(1);
+    expect(doc.tocItems).toContain("Historical context");
+    expect(doc.tocItems).toContain("Guidelines");
+    expect(doc.tocItems).toContain("Your team");
+  });
+
+  test("emoji/smileys are stripped from titles, text, lists and tables", async ({ page }) => {
+    await page.goto("/");
+    const doc = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const d = window.CanamedPdf.buildBookletDocDefinition({
+        name: "🙂 Akari",
+        sections: [{ title: "📋 Historical context 🇫🇷", blocks: [
+          { type: "p", text: "Truth-telling ✅ changed 🎯." },
+          { type: "ul", items: ["✓ first point", "🚩 second"] },
+          { type: "table", header: true, rows: [["Country 🇯🇵", "Norm"], ["France", "autonomy ⭐"]] }
+        ] }],
+        team: { name: "Room 1 🏆", score: 1, wins: ["🎉 win"], cohort: [{ label: "Room 1 🇫🇷", score: 1, you: true }] }
+      });
+      return JSON.stringify(d);
+    });
+    // Readable text is preserved …
+    expect(doc).toContain("Historical context");
+    expect(doc).toContain("Truth-telling");
+    expect(doc).toContain("autonomy");
+    expect(doc).toContain("first point");
+    // … but no emoji / pictographs survive (they render as tofu in Roboto).
+    const emoji = /[\u{1F000}-\u{1FAFF}\u{1F1E6}-\u{1F1FF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}]/u;
+    expect(emoji.test(doc), "no emoji should remain in the booklet doc").toBe(false);
+  });
+
+  test("pdfmake renders a non-empty booklet PDF with a TOC (chromium smoke)", async ({ page, browserName }) => {
     test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
     await page.goto("/");
     const out = await page.evaluate(async () => {
       await window.CanamedLoader.ensurePdfmake();
       await window.CanamedLoader.ensureStudentPdf();
       const d = window.CanamedPdf.buildBookletDocDefinition({
-        name: "T", sections: [{ title: "S", blocks: [{ type: "p", text: "x" }] }],
+        name: "T 🙂",
+        sections: [
+          { title: "📋 Section one", blocks: [{ type: "p", text: "x" }] },
+          { title: "Section two", blocks: [{ type: "p", text: "y" }] }
+        ],
         team: { name: "R1", score: 10, wins: [], cohort: [{ label: "R1", score: 10, you: true }] }
       });
       return await new Promise((resolve) => {

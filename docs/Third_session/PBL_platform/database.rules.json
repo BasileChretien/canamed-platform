@@ -184,7 +184,7 @@
         "pool": {
           "$clientId": {
             ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && (!root.child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
-            ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)",
+            ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && (data.child('at').val() == newData.child('at').val() || (newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)))",
             "room": {
               ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 30)"
@@ -311,6 +311,14 @@
               "exchangeCursor": {
                 ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
                 ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 20)"
+              },
+              "exchangeReplies": {
+                "$promptIdx": {
+                  "$cid": {
+                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                    ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 600 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000)"
+                  }
+                }
               }
             },
             "answers": {
@@ -532,7 +540,7 @@
             "pool": {
               "$clientId": {
                 ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && (!root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid)",
-                ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)",
+                ".validate": "newData.val() == null || (newData.hasChildren(['name','university','year','english','at']) && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 40 && newData.child('university').isString() && newData.child('university').val().length <= 40 && newData.child('year').isNumber() && newData.child('english').isString() && newData.child('english').val().length <= 4 && newData.child('at').isNumber() && (data.child('at').val() == newData.child('at').val() || (newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 120000)))",
                 "room": {
                   ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
                   ".validate": "newData.val() == null || (newData.isString() && newData.val().length <= 30)"
