@@ -135,7 +135,13 @@ exports.sendQueuedMail = onValueCreated({
  * Approval gate: dormant until MODA_LLM_ENABLED=true (functions/.env).
  * ========================================================================== */
 
-const HF_DEFAULT_MODEL = "mistralai/Mistral-7B-Instruct-v0.3";
+// Default models must be tagged as "chat models" on HF Inference Providers
+// (i.e. supported via /v1/chat/completions). Mistral-7B-Instruct-v0.3 was
+// our original pick — it's still on HF but only as a text-completion
+// model, so it returns 400 "is not a chat model" via the OpenAI-compat
+// route. Llama-3.1-8B-Instruct is universally available on the free tier
+// as a chat model and is excellent for instruction-following roleplay.
+const HF_DEFAULT_MODEL = "meta-llama/Llama-3.1-8B-Instruct";
 const HF_DEFAULT_MODEL_JA = "Qwen/Qwen2.5-7B-Instruct";
 const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 const MAX_BODY_MESSAGES = 16;
