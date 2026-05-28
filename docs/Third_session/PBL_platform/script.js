@@ -3551,6 +3551,11 @@ function enterAdminApp() {
     attestBtn.dataset.wired = "1";
     attestBtn.addEventListener("click", () => runAdminTool("generateAttestations"));
   }
+  const revokeBtn = el("admin-revoke-cert-btn");
+  if (revokeBtn && !revokeBtn.dataset.wired) {
+    revokeBtn.dataset.wired = "1";
+    revokeBtn.addEventListener("click", () => runAdminTool("removeVerificationEntry"));
+  }
   const programBtn = el("admin-program-btn");
   if (programBtn && !programBtn.dataset.wired) {
     programBtn.dataset.wired = "1";
