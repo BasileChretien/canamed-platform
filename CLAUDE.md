@@ -98,8 +98,8 @@ outstanding.**
      unverified script would lower the platform's security floor; the
      operator opts in by editing index.html when ready:
      ```html
-     <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"
-             integrity="sha384-dl8gTN2pDiuvgHrzW5Zb1btHv3Y2g2RAGe+oZPnyV8yqolnsEg/TBN/fKf97tmac"
+     <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-functions-compat.js"
+             integrity="sha384-0e6ckm3xAVRuudHvqdLzPYsVoBYmqB3xnx4uw9owqugEc3FyhMYiwmB7SjWACApm"
              crossorigin="anonymous"></script>
      ```
      Without this tag, the bridge stays in stub mode even with the function

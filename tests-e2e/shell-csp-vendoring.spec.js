@@ -33,7 +33,7 @@ const APP_DIR = path.join(__dirname, "..", "docs", "Third_session", "PBL_platfor
 const read = (f) => fs.readFileSync(path.join(APP_DIR, f), "utf8");
 
 const PERF_SDK_FILE = "fb-timings.min.js";
-const GSTATIC_PERF_URL = "firebasejs/10.12.5/firebase-performance-compat.js";
+const GSTATIC_PERF_URL = "firebasejs/12.13.0/firebase-performance-compat.js";
 
 test.describe("shell CSP + perf-SDK vendoring", () => {
   test("CSP connect-src allows gstatic in BOTH the meta and the header", () => {

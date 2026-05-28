@@ -204,19 +204,20 @@ exact file at this version (mirror the existing pattern for the other
 firebase compat scripts):
 
 ```html
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"
-        integrity="sha384-dl8gTN2pDiuvgHrzW5Zb1btHv3Y2g2RAGe+oZPnyV8yqolnsEg/TBN/fKf97tmac"
+<script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-functions-compat.js"
+        integrity="sha384-0e6ckm3xAVRuudHvqdLzPYsVoBYmqB3xnx4uw9owqugEc3FyhMYiwmB7SjWACApm"
         crossorigin="anonymous"></script>
 ```
 
-The integrity hash above was computed against the exact file at v10.12.5 on
+The integrity hash above was computed against the exact file at v12.13.0 on
 2026-05-28. If you bump the Firebase SDK version (the other compat scripts
 in [index.html](../index.html) ship as a set — keep them in lockstep),
-recompute the hash with:
+recompute every hash with:
 
 ```bash
-curl -s https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js \
-  | openssl dgst -sha384 -binary | openssl base64 -A
+for f in firebase-app-compat firebase-database-compat firebase-auth-compat firebase-app-check-compat firebase-functions-compat; do
+  echo "$f: $(curl -s https://www.gstatic.com/firebasejs/<NEW_VERSION>/$f.js | openssl dgst -sha384 -binary | openssl base64 -A)"
+done
 ```
 
 Without this tag the bridge stays in **stub mode** — chat works locally with

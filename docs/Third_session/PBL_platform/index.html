@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v25" below to the matching new string.
+         2. Update every "?v=v26" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v25"></script>
-  <link rel="stylesheet" href="style.css?v=v25" />
+  <script src="theme-init.js?v=v26"></script>
+  <link rel="stylesheet" href="style.css?v=v26" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v25" defer></script>
+  <script src="sw-register.js?v=v26" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -2909,14 +2909,14 @@
        https://firebase.google.com/support/release-notes/js
        integrity hashes are sha384 of these exact files; if you bump the version
        you must recompute them (or the page will refuse to load the SDK). -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"
-          integrity="sha384-mLD+wdwynYnAhgHAkdPP5hroWJXJTNy5C2OhPKM55zuiV2vjzFD1LtBohaHq2Ex8"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js"
+          integrity="sha384-lZdXyTmqFF084YMao84xKUEMETtezLQrISPWM2frjaZ2soaIyVPMRed2f1aItR+d"
           crossorigin="anonymous"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"
-          integrity="sha384-fXPb0uemoXlFCqQMtM0MOAv7FM0LsMegbR6x22q7lfnohaCNmTQzgA8BTrR8WqGx"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js"
+          integrity="sha384-pu7BGxa50f7nbHNKziqkWBwKW6FlXRwc4r9AWKj9eXdv4amdRLshYSmnoNFELtJz"
           crossorigin="anonymous"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"
-          integrity="sha384-NiuRnBs5Z0OgJ12kYJLSeWxANeJN369zH3+Zn0TGVPaCH/TKmbPFqfOmmLtrj+wg"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-auth-compat.js"
+          integrity="sha384-WZRQ9uBbnZ9oCZd85Hbt663LqMA0DvZcdE9PGjybnqECAHSH0m3vPW1geN/tw7NI"
           crossorigin="anonymous"></script>
   <!-- Firebase App Check — verifies every DB request actually comes from a
        legitimate browser load of THIS site (not a script with stolen auth
@@ -2924,18 +2924,19 @@
        is set in firebase-config.js. When App Check is enforced in the
        Firebase Console with this site key registered, anonymous-auth abuse
        is no longer possible. See README.md → "Enabling App Check". -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"
-          integrity="sha384-Ybv3lGuy/hHZj1VLzE7e+sawyrFSbMuEQaKRSfC9W4Q8MK+k/zQKNrxNVagHhXAj"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-check-compat.js"
+          integrity="sha384-gu4r0mRSadHmKzjUDXzbNG8AjJHppTLmPeBrfDJjByEjEa8MlTn80mA7+rluQS33"
           crossorigin="anonymous"></script>
   <!-- Firebase Functions (compat) — only used by the Module A LLM-patient
        pilot (`hfPatient` callable). The bridge wires up
        `firebase.functions().httpsCallable("hfPatient")` during startRoom();
        without this script the chat stays in stub mode (canned answers, no
-       real LLM call). Integrity hash computed against v10.12.5 on
-       2026-05-28 — if you bump the Firebase SDK version, recompute the
-       hash with `curl ... | openssl dgst -sha384 -binary | openssl base64 -A`. -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-functions-compat.js"
-          integrity="sha384-dl8gTN2pDiuvgHrzW5Zb1btHv3Y2g2RAGe+oZPnyV8yqolnsEg/TBN/fKf97tmac"
+       real LLM call). Integrity hash computed against v12.13.0 on
+       2026-05-28 — if you bump the Firebase SDK version, recompute ALL
+       five compat-script hashes with `curl ... | openssl dgst -sha384
+       -binary | openssl base64 -A`. -->
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-functions-compat.js"
+          integrity="sha384-0e6ckm3xAVRuudHvqdLzPYsVoBYmqB3xnx4uw9owqugEc3FyhMYiwmB7SjWACApm"
           crossorigin="anonymous"></script>
   <!-- Firebase Performance Monitoring — collects real-user load times
        (TTFB, FCP, page load, custom traces). Useful research-side:
@@ -2950,51 +2951,51 @@
        runtime trace upload still goes to *.googleapis.com and may itself be
        blocked by aggressive extensions — that's accepted; data is partial.)
        SRI hash is the genuine gstatic 10.12.5 file (verified by sha384). -->
-  <script src="fb-timings.min.js?v=v25"
+  <script src="fb-timings.min.js?v=v26"
           integrity="sha384-itOr+DLGg//NmXkxa8it79G3P4Gpi3cqjsw8vx+DDTzJvzR2QTB3WrvbGirWm1Jq"></script>
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v25" defer></script>
+  <script src="firebase-config.js?v=v26" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v25" defer></script>
+  <script src="orgs.js?v=v26" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v25" defer></script>
+  <script src="platform-config.js?v=v26" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v25" defer></script>
+  <script src="telemetry.js?v=v26" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v25" defer></script>
+  <script src="purify.min.js?v=v26" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v25" defer></script>
+  <script src="i18n.js?v=v26" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v25" defer></script>
+  <script src="localdb.js?v=v26" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v25" defer></script>
+  <script src="lib.js?v=v26" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v25" defer></script>
+  <script src="pure-utils.js?v=v26" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3005,7 +3006,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v25" defer></script>
+  <script src="script-loader.js?v=v26" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
        flag is on (URL ?llm=1 or localStorage canamedModALLM=1). The four
        files are independent of each other except for load order:
@@ -3013,11 +3014,11 @@
        lazily); the bridge and init are activated only after startRoom().
        Kept as classic scripts (not modules) to share the global namespace
        with script.js, same as every other file in this platform. -->
-  <script src="modA-question-scoring.js?v=v25" defer></script>
-  <script src="modA-llm-prompts.js?v=v25" defer></script>
-  <script src="modA-llm-bridge.js?v=v25" defer></script>
-  <script src="modA-llm-init.js?v=v25" defer></script>
-  <script src="script.js?v=v25" defer></script>
+  <script src="modA-question-scoring.js?v=v26" defer></script>
+  <script src="modA-llm-prompts.js?v=v26" defer></script>
+  <script src="modA-llm-bridge.js?v=v26" defer></script>
+  <script src="modA-llm-init.js?v=v26" defer></script>
+  <script src="script.js?v=v26" defer></script>
   <!-- case-content.js, qrcode.js, tour.js and scenario-author.js are NOT
        in the initial HTML on purpose — they're injected by
        script-loader.js on demand. See that file's header for the loading
