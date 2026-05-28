@@ -38,7 +38,7 @@ test("i18n: English is the canonical key set", () => {
   assert.ok(enKeys.length > 30, "English should have a meaningful number of keys");
   // every key starts with a section prefix
   for (const k of enKeys) {
-    assert.match(k, /^(lang|a11y|splash|lobby|waiting|data-rights|stage|room|admin|closed|ended|debrief|impact|tour|test|survey|offline|modal|privacy|rcol|findings|prompts|reset|settings|modA|modB|coach|reference-section|answer|endpoll)\./, `key ${k} should be section.prefixed`);
+    assert.match(k, /^(lang|a11y|splash|lobby|waiting|data-rights|stage|room|admin|closed|ended|debrief|impact|tour|test|survey|offline|modal|privacy|verify|rcol|findings|prompts|reset|settings|modA|modB|coach|reference-section|answer|endpoll)\./, `key ${k} should be section.prefixed`);
   }
 });
 

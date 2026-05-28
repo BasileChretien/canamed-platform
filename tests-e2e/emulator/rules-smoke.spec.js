@@ -233,6 +233,56 @@ test("rules: a participant can save a Module B Phase-3 exchange reply, with vali
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
 });
 
+test("rules: /credentials/$id — public read by exact id; listing denied; write-once enforced; bad payload denied", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const id = "CNM-T582B-V53WX"; // valid Crockford format
+  const path = "credentials/" + id;
+  const goodHash = "a".repeat(64);
+
+  // Reading the parent /credentials node (listing) is DENIED — no enumeration.
+  const list = await page.evaluate(async () => {
+    try { const s = await firebase.database().ref("credentials").get(); return "READ:" + (s.exists() ? "exists" : "empty"); }
+    catch (e) { return (e && (e.code || e.message)) || "DENIED"; }
+  });
+  expect(list, "/credentials must not be listable").not.toMatch(/^READ:/);
+
+  // Write a well-formed credential entry → ALLOWED.
+  expect(await tryWrite(page, path, {
+    nameHash: goodHash, session: "ABC-DEF", sessionLabel: "Test session",
+    at: Date.now(), retentionUntil: Date.now() + 365 * 86400 * 1000
+  })).toBe("ALLOWED");
+
+  // Reading that exact id back is ALLOWED (rule .read: true on $id).
+  const readBack = await page.evaluate(async (p) => {
+    try { const s = await firebase.database().ref(p).get(); return s.val(); }
+    catch (e) { return "DENIED:" + (e && (e.code || e.message)); }
+  }, path);
+  expect(readBack && readBack.nameHash, "by-id read must return the stored entry").toBe(goodHash);
+
+  // Overwriting is DENIED (write-once).
+  const over = await tryWrite(page, path, {
+    nameHash: "b".repeat(64), session: "ABC-DEF", at: Date.now()
+  });
+  expect(over).not.toBe("ALLOWED");
+
+  // Client-initiated delete is DENIED (withdrawal is admin-only via console).
+  const del = await tryWrite(page, path, null);
+  expect(del).not.toBe("ALLOWED");
+
+  // A bad payload (bad nameHash format) at a fresh id is DENIED.
+  const bad = await tryWrite(page, "credentials/CNM-BADHX-PAYL2", {
+    nameHash: "not-hex", session: "ABC-DEF", at: Date.now()
+  });
+  expect(bad).not.toBe("ALLOWED");
+
+  // A bad key format (not CNM-XXXXX-XXXXX) is DENIED.
+  const badKey = await tryWrite(page, "credentials/not-a-cnm-id", {
+    nameHash: goodHash, session: "ABC-DEF", at: Date.now()
+  });
+  expect(badKey).not.toBe("ALLOWED");
+});
+
 test("rules: a write to a denied path is rejected (rules ARE enforced)", async ({ page }) => {
   await page.goto("/");
   // Wait for the app to finish anonymous sign-in so a write is even attempted.

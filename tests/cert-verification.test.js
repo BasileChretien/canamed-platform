@@ -63,8 +63,11 @@ test("the certificate builder embeds the id + a QR only when an id is supplied",
   const fn = STUDENT_PDF.slice(STUDENT_PDF.indexOf("function buildCertificateDocDefinition"),
                                STUDENT_PDF.indexOf("function _safe"));
   assert.match(fn, /var certId = _str\(data\.certId/, "builder must read data.certId");
-  assert.match(fn, /qr:\s*certId/, "builder must render a QR of the id");
+  // QR encodes the verify URL when one is supplied (public verification flow),
+  // and the bare id otherwise (facilitator-only path).
+  assert.match(fn, /qr:\s*\(\s*verifyUrl\s*\|\|\s*certId\s*\)/,
+    "QR must encode verifyUrl when present, else the bare id");
   assert.match(fn, /Verification ID/, "builder must label the id");
   // Guarded so a cert with no id renders neither the QR nor the id line.
-  assert.match(fn, /certId\s*\?\s*\{[\s\S]*qr:\s*certId/, "QR must be gated on certId presence");
+  assert.match(fn, /certId\s*\?\s*\{[\s\S]*qr:/, "QR must be gated on certId presence");
 });

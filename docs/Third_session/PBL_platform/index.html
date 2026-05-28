@@ -855,8 +855,14 @@
               participation, my grades or my standing at my university.
             </span>
           </label>
+          <label class="consent-row">
+            <input type="checkbox" id="consent-verification" />
+            <span data-i18n="lobby.consent-verification">
+              I additionally consent to my certificate being independently verifiable: a verification ID printed on it is linked, in a separate registry, to a one-way hash of my name + session, so that a third party who is given BOTH my certificate ID AND the name on it can confirm &mdash; on a public CaNaMED page &mdash; that they match a real CaNaMED certificate. The page does not publish my name; it only returns &ldquo;valid&rdquo; or &ldquo;no match&rdquo; when both inputs are supplied. The registry is retained for up to 10 years and I can ask for my entry to be removed at any time (see the privacy policy, section 18). I understand I can take part and consent to the research without ticking this third box.
+            </span>
+          </label>
           <p class="lobby-hint consent-version" id="consent-version">
-            <span data-i18n="lobby.consent-version">Notice version PIS v1 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
+            <span data-i18n="lobby.consent-version">Notice version PIS v2 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
           </p>
         </div>
 
