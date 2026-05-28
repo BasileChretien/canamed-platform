@@ -51,21 +51,22 @@ test.describe("Student PDFs — certificate of attendance", () => {
     expect(doc.json).toContain("Dr. Basile Chr");          // Chrétien (accent-safe match)
   });
 
-  test("the certificate embeds a provided signature image, else falls back to a line", async ({ page }) => {
+  test("the certificate embeds the director's signature (default) and honours an override", async ({ page }) => {
     await page.goto("/");
     const out = await page.evaluate(async () => {
       await window.CanamedLoader.ensureStudentPdf();
-      // 1x1 transparent PNG data URL stands in for the real signature scan.
       const px = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC";
       const withSig = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A", signatureDataUrl: px }));
-      const noSig = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A" }));
-      return { hasImg: withSig.includes(px), withSig: withSig, noSig: noSig };
+      const dflt = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A" }));
+      return { hasOverride: withSig.includes(px), withSig: withSig, dflt: dflt };
     });
-    // With a signature provided → the image is embedded.
-    expect(out.hasImg, "a provided signatureDataUrl must be embedded as an image").toBe(true);
+    // An explicit signatureDataUrl overrides the baked-in default.
+    expect(out.hasOverride, "a provided signatureDataUrl must be embedded as an image").toBe(true);
+    // The default cert now carries the baked-in signature PNG (SIGNATURE_DATAURL).
+    expect(out.dflt, "default cert must embed the real signature PNG").toContain("data:image/png;base64,");
     // The signature name appears regardless.
     expect(out.withSig).toContain("Dr. Basile Chr");
-    expect(out.noSig).toContain("Dr. Basile Chr");
+    expect(out.dflt).toContain("Dr. Basile Chr");
   });
 
   test("pdfmake renders the certificate with an embedded signature image (chromium smoke)", async ({ page, browserName }) => {
