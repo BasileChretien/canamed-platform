@@ -1915,10 +1915,20 @@ function claimClientMapping() {
     return Promise.resolve();
   }
   try {
-    return db.ref(sPath("clientMapping/" + clientId)).set(currentUser.uid).catch(e => {
-      // Expected when the binding already exists (refresh / re-join) or on
-      // a legacy DB; the join continues regardless.
-      try { console.warn("claimClientMapping skipped (continuing):", e && e.code); } catch (_) {}
+    // Read first to avoid a doomed write (which the Firebase SDK logs as a
+    // PERMISSION_DENIED warning at the SDK level — before our .catch can
+    // swallow it). The binding is write-once, so once set it never changes;
+    // skipping the set when a value already exists is correct + silent.
+    const ref = db.ref(sPath("clientMapping/" + clientId));
+    return ref.once("value").then(snap => {
+      if (snap.exists()) return; // already bound (ours or legacy): no-op
+      return ref.set(currentUser.uid).catch(e => {
+        const code = e && e.code;
+        if (code === "PERMISSION_DENIED") return; // raced another writer
+        try { console.warn("claimClientMapping failed:", code); } catch (_) {}
+      });
+    }).catch(e => {
+      try { console.warn("claimClientMapping read failed (continuing):", e && e.code); } catch (_) {}
     });
   } catch (e) {
     try { console.warn("claimClientMapping threw (continuing):", e); } catch (_) {}
@@ -1941,8 +1951,18 @@ function claimStableIdMapping() {
     return Promise.resolve();
   }
   try {
-    return db.ref(sPath("stableIdMapping/" + stableId)).set(currentUser.uid).catch(e => {
-      try { console.warn("claimStableIdMapping skipped (continuing):", e && e.code); } catch (_) {}
+    // Read first to avoid a doomed write (SDK logs PERMISSION_DENIED at
+    // WARNING level before our .catch sees it). Mapping is write-once.
+    const ref = db.ref(sPath("stableIdMapping/" + stableId));
+    return ref.once("value").then(snap => {
+      if (snap.exists()) return; // already bound: no-op
+      return ref.set(currentUser.uid).catch(e => {
+        const code = e && e.code;
+        if (code === "PERMISSION_DENIED") return; // raced another writer
+        try { console.warn("claimStableIdMapping failed:", code); } catch (_) {}
+      });
+    }).catch(e => {
+      try { console.warn("claimStableIdMapping read failed (continuing):", e && e.code); } catch (_) {}
     });
   } catch (e) {
     try { console.warn("claimStableIdMapping threw (continuing):", e); } catch (_) {}

@@ -85,4 +85,10 @@ window.CANAMED_RECAPTCHA_SITE_KEY = "6Lemg-wsAAAAAKIkv6KorbZu0iUz_q3e36wrlFiQ";
  * Set to true to enable. Default false so the SDK script is loaded but
  * inert; you can flip this without redeploying the SDK script tag.
  */
-window.CANAMED_PERF_MONITORING = true;
+// Currently false: the GCP API-key restriction (allowed services list) does
+// not include firebaselogging.googleapis.com, so uploads return 503 and the
+// SDK spams `Performance: Tries left: N.` retries in the console. Flip back
+// to true after whitelisting Firelog/Performance on the browser API key in
+// GCP Console → Credentials. The SDK script tag stays loaded either way, so
+// this is a one-line redeploy when ready.
+window.CANAMED_PERF_MONITORING = false;
