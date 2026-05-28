@@ -151,7 +151,7 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@1.6";   // bumped to force redeploy: raise MAX_BODY_CHARS 4000→12000 (system prompt was at the limit)
+const PROMPT_VERSION = "modA-llm@1.7";   // bumped to force redeploy: trim stop[] to 4 + surface HF response body in errors
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
 const HF_TOKEN         = defineSecret("HF_TOKEN");
@@ -359,6 +359,11 @@ exports.hfPatient = onCall({
   const to = setTimeout(() => ctrl.abort(), TOTAL_BUDGET_MS);
   let raw = "", attempts = 0, httpStatus = 0, provider = "";
   let promptTokens = 0, completionTokens = 0;
+  // Stop array trimmed to 4 elements (was 10). HF's OpenAI-compat router
+  // forwards to underlying providers (Together, Fireworks, Cerebras, etc.)
+  // and Together's cap is 4 — sending 10 returned upstream HTTP 400 in our
+  // pilot. Kept the 4 highest-value stops; the broader format-leak regex
+  // in _sanitiseReply() catches FR/JA variants + bullet alternatives.
   const reqBody = JSON.stringify({
     model: _hfModel(lang),
     messages,
@@ -366,11 +371,7 @@ exports.hfPatient = onCall({
     temperature: 0.3,
     top_p: 0.9,
     presence_penalty: 0.3,
-    stop: [
-      "\nDoctor:", "\nDocteur:", "\n医師:", "\nDoctor :", "Doctor:",
-      "\n- ", "\n* ", "\n• ",
-      "[INST]", "</s>"
-    ],
+    stop: ["\nDoctor:", "\n- ", "[INST]", "</s>"],
     stream: false
   });
   try {
@@ -385,10 +386,18 @@ exports.hfPatient = onCall({
     httpStatus = res.status;
     provider = (res.headers && res.headers.get && res.headers.get("x-inference-provider")) || "";
     if (!res.ok) {
+      // Surface the HF response body in the error message so the
+      // client/operator can see WHY HF rejected — "hf http 400" alone
+      // is uselessly opaque. Capped at 300 chars to avoid leaking
+      // anything sensitive into the client error path. Logged
+      // server-side at the full length via console.error.
+      let upstreamBody = "";
+      try { upstreamBody = await res.text(); } catch (_) { /* ignore */ }
+      console.error("[hfPatient] upstream", res.status, upstreamBody.slice(0, 1000));
       const code = (res.status === 429) ? "resource-exhausted"
                  : (res.status >= 500)  ? "unavailable"
                                         : "failed-precondition";
-      throw new HttpsError(code, "hf http " + res.status);
+      throw new HttpsError(code, "hf http " + res.status + ": " + upstreamBody.slice(0, 300));
     }
     const j = await res.json();
     if (j && j.error && !j.choices) {
