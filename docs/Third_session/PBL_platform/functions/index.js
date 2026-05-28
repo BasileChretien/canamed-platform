@@ -155,7 +155,7 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;            // turns per uid per window
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
 const SESSION_RATE_LIMIT_TURNS = 250;    // turns per session per window
-const PROMPT_VERSION = "modA-llm@1.1";   // bump when STYLE_RULES change
+const PROMPT_VERSION = "modA-llm@1.2";   // bump when STYLE_RULES change (also forces a non-trivial source hash so `firebase deploy` doesn't skip on package.json-only changes)
 
 /* === Params (Firebase functions/params API, replacing the deprecated
  *      Runtime Config / functions.config() that shuts down March 2027) ===
