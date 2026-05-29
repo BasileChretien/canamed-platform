@@ -61,6 +61,18 @@ outstanding.**
    the manual cadence slip more than a few days. Uncomment the `schedule:`
    blocks once the monthly Actions minute pool resets or billing is raised.
 
+5. **Enable Email/Password sign-in provider (LOW, one-click).** The splash
+   account view now offers Google **and** email/password sign-in (added
+   2026-05-29 as the foundation for facilitator-owned scenarios). Google
+   already works; email/password requires the provider to be turned on:
+   - Firebase Console → Authentication → Sign-in method → **Email/Password**
+     → Enable → Save. (Leave the "Email link" toggle off — the form uses
+     password sign-in only.)
+   - No other config needed. The existing `authDomain` (canamed.web.app) is
+     already authorised; the anonymous-uid linking flow mirrors the Google
+     path so anonymous participants who later create an account keep their
+     `users/{uid}/history`.
+
 4. **Module A LLM-patient pilot (2026-05-28) — DORMANT until operator activates.**
    The free-text chat with Mr Lefebvre (via HF Inference Providers, proxied
    by a Firebase Cloud Function) is fully wired in code but stays in stub

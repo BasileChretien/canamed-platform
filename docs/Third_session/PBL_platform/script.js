@@ -194,7 +194,11 @@ function applyScenario(id, customContent) {
 
 /* read the scenario from the session record (set at creation) and apply it.
    Resolves once the content is in place - callers should await before any
-   case-dependent UI is built. */
+   case-dependent UI is built.
+
+   Resolution priority: scenarioCustomJson (legacy pasted JSON) →
+   scenarioRef (authored, fetched from scenarios/$ownerUid or
+   sharedScenarios/$shareId) → scenarioId (built-in registry). */
 function loadSessionScenario(code) {
   if (!code) return Promise.resolve(false);
   try { dbInit(); } catch (e) {}
@@ -214,10 +218,12 @@ function loadSessionScenario(code) {
     return ensureSignedIn();
   }).then(() => Promise.all([
     db.ref(oPath(code, "scenarioId")).once("value"),
-    db.ref(oPath(code, "scenarioCustomJson")).once("value")
+    db.ref(oPath(code, "scenarioCustomJson")).once("value"),
+    db.ref(oPath(code, "scenarioRef")).once("value")
   ])).then(res => {
     const id = res[0] && res[0].val();
     const customJson = res[1] && res[1].val();
+    const ref = res[2] && res[2].val();
     let custom = null;
     if (customJson) {
       try { custom = JSON.parse(customJson); } catch (e) {
@@ -225,10 +231,167 @@ function loadSessionScenario(code) {
       }
     }
     if (custom) return applyScenario(null, custom);
+    if (ref) {
+      return loadScenarioByRef(ref).then(body => {
+        if (body) return applyScenario(null, body);
+        if (id) return applyScenario(id);
+        return false;
+      });
+    }
     if (id) return applyScenario(id);
     // session has no scenario set - keep whatever default case-content loaded
     return false;
   }).catch(e => { console.error("loadSessionScenario failed", e); return false; });
+}
+
+/* Resolve a scenarioRef ({ ownerUid, scenarioId, source }) to a parsed
+   scenario body object. source="private" reads scenarios/$ownerUid/$id
+   (only succeeds when caller IS the owner — the rule blocks other reads);
+   source="shared" reads sharedScenarios/$ownerUid_$id and is readable by
+   any authenticated user. */
+function loadScenarioByRef(ref) {
+  if (!ref || !ref.ownerUid || !ref.scenarioId || !db) return Promise.resolve(null);
+  const path = (ref.source === "shared")
+    ? "sharedScenarios/" + ref.ownerUid + "_" + ref.scenarioId + "/bodyJson"
+    : "scenarios/" + ref.ownerUid + "/" + ref.scenarioId + "/bodyJson";
+  return db.ref(path).once("value")
+    .then(snap => {
+      const json = snap && snap.val();
+      if (!json) return null;
+      try { return JSON.parse(json); }
+      catch (e) { console.error("Scenario bodyJson parse failed", e); return null; }
+    })
+    .catch(e => { console.error("loadScenarioByRef read failed", e); return null; });
+}
+
+/* List the calling user's authored scenarios. Returns [] when signed-out
+   or in local-test mode. Each entry: { id, meta }. */
+function listMyScenarios() {
+  if (!auth || !auth.currentUser || !db) return Promise.resolve([]);
+  const uid = auth.currentUser.uid;
+  return db.ref("scenarios/" + uid).once("value")
+    .then(snap => {
+      const out = [];
+      snap.forEach(child => {
+        out.push({ id: child.key, meta: (child.val() || {}).meta || {} });
+      });
+      return out;
+    })
+    .catch(e => { console.warn("listMyScenarios failed", e); return []; });
+}
+
+/* List shared scenarios published by any user. Each entry:
+   { shareId, ownerUid, scenarioId, ownerName, meta }. Capped at 200 to
+   avoid pulling unbounded data — the picker is for facilitator quick
+   selection, not a marketplace. Feature-detects .limitToFirst so we work
+   against both the real RTDB SDK (server-side limit) and LocalDB's shim
+   (no limit support — we slice the snapshot client-side instead). */
+function listSharedScenarios() {
+  if (!db) return Promise.resolve([]);
+  const baseRef = db.ref("sharedScenarios");
+  const queryRef = (typeof baseRef.limitToFirst === "function")
+    ? baseRef.limitToFirst(200)
+    : baseRef;
+  return queryRef.once("value")
+    .then(snap => {
+      const out = [];
+      snap.forEach(child => {
+        if (out.length >= 200) return true; // forEach stops on truthy return
+        const v = child.val() || {};
+        out.push({
+          shareId: child.key,
+          ownerUid: v.ownerUid || "",
+          scenarioId: v.scenarioId || "",
+          ownerName: v.ownerName || "",
+          meta: v.meta || {}
+        });
+      });
+      return out;
+    })
+    .catch(e => { console.warn("listSharedScenarios failed", e); return []; });
+}
+
+/* Persist an authored scenario for the signed-in user. `body` is the
+   scenario object the runtime expects (case / scoring / penalties /
+   decisions / synthId / synthPrereqs / preTest / postTest / name /
+   summary / moduleAName / moduleBName). Stored as a single stringified
+   blob under bodyJson; queryable metadata is split out under meta/. When
+   `share` is true, also publishes (or refreshes) a copy under
+   sharedScenarios/<uid>_<id>; when false, removes the shared copy if
+   one exists. Returns the stored meta on success. */
+function saveScenario(scenarioId, body, share) {
+  if (!auth || !auth.currentUser || !db) {
+    return Promise.reject(new Error("Sign in to save scenarios."));
+  }
+  if (!scenarioId || !/^[a-z0-9_-]{1,60}$/.test(scenarioId)) {
+    return Promise.reject(new Error("Scenario id must be 1-60 chars, lower-case alphanumerics, _ or -."));
+  }
+  if (!body || typeof body !== "object") {
+    return Promise.reject(new Error("Scenario body must be an object."));
+  }
+  const uid = auth.currentUser.uid;
+  const bodyJson = JSON.stringify(body);
+  if (bodyJson.length > 262144) {
+    return Promise.reject(new Error("Scenario is too large (" + bodyJson.length +
+      " bytes, max 262144). Split content across modules or trim long narrative."));
+  }
+  const now = Date.now();
+  const path = "scenarios/" + uid + "/" + scenarioId;
+  return db.ref(path + "/meta/createdAt").once("value").then(snap => {
+    const createdAt = snap.val() || now;
+    const meta = {
+      id: scenarioId,
+      name: (typeof body.name === "string" ? body.name : (body.name && body.name.en) || scenarioId).slice(0, 200),
+      summary: (typeof body.summary === "string" ? body.summary : (body.summary && body.summary.en) || "").slice(0, 400),
+      createdAt: createdAt,
+      updatedAt: now,
+      version: (typeof body.version === "number" ? body.version : 1),
+      locale: (typeof body.locale === "string" ? body.locale : "fr-ja")
+    };
+    const writes = [
+      db.ref(path).set({ meta: meta, bodyJson: bodyJson })
+    ];
+    const shareId = uid + "_" + scenarioId;
+    if (share) {
+      const ownerName = (currentProfile && currentProfile.name) ||
+                        (auth.currentUser.displayName) || "";
+      writes.push(db.ref("sharedScenarios/" + shareId).set({
+        ownerUid: uid,
+        ownerName: ownerName.slice(0, 80),
+        scenarioId: scenarioId,
+        meta: meta,
+        bodyJson: bodyJson
+      }));
+    } else {
+      writes.push(db.ref("sharedScenarios/" + shareId).remove().catch(() => null));
+    }
+    return Promise.all(writes).then(() => meta);
+  });
+}
+
+/* Remove an authored scenario (and any shared copy). Sessions that
+   already reference it keep working at runtime only because the runtime
+   reads bodyJson at session START — once deleted, future session loads
+   will fall back to whatever scenarioId (if any) was also stored. */
+function deleteScenario(scenarioId) {
+  if (!auth || !auth.currentUser || !db) {
+    return Promise.reject(new Error("Sign in required."));
+  }
+  const uid = auth.currentUser.uid;
+  return Promise.all([
+    db.ref("scenarios/" + uid + "/" + scenarioId).remove(),
+    db.ref("sharedScenarios/" + uid + "_" + scenarioId).remove().catch(() => null)
+  ]);
+}
+
+if (typeof window !== "undefined") {
+  window.canamedScenarios = {
+    list: listMyScenarios,
+    listShared: listSharedScenarios,
+    save: saveScenario,
+    remove: deleteScenario,
+    loadByRef: loadScenarioByRef
+  };
 }
 
 const STAGE_COUNT = 4;
@@ -6514,11 +6677,18 @@ function downloadCertificatePdf() {
   const detId = (typeof canamedCertId === "function")
     ? canamedCertId((sessionNum || "") + "|" + (clientId || "")) : "";
 
+  // Default verifyUrl for the facilitator-only path: a real link to the verify
+  // page (id prefilled). Without this, the QR would encode the bare id as plain
+  // text — scanners would show text but no link, so the QR "leads nowhere".
+  // The verify page handles both opt-in (registry hit → "valid") and
+  // facilitator-only (registry miss → "not found in public registry") gracefully.
+  const detVerifyUrl = detId ? _verifyUrl(detId) : "";
+
   function resolveCertId() {
-    if (!wantVerify) return Promise.resolve({ certId: detId, verifyUrl: "" });
+    if (!wantVerify) return Promise.resolve({ certId: detId, verifyUrl: detVerifyUrl });
     if (typeof firebase === "undefined" || typeof randomCredentialId !== "function" ||
         typeof credentialNameHash !== "function") {
-      return Promise.resolve({ certId: detId, verifyUrl: "" });
+      return Promise.resolve({ certId: detId, verifyUrl: detVerifyUrl });
     }
     const cacheKey = "canamed_cred_" + (sessionNum || "") + "_" + (clientId || "");
     const ID_RE = /^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/;
@@ -6546,12 +6716,12 @@ function downloadCertificatePdf() {
         }, function (err) {
           if (triesLeft > 0) return attempt(triesLeft - 1);
           console.warn("credential write failed — falling back to deterministic id", err);
-          return { certId: detId, verifyUrl: "" };
+          return { certId: detId, verifyUrl: detVerifyUrl };
         });
       }
       return attempt(2);
     }, function () {
-      return { certId: detId, verifyUrl: "" };
+      return { certId: detId, verifyUrl: detVerifyUrl };
     });
   }
 
@@ -11445,6 +11615,7 @@ function wireSplash() {
     const sel = el("splash-create-scenario");
     let scenarioId = sel ? sel.value : "";
     let customJson = null;
+    let scenarioRef = null;
     if (scenarioId === "__custom__") {
       const ta = el("splash-create-custom");
       const text = (ta && ta.value || "").trim();
@@ -11463,10 +11634,25 @@ function wireSplash() {
       }
       customJson = text;
       scenarioId = null;
+    } else if (typeof scenarioId === "string" && scenarioId.indexOf("__ref:") === 0) {
+      // authored scenario: format is __ref:<source>:<ownerUid>:<scenarioId>
+      const parts = scenarioId.split(":");
+      if (parts.length >= 4 && (parts[1] === "private" || parts[1] === "shared")) {
+        scenarioRef = {
+          source: parts[1],
+          ownerUid: parts[2],
+          // scenarioId may itself contain "-" or "_" but no ":" per validation
+          scenarioId: parts.slice(3).join(":")
+        };
+        scenarioId = null;
+      } else {
+        cHint.textContent = "Invalid scenario selection — pick another.";
+        cHint.className = "splash-hint err"; return;
+      }
     }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    createSession(name, label, pass, scenarioId, customJson).then(result => {
+    createSession(name, label, pass, scenarioId, customJson, scenarioRef).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -11703,13 +11889,22 @@ function populateScenarioPicker() {
   sel.innerHTML = "";
   const scenarios = window.CANAMED_SCENARIOS || {};
   const lang = _curLang();
+  const builtInGroup = document.createElement("optgroup");
+  builtInGroup.label = (window.t ? window.t("splash.create.builtin-group") : "Built-in scenarios");
   Object.keys(scenarios).forEach(id => {
     const sc = scenarios[id];
     const opt = document.createElement("option");
     opt.value = id;
     opt.textContent = tc(sc.name, lang) || id;
-    sel.appendChild(opt);
+    builtInGroup.appendChild(opt);
   });
+  sel.appendChild(builtInGroup);
+  // Authored scenarios: only available to signed-in users (anonymous uids
+  // can't own scenarios, so the private list is always empty). The shared
+  // list is readable by anyone authenticated. Both fetches are fire-and-
+  // forget — if they fail (offline / disabled tree), the picker still
+  // shows the built-ins.
+  appendAuthoredScenarioOptions(sel, lang);
   // NOTE: "Create new content (advanced)" used to be an option inside
   // this dropdown. The simulation report (Step 2) found that first-time
   // facilitators panicked at the JSON textarea after picking it by
@@ -11723,6 +11918,56 @@ function populateScenarioPicker() {
   wireAdvancedScenarioToggle();
   onScenarioChange();
 }
+/* Inject "My scenarios" and "Shared scenarios" optgroups into the picker
+   when authored scenarios are available. Async — repaints when the data
+   arrives, so the picker stays responsive even if the network is slow.
+   Idempotent: any previous authored optgroups are removed first. */
+function appendAuthoredScenarioOptions(sel, lang) {
+  if (!sel) return;
+  // Drop any previously-injected authored optgroups (re-entry after
+  // sign-in or language change must not stack duplicates).
+  Array.from(sel.querySelectorAll('optgroup[data-authored="1"]'))
+    .forEach(g => g.remove());
+  const isSignedIn = !!(auth && auth.currentUser && !auth.currentUser.isAnonymous);
+  const mineP = isSignedIn ? listMyScenarios() : Promise.resolve([]);
+  const sharedP = listSharedScenarios();
+  Promise.all([mineP, sharedP]).then(res => {
+    const mine = res[0] || [];
+    const shared = res[1] || [];
+    const myUid = (auth && auth.currentUser && auth.currentUser.uid) || null;
+    if (mine.length) {
+      const g = document.createElement("optgroup");
+      g.label = (window.t ? window.t("splash.create.mine-group") : "My scenarios");
+      g.dataset.authored = "1";
+      mine.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = "__ref:private:" + myUid + ":" + s.id;
+        opt.textContent = (s.meta && s.meta.name) || s.id;
+        g.appendChild(opt);
+      });
+      sel.appendChild(g);
+    }
+    // Exclude the caller's own shared scenarios from the Shared group —
+    // they already appear under "My scenarios" with the private path
+    // (which works for them; reads of their own shared copy would also
+    // succeed but the private one is the source of truth).
+    const externalShared = shared.filter(s => !myUid || s.ownerUid !== myUid);
+    if (externalShared.length) {
+      const g = document.createElement("optgroup");
+      g.label = (window.t ? window.t("splash.create.shared-group") : "Shared scenarios");
+      g.dataset.authored = "1";
+      externalShared.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = "__ref:shared:" + s.ownerUid + ":" + s.scenarioId;
+        const who = s.ownerName ? " — " + s.ownerName : "";
+        opt.textContent = ((s.meta && s.meta.name) || s.scenarioId) + who;
+        g.appendChild(opt);
+      });
+      sel.appendChild(g);
+    }
+  }).catch(e => console.warn("appendAuthoredScenarioOptions failed", e));
+}
+
 function wireAdvancedScenarioToggle() {
   const toggle = el("splash-create-advanced-toggle");
   if (!toggle || toggle.dataset.wired === "1") return;
@@ -11776,12 +12021,19 @@ function onScenarioChange() {
   const toggle = el("splash-create-advanced-toggle");
   if (!sel) return;
   const isCustom = sel.value === "__custom__";
+  const isRef = typeof sel.value === "string" && sel.value.indexOf("__ref:") === 0;
   if (wrap) wrap.hidden = !isCustom;
   if (toggle) toggle.setAttribute("aria-expanded", isCustom ? "true" : "false");
   if (desc) {
     if (isCustom) {
       desc.textContent = (window.t ? window.t("splash.create.custom-desc") :
         "Paste a JSON object describing your case. Use 'Load template' to start from the built-in content.");
+    } else if (isRef) {
+      // For authored scenarios we keep the picker label as the description
+      // (the meta summary isn't on the option). Looking it up would require
+      // an extra fetch; the user just picked it from a labelled list.
+      const opt = sel.options[sel.selectedIndex];
+      desc.textContent = (opt && opt.textContent) || "";
     } else {
       const sc = (window.CANAMED_SCENARIOS || {})[sel.value];
       desc.textContent = tc(sc && sc.summary, _curLang());
@@ -11853,7 +12105,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -11898,6 +12150,19 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       }
       if (customJson) {
         writes.push(db.ref(oPath(code, "scenarioCustomJson")).set(customJson));
+      } else if (scenarioRef && scenarioRef.ownerUid && scenarioRef.scenarioId) {
+        const refSrc = scenarioRef.source === "shared" ? "shared" : "private";
+        writes.push(db.ref(oPath(code, "scenarioRef")).set({
+          ownerUid: scenarioRef.ownerUid,
+          scenarioId: scenarioRef.scenarioId,
+          source: refSrc
+        }));
+        // record a stable scenarioId too — survives the authored scenario
+        // being deleted, and keeps existing exports/aggregations that key
+        // on scenarioId working unchanged.
+        if (/^[a-z0-9_-]{1,60}$/.test(scenarioRef.scenarioId)) {
+          writes.push(db.ref(oPath(code, "scenarioId")).set(scenarioRef.scenarioId));
+        }
       } else if (scenarioId) {
         writes.push(db.ref(oPath(code, "scenarioId")).set(scenarioId));
       }
@@ -11987,7 +12252,14 @@ function authErrorMessage(err) {
     "auth/account-exists-with-different-credential": "An account already exists with this email under a different sign-in method.",
     "auth/network-request-failed": "Could not reach the sign-in server — check your connection.",
     "auth/too-many-requests": "Too many attempts — try again in a few minutes.",
-    "auth/requires-recent-login": "For this action, please sign out and sign back in, then try again."
+    "auth/requires-recent-login": "For this action, please sign out and sign back in, then try again.",
+    "auth/invalid-email": "That email address does not look valid.",
+    "auth/missing-password": "Enter your password.",
+    "auth/wrong-password": "Wrong password — try again, or use Create account if this is your first sign-in.",
+    "auth/user-not-found": "No account with that email — use Create account to make one.",
+    "auth/invalid-credential": "Email or password is incorrect.",
+    "auth/weak-password": "Pick a password with at least 6 characters.",
+    "auth/email-already-in-use": "An account with that email already exists — use Sign in instead."
   };
   return map[code] || (err && err.message) || "Sign-in failed.";
 }
@@ -12071,6 +12343,62 @@ function signInWithProvider(name) {
   });
 }
 
+/* Sign in to an EXISTING email/password account. No anonymous-uid linking
+   here — the user is claiming an account that pre-dates this tab, so any
+   throwaway anonymous uid is forfeited (same fate as Google sign-in for a
+   returning user). For first-time account creation, see signUpWithEmail. */
+function signInWithEmail(email, password) {
+  const hint = el("splash-account-hint");
+  if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
+  if (!email || !password) {
+    splashHintErr(hint, "Enter your email and password.");
+    return;
+  }
+  splashHintOk(hint, "Signing you in…");
+  auth.signInWithEmailAndPassword(email, password)
+    .then(() => splashHintOk(hint, ""))
+    .catch(e => splashHintErr(hint, authErrorMessage(e)));
+}
+
+/* Create a new email/password account. If the caller is currently anonymous
+   we LINK the credential so users/{uid}/profile + history written under the
+   anon uid survive the upgrade. If the email is already in use, salvage by
+   signing in with the typed credential directly — same fall-back as the
+   Google flow. */
+function signUpWithEmail(email, password) {
+  const hint = el("splash-account-hint");
+  if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
+  if (!email || !password) {
+    splashHintErr(hint, "Enter your email and password.");
+    return;
+  }
+  if (password.length < 6) {
+    splashHintErr(hint, authErrorMessage({ code: "auth/weak-password" }));
+    return;
+  }
+  splashHintOk(hint, "Creating your account…");
+  const cur = auth.currentUser;
+  const cred = firebase.auth.EmailAuthProvider.credential(email, password);
+  const link = (cur && cur.isAnonymous)
+    ? cur.linkWithCredential(cred).catch(e => {
+        if (e && (e.code === "auth/credential-already-in-use" ||
+                  e.code === "auth/email-already-in-use")) {
+          // returning user — burn the throwaway anon uid, sign in as them
+          return auth.signInWithCredential(cred);
+        }
+        throw e;
+      })
+    : auth.createUserWithEmailAndPassword(email, password)
+        .catch(e => {
+          if (e && e.code === "auth/email-already-in-use") {
+            return auth.signInWithEmailAndPassword(email, password);
+          }
+          throw e;
+        });
+  link.then(() => splashHintOk(hint, ""))
+      .catch(e => splashHintErr(hint, authErrorMessage(e)));
+}
+
 /* Returns a promise that resolves once auth.currentUser is non-null. If
    no user exists yet (first tab load, or someone signed out), kicks off
    an anonymous sign-in. Idempotent — concurrent callers share one
@@ -12144,6 +12472,21 @@ function handleAuthStateChange(user) {
     loadProfile().then(profile => {
       currentProfile = profile;
       paintUserChip();
+      // Refresh the create-session picker so this user's authored scenarios
+      // (and any shared ones they can now see) show up immediately after
+      // sign-in. Idempotent + cheap; safe to call even if the picker is
+      // not currently on screen.
+      try {
+        const sel = el("splash-create-scenario");
+        if (sel) appendAuthoredScenarioOptions(sel, _curLang());
+      } catch (_) {}
+      // Reveal the "Author scenarios" splash link now that the user has a
+      // persistent identity. Hidden by default to keep the participant
+      // landing page uncluttered.
+      try {
+        const row = el("splash-author-row");
+        if (row) row.hidden = false;
+      } catch (_) {}
       // first sign-in for this identified account → guide them through profile setup
       if (!profile || !profile.name) {
         populateProfileSelects("splash-prof-uni");
@@ -12470,6 +12813,19 @@ function wireAccountUI() {
     .addEventListener("click", () => signInWithProvider("microsoft"));
   if (el("splash-apple-signin")) el("splash-apple-signin")
     .addEventListener("click", () => signInWithProvider("apple"));
+  if (el("splash-email-form")) el("splash-email-form")
+    .addEventListener("submit", e => {
+      e.preventDefault();
+      const em = (el("splash-email-input") || {}).value || "";
+      const pw = (el("splash-password-input") || {}).value || "";
+      signInWithEmail(em.trim(), pw);
+    });
+  if (el("splash-email-signup")) el("splash-email-signup")
+    .addEventListener("click", () => {
+      const em = (el("splash-email-input") || {}).value || "";
+      const pw = (el("splash-password-input") || {}).value || "";
+      signUpWithEmail(em.trim(), pw);
+    });
 
   // profile-setup (runs once, right after the first Google sign-in)
   if (el("splash-profile-setup-form")) el("splash-profile-setup-form")

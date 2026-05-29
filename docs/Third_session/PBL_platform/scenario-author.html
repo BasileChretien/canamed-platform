@@ -222,5 +222,15 @@
   </main>
 
   <script src="scenario-author.js"></script>
+
+  <!-- Cloud save / load (Firebase). Loads after the offline editor so the
+       editor stays usable if any of these CDN scripts fail. Each is
+       independently gated: scenario-author-cloud.js silently no-ops when
+       Firebase SDK or CANAMED_FIREBASE config is unavailable. -->
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-auth-compat.js" crossorigin="anonymous"></script>
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js" crossorigin="anonymous"></script>
+  <script src="firebase-config.js"></script>
+  <script src="scenario-author-cloud.js"></script>
 </body>
 </html>

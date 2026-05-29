@@ -176,7 +176,7 @@
       "verify.checking": "Checking…",
       "verify.valid": "✓ Valid: this is a real CaNaMED certificate",
       "verify.no-match": "The name you entered does not match the certificate with that ID.",
-      "verify.not-found": "No CaNaMED certificate with that Verification ID.",
+      "verify.not-found": "This Verification ID is not in the public registry. If you received it on a CaNaMED certificate, please contact the CaNaMED team with the ID and the name on the certificate — they hold the master record.",
       "verify.unavailable": "Verification is temporarily unavailable. Please try again later.",
       "verify.privacy-note": "See section 18 of the <a href=\"privacy.html\">privacy policy</a> for what is stored, the retention period and how to remove an entry.",
 
@@ -186,12 +186,18 @@
       "splash.enter.submit": "Enter →",
       "splash.enter.no-code": "Don't have a code yet?",
       "splash.enter.go-create": "I'm a facilitator — create a session →",
-      "splash.enter.go-account": "Sign in with Google (optional — to save your profile & history) →",
+      "splash.enter.go-account": "Sign in with Google or email (optional — to save your profile & history) →",
+      "splash.enter.go-author": "Author or edit your own scenarios →",
 
       // splash — sign-in view
-      "splash.account.title": "Sign in with Google",
-      "splash.account.subtitle": "We use Google to verify your identity — no separate password to remember. Your details auto-fill when you join a session, and the sessions you have taken part in are kept under your profile.",
+      "splash.account.title": "Sign in to your account",
+      "splash.account.subtitle": "Sign in with Google or with an email and password. Your details auto-fill when you join a session, and the sessions you have taken part in — plus any scenarios you author — are kept under your profile.",
       "splash.account.continue-google": "Continue with Google",
+      "splash.account.or": "— or use email —",
+      "splash.account.email-label": "Email",
+      "splash.account.password-label": "Password",
+      "splash.account.signin-email": "Sign in",
+      "splash.account.signup-email": "Create account",
       "splash.account.back": "← Back to join a session",
 
       // splash — profile-setup view
@@ -219,6 +225,9 @@
       "splash.create.password-label": "Set a session password",
       "splash.create.password-placeholder": "something only the facilitators will know",
       "splash.create.password-hint": "You'll need this to re-open the admin dashboard if you reload the page. Students never see it. Use a fresh password — not your university one.",
+      "splash.create.builtin-group": "Built-in scenarios",
+      "splash.create.mine-group": "My scenarios",
+      "splash.create.shared-group": "Shared scenarios",
       "splash.create.advanced-toggle": "Create new content (advanced) ↓",
       "splash.create.custom-label": "Custom content (JSON)",
       "splash.create.custom-help": "Paste a JSON object with the keys name, case, scoring, penalties, decisions — see the README for the full structure. Use \"Load template\" to start from the built-in content, then edit only what you need.",

@@ -70,8 +70,15 @@
     show("checking", t("verify.checking", "Checking…"));
     lookupCredential(id).then(function (cred) {
       if (!cred) {
+        // A well-formed ID that isn't in the public registry can mean (a) a
+        // facilitator-only certificate (the default — the registry only
+        // contains opt-in entries per PIS v2 §18) or (b) a fake/typoed ID.
+        // We can't tell the two apart here, so the message points the verifier
+        // at the CaNaMED team rather than declaring the cert fake.
         show("invalid", t("verify.not-found",
-          "No CaNaMED certificate with that Verification ID."));
+          "This Verification ID is not in the public registry. " +
+          "If you received it on a CaNaMED certificate, please contact the CaNaMED team " +
+          "with the ID and the name on the certificate — they hold the master record."));
         return null;
       }
       return window.credentialNameHash(name, cred.session || "").then(function (hash) {

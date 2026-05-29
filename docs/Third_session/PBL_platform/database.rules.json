@@ -143,6 +143,11 @@
           ".write": "auth != null && !data.exists()",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32000)"
         },
+        "scenarioRef": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.val() == null || (newData.hasChildren(['ownerUid','scenarioId','source']) && newData.child('ownerUid').isString() && newData.child('ownerUid').val().length > 0 && newData.child('ownerUid').val().length <= 128 && newData.child('scenarioId').isString() && newData.child('scenarioId').val().matches(/^[a-z0-9_-]{1,60}$/) && newData.child('source').isString() && (newData.child('source').val() == 'private' || newData.child('source').val() == 'shared'))"
+        },
 
         "started": {
           ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !root.child('sessions').child($sessionId).child('closed').exists()",
@@ -469,6 +474,31 @@
       }
     },
 
+    "scenarios": {
+      "$ownerUid": {
+        ".read": "auth != null && auth.uid == $ownerUid",
+        ".write": "auth != null && auth.uid == $ownerUid",
+        "$scenarioId": {
+          ".validate": "newData.val() == null || (newData.hasChildren(['meta','bodyJson']) && $scenarioId.matches(/^[a-z0-9_-]{1,60}$/))",
+          "meta": {
+            ".validate": "newData.hasChildren(['id','name','updatedAt']) && newData.child('id').isString() && newData.child('id').val() == $scenarioId && newData.child('name').isString() && newData.child('name').val().length > 0 && newData.child('name').val().length <= 200 && newData.child('updatedAt').isNumber() && newData.child('updatedAt').val() <= now + 5000 && (!newData.hasChild('summary') || (newData.child('summary').isString() && newData.child('summary').val().length <= 400)) && (!newData.hasChild('createdAt') || newData.child('createdAt').isNumber()) && (!newData.hasChild('version') || newData.child('version').isNumber()) && (!newData.hasChild('locale') || (newData.child('locale').isString() && newData.child('locale').val().length <= 16))"
+          },
+          "bodyJson": {
+            ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 262144"
+          }
+        }
+      }
+    },
+
+    "sharedScenarios": {
+      ".read": "auth != null",
+      "$shareId": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((data.exists() && data.child('ownerUid').val() == auth.uid) || (!data.exists() && newData.exists() && newData.child('ownerUid').val() == auth.uid))",
+        ".validate": "newData.val() == null || (newData.hasChildren(['ownerUid','scenarioId','meta','bodyJson']) && $shareId.matches(/^[A-Za-z0-9_-]{1,200}$/) && newData.child('ownerUid').isString() && newData.child('ownerUid').val().length > 0 && newData.child('ownerUid').val().length <= 128 && (!data.exists() || newData.child('ownerUid').val() == data.child('ownerUid').val()) && newData.child('scenarioId').isString() && newData.child('scenarioId').val().matches(/^[a-z0-9_-]{1,60}$/) && newData.child('bodyJson').isString() && newData.child('bodyJson').val().length > 0 && newData.child('bodyJson').val().length <= 262144 && (!newData.hasChild('ownerName') || (newData.child('ownerName').isString() && newData.child('ownerName').val().length <= 80)) && newData.child('meta').child('updatedAt').isNumber() && newData.child('meta').child('updatedAt').val() <= now + 5000 && newData.child('meta').child('name').isString() && newData.child('meta').child('name').val().length > 0 && newData.child('meta').child('name').val().length <= 200"
+      }
+    },
+
     "orgs": {
       "$orgSlug": {
         ".validate": "$orgSlug.matches(/^[a-z0-9-]+$/)",
@@ -526,6 +556,11 @@
               ".read": "auth != null",
               ".write": "auth != null && !data.exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32000)"
+            },
+            "scenarioRef": {
+              ".read": "auth != null",
+              ".write": "auth != null && !data.exists()",
+              ".validate": "newData.val() == null || (newData.hasChildren(['ownerUid','scenarioId','source']) && newData.child('ownerUid').isString() && newData.child('ownerUid').val().length > 0 && newData.child('ownerUid').val().length <= 128 && newData.child('scenarioId').isString() && newData.child('scenarioId').val().matches(/^[a-z0-9_-]{1,60}$/) && newData.child('source').isString() && (newData.child('source').val() == 'private' || newData.child('source').val() == 'shared'))"
             },
 
             "started": {

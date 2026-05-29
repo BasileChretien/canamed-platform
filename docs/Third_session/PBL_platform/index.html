@@ -234,8 +234,15 @@
           <br />
           <button type="button" class="splash-link" id="splash-go-account"
                   data-i18n="splash.enter.go-account">
-            Sign in with Google to save your profile &amp; history &rarr;
+            Sign in with Google or email to save your profile &amp; history &rarr;
           </button>
+        </p>
+        <p class="splash-foot splash-author-foot" id="splash-author-row" hidden>
+          <a href="scenario-author.html" target="_blank" rel="noopener"
+             class="splash-link" id="splash-go-author"
+             data-i18n="splash.enter.go-author">
+            Author or edit your own scenarios &rarr;
+          </a>
         </p>
       </div>
 
@@ -284,6 +291,31 @@
             <span data-i18n="splash.account.continue-google">Continue with Google</span>
           </button>
         </div>
+        <p class="splash-or" data-i18n="splash.account.or"
+           aria-hidden="true">— or use email —</p>
+        <form id="splash-email-form" class="splash-email-form" autocomplete="on"
+              novalidate>
+          <div class="splash-field">
+            <label for="splash-email-input"
+                   data-i18n="splash.account.email-label">Email</label>
+            <input type="email" id="splash-email-input" maxlength="120"
+                   autocomplete="email" inputmode="email"
+                   required aria-required="true" />
+          </div>
+          <div class="splash-field">
+            <label for="splash-password-input"
+                   data-i18n="splash.account.password-label">Password</label>
+            <input type="password" id="splash-password-input" maxlength="120"
+                   autocomplete="current-password" minlength="6"
+                   required aria-required="true" />
+          </div>
+          <div class="splash-row splash-email-actions">
+            <button type="submit" id="splash-email-signin"
+                    data-i18n="splash.account.signin-email">Sign in</button>
+            <button type="button" id="splash-email-signup" class="splash-link"
+                    data-i18n="splash.account.signup-email">Create account</button>
+          </div>
+        </form>
         <p class="splash-hint" id="splash-account-hint" role="status"
            aria-live="polite"></p>
         <div class="splash-row">
