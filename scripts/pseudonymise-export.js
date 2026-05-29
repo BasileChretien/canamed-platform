@@ -29,6 +29,23 @@
  *   GOOGLE_APPLICATION_CREDENTIALS  path to the SA JSON file
  *   FIREBASE_DATABASE_URL           the RTDB URL
  *   EXPORT_OUT_DIR                  where to write outputs
+ *   EXPORT_GCS_BUCKET               if set, upload BOTH files to this private
+ *                                   GCS bucket (no gs:// prefix), so the job
+ *                                   can run from the public repo without
+ *                                   exposing PII via world-downloadable
+ *                                   artifacts
+ *   EXPORT_GCS_PSEUDO_PREFIX        bucket prefix for the pseudonymised file
+ *                                   (default "pseudonymised") — give it a
+ *                                   long (~90d) lifecycle rule
+ *   EXPORT_GCS_LINKAGE_PREFIX       bucket prefix for the linkage table
+ *                                   (default "linkage") — give it a SHORT
+ *                                   (~14d) lifecycle rule; it re-identifies
+ *                                   participants and must be destroyed early
+ *   EXPORT_REQUIRE_GCS              set to "1" to FAIL when EXPORT_GCS_BUCKET
+ *                                   is empty — used by the public-repo
+ *                                   workflow so a misconfigured bucket gives a
+ *                                   loud red run instead of an export that
+ *                                   silently vanishes with the runner
  *
  * Outputs:
  *   $EXPORT_OUT_DIR/canamed-pseudonymised-YYYY-MM-DD.json
@@ -36,7 +53,7 @@
  *
  * Exit codes:
  *   0 — success
- *   2 — infrastructure failure
+ *   2 — infrastructure failure / misconfiguration
  */
 
 "use strict";
@@ -44,11 +61,17 @@
 const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
+const { uploadToGcs } = require("./lib/gcs-archive");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
 
 const OUT_DIR = process.env.EXPORT_OUT_DIR || process.env.RUNNER_TEMP || ".";
+
+const GCS_BUCKET = process.env.EXPORT_GCS_BUCKET || "";
+const GCS_PSEUDO_PREFIX = (process.env.EXPORT_GCS_PSEUDO_PREFIX || "pseudonymised").replace(/\/+$/, "");
+const GCS_LINKAGE_PREFIX = (process.env.EXPORT_GCS_LINKAGE_PREFIX || "linkage").replace(/\/+$/, "");
+const REQUIRE_GCS = process.env.EXPORT_REQUIRE_GCS === "1";
 
 function isoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -114,12 +137,22 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
 }
 
 async function main() {
+  if (REQUIRE_GCS && !GCS_BUCKET) {
+    console.error(
+      "FATAL: EXPORT_REQUIRE_GCS=1 but EXPORT_GCS_BUCKET is empty.\n" +
+      "       Set the PII_ARCHIVE_BUCKET repo variable to a PRIVATE GCS bucket.\n" +
+      "       Refusing to run an export whose only copy would vanish with the runner."
+    );
+    process.exit(2);
+  }
+
   admin.initializeApp({ databaseURL: DB_URL });
   const db = admin.database();
 
   console.log("--- CaNaMED daily pseudonymised export ---");
   console.log("Database:  " + DB_URL);
   console.log("Out dir:   " + OUT_DIR);
+  console.log("GCS:       " + (GCS_BUCKET ? `gs://${GCS_BUCKET}/` : "(none — local artifact mode)"));
   console.log("Run time:  " + new Date().toISOString());
   console.log("");
 
@@ -168,6 +201,21 @@ async function main() {
   const linkageKb = (fs.statSync(linkagePath).size / 1024).toFixed(1);
   console.log("Wrote " + pseudoPath + " (" + pseudoKb + " KB)");
   console.log("Wrote " + linkagePath + " (" + linkageKb + " KB)");
+
+  if (GCS_BUCKET) {
+    const pseudoUri = await uploadToGcs({
+      bucket: GCS_BUCKET,
+      localPath: pseudoPath,
+      destination: GCS_PSEUDO_PREFIX + "/canamed-pseudonymised-" + isoDate() + ".json"
+    });
+    console.log("Uploaded to " + pseudoUri);
+    const linkageUri = await uploadToGcs({
+      bucket: GCS_BUCKET,
+      localPath: linkagePath,
+      destination: GCS_LINKAGE_PREFIX + "/canamed-linkage-" + isoDate() + ".json"
+    });
+    console.log("Uploaded to " + linkageUri);
+  }
 
   process.exit(0);
 }

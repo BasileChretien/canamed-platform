@@ -71,15 +71,31 @@ outstanding.**
      scripts and the `FIREBASE_SERVICE_ACCOUNT_CANAMED_69785` secret were
      already present here. **Leave the private repo's copies disabled** — do
      not re-enable them and double-run.
-   - ⚠️ **Still outstanding — `backup-sessions` + `pseudonymise-export`.**
-     These upload artifacts containing identified PII (full `/sessions` dump;
-     a pseudonym→name linkage table). On a **public** repo anyone with read
-     access — i.e. everyone — can download run artifacts, so they **must not**
-     be moved here. Options: (a) fix the personal-account billing in GitHub →
-     Settings → Billing & plans, then run them from the private repo; or
-     (b) change the scripts to write artifacts to a **private GCS bucket**
-     (same service account) and run the jobs from this public repo (logs carry
-     no PII). Until one is done, take a manual backup before any risky DB op.
+   - ⚠️ **`backup-sessions` + `pseudonymise-export` — GCS variant drafted,
+     DORMANT until operator setup (2026-05-29).** These produce artefacts
+     containing identified PII (full `/sessions` dump; a pseudonym→name
+     linkage table). On a **public** repo anyone with read access — i.e.
+     everyone — can download run artifacts, so they must **not** upload
+     artifacts here. Option (b) is now implemented: the scripts gained a
+     GCS-upload path (`scripts/lib/gcs-archive.js`, gated by
+     `BACKUP_GCS_BUCKET` / `EXPORT_GCS_BUCKET` + a `*_REQUIRE_GCS` fail-loud
+     flag), and `.github/workflows/backup-sessions.yml` +
+     `pseudonymise-export.yml` run them here writing to a **private GCS
+     bucket** (logs carry no PII). They are **dormant** — `schedule:` is
+     commented out and they fail by design until setup is done. **ACTION
+     REQUIRED** (see the step-by-step header in `backup-sessions.yml`):
+     1. Create a **private** EU bucket (e.g. `canamed-pii-archive`,
+        `europe-west1`, uniform access + public-access-prevention).
+     2. Grant the deploy SA `roles/storage.objectAdmin` on that bucket only.
+     3. Add lifecycle rules: `backups/` + `pseudonymised/` = 90d, `linkage/`
+        = 14d (auto-deletion).
+     4. `gh variable set PII_ARCHIVE_BUCKET --body "canamed-pii-archive"`.
+     5. Dispatch both workflows once; confirm green + objects in the bucket.
+     6. Uncomment the `schedule:` blocks and push.
+     Alternative (a): fix the personal-account billing (GitHub → Settings →
+     Billing & plans) and run the original artifact-based copies from the
+     **private** repo instead. Until either path is live, take a manual
+     backup before any risky DB op.
 
 5. **Enable Email/Password sign-in provider (LOW, one-click).** The splash
    account view now offers Google **and** email/password sign-in (added

@@ -1,0 +1,62 @@
+# Daily pseudonymised export of /sessions for research → PRIVATE GCS.
+#
+# PUBLIC-REPO variant. Produces two objects in a private GCS bucket:
+#   - pseudonymised/canamed-pseudonymised-DATE.json — real names replaced
+#     by Student-A/B/... per session; researchers consume this. Long
+#     (~90d) lifecycle.
+#   - linkage/canamed-linkage-DATE.json — maps pseudonyms back to real
+#     names; used only to honour GDPR Art. 17 erasure on a closed session.
+#     SHORT (~14d) lifecycle.
+#
+# Why GCS and not a GitHub artifact: this is a public repo, where artifacts
+# are downloadable by anyone with read access. The linkage table is the
+# crown jewels (re-identifies every participant), so it must never touch a
+# public-repo artifact. The job log itself prints only counts — no names.
+#
+# DORMANT until the operator completes the one-time bucket setup documented
+# in .github/workflows/backup-sessions.yml. The `schedule:` block is
+# commented out until then; workflow_dispatch is live for the smoke test.
+# Only CLOSED sessions are exported.
+
+name: Pseudonymised export
+
+on:
+  # schedule:
+  #   - cron: "47 3 * * *"   # daily 03:47 UTC — after cleanup (03:17)
+  workflow_dispatch:
+
+concurrency:
+  group: pseudonymised-export
+  cancel-in-progress: false
+
+jobs:
+  export:
+    name: Pseudonymise + export /sessions to private GCS
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install firebase-admin (one-shot)
+        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+
+      - name: Write service-account credentials
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Pseudonymise + export to private GCS (no artifact upload)
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+          EXPORT_GCS_BUCKET: ${{ vars.PII_ARCHIVE_BUCKET }}
+          EXPORT_GCS_PSEUDO_PREFIX: pseudonymised
+          EXPORT_GCS_LINKAGE_PREFIX: linkage
+          EXPORT_REQUIRE_GCS: "1"
+        run: node scripts/pseudonymise-export.js
