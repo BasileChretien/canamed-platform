@@ -20,9 +20,15 @@
  *   CLEANUP_RETENTION_CLOSED_DAYS   default 30 — purge after this many days post-close
  *   CLEANUP_RETENTION_OPEN_DAYS     default 90 — purge abandoned sessions after this many days
  *   CLEANUP_CONFIRM                 set to "1" to actually delete (otherwise just log)
+ *   CLEANUP_QUIET                   set to "1" to suppress the per-session lines and
+ *                                   emit only the summary. REQUIRED when the workflow
+ *                                   runs on a PUBLIC repo, whose Actions logs are
+ *                                   world-readable: a per-session line prints the
+ *                                   session join-code, and codes of not-yet-expired
+ *                                   ("KEEP") sessions could still be live/joinable.
  *
  * Output:
- *   one line per session in the report — KEEP / PURGE / DRY-RUN.
+ *   one line per session in the report — KEEP / PURGE / DRY-RUN (unless CLEANUP_QUIET).
  *   exits non-zero only on infrastructure errors (auth fail, DB unreachable);
  *   "nothing to purge" is success.
  */
@@ -36,6 +42,7 @@ const DB_URL = process.env.FIREBASE_DATABASE_URL
 const CLOSED_DAYS = parseInt(process.env.CLEANUP_RETENTION_CLOSED_DAYS || "30", 10);
 const OPEN_DAYS = parseInt(process.env.CLEANUP_RETENTION_OPEN_DAYS || "90", 10);
 const CONFIRM = process.env.CLEANUP_CONFIRM === "1";
+const QUIET = process.env.CLEANUP_QUIET === "1";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const closedCutoff = Date.now() - CLOSED_DAYS * MS_PER_DAY;
@@ -102,7 +109,7 @@ async function main() {
       const tag = (verdict === "PURGE")
         ? (CONFIRM ? "PURGE   " : "DRY-RUN ")
         : "KEEP    ";
-      console.log(`${tag} ${code}  ${reason}`);
+      if (!QUIET) console.log(`${tag} ${code}  ${reason}`);
 
       if (verdict === "PURGE" && CONFIRM) {
         await db.ref(`sessions/${code}`).remove();
@@ -111,7 +118,7 @@ async function main() {
       else kept++;
     } catch (e) {
       errors++;
-      console.error(`ERROR    ${code}  ${e.message}`);
+      console.error(`ERROR    ${QUIET ? "<redacted>" : code}  ${e.message}`);
     }
   }
 

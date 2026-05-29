@@ -1,0 +1,56 @@
+# Daily Firebase Spark-plan cost / quota monitor for CaNaMED.
+#
+# Runs scripts/firebase-cost-monitor.js once a day. The script reads the
+# /sessions subtree and measures storage usage against Spark caps. If any
+# measurable cap is above 80%, the job exits non-zero and the operator
+# gets an email (GitHub default behaviour for failed scheduled workflows
+# on the default branch).
+#
+# WHY THIS LIVES IN THE PUBLIC REPO (moved 2026-05-29): see
+# cleanup-stale-sessions.yml for the full rationale — the private repo's
+# Actions are blocked by a billing-payment failure, so retention/monitor
+# jobs were moved here, off that dependency. This job prints only counts,
+# sizes and percentages (no session codes, no names), so its world-
+# readable public log leaks nothing.
+#
+# Scheduled for 02:13 UTC daily (off the cleanup at 03:17 to avoid the
+# cron-stampede pattern). Manual workflow_dispatch is also exposed.
+
+name: Cost monitor
+
+on:
+  schedule:
+    - cron: "13 2 * * *"   # daily at 02:13 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: cost-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Spark-plan usage check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install firebase-admin (one-shot, not added to package.json)
+        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+
+      - name: Write service-account credentials
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Run cost monitor
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+        run: node scripts/firebase-cost-monitor.js

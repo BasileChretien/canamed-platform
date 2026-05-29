@@ -53,13 +53,33 @@ outstanding.**
    - ✅ **Done 2026-05-23** — browser key locked to HTTP referrers and scoped
      to only the Firebase services in use.
 
-3. **Re-enable retention cron schedules (private CANAMED repo).** The 4 PII
-   workflows on `BasileChretien/CANAMED` (backup-sessions, cleanup-stale-
-   sessions, cost-monitor, pseudonymise-export) have their `schedule:` blocks
-   commented out (Actions free-tier cap). `workflow_dispatch:` still works, so
-   GDPR/APPI retention + backups are being honoured **manually** — do not let
-   the manual cadence slip more than a few days. Uncomment the `schedule:`
-   blocks once the monthly Actions minute pool resets or billing is raised.
+3. **PII retention workflows — partly restored in this repo, two still
+   blocked.** The 4 PII workflows originally lived on the private
+   `BasileChretien/CANAMED` repo. **Correction (2026-05-29):** that repo's
+   GitHub Actions are not merely at a free-tier minute cap — they are blocked
+   by an **account billing-payment failure** ("the job was not started because
+   recent account payments have failed or your spending limit needs to be
+   increased"). This blocks **scheduled *and* `workflow_dispatch`** runs, so
+   the earlier assumption that retention was "being honoured manually" was
+   **false** — backup/cleanup/pseudonymise/cost-monitor had not run since
+   ~2026-05-18 (≈11-day GDPR/APPI storage-limitation gap + no fresh backups).
+   - ✅ **Durable fix (2026-05-29):** the two **no-artifact** jobs were ported
+     to this public repo, whose Actions are healthy, off the broken-billing
+     dependency — `.github/workflows/cleanup-stale-sessions.yml` (daily 03:17
+     UTC, `CLEANUP_QUIET=1` so world-readable logs never print session codes)
+     and `.github/workflows/cost-monitor.yml` (daily 02:13 UTC). The PII
+     scripts and the `FIREBASE_SERVICE_ACCOUNT_CANAMED_69785` secret were
+     already present here. **Leave the private repo's copies disabled** — do
+     not re-enable them and double-run.
+   - ⚠️ **Still outstanding — `backup-sessions` + `pseudonymise-export`.**
+     These upload artifacts containing identified PII (full `/sessions` dump;
+     a pseudonym→name linkage table). On a **public** repo anyone with read
+     access — i.e. everyone — can download run artifacts, so they **must not**
+     be moved here. Options: (a) fix the personal-account billing in GitHub →
+     Settings → Billing & plans, then run them from the private repo; or
+     (b) change the scripts to write artifacts to a **private GCS bucket**
+     (same service account) and run the jobs from this public repo (logs carry
+     no PII). Until one is done, take a manual backup before any risky DB op.
 
 5. **Enable Email/Password sign-in provider (LOW, one-click).** The splash
    account view now offers Google **and** email/password sign-in (added

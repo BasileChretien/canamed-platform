@@ -1,0 +1,96 @@
+# Scheduled cleanup of stale CaNaMED sessions (GDPR/APPI retention).
+#
+# GDPR Art. 5(1)(e) "storage limitation" + APPI Art. 21 require that
+# personal data isn't kept longer than needed. The privacy policy commits
+# us to: identified data ≤ 30 days after session close, abandoned sessions
+# ≤ 90 days after creation. This workflow enforces that schedule.
+#
+# WHY THIS LIVES IN THE PUBLIC REPO (moved 2026-05-29):
+#   The retention workflows originally ran on the private
+#   BasileChretien/CANAMED repo, but that account's GitHub Actions are
+#   blocked by a billing-payment failure ("the job was not started because
+#   recent account payments have failed"), so every scheduled AND manual
+#   run there has failed since ~2026-05-18 — meaning retention silently
+#   stopped. This public repo's Actions are healthy, so the retention is
+#   restored here, off the broken-billing dependency.
+#
+#   Only the NO-ARTIFACT retention jobs (this one + cost-monitor) were
+#   moved. backup-sessions and pseudonymise-export upload artifacts
+#   containing identified PII (full names; a pseudonym→name linkage
+#   table). On a PUBLIC repo, anyone with read access — i.e. everyone —
+#   can download run artifacts, so moving those here would turn a
+#   retention gap into a PII breach. They must run somewhere with private
+#   artifact storage (a private repo with working Actions, or write to a
+#   private GCS bucket).
+#
+#   CLEANUP_QUIET=1 is set below because this repo's Actions logs are
+#   world-readable: without it the per-session report prints session
+#   join-codes, and codes of not-yet-expired ("KEEP") sessions could
+#   still be live/joinable. Quiet mode emits only the summary counts.
+#   For a verbose dry-run preview, run scripts/cleanup-stale-sessions.js
+#   locally (private logs), not via this workflow.
+#
+# Runs daily at 03:17 UTC (deliberately off-:00 to avoid the cron
+# stampede). The scheduled run purges (CONFIRM=1); the manual dispatch
+# defaults to dry-run so an operator can preview before deleting.
+
+name: Cleanup stale sessions
+
+on:
+  schedule:
+    - cron: "17 3 * * *"   # daily at 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Actually delete (otherwise just dry-run)"
+        type: boolean
+        required: true
+        default: false
+      retention_closed_days:
+        description: "Retention after close (days)"
+        type: string
+        required: true
+        default: "30"
+      retention_open_days:
+        description: "Retention for abandoned sessions (days)"
+        type: string
+        required: true
+        default: "90"
+
+concurrency:
+  group: cleanup-stale-sessions
+  cancel-in-progress: false  # don't kill a running cleanup mid-delete
+
+jobs:
+  cleanup:
+    name: Purge expired sessions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install firebase-admin (one-shot, not added to package.json)
+        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+
+      - name: Write service-account credentials to a temp file
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Run cleanup
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+          # Scheduled runs purge by default; manual dispatch follows the dropdown.
+          CLEANUP_CONFIRM: ${{ (github.event_name == 'schedule' || github.event.inputs.confirm == 'true') && '1' || '0' }}
+          CLEANUP_RETENTION_CLOSED_DAYS: ${{ github.event.inputs.retention_closed_days || '30' }}
+          CLEANUP_RETENTION_OPEN_DAYS:   ${{ github.event.inputs.retention_open_days   || '90' }}
+          # PUBLIC repo: logs are world-readable — never print raw session codes.
+          CLEANUP_QUIET: "1"
+        run: node scripts/cleanup-stale-sessions.js
