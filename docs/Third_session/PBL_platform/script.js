@@ -12343,6 +12343,130 @@ function signInWithProvider(name) {
   });
 }
 
+/* Cheap password-strength scorer — no zxcvbn dependency. Returns
+   { score: 0-4, label: i18n-key, ok: boolean }. ok=true means the
+   password is acceptable for account creation (≥8 chars + at least 3 of
+   {lowercase, uppercase, digit, symbol}). The score 0-4 drives the
+   colored meter; the threshold for ok is score >= 3. */
+function scorePassword(pw) {
+  pw = String(pw || "");
+  if (!pw) return { score: 0, key: "splash.account.pwd-strength-empty", ok: false };
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 12) score++;
+  let classes = 0;
+  if (/[a-z]/.test(pw)) classes++;
+  if (/[A-Z]/.test(pw)) classes++;
+  if (/[0-9]/.test(pw)) classes++;
+  if (/[^A-Za-z0-9]/.test(pw)) classes++;
+  if (classes >= 2) score++;
+  if (classes >= 3) score++;
+  // Soft penalty for trivially weak strings (single char class regardless of
+  // length, or sequences like 12345/abcdef). Doesn't try to be a full check.
+  if (classes <= 1 || /(?:0123|1234|2345|3456|4567|5678|6789|abcd|qwer|asdf)/i.test(pw)) {
+    score = Math.min(score, 1);
+  }
+  score = Math.max(0, Math.min(4, score));
+  const labels = [
+    "splash.account.pwd-strength-veryweak",
+    "splash.account.pwd-strength-weak",
+    "splash.account.pwd-strength-fair",
+    "splash.account.pwd-strength-good",
+    "splash.account.pwd-strength-strong"
+  ];
+  return {
+    score: score,
+    key: labels[score],
+    ok: score >= 3 && pw.length >= 8 && classes >= 3
+  };
+}
+
+/* Wire the sign-in / sign-up email form: tab toggle, password-strength
+   meter, single submit handler that dispatches on data-mode. Idempotent
+   — calling it again rebinds without duplicating listeners (we only
+   look up by id and use simple guard flags). */
+function wireEmailAuthForm() {
+  const form    = el("splash-email-form");
+  const tabIn   = el("splash-email-mode-signin");
+  const tabUp   = el("splash-email-mode-signup");
+  const pwIn    = el("splash-password-input");
+  const submit  = el("splash-email-submit");
+  if (!form || form.dataset.wired === "1") return;
+  form.dataset.wired = "1";
+
+  function applyMode(mode) {
+    const isSignup = (mode === "signup");
+    form.dataset.mode = isSignup ? "signup" : "signin";
+    if (tabIn) {
+      tabIn.classList.toggle("is-active", !isSignup);
+      tabIn.setAttribute("aria-selected", String(!isSignup));
+    }
+    if (tabUp) {
+      tabUp.classList.toggle("is-active", isSignup);
+      tabUp.setAttribute("aria-selected", String(isSignup));
+    }
+    // Show / hide the sign-up-only rows (confirm field + strength meter).
+    Array.from(document.querySelectorAll(".splash-signup-only"))
+      .forEach(n => { n.hidden = !isSignup; });
+    if (pwIn) {
+      pwIn.setAttribute("autocomplete", isSignup ? "new-password" : "current-password");
+      pwIn.setAttribute("minlength", isSignup ? "8" : "6");
+    }
+    if (submit) {
+      const key = isSignup ? "splash.account.signup-email" : "splash.account.signin-email";
+      submit.setAttribute("data-i18n", key);
+      submit.textContent = (window.t ? window.t(key) :
+        (isSignup ? "Create account" : "Sign in"));
+    }
+    // Clear any stale hint from the other mode.
+    splashHintOk(el("splash-account-hint"), "");
+    if (isSignup) updateStrengthMeter();
+  }
+
+  function updateStrengthMeter() {
+    const fill  = el("splash-pwd-strength-fill");
+    const label = el("splash-pwd-strength-label");
+    if (!fill || !label) return;
+    const s = scorePassword(pwIn ? pwIn.value : "");
+    // 0..4 → width 0..100%; data attribute drives colour via CSS.
+    fill.style.width = (s.score * 25) + "%";
+    fill.dataset.score = String(s.score);
+    label.textContent = (window.t ? window.t(s.key) : s.key);
+  }
+
+  if (tabIn) tabIn.addEventListener("click", () => applyMode("signin"));
+  if (tabUp) tabUp.addEventListener("click", () => applyMode("signup"));
+  if (pwIn)  pwIn.addEventListener("input", () => {
+    if (form.dataset.mode === "signup") updateStrengthMeter();
+  });
+
+  form.addEventListener("submit", e => {
+    e.preventDefault();
+    const em = (el("splash-email-input") || {}).value.trim();
+    const pw = (el("splash-password-input") || {}).value || "";
+    if (form.dataset.mode === "signup") {
+      const pw2 = (el("splash-password-confirm") || {}).value || "";
+      const hint = el("splash-account-hint");
+      if (pw !== pw2) {
+        splashHintErr(hint, (window.t && window.t("splash.account.pwd-mismatch")) ||
+          "The two passwords don't match — retype them.");
+        return;
+      }
+      const s = scorePassword(pw);
+      if (!s.ok) {
+        splashHintErr(hint, (window.t && window.t("splash.account.pwd-too-weak")) ||
+          "Pick a stronger password: at least 8 characters with a mix of upper-case, lower-case, digits, and symbols.");
+        return;
+      }
+      signUpWithEmail(em, pw);
+    } else {
+      signInWithEmail(em, pw);
+    }
+  });
+
+  applyMode("signin");
+}
+
 /* Sign in to an EXISTING email/password account. No anonymous-uid linking
    here — the user is claiming an account that pre-dates this tab, so any
    throwaway anonymous uid is forfeited (same fate as Google sign-in for a
@@ -12813,19 +12937,7 @@ function wireAccountUI() {
     .addEventListener("click", () => signInWithProvider("microsoft"));
   if (el("splash-apple-signin")) el("splash-apple-signin")
     .addEventListener("click", () => signInWithProvider("apple"));
-  if (el("splash-email-form")) el("splash-email-form")
-    .addEventListener("submit", e => {
-      e.preventDefault();
-      const em = (el("splash-email-input") || {}).value || "";
-      const pw = (el("splash-password-input") || {}).value || "";
-      signInWithEmail(em.trim(), pw);
-    });
-  if (el("splash-email-signup")) el("splash-email-signup")
-    .addEventListener("click", () => {
-      const em = (el("splash-email-input") || {}).value || "";
-      const pw = (el("splash-password-input") || {}).value || "";
-      signUpWithEmail(em.trim(), pw);
-    });
+  wireEmailAuthForm();
 
   // profile-setup (runs once, right after the first Google sign-in)
   if (el("splash-profile-setup-form")) el("splash-profile-setup-form")

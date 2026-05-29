@@ -30,12 +30,54 @@ test.describe("Splash — authored scenarios entry points", () => {
     // Existing Google button still present.
     await expect(page.locator("#splash-google-signin")).toBeVisible();
 
-    // New email/password form fields + buttons.
+    // New email/password form: mode tabs + fields + single submit button.
     await expect(page.locator("#splash-email-form")).toBeVisible();
+    await expect(page.locator("#splash-email-mode-signin")).toBeVisible();
+    await expect(page.locator("#splash-email-mode-signup")).toBeVisible();
     await expect(page.locator("#splash-email-input")).toBeVisible();
     await expect(page.locator("#splash-password-input")).toBeVisible();
-    await expect(page.locator("#splash-email-signin")).toBeVisible();
-    await expect(page.locator("#splash-email-signup")).toBeVisible();
+    await expect(page.locator("#splash-email-submit")).toBeVisible();
+    // Confirm-password + strength meter are sign-up only and start hidden.
+    await expect(page.locator("#splash-password-confirm")).toBeHidden();
+  });
+
+  test("switching to 'Create a new account' reveals confirm + strength meter", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#splash-go-account").click();
+    await page.locator("#splash-email-mode-signup").click();
+    await expect(page.locator("#splash-password-confirm")).toBeVisible();
+    await expect(page.locator("#splash-pwd-strength-label")).toBeVisible();
+    // Submit button relabels from "Sign in" → "Create account".
+    await expect(page.locator("#splash-email-submit")).toContainText(/create account|cr.er un compte|アカウントを作成/i);
+
+    // Typing a weak password lights up the meter at a low score.
+    await page.locator("#splash-password-input").fill("aaaaaaaa");
+    await expect(page.locator("#splash-pwd-strength-fill"))
+      .toHaveAttribute("data-score", /[0-1]/);
+
+    // A strong password lights it up at a high score.
+    await page.locator("#splash-password-input").fill("Str0ng-Pass!2025");
+    await expect(page.locator("#splash-pwd-strength-fill"))
+      .toHaveAttribute("data-score", /[3-4]/);
+  });
+
+  test("sign-up blocks mismatched passwords and weak passwords with a clear error", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#splash-go-account").click();
+    await page.locator("#splash-email-mode-signup").click();
+    await page.locator("#splash-email-input").fill("new@example.test");
+    await page.locator("#splash-password-input").fill("Str0ng-Pass!2025");
+    await page.locator("#splash-password-confirm").fill("typo-typo-typo");
+    await page.locator("#splash-email-submit").click();
+    await expect(page.locator("#splash-account-hint"))
+      .toContainText(/don't match|ne correspondent|一致しません/i);
+
+    // Matching but weak password → blocked with the strength error.
+    await page.locator("#splash-password-input").fill("aaaaaaaa");
+    await page.locator("#splash-password-confirm").fill("aaaaaaaa");
+    await page.locator("#splash-email-submit").click();
+    await expect(page.locator("#splash-account-hint"))
+      .toContainText(/stronger|plus fort|より強い/i);
   });
 
   test("email sign-in shows a clear error in LOCAL mode (no Firebase wired)", async ({ page }) => {
@@ -44,7 +86,7 @@ test.describe("Splash — authored scenarios entry points", () => {
 
     await page.locator("#splash-email-input").fill("nobody@example.test");
     await page.locator("#splash-password-input").fill("ignored-in-local-mode");
-    await page.locator("#splash-email-signin").click();
+    await page.locator("#splash-email-submit").click();
 
     const hint = page.locator("#splash-account-hint");
     await expect(hint).toBeVisible();

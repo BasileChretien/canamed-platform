@@ -4445,6 +4445,74 @@ body.session-ended-shown { overflow: hidden; }
 }
 .splash-email-actions button[type="submit"] { flex: 1 1 auto; }
 
+/* Mode toggle (Sign in / Create account) — segmented tab control. */
+.splash-email-mode {
+  display: flex;
+  gap: 0;
+  margin: 0 0 4px;
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  border: 1px solid rgba(0,0,0,0.12);
+}
+.splash-email-mode-btn {
+  flex: 1 1 0;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.88rem;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              opacity var(--dur-base, .18s) var(--ease-out, ease);
+}
+.splash-email-mode-btn:hover { opacity: 1; }
+.splash-email-mode-btn.is-active {
+  background: var(--primary, #1763a6);
+  color: #fff;
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* Password-strength meter (only visible in sign-up mode). */
+.splash-pwd-strength {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.splash-pwd-strength-bar {
+  height: 6px;
+  background: rgba(0,0,0,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.splash-pwd-strength-bar > span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: #c44;
+  transition: width var(--dur-base, .18s) var(--ease-out, ease),
+              background var(--dur-base, .18s) var(--ease-out, ease);
+}
+.splash-pwd-strength-bar > span[data-score="0"] { background: #c44; }
+.splash-pwd-strength-bar > span[data-score="1"] { background: #d97; }
+.splash-pwd-strength-bar > span[data-score="2"] { background: #db4; }
+.splash-pwd-strength-bar > span[data-score="3"] { background: #8b3; }
+.splash-pwd-strength-bar > span[data-score="4"] { background: #4a3; }
+.splash-pwd-strength-label {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+.splash-pwd-strength-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  opacity: 0.65;
+  line-height: 1.35;
+}
+
 /* Google: white card per their brand guidelines */
 .splash-google-btn {
   color: #3c4043;
