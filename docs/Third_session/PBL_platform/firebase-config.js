@@ -19,6 +19,11 @@
  *   appId: "1:...:web:..."
  * };
  */
+// NB: these values are inherently PUBLIC (they ship in the served HTML) — they
+// are identifiers, not secrets. The apiKey is locked down by HTTP-referrer + API
+// restrictions in the GCP Console (done 2026-05-23; see CLAUDE.md). KEY ROTATION:
+// if the browser key is ever rotated, update `apiKey` here AND redeploy hosting,
+// otherwise the app silently fails to initialise Firebase for all users.
 window.CANAMED_FIREBASE = {
   apiKey: "AIzaSyB_7d4rCWsVSUAaL17Jcjy3v2s_n5uJVUg",
   authDomain: "canamed-69785.web.app",

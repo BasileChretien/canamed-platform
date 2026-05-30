@@ -258,6 +258,13 @@ operational reminders remain outstanding.
 - `credentials/$certId` public read by exact id (no `auth`): required by the
   unauthenticated certificate-verification page; cert IDs are crypto-random
   high-entropy (no enumeration) and carry only a name **hash** + session label.
+- `poll/$clientId` uses the same tolerant first-write `clientMapping` branch as
+  `pool`/`presence`/`typing`: in the brief window before the join chain commits
+  the mapping, a peer could spoof another participant's qualitative poll answer
+  (`hardest`/`feeling`). Same accepted class as the room-griefing residual; the
+  window is narrow (the claim runs before the poll UI is reachable). **Note for
+  research:** poll data feeds the research export — if poll integrity ever
+  matters for analysis, bind it to `clientMapping` ownership like `votes/ballots`.
 
 **Deferred (must address before the relevant go-live):**
 - Org-scoped sessions still store the real `adminPasswordHash` at a
