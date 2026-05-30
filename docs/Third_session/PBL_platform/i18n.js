@@ -176,7 +176,7 @@
       "verify.checking": "Checking…",
       "verify.valid": "✓ Valid: this is a real CaNaMED certificate",
       "verify.no-match": "The name you entered does not match the certificate with that ID.",
-      "verify.not-found": "This Verification ID is not in the public registry. If you received it on a CaNaMED certificate, please contact the CaNaMED team with the ID and the name on the certificate — they hold the master record.",
+      "verify.not-found": "We couldn't find that Verification ID. Please re-check it against the certificate (it looks like CNM-XXXXX-XXXXX). If it still doesn't match, the ID may be incorrect or the entry may have been removed on request.",
       "verify.unavailable": "Verification is temporarily unavailable. Please try again later.",
       "verify.privacy-note": "See section 18 of the <a href=\"privacy.html\">privacy policy</a> for what is stored, the retention period and how to remove an entry.",
 
@@ -314,7 +314,7 @@
       "lobby.consent-workshop": "I have read the data-use notice above and consent to taking part in this CaNaMED workshop.",
       "lobby.consent-workshop-detail": "My first name, university, year, English level and the text I type during the workshop will be visible to the other people in my room and to the facilitators.",
       "lobby.consent-research": "I additionally consent to my contributions — my answers, the questions and examinations I choose and their order, my votes, my scores and my free-text — being recorded and linked to me (identifiably) for the CaNaMED education-research project (analysis and publication). Only the study facilitators see my identity; other participants do not. I understand that I can take part in the workshop without ticking this second box — refusing has no effect on my participation, my grades or my standing at my university.",
-      "lobby.consent-verification": "I additionally consent to my certificate being independently verifiable: a verification ID printed on the certificate is linked, in a separate registry, to a one-way hash of my name + session, so that a third party who is given BOTH my certificate ID AND the name on it can confirm — on a public CaNaMED page — that they match a real CaNaMED certificate. The page does not publish my name; it only returns \"valid\" or \"no match\" when both inputs are supplied. The registry is retained for up to 10 years and I can ask for my entry to be removed at any time (see the privacy policy, section 18). I understand I can take part and consent to the research without ticking this third box.",
+      "lobby.consent-verification": "Your certificate of attendance is independently verifiable. A verification ID and QR code printed on it link — in a separate registry — to a one-way hash of your name and session, so that anyone you give BOTH the ID AND the name to can confirm, on a public CaNaMED page, that they match a genuine CaNaMED certificate. Your name is never published — the page only answers \"valid\" or \"no match\". The registry stores only the hash, for up to 5 years, and you can ask for your entry to be removed at any time (see section 18 of the privacy policy).",
       "lobby.consent-version": "Notice version PIS v2 · 2026-05. Full ",
       "lobby.consent-version-link": "privacy policy",
       "lobby.consent-version-suffix": ".",

@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v33" below to the matching new string.
+         2. Update every "?v=v34" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v33"></script>
-  <link rel="stylesheet" href="style.css?v=v33" />
+  <script src="theme-init.js?v=v34"></script>
+  <link rel="stylesheet" href="style.css?v=v34" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v33" defer></script>
+  <script src="sw-register.js?v=v34" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -916,12 +916,9 @@
               participation, my grades or my standing at my university.
             </span>
           </label>
-          <label class="consent-row">
-            <input type="checkbox" id="consent-verification" />
-            <span data-i18n="lobby.consent-verification">
-              I additionally consent to my certificate being independently verifiable: a verification ID printed on it is linked, in a separate registry, to a one-way hash of my name + session, so that a third party who is given BOTH my certificate ID AND the name on it can confirm &mdash; on a public CaNaMED page &mdash; that they match a real CaNaMED certificate. The page does not publish my name; it only returns &ldquo;valid&rdquo; or &ldquo;no match&rdquo; when both inputs are supplied. The registry is retained for up to 10 years and I can ask for my entry to be removed at any time (see the privacy policy, section 18). I understand I can take part and consent to the research without ticking this third box.
-            </span>
-          </label>
+          <p class="consent-row consent-note" data-i18n="lobby.consent-verification">
+            Your certificate of attendance is independently verifiable. A verification ID and QR code printed on it link &mdash; in a separate registry &mdash; to a one-way hash of your name and session, so that anyone you give BOTH the ID AND the name to can confirm, on a public CaNaMED page, that they match a genuine CaNaMED certificate. Your name is never published &mdash; the page only answers &ldquo;valid&rdquo; or &ldquo;no match&rdquo;. The registry stores only the hash, for up to 5 years, and you can ask for your entry to be removed at any time (see section 18 of the privacy policy).
+          </p>
           <p class="lobby-hint consent-version" id="consent-version">
             <span data-i18n="lobby.consent-version">Notice version PIS v2 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
           </p>
@@ -3002,46 +2999,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v33" defer></script>
+  <script src="firebase-config.js?v=v34" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v33" defer></script>
+  <script src="orgs.js?v=v34" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v33" defer></script>
+  <script src="platform-config.js?v=v34" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v33" defer></script>
+  <script src="telemetry.js?v=v34" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v33" defer></script>
+  <script src="purify.min.js?v=v34" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v33" defer></script>
+  <script src="i18n.js?v=v34" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v33" defer></script>
+  <script src="localdb.js?v=v34" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v33" defer></script>
+  <script src="lib.js?v=v34" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v33" defer></script>
+  <script src="pure-utils.js?v=v34" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3052,7 +3049,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v33" defer></script>
+  <script src="script-loader.js?v=v34" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
        flag is on (URL ?llm=1 or localStorage canamedModALLM=1). The four
        files are independent of each other except for load order:
@@ -3060,11 +3057,11 @@
        lazily); the bridge and init are activated only after startRoom().
        Kept as classic scripts (not modules) to share the global namespace
        with script.js, same as every other file in this platform. -->
-  <script src="modA-question-scoring.js?v=v33" defer></script>
-  <script src="modA-llm-prompts.js?v=v33" defer></script>
-  <script src="modA-llm-bridge.js?v=v33" defer></script>
-  <script src="modA-llm-init.js?v=v33" defer></script>
-  <script src="script.js?v=v33" defer></script>
+  <script src="modA-question-scoring.js?v=v34" defer></script>
+  <script src="modA-llm-prompts.js?v=v34" defer></script>
+  <script src="modA-llm-bridge.js?v=v34" defer></script>
+  <script src="modA-llm-init.js?v=v34" defer></script>
+  <script src="script.js?v=v34" defer></script>
   <!-- case-content.js, qrcode.js, tour.js and scenario-author.js are NOT
        in the initial HTML on purpose — they're injected by
        script-loader.js on demand. See that file's header for the loading

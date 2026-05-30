@@ -67,7 +67,11 @@ test("the certificate builder embeds the id + a QR only when an id is supplied",
   // and the bare id otherwise (facilitator-only path).
   assert.match(fn, /qr:\s*\(\s*verifyUrl\s*\|\|\s*certId\s*\)/,
     "QR must encode verifyUrl when present, else the bare id");
-  assert.match(fn, /Verification ID/, "builder must label the id");
+  // The id label is now localized (EN "Verification ID" / FR / JA) via the STR
+  // table, so the builder references L.certVerifyId rather than a literal. The
+  // rendered "Verification ID" text is asserted in tests/student-pdf-i18n.test.js
+  // and the e2e suite.
+  assert.match(fn, /L\.certVerifyId/, "builder must label the id (localized)");
   // Guarded so a cert with no id renders neither the QR nor the id line.
   assert.match(fn, /certId\s*\?\s*\{[\s\S]*qr:/, "QR must be gated on certId presence");
 });

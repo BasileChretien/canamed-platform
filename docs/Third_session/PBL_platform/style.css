@@ -4736,6 +4736,19 @@ body.session-ended-shown { overflow: hidden; }
   line-height: 1.5;
 }
 .consent-row:last-of-type { margin-bottom: 4px; }
+/* Certificate verification is on by default (privacy-preserving), so the former
+   third consent checkbox is now an informational note — not an action row.
+   Override the pointer/flex affordances and give it a quiet, divided look. */
+.consent-note {
+  display: block;
+  cursor: default;
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
 /* R2-36 / WCAG 2.5.8 (Target Size — Minimum, 24x24 CSS px): the consent
    checkboxes were 17px which fails AA on touch devices. Bumped to 24px
    with an enlarged label hit-area (padding on .consent-row below) so the

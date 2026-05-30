@@ -275,3 +275,60 @@ test.describe("Student PDFs — study booklet", () => {
     expect(out.type).toContain("pdf");
   });
 });
+
+test.describe("Student PDFs — localization + clickable links (per-device)", () => {
+  test("the certificate localizes (en/fr/ja) and always carries the extra-curricular / no-credit disclaimer", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const B = window.CanamedPdf.buildCertificateDocDefinition;
+      return {
+        en: JSON.stringify(B({ name: "A", lang: "en" })),
+        fr: JSON.stringify(B({ name: "A", lang: "fr" })),
+        ja: JSON.stringify(B({ name: "A", lang: "ja" }))
+      };
+    });
+    // Localized title chrome
+    expect(out.en).toContain("CERTIFICATE OF ATTENDANCE");
+    expect(out.fr).toContain("ATTESTATION DE PARTICIPATION");
+    expect(out.ja).toContain("参加証明書");
+    // The extra-curricular / no-academic-credit disclaimer in each language
+    expect(out.en).toContain("extra-curricular");
+    expect(out.en).toContain("does not award any academic credit");
+    expect(out.fr).toContain("extra-curriculaire");
+    expect(out.fr).toContain("aucun crédit universitaire");
+    expect(out.ja).toContain("正課外");
+    expect(out.ja).toContain("単位");
+  });
+
+  test("the booklet localizes and renders DOIs/links as clickable runs", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureStudentPdf();
+      const B = window.CanamedPdf.buildBookletDocDefinition;
+      const fr = JSON.stringify(B({ name: "A", sessionCode: "S", lang: "fr",
+        sections: [{ title: "Refs", blocks: [{ type: "p", text: "voir doi.org/10.1007/s40122-018-0097-6 ici" }] }],
+        team: {} }));
+      return { fr };
+    });
+    // Localized booklet chrome + new pages
+    expect(out.fr).toContain("Livret d");
+    expect(out.fr).toContain("Objectifs d'apprentissage");
+    expect(out.fr).toContain("Glossaire");
+    expect(out.fr).toContain("Références");
+    // A DOI in collected section text becomes a clickable link run, and the
+    // curated references include a clickable DOI.
+    expect(out.fr).toContain('"link":"https://doi.org/10.1007/s40122-018-0097-6"');
+    expect(out.fr).toContain("https://doi.org/10.1634/theoncologist.5-4-302");
+  });
+
+  test("the lobby presents certificate verification as an informational note, not an opt-in checkbox", async ({ page }) => {
+    await page.goto("/");
+    const out = await page.evaluate(() => ({
+      hasCheckbox: !!document.querySelector("input#consent-verification"),
+      note: (document.querySelector('[data-i18n="lobby.consent-verification"]') || {}).tagName || ""
+    }));
+    expect(out.hasCheckbox, "the opt-in verification checkbox is removed").toBe(false);
+    expect(out.note, "verification copy is now a paragraph note").toBe("P");
+  });
+});
