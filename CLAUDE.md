@@ -38,6 +38,22 @@ the public-repo workflows + private GCS archive. The only thing still marked
 as deferred is the *optional* App Check enforcement on the `hfPatient`
 function (nested under item 4) — a hardening, not a blocker.
 
+> ⚠️ **STATUS-CLAIM RULE — read before reporting any item here as done /
+> outstanding / dormant.** These hand-maintained labels CAN go stale: an
+> operator may finish a Console/deploy step without updating this file (that
+> is exactly what happened with items 4 & 5, caught 2026-05-30 only because
+> the user contradicted the doc). So:
+> 1. **Verify before you relay.** Never report an item's status from this file
+>    alone. Confirm the real state from the code or live system first — each
+>    item below carries a `Verify:` hint for this. If a label contradicts
+>    reality, trust reality and fix the label in the same turn.
+> 2. **Sync on completion.** Whenever you do (or learn of) work that resolves
+>    an item, flip its status here in the **same commit**. A stale "ACTION
+>    REQUIRED" on already-done work is itself a defect to fix.
+> 3. This applies to **every** status assertion in this file (operational
+>    reminders, "Known security follow-ups", inline ✅/DONE notes), not just
+>    this section.
+
 1. **Firebase App Check → Enforce mode (HIGH).** App Check (reCAPTCHA v3) is
    wired client-side but enforcement is set in the Console. Until the
    Realtime Database product is switched from *Monitor* to *Enforce*, a
@@ -47,6 +63,8 @@ function (nested under item 4) — a hardening, not a blocker.
      next to Realtime Database.
    - ✅ **Done 2026-05-23** — Realtime Database switched from *Monitor* to
      *Enforce*; unattested tokens are now rejected at the DB.
+   - `Verify:` Firebase Console → App Check → Realtime Database shows
+     *Enforced* (Console-only — no code signal).
 
 2. **Restrict the API key (HIGH).** The Firebase web API key is necessarily
    public in the served HTML, but it should be locked down:
@@ -55,6 +73,8 @@ function (nested under item 4) — a hardening, not a blocker.
      restrictions = only the Firebase services actually used.
    - ✅ **Done 2026-05-23** — browser key locked to HTTP referrers and scoped
      to only the Firebase services in use.
+   - `Verify:` GCP Console → APIs & Services → Credentials → browser key shows
+     HTTP-referrer + API restrictions (Console-only — no code signal).
 
 3. **PII retention workflows — partly restored in this repo, two still
    blocked.** The 4 PII workflows originally lived on the private
@@ -92,6 +112,10 @@ function (nested under item 4) — a hardening, not a blocker.
      bucket) and their daily `schedule:` blocks enabled (02:47 / 03:47 UTC).
      Re-provisioning steps live in the `backup-sessions.yml` header and
      `scripts/ops/setup-pii-bucket.sh`.
+   - `Verify:` `gh workflow list` shows all 4 (cleanup, cost-monitor, backup,
+     pseudonymise-export) **active**; `.github/workflows/*.yml` have live
+     (uncommented) `schedule:` blocks; `gcloud storage ls gs://canamed-pii-archive/`
+     lists recent objects under `backups/`, `pseudonymised/`, `linkage/`.
 
 5. **Email/Password sign-in provider — DONE.** The splash account view offers
    Google **and** email/password sign-in (added 2026-05-29 as the foundation
@@ -103,6 +127,10 @@ function (nested under item 4) — a hardening, not a blocker.
    - ✅ **Done 2026-05-30** — the Firebase Console **Email/Password** provider
      is enabled (Authentication → Sign-in method); Google + email/password
      both work in production.
+   - `Verify:` code wiring — `grep -c signInWithEmailAndPassword
+     docs/Third_session/PBL_platform/script.js` > 0. Provider toggle is
+     Console-only; functional check = create an account with email/password on
+     the live splash and confirm no `auth/operation-not-allowed` error.
 
 4. **Module A LLM-patient pilot (2026-05-28) — ✅ ACTIVATED 2026-05-30.**
    The free-text chat with Mr Lefebvre (via HF Inference Providers, proxied
@@ -119,6 +147,11 @@ function (nested under item 4) — a hardening, not a blocker.
    (`firebase deploy --only functions,database,hosting`). The bridge now wires
    `firebase.functions().httpsCallable("hfPatient")` at startRoom() instead of
    the local stub.
+   - `Verify:` `grep -c firebase-functions-compat
+     docs/Third_session/PBL_platform/index.html` > 0 (active SDK tag, not
+     commented out); `firebase functions:list` shows `hfPatient`;
+     `MODA_LLM_ENABLED=true` in `functions/.env`. Tag present but function
+     absent (or vice-versa) ⇒ the label is wrong.
    - **Panic button:** edit `functions/.env` and flip
      `MODA_LLM_ENABLED=false`, then `firebase deploy --only functions`.
      Returns `{state:"disabled"}` within ~30s; all clients seamlessly
