@@ -141,3 +141,52 @@ test("normName trims and NFC-normalises, passes non-strings through", () => {
   assert.strictEqual(normName(5), 5);
   assert.strictEqual(normName(null), null);
 });
+
+test("participants named like Object built-ins are pseudonymised, not dropped", () => {
+  const sess = {
+    pool: {
+      c1: { name: "__proto__", at: 1 },
+      c2: { name: "toString", at: 2 },
+      c3: { name: "constructor", at: 3 }
+    },
+    rooms: { r1: { answers: {
+      a1: { by: "__proto__" }, a2: { by: "toString" }, a3: { by: "constructor" }
+    } } }
+  };
+  const linkage = {};
+  const out = pseudonymiseSession(sess, "S1", linkage);
+  assert.strictEqual(out.pool.c1.name, "Student-A");
+  assert.strictEqual(out.pool.c2.name, "Student-B");
+  assert.strictEqual(out.pool.c3.name, "Student-C");
+  assert.strictEqual(out.rooms.r1.answers.a1.by, "Student-A");
+  assert.strictEqual(out.rooms.r1.answers.a2.by, "Student-B");
+  assert.strictEqual(out.rooms.r1.answers.a3.by, "Student-C");
+  // No real value should be a non-string (function/object) leftover.
+  for (const a of Object.values(out.rooms.r1.answers)) {
+    assert.strictEqual(typeof a.by, "string");
+  }
+  // Linkage round-trips through JSON with the literal "__proto__" key intact.
+  const round = JSON.parse(JSON.stringify(linkage));
+  assert.strictEqual(round.S1["__proto__"], "Student-A");
+});
+
+test("participant names appearing as bare array elements are scrubbed", () => {
+  const sess = {
+    pool: { c1: { name: "Alice", at: 1 } },
+    rooms: { r1: { tags: ["Alice", "keep-me", "Alice"] } }
+  };
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.deepStrictEqual(out.rooms.r1.tags, ["Student-A", "keep-me", "Student-A"]);
+  assert.ok(!/Alice/.test(JSON.stringify(out)), "no real name may survive in arrays");
+});
+
+test("a session with no pool redacts every name/by and does not crash", () => {
+  const sess = {
+    created: { by: "Dr Fac", at: 1 },
+    rooms: { r1: { answers: { a1: { by: "Whoever", text: "keep" } } } }
+  };
+  const out = pseudonymiseSession(sess, "S1", {});
+  assert.strictEqual(out.created.by, REDACTED_NAME);
+  assert.strictEqual(out.rooms.r1.answers.a1.by, REDACTED_NAME);
+  assert.strictEqual(out.rooms.r1.answers.a1.text, "keep");
+});

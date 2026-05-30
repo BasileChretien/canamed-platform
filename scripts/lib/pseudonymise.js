@@ -40,6 +40,12 @@ function normName(s) {
   return typeof s === "string" ? s.normalize("NFC").trim() : s;
 }
 
+// Own-property check — the lookup maps are null-prototype objects so that a
+// participant named "__proto__" / "toString" / "constructor" can't collide with
+// a built-in via the prototype chain (which would leave the real name neither
+// pseudonymised nor redacted). Belt-and-braces: use hasOwnProperty too.
+function hasOwn(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
+
 // 26 single letters then AA, AB, ... so we never run out.
 function pseudoCode(i) {
   if (i < 26) return "Student-" + String.fromCharCode(65 + i);
@@ -68,29 +74,32 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   // name -> pseudonym. Every distinct normalised name is mapped; on collision
   // the colliding name keeps the first cid's code (more anonymous, and crucially
   // never a plaintext survivor).
-  const nameToPseudo = {};
+  const nameToPseudo = Object.create(null);
   cids.forEach((cid, i) => {
     const name = normName(pool[cid] && pool[cid].name);
-    if (typeof name === "string" && name.length > 0 && !(name in nameToPseudo)) {
+    if (typeof name === "string" && name.length > 0 && !hasOwn(nameToPseudo, name)) {
       nameToPseudo[name] = pseudoCode(i);
     }
   });
+  // Assign the null-proto map directly: JSON.stringify serialises its own keys
+  // correctly (including a literal "__proto__" key), whereas Object.assign into
+  // a plain {} would re-trigger the __proto__ setter and lose that entry.
   if (linkage) linkage[sessionCode] = nameToPseudo;
 
   // university -> Univ-N, consistent within the session.
-  const univToCode = {};
+  const univToCode = Object.create(null);
   let univN = 0;
   function bucketUniv(v) {
     const u = normName(v);
     if (typeof u !== "string" || u.length === 0) return v;
-    if (!(u in univToCode)) univToCode[u] = "Univ-" + (++univN);
+    if (!hasOwn(univToCode, u)) univToCode[u] = "Univ-" + (++univN);
     return univToCode[u];
   }
 
   function redactName(v) {
     const n = normName(v);
     if (typeof n !== "string" || n.length === 0) return v;
-    if (n in nameToPseudo) return nameToPseudo[n];
+    if (hasOwn(nameToPseudo, n)) return nameToPseudo[n];
     return REDACTED_NAME; // unknown name (facilitator / unforeseen) — never leak
   }
 
@@ -99,8 +108,15 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
   function walk(node) {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
-      for (const item of node) {
-        if (item && typeof item === "object") walk(item);
+      for (let i = 0; i < node.length; i++) {
+        const item = node[i];
+        if (typeof item === "string") {
+          // Bare-string array element: apply the same exact-known-name safety net.
+          const n = normName(item);
+          if (hasOwn(nameToPseudo, n)) node[i] = nameToPseudo[n];
+        } else if (item && typeof item === "object") {
+          walk(item);
+        }
       }
       return;
     }
@@ -114,7 +130,7 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
       } else if (typeof v === "string") {
         // Safety net: replace any exact known-name occurrence in any other field.
         const n = normName(v);
-        if (n in nameToPseudo) node[k] = nameToPseudo[n];
+        if (hasOwn(nameToPseudo, n)) node[k] = nameToPseudo[n];
       } else if (v && typeof v === "object") {
         walk(v);
       }
