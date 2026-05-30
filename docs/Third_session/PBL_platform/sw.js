@@ -166,5 +166,7 @@ async function handleSameOrigin(req) {
 
 // Listen for "skip-waiting" message from the page (manual update prompt).
 self.addEventListener("message", (event) => {
-  if (event.data === "skipWaiting") self.skipWaiting();
+  // Only honour a same-origin window client (event.source present). skipWaiting
+  // only activates already-installed code, but the source check is cheap hardening.
+  if (event.data === "skipWaiting" && event.source) self.skipWaiting();
 });

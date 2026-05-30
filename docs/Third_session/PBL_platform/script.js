@@ -12513,7 +12513,10 @@ function signUpWithEmail(email, password) {
     splashHintErr(hint, "Enter your email and password.");
     return;
   }
-  if (password.length < 6) {
+  // Backstop must not be weaker than the UI strength gate: enforce the same
+  // policy (>= 8 chars AND >= 3 character classes) for ANY caller of this
+  // function, not just the wired form (2026-05-30 R2 review).
+  if (!scorePassword(password).ok) {
     splashHintErr(hint, authErrorMessage({ code: "auth/weak-password" }));
     return;
   }

@@ -83,11 +83,21 @@
       }
       return window.credentialNameHash(name, cred.session || "").then(function (hash) {
         if (hash === cred.nameHash) {
-          var when = cred.at ? new Date(cred.at).toLocaleDateString() : "";
-          var lbl  = cred.sessionLabel ? (" — " + cred.sessionLabel) : "";
+          // DB-sourced display fields: bound length + strip control chars (the
+          // output goes to textContent so this is content-hygiene, not XSS), and
+          // guard the date parse so a malformed cred.at can't reject the chain.
+          var clean = function (s) {
+            return String(s == null ? "" : s).replace(/[\x00-\x1F\x7F]/g, "").slice(0, 80);
+          };
+          var when = "";
+          if (cred.at) {
+            var d = new Date(cred.at);
+            if (!isNaN(d.getTime())) when = d.toLocaleDateString();
+          }
+          var lbl  = cred.sessionLabel ? (" — " + clean(cred.sessionLabel)) : "";
           show("valid",
             t("verify.valid", "✓ Valid: this is a real CaNaMED certificate") +
-            " (" + (cred.session || "") + lbl + (when ? " · " + when : "") + ")"
+            " (" + clean(cred.session) + lbl + (when ? " · " + when : "") + ")"
           );
         } else {
           show("invalid", t("verify.no-match",
