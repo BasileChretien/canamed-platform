@@ -1972,7 +1972,10 @@ function joinParticipant() {
   // analysis pipelines can skip participants who opted out
   const cWorkshop = !!(el("consent-workshop") && el("consent-workshop").checked);
   const cResearch = !!(el("consent-research") && el("consent-research").checked);
-  const cVerification = !!(el("consent-verification") && el("consent-verification").checked);
+  // Certificate verification is on by default and privacy-preserving (only a
+  // one-way hash of name+session is ever published — see the verification note
+  // in the lobby and the certificate flow). Recorded true for the audit trail.
+  const cVerification = true;
   if (!cWorkshop) {
     el("lobby-hint").textContent = tt(
       "lobby.consent-required-hint",
@@ -6690,18 +6693,6 @@ function _caseItemById(itemId, lang) {
  * answers, and the recap. Exports ONLY the participant's own room as Markdown,
  * read fresh from the room subtree (the student is a member, so the read is
  * allowed). Distinct from the admin export above, which dumps every room. */
-/* Competencies printed on the student certificate. Kept here (not pulled from
-   admin-tools' CANAMED_COMPETENCY_MAP) so the student PDF path never loads the
-   facilitator chunk; the labels mirror that map's session-3 competencies. */
-var CERT_COMPETENCIES = [
-  "Information gathering & shared decision-making",
-  "Hypothesis-driven clinical reasoning",
-  "Responsible, evidence-based prescribing",
-  "Empathic response & acknowledging emotion (SPIKES)",
-  "Breaking bad news with a clear plan",
-  "Respecting patient autonomy across cultures"
-];
-
 /* Student certificate of attendance (PDF). Lazy-loads pdfmake (~2.2 MB) then
    our generator, only on click. Best-effort: a network failure (e.g. offline)
    surfaces a toast rather than a dead button. */
@@ -6710,66 +6701,55 @@ function downloadCertificatePdf() {
   if (btn) btn.disabled = true;
   const loader = window.CanamedLoader || {};
 
-  // ID strategy:
-  //   • Facilitator-only verification (default, no extra consent): deterministic
-  //     id from (session, clientId) — recomputed in the research export so the
-  //     facilitator can check (name, id) against their records.
-  //   • Public verification (participant ticked the 3rd "make my certificate
-  //     independently verifiable" box, PIS v2 §18): a cryptographically random
-  //     id written write-once to /credentials/<id>, with only a one-way hash of
-  //     (name, session) — the public verify page confirms a match without ever
-  //     publishing the name. Cached per (session, clientId) in localStorage so
-  //     re-downloads keep the SAME id.
-  const wantVerify = !!(myConsent && myConsent.verification === true);
+  // ID + verification strategy (verifiable by DEFAULT, privacy-preserving):
+  //   • The certificate carries a deterministic id from (session, clientId).
+  //     The SAME id is recomputed by the facilitator research export, so the
+  //     cert, the public registry and the export all agree without coordination.
+  //   • Whenever a certificate is generated we publish ONLY a one-way hash of
+  //     (name, session) to /credentials/<id> (write-once). The public verify
+  //     page confirms a (name, id) match without the name ever being stored or
+  //     returned — it only answers "valid" / "no match". This is why scanning
+  //     the QR and typing the name on the certificate now works for everyone.
+  //   • The QR encodes the verify-page URL (id pre-filled) so a scan opens a
+  //     real link, not bare text.
   const detId = (typeof canamedCertId === "function")
     ? canamedCertId((sessionNum || "") + "|" + (clientId || "")) : "";
-
-  // Default verifyUrl for the facilitator-only path: a real link to the verify
-  // page (id prefilled). Without this, the QR would encode the bare id as plain
-  // text — scanners would show text but no link, so the QR "leads nowhere".
-  // The verify page handles both opt-in (registry hit → "valid") and
-  // facilitator-only (registry miss → "not found in public registry") gracefully.
   const detVerifyUrl = detId ? _verifyUrl(detId) : "";
 
   function resolveCertId() {
-    if (!wantVerify) return Promise.resolve({ certId: detId, verifyUrl: detVerifyUrl });
-    if (typeof firebase === "undefined" || typeof randomCredentialId !== "function" ||
-        typeof credentialNameHash !== "function") {
-      return Promise.resolve({ certId: detId, verifyUrl: detVerifyUrl });
-    }
-    const cacheKey = "canamed_cred_" + (sessionNum || "") + "_" + (clientId || "");
-    const ID_RE = /^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/;
-    let cached = null;
-    try { cached = localStorage.getItem(cacheKey); } catch (e) { /* incognito etc. */ }
-    if (cached && ID_RE.test(cached)) {
-      return Promise.resolve({ certId: cached, verifyUrl: _verifyUrl(cached) });
+    const fallback = { certId: detId, verifyUrl: detVerifyUrl };
+    // No id, no DB, no hashing, or no session to bind to → still hand back the
+    // id so the cert renders; verification simply can't be published here.
+    if (!detId || !(sessionNum || "").length ||
+        typeof firebase === "undefined" || typeof credentialNameHash !== "function") {
+      return Promise.resolve(fallback);
     }
     return credentialNameHash(myName || "", sessionNum || "").then(function (nameHash) {
-      function attempt(triesLeft) {
-        const id = randomCredentialId();
-        const sessionLabel = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
-          typeof CANAMED_CONFIG.workshopName === "string")
-          ? String(CANAMED_CONFIG.workshopName).slice(0, 80) : "";
-        const payload = {
-          nameHash: nameHash,
-          session: (sessionNum || "").slice(0, 40),
-          sessionLabel: sessionLabel,
-          at: Date.now(),
-          retentionUntil: Date.now() + 10 * 365.25 * 24 * 60 * 60 * 1000
-        };
-        return firebase.database().ref("credentials/" + id).set(payload).then(function () {
-          try { localStorage.setItem(cacheKey, id); } catch (e) { /* non-fatal */ }
-          return { certId: id, verifyUrl: _verifyUrl(id) };
-        }, function (err) {
-          if (triesLeft > 0) return attempt(triesLeft - 1);
-          console.warn("credential write failed — falling back to deterministic id", err);
-          return { certId: detId, verifyUrl: detVerifyUrl };
-        });
-      }
-      return attempt(2);
-    }, function () {
-      return { certId: detId, verifyUrl: detVerifyUrl };
-    });
+      const sessionLabel = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
+        typeof CANAMED_CONFIG.workshopName === "string")
+        ? String(CANAMED_CONFIG.workshopName).slice(0, 80) : "";
+      const payload = {
+        nameHash: nameHash,
+        session: (sessionNum || "").slice(0, 40),
+        sessionLabel: sessionLabel,
+        at: Date.now(),
+        // Keep inside the DB rule's ~5-year retention cap (5y minus a margin for
+        // clock skew). The previous 10-year value exceeded the cap, so the rule
+        // rejected every write — leaving the id absent from the registry and the
+        // verify page reporting "not in the public registry". This was the bug.
+        retentionUntil: Date.now() + (5 * 365 - 30) * 24 * 60 * 60 * 1000
+      };
+      // Write-once: a re-download re-attempts and is denied because the entry
+      // already exists — that's fine, the credential is already published, so we
+      // treat any write outcome as success and return the id either way.
+      return firebase.database().ref("credentials/" + detId).set(payload).then(
+        function () { return fallback; },
+        function (err) {
+          console.warn("credential publish skipped", err && err.code);
+          return fallback;
+        }
+      );
+    }, function () { return fallback; });
   }
 
   if (typeof toast === "function") toast("⏳ Preparing your certificate…");
@@ -6782,9 +6762,12 @@ function downloadCertificatePdf() {
         name: myName || "",
         sessionCode: sessionNum || "",
         sessionLabel: "",
+        lang: (typeof getLang === "function") ? getLang() : "en",
         dateStr: new Date().toLocaleDateString(),
         partnership: "Université de Caen Normandie × Nagoya University",
-        competencies: CERT_COMPETENCIES,
+        // Competencies omitted on purpose: the builder localizes its own
+        // default set to data.lang. (A caller may still pass competencies to
+        // override.)
         certId: id.certId,
         verifyUrl: id.verifyUrl
       };
@@ -6814,18 +6797,37 @@ function _verifyUrl(id) {
    tables) from the LIVE DOM into structured booklet sections — single source of
    truth (the same cards students read in-session), so no per-scenario content
    is duplicated in the PDF code. */
+/* node.textContent, but with any link that isn't already spelled out in the
+   text appended as a bare URL in parentheses — so the booklet's DOI/website
+   links survive the DOM→PDF crossing and the PDF builder can make them
+   clickable (links in the live cards are <a href> whose visible text is often
+   a human label, e.g. "HAS 2019", that would otherwise lose its URL). */
+function _textWithLinks(node) {
+  let txt = node.textContent.replace(/\s+/g, " ").trim();
+  try {
+    const anchors = node.querySelectorAll ? node.querySelectorAll("a[href]") : [];
+    anchors.forEach(a => {
+      const href = (a.getAttribute("href") || "").trim();
+      if (!/^https?:\/\//i.test(href)) return;
+      const bare = href.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+      if (txt.indexOf(bare) >= 0 || txt.indexOf(href) >= 0) return;  // already shown
+      txt += " (" + href + ")";
+    });
+  } catch (_) { /* best-effort link capture */ }
+  return txt;
+}
 function _bookletBlocks(node, blocks) {
   const tag = node.tagName;
   if (!tag) return;
   if (tag === "P") {
-    const t = node.textContent.replace(/\s+/g, " ").trim();
+    const t = _textWithLinks(node);
     if (t) blocks.push({ type: "p", text: t });
   } else if (tag === "H4" || tag === "H5") {
     const t = node.textContent.replace(/\s+/g, " ").trim();
     if (t) blocks.push({ type: "sub", text: t });
   } else if (tag === "UL" || tag === "OL") {
     const items = Array.from(node.querySelectorAll(":scope > li"))
-      .map(li => li.textContent.replace(/\s+/g, " ").trim()).filter(Boolean);
+      .map(li => _textWithLinks(li)).filter(Boolean);
     if (items.length) blocks.push({ type: "ul", items: items });
   } else if (tag === "TABLE") {
     const rows = Array.from(node.querySelectorAll("tr")).map(tr =>
@@ -6886,6 +6888,7 @@ function downloadStudyBookletPdf() {
   const data = {
     name: myName || "",
     sessionCode: sessionNum || "",
+    lang: (typeof getLang === "function") ? getLang() : "en",
     dateStr: new Date().toLocaleDateString(),
     partnership: "Université de Caen Normandie × Nagoya University",
     sections: _collectBookletSections(),

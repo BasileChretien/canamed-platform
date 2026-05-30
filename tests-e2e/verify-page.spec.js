@@ -75,12 +75,11 @@ test.describe("Public certificate verification page (verify.html)", () => {
     await page.fill("#verify-id", "CNM-XXXXX-YYYYY");
     await page.fill("#verify-name", "Whoever");
     await page.click("#verify-submit");
-    // verify.not-found copy was clarified post-PIS v2 §18 — a registry miss
-    // can be either a facilitator-only cert (opt-out is the default) or a
-    // fake ID, so the user-facing message no longer claims "not found";
-    // instead it points the verifier at the CaNaMED team and says the ID
-    // isn't in the public registry. Match either phrasing for resilience.
-    await expect(page.locator("#verify-result")).toContainText(/not in the public registry|no CaNaMED certificate|not found/i);
+    // verify.not-found copy: certificates are published to the registry by
+    // default now, so a miss means a mistyped/incorrect ID or a removed entry.
+    // Match the current "couldn't find … may be incorrect / removed" phrasing
+    // as well as older variants for resilience.
+    await expect(page.locator("#verify-result")).toContainText(/couldn't find|not in the public registry|may be incorrect|not found/i);
   });
 
   test("the ?id= URL param pre-fills the ID input (QR scan path)", async ({ page }) => {
