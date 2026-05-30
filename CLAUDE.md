@@ -160,7 +160,12 @@ operational reminders remain outstanding.
    - **Pilot gate:** the chat UI itself stays hidden unless a user passes
      `?llm=1` in the URL or sets `localStorage.canamedModALLM=1`. The
      facilitator controls who sees it during the pilot window.
-   - **App Check on hfPatient — ✅ DONE (config verified 2026-05-30).** The
+   - **App Check on hfPatient — ✅ DONE & DEPLOYED (verified 2026-05-30).**
+     `firebase functions:list` shows `hfPatient` live (v2 callable); its last
+     deploy (`gcloud functions describe` updateTime `2026-05-28T11:38:37Z`)
+     postdates the `functions/.env` change that set `APP_CHECK_ENFORCE=true`
+     (mtime 20:36 JST = 11:36 UTC, ~2 min earlier) with no deploy since — so
+     the live function carries the enforcement flag. The
      function enforces App Check via `enforceAppCheck: APP_CHECK_ENFORCE`
      ([functions/index.js](docs/Third_session/PBL_platform/functions/index.js)),
      and all enabling config is in place: a real reCAPTCHA v3 site key is set
