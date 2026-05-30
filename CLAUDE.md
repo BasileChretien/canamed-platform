@@ -31,9 +31,12 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 ## Operational reminders — ACTION REQUIRED (cannot be done in code)
 
 These are the Round-3 security follow-ups that require the Firebase / GCP
-Console (a human with project access), surfaced 2026-05-20. **Items 1 & 2
-were completed 2026-05-23; item 3 (retention cron) is the only one still
-outstanding.**
+Console (a human with project access), surfaced 2026-05-20. **All items are
+now complete:** items 1 & 2 on 2026-05-23, item 5 + item 4 (LLM pilot
+activated) on 2026-05-30, and item 3 (retention) fully restored 2026-05-30 via
+the public-repo workflows + private GCS archive. The only thing still marked
+as deferred is the *optional* App Check enforcement on the `hfPatient`
+function (nested under item 4) — a hardening, not a blocker.
 
 1. **Firebase App Check → Enforce mode (HIGH).** App Check (reCAPTCHA v3) is
    wired client-side but enforcement is set in the Console. Until the
@@ -90,66 +93,32 @@ outstanding.**
      Re-provisioning steps live in the `backup-sessions.yml` header and
      `scripts/ops/setup-pii-bucket.sh`.
 
-5. **Enable Email/Password sign-in provider (LOW, one-click).** The splash
-   account view now offers Google **and** email/password sign-in (added
-   2026-05-29 as the foundation for facilitator-owned scenarios). Google
-   already works; email/password requires the provider to be turned on:
-   - Firebase Console → Authentication → Sign-in method → **Email/Password**
-     → Enable → Save. (Leave the "Email link" toggle off — the form uses
-     password sign-in only.)
-   - No other config needed. The existing `authDomain` (canamed.web.app) is
-     already authorised; the anonymous-uid linking flow mirrors the Google
-     path so anonymous participants who later create an account keep their
-     `users/{uid}/history`.
+5. **Email/Password sign-in provider — DONE.** The splash account view offers
+   Google **and** email/password sign-in (added 2026-05-29 as the foundation
+   for facilitator-owned scenarios). Code wiring lives in
+   [script.js](docs/Third_session/PBL_platform/script.js)
+   (`createUserWithEmailAndPassword` / `signInWithEmailAndPassword`, with the
+   anonymous-uid linking flow mirroring the Google path so participants who
+   later create an account keep their `users/{uid}/history`).
+   - ✅ **Done 2026-05-30** — the Firebase Console **Email/Password** provider
+     is enabled (Authentication → Sign-in method); Google + email/password
+     both work in production.
 
-4. **Module A LLM-patient pilot (2026-05-28) — DORMANT until operator activates.**
+4. **Module A LLM-patient pilot (2026-05-28) — ✅ ACTIVATED 2026-05-30.**
    The free-text chat with Mr Lefebvre (via HF Inference Providers, proxied
-   by a Firebase Cloud Function) is fully wired in code but stays in stub
-   mode (canned answers from `case-content.js`) until **every** step below
-   is done. Mid-state activation is intentionally impossible: code refuses
-   to call HF without the flag, function returns `{state:"disabled"}` without
-   the config flip, browser stays in stub mode without the SDK script tag.
-   - **a. Privacy notice update (PIS v2 → v3)** — disclose Hugging Face as a
-     sub-processor (US/EU), transient processing, no PII; re-consent banner
-     on next session join. The in-product `modA.chat.disclosure` banner is
-     already legally adequate (names HF, region, "do not type personal
-     info") but the formal PIS doc must match.
-   - **b. Enable Blaze** + set a **$1 budget alert** in GCP Console →
-     Billing → Budgets & alerts. Workshop volumes stay deep inside the
-     Cloud Functions free tier (~300 turns vs 2M/mo allowance) — Blaze is
-     required for Cloud Functions, not for any real spend.
-   - **c. Set the HF token + flag (params API, NOT the deprecated
-     functions:config commands):**
-     ```bash
-     # Secret — prompts for the hf_... value, stored in Google Secret Manager
-     firebase functions:secrets:set HF_TOKEN
-     ```
-     Then create `docs/Third_session/PBL_platform/functions/.env` with:
-     ```
-     MODA_LLM_ENABLED=true
-     HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3
-     HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct
-     ```
-     `.env` is git-ignored (use `.env.<projectId>` for per-project overrides).
-     The lang-aware `_hfModel()` routes JA traffic to Qwen — Mistral-7B's
-     Japanese is too weak for in-character roleplay.
-   - **d. Add `firebase-functions-compat.js` to `index.html`** — exactly
-     after `firebase-app-check-compat.js`, with the precomputed integrity
-     hash. The SDK script is NOT eagerly loaded today because adding an
-     unverified script would lower the platform's security floor; the
-     operator opts in by editing index.html when ready:
-     ```html
-     <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-functions-compat.js"
-             integrity="sha384-0e6ckm3xAVRuudHvqdLzPYsVoBYmqB3xnx4uw9owqugEc3FyhMYiwmB7SjWACApm"
-             crossorigin="anonymous"></script>
-     ```
-     Without this tag, the bridge stays in stub mode even with the function
-     deployed.
-   - **e. Deploy:**
-     ```bash
-     cd docs/Third_session/PBL_platform/functions && npm install && cd ..
-     firebase deploy --only functions,database,hosting
-     ```
+   by the `hfPatient` Firebase Cloud Function) is live. All activation steps
+   are complete: **(a)** privacy notice updated (HF disclosed as sub-processor;
+   in-product `modA.chat.disclosure` banner shown); **(b)** Blaze enabled with
+   a $1 budget alert (volumes stay inside the Cloud Functions free tier);
+   **(c)** `HF_TOKEN` set in Secret Manager + `functions/.env` with
+   `MODA_LLM_ENABLED=true`, `HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3`,
+   `HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct` (lang-aware `_hfModel()` routes JA
+   to Qwen); **(d)** `firebase-functions-compat.js` added to
+   [index.html](docs/Third_session/PBL_platform/index.html) after the
+   app-check compat script, with its integrity hash; **(e)** deployed
+   (`firebase deploy --only functions,database,hosting`). The bridge now wires
+   `firebase.functions().httpsCallable("hfPatient")` at startRoom() instead of
+   the local stub.
    - **Panic button:** edit `functions/.env` and flip
      `MODA_LLM_ENABLED=false`, then `firebase deploy --only functions`.
      Returns `{state:"disabled"}` within ~30s; all clients seamlessly
