@@ -16,6 +16,10 @@
 
 name: Rules E2E
 
+# Least-privilege token: this workflow only needs to read the repo.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]

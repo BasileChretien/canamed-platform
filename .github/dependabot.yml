@@ -42,6 +42,24 @@ updates:
       prefix: "chore(deps)"
       include: "scope"
 
+  # Cloud Functions have their OWN package.json (nodemailer, firebase-admin,
+  # sanitize-html) — watched separately so the functions tree gets auto-bumps
+  # too (added 2026-05-30 after a security review flagged a stale nodemailer).
+  - package-ecosystem: "npm"
+    directory: "/docs/Third_session/PBL_platform/functions"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:18"
+    open-pull-requests-limit: 4
+    labels:
+      - "dependencies"
+      - "npm"
+      - "functions"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

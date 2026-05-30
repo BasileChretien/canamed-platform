@@ -15,6 +15,10 @@
 
 name: Synthetic uptime probe
 
+# Least-privilege token: this workflow only needs to read the repo.
+permissions:
+  contents: read
+
 on:
   schedule:
     - cron: "*/15 * * * *"   # every 15 minutes
