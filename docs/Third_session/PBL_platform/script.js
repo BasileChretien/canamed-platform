@@ -11367,7 +11367,8 @@ function showOrgNotFoundSplash() {
       'border-radius:12px;background:#fff;font-family:system-ui,sans-serif;color:#0f172a;">' +
       '<h1 style="margin:0 0 12px 0;font-size:20px;">Org not found</h1>' +
       '<p style="white-space:pre-line;line-height:1.5;margin:0;">' +
-      msg.replace(/&/g, "&amp;").replace(/</g, "&lt;") + '</p></div>';
+      msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;").replace(/'/g, "&#39;") + '</p></div>';
   } else if (typeof document !== "undefined" && document.body) {
     const div = document.createElement("div");
     div.setAttribute("role", "alert");
@@ -12258,10 +12259,14 @@ function authErrorMessage(err) {
     "auth/wrong-password": "Wrong password — try again, or use Create account if this is your first sign-in.",
     "auth/user-not-found": "No account with that email — use Create account to make one.",
     "auth/invalid-credential": "Email or password is incorrect.",
-    "auth/weak-password": "Pick a password with at least 6 characters.",
+    "auth/weak-password": "Pick a stronger password: at least 8 characters mixing letters, numbers, and symbols.",
     "auth/email-already-in-use": "An account with that email already exists — use Sign in instead."
   };
-  return map[code] || (err && err.message) || "Sign-in failed.";
+  if (map[code]) return map[code];
+  // Don't surface raw SDK messages to the UI — they can leak internal request
+  // URLs or quota strings. Log the code for debugging, show a generic line.
+  if (code) { try { console.warn("[auth] unmapped error code:", code); } catch (_) { /* noop */ } }
+  return "Sign-in failed — please try again.";
 }
 
 /* sign in via a popup against any supported identity provider. Firebase

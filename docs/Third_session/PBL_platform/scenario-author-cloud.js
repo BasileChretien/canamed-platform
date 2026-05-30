@@ -59,7 +59,8 @@
       Object.keys(attrs).forEach(function (k) {
         if (k === "class") n.className = attrs[k];
         else if (k === "text") n.textContent = attrs[k];
-        else if (k === "html") n.innerHTML = attrs[k];
+        // NB: no `html` key on purpose — this helper must never set innerHTML
+        // from caller data (it would be an unsanitised XSS sink). Use `text`.
         else n[k] = attrs[k];
       });
     }
@@ -68,6 +69,24 @@
   }
 
   function $(id) { return document.getElementById(id); }
+
+  // Password policy — mirrors the main app (script.js signUpWithEmail): at
+  // least 8 chars and at least 3 of {lower, upper, digit, symbol}. Both paths
+  // share the same Firebase Auth backend, so this one must not be weaker.
+  function passwordPolicyError(pw) {
+    if (typeof pw !== "string" || pw.length < 8) {
+      return "use at least 8 characters.";
+    }
+    var classes = 0;
+    if (/[a-z]/.test(pw)) classes++;
+    if (/[A-Z]/.test(pw)) classes++;
+    if (/[0-9]/.test(pw)) classes++;
+    if (/[^A-Za-z0-9]/.test(pw)) classes++;
+    if (classes < 3) {
+      return "mix at least 3 of: lower-case, upper-case, numbers, symbols.";
+    }
+    return null;
+  }
 
   function setStatus(kind, msg) {
     var out = $("validation-output");
@@ -137,8 +156,13 @@
           .catch(function (e) { setStatus("error", e.message || "Sign-in failed."); });
       });
       signup.addEventListener("click", function () {
-        if (!emailIn.value.trim() || pwIn.value.length < 6) {
-          setStatus("error", "Enter an email and a password of at least 6 characters.");
+        if (!emailIn.value.trim()) {
+          setStatus("error", "Enter an email address.");
+          return;
+        }
+        var pwErr = passwordPolicyError(pwIn.value);
+        if (pwErr) {
+          setStatus("error", "Weak password — " + pwErr);
           return;
         }
         setStatus("", "Creating your account…");
