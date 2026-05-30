@@ -309,6 +309,30 @@ test("rules: org-scoped adminSecrets — real hash unreadable; proof-write verif
   expect(overwrite).not.toBe("ALLOWED");
 });
 
+test("rules: org per-room gating — moduleA/B writes allowed in own org room, denied cross-room", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const code = "oc-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const base = `orgs/${slug}/sessions/${code}`;
+
+  // Member of Room 1 only.
+  expect(await tryWrite(page, `${base}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  // Own room: the org-tree paths added for parity (2026-05-30 R2) accept writes.
+  const own = (p, v) => tryWrite(page, `${base}/rooms/Room 1/${p}`, v);
+  expect(await own("moduleA/hypotheses/h1", { text: "dx", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await own("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await own("moduleB/exchangeReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+
+  // Room 2 (not a member): all denied (cross-room tampering closed in org tree too).
+  for (const p of ["moduleA/hypotheses/h1", "moduleA/promptReplies/0/" + uid, "moduleB/exchangeReplies/0/" + uid]) {
+    const r = await tryWrite(page, `${base}/rooms/Room 2/${p}`, { text: "x", by: "S", cid: uid, at: Date.now() });
+    expect(r, p).not.toBe("ALLOWED");
+    expect(String(r)).toMatch(/permission_denied|denied/i);
+  }
+});
+
 test("rules: roleChoices is owner-bound — a peer cannot overwrite another participant's role choice", async ({ page, browser }) => {
   const code = "role-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const cid = "c_" + Math.floor(Math.random() * 1e9);

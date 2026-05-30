@@ -278,3 +278,20 @@ operational reminders remain outstanding.
   verifies, write-once).
 - **sendQueuedMail HTML (D2)** — `job.html` now sanitised with `sanitize-html`
   + a tight allowlist before nodemailer. Shipped + deployed 2026-05-30.
+
+**Round-2 review (2026-05-30) — fixes to the round-1 fixes:**
+- Pseudonymiser: null-prototype maps (a participant named `__proto__`/`toString`
+  no longer collides with a built-in) + bare-string array-element scrubbing.
+- hfPatient: the `j.error` branch no longer forwards the provider body to the
+  client; pure helpers extracted to `functions/lib/hf-helpers.js` and unit-tested
+  (`tests/hf-helpers.test.js` — HF_URL allowlist, system-guard collapse, lang).
+  `mailto` removed from the email sanitiser. Redeployed.
+- `signUpWithEmail` backstop now enforces the full `scorePassword().ok` policy
+  (was a stale 6-char check).
+- `verify.js` bounds DB display fields + guards the date parse; `telemetry.js`
+  logs `pathname` only (no query-string identifiers); `sw.js` `skipWaiting`
+  requires `event.source`.
+- Org rule parity: `moduleA/hypotheses`, `promptCursor`, `promptReplies` and a
+  `moduleB` block (`phase`, `exchangeCursor`, `exchangeReplies`) added to the
+  org tree with the `uidMembers` gate (were absent ⇒ fail-closed; now at parity
+  with `sessions/`). Emulator-tested (own-room allowed, cross-room denied).
