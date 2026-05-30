@@ -53,7 +53,8 @@
       Object.keys(attrs).forEach(function (k) {
         if (k === "class") n.className = attrs[k];
         else if (k === "text") n.textContent = attrs[k];
-        else if (k === "html") n.innerHTML = attrs[k]; // only for static labels
+        // No `html` key on purpose — never set innerHTML from caller data (it
+        // was dead code and a latent XSS sink). Use `text` (2026-05-30 R3).
         else if (k.indexOf("data-") === 0) n.setAttribute(k, attrs[k]);
         else n[k] = attrs[k];
       });
@@ -730,24 +731,18 @@
     // Strip optional trailing semicolons and leading assignments.
     var m = trimmed.match(/=\s*({[\s\S]*})\s*;?\s*$/);
     var body = m ? m[1] : trimmed;
-    // Strict JSON first. If that fails, fall back to a constrained Function eval
-    // — the input field is editor-pasted from case-content.js, which uses JS
-    // (unquoted keys, string concatenation with +). Function() runs in the
-    // global scope, NOT the page scope, so it cannot touch the form's
-    // closure-bound STATE. Still, we sandbox by stripping anything that looks
-    // like a call to window/document/fetch.
+    // JSON only. We used to fall back to Function() eval to accept raw JS
+    // object-literal syntax (unquoted keys, `+` concatenation), but that is a
+    // code-execution sink (a facilitator could be socially-engineered into
+    // pasting a snippet that exfiltrates their auth token) and its keyword
+    // blocklist was bypassable (globalThis, bracket access, hex escapes). The
+    // tool EXPORTS valid JSON, so the normal round-trip is unaffected; raw JS
+    // must be converted to JSON first (2026-05-30 R3 review).
     try {
       return JSON.parse(body);
     } catch (jsonErr) {
-      if (/\b(window|document|fetch|XMLHttpRequest|eval|Function|import|require)\b/.test(body)) {
-        throw new Error("Input contains a forbidden identifier (window, document, fetch, etc.). Paste only the scenario object.");
-      }
-      try {
-        // eslint-disable-next-line no-new-func
-        return Function("\"use strict\"; return (" + body + ");")();
-      } catch (jsErr) {
-        throw new Error("Could not parse input as JSON or JS object: " + jsErr.message);
-      }
+      throw new Error("Could not parse the input as JSON. Paste the scenario as JSON " +
+        "(the format this tool exports) — not raw JavaScript. Details: " + jsonErr.message);
     }
   }
 
