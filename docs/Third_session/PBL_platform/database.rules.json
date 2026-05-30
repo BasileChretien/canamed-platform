@@ -84,7 +84,7 @@
       "$certId": {
         ".read": true,
         ".write": "auth != null && !data.exists()",
-        ".validate": "$certId.matches(/^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/) && newData.val() != null && newData.hasChildren(['nameHash','session','at']) && newData.child('nameHash').isString() && newData.child('nameHash').val().matches(/^[0-9a-f]{64}$/) && newData.child('session').isString() && newData.child('session').val().length > 0 && newData.child('session').val().length <= 40 && (!newData.hasChild('sessionLabel') || (newData.child('sessionLabel').isString() && newData.child('sessionLabel').val().length <= 80)) && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('retentionUntil') || newData.child('retentionUntil').isNumber())"
+        ".validate": "$certId.matches(/^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/) && newData.val() != null && newData.hasChildren(['nameHash','session','at']) && newData.child('nameHash').isString() && newData.child('nameHash').val().matches(/^[0-9a-f]{64}$/) && newData.child('session').isString() && newData.child('session').val().length > 0 && newData.child('session').val().length <= 40 && (!newData.hasChild('sessionLabel') || (newData.child('sessionLabel').isString() && newData.child('sessionLabel').val().length <= 80)) && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('retentionUntil') || (newData.child('retentionUntil').isNumber() && newData.child('retentionUntil').val() <= now + 157680000000))"
       }
     },
 

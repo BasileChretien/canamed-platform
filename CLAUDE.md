@@ -295,3 +295,45 @@ operational reminders remain outstanding.
   `moduleB` block (`phase`, `exchangeCursor`, `exchangeReplies`) added to the
   org tree with the `uidMembers` gate (were absent ⇒ fail-closed; now at parity
   with `sessions/`). Emulator-tested (own-room allowed, cross-room denied).
+
+**Round-3 review (2026-05-30) — fixed:**
+- **Recovery-race (HIGH)**: the admin-hash overwrite rules allowed any authed
+  user to write during a fresh `_superadminReset` window. Now the reset records
+  its initiator's uid (`== auth.uid`) and all four hash-overwrite rules
+  (sessions+orgs × adminPasswordHash + adminSecrets/hash) require the writer to
+  match. Emulator-tested (race-guard: distinct uid denied).
+- **Supply-chain**: nodemailer ^6 → ^8.0.10 (vuln line); Dependabot now watches
+  `functions/`; explicit `permissions: contents: read` on test/e2e/rules-e2e/
+  synthetic-uptime workflows.
+- **scenario-author.js**: removed the `Function()` eval (code-exec sink) → JSON
+  only; removed the dead `html:` branch in `el()`.
+- `credentials/$certId.retentionUntil` now capped (`<= now + ~5y`) so a client
+  can't set retention indefinitely and defeat GDPR cleanup.
+
+**Round-3 — TRACKED hardening (defense-in-depth, not active exploits):**
+- **`$other:{".validate":false}` sentinels** on participant-writable per-room
+  nodes (chat/$turnId, score/auto+penalties/$eventId, scoring/awarded/$familyId,
+  hypotheses/$entryId, promptReplies+exchangeReplies/$cid, callForHelp,
+  uidMembers/$uid, members/$uid, events/$pushId, votes/$voteId/committed, +org
+  mirrors) — blocks unknown-key/oversized-field injection. NB: this needs each
+  node restructured to NAMED child rules first (a bare `$other` would reject the
+  valid keys, which are checked in the parent `.validate`), so it's a focused
+  change, not a one-liner.
+- **Org parity (remaining)**: `poll/$clientId`, `rooms/$roomId/answerReplies`,
+  `rooms/$roomId/observers` are still `sessions/`-only (fail-closed in org —
+  denied, not a hole). Mirror into the org tree before any org go-live.
+- `summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
+  low value); `answers/.../edits/$editId` has no explicit owner check (possible
+  collaborative-edit by design — decide + document).
+
+**Round-3 — re-confirmed ACCEPTED (no change):**
+- `credentials/$certId` public read: the verification page needs it; the parent
+  collection is `.read:false` (no listing) and cert IDs are crypto-random
+  high-entropy, so it's a "know-the-ID-to-read-it" feature, not an enumerable
+  oracle. Only a name **hash** + session label are exposed.
+- `sessions/<code>/adminPasswordHash` `.read:auth!=null`: the value is a
+  non-secret random marker (real hash is in the unreadable `adminSecrets/`);
+  cross-session read leaks only "this session has admin configured".
+- `sharedScenarios` readable by any authed user (opt-in facilitator sharing);
+  `ownerName` is capped at 80 chars — confirm the facilitator consent flow
+  discloses that a display name may be visible to participants.
