@@ -225,3 +225,45 @@ operational reminders remain outstanding.
   ever becomes graded / assessment (stakes appear) — then move scoring
   server-side. Until then accepted: Module A is formative, so the incentive
   to self-award is near-zero.
+
+### 2026-05-30 multi-agent security review — outcomes
+
+**Fixed (committed + tested):**
+- **Pseudonymisation leaks (P0)** — the research export left real names in the
+  "pseudonymised" file (free-text LLM chat, facilitator `by` fields, duplicate
+  display names) + an unscrubbed `university` quasi-identifier. Rewritten as
+  the pure, unit-tested `scripts/lib/pseudonymise.js` (drops chat + facilitator
+  transient fields, redacts unknown names, collision-safe, buckets university).
+  Also `cleanup-stale-sessions.js` redacts `e.message` in `CLEANUP_QUIET` mode.
+- **Per-room write gating (P1)** — added the `uidMembers` gate to
+  `score/auto`, `score/penalties`, `moduleA/hypotheses`, `moduleA/promptReplies`,
+  `moduleB/exchangeReplies`, `votes/committed` (sessions + orgs) so a member of
+  one room can't tamper with another's. Validated by the emulator suite (new
+  cross-room denial test) + the cross-tab sim.
+- **Client/auth (P3)** — scenario-author sign-up now enforces the main app's
+  8-char + 3-class password policy (was 6); removed the unused `html:` innerHTML
+  footgun in scenario-author `el()`; `showOrgNotFoundSplash` escapes `> " '`;
+  `authErrorMessage` no longer surfaces raw SDK messages.
+- **hfPatient (P2) — ⚠ REQUIRES `firebase deploy --only functions` to activate:**
+  server now prepends an authoritative system guard the client can't override
+  (stops persona replacement / prompt extraction); `HF_URL` locked to
+  huggingface.co (no token exfil to arbitrary hosts); HF error body no longer
+  forwarded to the client; `lang` allowlisted. PROMPT_VERSION bumped to 2.2.
+
+**Accepted by design (no change — documented decisions):**
+- Full room-subtree readability to any session member: intentional classroom
+  visibility (facilitator/observer). Only `moduleA/chat` is per-room read-gated.
+- `sharedScenarios` readable by any authenticated user: that is the opt-in
+  facilitator sharing feature working as intended.
+- `credentials/$certId` public read by exact id (no `auth`): required by the
+  unauthenticated certificate-verification page; cert IDs are crypto-random
+  high-entropy (no enumeration) and carry only a name **hash** + session label.
+
+**Deferred (must address before the relevant go-live):**
+- Org-scoped sessions still store the real `adminPasswordHash` at a
+  `auth!=null`-readable path (hash oracle) — the `adminSecrets` proof-write
+  protection covers only `sessions/`. **Must extend to `orgs/` before any live
+  org deployment.** (No live org deployments today.)
+- `sendQueuedMail` passes `job.html` to nodemailer unsanitised — dormant
+  (`EMAIL_ENABLED=false`, admin-write-only). Add HTML sanitisation before
+  enabling the email feature.
