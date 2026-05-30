@@ -201,9 +201,10 @@ operational reminders remain outstanding.
   `adminSecrets/<code>/proof/<uid>` and the rule allows it only when the
   candidate equals the stored hash (compared server-side; hash never sent to a
   client). A non-secret random marker stays at `sessions/<code>/adminPasswordHash`
-  so the existence-based admin-gated rules keep working. Gated to the live
-  `sessions/` deployment in `shared` mode (LOCAL keeps read-verify; org-scoped
-  sessions deferred — no live org deployments). See `verifyAdminPassword`,
+  so the existence-based admin-gated rules keep working. Active in `shared` mode
+  for BOTH the default `sessions/` tree and org-scoped sessions
+  (`adminSecrets/orgs/<slug>/<sessionId>`, added 2026-05-30); LOCAL keeps
+  read-verify (no rules). See `verifyAdminPassword`,
   `useAdminSecrets`, the create/recovery flows, and `tests/rules.test.js` +
   `tests-e2e/emulator/rules-smoke.spec.js` (FINDING-07).
 - `pool/$clientId/room` is intentionally writable by any authenticated user
@@ -266,11 +267,14 @@ operational reminders remain outstanding.
   research:** poll data feeds the research export — if poll integrity ever
   matters for analysis, bind it to `clientMapping` ownership like `votes/ballots`.
 
-**Deferred (must address before the relevant go-live):**
-- Org-scoped sessions still store the real `adminPasswordHash` at a
-  `auth!=null`-readable path (hash oracle) — the `adminSecrets` proof-write
-  protection covers only `sessions/`. **Must extend to `orgs/` before any live
-  org deployment.** (No live org deployments today.)
-- `sendQueuedMail` passes `job.html` to nodemailer unsanitised — dormant
-  (`EMAIL_ENABLED=false`, admin-write-only). Add HTML sanitisation before
-  enabling the email feature.
+**Also fixed (2026-05-30, second pass):**
+- **Org-scoped adminSecrets (D1)** — org sessions stored the real
+  `adminPasswordHash` at an `auth!=null`-readable path (hash oracle). The
+  `adminSecrets` proof-write scheme now covers org sessions too: real hash at
+  the unreadable `adminSecrets/orgs/<slug>/<sessionId>/hash`, a non-secret
+  marker at the readable org `adminPasswordHash`. `useAdminSecrets()` is now
+  true for any shared-mode deployment; `adminSecretPath()` namespaces per org
+  (default org path unchanged). Emulator-tested (hash unreadable, proof-write
+  verifies, write-once).
+- **sendQueuedMail HTML (D2)** — `job.html` now sanitised with `sanitize-html`
+  + a tight allowlist before nodemailer. Shipped + deployed 2026-05-30.

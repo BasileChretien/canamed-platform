@@ -1076,17 +1076,25 @@ function sPath(p) { return oPath(sessionNum, p); }
  * any client. A non-secret RANDOM marker stays at the old readable path so the
  * existence checks the admin-gated rules + recovery rely on keep working.
  *
- * Scope: the live legacy `sessions/` deployment only. Org-scoped sessions keep
- * the prior read-verify scheme for now (no live org deployments). */
-// Use the adminSecrets scheme only on the live, rules-enforced legacy
-// `sessions/` deployment. LOCAL mode (LocalDB) has no security rules, so a
-// proof-write would always succeed there — LOCAL keeps the legacy read-verify
-// path (the real hash sits at adminPasswordHash). Org-scoped sessions are
-// deferred (no live org deployments yet).
+ * Scope: any rules-enforced (shared-mode) deployment — both the default
+ * `sessions/` tree and org-scoped `orgs/<slug>/sessions/` trees. */
+// Use the adminSecrets proof-write scheme on ANY rules-enforced deployment
+// (default `sessions/` AND org-scoped `orgs/<slug>/sessions/`). LOCAL mode
+// (LocalDB) has no security rules, so a proof-write would always succeed there
+// — LOCAL keeps the legacy read-verify path (the real hash sits at
+// adminPasswordHash). Org support added 2026-05-30 to close the org hash oracle.
 function useAdminSecrets() {
-  return MODE === "shared" && _sessionPrefix(currentOrg) === "sessions/";
+  return MODE === "shared";
 }
-function adminSecretPath(code, leaf) { return "adminSecrets/" + code + (leaf ? "/" + leaf : ""); }
+function adminSecretPath(code, leaf) {
+  // Default org keeps the legacy top-level path (adminSecrets/<code>, unchanged);
+  // other orgs namespace under adminSecrets/orgs/<slug>/<code> so the unreadable
+  // real hash is per-org. Mirrors _sessionPrefix() (default -> "sessions/").
+  const base = (_sessionPrefix(currentOrg) === "sessions/")
+    ? "adminSecrets/" + code
+    : "adminSecrets/orgs/" + currentOrg + "/" + code;
+  return base + (leaf ? "/" + leaf : "");
+}
 function randomAdminMarker() {
   // 32 random bytes -> 64 lowercase hex, which satisfies the existing
   // adminPasswordHash .validate (legacy SHA-256 shape) while revealing
@@ -3597,7 +3605,7 @@ function joinSuperAdmin() {
       // (readable) marker's existence to decide initial-set vs reset.
       const refSecret = useAdminSecrets()
         ? db.ref(adminSecretPath(sessionNum, "hash"))
-        : refMarker;   // org path (deferred): the hash stays at the session path
+        : refMarker;   // LOCAL mode (no rules): the hash stays at the session path
       return refMarker.once("value").then(snap => {
         // snap.val() == null (NOT snap.exists()) so this works against BOTH
         // Firebase and the LOCAL-mode LocalDB snapshot (which exposes .val()
@@ -12185,7 +12193,7 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
               db.ref(oPath(code, "adminPasswordHash")).set(randomAdminMarker())
             ]);
           }
-          return db.ref(oPath(code, "adminPasswordHash")).set(h);   // org path: unchanged (deferred)
+          return db.ref(oPath(code, "adminPasswordHash")).set(h);   // LOCAL mode only (no rules)
         })
         .then(() => ({ code: code, recoveryCode: recoveryCode }));
     });

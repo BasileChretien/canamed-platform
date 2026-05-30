@@ -274,6 +274,41 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   }
 });
 
+test("rules: org-scoped adminSecrets — real hash unreadable; proof-write verifies; write-once (D1)", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const sid = "os-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const hashPath = `adminSecrets/orgs/${slug}/${sid}/hash`;
+  const proofPath = `adminSecrets/orgs/${slug}/${sid}/proof/${uid}`;
+  const realHash = "a".repeat(64);
+  const wrongHash = "b".repeat(64);
+
+  // Initial set (no data yet) is allowed without a reset flag.
+  expect(await tryWrite(page, hashPath, realHash)).toBe("ALLOWED");
+
+  // The real hash is UNREADABLE — adminSecrets has no .read rule (closes the
+  // org hash-oracle that the readable adminPasswordHash used to be).
+  const read = await page.evaluate(async (p) => {
+    try { const s = await firebase.database().ref(p).get(); return "READ:" + s.val(); }
+    catch (e) { return (e && (e.code || e.message)) || "DENIED"; }
+  }, hashPath);
+  expect(read).not.toContain("READ:");
+  expect(String(read)).toMatch(/permission_denied|denied/i);
+
+  // Proof-write with the CORRECT hash → allowed (server-side compare).
+  expect(await tryWrite(page, proofPath, realHash)).toBe("ALLOWED");
+
+  // Proof-write with a WRONG hash → denied (wrong password).
+  const wrong = await tryWrite(page, proofPath, wrongHash);
+  expect(wrong).not.toBe("ALLOWED");
+  expect(String(wrong)).toMatch(/permission_denied|denied/i);
+
+  // Hash is write-once: overwrite without a fresh _superadminReset is denied.
+  const overwrite = await tryWrite(page, hashPath, wrongHash);
+  expect(overwrite).not.toBe("ALLOWED");
+});
+
 test("rules: roleChoices is owner-bound — a peer cannot overwrite another participant's role choice", async ({ page, browser }) => {
   const code = "role-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const cid = "c_" + Math.floor(Math.random() * 1e9);
