@@ -13,16 +13,15 @@
 # crown jewels (re-identifies every participant), so it must never touch a
 # public-repo artifact. The job log itself prints only counts — no names.
 #
-# DORMANT until the operator completes the one-time bucket setup documented
-# in .github/workflows/backup-sessions.yml. The `schedule:` block is
-# commented out until then; workflow_dispatch is live for the smoke test.
-# Only CLOSED sessions are exported.
+# LIVE since 2026-05-30 — the bucket setup documented in
+# .github/workflows/backup-sessions.yml is complete, so the daily
+# `schedule:` is enabled. Only CLOSED sessions are exported.
 
 name: Pseudonymised export
 
 on:
-  # schedule:
-  #   - cron: "47 3 * * *"   # daily 03:47 UTC — after cleanup (03:17)
+  schedule:
+    - cron: "47 3 * * *"   # daily 03:47 UTC — after cleanup (03:17)
   workflow_dispatch:
 
 concurrency:

@@ -9,12 +9,12 @@
 # only the service account and project admins can read it.
 #
 # ───────────────────────────────────────────────────────────────────────
-# DORMANT until the operator completes one-time setup (mirrors the
-# Module A LLM pilot's dormant pattern). The `schedule:` block is
-# intentionally commented out so this does not email a daily red run
-# before the bucket exists. workflow_dispatch is live for the smoke test.
+# LIVE since 2026-05-30. The one-time bucket setup below was completed
+# (private gs://canamed-pii-archive in europe-west1, SA objectAdmin grant,
+# lifecycle rules) and the daily `schedule:` is enabled. The setup steps
+# are kept here for disaster-recovery / re-provisioning reference.
 #
-# One-time setup (a human with GCP project access):
+# One-time setup (a human with GCP project access) — DONE 2026-05-30:
 #   1. Create a PRIVATE bucket in the EU (data residency = the RTDB's
 #      europe-west1), uniform bucket-level access, no public IAM:
 #        gcloud storage buckets create gs://canamed-pii-archive \
@@ -42,8 +42,8 @@
 name: Backup sessions
 
 on:
-  # schedule:
-  #   - cron: "47 2 * * *"   # daily 02:47 UTC — 30 min before cleanup (03:17)
+  schedule:
+    - cron: "47 2 * * *"   # daily 02:47 UTC — 30 min before cleanup (03:17)
   workflow_dispatch:
 
 concurrency:
