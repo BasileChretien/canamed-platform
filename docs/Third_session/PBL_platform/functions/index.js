@@ -80,6 +80,23 @@ function emailEnabled() {
   return EMAIL_ENABLED.value() === true;
 }
 
+// FINDING-05 (2026-05-30 review): job.html is admin-written but was passed to
+// nodemailer unsanitised — a compromised admin session could inject phishing
+// HTML into transactional emails. Sanitise with a tight allowlist (basic
+// formatting + https/mailto links only; scripts, styles, iframes, on* handlers,
+// and javascript:/data: URLs are discarded).
+const sanitizeHtml = require("sanitize-html");
+const EMAIL_HTML_OPTS = {
+  allowedTags: ["a", "b", "strong", "i", "em", "u", "br", "p", "div", "span",
+    "ul", "ol", "li", "h1", "h2", "h3", "h4", "table", "thead", "tbody", "tr",
+    "td", "th", "hr", "blockquote", "img"],
+  allowedAttributes: { a: ["href"], img: ["src", "alt", "width", "height"] },
+  allowedSchemes: ["https", "mailto"],
+  allowedSchemesByTag: { img: ["https"] },
+  allowProtocolRelative: false,
+  disallowedTagsMode: "discard"
+};
+
 exports.sendQueuedMail = onValueCreated({
   ref: "/sessions/{code}/mail/{id}",
   region: "europe-west1",        // co-located with the trigger (EU-resident data)
@@ -115,7 +132,7 @@ exports.sendQueuedMail = onValueCreated({
       to: String(job.to),
       subject: String(job.subject),
       text: job.text ? String(job.text) : "",
-      html: job.html ? String(job.html) : undefined
+      html: job.html ? sanitizeHtml(String(job.html), EMAIL_HTML_OPTS) : undefined
     });
     await snap.ref.child("delivery").set({ state: "sent", at: Date.now() });
   } catch (e) {
