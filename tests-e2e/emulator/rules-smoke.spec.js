@@ -333,6 +333,32 @@ test("rules: org per-room gating — moduleA/B writes allowed in own org room, d
   }
 });
 
+test("rules: initial-set admin hash is creatorUid-bound — a non-creator can't claim admin in the create gap (R4)", async ({ page, browser }) => {
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const code = "init-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+
+  // Creator A claims creatorUid (write-once, == auth.uid, before any admin hash).
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uidA)).toBe("ALLOWED");
+
+  // A DIFFERENT uid B cannot do the INITIAL set of adminPasswordHash (racing the
+  // create gap) once creatorUid is claimed — the !data.exists() branch is now
+  // guarded by creatorUid == auth.uid (R4 initial-set-race fix).
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+  const bClaim = await tryWrite(tabB, `sessions/${code}/adminPasswordHash`, "a".repeat(64));
+  expect(bClaim, "a non-creator must not initial-set the admin hash").not.toBe("ALLOWED");
+  expect(String(bClaim)).toMatch(/permission_denied|denied/i);
+  await ctxB.close();
+
+  // The creator A CAN set the initial admin hash.
+  expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+});
+
 test("rules: roleChoices is owner-bound — a peer cannot overwrite another participant's role choice", async ({ page, browser }) => {
   const code = "role-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const cid = "c_" + Math.floor(Math.random() * 1e9);

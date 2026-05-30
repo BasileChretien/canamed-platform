@@ -120,6 +120,15 @@ test("rules: a non-creator cannot reset the password without the recovery code, 
   // ---- POSITIVE: with the CORRECT recovery code, the chain succeeds ----
   // The reset flag is now bound to its initiator's uid (R3 recovery-race fix).
   const attackerUid = await attacker.evaluate(() => firebase.auth().currentUser.uid);
+
+  // e) CORRECT code but a FORGED uid (!= the writer's own auth.uid) → denied.
+  //    The reset write binds uid to its initiator (R3); you can't open a reset
+  //    on someone else's behalf even if you know the code.
+  const forgedUid = await tryWrite(sPath + "/_superadminReset",
+    { requestedAt: Date.now(), by: "Mallory", code: recovery, uid: attackerUid + "-forged" });
+  expect(forgedUid, "_superadminReset with a forged uid must be denied").not.toBe("ALLOWED");
+  expect(String(forgedUid)).toMatch(/permission_denied|denied/i);
+
   const goodReset = await tryWrite(sPath + "/_superadminReset",
     { requestedAt: Date.now(), by: "Recovery Emu Fac", code: recovery, uid: attackerUid });
   expect(goodReset, "_superadminReset with the correct code must be ALLOWED: " + goodReset).toBe("ALLOWED");
@@ -144,6 +153,8 @@ test("rules: a non-creator cannot reset the password without the recovery code, 
   await racerCtx.close();
 
   // The reset INITIATOR (attacker tab) can complete the hash overwrite.
+  // (The real-hash adminSecrets path carries the byte-identical uid-bound rule;
+  // its race is covered structurally + by the adminSecrets smoke tests.)
   const goodHash = await tryWrite(sPath + "/adminPasswordHash",
     "v2$100000$abcdef0123456789");
   expect(goodHash, "adminPasswordHash overwrite by the reset initiator must be ALLOWED: " + goodHash).toBe("ALLOWED");

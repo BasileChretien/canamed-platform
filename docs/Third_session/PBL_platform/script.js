@@ -3640,7 +3640,7 @@ function joinSuperAdmin() {
         // uid binds the reset flag to its initiator so only this client (the
         // one that supplied the recovery code) can write the hash during the
         // 30s window — closes the recovery-race (2026-05-30 R3 review).
-        return refReset.set({ requestedAt: TS, by: myName, code: recoveryCode, uid: currentUser.uid })
+        return refReset.set({ requestedAt: TS, by: myName, code: recoveryCode, uid: (currentUser && currentUser.uid) })
           .then(() => refSecret.set(h))
           .then(() => refReset.remove())
           .catch(err => {
@@ -3948,7 +3948,7 @@ function enterAdminApp() {
           const TS = (typeof firebase !== "undefined" &&
             firebase.database && firebase.database.ServerValue &&
             firebase.database.ServerValue.TIMESTAMP) || Date.now();
-          return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode, uid: currentUser.uid })
+          return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode, uid: (currentUser && currentUser.uid) })
             .then(() => refSecret.set(h))
             .then(() => refReset.remove())
             .catch(err => {
