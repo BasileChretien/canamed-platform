@@ -337,3 +337,16 @@ operational reminders remain outstanding.
 - `sharedScenarios` readable by any authed user (opt-in facilitator sharing);
   `ownerName` is capped at 80 chars — confirm the facilitator consent flow
   discloses that a display name may be visible to participants.
+
+**Round-4 review (2026-05-30) — verification pass on R3 + two residuals fixed:**
+- The R3 recovery-race fix was confirmed **correct + complete** (uid binding on
+  all 4 hash rules, code-gate intact, no forge path; supply-chain, eval removal,
+  retentionUntil all re-verified). Two residuals found and fixed:
+  - **Initial-set race (MEDIUM)**: the `!data.exists()` branch of the four hash
+    rules wasn't uid-bound — an attacker could race the create-flow gap to set
+    the admin hash first. Now guarded by `creatorUid == auth.uid` (creatorUid is
+    written before the hash). Emulator-tested.
+  - **`currentUser` null self-DoS (LOW)** in the reset write sites — guarded.
+- Added tests: initial-set creatorUid-bound race; forged-uid (`uid != auth.uid`)
+  denial at `_superadminReset`. Remaining open item is the *documented*
+  defense-in-depth set above (`$other` sentinels, remaining org parity).
