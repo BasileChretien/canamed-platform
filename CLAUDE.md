@@ -31,13 +31,13 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 ## Operational reminders — ACTION REQUIRED (cannot be done in code)
 
 These are the Round-3 security follow-ups that require the Firebase / GCP
-Console (a human with project access), surfaced 2026-05-20. **All items are
-now complete:** items 1 & 2 on 2026-05-23, item 5 + item 4 (LLM pilot
-activated) on 2026-05-30, and item 3 (retention) fully restored 2026-05-30 via
-the public-repo workflows + private GCS archive. The previously-deferred
-App Check enforcement on the `hfPatient` function (nested under item 4) is
-also done as of 2026-05-30 (config verified; see that item's note). No
-operational reminders remain outstanding.
+Console (a human with project access), surfaced 2026-05-20. Items 2, 3, 4, 5
+are complete (see each). **⚠️ One action OUTSTANDING (2026-05-30):** item 1 —
+switch RTDB App Check from *Enforce* back to *Monitor* in the Console, after
+Enforce mode was found to cause intermittent total lockouts (reCAPTCHA
+`grecaptcha.execute()` hangs → no App Check token → Enforce blocks the whole
+DB). Until that Console toggle is flipped, clients still hit "Checking…" →
+"Couldn't reach the session server" whenever reCAPTCHA hiccups. See item 1.
 
 > ⚠️ **STATUS-CLAIM RULE — read before reporting any item here as done /
 > outstanding / dormant.** These hand-maintained labels CAN go stale: an
@@ -55,17 +55,37 @@ operational reminders remain outstanding.
 >    reminders, "Known security follow-ups", inline ✅/DONE notes), not just
 >    this section.
 
-1. **Firebase App Check → Enforce mode (HIGH).** App Check (reCAPTCHA v3) is
-   wired client-side but enforcement is set in the Console. Until the
-   Realtime Database product is switched from *Monitor* to *Enforce*, a
-   stolen anonymous-auth token still reaches the DB without attestation.
-   - Console → App Check → app `canamed-69785` → confirm site key matches
-     `CANAMED_RECAPTCHA_SITE_KEY` in `firebase-config.js` → click **Enforce**
-     next to Realtime Database.
-   - ✅ **Done 2026-05-23** — Realtime Database switched from *Monitor* to
-     *Enforce*; unattested tokens are now rejected at the DB.
-   - `Verify:` Firebase Console → App Check → Realtime Database shows
-     *Enforced* (Console-only — no code signal).
+1. **Firebase App Check → Monitor (NOT Enforce) for RTDB — REVERTED
+   2026-05-30 after an availability incident (HIGH).** App Check (reCAPTCHA
+   v3) is wired client-side; enforcement is a Console setting.
+   - ✅ Done 2026-05-23 — RTDB switched *Monitor* → *Enforce* (unattested
+     tokens rejected at the DB).
+   - ⚠️ **Reverted to *Monitor* 2026-05-30.** Enforce mode made reCAPTCHA a
+     single point of failure for the *entire* database: when
+     `grecaptcha.execute()` intermittently **hangs** (diagnosed live
+     2026-05-30 — network to Google was fine; reCAPTCHA-internal hang), App
+     Check can't mint a token, and under Enforce the RTDB rejects **all**
+     access (realtime *and* REST), so every client hangs on "Checking…" then
+     "Couldn't reach the session server". Symptom chain:
+     `grecaptcha.execute()` hang → no App Check token → Enforce blocks DB →
+     `sessionStatus()` read never resolves. For a **supervised classroom**
+     (facilitator present; threat model = free-tier quota abuse via stolen
+     anon tokens), availability outweighs that marginal protection, and the
+     DB **rules** (auth!=null, ownership guards, unreadable `adminSecrets/`)
+     remain the real security boundary — so RTDB was switched back to
+     *Monitor* (SDK still sends tokens; DB observes, does not reject). The
+     client-side timeout/retry fix (script.js `_clearStickyLongPollFlag` +
+     `SESSION_STATUS_TIMEOUT_MS`, shipped 2026-05-30) makes the failure
+     *graceful* but cannot create access while a mandatory token can't mint —
+     hence the Console revert.
+   - **Re-enable Enforce only after** reCAPTCHA reliability is understood
+     (check reCAPTCHA admin console error rate/volume for the site key +
+     Firebase App Check metrics); consider reCAPTCHA Enterprise or a longer
+     App-Check token TTL / proactive refresh before re-enforcing.
+   - `Verify:` Firebase Console → App Check → APIs → Realtime Database shows
+     *Monitored* (Console-only — no code signal). The `hfPatient` function
+     still has `APP_CHECK_ENFORCE=true` (item 4) — flip it to Monitor too if
+     the Module A LLM pilot runs before reCAPTCHA is fixed.
 
 2. **Restrict the API key (HIGH).** The Firebase web API key is necessarily
    public in the served HTML, but it should be locked down:
