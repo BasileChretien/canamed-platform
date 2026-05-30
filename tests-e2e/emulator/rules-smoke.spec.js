@@ -251,6 +251,7 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
   expect(await ok("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("score/auto/e1", { points: 3, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("score/penalties/e1", { points: 1, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("votes/v1/committed", { choice: 2, at: Date.now() })).toBe("ALLOWED");
@@ -261,6 +262,7 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   const denied = [
     await x("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() }),
     await x("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
+    await x("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() }),
     await x("moduleB/exchangeReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
     await x("score/auto/e1", { points: 999, at: Date.now() }),
     await x("score/penalties/e1", { points: 999, at: Date.now() }),
@@ -270,6 +272,48 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
     expect(r).not.toBe("ALLOWED");
     expect(String(r)).toMatch(/permission_denied|denied/i);
   }
+});
+
+test("rules: roleChoices is owner-bound — a peer cannot overwrite another participant's role choice", async ({ page, browser }) => {
+  const code = "role-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const cid = "c_" + Math.floor(Math.random() * 1e9);
+  const cmPath = `sessions/${code}/clientMapping/${cid}`;          // clientMapping is session-level
+  const rcPath = `sessions/${code}/rooms/Room 1/roleChoices/${cid}`; // roleChoices is per-room
+
+  // Owner A binds the clientId to its uid (write-once = auth.uid) and sets a role.
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  expect(await tryWrite(page, cmPath, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, rcPath, { role: "Doctor", name: "A", at: Date.now() })).toBe("ALLOWED");
+
+  // Peer B — a fresh isolated context so it signs in as a DISTINCT anonymous
+  // uid (context.newPage would reuse A's session).
+  const ctxB = await browser.newContext();
+  const tab2 = await ctxB.newPage();
+  await useEmulator(tab2);
+  await tab2.goto("/");
+  const uidB = await waitForUid(tab2);
+  expect(uidB).not.toBe(uidA);
+
+  // B cannot overwrite A's role choice for that cid (clientMapping ownership).
+  const overwrite = await tryWrite(tab2, rcPath, { role: "Nurse", name: "B", at: Date.now() });
+  expect(overwrite).not.toBe("ALLOWED");
+  expect(String(overwrite)).toMatch(/permission_denied|denied/i);
+  await ctxB.close();
+});
+
+test("rules: mail queue is admin-gated — a non-admin cannot enqueue mail (open-relay guard)", async ({ page }) => {
+  await page.goto("/");
+  await waitForUid(page);
+  // A fresh code has no adminPasswordHash, so the existence-based admin gate
+  // fails: a participant who merely knows a code cannot turn the queue into an
+  // open relay. A well-formed mail job is still denied.
+  const code = "mail-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const res = await tryWrite(page, `sessions/${code}/mail/m1`, {
+    to: "victim@example.com", subject: "phish", at: Date.now()
+  });
+  expect(res).not.toBe("ALLOWED");
+  expect(String(res)).toMatch(/permission_denied|denied/i);
 });
 
 test("rules: /credentials/$id — public read by exact id; listing denied; write-once enforced; bad payload denied", async ({ page }) => {
