@@ -208,7 +208,12 @@ operational reminders remain outstanding.
   `tests-e2e/emulator/rules-smoke.spec.js` (FINDING-07).
 - `pool/$clientId/room` is intentionally writable by any authenticated user
   (admin room-assignment + self-assign); residual room-griefing is accepted
-  until a cryptographic admin identity exists.
+  until a cryptographic admin identity exists. A "self-assign only" rule can't
+  be the fix while admin assignment rides the same open path with no admin
+  identity. **Revisit when:** sessions become unfacilitated / self-serve or
+  scale beyond a supervised classroom — then build the cryptographic admin
+  identity and gate room-assignment behind it. Until then, accepted (a human
+  facilitator is present and the disruption is recoverable).
 - Module A `scoring/awarded/<famId>` is client-writable (write-once, bounded
   points, requires uidMembers membership). A teammate with dev tools can
   still pre-award their own room — accepted because this is collaborative
@@ -216,4 +221,7 @@ operational reminders remain outstanding.
   `uidMembers` gate closes the cross-room griefing path that existed when
   the chat first landed; only same-room self-awarding remains. Server-side
   scoring would require returning `awards: [...]` from `hfPatient` and
-  writing them via admin SDK — deferred.
+  writing them via admin SDK — deferred. **Revisit when:** Module A scoring
+  ever becomes graded / assessment (stakes appear) — then move scoring
+  server-side. Until then accepted: Module A is formative, so the incentive
+  to self-award is near-zero.
