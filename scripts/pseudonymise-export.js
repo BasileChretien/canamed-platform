@@ -9,17 +9,15 @@
  * earlier (matching the 6-month linkage-destruction commitment in the
  * privacy policy).
  *
- * Pseudonymisation strategy (deterministic per session):
- *   - For each room, sort participants by `at` (join order) and assign
- *     codes Student-A, Student-B, Student-C... — stable across runs
- *   - Replace every occurrence of the participant's name in:
- *       /pool/{cid}/name
- *       /rooms/{room}/answers/{*}/by
- *       /rooms/{room}/votes/{*}/ballots/{cid} (no name, just choice — no-op)
- *       /rooms/{room}/score/manual/{*}/by
- *       /rooms/{room}/calls/{*}/by, etc.
- *   - Linkage table: { sessionCode: { realName: pseudoCode } } — written
- *     separately so researchers operate only on the pseudonymised export
+ * The pseudonymisation transform lives in scripts/lib/pseudonymise.js (pure,
+ * unit-tested). It: maps participant display names to Student-A/B/... codes
+ * (collision-safe), REDACTS unknown names in name/by fields (e.g. facilitators,
+ * who are never in the pool), DROPS free-text LLM chat turns + facilitator
+ * transient fields (`_adminPresence`, `_superadminReset`) + the admin hash, and
+ * BUCKETS the `university` quasi-identifier to Univ-N. See that file's header
+ * for the full de-identification guarantees (hardened after the 2026-05-30
+ * security review). Linkage table { sessionCode: { realName: pseudoCode } } is
+ * written separately so researchers operate only on the pseudonymised export.
  *
  * Closed sessions only (active sessions could still receive writes that
  * would not be pseudonymised). Use the in-memory copy; don't mutate the
@@ -62,6 +60,7 @@ const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
 const { uploadToGcs } = require("./lib/gcs-archive");
+const { pseudonymiseSession } = require("./lib/pseudonymise");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -75,65 +74,6 @@ const REQUIRE_GCS = process.env.EXPORT_REQUIRE_GCS === "1";
 
 function isoDate() {
   return new Date().toISOString().slice(0, 10);
-}
-
-// 26 letters then double letters AA, AB, ... so we don't run out
-function pseudoCode(i) {
-  if (i < 26) return "Student-" + String.fromCharCode(65 + i);
-  const a = Math.floor(i / 26) - 1;
-  const b = i % 26;
-  return "Student-" + String.fromCharCode(65 + a) + String.fromCharCode(65 + b);
-}
-
-function pseudonymiseSession(sess, sessionCode, linkage) {
-  if (!sess || typeof sess !== "object") return sess;
-  // Build name -> pseudo map for this session
-  const pool = sess.pool || {};
-  const cids = Object.keys(pool).sort((a, b) => {
-    const ta = (pool[a] && pool[a].at) || 0;
-    const tb = (pool[b] && pool[b].at) || 0;
-    return ta - tb;
-  });
-  const nameToPseudo = {};
-  cids.forEach((cid, i) => {
-    const name = pool[cid] && pool[cid].name;
-    if (typeof name === "string" && name.length > 0 && !nameToPseudo[name]) {
-      nameToPseudo[name] = pseudoCode(i);
-    }
-  });
-  linkage[sessionCode] = nameToPseudo;
-
-  // Deep-walk and replace any field whose value matches a real name
-  const out = JSON.parse(JSON.stringify(sess));
-  // Strip the password hash too
-  if (out.adminPasswordHash) delete out.adminPasswordHash;
-
-  function replaceInValue(v) {
-    if (typeof v === "string" && nameToPseudo[v]) return nameToPseudo[v];
-    return v;
-  }
-  function walk(node) {
-    if (!node || typeof node !== "object") return;
-    if (Array.isArray(node)) {
-      for (let i = 0; i < node.length; i++) {
-        node[i] = replaceInValue(node[i]);
-        if (typeof node[i] === "object") walk(node[i]);
-      }
-      return;
-    }
-    for (const k of Object.keys(node)) {
-      // The `name` field is the canonical real-name location; rewrite.
-      // Also `by` fields throughout (answers, scores, calls, etc.) are real names.
-      if (k === "name" || k === "by") {
-        node[k] = replaceInValue(node[k]);
-      } else {
-        node[k] = replaceInValue(node[k]);
-      }
-      if (typeof node[k] === "object") walk(node[k]);
-    }
-  }
-  walk(out);
-  return out;
 }
 
 async function main() {
@@ -179,8 +119,10 @@ async function main() {
     databaseUrl: DB_URL,
     sessionCount: closedCodes.length,
     sessions: pseudonymised,
-    note: "Pseudonymised export. Real names replaced by Student-A/B/... codes per session. " +
-      "Linkage table is in a separate artefact with shorter retention (see workflow)."
+    note: "Pseudonymised export. Participant names -> Student-A/B/... per session; " +
+      "unknown names (facilitators) redacted; free-text LLM chat dropped; university " +
+      "bucketed to Univ-N. See scripts/lib/pseudonymise.js for guarantees. Linkage " +
+      "table is in a separate artefact with shorter retention (see workflow)."
   };
   const linkagePayload = {
     exportTakenAt: new Date().toISOString(),

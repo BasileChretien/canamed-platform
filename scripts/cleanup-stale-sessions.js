@@ -118,7 +118,10 @@ async function main() {
       else kept++;
     } catch (e) {
       errors++;
-      console.error(`ERROR    ${QUIET ? "<redacted>" : code}  ${e.message}`);
+      // In QUIET mode (public-repo logs are world-readable) avoid printing the
+      // raw e.message too: some firebase-admin errors embed the node path,
+      // which includes the session code. Use the error code only.
+      console.error(`ERROR    ${QUIET ? "<redacted>" : code}  ${QUIET ? (e && e.code ? e.code : "error") : (e && e.message)}`);
     }
   }
 
