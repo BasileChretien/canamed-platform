@@ -34,9 +34,10 @@ These are the Round-3 security follow-ups that require the Firebase / GCP
 Console (a human with project access), surfaced 2026-05-20. **All items are
 now complete:** items 1 & 2 on 2026-05-23, item 5 + item 4 (LLM pilot
 activated) on 2026-05-30, and item 3 (retention) fully restored 2026-05-30 via
-the public-repo workflows + private GCS archive. The only thing still marked
-as deferred is the *optional* App Check enforcement on the `hfPatient`
-function (nested under item 4) — a hardening, not a blocker.
+the public-repo workflows + private GCS archive. The previously-deferred
+App Check enforcement on the `hfPatient` function (nested under item 4) is
+also done as of 2026-05-30 (config verified; see that item's note). No
+operational reminders remain outstanding.
 
 > ⚠️ **STATUS-CLAIM RULE — read before reporting any item here as done /
 > outstanding / dormant.** These hand-maintained labels CAN go stale: an
@@ -159,24 +160,22 @@ function (nested under item 4) — a hardening, not a blocker.
    - **Pilot gate:** the chat UI itself stays hidden unless a user passes
      `?llm=1` in the URL or sets `localStorage.canamedModALLM=1`. The
      facilitator controls who sees it during the pilot window.
-   - **Re-enable App Check on hfPatient (deferred from initial pilot):**
-     the function ships with `enforceAppCheck` driven by the
-     `APP_CHECK_ENFORCE` defineBoolean param (defaults `false`). The
-     client-side wiring is already done — `initAppCheck()` in
-     [script.js](docs/Third_session/PBL_platform/script.js) activates
-     the reCAPTCHA v3 provider as soon as a site key is set. To turn it
-     on:
-     1. Get a reCAPTCHA v3 site key at
-        https://www.google.com/recaptcha/admin — register both
-        `canamed-69785.web.app` and `canamed.web.app` as allowed sites.
-     2. Firebase Console → App Check → Apps → register
-        `canamed-69785` with the reCAPTCHA v3 provider (paste the
-        site key + secret key from step 1).
-     3. In
-        [firebase-config.js](docs/Third_session/PBL_platform/firebase-config.js),
-        set `window.CANAMED_RECAPTCHA_SITE_KEY = "<site-key>"`.
-     4. In `functions/.env`, set `APP_CHECK_ENFORCE=true`.
-     5. `firebase deploy --only functions,hosting`.
+   - **App Check on hfPatient — ✅ DONE (config verified 2026-05-30).** The
+     function enforces App Check via `enforceAppCheck: APP_CHECK_ENFORCE`
+     ([functions/index.js](docs/Third_session/PBL_platform/functions/index.js)),
+     and all enabling config is in place: a real reCAPTCHA v3 site key is set
+     in [firebase-config.js](docs/Third_session/PBL_platform/firebase-config.js)
+     (`CANAMED_RECAPTCHA_SITE_KEY`), client `initAppCheck()` activates the
+     provider, and `functions/.env` has `APP_CHECK_ENFORCE=true` (the
+     `.env.canamed-69785` override does not unset it). The `PROMPT_VERSION`
+     redeploy marker references the `APP_CHECK_ENFORCE` param, indicating the
+     deploy carrying it was made (same deploy that activated the pilot).
+   - `Verify:` `grep APP_CHECK_ENFORCE docs/Third_session/PBL_platform/functions/.env`
+     = `true`; `grep CANAMED_RECAPTCHA_SITE_KEY .../firebase-config.js` is a
+     real key (not empty/placeholder). Live-deploy confirmation is CLI-only:
+     `firebase functions:list` / a call to `hfPatient` **without** an App Check
+     token should be rejected (`unauthenticated`). `.env` is git-ignored, so
+     this label cannot be auto-checked from the repo alone.
 
 ## Known security follow-ups (code, tracked)
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
