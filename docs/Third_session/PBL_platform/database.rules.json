@@ -249,13 +249,13 @@
             "score": {
               "auto": {
                 "$eventId": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                   ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                 }
               },
               "penalties": {
                 "$eventId": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                   ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                 }
               },
@@ -322,7 +322,7 @@
               },
               "hypotheses": {
                 "$entryId": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                   ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 200 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000 && (!newData.hasChild('university') || (newData.child('university').isString() && newData.child('university').val().length <= 40)))"
                 }
               },
@@ -333,7 +333,7 @@
               "promptReplies": {
                 "$promptIdx": {
                   "$cid": {
-                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                     ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 600 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000)"
                   }
                 }
@@ -351,7 +351,7 @@
               "exchangeReplies": {
                 "$promptIdx": {
                   "$cid": {
-                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                    ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                     ".validate": "newData.val() == null || (newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 600 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('cid').isString() && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000)"
                   }
                 }
@@ -396,7 +396,7 @@
                   }
                 },
                 "committed": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
+                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                   ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
                 }
               }
@@ -663,13 +663,13 @@
                 "score": {
                   "auto": {
                     "$eventId": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                       ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                     }
                   },
                   "penalties": {
                     "$eventId": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists()",
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                       ".validate": "newData.val() == null || (newData.hasChildren(['points','at']) && newData.child('points').isNumber() && newData.child('points').val() >= 0 && newData.child('points').val() <= 100 && newData.child('at').isNumber())"
                     }
                   },
@@ -780,7 +780,7 @@
                       }
                     },
                     "committed": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                       ".validate": "newData.val() == null || (newData.hasChildren(['choice','at']) && newData.child('choice').isNumber() && newData.child('choice').val() >= 0 && newData.child('choice').val() <= 9 && newData.child('at').isNumber())"
                     }
                   }

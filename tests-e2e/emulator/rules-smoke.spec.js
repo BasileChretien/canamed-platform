@@ -214,6 +214,12 @@ test("rules: a participant can save a Module B Phase-3 exchange reply, with vali
   const code = "exr-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const path = `sessions/${code}/rooms/Room 1/moduleB/exchangeReplies/0/${uid}`;
 
+  // The real flow claims write-once room membership on entry (script.js
+  // enterRoom). The per-room write rules (chat, scoring, hypotheses, replies,
+  // score, votes/committed) require it — added 2026-05-30 to stop cross-room
+  // tampering. Claim it first, exactly as a participant entering Room 1 does.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
   // A well-formed group note for the current prompt is allowed (mirrors the
   // proven moduleA/promptReplies rule).
   expect(await tryWrite(page, path, {
@@ -231,6 +237,39 @@ test("rules: a participant can save a Module B Phase-3 exchange reply, with vali
 
   // Clearing the note (null) is allowed — that's how the autosave deletes.
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
+});
+
+test("rules: per-room write gating — a Room 1 member cannot write into Room 2 (cross-room tampering denied)", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "xroom-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+
+  // Become a member of Room 1 only.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  // Writing into Room 1 (own room) is allowed for every gated path...
+  const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
+  expect(await ok("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("score/auto/e1", { points: 3, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("score/penalties/e1", { points: 1, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("votes/v1/committed", { choice: 2, at: Date.now() })).toBe("ALLOWED");
+
+  // ...but the SAME writes targeting Room 2 (where this uid is NOT a member)
+  // are all denied. This is the cross-room tampering boundary.
+  const x = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 2/${p}`, v);
+  const denied = [
+    await x("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() }),
+    await x("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
+    await x("moduleB/exchangeReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
+    await x("score/auto/e1", { points: 999, at: Date.now() }),
+    await x("score/penalties/e1", { points: 999, at: Date.now() }),
+    await x("votes/v1/committed", { choice: 2, at: Date.now() })
+  ];
+  for (const r of denied) {
+    expect(r).not.toBe("ALLOWED");
+    expect(String(r)).toMatch(/permission_denied|denied/i);
+  }
 });
 
 test("rules: /credentials/$id — public read by exact id; listing denied; write-once enforced; bad payload denied", async ({ page }) => {

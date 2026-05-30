@@ -3398,11 +3398,15 @@ function startRoom() {
   }
 
   // Per-room uid membership claim (introduced 2026-05-28 with the LLM-patient
-  // pilot). Write-once `rooms/<roomId>/uidMembers/<uid> = true`; the chat +
-  // scoring rules require this entry to read/write the LLM chat transcript,
-  // so a session-member who is NOT in this room cannot peek at its chat.
-  // Best-effort and safe to ignore on failure — only the LLM chat depends
-  // on it, and that path stays in stub mode for users without the claim.
+  // pilot; the set of rules depending on it was EXPANDED 2026-05-30). Write-once
+  // `rooms/<roomId>/uidMembers/<uid> = true`, claimed here on room entry BEFORE
+  // any gameplay write. The per-room write rules now require this entry for:
+  // LLM chat, scoring (awarded/auto/penalties), moduleA hypotheses + prompt
+  // replies, moduleB exchange replies, and votes/committed — so a session
+  // member who is NOT in this room can neither read its chat nor tamper with
+  // its gameplay/score (cross-room tampering, 2026-05-30 review). The
+  // transaction is idempotent; on a rare transient failure those room writes
+  // are denied until it is re-claimed on the next room entry.
   try {
     const auth = (typeof firebase !== "undefined" && firebase.auth) ? firebase.auth() : null;
     const uid = auth && auth.currentUser && auth.currentUser.uid;
