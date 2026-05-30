@@ -195,6 +195,7 @@
   "splash.qr.loading": "Génération du QR code…",
   "splash.enter.session-ended": "Cette séance est déjà terminée. Demandez un nouveau code de session à votre encadrant·e.",
   "splash.enter.previous-session-ended": "Votre séance précédente est terminée. Saisissez un nouveau code fourni par votre encadrant·e.",
+  "splash.enter.unreachable": "Impossible de joindre le serveur de session. Vérifiez votre connexion et réessayez.",
   "splash.created.create-another": "Créer une autre séance",
   "splash.created.open-admin": "Ouvrir le tableau de bord →",
   "splash.created.recovery-title": "Code de récupération — notez-le maintenant",

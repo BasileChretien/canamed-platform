@@ -1362,6 +1362,25 @@ function _maybeWireAuthEmulator(authInstance) {
   } catch (e) { console.warn("Auth emulator hookup failed", e); }
 }
 
+/* Remove the Firebase SDK's cached "previous websocket failure" flag(s) from
+   localStorage. The SDK keys this as `firebase:previous_websocket_failure`
+   (sometimes with an origin suffix); once set, it stops attempting the
+   WebSocket transport and uses long-poll only — which is broken under RTDB
+   App Check enforcement (503). Returns the number of keys cleared. Defensive:
+   localStorage can throw (private mode / disabled storage) — never fatal. */
+function _clearStickyLongPollFlag() {
+  try {
+    if (typeof localStorage === "undefined") return 0;
+    const doomed = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("previous_websocket_failure") !== -1) doomed.push(k);
+    }
+    doomed.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+    return doomed.length;
+  } catch (e) { return 0; }
+}
+
 function dbInit() {
   if (db) return;
   if (MODE === "shared") {
@@ -1374,6 +1393,19 @@ function dbInit() {
     // and reCAPTCHA can't reach the Google verification endpoint in tests
     // (which would otherwise spam the console with appCheck/recaptcha-error).
     if (!_isEmulatorMode()) initAppCheck();
+    // Clear the SDK's sticky "websocket previously failed" flag BEFORE the
+    // realtime connection is built. The Firebase SDK caches
+    // `firebase:previous_websocket_failure` in localStorage after a single
+    // transient WebSocket hiccup, then permanently prefers long-poll for this
+    // origin. Under App Check *enforcement*, the RTDB long-poll transport
+    // returns HTTP 503 for App-Check-passing requests (the WebSocket transport
+    // works fine) — so a wedged client falls into long-poll-only mode and every
+    // realtime read (`once`/`on`) hangs forever with no rejection, leaving the
+    // splash stuck on "Checking…" (diagnosed live 2026-05-30). Clearing the
+    // flag each boot makes the SDK re-attempt WebSocket (which succeeds); if a
+    // network genuinely blocks wss:// the SDK still falls back to long-poll as
+    // before, so this is strictly safer.
+    _clearStickyLongPollFlag();
     db = firebase.database();
     // Emulator hookup: when window.CANAMED_EMULATOR is set to
     // { host: "127.0.0.1", dbPort: 9000, authPort: 9099 }, point the
@@ -10695,10 +10727,18 @@ function sessionExists(code) {
  * join a finished session anyway." Right — the old sessionExists() only
  * checked `created`, so students could pass the splash and waste
  * effort on a session that's already over. */
+// How long to wait on the existence/closed reads before declaring the DB
+// unreachable. A realtime `once("value")` against a down connection never
+// rejects — it just never resolves — so without this race the splash would
+// sit on "Checking…" forever (the 2026-05-30 long-poll/App-Check wedge). 12s
+// is comfortably above a normal cold read (~250ms) yet short enough that a
+// genuinely wedged client gets a real error + retry instead of a dead UI.
+const SESSION_STATUS_TIMEOUT_MS = 12000;
+
 function sessionStatus(code) {
   try { dbInit(); } catch (e) {}
-  if (!db) return Promise.resolve({ exists: false, closed: false });
-  return ensureSignedIn()
+  if (!db) return Promise.resolve({ exists: false, closed: false, unreachable: true });
+  const read = ensureSignedIn()
     .then(() => Promise.all([
       db.ref(oPath(code, "created")).once("value"),
       db.ref(oPath(code, "closed")).once("value")
@@ -10707,7 +10747,17 @@ function sessionStatus(code) {
       exists: snaps[0].val() != null,
       closed: snaps[1].val() != null
     }))
-    .catch(() => ({ exists: false, closed: false }));
+    .catch(() => ({ exists: false, closed: false, unreachable: true }));
+  // Race the read against a timeout so a hung realtime connection surfaces a
+  // distinguishable `unreachable` result instead of leaving callers pending.
+  let timer;
+  const timeout = new Promise(resolve => {
+    timer = setTimeout(
+      () => resolve({ exists: false, closed: false, unreachable: true }),
+      SESSION_STATUS_TIMEOUT_MS
+    );
+  });
+  return Promise.race([read, timeout]).then(r => { clearTimeout(timer); return r; });
 }
 
 function setUnlockedSession(code) {
@@ -11415,6 +11465,14 @@ function initEntry() {
     sessionStatus(stored).then(status => {
       if (status.exists && !status.closed) {
         enterUnlockedSession(stored);
+      } else if (status.unreachable) {
+        // Couldn't reach the database (e.g. realtime connection wedged). Do
+        // NOT clear the stored code — it may be perfectly valid. Show the
+        // splash with a one-shot connectivity hint so the user can retry
+        // instead of being stranded on a blank, locked screen.
+        try { sessionStorage.setItem("canamed_db_unreachable", "1"); } catch (e) {}
+        sessionNum = "";
+        showSplash();
       } else {
         // stale code (purged, never existed, or finished): clear and
         // show splash. Stash a one-shot hint key so the splash can
@@ -11445,6 +11503,7 @@ function initEntry() {
     // back on the splash (rather than silently dumping them there).
     try {
       const endedCode = sessionStorage.getItem("canamed_just_ended_session");
+      const unreachable = sessionStorage.getItem("canamed_db_unreachable");
       if (endedCode) {
         sessionStorage.removeItem("canamed_just_ended_session");
         const hint = el("splash-hint");
@@ -11452,6 +11511,17 @@ function initEntry() {
           hint.textContent = tFallback("splash.enter.previous-session-ended",
             "Your previous session (" + endedCode.toUpperCase() +
             ") has ended. Enter a new code from your facilitator.");
+          hint.className = "splash-hint err";
+        }
+      } else if (unreachable) {
+        // Auto-resume bailed because the DB was unreachable (not because the
+        // session was closed/invalid). Explain why we're back on the splash
+        // and invite a retry — the stored code was intentionally preserved.
+        sessionStorage.removeItem("canamed_db_unreachable");
+        const hint = el("splash-hint");
+        if (hint) {
+          hint.textContent = tFallback("splash.enter.unreachable",
+            "Couldn't reach the session server. Check your connection and try again.");
           hint.className = "splash-hint err";
         }
       }
@@ -11561,6 +11631,17 @@ function wireSplash() {
     // clear "this session has ended" message — students no longer waste
     // time on the lobby + name/consent + room only to get kicked.
     sessionStatus(got).then(status => {
+      if (status.unreachable) {
+        // The DB read timed out / the realtime connection is wedged. Surface a
+        // real connectivity error + retry rather than the misleading "no
+        // session matches" (the code may be perfectly valid) or a silent
+        // "Checking…" hang. Keep what the user typed so a retry is one click.
+        hint.textContent = tFallback("splash.enter.unreachable",
+          "Couldn't reach the session server. Check your connection and try again.");
+        hint.className = "splash-hint err";
+        shake();
+        return;
+      }
       if (!status.exists) {
         // B7 (SIMULATION_EDGE_CASES.md): if the user typed a 6-char code
         // without the dash (e.g. "abcdef"), try the dashed variant

@@ -290,6 +290,7 @@
       // session anyway"). Surface at splash before the lobby flow.
       "splash.enter.session-ended": "This session has already ended. Ask your facilitator for a new session code.",
       "splash.enter.previous-session-ended": "Your previous session has ended. Enter a new code from your facilitator.",
+      "splash.enter.unreachable": "Couldn't reach the session server. Check your connection and try again.",
       "splash.created.create-another": "Create another",
       "splash.created.open-admin": "Open admin dashboard →",
       // D21 — one-time recovery code shown on the created view.

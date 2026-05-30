@@ -195,6 +195,7 @@
   "splash.qr.loading": "QRコードを生成中…",
   "splash.enter.session-ended": "このセッションは既に終了しています。ファシリテーターに新しいセッションコードを求めてください。",
   "splash.enter.previous-session-ended": "前回のセッションは終了しています。ファシリテーターから新しいコードを入力してください。",
+  "splash.enter.unreachable": "セッションサーバーに接続できませんでした。通信環境を確認して、もう一度お試しください。",
   "splash.created.create-another": "別のセッションを作成",
   "splash.created.open-admin": "管理ダッシュボードを開く →",
   "splash.created.recovery-title": "リカバリーコード — 今すぐ控えてください",
