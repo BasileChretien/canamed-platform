@@ -820,7 +820,9 @@ test("rules: /sessions _superadminReset.write requires the recovery code to matc
 test("rules: /sessions _superadminReset.validate requires a code field (8..60)", () => {
   const v = rules.rules.sessions["$sessionId"]._superadminReset[".validate"];
   assert.ok(v.includes("'code'"), "_superadminReset validate must require a `code` field: " + v);
-  assert.ok(v.includes("hasChildren(['requestedAt','by','code'])"),
+  assert.ok(v.includes("child('uid').isString()"),
+    "_superadminReset validate must require a `uid` field (R3 recovery-race fix): " + v);
+  assert.ok(v.includes("hasChildren(['requestedAt','by','code','uid'])"),
     "_superadminReset validate must require {requestedAt, by, code}: " + v);
   assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/,
     "_superadminReset code must be >= 8 chars: " + v);
@@ -839,7 +841,9 @@ test("rules: /orgs _superadminReset.write requires the org-scoped recovery code 
 test("rules: /orgs _superadminReset.validate requires a code field (8..60)", () => {
   const v = rules.rules.orgs["$orgSlug"].sessions["$sessionId"]._superadminReset[".validate"];
   assert.ok(v.includes("'code'"), "/orgs _superadminReset validate must require a `code` field: " + v);
-  assert.ok(v.includes("hasChildren(['requestedAt','by','code'])"),
+  assert.ok(v.includes("child('uid').isString()"),
+    "_superadminReset validate must require a `uid` field (R3 recovery-race fix): " + v);
+  assert.ok(v.includes("hasChildren(['requestedAt','by','code','uid'])"),
     "/orgs _superadminReset validate must require {requestedAt, by, code}: " + v);
   assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/);
   assert.match(v, /child\('code'\)\.val\(\)\.length <= 60/);

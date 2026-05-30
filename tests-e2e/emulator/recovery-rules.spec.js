@@ -65,7 +65,7 @@ function sessionPath(code) {
   return "sessions/" + code.toLowerCase();
 }
 
-test("rules: a non-creator cannot reset the password without the recovery code, but CAN with it", async ({ page, context }) => {
+test("rules: a non-creator cannot reset the password without the recovery code, but CAN with it", async ({ page, context, browser }) => {
   // ---- SETUP: facilitator creates the session (writes recovery + hash) ----
   const { code, recovery } = await createSessionUI(page);
   expect(recovery).toMatch(/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/);
@@ -118,14 +118,35 @@ test("rules: a non-creator cannot reset the password without the recovery code, 
   expect(String(directHash)).toMatch(/PERMISSION_DENIED|denied/i);
 
   // ---- POSITIVE: with the CORRECT recovery code, the chain succeeds ----
+  // The reset flag is now bound to its initiator's uid (R3 recovery-race fix).
+  const attackerUid = await attacker.evaluate(() => firebase.auth().currentUser.uid);
   const goodReset = await tryWrite(sPath + "/_superadminReset",
-    { requestedAt: Date.now(), by: "Recovery Emu Fac", code: recovery });
+    { requestedAt: Date.now(), by: "Recovery Emu Fac", code: recovery, uid: attackerUid });
   expect(goodReset, "_superadminReset with the correct code must be ALLOWED: " + goodReset).toBe("ALLOWED");
 
-  // With a fresh, valid reset flag in place, the hash overwrite is allowed.
+  // RACE GUARD (R3): while that reset is fresh, a DIFFERENT uid must NOT be able
+  // to overwrite the hash — the write is bound to the reset initiator's uid,
+  // closing the recovery-race takeover. Use a fresh isolated context so the
+  // racer signs in as a DISTINCT anonymous uid (context.newPage reuses the uid).
+  const racerCtx = await browser.newContext();
+  const racer = await racerCtx.newPage();
+  await useEmulator(racer);
+  await racer.goto("/");
+  await waitForAuth(racer);
+  const racerUid = await racer.evaluate(() => firebase.auth().currentUser.uid);
+  expect(racerUid).not.toBe(attackerUid);
+  const raceHash = await racer.evaluate(async (p) => {
+    try { await firebase.database().ref(p).set("v2$100000$cccccccccccccccc"); return "ALLOWED"; }
+    catch (e) { return (e && (e.code || e.message)) || "DENIED"; }
+  }, sPath + "/adminPasswordHash");
+  expect(raceHash, "a non-initiator uid must NOT write the hash during the reset window").not.toBe("ALLOWED");
+  expect(String(raceHash)).toMatch(/permission_denied|denied/i);
+  await racerCtx.close();
+
+  // The reset INITIATOR (attacker tab) can complete the hash overwrite.
   const goodHash = await tryWrite(sPath + "/adminPasswordHash",
     "v2$100000$abcdef0123456789");
-  expect(goodHash, "adminPasswordHash overwrite with a fresh valid reset must be ALLOWED: " + goodHash).toBe("ALLOWED");
+  expect(goodHash, "adminPasswordHash overwrite by the reset initiator must be ALLOWED: " + goodHash).toBe("ALLOWED");
 
   await attacker.close();
 });
