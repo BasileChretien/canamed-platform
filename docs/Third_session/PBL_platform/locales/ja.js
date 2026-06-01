@@ -553,6 +553,7 @@
   "impact.research-csv": "📊 研究データ書き出し（CSV）",
   "impact.roster": "📧 メール名簿（CSV）",
   "impact.attest": "🎓 修了証",
+  "impact.revoke-cert": "🗑️ 検証エントリを削除",
   "impact.program": "📈 プログラム全体の概要",
   "impact.guide": "📖 ファシリテーターガイド",
   "impact.compliance": "🛡 コンプライアンスとアクセシビリティ",
