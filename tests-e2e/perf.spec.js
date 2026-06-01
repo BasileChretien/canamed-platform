@@ -201,7 +201,23 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     a room with the ?llm=1 flag on); tracked as follow-up work post-
 //     pilot. For now the +20 KB buys "feature loads in time, no race
 //     conditions, no extra ensure*() complexity in the join chain."
-const FIRST_PARTY_BYTES_LIMIT_KB = 320;
+//
+//   2026-06-01: UX information-overload Phase-1 batch — bumped to 325.
+//     NET +2.3 KB gz, all in the eager script.js + style.css (case-content.js
+//     grew too — the segmented-synthesis `aParts` — but it's a LAZY chunk and
+//     off this budget; i18n.js untouched). The payload buys: the global
+//     "you are here" session stepper (renderStage segments + CSS pill row),
+//     the segmented clinical-synthesis renderer (labelled micro-sections in
+//     the inline-reveal), the Stage-1 progress de-dup + focal-heading CSS,
+//     the demoted-callout CSS, and the reduced-motion scroll guards. The
+//     baseline was sitting right at the 320 ceiling, so this is a genuine
+//     small regression for real student-facing UX wins (PR #134). The
+//     designated reclaim remains the 4 eager modA-llm-*.js files (~24 KB gz,
+//     NOT splash-critical — gated behind ?llm=1, idle until a user is in a
+//     room): lazy-splitting them via script-loader.js (the #48 precedent)
+//     returns far more than this and is the move the next time the budget
+//     is threatened, rather than another bump.
+const FIRST_PARTY_BYTES_LIMIT_KB = 325;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
