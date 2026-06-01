@@ -317,7 +317,45 @@ var CASE = {
       key: true,
       a: { en: "You have taken a focused history, screened the red-flag categories and examined the legs, spine and hips - all reassuring. There are NO red flags for cauda equina, malignancy, infection, fracture or inflammatory (axial spondyloarthritis) disease, and the neurological exam is normal with negative straight-leg raise, so this is NOT radicular pain. With 8 months of mechanical-pattern, non-radiating pain and a normal exam, this fits chronic non-specific (mechanical) low-back pain. Note also the yellow flags: fear of movement, activity avoidance, worry that something is being missed, low mood and disturbed sleep - these predict chronicity and are what your management plan must target. Safety-net explicitly: tell Mr Lefebvre to come back urgently for new leg weakness or numbness, saddle numbness, bladder/bowel disturbance, fever, unexplained weight loss, or pain that is newly worse at night or at rest (this mirrors the red-flag screen already done in the history). Before you open the discussion prompts, decide together as a group: does this picture justify an MRI, and how will you respond to the oxycodone request? Then work through the prompts below.",
            fr: "Vous avez mené un interrogatoire ciblé, dépisté les catégories de drapeaux rouges et examiné les membres inférieurs, le rachis et les hanches — l'ensemble est rassurant. Il n'y a AUCUN drapeau rouge en faveur d'un syndrome de la queue de cheval, d'une néoplasie, d'une infection, d'une fracture ou d'une pathologie inflammatoire (spondyloarthrite axiale), et l'examen neurologique est normal avec un signe de Lasègue négatif, donc il ne s'agit PAS d'une douleur radiculaire. Avec 8 mois de douleur de type mécanique, non irradiante, et un examen normal, le tableau correspond à une lombalgie chronique non spécifique (mécanique). Notez aussi les drapeaux jaunes : peur du mouvement, évitement de l'activité, inquiétude qu'on lui passe à côté de quelque chose, humeur basse et sommeil perturbé — ces éléments prédisent la chronicisation et constituent les cibles de votre plan de prise en charge. Filet de sécurité explicite : dites à M. Lefebvre de reconsulter en urgence en cas de nouvelle faiblesse ou d'engourdissement d'un membre inférieur, d'anesthésie en selle, de troubles vésico-sphinctériens, de fièvre, de perte de poids inexpliquée, ou de douleur nouvellement aggravée la nuit ou au repos (cela reprend le dépistage des drapeaux rouges déjà fait à l'interrogatoire). Avant d'ouvrir les questions de discussion, décidez ensemble en groupe : ce tableau justifie-t-il une IRM, et comment allez-vous répondre à la demande d'oxycodone ? Puis traitez les questions ci-dessous.",
-           ja: "焦点を絞った病歴聴取を行い、レッドフラッグの各カテゴリーをスクリーニングし、下肢・脊椎・股関節を診察した — いずれも安心できる所見である。馬尾症候群、悪性腫瘍、感染、骨折、炎症性疾患 (軸性脊椎関節炎) を示唆するレッドフラッグは一つもなく、神経学的所見も正常で下肢伸展挙上テストも陰性であるため、本症例は神経根性疼痛ではない。8か月続く機械的パターンで放散しない疼痛と正常な診察所見は、慢性非特異的 (機械的) 腰痛に合致する。さらにイエローフラッグにも注目すべきである:運動恐怖、活動回避、見落とされているのではないかという不安、抑うつ気分、睡眠障害 — これらは慢性化を予測する因子であり、治療計画が標的とすべきものである。明確なセーフティネット:M. Lefebvre には、下肢の新たな筋力低下やしびれ、鞍状部のしびれ、排尿・排便障害、発熱、原因不明の体重減少、または夜間や安静時に新たに悪化する痛みがあれば、ただちに再診するよう伝える(これは病歴ですでに行ったレッドフラッグのスクリーニングに対応している)。ディスカッション課題を開く前に、グループで一緒に決めましょう:この所見はMRIを正当化するか、そしてオキシコドンの要望にどう応えるか?その後、下記の課題に取り組んでください。" } },
+           ja: "焦点を絞った病歴聴取を行い、レッドフラッグの各カテゴリーをスクリーニングし、下肢・脊椎・股関節を診察した — いずれも安心できる所見である。馬尾症候群、悪性腫瘍、感染、骨折、炎症性疾患 (軸性脊椎関節炎) を示唆するレッドフラッグは一つもなく、神経学的所見も正常で下肢伸展挙上テストも陰性であるため、本症例は神経根性疼痛ではない。8か月続く機械的パターンで放散しない疼痛と正常な診察所見は、慢性非特異的 (機械的) 腰痛に合致する。さらにイエローフラッグにも注目すべきである:運動恐怖、活動回避、見落とされているのではないかという不安、抑うつ気分、睡眠障害 — これらは慢性化を予測する因子であり、治療計画が標的とすべきものである。明確なセーフティネット:M. Lefebvre には、下肢の新たな筋力低下やしびれ、鞍状部のしびれ、排尿・排便障害、発熱、原因不明の体重減少、または夜間や安静時に新たに悪化する痛みがあれば、ただちに再診するよう伝える(これは病歴ですでに行ったレッドフラッグのスクリーニングに対応している)。ディスカッション課題を開く前に、グループで一緒に決めましょう:この所見はMRIを正当化するか、そしてオキシコドンの要望にどう応えるか?その後、下記の課題に取り組んでください。" },
+      /* Segmented view of the synthesis (UX-overload fix 2026-06-01): the
+         flat `a` above is ~160 words — a wall for a B1/A2 cohort. `aParts`
+         carries the SAME clinical content split into labelled micro-sections
+         so the inline-reveal can show one idea at a time (script.js renders
+         aParts when present for SYNTH_ID; `a` stays the fallback + toast +
+         export text). Keep every clinical detail in sync if you edit `a`. */
+      aParts: [
+        { label: { en: "What you found",
+                   fr: "Ce que vous avez trouvé",
+                   ja: "わかったこと" },
+          body: { en: "You have taken a focused history, screened the red-flag categories and examined the legs, spine and hips — all reassuring. There are NO red flags for cauda equina, malignancy, infection, fracture or inflammatory (axial spondyloarthritis) disease, and the neurological exam is normal with negative straight-leg raise, so this is NOT radicular pain.",
+                  fr: "Vous avez mené un interrogatoire ciblé, dépisté les catégories de drapeaux rouges et examiné les membres inférieurs, le rachis et les hanches — l'ensemble est rassurant. Il n'y a AUCUN drapeau rouge en faveur d'un syndrome de la queue de cheval, d'une néoplasie, d'une infection, d'une fracture ou d'une pathologie inflammatoire (spondyloarthrite axiale), et l'examen neurologique est normal avec un signe de Lasègue négatif, donc il ne s'agit PAS d'une douleur radiculaire.",
+                  ja: "焦点を絞った病歴聴取を行い、レッドフラッグの各カテゴリーをスクリーニングし、下肢・脊椎・股関節を診察した — いずれも安心できる所見である。馬尾症候群、悪性腫瘍、感染、骨折、炎症性疾患 (軸性脊椎関節炎) を示唆するレッドフラッグは一つもなく、神経学的所見も正常で下肢伸展挙上テストも陰性であるため、本症例は神経根性疼痛ではない。" } },
+        { label: { en: "Diagnosis",
+                   fr: "Diagnostic",
+                   ja: "診断" },
+          body: { en: "With 8 months of mechanical-pattern, non-radiating pain and a normal exam, this fits chronic non-specific (mechanical) low-back pain.",
+                  fr: "Avec 8 mois de douleur de type mécanique, non irradiante, et un examen normal, le tableau correspond à une lombalgie chronique non spécifique (mécanique).",
+                  ja: "8か月続く機械的パターンで放散しない疼痛と正常な診察所見は、慢性非特異的 (機械的) 腰痛に合致する。" } },
+        { label: { en: "Yellow flags to target",
+                   fr: "Drapeaux jaunes à cibler",
+                   ja: "標的とすべきイエローフラッグ" },
+          body: { en: "Fear of movement, activity avoidance, worry that something is being missed, low mood and disturbed sleep — these predict chronicity and are what your management plan must target.",
+                  fr: "Peur du mouvement, évitement de l'activité, inquiétude qu'on lui passe à côté de quelque chose, humeur basse et sommeil perturbé — ces éléments prédisent la chronicisation et constituent les cibles de votre plan de prise en charge.",
+                  ja: "運動恐怖、活動回避、見落とされているのではないかという不安、抑うつ気分、睡眠障害 — これらは慢性化を予測する因子であり、治療計画が標的とすべきものである。" } },
+        { label: { en: "Safety-net — come back urgently for",
+                   fr: "Filet de sécurité — reconsulter en urgence en cas de",
+                   ja: "セーフティネット — 次の場合はただちに再診" },
+          body: { en: "New leg weakness or numbness, saddle numbness, bladder/bowel disturbance, fever, unexplained weight loss, or pain that is newly worse at night or at rest (this mirrors the red-flag screen already done in the history).",
+                  fr: "Nouvelle faiblesse ou engourdissement d'un membre inférieur, anesthésie en selle, troubles vésico-sphinctériens, fièvre, perte de poids inexpliquée, ou douleur nouvellement aggravée la nuit ou au repos (cela reprend le dépistage des drapeaux rouges déjà fait à l'interrogatoire).",
+                  ja: "下肢の新たな筋力低下やしびれ、鞍状部のしびれ、排尿・排便障害、発熱、原因不明の体重減少、または夜間や安静時に新たに悪化する痛みがあれば、ただちに再診するよう伝える(これは病歴ですでに行ったレッドフラッグのスクリーニングに対応している)。" } },
+        { label: { en: "Decide together before you continue",
+                   fr: "À décider ensemble avant de continuer",
+                   ja: "続ける前にグループで決めること" },
+          body: { en: "Does this picture justify an MRI, and how will you respond to the oxycodone request? Then work through the prompts below.",
+                  fr: "Ce tableau justifie-t-il une IRM, et comment allez-vous répondre à la demande d'oxycodone ? Puis traitez les questions ci-dessous.",
+                  ja: "この所見はMRIを正当化するか、そしてオキシコドンの要望にどう応えるか?その後、下記の課題に取り組んでください。" } }
+      ] },
     { q: { en: "Lumbar spine MRI",
            fr: "IRM du rachis lombaire",
            ja: "腰椎MRI" },

@@ -1674,6 +1674,7 @@ function wireLanguageSwitcher() {
       callIfFn("renderScore");
       callIfFn("renderStage");
       callIfFn("renderContrib");
+      callIfFn("updateWaitingStatus");   // i18n the waiting-room status on a mid-wait language switch
       // renderAnswers takes a module key — call it for both Module A and B.
       try {
         const fn = window.renderAnswers;
@@ -1828,7 +1829,7 @@ function initLobby() {
         if (adminBody.classList.contains("hidden")) return;
         const nameVal = (nameFieldForFocus.value || "").trim();
         if (!nameVal) {
-          try { nameFieldForFocus.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          try { nameFieldForFocus.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
           catch (_) { try { nameFieldForFocus.scrollIntoView(); } catch (__) {} }
           const hint = el("admin-hint");
           if (hint) {
@@ -1861,7 +1862,7 @@ function initLobby() {
           ? el("superadmin-key-input")
           : (el("recovery-code-input") || el("new-pass-input"));
         if (target) {
-          try { target.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          try { target.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
           catch (_) { try { target.scrollIntoView(); } catch (__) {} }
           try { target.focus(); } catch (e) {}
         }
@@ -2265,9 +2266,17 @@ function _joinParticipantWireUp() {
 }
 
 function updateWaitingStatus() {
+  // UX/i18n fix (2026-06-01): these two messages were hardcoded English even
+  // though the waiting.status-* keys already ship in en/fr/ja — so FR/JP
+  // participants saw English on the waiting screen. Use the existing keys
+  // (tFallback keeps the English text if i18n hasn't loaded yet); the
+  // canamed:langchange handler re-calls this so a mid-wait language switch
+  // updates the line.
   el("waiting-status").textContent = started
-    ? "The session has started - placing you in a room…"
-    : "You have joined. Waiting for a facilitator to start the session…";
+    ? tFallback("waiting.status-starting",
+        "The session has started — placing you in a room…")
+    : tFallback("waiting.status-not-started",
+        "You have joined. Waiting for a facilitator to start the session…");
 }
 function renderWaitingList() {
   const list = el("waiting-list");
@@ -3028,9 +3037,9 @@ function maybeSelfAssign() {
     console.error(e);
     clearTimeout(stallGuard);
     selfAssigning = false;
-    el("waiting-status").textContent =
+    el("waiting-status").textContent = tFallback("waiting.status-place-failed",
       "We could not place you in a room yet. It will try again automatically. " +
-      "If nothing happens after a minute, please reload the page.";
+      "If nothing happens after a minute, please reload the page.");
   });
 }
 
@@ -7119,9 +7128,46 @@ function renderStage() {
   }
   el("stage-indicator").textContent =
     "Stage " + (viewStage + 1) + " of " + STAGE_COUNT + " · " + stageLabel(viewStage);
-  // the leaderboard auto-opens at the milestones (Welcome and Wrap-up)
+  // Global "you are here" stepper — a compact visual map of the whole session
+  // arc so the Module A LOCAL phase-stepper reads as sub-progress, not session
+  // position (UX-overload fix 2026-06-01). Built with createElement +
+  // textContent (never innerHTML) because stageLabel() can return a
+  // facilitator-authored scenario name. Marks the viewed stage (is-current),
+  // completed stages (is-done) and — when the student pressed Back to re-read
+  // an earlier stage — the room's live furthest-open stage (is-live).
+  const gsp = el("global-stage-progress");
+  if (gsp) {
+    gsp.textContent = "";
+    for (let i = 0; i < STAGE_COUNT; i++) {
+      const li = document.createElement("li");
+      li.className = "gsp-step" +
+        (i < viewStage ? " is-done" : "") +
+        (i === viewStage ? " is-current" : "") +
+        (i === roomStage && i !== viewStage ? " is-live" : "");
+      const label = stageLabel(i);
+      li.setAttribute("aria-label", label);
+      if (i === viewStage) li.setAttribute("aria-current", "step");
+      const num = document.createElement("span");
+      num.className = "gsp-num";
+      num.setAttribute("aria-hidden", "true");
+      num.textContent = String(i + 1);
+      li.appendChild(num);
+      const name = document.createElement("span");
+      name.className = "gsp-name";
+      name.textContent = label;
+      li.appendChild(name);
+      gsp.appendChild(li);
+    }
+  }
+  // UX-overload fix (2026-06-01): auto-open the leaderboard ONLY at Wrap-up,
+  // where celebrating the shared cohort progress is the point. It used to also
+  // force-open at Welcome (viewStage 0), where the board is empty/zeroed, and
+  // it never closed for Module A/B — so the competitive widget sat open at the
+  // top of the work scroll competing with the clinical task. We only ever
+  // OPEN it here (never force-close) so a student who expands it mid-case
+  // keeps it open; the default is closed (no `open` attr in index.html).
   const lb = el("leaderboard-card");
-  if (lb && (viewStage === 0 || viewStage === STAGE_COUNT - 1)) lb.open = true;
+  if (lb && viewStage === STAGE_COUNT - 1) lb.open = true;
   // a celebration when the room reaches the wrap-up (once)
   if (!wrapCelebrated && roomStage === STAGE_COUNT - 1 && viewStage === STAGE_COUNT - 1) {
     wrapCelebrated = true;
@@ -7699,10 +7745,39 @@ function renderButtons() {
         // is set via textContent — case content is author-controlled
         // but we keep the no-eval-by-default discipline.
         inline.textContent = "";
-        const ans = document.createElement("span");
-        ans.className = "req-inline-answer";
-        ans.textContent = tc(item.a, lang);
-        inline.appendChild(ans);
+        // Segmented clinical synthesis (UX-overload fix 2026-06-01): the
+        // synthesis answer was one ~160-word paragraph — a wall for a B1/A2
+        // cohort. When the synthesis item carries aParts (labelled
+        // {label, body} trios), render it as labelled micro-sections so each
+        // idea (what you found / diagnosis / yellow flags / safety-net /
+        // decide together) is processed one at a time. Every OTHER reveal —
+        // and a synthesis without aParts — keeps the flat .req-inline-answer.
+        const useSynthParts = id === SYNTH_ID && item && Array.isArray(item.aParts) &&
+          item.aParts.length > 0;
+        inline.classList.toggle("req-inline-synth", useSynthParts);
+        if (useSynthParts) {
+          const chunks = document.createElement("div");
+          chunks.className = "synth-chunks";
+          item.aParts.forEach(part => {
+            const sec = document.createElement("div");
+            sec.className = "synth-chunk";
+            const h = document.createElement("span");
+            h.className = "synth-chunk-label";
+            h.textContent = tc(part.label, lang);
+            const b = document.createElement("span");
+            b.className = "synth-chunk-body";
+            b.textContent = tc(part.body, lang);
+            sec.appendChild(h);
+            sec.appendChild(b);
+            chunks.appendChild(sec);
+          });
+          inline.appendChild(chunks);
+        } else {
+          const ans = document.createElement("span");
+          ans.className = "req-inline-answer";
+          ans.textContent = tc(item.a, lang);
+          inline.appendChild(ans);
+        }
         // Citation badge (sim 2026-05-19 — Lucas): "Inline citation
         // badges (NICE 2021, HAS 2023…) on each finding so we can argue
         // from sources." Pull from CASE item's optional `cite` field
@@ -8878,7 +8953,7 @@ function renderDecisions() {
     try {
       const box = el("decisions-" + (d.module || "A"));
       if (box && !typing && typeof box.scrollIntoView === "function") {
-        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        box.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "nearest" });
       }
     } catch (_) { /* scrollIntoView unsupported / detached — non-fatal */ }
   });
