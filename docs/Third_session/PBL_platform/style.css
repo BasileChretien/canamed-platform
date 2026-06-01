@@ -1547,6 +1547,23 @@ html[data-theme="dark"] .next-step-coach {
   color: var(--success, #2e7d32);
 }
 
+/* UX-overload fix (2026-06-01): the top of Stage 1 stacked TWO 4-item
+   progress strips — the phase stepper AND this per-bullet checklist —
+   reading as two competing progress bars before the student does anything.
+   Group them into one block (tighten the gap) and make the per-bullet
+   checklist visually SECONDARY so the phase stepper is the one primary
+   progress signal. Plus give the consultation note (the actual activity)
+   the single focal heading. All scoped to #stage-1 so the shared
+   .card / .vignette / phase-stepper styles on other stages are untouched. */
+#stage-1 .phase-stepper { margin-bottom: 6px; }
+#stage-1 .modA-bullet-progress {
+  font-size: 0.82rem;
+  margin: 0 0 12px;
+  padding-left: 2px;
+}
+#stage-1 .modA-bullet-progress li::before { font-size: 1em; }
+#stage-1 .consultation-note-title { font-size: 1.18rem; }
+
 /* Glossed buttons get a tiny dotted underline as a "hover for more"
    cue — sim 2026-05-19 feature for low-English students. Title
    attribute carries the EN+JP explanation; this is just the visual
