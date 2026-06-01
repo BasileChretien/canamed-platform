@@ -7119,6 +7119,37 @@ function renderStage() {
   }
   el("stage-indicator").textContent =
     "Stage " + (viewStage + 1) + " of " + STAGE_COUNT + " · " + stageLabel(viewStage);
+  // Global "you are here" stepper — a compact visual map of the whole session
+  // arc so the Module A LOCAL phase-stepper reads as sub-progress, not session
+  // position (UX-overload fix 2026-06-01). Built with createElement +
+  // textContent (never innerHTML) because stageLabel() can return a
+  // facilitator-authored scenario name. Marks the viewed stage (is-current),
+  // completed stages (is-done) and — when the student pressed Back to re-read
+  // an earlier stage — the room's live furthest-open stage (is-live).
+  const gsp = el("global-stage-progress");
+  if (gsp) {
+    gsp.textContent = "";
+    for (let i = 0; i < STAGE_COUNT; i++) {
+      const li = document.createElement("li");
+      li.className = "gsp-step" +
+        (i < viewStage ? " is-done" : "") +
+        (i === viewStage ? " is-current" : "") +
+        (i === roomStage && i !== viewStage ? " is-live" : "");
+      const label = stageLabel(i);
+      li.setAttribute("aria-label", label);
+      if (i === viewStage) li.setAttribute("aria-current", "step");
+      const num = document.createElement("span");
+      num.className = "gsp-num";
+      num.setAttribute("aria-hidden", "true");
+      num.textContent = String(i + 1);
+      li.appendChild(num);
+      const name = document.createElement("span");
+      name.className = "gsp-name";
+      name.textContent = label;
+      li.appendChild(name);
+      gsp.appendChild(li);
+    }
+  }
   // UX-overload fix (2026-06-01): auto-open the leaderboard ONLY at Wrap-up,
   // where celebrating the shared cohort progress is the point. It used to also
   // force-open at Welcome (viewStage 0), where the board is empty/zeroed, and

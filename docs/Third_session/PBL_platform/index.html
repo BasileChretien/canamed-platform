@@ -1087,6 +1087,19 @@
             <button id="leave-btn" title="Leave">Leave</button>
           </div>
         </div>
+        <!-- Global "you are here" stepper (UX-overload fix 2026-06-01). The
+             only VISUAL numbered stepper used to be Module A's LOCAL phase
+             stepper, so students mistook module sub-progress for their
+             position in the whole session and got disoriented when the
+             facilitator advanced. This compact 4-segment bar shows the
+             session arc (Welcome → Module A → Module B → Wrap-up);
+             renderStage() fills it and marks the viewed stage (is-current)
+             and, when the student has pressed Back to re-read, the room's
+             live stage (is-live). Segment names come from stageLabel() via
+             aria-label + the current segment's visible name — no new
+             per-segment i18n keys. -->
+        <ol id="global-stage-progress" class="global-stage-progress"
+            aria-label="Session progress"></ol>
         <p id="stage-now" aria-live="polite"></p>
         <p id="stage-wait" class="stage-wait" aria-live="polite"></p>
         <div class="presence-line">
