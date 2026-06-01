@@ -3120,22 +3120,20 @@
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
   <script src="script-loader.js?v=v36" defer></script>
-  <!-- Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
-       flag is on (URL ?llm=1 or localStorage canamedModALLM=1). The four
-       files are independent of each other except for load order:
-       modA-question-scoring relies on SCORING from case-content.js (loaded
-       lazily); the bridge and init are activated only after startRoom().
-       Kept as classic scripts (not modules) to share the global namespace
-       with script.js, same as every other file in this platform. -->
-  <script src="modA-question-scoring.js?v=v36" defer></script>
-  <script src="modA-llm-prompts.js?v=v36" defer></script>
-  <script src="modA-llm-bridge.js?v=v36" defer></script>
-  <script src="modA-llm-init.js?v=v36" defer></script>
+  <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
+       (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
+       were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
+       critical-path JS — they are gated behind ?llm=1 and useless to the ~all
+       non-pilot students. They are now injected on demand by
+       window.CanamedLoader.ensureModALlm(), which startRoom() calls only when
+       CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
+       promotion that must survive the join flow is done eagerly in
+       script-loader.js (see its header). -->
   <script src="script.js?v=v36" defer></script>
-  <!-- case-content.js, qrcode.js, tour.js and scenario-author.js are NOT
-       in the initial HTML on purpose — they're injected by
-       script-loader.js on demand. See that file's header for the loading
-       contract. -->
+  <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
+       modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
+       injected by script-loader.js on demand. See that file's header for the
+       loading contract. -->
   <!--
        The previous (synchronous) load list:
          case-content.js, qrcode.js, tour.js, scenario-author.js, script.js

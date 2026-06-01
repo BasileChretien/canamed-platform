@@ -3571,8 +3571,20 @@ function startRoom() {
     get: function () { return revealed; },
     configurable: true
   });
+  // The four pilot scripts are LAZY (split out of the eager splash bundle
+  // 2026-06-01). Load them ONLY when the flag is on — non-pilot students never
+  // fetch them; pilot users (?llm=1 / canamedModALLM) load the bundle on room
+  // entry, then init. Async + caught: this must NEVER block room entry, and
+  // when the flag is off nothing is fetched and the legacy click-button UI is
+  // untouched. modALLMInit re-reads the window.* re-exports above (live).
   try {
-    if (typeof window.modALLMInit === "function") window.modALLMInit();
+    var _ld = window.CanamedLoader;
+    if (_ld && typeof _ld.modALLMFlagOn === "function" && _ld.modALLMFlagOn() &&
+        typeof _ld.ensureModALlm === "function") {
+      _ld.ensureModALlm()
+        .then(function () { if (typeof window.modALLMInit === "function") window.modALLMInit(); })
+        .catch(function (e) { console.warn("[modA LLM] lazy-load failed:", e); });
+    }
   } catch (e) {
     console.warn("[modA LLM] init failed:", e);
   }

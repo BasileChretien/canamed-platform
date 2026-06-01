@@ -129,6 +129,41 @@
   // suffixed (it changes with deploys). Caller must ensurePdfmake() first.
   function ensureStudentPdf() { return loadScript(v("student-pdf.js")); }
 
+  // Module A LLM-patient pilot scripts (2026-05-28). LAZY-SPLIT out of the
+  // eager splash bundle (2026-06-01) to reclaim critical-path JS: the four
+  // files are gated behind ?llm=1 and are dead weight for the ~all non-pilot
+  // users. startRoom() calls ensureModALlm() only when modALLMFlagOn() — so a
+  // normal student never fetches them.
+  //
+  // The ?llm flag itself, however, MUST be resolved EAGERLY on first page-load:
+  // the join flow (splash → lobby → session → room) strips the query string
+  // before startRoom() runs, so we persist ?llm=1 to localStorage now. This is
+  // the same promotion modA-llm-init.js does inside its IIFE — hoisted here so
+  // it still happens when that file is no longer eagerly loaded.
+  try {
+    var _llmParams = new URLSearchParams(location.search);
+    if (window.localStorage) {
+      if (_llmParams.get("llm") === "1") localStorage.setItem("canamedModALLM", "1");
+      else if (_llmParams.get("llm") === "0") localStorage.removeItem("canamedModALLM");
+    }
+  } catch (_) { /* private mode — the URL-only check in modALLMFlagOn still works */ }
+  function modALLMFlagOn() {
+    try {
+      if (new URLSearchParams(location.search).get("llm") === "1") return true;
+      if (window.localStorage && localStorage.getItem("canamedModALLM") === "1") return true;
+    } catch (_) { /* locked-down env — flag stays off */ }
+    return false;
+  }
+  // The four scripts must run in document order — init wires the others:
+  // scoring → prompts → bridge → init. loadScript de-dupes, so re-calls are
+  // cheap; chain to preserve ordering.
+  function ensureModALlm() {
+    return loadScript(v("modA-question-scoring.js"))
+      .then(function () { return loadScript(v("modA-llm-prompts.js")); })
+      .then(function () { return loadScript(v("modA-llm-bridge.js")); })
+      .then(function () { return loadScript(v("modA-llm-init.js")); });
+  }
+
   // Public namespace. Single object so the rest of script.js can do
   // `window.CanamedLoader.ensureX()` without polluting the global namespace
   // with several free functions.
@@ -141,7 +176,9 @@
     ensureGlossary,
     ensureAdminTools,
     ensurePdfmake,
-    ensureStudentPdf
+    ensureStudentPdf,
+    modALLMFlagOn,
+    ensureModALlm
   };
 
   // After the splash is interactive, prefetch tour.js + case-content.js in
