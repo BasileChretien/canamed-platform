@@ -994,12 +994,14 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   font-weight: 600;
 }
 
-/* "Everyone talks" reminder under the vignette in Module A. */
+/* "Everyone talks" reminder under the vignette in Module A.
+   UX-overload fix (2026-06-01): demoted from a filled, border-left callout
+   to plain muted hint text. The Stage-1 first viewport carried THREE
+   competing bordered/filled callouts (this, the amber next-step coach, and
+   the amber "every click is a team decision" banner) reading as three
+   alarms. Only the next-step coach stays a callout now, so the eye lands on
+   one focal instruction. The element keeps its .hint class → muted text. */
 .everyone-talks {
-  background: var(--meeting-50);
-  border-left: 4px solid var(--meeting);
-  padding: 9px 13px;
-  border-radius: var(--r-sm);
   margin-top: var(--s-2);
 }
 
@@ -3490,10 +3492,22 @@ h2, h3 { text-wrap: balance; }
   .rcol-tab.has-attention::after { animation: none; }
   .rcol-panel.is-active { animation: none; }
 }
-/* on narrow screens the tab labels shrink to icons to keep the bar one row */
+/* On narrow screens, keep the verb label VISIBLE (UX-overload fix
+   2026-06-01). It used to be `display:none`, leaving each tab as an
+   aria-hidden emoji with NO accessible name (WCAG 4.1.2 failure on the
+   primary Module A nav) and forcing L2 students to guess what 🗳️/💬/📝
+   mean. Instead, stack the icon over a smaller, wrapping label so all
+   three tabs still fit one row on a 375px phone. */
 @media (max-width: 720px) {
-  .rcol-tab { padding: 9px 8px; }
-  .rcol-tab-label { display: none; }
+  .rcol-tab {
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 6px;
+    font-size: 0.72rem;
+    line-height: 1.15;
+    text-align: center;
+  }
+  .rcol-tab-label { white-space: normal; }
 }
 
 /* ===================== CANAMED SPLASH (top-level gate) =====================
@@ -5114,40 +5128,21 @@ body.session-ended-shown { overflow: hidden; }
    chart so it's visible the whole case-work phase. Caen-amber border
    matches the chart's paper theme; strong colour pulls the eye without
    being alarming. */
+/* "Every click is a team decision" note pinned in the chart header.
+   UX-overload fix (2026-06-01): demoted from a filled amber banner to quiet
+   muted hint text (no fill, no border) so it no longer competes with the
+   next-step coach as a second "alarm" in the Stage-1 first viewport. The
+   message is preserved verbatim — just calmer. Muted text reads fine in
+   light/dark/high-contrast, so the former dark-mode amber overrides are no
+   longer needed. */
 .chart-team-warning {
-  margin: 12px 0 0;
-  padding: 10px 14px;
-  background: rgba(231, 184, 0, 0.16);
-  border-left: 4px solid var(--caen-line, #e7b800);
-  border-radius: var(--r-sm);
-  font-size: 0.93rem;
-  line-height: 1.55;
-  color: var(--ink);
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--muted);
 }
-.chart-team-warning strong { color: var(--caen-ink, #5a3b14); }
-.chart-team-warning em { font-style: italic; color: var(--caen-ink, #5a3b14); }
-/* Dark-mode adjustment: warm amber goes too dim, use the brighter
-   meeting palette for readability. */
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .chart-team-warning {
-    background: rgba(116, 162, 179, 0.18);
-    border-left-color: var(--meeting, #74a2b3);
-    color: var(--ink);
-  }
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .chart-team-warning strong,
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .chart-team-warning em {
-    color: var(--ink);
-  }
-}
-html[data-theme="dark"] .chart-team-warning {
-  background: rgba(116, 162, 179, 0.18);
-  border-left-color: var(--meeting, #74a2b3);
-  color: var(--ink);
-}
-html[data-theme="dark"] .chart-team-warning strong,
-html[data-theme="dark"] .chart-team-warning em {
-  color: var(--ink);
-}
+.chart-team-warning strong { color: var(--ink); }
+.chart-team-warning em { font-style: italic; }
 @keyframes req-reveal-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }

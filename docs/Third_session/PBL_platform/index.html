@@ -1115,7 +1115,14 @@
            its target #objectives element is gone. The score-chip in
            the stage header continues to announce the user's team
            score politely. -->
-      <details id="leaderboard-card" class="card leaderboard-card" open>
+      <!-- UX-overload fix (2026-06-01): the leaderboard is engagement chrome,
+           not the task. It is now CLOSED by default (no `open` attribute) so an
+           empty/zeroed board doesn't dominate Welcome and a re-rendering
+           competitive widget doesn't sit at the top of the Module A/B work
+           scroll. renderStage() auto-opens it only at Wrap-up, where cohort
+           progress is the point; students can still expand it any time, and the
+           persistent score-chip covers the at-a-glance need. -->
+      <details id="leaderboard-card" class="card leaderboard-card">
         <summary><strong>&#127919; Live leaderboard</strong>
           <span class="lb-hint">all rooms add to a shared cohort goal &mdash;
             every contribution counts</span></summary>
@@ -1519,6 +1526,7 @@
                  tab; #contrib-tally relocated to the chart header. -->
             <div class="rcol-tabs" role="tablist" aria-label="Module A panels">
               <button class="rcol-tab is-active" type="button" data-tab="decisions"
+                      id="rcol-tab-decisions"
                       role="tab" aria-selected="true" aria-controls="rcol-p-decisions">
                 <span class="rcol-tab-icon" aria-hidden="true">🗳️</span>
                 <span class="rcol-tab-label" data-i18n="rcol.tab.decisions">Decide together</span>
@@ -1534,6 +1542,7 @@
                 <span class="rcol-tab-badge" id="tab-badge-discussion" hidden></span>
               </button>
               <button class="rcol-tab" type="button" data-tab="answers"
+                      id="rcol-tab-answers"
                       role="tab" aria-selected="false" aria-controls="rcol-p-answers">
                 <span class="rcol-tab-icon" aria-hidden="true">📝</span>
                 <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
@@ -1547,7 +1556,8 @@
             </div><!-- /decisions panel -->
 
             <div class="rcol-panel" id="rcol-p-discussion" hidden
-                 role="tabpanel" data-panel="discussion">
+                 role="tabpanel" data-panel="discussion"
+                 aria-labelledby="rcol-tab-discussion">
             <!-- Auto-injected by updateModANextStep() when the platform
                  switches to this panel because the synthesis was just
                  revealed. Hidden by default; .auto-fade triggers
@@ -1654,7 +1664,8 @@
 
 
             <div class="rcol-panel" id="rcol-p-answers" hidden
-                 role="tabpanel" data-panel="answers">
+                 role="tabpanel" data-panel="answers"
+                 aria-labelledby="rcol-tab-answers">
             <!-- Natural-flow refactor: the form now drives the four
                  bullets students need to write, instead of asking them
                  to remember a list from an instructions block. Each

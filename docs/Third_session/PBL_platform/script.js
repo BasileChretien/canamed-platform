@@ -1828,7 +1828,7 @@ function initLobby() {
         if (adminBody.classList.contains("hidden")) return;
         const nameVal = (nameFieldForFocus.value || "").trim();
         if (!nameVal) {
-          try { nameFieldForFocus.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          try { nameFieldForFocus.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
           catch (_) { try { nameFieldForFocus.scrollIntoView(); } catch (__) {} }
           const hint = el("admin-hint");
           if (hint) {
@@ -1861,7 +1861,7 @@ function initLobby() {
           ? el("superadmin-key-input")
           : (el("recovery-code-input") || el("new-pass-input"));
         if (target) {
-          try { target.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          try { target.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
           catch (_) { try { target.scrollIntoView(); } catch (__) {} }
           try { target.focus(); } catch (e) {}
         }
@@ -7119,9 +7119,15 @@ function renderStage() {
   }
   el("stage-indicator").textContent =
     "Stage " + (viewStage + 1) + " of " + STAGE_COUNT + " · " + stageLabel(viewStage);
-  // the leaderboard auto-opens at the milestones (Welcome and Wrap-up)
+  // UX-overload fix (2026-06-01): auto-open the leaderboard ONLY at Wrap-up,
+  // where celebrating the shared cohort progress is the point. It used to also
+  // force-open at Welcome (viewStage 0), where the board is empty/zeroed, and
+  // it never closed for Module A/B — so the competitive widget sat open at the
+  // top of the work scroll competing with the clinical task. We only ever
+  // OPEN it here (never force-close) so a student who expands it mid-case
+  // keeps it open; the default is closed (no `open` attr in index.html).
   const lb = el("leaderboard-card");
-  if (lb && (viewStage === 0 || viewStage === STAGE_COUNT - 1)) lb.open = true;
+  if (lb && viewStage === STAGE_COUNT - 1) lb.open = true;
   // a celebration when the room reaches the wrap-up (once)
   if (!wrapCelebrated && roomStage === STAGE_COUNT - 1 && viewStage === STAGE_COUNT - 1) {
     wrapCelebrated = true;
@@ -8878,7 +8884,7 @@ function renderDecisions() {
     try {
       const box = el("decisions-" + (d.module || "A"));
       if (box && !typing && typeof box.scrollIntoView === "function") {
-        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        box.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "nearest" });
       }
     } catch (_) { /* scrollIntoView unsupported / detached — non-fatal */ }
   });
