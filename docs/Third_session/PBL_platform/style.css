@@ -1488,6 +1488,23 @@ html[data-theme="dark"] .next-step-coach {
 .chart-section[open] > .chart-section-h::before {
   transform: rotate(90deg);
 }
+/* UX-overload fix (2026-06-01): ease the chart-section reveal. Expanding a
+   <details> chart section used to snap the layout instantly — the only
+   un-eased interaction in an otherwise mature motion system. Animate the
+   revealed content (not the summary) with the same gentle fade+slide as the
+   inline reveals. It fires once per open (renderButtons rebuilds the
+   #group-* CONTENTS, not the section's direct children, so this never
+   re-fires on a finding reveal). Reduced-motion disables it just below. */
+.chart-section[open] > *:not(summary):not(.chart-section-h) {
+  animation: chart-section-reveal 0.22s var(--ease-out, ease);
+}
+@keyframes chart-section-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-section[open] > *:not(summary):not(.chart-section-h) { animation: none; }
+}
 .chart-section-h:hover { color: var(--primary, #1763a6); }
 /* Browser-native <details> collapse hides non-summary children, but the
    .btn-group's explicit display:flex (defined above) wins specificity
