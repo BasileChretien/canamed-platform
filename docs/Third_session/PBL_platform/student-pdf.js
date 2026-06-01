@@ -391,7 +391,7 @@
         { canvas: [{ type: "line", x1: 0, y1: 0, x2: 120, y2: 0, lineWidth: 2.5, lineColor: BRAND.gold }],
           alignment: "center", margin: [0, 6, 0, 0] },
         { text: partnership, style: "subtitle" },
-        { text: L.certCertifies, style: "line", margin: [0, 18, 0, 2] },
+        { text: L.certCertifies, style: "line", margin: [0, 12, 0, 2] },
         { text: name, style: "name" },
         { text: did, style: "line", margin: [70, 8, 70, 6], alignment: "center" },
         comps.length
@@ -416,7 +416,15 @@
               ] },
             certId
               ? { width: "auto", alignment: "center", margin: [12, 0, 12, 0], stack: [
-                    { qr: (verifyUrl || certId), fit: 60, foreground: BRAND.ink, eccLevel: "M", alignment: "center" },
+                    // Scannability: pure black on an explicit white field (max
+                    // camera contrast — navy modules binarise poorly), eccLevel
+                    // "L" so the short /v?id= verify URL stays a low QR version
+                    // (≈29x29) instead of a dense 33x33, a larger fit so each
+                    // module clears the ~0.7 mm a phone needs, and a bottom
+                    // margin to keep a clean quiet zone above the id label.
+                    { qr: (verifyUrl || certId), fit: 72,
+                      foreground: "#000000", background: "#ffffff",
+                      eccLevel: "L", alignment: "center", margin: [0, 0, 0, 6] },
                     { text: L.certVerifyId, style: "certLbl", alignment: "center", margin: [0, 3, 0, 0] },
                     { text: certId, style: "certId", alignment: "center" }
                   ] }
@@ -428,7 +436,7 @@
                   ? { text: L.certVerifyOnline, style: "footSmall", alignment: "right", margin: [0, 4, 0, 0] }
                   : { text: "" }
               ] }
-          ], columnGap: 22, margin: [0, 18, 0, 0] }
+          ], columnGap: 22, margin: [0, 10, 0, 0] }
       ],
       styles: {
         kicker:   { fontSize: 11, characterSpacing: 3, color: BRAND.muted, alignment: "center", bold: true },

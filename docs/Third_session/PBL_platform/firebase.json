@@ -50,7 +50,8 @@
       }
     ],
     "rewrites": [
-      { "source": "/o/**", "destination": "/index.html" }
+      { "source": "/o/**", "destination": "/index.html" },
+      { "source": "/v", "destination": "/verify.html" }
     ]
   },
   "database": {
