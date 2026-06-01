@@ -5164,6 +5164,21 @@ body.session-ended-shown { overflow: hidden; }
   font-size: 0.84rem;
   margin-left: 4px;
 }
+/* Segmented clinical synthesis (UX-overload fix 2026-06-01). When the
+   synthesis reveal renders aParts, show labelled micro-sections instead of
+   one ~160-word wall, so a B1/A2 reader processes one idea at a time. */
+.req-inline-synth { line-height: 1.5; }
+.synth-chunks { display: flex; flex-direction: column; gap: 8px; }
+.synth-chunk-label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--ok, #2a9d8f);
+  margin-bottom: 1px;
+}
+.synth-chunk-body { display: block; }
 /* Contribution tally relocated 2026-05-18 to the chart header (was
    inside the removed Findings panel). Tighter top spacing + lighter
    surface so it sits naturally inside the consultation-note header

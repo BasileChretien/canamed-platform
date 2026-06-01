@@ -7736,10 +7736,39 @@ function renderButtons() {
         // is set via textContent — case content is author-controlled
         // but we keep the no-eval-by-default discipline.
         inline.textContent = "";
-        const ans = document.createElement("span");
-        ans.className = "req-inline-answer";
-        ans.textContent = tc(item.a, lang);
-        inline.appendChild(ans);
+        // Segmented clinical synthesis (UX-overload fix 2026-06-01): the
+        // synthesis answer was one ~160-word paragraph — a wall for a B1/A2
+        // cohort. When the synthesis item carries aParts (labelled
+        // {label, body} trios), render it as labelled micro-sections so each
+        // idea (what you found / diagnosis / yellow flags / safety-net /
+        // decide together) is processed one at a time. Every OTHER reveal —
+        // and a synthesis without aParts — keeps the flat .req-inline-answer.
+        const useSynthParts = id === SYNTH_ID && item && Array.isArray(item.aParts) &&
+          item.aParts.length > 0;
+        inline.classList.toggle("req-inline-synth", useSynthParts);
+        if (useSynthParts) {
+          const chunks = document.createElement("div");
+          chunks.className = "synth-chunks";
+          item.aParts.forEach(part => {
+            const sec = document.createElement("div");
+            sec.className = "synth-chunk";
+            const h = document.createElement("span");
+            h.className = "synth-chunk-label";
+            h.textContent = tc(part.label, lang);
+            const b = document.createElement("span");
+            b.className = "synth-chunk-body";
+            b.textContent = tc(part.body, lang);
+            sec.appendChild(h);
+            sec.appendChild(b);
+            chunks.appendChild(sec);
+          });
+          inline.appendChild(chunks);
+        } else {
+          const ans = document.createElement("span");
+          ans.className = "req-inline-answer";
+          ans.textContent = tc(item.a, lang);
+          inline.appendChild(ans);
+        }
         // Citation badge (sim 2026-05-19 — Lucas): "Inline citation
         // badges (NICE 2021, HAS 2023…) on each finding so we can argue
         // from sources." Pull from CASE item's optional `cite` field
