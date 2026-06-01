@@ -36,7 +36,7 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v27";
+const SHELL_VERSION = "canamed-shell-v36";
 
 const SHELL_ASSETS = [
   "/",
@@ -52,6 +52,10 @@ const SHELL_ASSETS = [
   "/localdb.js",
   "/script.js",
   "/case-content.js",
+  "/modA-question-scoring.js",
+  "/modA-llm-prompts.js",
+  "/modA-llm-bridge.js",
+  "/modA-llm-init.js",
   "/glossary.js",
   "/admin-tools.js",
   "/facilitator-guide.html",
@@ -62,7 +66,6 @@ const SHELL_ASSETS = [
   "/docs-page.js",
   "/platform-config.js",
   "/firebase-config.js",
-  "/fb-timings.min.js",
   "/manifest.webmanifest"
 ];
 
@@ -163,5 +166,7 @@ async function handleSameOrigin(req) {
 
 // Listen for "skip-waiting" message from the page (manual update prompt).
 self.addEventListener("message", (event) => {
-  if (event.data === "skipWaiting") self.skipWaiting();
+  // Only honour a same-origin window client (event.source present). skipWaiting
+  // only activates already-installed code, but the source check is cheap hardening.
+  if (event.data === "skipWaiting" && event.source) self.skipWaiting();
 });

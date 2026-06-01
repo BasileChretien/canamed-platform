@@ -48,7 +48,6 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 |----------|-------|-------|---------|
 | dbInit() | 722–774 | (init) | Create db ref (Firebase SDK or LocalDB), set up anonymous/Google auth, listen to auth state |
 | initAppCheck() | 667–706 | dbInit() | Configure Firebase App Check with reCAPTCHA v3 |
-| initPerfMonitoring() | 707–721 | (init) | Enable/disable Firebase Performance Monitoring (flag in firebase-config.js) |
 | handleAuthStateChange() | 4571–4628 | Firebase auth listener | Route logged-in users through profile-setup or profile-restore; set global userId |
 | ensureSignedIn() | 4541–4570 | loadSessionScenario(), other async flows | Trigger anonymous auth if not already signed in |
 

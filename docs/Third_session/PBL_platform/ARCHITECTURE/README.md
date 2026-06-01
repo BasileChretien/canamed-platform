@@ -138,7 +138,7 @@ Room's total never drops below zero. All rooms' points sum into their cohort's s
 | **telemetry.js** | Event tracking | ~500 | Session timestamps, participant joins, stage changes, score events — JSON export for research |
 | **case-content.js** | Clinical content | ~2,500 | CASE (history/exam/labs structure), SCORING (concept families), PENALTIES (wrong-choice rules), DECISIONS (voting Qs), SCENARIOS registry |
 | **platform-config.js** | Deployment config | ~50 | CANAMED_CONFIG: workshop name, cohort definitions (Caen/Nagoya or custom) |
-| **firebase-config.js** | Infrastructure config | ~90 | CANAMED_FIREBASE (credentials), CANAMED_RECAPTCHA_SITE_KEY, CANAMED_PERF_MONITORING flag |
+| **firebase-config.js** | Infrastructure config | ~70 | CANAMED_FIREBASE (credentials), CANAMED_RECAPTCHA_SITE_KEY |
 | **qrcode.js** | QR code gen | ~900 | Generates QR code SVG for join URL (displayed in admin console) |
 | **database.rules.json** | RTDB security | ~190 | Firebase security rules: auth checks, immutability constraints, validation regexes |
 | **firebase.json** | Hosting config | ~40 | CSP headers, HSTS, X-Frame-Options, caching policy, database rules path |
@@ -208,7 +208,6 @@ Room's total never drops below zero. All rooms' points sum into their cohort's s
 - **Firebase Realtime Database:** Multi-user state, persistence, real-time sync
 - **Firebase Authentication:** Anonymous + Google signin
 - **Firebase App Check:** reCAPTCHA v3 attestation (free tier)
-- **Firebase Performance Monitoring:** Optional—collects page-load metrics (disabled by default)
 - **Google reCAPTCHA v3:** Bot detection (free, 10k/month, no billing required)
 - **Google Sign-In SDK:** OAuth 2.0 provider for optional profile signin
 

@@ -1,0 +1,85 @@
+# Daily snapshot of /sessions from the live Realtime Database → PRIVATE GCS.
+#
+# This is the PUBLIC-REPO variant of the backup job. The original
+# private-repo workflow uploaded the snapshot as a GitHub Actions artifact;
+# that is unsafe here because public-repo artifacts are downloadable by
+# anyone with read access (everyone), and the snapshot contains identified
+# PII (the full /sessions tree). Instead this job writes the snapshot to a
+# PRIVATE GCS bucket — the job log carries no PII, and the PII lands where
+# only the service account and project admins can read it.
+#
+# ───────────────────────────────────────────────────────────────────────
+# LIVE since 2026-05-30. The one-time bucket setup below was completed
+# (private gs://canamed-pii-archive in europe-west1, SA objectAdmin grant,
+# lifecycle rules) and the daily `schedule:` is enabled. The setup steps
+# are kept here for disaster-recovery / re-provisioning reference.
+#
+# One-time setup (a human with GCP project access) — DONE 2026-05-30:
+#   1. Create a PRIVATE bucket in the EU (data residency = the RTDB's
+#      europe-west1), uniform bucket-level access, no public IAM:
+#        gcloud storage buckets create gs://canamed-pii-archive \
+#          --project=canamed-69785 --location=europe-west1 \
+#          --uniform-bucket-level-access --public-access-prevention
+#   2. Grant the deploy service account object admin on JUST this bucket
+#      (SA email is in the FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 secret,
+#      field client_email — typically
+#      firebase-adminsdk-xxxxx@canamed-69785.iam.gserviceaccount.com):
+#        gcloud storage buckets add-iam-policy-binding gs://canamed-pii-archive \
+#          --member=serviceAccount:<that-email> --role=roles/storage.objectAdmin
+#   3. Add lifecycle rules so archives auto-delete on the retention policy
+#      (backups/ + pseudonymised/ = 90d, linkage/ = 14d). Example
+#      lifecycle.json + apply:
+#        gcloud storage buckets update gs://canamed-pii-archive \
+#          --lifecycle-file=lifecycle.json
+#   4. Point the workflows at the bucket via a repo VARIABLE (not a secret;
+#      a bucket name is not sensitive):
+#        gh variable set PII_ARCHIVE_BUCKET --body "canamed-pii-archive"
+#   5. Manually dispatch this workflow + pseudonymise-export once; confirm
+#      green and that the objects appear in the bucket.
+#   6. Uncomment the `schedule:` block below and push.
+# ───────────────────────────────────────────────────────────────────────
+
+name: Backup sessions
+
+on:
+  schedule:
+    - cron: "47 2 * * *"   # daily 02:47 UTC — 30 min before cleanup (03:17)
+  workflow_dispatch:
+
+concurrency:
+  group: backup-sessions
+  cancel-in-progress: false  # never kill an in-flight backup
+
+jobs:
+  backup:
+    name: Snapshot /sessions to a private GCS bucket
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 20
+
+      - name: Install firebase-admin (one-shot, not added to package.json)
+        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+
+      - name: Write service-account credentials to a temp file
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Backup /sessions to private GCS (no artifact upload)
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+          BACKUP_GCS_BUCKET: ${{ vars.PII_ARCHIVE_BUCKET }}
+          BACKUP_GCS_PREFIX: backups
+          # PUBLIC repo: fail loudly if the bucket isn't configured, so a
+          # missing PII_ARCHIVE_BUCKET never becomes a backup that vanishes
+          # with the runner.
+          BACKUP_REQUIRE_GCS: "1"
+        run: node scripts/backup-sessions.js

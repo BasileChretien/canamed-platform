@@ -43,7 +43,6 @@ async function useEmulator(page) {
       host: cfg.host, dbPort: cfg.dbPort, authPort: cfg.authPort
     });
     pin("CANAMED_RECAPTCHA_SITE_KEY", null);   // App Check OFF
-    pin("CANAMED_PERF_MONITORING", false);
     window.CANAMED_SUPERADMIN_KEY = "e2e-emulator-super-admin";
     try {
       // Suppress tours so overlays don't cover the controls under test.

@@ -19,6 +19,11 @@
  *   appId: "1:...:web:..."
  * };
  */
+// NB: these values are inherently PUBLIC (they ship in the served HTML) — they
+// are identifiers, not secrets. The apiKey is locked down by HTTP-referrer + API
+// restrictions in the GCP Console (done 2026-05-23; see CLAUDE.md). KEY ROTATION:
+// if the browser key is ever rotated, update `apiKey` here AND redeploy hosting,
+// otherwise the app silently fails to initialise Firebase for all users.
 window.CANAMED_FIREBASE = {
   apiKey: "AIzaSyB_7d4rCWsVSUAaL17Jcjy3v2s_n5uJVUg",
   authDomain: "canamed-69785.web.app",
@@ -66,23 +71,4 @@ window.CANAMED_SUPERADMIN_KEY = null;
  * Set to null to disable — the platform still works, just without this
  * layer. See README.md → "Enabling App Check" for the full step-by-step.
  */
-window.CANAMED_RECAPTCHA_SITE_KEY = null;
-
-/* PERFORMANCE MONITORING (optional, recommended for research deployments).
- *
- * Firebase Performance Monitoring auto-collects real-user timings — page
- * load, first contentful paint, time-to-first-byte, and every network
- * request. Useful research-side: "did Nagoya students experience the
- * platform as laggier than Caen students?" answers are visible in the
- * Firebase Console → Performance dashboard within ~24 h of the next
- * session.
- *
- * Privacy note: Performance Monitoring collects timing data, not content.
- * No participant text / consent / IDs are sent. Aggregate data only.
- * Still — disclose this in privacy.html if you turn it on, alongside the
- * other Firebase services. The privacy doc references this already.
- *
- * Set to true to enable. Default false so the SDK script is loaded but
- * inert; you can flip this without redeploying the SDK script tag.
- */
-window.CANAMED_PERF_MONITORING = true;
+window.CANAMED_RECAPTCHA_SITE_KEY = "6Lemg-wsAAAAAKIkv6KorbZu0iUz_q3e36wrlFiQ";

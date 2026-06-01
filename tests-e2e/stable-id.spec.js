@@ -70,7 +70,6 @@ test.describe("R2-24/25: stableId persistence across tab refresh", () => {
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
     });
     await p1.goto("/");
     await waitForStableId(p1);
@@ -87,7 +86,6 @@ test.describe("R2-24/25: stableId persistence across tab refresh", () => {
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
     });
     await p2.goto("/");
     await waitForStableId(p2);

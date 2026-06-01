@@ -22,8 +22,9 @@ const COMPLIANCE = fs.readFileSync(path.join(P, "compliance.html"), "utf8");
 
 test("the Cloud Function parses, triggers on the mail queue, fails closed, is idempotent", () => {
   assert.doesNotThrow(() => new Function(FN), "functions/index.js must parse");
-  assert.match(FN, /functions\.database[\s\S]*\.ref\("\/sessions\/\{code\}\/mail\/\{id\}"\)[\s\S]*\.onCreate/,
-    "must trigger onCreate of the session mail queue");
+  // Gen 2 trigger: onValueCreated({ref: "/sessions/.../mail/{id}", ...})
+  assert.match(FN, /onValueCreated[\s\S]*ref:\s*"\/sessions\/\{code\}\/mail\/\{id\}"/,
+    "must trigger onValueCreated of the session mail queue");
   assert.match(FN, /if \(!job\.to \|\| !job\.subject \|\| job\.delivery\) return null/,
     "must be idempotent (skip already-delivered / malformed jobs)");
   assert.match(FN, /SMTP not configured/, "must fail closed when SMTP is unconfigured");
@@ -32,17 +33,20 @@ test("the Cloud Function parses, triggers on the mail queue, fails closed, is id
 
 test("email is DISABLED by default — gated on explicit institutional approval", () => {
   assert.match(FN, /function emailEnabled\(\)/, "must have an approval gate");
-  assert.match(FN, /email\.enabled|EMAIL_ENABLED/, "gate reads an explicit enable flag");
+  // Gen 2 param: defineBoolean("EMAIL_ENABLED", { default: false })
+  assert.match(FN, /defineBoolean\("EMAIL_ENABLED"/, "gate reads the EMAIL_ENABLED param");
+  assert.match(FN, /EMAIL_ENABLED\.value\(\)\s*===\s*true/,
+    "gate requires the param to be strictly true");
   // The gate is checked BEFORE building the transport / sending.
-  const onCreate = FN.slice(FN.indexOf(".onCreate"));
+  const onCreate = FN.slice(FN.indexOf("onValueCreated"));
   assert.match(onCreate, /if \(!emailEnabled\(\)\)[\s\S]{0,200}return null/,
     "must short-circuit (no send) when not enabled");
   assert.match(onCreate, /"disabled"/, "must record a 'disabled' state when gated");
-  // Default off: enabling requires the literal string "true".
-  assert.match(FN, /=== "true"/, "must require an explicit opt-in value to enable");
   assert.match(README, /pending institutional approval|university president/i,
     "README must document the approval gate");
-  assert.match(README, /email\.enabled="true"/, "README must document the enable step");
+  // Operator step now: edit functions/.env with EMAIL_ENABLED=true (Gen 2 params API)
+  assert.match(README, /EMAIL_ENABLED=true|email\.enabled="true"/,
+    "README must document the enable step");
 });
 
 test("the compliance statement does NOT advertise email as active", () => {
@@ -51,7 +55,12 @@ test("the compliance statement does NOT advertise email as active", () => {
 });
 
 test("SMTP credentials are read from config/env — never hardcoded", () => {
-  assert.match(FN, /functions\.config\(\)\.smtp|process\.env\.SMTP_/, "must read SMTP from config/env");
+  // Gen 2: SMTP_HOST/USER/PORT/FROM via defineString, SMTP_PASS via
+  // defineSecret (Google Secret Manager). NO hardcoded credentials.
+  assert.match(FN, /defineString\("SMTP_HOST"\)|defineSecret\("SMTP_PASS"\)/,
+    "must read SMTP from the params API");
+  assert.match(FN, /defineSecret\("SMTP_PASS"\)/,
+    "SMTP password must be a defineSecret (Google Secret Manager), not a defineString");
   // No obvious hardcoded secret: no inline password/api-key string assignments.
   assert.doesNotMatch(FN, /pass\s*[:=]\s*["'][A-Za-z0-9._\-]{12,}["']/, "must not hardcode a password");
   assert.doesNotMatch(FN, /api[_-]?key\s*[:=]\s*["'][A-Za-z0-9._\-]{12,}["']/i, "must not hardcode an API key");
@@ -80,7 +89,10 @@ test("the enqueue helper is exposed and writes the admin-gated queue", () => {
 
 test("the operator setup (billing, secret, DNS) is documented", () => {
   assert.match(README, /Blaze/, "must document the billing step");
-  assert.match(README, /functions:config:set/, "must document setting the SMTP secret");
+  // Gen 2 secrets flow: `firebase functions:secrets:set HF_TOKEN` (or SMTP_PASS).
+  // The deprecated functions:config:set is no longer the recommended path.
+  assert.match(README, /functions:secrets:set|\.env file/,
+    "must document setting credentials via the params API (.env / Secret Manager)");
   assert.match(README, /SPF\/DKIM|DKIM/, "must document sender-domain verification");
   assert.match(README, /never commit|not.*in the repo|never.*hardcode/i, "must warn the secret stays out of the repo");
 });

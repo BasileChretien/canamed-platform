@@ -175,7 +175,49 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     leaving runway for in-flight feature work. The byte tally is
 //     deterministic (same source -> same gzip), so this cap behaves identically
 //     on CI and locally.
-const FIRST_PARTY_BYTES_LIMIT_KB = 280;
+//   - 285 KB after the public certificate-verification feature (PIS v2 §18 +
+//     /credentials + verify.html). NET +2 KB gz on the splash bundle: ~+1 KB
+//     in i18n.js (the new lobby.consent-verification paragraph + 14 verify.*
+//     UI keys in EN — the FR/JA copies live in the lazy locales and don't
+//     touch the splash), ~+1 KB in pure-utils.js (randomCredentialId +
+//     normalizeName + credentialNameHash for the public verify flow), and
+//     ~+0.3 KB in script.js (the credential write-once flow in
+//     downloadCertificatePdf, gated on the new third consent tickbox).
+//     verify.html itself is a separate entry — not on the splash critical
+//     path, not counted here.
+//
+//   2026-05-28: Module A LLM-patient pilot — bumped to 320. NET +20 KB gz:
+//     four new eager scripts on the splash bundle (modA-question-scoring.js
+//     ~2 KB, modA-llm-prompts.js ~3 KB, modA-llm-bridge.js ~4 KB,
+//     modA-llm-init.js ~3 KB), plus the new SCORING.moduleA_questions +
+//     moduleA_question_penalties blocks in case-content.js with EN/FR/JA
+//     keyword stems (~3 KB), plus the modA.chat.* i18n keys (~3 KB), plus
+//     the chat panel CSS in style.css (~2 KB). Justification: the LLM
+//     pilot is a deliberately-eager feature — it MUST be loaded by the
+//     time startRoom() runs (mid-flow, not on idle prefetch) or the chat
+//     panel can't mount when the student lands in Module A. Lazy-loading
+//     via script-loader.js IS the right long-term move (the four files
+//     are NOT splash-critical — they're idle until a user is actively in
+//     a room with the ?llm=1 flag on); tracked as follow-up work post-
+//     pilot. For now the +20 KB buys "feature loads in time, no race
+//     conditions, no extra ensure*() complexity in the join chain."
+//
+//   2026-06-01: UX information-overload Phase-1 batch — bumped to 325.
+//     NET +2.3 KB gz, all in the eager script.js + style.css (case-content.js
+//     grew too — the segmented-synthesis `aParts` — but it's a LAZY chunk and
+//     off this budget; i18n.js untouched). The payload buys: the global
+//     "you are here" session stepper (renderStage segments + CSS pill row),
+//     the segmented clinical-synthesis renderer (labelled micro-sections in
+//     the inline-reveal), the Stage-1 progress de-dup + focal-heading CSS,
+//     the demoted-callout CSS, and the reduced-motion scroll guards. The
+//     baseline was sitting right at the 320 ceiling, so this is a genuine
+//     small regression for real student-facing UX wins (PR #134). The
+//     designated reclaim remains the 4 eager modA-llm-*.js files (~24 KB gz,
+//     NOT splash-critical — gated behind ?llm=1, idle until a user is in a
+//     room): lazy-splitting them via script-loader.js (the #48 precedent)
+//     returns far more than this and is the move the next time the budget
+//     is threatened, rather than another bump.
+const FIRST_PARTY_BYTES_LIMIT_KB = 325;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -254,13 +296,7 @@ test.describe("Perf budget — splash", () => {
     // Sum first-party bytes only. Anything served from gstatic / google.com /
     // recaptcha is the SDK CDN and excluded from our app-bytes budget.
     const isThirdParty = (u) =>
-      /^https?:\/\/(www\.)?(gstatic|google|recaptcha|googletagmanager)\.com\//.test(u) ||
-      // Firebase Performance SDK: vendored first-party (fb-timings.min.js) to
-      // dodge tracker blocklists, but it's the same third-party Firebase SDK
-      // that used to load from gstatic — keep it out of the OUR-code budget
-      // (it's optional telemetry, gated off in tests, not needed for splash
-      // interactivity). Still surfaced under third_party_kb_gz diagnostics.
-      /\/fb-timings\.min\.js(\?|$)/.test(u);
+      /^https?:\/\/(www\.)?(gstatic|google|recaptcha|googletagmanager)\.com\//.test(u);
     // Lazy-loaded chunks fetched by script-loader.js's idle prefetch are
     // NOT critical-path: the splash is interactive without them. They are
     // captured in the test's response stream because Chrome's idle window

@@ -293,22 +293,7 @@ Re-enable when ready.
 
 ---
 
-## 7. Performance Monitoring
-
-Off by default. Turn it on for the live workshop you want to measure:
-
-1. Edit `firebase-config.js` → `window.CANAMED_PERF_MONITORING = true`.
-2. Push to main; the workflow redeploys hosting.
-3. Wait ≥24 h after the next live session for data to populate.
-4. **Firebase Console → Performance** → "first_contentful_paint",
-   "page_load", or per-network-request traces. Aggregate-only;
-   timing-only; no participant data.
-
-To turn it back off: set the flag back to `false` and redeploy.
-
----
-
-## 8. Inherited a live deployment
+## 7. Inherited a live deployment
 
 If someone just handed you the keys:
 

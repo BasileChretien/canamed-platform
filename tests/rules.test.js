@@ -820,7 +820,9 @@ test("rules: /sessions _superadminReset.write requires the recovery code to matc
 test("rules: /sessions _superadminReset.validate requires a code field (8..60)", () => {
   const v = rules.rules.sessions["$sessionId"]._superadminReset[".validate"];
   assert.ok(v.includes("'code'"), "_superadminReset validate must require a `code` field: " + v);
-  assert.ok(v.includes("hasChildren(['requestedAt','by','code'])"),
+  assert.ok(v.includes("child('uid').isString()"),
+    "_superadminReset validate must require a `uid` field (R3 recovery-race fix): " + v);
+  assert.ok(v.includes("hasChildren(['requestedAt','by','code','uid'])"),
     "_superadminReset validate must require {requestedAt, by, code}: " + v);
   assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/,
     "_superadminReset code must be >= 8 chars: " + v);
@@ -839,7 +841,9 @@ test("rules: /orgs _superadminReset.write requires the org-scoped recovery code 
 test("rules: /orgs _superadminReset.validate requires a code field (8..60)", () => {
   const v = rules.rules.orgs["$orgSlug"].sessions["$sessionId"]._superadminReset[".validate"];
   assert.ok(v.includes("'code'"), "/orgs _superadminReset validate must require a `code` field: " + v);
-  assert.ok(v.includes("hasChildren(['requestedAt','by','code'])"),
+  assert.ok(v.includes("child('uid').isString()"),
+    "_superadminReset validate must require a `uid` field (R3 recovery-race fix): " + v);
+  assert.ok(v.includes("hasChildren(['requestedAt','by','code','uid'])"),
     "/orgs _superadminReset validate must require {requestedAt, by, code}: " + v);
   assert.match(v, /child\('code'\)\.val\(\)\.length >= 8/);
   assert.match(v, /child\('code'\)\.val\(\)\.length <= 60/);
@@ -937,4 +941,91 @@ test("rules: /orgs /rooms/$roomId/answersDeleted mirrors append-only + org-scope
   assert.ok(w.includes("!data.exists()"), "org answersDeleted must be append-only: " + w);
   assert.ok(w.includes("root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed')"),
     "org answersDeleted closed-guard must reference the org-scoped session: " + w);
+});
+
+// =============================================================
+// Authored scenarios (2026-05-29) — facilitators store scenarios
+// they have created in their own /scenarios/$uid subtree, with an
+// opt-in /sharedScenarios mirror that other facilitators can read.
+// =============================================================
+
+test("rules: /scenarios/$ownerUid is read+write gated by auth.uid == $ownerUid", () => {
+  const node = rules.rules.scenarios && rules.rules.scenarios["$ownerUid"];
+  assert.ok(node, "/scenarios/$ownerUid must be declared");
+  assert.match(node[".read"], /auth\s*!=\s*null/,
+    "scenarios read must require an authenticated user");
+  assert.match(node[".read"], /auth\.uid\s*==\s*\$ownerUid/,
+    "scenarios read must be bound to the owner");
+  assert.match(node[".write"], /auth\s*!=\s*null/,
+    "scenarios write must require auth");
+  assert.match(node[".write"], /auth\.uid\s*==\s*\$ownerUid/,
+    "scenarios write must be bound to the owner");
+});
+
+test("rules: /scenarios/$ownerUid/$scenarioId enforces shape + size cap", () => {
+  const sc = rules.rules.scenarios.$ownerUid.$scenarioId;
+  assert.ok(sc, "/scenarios/$ownerUid/$scenarioId must be declared");
+  assert.match(sc[".validate"], /\$scenarioId\.matches\(\/\^\[a-z0-9_-\]\{1,60\}\$\/\)/,
+    "scenario id must be 1-60 lowercase alphanumerics, _ or -");
+  const meta = sc.meta;
+  assert.ok(meta && meta[".validate"], "scenarios/$id/meta must validate");
+  assert.match(meta[".validate"], /newData\.child\('id'\)\.val\(\) == \$scenarioId/,
+    "meta.id must match the path key so list views can index reliably");
+  assert.match(meta[".validate"], /newData\.child\('name'\)\.val\(\)\.length <= 200/,
+    "meta.name must be capped at 200 chars");
+  const body = sc.bodyJson;
+  assert.ok(body && body[".validate"], "scenarios/$id/bodyJson must validate");
+  assert.match(body[".validate"], /newData\.isString\(\)/,
+    "bodyJson is stored as a single JSON string blob");
+  assert.match(body[".validate"], /\.length <= 262144/,
+    "bodyJson must be capped at 256 KB");
+});
+
+test("rules: /sharedScenarios is readable by any signed-in user", () => {
+  const node = rules.rules.sharedScenarios;
+  assert.ok(node, "/sharedScenarios must be declared");
+  assert.match(node[".read"], /auth\s*!=\s*null/,
+    "shared scenarios are visible to authenticated users (including anon participants browsing the picker)");
+});
+
+test("rules: /sharedScenarios/$shareId restricts writes to the owner", () => {
+  const node = rules.rules.sharedScenarios.$shareId;
+  assert.ok(node, "/sharedScenarios/$shareId must be declared");
+  const w = node[".write"];
+  assert.match(w, /auth\s*!=\s*null/, "shared scenario writes require auth");
+  // On create: writer's uid must match newData.ownerUid; on update / delete:
+  // existing record's ownerUid must match writer's uid. Both conditions
+  // appear in the rule.
+  assert.match(w, /newData\.child\('ownerUid'\)\.val\(\) == auth\.uid/,
+    "shared scenario create must record the writer as the owner");
+  assert.match(w, /data\.child\('ownerUid'\)\.val\(\) == auth\.uid/,
+    "shared scenario update/delete must require existing-owner == writer");
+});
+
+test("rules: /sharedScenarios/$shareId validates shape, ownership immutability, and 256KB cap", () => {
+  const v = rules.rules.sharedScenarios.$shareId[".validate"];
+  assert.ok(v, "/sharedScenarios/$shareId must declare .validate");
+  assert.match(v, /newData\.hasChildren\(\['ownerUid','scenarioId','meta','bodyJson'\]\)/,
+    "shared scenario payload must include ownerUid/scenarioId/meta/bodyJson");
+  assert.match(v, /newData\.child\('ownerUid'\)\.val\(\) == data\.child\('ownerUid'\)\.val\(\)/,
+    "ownerUid must not change between writes (no ownership transfer)");
+  assert.match(v, /newData\.child\('bodyJson'\)\.val\(\)\.length <= 262144/,
+    "shared bodyJson must be capped at 256 KB just like the private copy");
+});
+
+test("rules: session scenarioRef is write-once and validates {ownerUid, scenarioId, source}", () => {
+  const node = rules.rules.sessions.$sessionId.scenarioRef;
+  assert.ok(node, "/sessions/$sessionId/scenarioRef must be declared");
+  assert.ok(node[".write"].includes("!data.exists()"),
+    "scenarioRef must be write-once (baked at session create): " + node[".write"]);
+  const v = node[".validate"];
+  assert.match(v, /newData\.hasChildren\(\['ownerUid','scenarioId','source'\]\)/,
+    "scenarioRef must carry ownerUid + scenarioId + source");
+  assert.match(v, /newData\.child\('source'\)\.val\(\) == 'private'/,
+    "scenarioRef.source must allow 'private'");
+  assert.match(v, /newData\.child\('source'\)\.val\(\) == 'shared'/,
+    "scenarioRef.source must allow 'shared'");
+  // org-scoped mirror must exist too
+  const orgNode = rules.rules.orgs.$orgSlug.sessions.$sessionId.scenarioRef;
+  assert.ok(orgNode, "/orgs/$orgSlug/sessions/$sessionId/scenarioRef must mirror the legacy path");
 });

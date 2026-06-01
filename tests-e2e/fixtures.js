@@ -13,9 +13,9 @@
  *   `window.CANAMED_FIREBASE = null` therefore gets overwritten the moment
  *   firebase-config.js loads ("window.CANAMED_FIREBASE = {...real config}").
  *   We define a property with a setter that ignores assignments, so the
- *   real config never lands. Same trick for CANAMED_RECAPTCHA_SITE_KEY and
- *   CANAMED_PERF_MONITORING so App Check and Perf Monitoring stay off in
- *   tests regardless of what firebase-config.js contains.
+ *   real config never lands. Same trick for CANAMED_RECAPTCHA_SITE_KEY so
+ *   App Check stays off in tests regardless of what firebase-config.js
+ *   contains.
  */
 
 // @ts-check
@@ -35,7 +35,6 @@ async function forceLocalMode(page) {
     }
     pin("CANAMED_FIREBASE", null);                  // → MODE = "local"
     pin("CANAMED_RECAPTCHA_SITE_KEY", null);        // → App Check OFF
-    pin("CANAMED_PERF_MONITORING", false);          // → Perf Monitoring OFF
     // Suppress onboarding tour during E2E — the overlay covers the
     // create-session form and would block any test that needs to click
     // a control there. Setting the "done" flag mimics a user who has

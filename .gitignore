@@ -40,6 +40,16 @@ docs/Third_session/PBL_platform/firebase.emulator.json
 service-account*.json
 recaptcha-*.txt
 
+# Firebase functions params API (2026+). `.env` and `.env.<projectId>` are
+# the OPERATOR's per-environment overrides for defineString/defineBoolean
+# parameters in functions/index.js. They contain non-secret values like
+# `MODA_LLM_ENABLED=true` but should NEVER be committed — they differ per
+# project (dev/staging/prod) and per operator. Real secrets (HF_TOKEN)
+# live in Google Secret Manager and never touch the filesystem.
+docs/Third_session/PBL_platform/functions/.env
+docs/Third_session/PBL_platform/functions/.env.*
+!docs/Third_session/PBL_platform/functions/.env.example
+
 # OS junk
 .DS_Store
 Thumbs.db

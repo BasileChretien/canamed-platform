@@ -12,7 +12,7 @@
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self';
                  script-src 'self' https://www.gstatic.com https://apis.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
-                 connect-src 'self' https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://accounts.google.com https://content-firebaseappcheck.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
+                 connect-src 'self' https://www.gstatic.com https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://*.googleapis.com https://*.cloudfunctions.net https://*.run.app https://accounts.google.com https://content-firebaseappcheck.googleapis.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
                  frame-src 'self' https://canamed-69785.firebaseapp.com https://accounts.google.com https://www.google.com/recaptcha/ https://www.recaptcha.net/recaptcha/;
                  style-src 'self';
                  img-src 'self' data: https://www.googleusercontent.com https://lh3.googleusercontent.com;
@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v27" below to the matching new string.
+         2. Update every "?v=v36" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v27"></script>
-  <link rel="stylesheet" href="style.css?v=v27" />
+  <script src="theme-init.js?v=v36"></script>
+  <link rel="stylesheet" href="style.css?v=v36" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v27" defer></script>
+  <script src="sw-register.js?v=v36" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -234,8 +234,15 @@
           <br />
           <button type="button" class="splash-link" id="splash-go-account"
                   data-i18n="splash.enter.go-account">
-            Sign in with Google to save your profile &amp; history &rarr;
+            Sign in with Google or email to save your profile &amp; history &rarr;
           </button>
+        </p>
+        <p class="splash-foot splash-author-foot" id="splash-author-row" hidden>
+          <a href="scenario-author.html" target="_blank" rel="noopener"
+             class="splash-link" id="splash-go-author"
+             data-i18n="splash.enter.go-author">
+            Author or edit your own scenarios &rarr;
+          </a>
         </p>
       </div>
 
@@ -284,6 +291,60 @@
             <span data-i18n="splash.account.continue-google">Continue with Google</span>
           </button>
         </div>
+        <p class="splash-or" data-i18n="splash.account.or"
+           aria-hidden="true">— or use email —</p>
+        <form id="splash-email-form" class="splash-email-form" autocomplete="on"
+              data-mode="signin" novalidate>
+          <div class="splash-email-mode" role="tablist"
+               aria-label="Email sign-in or create account">
+            <button type="button" role="tab" aria-selected="true"
+                    id="splash-email-mode-signin"
+                    class="splash-email-mode-btn is-active"
+                    data-i18n="splash.account.mode-signin">I already have an account</button>
+            <button type="button" role="tab" aria-selected="false"
+                    id="splash-email-mode-signup"
+                    class="splash-email-mode-btn"
+                    data-i18n="splash.account.mode-signup">Create a new account</button>
+          </div>
+          <div class="splash-field">
+            <label for="splash-email-input"
+                   data-i18n="splash.account.email-label">Email</label>
+            <input type="email" id="splash-email-input" maxlength="120"
+                   autocomplete="email" inputmode="email"
+                   required aria-required="true" />
+          </div>
+          <div class="splash-field">
+            <label for="splash-password-input"
+                   data-i18n="splash.account.password-label">Password</label>
+            <input type="password" id="splash-password-input" maxlength="120"
+                   autocomplete="current-password" minlength="6"
+                   required aria-required="true" />
+          </div>
+          <!-- Confirm-password + strength meter only matter for sign-up.
+               Hidden when the form is in sign-in mode so returning users
+               see exactly one password field. -->
+          <div class="splash-field splash-signup-only" hidden>
+            <label for="splash-password-confirm"
+                   data-i18n="splash.account.password-confirm-label">Confirm password</label>
+            <input type="password" id="splash-password-confirm" maxlength="120"
+                   autocomplete="new-password" minlength="8" />
+          </div>
+          <div class="splash-pwd-strength splash-signup-only" hidden
+               aria-live="polite">
+            <div class="splash-pwd-strength-bar">
+              <span id="splash-pwd-strength-fill"></span>
+            </div>
+            <p class="splash-pwd-strength-label"
+               id="splash-pwd-strength-label"
+               data-i18n="splash.account.pwd-strength-empty">Strength: —</p>
+            <p class="splash-pwd-strength-hint"
+               data-i18n="splash.account.pwd-strength-hint">Use at least 8 characters with a mix of upper- and lower-case letters, digits, and symbols.</p>
+          </div>
+          <div class="splash-row splash-email-actions">
+            <button type="submit" id="splash-email-submit"
+                    data-i18n="splash.account.signin-email">Sign in</button>
+          </div>
+        </form>
         <p class="splash-hint" id="splash-account-hint" role="status"
            aria-live="polite"></p>
         <div class="splash-row">
@@ -749,7 +810,16 @@
           university grade. If you disagree with a point or a penalty,
           tell your facilitator; scoring is reviewable.</p>
       </div>
-      <details class="privacy-note" open>
+      <!-- UX-overload fix (2026-06-01): CLOSED by default. This 6-paragraph
+           GDPR/APPI notice (plus the certificate-verification note now moved
+           inside it) was the single biggest block on the join screen — an
+           open-by-default wall the student had to scroll past before the join
+           action. It is one click away via the summary, and the consent
+           checkboxes below — which reference it ("I have read the data-use
+           notice above") — stay visible on first paint. Collapsing it (rather
+           than hiding the consent control) keeps the lazy-locale-consent
+           "consent renders on first paint" contract intact. -->
+      <details class="privacy-note">
         <summary data-i18n="lobby.privacy.summary">How your data is used (please read before joining)</summary>
         <p data-i18n-html="lobby.privacy.p1">The CaNaMED research team
           (<strong>Université de Caen Normandie &times; Nagoya University</strong>,
@@ -788,6 +858,13 @@
           bases, the joint-use items, the international-transfer safeguards,
           retention periods, your rights with response times, and the
           ethics-committee approvals. Please read it once before joining.</p>
+        <!-- Certificate-verification note (UX-overload fix 2026-06-01): moved
+             here from the consent block, where its ~90 words sat on the
+             critical path to the Join button. It is a data-processing detail,
+             so it belongs inside "How your data is used". Same i18n key. -->
+        <p data-i18n="lobby.consent-verification">
+          Your certificate of attendance is independently verifiable. A verification ID and QR code printed on it link &mdash; in a separate registry &mdash; to a one-way hash of your name and session, so that anyone you give BOTH the ID AND the name to can confirm, on a public CaNaMED page, that they match a genuine CaNaMED certificate. Your name is never published &mdash; the page only answers &ldquo;valid&rdquo; or &ldquo;no match&rdquo;. The registry stores only the hash, for up to 5 years, and you can ask for your entry to be removed at any time (see section 18 of the privacy policy).
+        </p>
       </details>
 
       <div class="lobby-section">
@@ -856,7 +933,7 @@
             </span>
           </label>
           <p class="lobby-hint consent-version" id="consent-version">
-            <span data-i18n="lobby.consent-version">Notice version PIS v1 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
+            <span data-i18n="lobby.consent-version">Notice version PIS v2 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
           </p>
         </div>
 
@@ -1023,6 +1100,19 @@
             <button id="leave-btn" title="Leave">Leave</button>
           </div>
         </div>
+        <!-- Global "you are here" stepper (UX-overload fix 2026-06-01). The
+             only VISUAL numbered stepper used to be Module A's LOCAL phase
+             stepper, so students mistook module sub-progress for their
+             position in the whole session and got disoriented when the
+             facilitator advanced. This compact 4-segment bar shows the
+             session arc (Welcome → Module A → Module B → Wrap-up);
+             renderStage() fills it and marks the viewed stage (is-current)
+             and, when the student has pressed Back to re-read, the room's
+             live stage (is-live). Segment names come from stageLabel() via
+             aria-label + the current segment's visible name — no new
+             per-segment i18n keys. -->
+        <ol id="global-stage-progress" class="global-stage-progress"
+            aria-label="Session progress"></ol>
         <p id="stage-now" aria-live="polite"></p>
         <p id="stage-wait" class="stage-wait" aria-live="polite"></p>
         <div class="presence-line">
@@ -1051,7 +1141,14 @@
            its target #objectives element is gone. The score-chip in
            the stage header continues to announce the user's team
            score politely. -->
-      <details id="leaderboard-card" class="card leaderboard-card" open>
+      <!-- UX-overload fix (2026-06-01): the leaderboard is engagement chrome,
+           not the task. It is now CLOSED by default (no `open` attribute) so an
+           empty/zeroed board doesn't dominate Welcome and a re-rendering
+           competitive widget doesn't sit at the top of the Module A/B work
+           scroll. renderStage() auto-opens it only at Wrap-up, where cohort
+           progress is the point; students can still expand it any time, and the
+           persistent score-chip covers the at-a-glance need. -->
+      <details id="leaderboard-card" class="card leaderboard-card">
         <summary><strong>&#127919; Live leaderboard</strong>
           <span class="lb-hint">all rooms add to a shared cohort goal &mdash;
             every contribution counts</span></summary>
@@ -1455,6 +1552,7 @@
                  tab; #contrib-tally relocated to the chart header. -->
             <div class="rcol-tabs" role="tablist" aria-label="Module A panels">
               <button class="rcol-tab is-active" type="button" data-tab="decisions"
+                      id="rcol-tab-decisions"
                       role="tab" aria-selected="true" aria-controls="rcol-p-decisions">
                 <span class="rcol-tab-icon" aria-hidden="true">🗳️</span>
                 <span class="rcol-tab-label" data-i18n="rcol.tab.decisions">Decide together</span>
@@ -1470,6 +1568,7 @@
                 <span class="rcol-tab-badge" id="tab-badge-discussion" hidden></span>
               </button>
               <button class="rcol-tab" type="button" data-tab="answers"
+                      id="rcol-tab-answers"
                       role="tab" aria-selected="false" aria-controls="rcol-p-answers">
                 <span class="rcol-tab-icon" aria-hidden="true">📝</span>
                 <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
@@ -1483,7 +1582,8 @@
             </div><!-- /decisions panel -->
 
             <div class="rcol-panel" id="rcol-p-discussion" hidden
-                 role="tabpanel" data-panel="discussion">
+                 role="tabpanel" data-panel="discussion"
+                 aria-labelledby="rcol-tab-discussion">
             <!-- Auto-injected by updateModANextStep() when the platform
                  switches to this panel because the synthesis was just
                  revealed. Hidden by default; .auto-fade triggers
@@ -1590,7 +1690,8 @@
 
 
             <div class="rcol-panel" id="rcol-p-answers" hidden
-                 role="tabpanel" data-panel="answers">
+                 role="tabpanel" data-panel="answers"
+                 aria-labelledby="rcol-tab-answers">
             <!-- Natural-flow refactor: the form now drives the four
                  bullets students need to write, instead of asking them
                  to remember a list from an instructions block. Each
@@ -2909,14 +3010,14 @@
        https://firebase.google.com/support/release-notes/js
        integrity hashes are sha384 of these exact files; if you bump the version
        you must recompute them (or the page will refuse to load the SDK). -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"
-          integrity="sha384-mLD+wdwynYnAhgHAkdPP5hroWJXJTNy5C2OhPKM55zuiV2vjzFD1LtBohaHq2Ex8"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js"
+          integrity="sha384-lZdXyTmqFF084YMao84xKUEMETtezLQrISPWM2frjaZ2soaIyVPMRed2f1aItR+d"
           crossorigin="anonymous"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-database-compat.js"
-          integrity="sha384-fXPb0uemoXlFCqQMtM0MOAv7FM0LsMegbR6x22q7lfnohaCNmTQzgA8BTrR8WqGx"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js"
+          integrity="sha384-pu7BGxa50f7nbHNKziqkWBwKW6FlXRwc4r9AWKj9eXdv4amdRLshYSmnoNFELtJz"
           crossorigin="anonymous"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"
-          integrity="sha384-NiuRnBs5Z0OgJ12kYJLSeWxANeJN369zH3+Zn0TGVPaCH/TKmbPFqfOmmLtrj+wg"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-auth-compat.js"
+          integrity="sha384-WZRQ9uBbnZ9oCZd85Hbt663LqMA0DvZcdE9PGjybnqECAHSH0m3vPW1geN/tw7NI"
           crossorigin="anonymous"></script>
   <!-- Firebase App Check — verifies every DB request actually comes from a
        legitimate browser load of THIS site (not a script with stolen auth
@@ -2924,67 +3025,63 @@
        is set in firebase-config.js. When App Check is enforced in the
        Firebase Console with this site key registered, anonymous-auth abuse
        is no longer possible. See README.md → "Enabling App Check". -->
-  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-check-compat.js"
-          integrity="sha384-Ybv3lGuy/hHZj1VLzE7e+sawyrFSbMuEQaKRSfC9W4Q8MK+k/zQKNrxNVagHhXAj"
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-app-check-compat.js"
+          integrity="sha384-gu4r0mRSadHmKzjUDXzbNG8AjJHppTLmPeBrfDJjByEjEa8MlTn80mA7+rluQS33"
           crossorigin="anonymous"></script>
-  <!-- Firebase Performance Monitoring — collects real-user load times
-       (TTFB, FCP, page load, custom traces). Useful research-side:
-       "did the platform feel laggy to Nagoya students vs Caen students?"
-       Optional: only activates when window.CANAMED_PERF_MONITORING is
-       set to truthy in firebase-config.js. Auto-tracks page-load + each
-       network request; we don't add custom traces in code yet.
-       VENDORED LOCALLY (not loaded from gstatic) under a neutral filename:
-       the gstatic firebase-performance-compat.js URL is on tracker
-       blocklists, so privacy/ad blockers ERR_BLOCKED_BY_CLIENT it. Serving
-       the identical bytes first-party dodges the script-load block. (The
-       runtime trace upload still goes to *.googleapis.com and may itself be
-       blocked by aggressive extensions — that's accepted; data is partial.)
-       SRI hash is the genuine gstatic 10.12.5 file (verified by sha384). -->
-  <script src="fb-timings.min.js?v=v27"
-          integrity="sha384-itOr+DLGg//NmXkxa8it79G3P4Gpi3cqjsw8vx+DDTzJvzR2QTB3WrvbGirWm1Jq"></script>
+  <!-- Firebase Functions (compat) — only used by the Module A LLM-patient
+       pilot (`hfPatient` callable). The bridge wires up
+       `firebase.functions().httpsCallable("hfPatient")` during startRoom();
+       without this script the chat stays in stub mode (canned answers, no
+       real LLM call). Integrity hash computed against v12.13.0 on
+       2026-05-28 — if you bump the Firebase SDK version, recompute ALL
+       five compat-script hashes with `curl ... | openssl dgst -sha384
+       -binary | openssl base64 -A`. -->
+  <script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-functions-compat.js"
+          integrity="sha384-0e6ckm3xAVRuudHvqdLzPYsVoBYmqB3xnx4uw9owqugEc3FyhMYiwmB7SjWACApm"
+          crossorigin="anonymous"></script>
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v27" defer></script>
+  <script src="firebase-config.js?v=v36" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v27" defer></script>
+  <script src="orgs.js?v=v36" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v27" defer></script>
+  <script src="platform-config.js?v=v36" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v27" defer></script>
+  <script src="telemetry.js?v=v36" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v27" defer></script>
+  <script src="purify.min.js?v=v36" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v27" defer></script>
+  <script src="i18n.js?v=v36" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v27" defer></script>
+  <script src="localdb.js?v=v36" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v27" defer></script>
+  <script src="lib.js?v=v36" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v27" defer></script>
+  <script src="pure-utils.js?v=v36" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -2995,8 +3092,19 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v27" defer></script>
-  <script src="script.js?v=v27" defer></script>
+  <script src="script-loader.js?v=v36" defer></script>
+  <!-- Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
+       flag is on (URL ?llm=1 or localStorage canamedModALLM=1). The four
+       files are independent of each other except for load order:
+       modA-question-scoring relies on SCORING from case-content.js (loaded
+       lazily); the bridge and init are activated only after startRoom().
+       Kept as classic scripts (not modules) to share the global namespace
+       with script.js, same as every other file in this platform. -->
+  <script src="modA-question-scoring.js?v=v36" defer></script>
+  <script src="modA-llm-prompts.js?v=v36" defer></script>
+  <script src="modA-llm-bridge.js?v=v36" defer></script>
+  <script src="modA-llm-init.js?v=v36" defer></script>
+  <script src="script.js?v=v36" defer></script>
   <!-- case-content.js, qrcode.js, tour.js and scenario-author.js are NOT
        in the initial HTML on purpose — they're injected by
        script-loader.js on demand. See that file's header for the loading

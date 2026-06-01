@@ -1,0 +1,89 @@
+/* tests/ux-overload-quickwins.test.js
+ *
+ * Regression guards for the UX-overload "quick wins" (2026-06-01). These
+ * reduce the amount of information competing for a student's attention at
+ * the top of the Module A work screen, and respect reduced-motion.
+ *
+ *   - Leaderboard: ships CLOSED (no `open` attr) and renderStage() only
+ *     auto-opens it at Wrap-up — never at Welcome (empty board) or during
+ *     Module A/B (where it competed with the clinical task).
+ *   - Stage-1 callouts: the "work as equals" (.everyone-talks) and "every
+ *     click is a team decision" (.chart-team-warning) notes are demoted to
+ *     muted hint text (no fill, no border-left) so only the next-step coach
+ *     remains a focal callout in the first viewport.
+ *   - Reduced-motion: programmatic smooth scrollIntoView calls go through
+ *     reducedMotion() so vestibular-sensitive students aren't thrown.
+ *
+ * Static assertions, matching the repo's test style.
+ */
+"use strict";
+
+const test = require("node:test");
+const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
+const INDEX = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
+const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
+const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
+
+function ruleBody(selector) {
+  // first { ... } block following the exact selector
+  const re = new RegExp(selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{([^}]*)\\}");
+  const m = CSS.match(re);
+  assert.ok(m, "expected a CSS rule for " + selector);
+  return m[1];
+}
+
+/* ---------------------- leaderboard ---------------------- */
+
+test("leaderboard ships CLOSED (no open attribute on #leaderboard-card)", () => {
+  const tag = INDEX.match(/<details\b[^>]*id="leaderboard-card"[^>]*>/);
+  assert.ok(tag, "#leaderboard-card <details> must exist");
+  assert.doesNotMatch(tag[0], /\bopen\b/,
+    "the leaderboard must not be open by default (was dominating Welcome + Module A)");
+});
+
+test("renderStage auto-opens the leaderboard only at Wrap-up, not Welcome", () => {
+  // the surviving auto-open is gated on the LAST stage only
+  assert.match(SCRIPT, /lb && viewStage === STAGE_COUNT - 1\)\s*lb\.open = true/,
+    "leaderboard should auto-open only at the wrap-up stage");
+  // the old Welcome (viewStage 0) auto-open must be gone
+  assert.doesNotMatch(SCRIPT, /viewStage === 0 \|\| viewStage === STAGE_COUNT - 1\)\s*lb\.open/,
+    "leaderboard must no longer force-open at Welcome (empty board)");
+});
+
+/* ---------------------- Stage-1 callouts demoted ---------------------- */
+
+test(".everyone-talks is demoted to muted hint (no fill, no border-left)", () => {
+  const body = ruleBody(".everyone-talks");
+  assert.doesNotMatch(body, /border-left/, ".everyone-talks must not be a border-left callout");
+  assert.doesNotMatch(body, /background/, ".everyone-talks must not have a fill");
+});
+
+test(".chart-team-warning is demoted to muted hint (no fill, no border-left)", () => {
+  const body = ruleBody(".chart-team-warning");
+  assert.doesNotMatch(body, /border-left/, ".chart-team-warning must not be a border-left banner");
+  assert.doesNotMatch(body, /background/, ".chart-team-warning must not have an amber fill");
+  assert.match(body, /var\(--muted\)/, ".chart-team-warning should read as muted hint text");
+});
+
+test("the next-step coach is preserved as the single focal callout", () => {
+  // it stays a real bordered/filled callout — the ONE thing the eye lands on
+  const body = ruleBody(".next-step-coach");
+  assert.match(body, /border|background/,
+    ".next-step-coach should remain a visible callout (the single focal instruction)");
+});
+
+/* ---------------------- reduced-motion scrolls ---------------------- */
+
+test("all programmatic smooth scrollIntoView calls respect reducedMotion()", () => {
+  // no unguarded smooth scrollIntoView should remain
+  assert.doesNotMatch(SCRIPT, /scrollIntoView\(\{\s*behavior:\s*"smooth"/,
+    "smooth scrollIntoView must be gated by reducedMotion()");
+  // and the guarded form must be present (we guarded 3 sites)
+  const guarded = [...SCRIPT.matchAll(/scrollIntoView\(\{\s*behavior:\s*reducedMotion\(\)\s*\?\s*"auto"\s*:\s*"smooth"/g)];
+  assert.ok(guarded.length >= 3,
+    "expected at least 3 reducedMotion-guarded scrollIntoView calls, found " + guarded.length);
+});

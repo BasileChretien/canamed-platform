@@ -1,0 +1,9 @@
+# Preserve byte-exact line endings on checkout for vendored / minified
+# assets whose SHA-384 SRI hashes are pinned in index.html. Windows
+# core.autocrlf=true would otherwise rewrite LF -> CRLF on checkout,
+# changing the file's SHA-384 and breaking SRI verification when the
+# CRLF version is deployed. Treating them as binary keeps the bytes
+# identical to what's stored in git (and what was hashed for the SRI).
+*.min.js binary
+docs/Third_session/PBL_platform/firebase-*-compat.js binary
+docs/Third_session/PBL_platform/pdfmake/*.js binary

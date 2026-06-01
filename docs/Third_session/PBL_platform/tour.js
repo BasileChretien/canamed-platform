@@ -96,6 +96,24 @@
     // stable id from index.html. If an anchor is hidden on the current
     // viewport (the right-column tabs collapse on mobile-stacked), the
     // tour falls back to a centred bubble — see position() above.
+    //
+    // UX-overload fix (2026-06-01): the student tour fires on the WELCOME
+    // stage, but three of its steps anchored Module-A-only UI that is
+    // either gone or not yet visible there — `findings-log` (removed
+    // 2026-05-18), `rcol-p-decisions` (inside the still-hidden #stage-1),
+    // and `answers-list-moduleA` (never an id; only the -plan/-differ/…
+    // suffixed inputs exist). A first-run student was being taught a
+    // "Findings log" that no longer exists. Those steps are dropped here;
+    // the Module-A chart walkthrough is already covered by the dedicated
+    // `studentModA` mini-tour, which fires on stage 1 where its anchors
+    // are live. The Welcome tour now orients the student to the things
+    // actually on screen: where they are, the team name, the lifeline
+    // (Call a facilitator) and the language switcher. The render()
+    // auto-skip guard below is the belt-and-braces against this whole
+    // class of "anchor points at deleted UI" regression recurring.
+    // (Steps keep their original 1/2/6/7 i18n keys — tour.student.3-5
+    // are intentionally left defined-but-unused so translation parity is
+    // untouched.)
     student: [
       { anchor: null,
         titleKey: "tour.student.1.title", bodyKey: "tour.student.1.body",
@@ -103,15 +121,6 @@
       { anchor: "team-name-input",
         titleKey: "tour.student.2.title", bodyKey: "tour.student.2.body",
         placement: "bottom" },
-      { anchor: "findings-log",
-        titleKey: "tour.student.3.title", bodyKey: "tour.student.3.body",
-        placement: "top" },
-      { anchor: "rcol-p-decisions",
-        titleKey: "tour.student.4.title", bodyKey: "tour.student.4.body",
-        placement: "top" },
-      { anchor: "answers-list-moduleA",
-        titleKey: "tour.student.5.title", bodyKey: "tour.student.5.body",
-        placement: "top" },
       { anchor: "call-prof-btn",
         titleKey: "tour.student.6.title", bodyKey: "tour.student.6.body",
         placement: "bottom" },
@@ -259,6 +268,24 @@
   function render() {
     if (!active) return;
     const step = STEPS[active.set][active.index];
+    // Defensive auto-skip: if a step points at an anchor id that is not in
+    // the DOM at all (e.g. the element was removed in a refactor), skip it
+    // in the current travel direction rather than rendering a ghost centred
+    // bubble that narrates UI which no longer exists. A `null` anchor is a
+    // legitimate centred intro/outro bubble and is never skipped. This makes
+    // a future element removal degrade to a silent skip, not a broken tour.
+    if (step.anchor && typeof document !== "undefined" &&
+        !document.getElementById(step.anchor)) {
+      const totalSteps = STEPS[active.set].length;
+      const next = active.index + (active.dir || 1);
+      if (next >= 0 && next < totalSteps) {
+        active.index = next;
+        return render();
+      }
+      // No resolvable step left in this direction — close gracefully
+      // (without marking done, so it can retry on the next entry).
+      return dismiss(false);
+    }
     const total = STEPS[active.set].length;
     const isFirst = active.index === 0;
     const isLast = active.index === total - 1;
@@ -334,7 +361,11 @@
   function goTo(i) {
     if (!active) return;
     const total = STEPS[active.set].length;
-    active.index = Math.max(0, Math.min(total - 1, i));
+    const clamped = Math.max(0, Math.min(total - 1, i));
+    // Remember travel direction so the render() auto-skip guard can skip a
+    // missing-anchor step the same way the user was already moving.
+    active.dir = clamped >= active.index ? 1 : -1;
+    active.index = clamped;
     render();
   }
 
@@ -402,7 +433,7 @@
       if (opener === document.body) opener = null;
     } catch (_) { opener = null; }
 
-    active = { set, index: 0, root, opener,
+    active = { set, index: 0, root, opener, dir: 1,
                onKey: null, onResize: null, onScroll: null };
 
     active.onKey = (e) => {

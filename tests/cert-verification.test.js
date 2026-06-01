@@ -63,8 +63,46 @@ test("the certificate builder embeds the id + a QR only when an id is supplied",
   const fn = STUDENT_PDF.slice(STUDENT_PDF.indexOf("function buildCertificateDocDefinition"),
                                STUDENT_PDF.indexOf("function _safe"));
   assert.match(fn, /var certId = _str\(data\.certId/, "builder must read data.certId");
-  assert.match(fn, /qr:\s*certId/, "builder must render a QR of the id");
-  assert.match(fn, /Verification ID/, "builder must label the id");
+  // QR encodes the verify URL when one is supplied (public verification flow),
+  // and the bare id otherwise (facilitator-only path).
+  assert.match(fn, /qr:\s*\(\s*verifyUrl\s*\|\|\s*certId\s*\)/,
+    "QR must encode verifyUrl when present, else the bare id");
+  // The id label is now localized (EN "Verification ID" / FR / JA) via the STR
+  // table, so the builder references L.certVerifyId rather than a literal. The
+  // rendered "Verification ID" text is asserted in tests/student-pdf-i18n.test.js
+  // and the e2e suite.
+  assert.match(fn, /L\.certVerifyId/, "builder must label the id (localized)");
   // Guarded so a cert with no id renders neither the QR nor the id line.
-  assert.match(fn, /certId\s*\?\s*\{[\s\S]*qr:\s*certId/, "QR must be gated on certId presence");
+  assert.match(fn, /certId\s*\?\s*\{[\s\S]*qr:/, "QR must be gated on certId presence");
+});
+
+test("the certificate QR is rendered for phone-camera scannability", () => {
+  const fn = STUDENT_PDF.slice(STUDENT_PDF.indexOf("function buildCertificateDocDefinition"),
+                               STUDENT_PDF.indexOf("function _safe"));
+  const qr = fn.slice(fn.indexOf("qr:"), fn.indexOf("qr:") + 240);
+  // Pure black on an explicit white field — navy modules binarise poorly on
+  // phone cameras; #000 on #fff gives the maximum contrast scanners expect.
+  assert.match(qr, /foreground:\s*"#000000"/, "QR foreground must be pure black");
+  assert.match(qr, /background:\s*"#ffffff"/, "QR must sit on an explicit white field");
+  // eccLevel "L" keeps the short /v?id= URL at a low (sparse) QR version, so
+  // each module is large enough to scan; "M"/"Q"/"H" would push it denser.
+  assert.match(qr, /eccLevel:\s*"L"/, "QR must use eccLevel L to stay sparse");
+  // A larger fit than the original 60 pt so each module clears ~0.7 mm.
+  const fit = qr.match(/fit:\s*(\d+)/);
+  assert.ok(fit && Number(fit[1]) >= 72, "QR fit must be at least 72 pt (was 60)");
+});
+
+test("_verifyUrl encodes the short /v?id= path (keeps the QR sparse)", () => {
+  const fn = SCRIPT.slice(SCRIPT.indexOf("function _verifyUrl"),
+                          SCRIPT.indexOf("function _verifyUrl") + 700);
+  assert.match(fn, /"\/v\?id="/, "verify URL must use the short /v?id= rewrite path");
+  assert.doesNotMatch(fn, /verify\.html\?id=/, "verify URL must not bake in the long verify.html filename");
+});
+
+test("firebase.json rewrites /v to verify.html (so the short URL resolves)", () => {
+  const fj = JSON.parse(fs.readFileSync(path.join(P, "firebase.json"), "utf8"));
+  const rewrites = (fj.hosting && fj.hosting.rewrites) || [];
+  const v = rewrites.find((r) => r.source === "/v");
+  assert.ok(v, "a /v rewrite must exist");
+  assert.equal(v.destination, "/verify.html", "/v must rewrite to verify.html");
 });

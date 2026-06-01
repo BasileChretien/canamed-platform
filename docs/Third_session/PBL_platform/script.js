@@ -194,7 +194,11 @@ function applyScenario(id, customContent) {
 
 /* read the scenario from the session record (set at creation) and apply it.
    Resolves once the content is in place - callers should await before any
-   case-dependent UI is built. */
+   case-dependent UI is built.
+
+   Resolution priority: scenarioCustomJson (legacy pasted JSON) →
+   scenarioRef (authored, fetched from scenarios/$ownerUid or
+   sharedScenarios/$shareId) → scenarioId (built-in registry). */
 function loadSessionScenario(code) {
   if (!code) return Promise.resolve(false);
   try { dbInit(); } catch (e) {}
@@ -214,10 +218,12 @@ function loadSessionScenario(code) {
     return ensureSignedIn();
   }).then(() => Promise.all([
     db.ref(oPath(code, "scenarioId")).once("value"),
-    db.ref(oPath(code, "scenarioCustomJson")).once("value")
+    db.ref(oPath(code, "scenarioCustomJson")).once("value"),
+    db.ref(oPath(code, "scenarioRef")).once("value")
   ])).then(res => {
     const id = res[0] && res[0].val();
     const customJson = res[1] && res[1].val();
+    const ref = res[2] && res[2].val();
     let custom = null;
     if (customJson) {
       try { custom = JSON.parse(customJson); } catch (e) {
@@ -225,10 +231,167 @@ function loadSessionScenario(code) {
       }
     }
     if (custom) return applyScenario(null, custom);
+    if (ref) {
+      return loadScenarioByRef(ref).then(body => {
+        if (body) return applyScenario(null, body);
+        if (id) return applyScenario(id);
+        return false;
+      });
+    }
     if (id) return applyScenario(id);
     // session has no scenario set - keep whatever default case-content loaded
     return false;
   }).catch(e => { console.error("loadSessionScenario failed", e); return false; });
+}
+
+/* Resolve a scenarioRef ({ ownerUid, scenarioId, source }) to a parsed
+   scenario body object. source="private" reads scenarios/$ownerUid/$id
+   (only succeeds when caller IS the owner — the rule blocks other reads);
+   source="shared" reads sharedScenarios/$ownerUid_$id and is readable by
+   any authenticated user. */
+function loadScenarioByRef(ref) {
+  if (!ref || !ref.ownerUid || !ref.scenarioId || !db) return Promise.resolve(null);
+  const path = (ref.source === "shared")
+    ? "sharedScenarios/" + ref.ownerUid + "_" + ref.scenarioId + "/bodyJson"
+    : "scenarios/" + ref.ownerUid + "/" + ref.scenarioId + "/bodyJson";
+  return db.ref(path).once("value")
+    .then(snap => {
+      const json = snap && snap.val();
+      if (!json) return null;
+      try { return JSON.parse(json); }
+      catch (e) { console.error("Scenario bodyJson parse failed", e); return null; }
+    })
+    .catch(e => { console.error("loadScenarioByRef read failed", e); return null; });
+}
+
+/* List the calling user's authored scenarios. Returns [] when signed-out
+   or in local-test mode. Each entry: { id, meta }. */
+function listMyScenarios() {
+  if (!auth || !auth.currentUser || !db) return Promise.resolve([]);
+  const uid = auth.currentUser.uid;
+  return db.ref("scenarios/" + uid).once("value")
+    .then(snap => {
+      const out = [];
+      snap.forEach(child => {
+        out.push({ id: child.key, meta: (child.val() || {}).meta || {} });
+      });
+      return out;
+    })
+    .catch(e => { console.warn("listMyScenarios failed", e); return []; });
+}
+
+/* List shared scenarios published by any user. Each entry:
+   { shareId, ownerUid, scenarioId, ownerName, meta }. Capped at 200 to
+   avoid pulling unbounded data — the picker is for facilitator quick
+   selection, not a marketplace. Feature-detects .limitToFirst so we work
+   against both the real RTDB SDK (server-side limit) and LocalDB's shim
+   (no limit support — we slice the snapshot client-side instead). */
+function listSharedScenarios() {
+  if (!db) return Promise.resolve([]);
+  const baseRef = db.ref("sharedScenarios");
+  const queryRef = (typeof baseRef.limitToFirst === "function")
+    ? baseRef.limitToFirst(200)
+    : baseRef;
+  return queryRef.once("value")
+    .then(snap => {
+      const out = [];
+      snap.forEach(child => {
+        if (out.length >= 200) return true; // forEach stops on truthy return
+        const v = child.val() || {};
+        out.push({
+          shareId: child.key,
+          ownerUid: v.ownerUid || "",
+          scenarioId: v.scenarioId || "",
+          ownerName: v.ownerName || "",
+          meta: v.meta || {}
+        });
+      });
+      return out;
+    })
+    .catch(e => { console.warn("listSharedScenarios failed", e); return []; });
+}
+
+/* Persist an authored scenario for the signed-in user. `body` is the
+   scenario object the runtime expects (case / scoring / penalties /
+   decisions / synthId / synthPrereqs / preTest / postTest / name /
+   summary / moduleAName / moduleBName). Stored as a single stringified
+   blob under bodyJson; queryable metadata is split out under meta/. When
+   `share` is true, also publishes (or refreshes) a copy under
+   sharedScenarios/<uid>_<id>; when false, removes the shared copy if
+   one exists. Returns the stored meta on success. */
+function saveScenario(scenarioId, body, share) {
+  if (!auth || !auth.currentUser || !db) {
+    return Promise.reject(new Error("Sign in to save scenarios."));
+  }
+  if (!scenarioId || !/^[a-z0-9_-]{1,60}$/.test(scenarioId)) {
+    return Promise.reject(new Error("Scenario id must be 1-60 chars, lower-case alphanumerics, _ or -."));
+  }
+  if (!body || typeof body !== "object") {
+    return Promise.reject(new Error("Scenario body must be an object."));
+  }
+  const uid = auth.currentUser.uid;
+  const bodyJson = JSON.stringify(body);
+  if (bodyJson.length > 262144) {
+    return Promise.reject(new Error("Scenario is too large (" + bodyJson.length +
+      " bytes, max 262144). Split content across modules or trim long narrative."));
+  }
+  const now = Date.now();
+  const path = "scenarios/" + uid + "/" + scenarioId;
+  return db.ref(path + "/meta/createdAt").once("value").then(snap => {
+    const createdAt = snap.val() || now;
+    const meta = {
+      id: scenarioId,
+      name: (typeof body.name === "string" ? body.name : (body.name && body.name.en) || scenarioId).slice(0, 200),
+      summary: (typeof body.summary === "string" ? body.summary : (body.summary && body.summary.en) || "").slice(0, 400),
+      createdAt: createdAt,
+      updatedAt: now,
+      version: (typeof body.version === "number" ? body.version : 1),
+      locale: (typeof body.locale === "string" ? body.locale : "fr-ja")
+    };
+    const writes = [
+      db.ref(path).set({ meta: meta, bodyJson: bodyJson })
+    ];
+    const shareId = uid + "_" + scenarioId;
+    if (share) {
+      const ownerName = (currentProfile && currentProfile.name) ||
+                        (auth.currentUser.displayName) || "";
+      writes.push(db.ref("sharedScenarios/" + shareId).set({
+        ownerUid: uid,
+        ownerName: ownerName.slice(0, 80),
+        scenarioId: scenarioId,
+        meta: meta,
+        bodyJson: bodyJson
+      }));
+    } else {
+      writes.push(db.ref("sharedScenarios/" + shareId).remove().catch(() => null));
+    }
+    return Promise.all(writes).then(() => meta);
+  });
+}
+
+/* Remove an authored scenario (and any shared copy). Sessions that
+   already reference it keep working at runtime only because the runtime
+   reads bodyJson at session START — once deleted, future session loads
+   will fall back to whatever scenarioId (if any) was also stored. */
+function deleteScenario(scenarioId) {
+  if (!auth || !auth.currentUser || !db) {
+    return Promise.reject(new Error("Sign in required."));
+  }
+  const uid = auth.currentUser.uid;
+  return Promise.all([
+    db.ref("scenarios/" + uid + "/" + scenarioId).remove(),
+    db.ref("sharedScenarios/" + uid + "_" + scenarioId).remove().catch(() => null)
+  ]);
+}
+
+if (typeof window !== "undefined") {
+  window.canamedScenarios = {
+    list: listMyScenarios,
+    listShared: listSharedScenarios,
+    save: saveScenario,
+    remove: deleteScenario,
+    loadByRef: loadScenarioByRef
+  };
 }
 
 const STAGE_COUNT = 4;
@@ -373,6 +536,22 @@ function penaltyMeta(ev) {
       title: "Team decision: " + decisionShort(d.decision, lang),
       why: tc(d.option.why, lang)
     };
+  }
+  // Chat-mode penalties (Module A LLM pilot 2026-05-28): the dismissive /
+  // promise-opioid penalties live in SCORING.moduleA_question_penalties,
+  // not in PENALTIES. Check there before falling through to the standard
+  // PENALTIES list so the renderObjectives penalty section displays them
+  // with the right label.
+  if (typeof SCORING !== "undefined" && SCORING.moduleA_question_penalties) {
+    const chatPen = SCORING.moduleA_question_penalties.find(pp => pp.id === ev);
+    if (chatPen) {
+      return {
+        id: ev,
+        points: chatPen.points,
+        title: tc(chatPen.label, lang),
+        why: ""    // chat penalties don't carry a "why" paragraph
+      };
+    }
   }
   if (typeof PENALTIES === "undefined") return null;
   const p = PENALTIES.find(pp => pp.id === ev) || null;
@@ -897,17 +1076,25 @@ function sPath(p) { return oPath(sessionNum, p); }
  * any client. A non-secret RANDOM marker stays at the old readable path so the
  * existence checks the admin-gated rules + recovery rely on keep working.
  *
- * Scope: the live legacy `sessions/` deployment only. Org-scoped sessions keep
- * the prior read-verify scheme for now (no live org deployments). */
-// Use the adminSecrets scheme only on the live, rules-enforced legacy
-// `sessions/` deployment. LOCAL mode (LocalDB) has no security rules, so a
-// proof-write would always succeed there — LOCAL keeps the legacy read-verify
-// path (the real hash sits at adminPasswordHash). Org-scoped sessions are
-// deferred (no live org deployments yet).
+ * Scope: any rules-enforced (shared-mode) deployment — both the default
+ * `sessions/` tree and org-scoped `orgs/<slug>/sessions/` trees. */
+// Use the adminSecrets proof-write scheme on ANY rules-enforced deployment
+// (default `sessions/` AND org-scoped `orgs/<slug>/sessions/`). LOCAL mode
+// (LocalDB) has no security rules, so a proof-write would always succeed there
+// — LOCAL keeps the legacy read-verify path (the real hash sits at
+// adminPasswordHash). Org support added 2026-05-30 to close the org hash oracle.
 function useAdminSecrets() {
-  return MODE === "shared" && _sessionPrefix(currentOrg) === "sessions/";
+  return MODE === "shared";
 }
-function adminSecretPath(code, leaf) { return "adminSecrets/" + code + (leaf ? "/" + leaf : ""); }
+function adminSecretPath(code, leaf) {
+  // Default org keeps the legacy top-level path (adminSecrets/<code>, unchanged);
+  // other orgs namespace under adminSecrets/orgs/<slug>/<code> so the unreadable
+  // real hash is per-org. Mirrors _sessionPrefix() (default -> "sessions/").
+  const base = (_sessionPrefix(currentOrg) === "sessions/")
+    ? "adminSecrets/" + code
+    : "adminSecrets/orgs/" + currentOrg + "/" + code;
+  return base + (leaf ? "/" + leaf : "");
+}
 function randomAdminMarker() {
   // 32 random bytes -> 64 lowercase hex, which satisfies the existing
   // adminPasswordHash .validate (legacy SHA-256 shape) while revealing
@@ -1139,27 +1326,6 @@ function initAppCheck() {
   }
 }
 
-/* Firebase Performance Monitoring activation. No-op when
-   window.CANAMED_PERF_MONITORING isn't truthy (the script tag still
-   loads the SDK but doesn't call .performance(), so no traces ship).
-   Auto-tracks page load + each network request — we don't add custom
-   traces in code yet. Privacy: timing-only, no content. */
-let _perfActivated = false;
-function initPerfMonitoring() {
-  if (_perfActivated) return;
-  if (!window.CANAMED_PERF_MONITORING) return;
-  if (!firebase.performance) {
-    console.warn("[CaNaMED] Perf monitoring requested but the SDK didn't load.");
-    return;
-  }
-  try {
-    firebase.performance();
-    _perfActivated = true;
-  } catch (e) {
-    console.warn("[CaNaMED] Perf monitoring activation failed", e);
-  }
-}
-
 /* Firebase-emulator wiring (sim + integration-test use).
  *
  * When window.CANAMED_EMULATOR is set to
@@ -1196,6 +1362,25 @@ function _maybeWireAuthEmulator(authInstance) {
   } catch (e) { console.warn("Auth emulator hookup failed", e); }
 }
 
+/* Remove the Firebase SDK's cached "previous websocket failure" flag(s) from
+   localStorage. The SDK keys this as `firebase:previous_websocket_failure`
+   (sometimes with an origin suffix); once set, it stops attempting the
+   WebSocket transport and uses long-poll only — which is broken under RTDB
+   App Check enforcement (503). Returns the number of keys cleared. Defensive:
+   localStorage can throw (private mode / disabled storage) — never fatal. */
+function _clearStickyLongPollFlag() {
+  try {
+    if (typeof localStorage === "undefined") return 0;
+    const doomed = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.indexOf("previous_websocket_failure") !== -1) doomed.push(k);
+    }
+    doomed.forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+    return doomed.length;
+  } catch (e) { return 0; }
+}
+
 function dbInit() {
   if (db) return;
   if (MODE === "shared") {
@@ -1208,10 +1393,19 @@ function dbInit() {
     // and reCAPTCHA can't reach the Google verification endpoint in tests
     // (which would otherwise spam the console with appCheck/recaptcha-error).
     if (!_isEmulatorMode()) initAppCheck();
-    // Performance Monitoring is similarly opt-in via the firebase-config
-    // flag. Safe to activate before database/auth — it just attaches to
-    // the global window.fetch / XMLHttpRequest for timing capture.
-    initPerfMonitoring();
+    // Clear the SDK's sticky "websocket previously failed" flag BEFORE the
+    // realtime connection is built. The Firebase SDK caches
+    // `firebase:previous_websocket_failure` in localStorage after a single
+    // transient WebSocket hiccup, then permanently prefers long-poll for this
+    // origin. Under App Check *enforcement*, the RTDB long-poll transport
+    // returns HTTP 503 for App-Check-passing requests (the WebSocket transport
+    // works fine) — so a wedged client falls into long-poll-only mode and every
+    // realtime read (`once`/`on`) hangs forever with no rejection, leaving the
+    // splash stuck on "Checking…" (diagnosed live 2026-05-30). Clearing the
+    // flag each boot makes the SDK re-attempt WebSocket (which succeeds); if a
+    // network genuinely blocks wss:// the SDK still falls back to long-poll as
+    // before, so this is strictly safer.
+    _clearStickyLongPollFlag();
     db = firebase.database();
     // Emulator hookup: when window.CANAMED_EMULATOR is set to
     // { host: "127.0.0.1", dbPort: 9000, authPort: 9099 }, point the
@@ -1480,6 +1674,7 @@ function wireLanguageSwitcher() {
       callIfFn("renderScore");
       callIfFn("renderStage");
       callIfFn("renderContrib");
+      callIfFn("updateWaitingStatus");   // i18n the waiting-room status on a mid-wait language switch
       // renderAnswers takes a module key — call it for both Module A and B.
       try {
         const fn = window.renderAnswers;
@@ -1634,7 +1829,7 @@ function initLobby() {
         if (adminBody.classList.contains("hidden")) return;
         const nameVal = (nameFieldForFocus.value || "").trim();
         if (!nameVal) {
-          try { nameFieldForFocus.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          try { nameFieldForFocus.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
           catch (_) { try { nameFieldForFocus.scrollIntoView(); } catch (__) {} }
           const hint = el("admin-hint");
           if (hint) {
@@ -1667,7 +1862,7 @@ function initLobby() {
           ? el("superadmin-key-input")
           : (el("recovery-code-input") || el("new-pass-input"));
         if (target) {
-          try { target.scrollIntoView({ behavior: "smooth", block: "center" }); }
+          try { target.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
           catch (_) { try { target.scrollIntoView(); } catch (__) {} }
           try { target.focus(); } catch (e) {}
         }
@@ -1766,7 +1961,7 @@ function readSession(hintId) {
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
    participant consented to. */
-const CONSENT_NOTICE_VERSION = "PIS-v1-2026-05";
+const CONSENT_NOTICE_VERSION = "PIS-v2-2026-05";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */
 function joinParticipant() {
@@ -1778,6 +1973,10 @@ function joinParticipant() {
   // analysis pipelines can skip participants who opted out
   const cWorkshop = !!(el("consent-workshop") && el("consent-workshop").checked);
   const cResearch = !!(el("consent-research") && el("consent-research").checked);
+  // Certificate verification is on by default and privacy-preserving (only a
+  // one-way hash of name+session is ever published — see the verification note
+  // in the lobby and the certificate flow). Recorded true for the audit trail.
+  const cVerification = true;
   if (!cWorkshop) {
     el("lobby-hint").textContent = tt(
       "lobby.consent-required-hint",
@@ -1807,6 +2006,7 @@ function joinParticipant() {
   myConsent = {
     workshop: cWorkshop,
     research: cResearch,
+    verification: cVerification,
     version: CONSENT_NOTICE_VERSION,
     at: Date.now()
   };
@@ -1897,10 +2097,20 @@ function claimClientMapping() {
     return Promise.resolve();
   }
   try {
-    return db.ref(sPath("clientMapping/" + clientId)).set(currentUser.uid).catch(e => {
-      // Expected when the binding already exists (refresh / re-join) or on
-      // a legacy DB; the join continues regardless.
-      try { console.warn("claimClientMapping skipped (continuing):", e && e.code); } catch (_) {}
+    // Read first to avoid a doomed write (which the Firebase SDK logs as a
+    // PERMISSION_DENIED warning at the SDK level — before our .catch can
+    // swallow it). The binding is write-once, so once set it never changes;
+    // skipping the set when a value already exists is correct + silent.
+    const ref = db.ref(sPath("clientMapping/" + clientId));
+    return ref.once("value").then(snap => {
+      if (snap.exists()) return; // already bound (ours or legacy): no-op
+      return ref.set(currentUser.uid).catch(e => {
+        const code = e && e.code;
+        if (code === "PERMISSION_DENIED") return; // raced another writer
+        try { console.warn("claimClientMapping failed:", code); } catch (_) {}
+      });
+    }).catch(e => {
+      try { console.warn("claimClientMapping read failed (continuing):", e && e.code); } catch (_) {}
     });
   } catch (e) {
     try { console.warn("claimClientMapping threw (continuing):", e); } catch (_) {}
@@ -1923,8 +2133,18 @@ function claimStableIdMapping() {
     return Promise.resolve();
   }
   try {
-    return db.ref(sPath("stableIdMapping/" + stableId)).set(currentUser.uid).catch(e => {
-      try { console.warn("claimStableIdMapping skipped (continuing):", e && e.code); } catch (_) {}
+    // Read first to avoid a doomed write (SDK logs PERMISSION_DENIED at
+    // WARNING level before our .catch sees it). Mapping is write-once.
+    const ref = db.ref(sPath("stableIdMapping/" + stableId));
+    return ref.once("value").then(snap => {
+      if (snap.exists()) return; // already bound: no-op
+      return ref.set(currentUser.uid).catch(e => {
+        const code = e && e.code;
+        if (code === "PERMISSION_DENIED") return; // raced another writer
+        try { console.warn("claimStableIdMapping failed:", code); } catch (_) {}
+      });
+    }).catch(e => {
+      try { console.warn("claimStableIdMapping read failed (continuing):", e && e.code); } catch (_) {}
     });
   } catch (e) {
     try { console.warn("claimStableIdMapping threw (continuing):", e); } catch (_) {}
@@ -2046,9 +2266,17 @@ function _joinParticipantWireUp() {
 }
 
 function updateWaitingStatus() {
+  // UX/i18n fix (2026-06-01): these two messages were hardcoded English even
+  // though the waiting.status-* keys already ship in en/fr/ja — so FR/JP
+  // participants saw English on the waiting screen. Use the existing keys
+  // (tFallback keeps the English text if i18n hasn't loaded yet); the
+  // canamed:langchange handler re-calls this so a mid-wait language switch
+  // updates the line.
   el("waiting-status").textContent = started
-    ? "The session has started - placing you in a room…"
-    : "You have joined. Waiting for a facilitator to start the session…";
+    ? tFallback("waiting.status-starting",
+        "The session has started — placing you in a room…")
+    : tFallback("waiting.status-not-started",
+        "You have joined. Waiting for a facilitator to start the session…");
 }
 function renderWaitingList() {
   const list = el("waiting-list");
@@ -2809,9 +3037,9 @@ function maybeSelfAssign() {
     console.error(e);
     clearTimeout(stallGuard);
     selfAssigning = false;
-    el("waiting-status").textContent =
+    el("waiting-status").textContent = tFallback("waiting.status-place-failed",
       "We could not place you in a room yet. It will try again automatically. " +
-      "If nothing happens after a minute, please reload the page.";
+      "If nothing happens after a minute, please reload the page.");
   });
 }
 
@@ -3220,6 +3448,57 @@ function startRoom() {
       if (typeof snap.val() !== "number") return refStage.set(0);
     }).catch(e => console.error("Stage init failed", e));
   }
+
+  // Per-room uid membership claim (introduced 2026-05-28 with the LLM-patient
+  // pilot; the set of rules depending on it was EXPANDED 2026-05-30). Write-once
+  // `rooms/<roomId>/uidMembers/<uid> = true`, claimed here on room entry BEFORE
+  // any gameplay write. The per-room write rules now require this entry for:
+  // LLM chat, scoring (awarded/auto/penalties), moduleA hypotheses + prompt
+  // replies, moduleB exchange replies, and votes/committed — so a session
+  // member who is NOT in this room can neither read its chat nor tamper with
+  // its gameplay/score (cross-room tampering, 2026-05-30 review). The
+  // transaction is idempotent; on a rare transient failure those room writes
+  // are denied until it is re-claimed on the next room entry.
+  try {
+    const auth = (typeof firebase !== "undefined" && firebase.auth) ? firebase.auth() : null;
+    const uid = auth && auth.currentUser && auth.currentUser.uid;
+    if (uid) {
+      db.ref(base + "/uidMembers/" + uid).transaction(cur => (cur == null ? true : undefined));
+    }
+  } catch (e) { /* LOCAL mode or auth not ready — chat falls back to stub */ }
+
+  // Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
+  // flag is on AND the IIFEs in modA-llm-init.js exposed window.modALLMInit
+  // (eager <script> tags in index.html). Failure here must NEVER block
+  // room entry — wrapped in try/catch and the function returns false when
+  // the flag is off, leaving the legacy click-button UI untouched.
+  //
+  // Bridge needs sessionNum / myRoom / db / viewStage on window, but
+  // those are declared with `let` at script-top (line 868, 941, 1012,
+  // 1056), so they live in the script's lexical scope and never reach
+  // window. Re-export them here so modALLMInit can read them via
+  // window.<name>. This is the single-line bridge between script.js's
+  // module-style state and the LLM init's window-accessor pattern.
+  window.myRoom = myRoom;
+  window.sessionNum = sessionNum;
+  window.db = db;
+  window.viewStage = viewStage;
+  // SYNTH_ID / prereqsMet are needed for the chat-mode auto-synthesis
+  // trigger (the synthesis button is hidden in LLM mode, so the bridge
+  // calls reveal(SYNTH_ID) automatically once prereqsMet returns true).
+  // revealed is mutable script-state; expose it via a getter so the LLM
+  // init reads the live value, not a snapshot at startRoom() time.
+  window.SYNTH_ID = SYNTH_ID;
+  window.prereqsMet = prereqsMet;
+  Object.defineProperty(window, "revealed", {
+    get: function () { return revealed; },
+    configurable: true
+  });
+  try {
+    if (typeof window.modALLMInit === "function") window.modALLMInit();
+  } catch (e) {
+    console.warn("[modA LLM] init failed:", e);
+  }
 }
 
 /* ===================== ADMIN ===================== */
@@ -3370,7 +3649,7 @@ function joinSuperAdmin() {
       // (readable) marker's existence to decide initial-set vs reset.
       const refSecret = useAdminSecrets()
         ? db.ref(adminSecretPath(sessionNum, "hash"))
-        : refMarker;   // org path (deferred): the hash stays at the session path
+        : refMarker;   // LOCAL mode (no rules): the hash stays at the session path
       return refMarker.once("value").then(snap => {
         // snap.val() == null (NOT snap.exists()) so this works against BOTH
         // Firebase and the LOCAL-mode LocalDB snapshot (which exposes .val()
@@ -3402,7 +3681,10 @@ function joinSuperAdmin() {
         // FINDING-07 + recovery: the reset payload MUST carry the recovery code
         // (the rule compares it against /recovery/.../code), and the real hash
         // is written to the unreadable adminSecrets tree (refSecret).
-        return refReset.set({ requestedAt: TS, by: myName, code: recoveryCode })
+        // uid binds the reset flag to its initiator so only this client (the
+        // one that supplied the recovery code) can write the hash during the
+        // 30s window — closes the recovery-race (2026-05-30 R3 review).
+        return refReset.set({ requestedAt: TS, by: myName, code: recoveryCode, uid: (currentUser && currentUser.uid) })
           .then(() => refSecret.set(h))
           .then(() => refReset.remove())
           .catch(err => {
@@ -3715,7 +3997,7 @@ function enterAdminApp() {
           const TS = (typeof firebase !== "undefined" &&
             firebase.database && firebase.database.ServerValue &&
             firebase.database.ServerValue.TIMESTAMP) || Date.now();
-          return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode })
+          return refReset.set({ requestedAt: TS, by: myName || "superadmin", code: recoveryCode, uid: (currentUser && currentUser.uid) })
             .then(() => refSecret.set(h))
             .then(() => refReset.remove())
             .catch(err => {
@@ -6425,18 +6707,6 @@ function _caseItemById(itemId, lang) {
  * answers, and the recap. Exports ONLY the participant's own room as Markdown,
  * read fresh from the room subtree (the student is a member, so the read is
  * allowed). Distinct from the admin export above, which dumps every room. */
-/* Competencies printed on the student certificate. Kept here (not pulled from
-   admin-tools' CANAMED_COMPETENCY_MAP) so the student PDF path never loads the
-   facilitator chunk; the labels mirror that map's session-3 competencies. */
-var CERT_COMPETENCIES = [
-  "Information gathering & shared decision-making",
-  "Hypothesis-driven clinical reasoning",
-  "Responsible, evidence-based prescribing",
-  "Empathic response & acknowledging emotion (SPIKES)",
-  "Breaking bad news with a clear plan",
-  "Respecting patient autonomy across cultures"
-];
-
 /* Student certificate of attendance (PDF). Lazy-loads pdfmake (~2.2 MB) then
    our generator, only on click. Best-effort: a network failure (e.g. offline)
    surfaces a toast rather than a dead button. */
@@ -6444,26 +6714,77 @@ function downloadCertificatePdf() {
   const btn = el("wrapup-cert-btn");
   if (btn) btn.disabled = true;
   const loader = window.CanamedLoader || {};
-  const data = {
-    name: myName || "",
-    sessionCode: sessionNum || "",
-    sessionLabel: "",
-    dateStr: new Date().toLocaleDateString(),
-    partnership: "Université de Caen Normandie × Nagoya University",
-    competencies: CERT_COMPETENCIES,
-    // Deterministic verification id from (session, participant). The SAME value
-    // is recomputed in the facilitator's research export / attestation list
-    // (admin-tools participantRows), so a certificate can be checked against
-    // those records. Seeded on clientId — the key presence is stored under.
-    certId: (typeof canamedCertId === "function")
-      ? canamedCertId((sessionNum || "") + "|" + (clientId || ""))
-      : ""
-  };
+
+  // ID + verification strategy (verifiable by DEFAULT, privacy-preserving):
+  //   • The certificate carries a deterministic id from (session, clientId).
+  //     The SAME id is recomputed by the facilitator research export, so the
+  //     cert, the public registry and the export all agree without coordination.
+  //   • Whenever a certificate is generated we publish ONLY a one-way hash of
+  //     (name, session) to /credentials/<id> (write-once). The public verify
+  //     page confirms a (name, id) match without the name ever being stored or
+  //     returned — it only answers "valid" / "no match". This is why scanning
+  //     the QR and typing the name on the certificate now works for everyone.
+  //   • The QR encodes the verify-page URL (id pre-filled) so a scan opens a
+  //     real link, not bare text.
+  const detId = (typeof canamedCertId === "function")
+    ? canamedCertId((sessionNum || "") + "|" + (clientId || "")) : "";
+  const detVerifyUrl = detId ? _verifyUrl(detId) : "";
+
+  function resolveCertId() {
+    const fallback = { certId: detId, verifyUrl: detVerifyUrl };
+    // No id, no DB, no hashing, or no session to bind to → still hand back the
+    // id so the cert renders; verification simply can't be published here.
+    if (!detId || !(sessionNum || "").length ||
+        typeof firebase === "undefined" || typeof credentialNameHash !== "function") {
+      return Promise.resolve(fallback);
+    }
+    return credentialNameHash(myName || "", sessionNum || "").then(function (nameHash) {
+      const sessionLabel = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
+        typeof CANAMED_CONFIG.workshopName === "string")
+        ? String(CANAMED_CONFIG.workshopName).slice(0, 80) : "";
+      const payload = {
+        nameHash: nameHash,
+        session: (sessionNum || "").slice(0, 40),
+        sessionLabel: sessionLabel,
+        at: Date.now(),
+        // Keep inside the DB rule's ~5-year retention cap (5y minus a margin for
+        // clock skew). The previous 10-year value exceeded the cap, so the rule
+        // rejected every write — leaving the id absent from the registry and the
+        // verify page reporting "not in the public registry". This was the bug.
+        retentionUntil: Date.now() + (5 * 365 - 30) * 24 * 60 * 60 * 1000
+      };
+      // Write-once: a re-download re-attempts and is denied because the entry
+      // already exists — that's fine, the credential is already published, so we
+      // treat any write outcome as success and return the id either way.
+      return firebase.database().ref("credentials/" + detId).set(payload).then(
+        function () { return fallback; },
+        function (err) {
+          console.warn("credential publish skipped", err && err.code);
+          return fallback;
+        }
+      );
+    }, function () { return fallback; });
+  }
+
   if (typeof toast === "function") toast("⏳ Preparing your certificate…");
   Promise.resolve()
     .then(() => loader.ensurePdfmake ? loader.ensurePdfmake() : Promise.reject(new Error("loader")))
     .then(() => loader.ensureStudentPdf())
-    .then(() => {
+    .then(resolveCertId)
+    .then(function (id) {
+      const data = {
+        name: myName || "",
+        sessionCode: sessionNum || "",
+        sessionLabel: "",
+        lang: (typeof getLang === "function") ? getLang() : "en",
+        dateStr: new Date().toLocaleDateString(),
+        partnership: "Université de Caen Normandie × Nagoya University",
+        // Competencies omitted on purpose: the builder localizes its own
+        // default set to data.lang. (A caller may still pass competencies to
+        // override.)
+        certId: id.certId,
+        verifyUrl: id.verifyUrl
+      };
       if (window.CanamedPdf && typeof window.CanamedPdf.certificate === "function") {
         window.CanamedPdf.certificate(data);
       }
@@ -6474,22 +6795,59 @@ function downloadCertificatePdf() {
     .then(() => { if (btn) btn.disabled = false; });
 }
 
+// Verify-page URL for a given credential id. Pegs to the live host (the cert
+// is taken offline + scanned anywhere), with a sensible fallback to whatever
+// origin served the platform — useful for staging and local dev.
+//
+// Uses the short "/v?id=" path (a Firebase Hosting rewrite to verify.html, see
+// firebase.json) rather than "/verify.html?id=". Dropping the 10-char filename
+// from the URL keeps the QR-encoded payload low enough to render as a sparser,
+// easier-to-scan QR version (~29x29 instead of 33x33). verify.html still works
+// directly, so certificates printed before this change keep verifying.
+function _verifyUrl(id) {
+  const host = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
+    typeof CANAMED_CONFIG.verifyOrigin === "string" && CANAMED_CONFIG.verifyOrigin)
+    ? CANAMED_CONFIG.verifyOrigin
+    : (typeof location !== "undefined" && location.origin) ? location.origin
+    : "https://canamed-69785.web.app";
+  return host.replace(/\/+$/, "") + "/v?id=" + encodeURIComponent(id);
+}
+
 /* Gather the session's reference cards (historical context, guidelines, recap
    tables) from the LIVE DOM into structured booklet sections — single source of
    truth (the same cards students read in-session), so no per-scenario content
    is duplicated in the PDF code. */
+/* node.textContent, but with any link that isn't already spelled out in the
+   text appended as a bare URL in parentheses — so the booklet's DOI/website
+   links survive the DOM→PDF crossing and the PDF builder can make them
+   clickable (links in the live cards are <a href> whose visible text is often
+   a human label, e.g. "HAS 2019", that would otherwise lose its URL). */
+function _textWithLinks(node) {
+  let txt = node.textContent.replace(/\s+/g, " ").trim();
+  try {
+    const anchors = node.querySelectorAll ? node.querySelectorAll("a[href]") : [];
+    anchors.forEach(a => {
+      const href = (a.getAttribute("href") || "").trim();
+      if (!/^https?:\/\//i.test(href)) return;
+      const bare = href.replace(/^https?:\/\//i, "").replace(/\/+$/, "");
+      if (txt.indexOf(bare) >= 0 || txt.indexOf(href) >= 0) return;  // already shown
+      txt += " (" + href + ")";
+    });
+  } catch (_) { /* best-effort link capture */ }
+  return txt;
+}
 function _bookletBlocks(node, blocks) {
   const tag = node.tagName;
   if (!tag) return;
   if (tag === "P") {
-    const t = node.textContent.replace(/\s+/g, " ").trim();
+    const t = _textWithLinks(node);
     if (t) blocks.push({ type: "p", text: t });
   } else if (tag === "H4" || tag === "H5") {
     const t = node.textContent.replace(/\s+/g, " ").trim();
     if (t) blocks.push({ type: "sub", text: t });
   } else if (tag === "UL" || tag === "OL") {
     const items = Array.from(node.querySelectorAll(":scope > li"))
-      .map(li => li.textContent.replace(/\s+/g, " ").trim()).filter(Boolean);
+      .map(li => _textWithLinks(li)).filter(Boolean);
     if (items.length) blocks.push({ type: "ul", items: items });
   } else if (tag === "TABLE") {
     const rows = Array.from(node.querySelectorAll("tr")).map(tr =>
@@ -6550,6 +6908,7 @@ function downloadStudyBookletPdf() {
   const data = {
     name: myName || "",
     sessionCode: sessionNum || "",
+    lang: (typeof getLang === "function") ? getLang() : "en",
     dateStr: new Date().toLocaleDateString(),
     partnership: "Université de Caen Normandie × Nagoya University",
     sections: _collectBookletSections(),
@@ -6774,9 +7133,46 @@ function renderStage() {
   }
   el("stage-indicator").textContent =
     "Stage " + (viewStage + 1) + " of " + STAGE_COUNT + " · " + stageLabel(viewStage);
-  // the leaderboard auto-opens at the milestones (Welcome and Wrap-up)
+  // Global "you are here" stepper — a compact visual map of the whole session
+  // arc so the Module A LOCAL phase-stepper reads as sub-progress, not session
+  // position (UX-overload fix 2026-06-01). Built with createElement +
+  // textContent (never innerHTML) because stageLabel() can return a
+  // facilitator-authored scenario name. Marks the viewed stage (is-current),
+  // completed stages (is-done) and — when the student pressed Back to re-read
+  // an earlier stage — the room's live furthest-open stage (is-live).
+  const gsp = el("global-stage-progress");
+  if (gsp) {
+    gsp.textContent = "";
+    for (let i = 0; i < STAGE_COUNT; i++) {
+      const li = document.createElement("li");
+      li.className = "gsp-step" +
+        (i < viewStage ? " is-done" : "") +
+        (i === viewStage ? " is-current" : "") +
+        (i === roomStage && i !== viewStage ? " is-live" : "");
+      const label = stageLabel(i);
+      li.setAttribute("aria-label", label);
+      if (i === viewStage) li.setAttribute("aria-current", "step");
+      const num = document.createElement("span");
+      num.className = "gsp-num";
+      num.setAttribute("aria-hidden", "true");
+      num.textContent = String(i + 1);
+      li.appendChild(num);
+      const name = document.createElement("span");
+      name.className = "gsp-name";
+      name.textContent = label;
+      li.appendChild(name);
+      gsp.appendChild(li);
+    }
+  }
+  // UX-overload fix (2026-06-01): auto-open the leaderboard ONLY at Wrap-up,
+  // where celebrating the shared cohort progress is the point. It used to also
+  // force-open at Welcome (viewStage 0), where the board is empty/zeroed, and
+  // it never closed for Module A/B — so the competitive widget sat open at the
+  // top of the work scroll competing with the clinical task. We only ever
+  // OPEN it here (never force-close) so a student who expands it mid-case
+  // keeps it open; the default is closed (no `open` attr in index.html).
   const lb = el("leaderboard-card");
-  if (lb && (viewStage === 0 || viewStage === STAGE_COUNT - 1)) lb.open = true;
+  if (lb && viewStage === STAGE_COUNT - 1) lb.open = true;
   // a celebration when the room reaches the wrap-up (once)
   if (!wrapCelebrated && roomStage === STAGE_COUNT - 1 && viewStage === STAGE_COUNT - 1) {
     wrapCelebrated = true;
@@ -7354,10 +7750,39 @@ function renderButtons() {
         // is set via textContent — case content is author-controlled
         // but we keep the no-eval-by-default discipline.
         inline.textContent = "";
-        const ans = document.createElement("span");
-        ans.className = "req-inline-answer";
-        ans.textContent = tc(item.a, lang);
-        inline.appendChild(ans);
+        // Segmented clinical synthesis (UX-overload fix 2026-06-01): the
+        // synthesis answer was one ~160-word paragraph — a wall for a B1/A2
+        // cohort. When the synthesis item carries aParts (labelled
+        // {label, body} trios), render it as labelled micro-sections so each
+        // idea (what you found / diagnosis / yellow flags / safety-net /
+        // decide together) is processed one at a time. Every OTHER reveal —
+        // and a synthesis without aParts — keeps the flat .req-inline-answer.
+        const useSynthParts = id === SYNTH_ID && item && Array.isArray(item.aParts) &&
+          item.aParts.length > 0;
+        inline.classList.toggle("req-inline-synth", useSynthParts);
+        if (useSynthParts) {
+          const chunks = document.createElement("div");
+          chunks.className = "synth-chunks";
+          item.aParts.forEach(part => {
+            const sec = document.createElement("div");
+            sec.className = "synth-chunk";
+            const h = document.createElement("span");
+            h.className = "synth-chunk-label";
+            h.textContent = tc(part.label, lang);
+            const b = document.createElement("span");
+            b.className = "synth-chunk-body";
+            b.textContent = tc(part.body, lang);
+            sec.appendChild(h);
+            sec.appendChild(b);
+            chunks.appendChild(sec);
+          });
+          inline.appendChild(chunks);
+        } else {
+          const ans = document.createElement("span");
+          ans.className = "req-inline-answer";
+          ans.textContent = tc(item.a, lang);
+          inline.appendChild(ans);
+        }
         // Citation badge (sim 2026-05-19 — Lucas): "Inline citation
         // badges (NICE 2021, HAS 2023…) on each finding so we can argue
         // from sources." Pull from CASE item's optional `cite` field
@@ -8143,6 +8568,15 @@ function renderObjectives() {
     const lang = _curLang();
     (SCORING["module" + mod] || []).forEach(f =>
       rows.push({ ev: "concept" + mod + "_" + f.id, points: f.points, label: tc(f.label, lang) }));
+    // Module A LLM-patient pilot (2026-05-28): also surface the chat-based
+    // scoring families (red-flag screen, cauda equina, yellow flags, opioid
+    // handling, etc.). The bridge writes the matching `chatA_<famId>` row
+    // to score/auto when the family fires, so `done` flips automatically
+    // from the existing `earned[ev]` check below.
+    if (mod === "A") {
+      (SCORING.moduleA_questions || []).forEach(f =>
+        rows.push({ ev: "chatA_" + f.id, points: f.points, label: tc(f.label, lang) }));
+    }
   }
   let got = 0, max = 0;
   box.innerHTML = "";
@@ -8524,7 +8958,7 @@ function renderDecisions() {
     try {
       const box = el("decisions-" + (d.module || "A"));
       if (box && !typing && typeof box.scrollIntoView === "function") {
-        box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        box.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "nearest" });
       }
     } catch (_) { /* scrollIntoView unsupported / detached — non-fatal */ }
   });
@@ -10382,10 +10816,18 @@ function sessionExists(code) {
  * join a finished session anyway." Right — the old sessionExists() only
  * checked `created`, so students could pass the splash and waste
  * effort on a session that's already over. */
+// How long to wait on the existence/closed reads before declaring the DB
+// unreachable. A realtime `once("value")` against a down connection never
+// rejects — it just never resolves — so without this race the splash would
+// sit on "Checking…" forever (the 2026-05-30 long-poll/App-Check wedge). 12s
+// is comfortably above a normal cold read (~250ms) yet short enough that a
+// genuinely wedged client gets a real error + retry instead of a dead UI.
+const SESSION_STATUS_TIMEOUT_MS = 12000;
+
 function sessionStatus(code) {
   try { dbInit(); } catch (e) {}
-  if (!db) return Promise.resolve({ exists: false, closed: false });
-  return ensureSignedIn()
+  if (!db) return Promise.resolve({ exists: false, closed: false, unreachable: true });
+  const read = ensureSignedIn()
     .then(() => Promise.all([
       db.ref(oPath(code, "created")).once("value"),
       db.ref(oPath(code, "closed")).once("value")
@@ -10394,7 +10836,17 @@ function sessionStatus(code) {
       exists: snaps[0].val() != null,
       closed: snaps[1].val() != null
     }))
-    .catch(() => ({ exists: false, closed: false }));
+    .catch(() => ({ exists: false, closed: false, unreachable: true }));
+  // Race the read against a timeout so a hung realtime connection surfaces a
+  // distinguishable `unreachable` result instead of leaving callers pending.
+  let timer;
+  const timeout = new Promise(resolve => {
+    timer = setTimeout(
+      () => resolve({ exists: false, closed: false, unreachable: true }),
+      SESSION_STATUS_TIMEOUT_MS
+    );
+  });
+  return Promise.race([read, timeout]).then(r => { clearTimeout(timer); return r; });
 }
 
 function setUnlockedSession(code) {
@@ -11069,7 +11521,8 @@ function showOrgNotFoundSplash() {
       'border-radius:12px;background:#fff;font-family:system-ui,sans-serif;color:#0f172a;">' +
       '<h1 style="margin:0 0 12px 0;font-size:20px;">Org not found</h1>' +
       '<p style="white-space:pre-line;line-height:1.5;margin:0;">' +
-      msg.replace(/&/g, "&amp;").replace(/</g, "&lt;") + '</p></div>';
+      msg.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+         .replace(/"/g, "&quot;").replace(/'/g, "&#39;") + '</p></div>';
   } else if (typeof document !== "undefined" && document.body) {
     const div = document.createElement("div");
     div.setAttribute("role", "alert");
@@ -11101,6 +11554,14 @@ function initEntry() {
     sessionStatus(stored).then(status => {
       if (status.exists && !status.closed) {
         enterUnlockedSession(stored);
+      } else if (status.unreachable) {
+        // Couldn't reach the database (e.g. realtime connection wedged). Do
+        // NOT clear the stored code — it may be perfectly valid. Show the
+        // splash with a one-shot connectivity hint so the user can retry
+        // instead of being stranded on a blank, locked screen.
+        try { sessionStorage.setItem("canamed_db_unreachable", "1"); } catch (e) {}
+        sessionNum = "";
+        showSplash();
       } else {
         // stale code (purged, never existed, or finished): clear and
         // show splash. Stash a one-shot hint key so the splash can
@@ -11131,6 +11592,7 @@ function initEntry() {
     // back on the splash (rather than silently dumping them there).
     try {
       const endedCode = sessionStorage.getItem("canamed_just_ended_session");
+      const unreachable = sessionStorage.getItem("canamed_db_unreachable");
       if (endedCode) {
         sessionStorage.removeItem("canamed_just_ended_session");
         const hint = el("splash-hint");
@@ -11138,6 +11600,17 @@ function initEntry() {
           hint.textContent = tFallback("splash.enter.previous-session-ended",
             "Your previous session (" + endedCode.toUpperCase() +
             ") has ended. Enter a new code from your facilitator.");
+          hint.className = "splash-hint err";
+        }
+      } else if (unreachable) {
+        // Auto-resume bailed because the DB was unreachable (not because the
+        // session was closed/invalid). Explain why we're back on the splash
+        // and invite a retry — the stored code was intentionally preserved.
+        sessionStorage.removeItem("canamed_db_unreachable");
+        const hint = el("splash-hint");
+        if (hint) {
+          hint.textContent = tFallback("splash.enter.unreachable",
+            "Couldn't reach the session server. Check your connection and try again.");
           hint.className = "splash-hint err";
         }
       }
@@ -11247,6 +11720,17 @@ function wireSplash() {
     // clear "this session has ended" message — students no longer waste
     // time on the lobby + name/consent + room only to get kicked.
     sessionStatus(got).then(status => {
+      if (status.unreachable) {
+        // The DB read timed out / the realtime connection is wedged. Surface a
+        // real connectivity error + retry rather than the misleading "no
+        // session matches" (the code may be perfectly valid) or a silent
+        // "Checking…" hang. Keep what the user typed so a retry is one click.
+        hint.textContent = tFallback("splash.enter.unreachable",
+          "Couldn't reach the session server. Check your connection and try again.");
+        hint.className = "splash-hint err";
+        shake();
+        return;
+      }
       if (!status.exists) {
         // B7 (SIMULATION_EDGE_CASES.md): if the user typed a 6-char code
         // without the dash (e.g. "abcdef"), try the dashed variant
@@ -11317,6 +11801,7 @@ function wireSplash() {
     const sel = el("splash-create-scenario");
     let scenarioId = sel ? sel.value : "";
     let customJson = null;
+    let scenarioRef = null;
     if (scenarioId === "__custom__") {
       const ta = el("splash-create-custom");
       const text = (ta && ta.value || "").trim();
@@ -11335,10 +11820,25 @@ function wireSplash() {
       }
       customJson = text;
       scenarioId = null;
+    } else if (typeof scenarioId === "string" && scenarioId.indexOf("__ref:") === 0) {
+      // authored scenario: format is __ref:<source>:<ownerUid>:<scenarioId>
+      const parts = scenarioId.split(":");
+      if (parts.length >= 4 && (parts[1] === "private" || parts[1] === "shared")) {
+        scenarioRef = {
+          source: parts[1],
+          ownerUid: parts[2],
+          // scenarioId may itself contain "-" or "_" but no ":" per validation
+          scenarioId: parts.slice(3).join(":")
+        };
+        scenarioId = null;
+      } else {
+        cHint.textContent = "Invalid scenario selection — pick another.";
+        cHint.className = "splash-hint err"; return;
+      }
     }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    createSession(name, label, pass, scenarioId, customJson).then(result => {
+    createSession(name, label, pass, scenarioId, customJson, scenarioRef).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -11575,13 +12075,22 @@ function populateScenarioPicker() {
   sel.innerHTML = "";
   const scenarios = window.CANAMED_SCENARIOS || {};
   const lang = _curLang();
+  const builtInGroup = document.createElement("optgroup");
+  builtInGroup.label = (window.t ? window.t("splash.create.builtin-group") : "Built-in scenarios");
   Object.keys(scenarios).forEach(id => {
     const sc = scenarios[id];
     const opt = document.createElement("option");
     opt.value = id;
     opt.textContent = tc(sc.name, lang) || id;
-    sel.appendChild(opt);
+    builtInGroup.appendChild(opt);
   });
+  sel.appendChild(builtInGroup);
+  // Authored scenarios: only available to signed-in users (anonymous uids
+  // can't own scenarios, so the private list is always empty). The shared
+  // list is readable by anyone authenticated. Both fetches are fire-and-
+  // forget — if they fail (offline / disabled tree), the picker still
+  // shows the built-ins.
+  appendAuthoredScenarioOptions(sel, lang);
   // NOTE: "Create new content (advanced)" used to be an option inside
   // this dropdown. The simulation report (Step 2) found that first-time
   // facilitators panicked at the JSON textarea after picking it by
@@ -11595,6 +12104,56 @@ function populateScenarioPicker() {
   wireAdvancedScenarioToggle();
   onScenarioChange();
 }
+/* Inject "My scenarios" and "Shared scenarios" optgroups into the picker
+   when authored scenarios are available. Async — repaints when the data
+   arrives, so the picker stays responsive even if the network is slow.
+   Idempotent: any previous authored optgroups are removed first. */
+function appendAuthoredScenarioOptions(sel, lang) {
+  if (!sel) return;
+  // Drop any previously-injected authored optgroups (re-entry after
+  // sign-in or language change must not stack duplicates).
+  Array.from(sel.querySelectorAll('optgroup[data-authored="1"]'))
+    .forEach(g => g.remove());
+  const isSignedIn = !!(auth && auth.currentUser && !auth.currentUser.isAnonymous);
+  const mineP = isSignedIn ? listMyScenarios() : Promise.resolve([]);
+  const sharedP = listSharedScenarios();
+  Promise.all([mineP, sharedP]).then(res => {
+    const mine = res[0] || [];
+    const shared = res[1] || [];
+    const myUid = (auth && auth.currentUser && auth.currentUser.uid) || null;
+    if (mine.length) {
+      const g = document.createElement("optgroup");
+      g.label = (window.t ? window.t("splash.create.mine-group") : "My scenarios");
+      g.dataset.authored = "1";
+      mine.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = "__ref:private:" + myUid + ":" + s.id;
+        opt.textContent = (s.meta && s.meta.name) || s.id;
+        g.appendChild(opt);
+      });
+      sel.appendChild(g);
+    }
+    // Exclude the caller's own shared scenarios from the Shared group —
+    // they already appear under "My scenarios" with the private path
+    // (which works for them; reads of their own shared copy would also
+    // succeed but the private one is the source of truth).
+    const externalShared = shared.filter(s => !myUid || s.ownerUid !== myUid);
+    if (externalShared.length) {
+      const g = document.createElement("optgroup");
+      g.label = (window.t ? window.t("splash.create.shared-group") : "Shared scenarios");
+      g.dataset.authored = "1";
+      externalShared.forEach(s => {
+        const opt = document.createElement("option");
+        opt.value = "__ref:shared:" + s.ownerUid + ":" + s.scenarioId;
+        const who = s.ownerName ? " — " + s.ownerName : "";
+        opt.textContent = ((s.meta && s.meta.name) || s.scenarioId) + who;
+        g.appendChild(opt);
+      });
+      sel.appendChild(g);
+    }
+  }).catch(e => console.warn("appendAuthoredScenarioOptions failed", e));
+}
+
 function wireAdvancedScenarioToggle() {
   const toggle = el("splash-create-advanced-toggle");
   if (!toggle || toggle.dataset.wired === "1") return;
@@ -11648,12 +12207,19 @@ function onScenarioChange() {
   const toggle = el("splash-create-advanced-toggle");
   if (!sel) return;
   const isCustom = sel.value === "__custom__";
+  const isRef = typeof sel.value === "string" && sel.value.indexOf("__ref:") === 0;
   if (wrap) wrap.hidden = !isCustom;
   if (toggle) toggle.setAttribute("aria-expanded", isCustom ? "true" : "false");
   if (desc) {
     if (isCustom) {
       desc.textContent = (window.t ? window.t("splash.create.custom-desc") :
         "Paste a JSON object describing your case. Use 'Load template' to start from the built-in content.");
+    } else if (isRef) {
+      // For authored scenarios we keep the picker label as the description
+      // (the meta summary isn't on the option). Looking it up would require
+      // an extra fetch; the user just picked it from a labelled list.
+      const opt = sel.options[sel.selectedIndex];
+      desc.textContent = (opt && opt.textContent) || "";
     } else {
       const sc = (window.CANAMED_SCENARIOS || {})[sel.value];
       desc.textContent = tc(sc && sc.summary, _curLang());
@@ -11725,7 +12291,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -11770,6 +12336,19 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       }
       if (customJson) {
         writes.push(db.ref(oPath(code, "scenarioCustomJson")).set(customJson));
+      } else if (scenarioRef && scenarioRef.ownerUid && scenarioRef.scenarioId) {
+        const refSrc = scenarioRef.source === "shared" ? "shared" : "private";
+        writes.push(db.ref(oPath(code, "scenarioRef")).set({
+          ownerUid: scenarioRef.ownerUid,
+          scenarioId: scenarioRef.scenarioId,
+          source: refSrc
+        }));
+        // record a stable scenarioId too — survives the authored scenario
+        // being deleted, and keeps existing exports/aggregations that key
+        // on scenarioId working unchanged.
+        if (/^[a-z0-9_-]{1,60}$/.test(scenarioRef.scenarioId)) {
+          writes.push(db.ref(oPath(code, "scenarioId")).set(scenarioRef.scenarioId));
+        }
       } else if (scenarioId) {
         writes.push(db.ref(oPath(code, "scenarioId")).set(scenarioId));
       }
@@ -11787,7 +12366,7 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
               db.ref(oPath(code, "adminPasswordHash")).set(randomAdminMarker())
             ]);
           }
-          return db.ref(oPath(code, "adminPasswordHash")).set(h);   // org path: unchanged (deferred)
+          return db.ref(oPath(code, "adminPasswordHash")).set(h);   // LOCAL mode only (no rules)
         })
         .then(() => ({ code: code, recoveryCode: recoveryCode }));
     });
@@ -11859,9 +12438,20 @@ function authErrorMessage(err) {
     "auth/account-exists-with-different-credential": "An account already exists with this email under a different sign-in method.",
     "auth/network-request-failed": "Could not reach the sign-in server — check your connection.",
     "auth/too-many-requests": "Too many attempts — try again in a few minutes.",
-    "auth/requires-recent-login": "For this action, please sign out and sign back in, then try again."
+    "auth/requires-recent-login": "For this action, please sign out and sign back in, then try again.",
+    "auth/invalid-email": "That email address does not look valid.",
+    "auth/missing-password": "Enter your password.",
+    "auth/wrong-password": "Wrong password — try again, or use Create account if this is your first sign-in.",
+    "auth/user-not-found": "No account with that email — use Create account to make one.",
+    "auth/invalid-credential": "Email or password is incorrect.",
+    "auth/weak-password": "Pick a stronger password: at least 8 characters mixing letters, numbers, and symbols.",
+    "auth/email-already-in-use": "An account with that email already exists — use Sign in instead."
   };
-  return map[code] || (err && err.message) || "Sign-in failed.";
+  if (map[code]) return map[code];
+  // Don't surface raw SDK messages to the UI — they can leak internal request
+  // URLs or quota strings. Log the code for debugging, show a generic line.
+  if (code) { try { console.warn("[auth] unmapped error code:", code); } catch (_) { /* noop */ } }
+  return "Sign-in failed — please try again.";
 }
 
 /* sign in via a popup against any supported identity provider. Firebase
@@ -11943,6 +12533,189 @@ function signInWithProvider(name) {
   });
 }
 
+/* Cheap password-strength scorer — no zxcvbn dependency. Returns
+   { score: 0-4, label: i18n-key, ok: boolean }. ok=true means the
+   password is acceptable for account creation (≥8 chars + at least 3 of
+   {lowercase, uppercase, digit, symbol}). The score 0-4 drives the
+   colored meter; the threshold for ok is score >= 3. */
+function scorePassword(pw) {
+  pw = String(pw || "");
+  if (!pw) return { score: 0, key: "splash.account.pwd-strength-empty", ok: false };
+  let score = 0;
+  if (pw.length >= 8)  score++;
+  if (pw.length >= 12) score++;
+  let classes = 0;
+  if (/[a-z]/.test(pw)) classes++;
+  if (/[A-Z]/.test(pw)) classes++;
+  if (/[0-9]/.test(pw)) classes++;
+  if (/[^A-Za-z0-9]/.test(pw)) classes++;
+  if (classes >= 2) score++;
+  if (classes >= 3) score++;
+  // Soft penalty for trivially weak strings (single char class regardless of
+  // length, or sequences like 12345/abcdef). Doesn't try to be a full check.
+  if (classes <= 1 || /(?:0123|1234|2345|3456|4567|5678|6789|abcd|qwer|asdf)/i.test(pw)) {
+    score = Math.min(score, 1);
+  }
+  score = Math.max(0, Math.min(4, score));
+  const labels = [
+    "splash.account.pwd-strength-veryweak",
+    "splash.account.pwd-strength-weak",
+    "splash.account.pwd-strength-fair",
+    "splash.account.pwd-strength-good",
+    "splash.account.pwd-strength-strong"
+  ];
+  return {
+    score: score,
+    key: labels[score],
+    ok: score >= 3 && pw.length >= 8 && classes >= 3
+  };
+}
+
+/* Wire the sign-in / sign-up email form: tab toggle, password-strength
+   meter, single submit handler that dispatches on data-mode. Idempotent
+   — calling it again rebinds without duplicating listeners (we only
+   look up by id and use simple guard flags). */
+function wireEmailAuthForm() {
+  const form    = el("splash-email-form");
+  const tabIn   = el("splash-email-mode-signin");
+  const tabUp   = el("splash-email-mode-signup");
+  const pwIn    = el("splash-password-input");
+  const submit  = el("splash-email-submit");
+  if (!form || form.dataset.wired === "1") return;
+  form.dataset.wired = "1";
+
+  function applyMode(mode) {
+    const isSignup = (mode === "signup");
+    form.dataset.mode = isSignup ? "signup" : "signin";
+    if (tabIn) {
+      tabIn.classList.toggle("is-active", !isSignup);
+      tabIn.setAttribute("aria-selected", String(!isSignup));
+    }
+    if (tabUp) {
+      tabUp.classList.toggle("is-active", isSignup);
+      tabUp.setAttribute("aria-selected", String(isSignup));
+    }
+    // Show / hide the sign-up-only rows (confirm field + strength meter).
+    Array.from(document.querySelectorAll(".splash-signup-only"))
+      .forEach(n => { n.hidden = !isSignup; });
+    if (pwIn) {
+      pwIn.setAttribute("autocomplete", isSignup ? "new-password" : "current-password");
+      pwIn.setAttribute("minlength", isSignup ? "8" : "6");
+    }
+    if (submit) {
+      const key = isSignup ? "splash.account.signup-email" : "splash.account.signin-email";
+      submit.setAttribute("data-i18n", key);
+      submit.textContent = (window.t ? window.t(key) :
+        (isSignup ? "Create account" : "Sign in"));
+    }
+    // Clear any stale hint from the other mode.
+    splashHintOk(el("splash-account-hint"), "");
+    if (isSignup) updateStrengthMeter();
+  }
+
+  function updateStrengthMeter() {
+    const fill  = el("splash-pwd-strength-fill");
+    const label = el("splash-pwd-strength-label");
+    if (!fill || !label) return;
+    const s = scorePassword(pwIn ? pwIn.value : "");
+    // 0..4 → width 0..100%; data attribute drives colour via CSS.
+    fill.style.width = (s.score * 25) + "%";
+    fill.dataset.score = String(s.score);
+    label.textContent = (window.t ? window.t(s.key) : s.key);
+  }
+
+  if (tabIn) tabIn.addEventListener("click", () => applyMode("signin"));
+  if (tabUp) tabUp.addEventListener("click", () => applyMode("signup"));
+  if (pwIn)  pwIn.addEventListener("input", () => {
+    if (form.dataset.mode === "signup") updateStrengthMeter();
+  });
+
+  form.addEventListener("submit", e => {
+    e.preventDefault();
+    const em = (el("splash-email-input") || {}).value.trim();
+    const pw = (el("splash-password-input") || {}).value || "";
+    if (form.dataset.mode === "signup") {
+      const pw2 = (el("splash-password-confirm") || {}).value || "";
+      const hint = el("splash-account-hint");
+      if (pw !== pw2) {
+        splashHintErr(hint, (window.t && window.t("splash.account.pwd-mismatch")) ||
+          "The two passwords don't match — retype them.");
+        return;
+      }
+      const s = scorePassword(pw);
+      if (!s.ok) {
+        splashHintErr(hint, (window.t && window.t("splash.account.pwd-too-weak")) ||
+          "Pick a stronger password: at least 8 characters with a mix of upper-case, lower-case, digits, and symbols.");
+        return;
+      }
+      signUpWithEmail(em, pw);
+    } else {
+      signInWithEmail(em, pw);
+    }
+  });
+
+  applyMode("signin");
+}
+
+/* Sign in to an EXISTING email/password account. No anonymous-uid linking
+   here — the user is claiming an account that pre-dates this tab, so any
+   throwaway anonymous uid is forfeited (same fate as Google sign-in for a
+   returning user). For first-time account creation, see signUpWithEmail. */
+function signInWithEmail(email, password) {
+  const hint = el("splash-account-hint");
+  if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
+  if (!email || !password) {
+    splashHintErr(hint, "Enter your email and password.");
+    return;
+  }
+  splashHintOk(hint, "Signing you in…");
+  auth.signInWithEmailAndPassword(email, password)
+    .then(() => splashHintOk(hint, ""))
+    .catch(e => splashHintErr(hint, authErrorMessage(e)));
+}
+
+/* Create a new email/password account. If the caller is currently anonymous
+   we LINK the credential so users/{uid}/profile + history written under the
+   anon uid survive the upgrade. If the email is already in use, salvage by
+   signing in with the typed credential directly — same fall-back as the
+   Google flow. */
+function signUpWithEmail(email, password) {
+  const hint = el("splash-account-hint");
+  if (!auth) { splashHintErr(hint, "Sign-in is not available in local-test mode."); return; }
+  if (!email || !password) {
+    splashHintErr(hint, "Enter your email and password.");
+    return;
+  }
+  // Backstop must not be weaker than the UI strength gate: enforce the same
+  // policy (>= 8 chars AND >= 3 character classes) for ANY caller of this
+  // function, not just the wired form (2026-05-30 R2 review).
+  if (!scorePassword(password).ok) {
+    splashHintErr(hint, authErrorMessage({ code: "auth/weak-password" }));
+    return;
+  }
+  splashHintOk(hint, "Creating your account…");
+  const cur = auth.currentUser;
+  const cred = firebase.auth.EmailAuthProvider.credential(email, password);
+  const link = (cur && cur.isAnonymous)
+    ? cur.linkWithCredential(cred).catch(e => {
+        if (e && (e.code === "auth/credential-already-in-use" ||
+                  e.code === "auth/email-already-in-use")) {
+          // returning user — burn the throwaway anon uid, sign in as them
+          return auth.signInWithCredential(cred);
+        }
+        throw e;
+      })
+    : auth.createUserWithEmailAndPassword(email, password)
+        .catch(e => {
+          if (e && e.code === "auth/email-already-in-use") {
+            return auth.signInWithEmailAndPassword(email, password);
+          }
+          throw e;
+        });
+  link.then(() => splashHintOk(hint, ""))
+      .catch(e => splashHintErr(hint, authErrorMessage(e)));
+}
+
 /* Returns a promise that resolves once auth.currentUser is non-null. If
    no user exists yet (first tab load, or someone signed out), kicks off
    an anonymous sign-in. Idempotent — concurrent callers share one
@@ -12016,6 +12789,21 @@ function handleAuthStateChange(user) {
     loadProfile().then(profile => {
       currentProfile = profile;
       paintUserChip();
+      // Refresh the create-session picker so this user's authored scenarios
+      // (and any shared ones they can now see) show up immediately after
+      // sign-in. Idempotent + cheap; safe to call even if the picker is
+      // not currently on screen.
+      try {
+        const sel = el("splash-create-scenario");
+        if (sel) appendAuthoredScenarioOptions(sel, _curLang());
+      } catch (_) {}
+      // Reveal the "Author scenarios" splash link now that the user has a
+      // persistent identity. Hidden by default to keep the participant
+      // landing page uncluttered.
+      try {
+        const row = el("splash-author-row");
+        if (row) row.hidden = false;
+      } catch (_) {}
       // first sign-in for this identified account → guide them through profile setup
       if (!profile || !profile.name) {
         populateProfileSelects("splash-prof-uni");
@@ -12342,6 +13130,7 @@ function wireAccountUI() {
     .addEventListener("click", () => signInWithProvider("microsoft"));
   if (el("splash-apple-signin")) el("splash-apple-signin")
     .addEventListener("click", () => signInWithProvider("apple"));
+  wireEmailAuthForm();
 
   // profile-setup (runs once, right after the first Google sign-in)
   if (el("splash-profile-setup-form")) el("splash-profile-setup-form")

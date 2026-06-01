@@ -190,7 +190,6 @@ test.describe("Accessibility (axe-core)", () => {
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
       window.CANAMED_SUPERADMIN_KEY = "a11y-super-admin";
     });
     await tab2.goto("/");
@@ -299,7 +298,6 @@ test.describe("Accessibility (axe-core)", () => {
         }
         pin("CANAMED_FIREBASE", null);
         pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-        pin("CANAMED_PERF_MONITORING", false);
         window.CANAMED_SUPERADMIN_KEY = "a11y-stage-super-admin";
       });
       await tab2.goto("/");
@@ -380,7 +378,6 @@ test.describe("Accessibility (axe-core)", () => {
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
       window.CANAMED_SUPERADMIN_KEY = "a11y-super-admin";
     });
     await tab2.goto("/");
@@ -456,7 +453,6 @@ test.describe("Accessibility (axe-core)", () => {
           }
           pin("CANAMED_FIREBASE", null);
           pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-          pin("CANAMED_PERF_MONITORING", false);
           window.CANAMED_SUPERADMIN_KEY = "theme-a11y-super-admin";
           try { localStorage.setItem("canamed_theme", t); } catch (e) {}
         }, theme);

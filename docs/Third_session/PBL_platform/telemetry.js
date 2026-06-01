@@ -67,7 +67,9 @@
     _push({
       kind: String(kind || "unknown"),
       at: new Date().toISOString(),
-      url: (typeof location !== "undefined") ? location.href : null,
+      // pathname only — never the query/fragment, which can carry a session
+      // code (?code=...) or other identifiers into the downloadable log.
+      url: (typeof location !== "undefined") ? location.pathname : null,
       lang: (typeof navigator !== "undefined") ? navigator.language : null,
       ua: (typeof navigator !== "undefined") ? _truncate(navigator.userAgent, 200) : null,
       payload: payload || null

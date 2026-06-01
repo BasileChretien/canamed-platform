@@ -100,5 +100,66 @@
     return "CNM-" + s.slice(0, 5) + "-" + s.slice(5, 10);
   }
 
-  return { COLORS, hashStr, colorFor, roomNames, minsSince, reducedMotion, canamedCertId };
+  // ── Public-verification primitives ─────────────────────────────────────
+  // Cryptographically-random credential id for the public verification flow
+  // (CNM-XXXXX-XXXXX in Crockford base-32 — same shape as canamedCertId so
+  // human handling is identical). 50 bits of entropy = ~1.13e15 keyspace, so
+  // collisions over the lifetime of the project are negligible and ids cannot
+  // be enumerated by guessing through the public verification endpoint.
+  function randomCredentialId() {
+    const g = (typeof crypto !== "undefined") ? crypto :
+              (typeof globalThis !== "undefined" ? globalThis.crypto : null);
+    if (!g || typeof g.getRandomValues !== "function") {
+      throw new Error("crypto.getRandomValues not available");
+    }
+    const buf = new Uint8Array(7);   // 56 bits ⇒ 50 used + slack
+    g.getRandomValues(buf);
+    let bits = "";
+    for (const b of buf) bits += b.toString(2).padStart(8, "0");
+    let s = "";
+    for (let i = 0; i < 10; i++) s += _CROCK[parseInt(bits.slice(i * 5, (i + 1) * 5), 2)];
+    return "CNM-" + s.slice(0, 5) + "-" + s.slice(5, 10);
+  }
+
+  // Normalise a participant name so the same person types it the same way
+  // when verifying (trim, collapse internal whitespace, NFC-normalise so the
+  // composed/decomposed Unicode forms agree, casefold to lowercase).
+  function normalizeName(s) {
+    if (s == null) return "";
+    let n = String(s).normalize ? String(s).normalize("NFC") : String(s);
+    n = n.replace(/\s+/g, " ").trim().toLowerCase();
+    return n;
+  }
+
+  // SHA-256 hex of `normalizeName(name) | sessionId`. Returns Promise<string>.
+  // Used both at credential-write time (server-recorded) and at verification
+  // time (the page hashes the verifier's typed name + session and compares).
+  // No salt by design: the strict no-listing /credentials rule means an
+  // attacker can only probe a specific id one at a time, and the stored
+  // value is the hash, not the name.
+  function credentialNameHash(name, sessionId) {
+    const data = normalizeName(name) + "|" + String(sessionId == null ? "" : sessionId);
+    const g = (typeof crypto !== "undefined") ? crypto :
+              (typeof globalThis !== "undefined" ? globalThis.crypto : null);
+    if (g && g.subtle && typeof g.subtle.digest === "function" &&
+        typeof TextEncoder !== "undefined") {
+      const buf = new TextEncoder().encode(data);
+      return g.subtle.digest("SHA-256", buf).then(function (h) {
+        const arr = new Uint8Array(h);
+        let hex = "";
+        for (let i = 0; i < arr.length; i++) hex += arr[i].toString(16).padStart(2, "0");
+        return hex;
+      });
+    }
+    try {
+      const c = (typeof require === "function") ? require("crypto") : null;
+      if (c && typeof c.createHash === "function") {
+        return Promise.resolve(c.createHash("sha256").update(data).digest("hex"));
+      }
+    } catch (e) { /* fall through */ }
+    return Promise.reject(new Error("SHA-256 unavailable"));
+  }
+
+  return { COLORS, hashStr, colorFor, roomNames, minsSince, reducedMotion,
+           canamedCertId, randomCredentialId, normalizeName, credentialNameHash };
 });

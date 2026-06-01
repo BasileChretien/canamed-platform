@@ -118,7 +118,6 @@ test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
       }
       pin("CANAMED_FIREBASE", null);
       pin("CANAMED_RECAPTCHA_SITE_KEY", null);
-      pin("CANAMED_PERF_MONITORING", false);
       window.CANAMED_SUPERADMIN_KEY = "e2e-super-admin";
       // Clear any inherited admin-session keys from tab1 so tab2 starts
       // at the splash and can enter the code as a fresh participant.

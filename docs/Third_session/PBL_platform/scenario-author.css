@@ -393,3 +393,15 @@ input:focus, textarea:focus, select:focus {
 .preview-decision { border: 1px solid #e1e7ed; border-radius: 8px; padding: 8px 12px; margin: 6px 0; background: #f7f9fb; }
 .preview-dec-prompt { font-weight: 600; margin: 0 0 4px; }
 .preview-correct { color: #1d6b3f; font-weight: 600; font-size: 0.85em; }
+
+
+/* ---- cloud auth + cloud picker (scenario-author-cloud.js) ---- */
+.scenario-auth-slot { margin: 0 0 16px; }
+.scenario-auth-card { padding: 14px 18px; }
+.scenario-auth-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 8px 0; }
+.scenario-auth-email { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.scenario-auth-email input { flex: 1 1 200px; padding: 6px 8px; min-width: 160px; }
+.scenario-cloud-list { list-style: none; padding: 0; margin: 6px 0 12px; max-height: 240px; overflow-y: auto; }
+.scenario-cloud-list li { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+.scenario-cloud-list li button { flex: 0 0 auto; }
+.scenario-cloud-list li button.secondary-btn:first-child { flex: 1 1 auto; text-align: left; }

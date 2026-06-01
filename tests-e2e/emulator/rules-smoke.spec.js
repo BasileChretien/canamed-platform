@@ -214,6 +214,12 @@ test("rules: a participant can save a Module B Phase-3 exchange reply, with vali
   const code = "exr-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const path = `sessions/${code}/rooms/Room 1/moduleB/exchangeReplies/0/${uid}`;
 
+  // The real flow claims write-once room membership on entry (script.js
+  // enterRoom). The per-room write rules (chat, scoring, hypotheses, replies,
+  // score, votes/committed) require it — added 2026-05-30 to stop cross-room
+  // tampering. Claim it first, exactly as a participant entering Room 1 does.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
   // A well-formed group note for the current prompt is allowed (mirrors the
   // proven moduleA/promptReplies rule).
   expect(await tryWrite(page, path, {
@@ -231,6 +237,218 @@ test("rules: a participant can save a Module B Phase-3 exchange reply, with vali
 
   // Clearing the note (null) is allowed — that's how the autosave deletes.
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
+});
+
+test("rules: per-room write gating — a Room 1 member cannot write into Room 2 (cross-room tampering denied)", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "xroom-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+
+  // Become a member of Room 1 only.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  // Writing into Room 1 (own room) is allowed for every gated path...
+  const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
+  expect(await ok("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("score/auto/e1", { points: 3, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("score/penalties/e1", { points: 1, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("votes/v1/committed", { choice: 2, at: Date.now() })).toBe("ALLOWED");
+
+  // ...but the SAME writes targeting Room 2 (where this uid is NOT a member)
+  // are all denied. This is the cross-room tampering boundary.
+  const x = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 2/${p}`, v);
+  const denied = [
+    await x("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() }),
+    await x("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
+    await x("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() }),
+    await x("moduleB/exchangeReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
+    await x("score/auto/e1", { points: 999, at: Date.now() }),
+    await x("score/penalties/e1", { points: 999, at: Date.now() }),
+    await x("votes/v1/committed", { choice: 2, at: Date.now() })
+  ];
+  for (const r of denied) {
+    expect(r).not.toBe("ALLOWED");
+    expect(String(r)).toMatch(/permission_denied|denied/i);
+  }
+});
+
+test("rules: org-scoped adminSecrets — real hash unreadable; proof-write verifies; write-once (D1)", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const sid = "os-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const hashPath = `adminSecrets/orgs/${slug}/${sid}/hash`;
+  const proofPath = `adminSecrets/orgs/${slug}/${sid}/proof/${uid}`;
+  const realHash = "a".repeat(64);
+  const wrongHash = "b".repeat(64);
+
+  // Initial set (no data yet) is allowed without a reset flag.
+  expect(await tryWrite(page, hashPath, realHash)).toBe("ALLOWED");
+
+  // The real hash is UNREADABLE — adminSecrets has no .read rule (closes the
+  // org hash-oracle that the readable adminPasswordHash used to be).
+  const read = await page.evaluate(async (p) => {
+    try { const s = await firebase.database().ref(p).get(); return "READ:" + s.val(); }
+    catch (e) { return (e && (e.code || e.message)) || "DENIED"; }
+  }, hashPath);
+  expect(read).not.toContain("READ:");
+  expect(String(read)).toMatch(/permission_denied|denied/i);
+
+  // Proof-write with the CORRECT hash → allowed (server-side compare).
+  expect(await tryWrite(page, proofPath, realHash)).toBe("ALLOWED");
+
+  // Proof-write with a WRONG hash → denied (wrong password).
+  const wrong = await tryWrite(page, proofPath, wrongHash);
+  expect(wrong).not.toBe("ALLOWED");
+  expect(String(wrong)).toMatch(/permission_denied|denied/i);
+
+  // Hash is write-once: overwrite without a fresh _superadminReset is denied.
+  const overwrite = await tryWrite(page, hashPath, wrongHash);
+  expect(overwrite).not.toBe("ALLOWED");
+});
+
+test("rules: org per-room gating — moduleA/B writes allowed in own org room, denied cross-room", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const code = "oc-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const base = `orgs/${slug}/sessions/${code}`;
+
+  // Member of Room 1 only.
+  expect(await tryWrite(page, `${base}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  // Own room: the org-tree paths added for parity (2026-05-30 R2) accept writes.
+  const own = (p, v) => tryWrite(page, `${base}/rooms/Room 1/${p}`, v);
+  expect(await own("moduleA/hypotheses/h1", { text: "dx", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await own("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await own("moduleB/exchangeReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+
+  // Room 2 (not a member): all denied (cross-room tampering closed in org tree too).
+  for (const p of ["moduleA/hypotheses/h1", "moduleA/promptReplies/0/" + uid, "moduleB/exchangeReplies/0/" + uid]) {
+    const r = await tryWrite(page, `${base}/rooms/Room 2/${p}`, { text: "x", by: "S", cid: uid, at: Date.now() });
+    expect(r, p).not.toBe("ALLOWED");
+    expect(String(r)).toMatch(/permission_denied|denied/i);
+  }
+});
+
+test("rules: initial-set admin hash is creatorUid-bound — a non-creator can't claim admin in the create gap (R4)", async ({ page, browser }) => {
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const code = "init-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+
+  // Creator A claims creatorUid (write-once, == auth.uid, before any admin hash).
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uidA)).toBe("ALLOWED");
+
+  // A DIFFERENT uid B cannot do the INITIAL set of adminPasswordHash (racing the
+  // create gap) once creatorUid is claimed — the !data.exists() branch is now
+  // guarded by creatorUid == auth.uid (R4 initial-set-race fix).
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+  const bClaim = await tryWrite(tabB, `sessions/${code}/adminPasswordHash`, "a".repeat(64));
+  expect(bClaim, "a non-creator must not initial-set the admin hash").not.toBe("ALLOWED");
+  expect(String(bClaim)).toMatch(/permission_denied|denied/i);
+  await ctxB.close();
+
+  // The creator A CAN set the initial admin hash.
+  expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+});
+
+test("rules: roleChoices is owner-bound — a peer cannot overwrite another participant's role choice", async ({ page, browser }) => {
+  const code = "role-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const cid = "c_" + Math.floor(Math.random() * 1e9);
+  const cmPath = `sessions/${code}/clientMapping/${cid}`;          // clientMapping is session-level
+  const rcPath = `sessions/${code}/rooms/Room 1/roleChoices/${cid}`; // roleChoices is per-room
+
+  // Owner A binds the clientId to its uid (write-once = auth.uid) and sets a role.
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  expect(await tryWrite(page, cmPath, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, rcPath, { role: "Doctor", name: "A", at: Date.now() })).toBe("ALLOWED");
+
+  // Peer B — a fresh isolated context so it signs in as a DISTINCT anonymous
+  // uid (context.newPage would reuse A's session).
+  const ctxB = await browser.newContext();
+  const tab2 = await ctxB.newPage();
+  await useEmulator(tab2);
+  await tab2.goto("/");
+  const uidB = await waitForUid(tab2);
+  expect(uidB).not.toBe(uidA);
+
+  // B cannot overwrite A's role choice for that cid (clientMapping ownership).
+  const overwrite = await tryWrite(tab2, rcPath, { role: "Nurse", name: "B", at: Date.now() });
+  expect(overwrite).not.toBe("ALLOWED");
+  expect(String(overwrite)).toMatch(/permission_denied|denied/i);
+  await ctxB.close();
+});
+
+test("rules: mail queue is admin-gated — a non-admin cannot enqueue mail (open-relay guard)", async ({ page }) => {
+  await page.goto("/");
+  await waitForUid(page);
+  // A fresh code has no adminPasswordHash, so the existence-based admin gate
+  // fails: a participant who merely knows a code cannot turn the queue into an
+  // open relay. A well-formed mail job is still denied.
+  const code = "mail-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const res = await tryWrite(page, `sessions/${code}/mail/m1`, {
+    to: "victim@example.com", subject: "phish", at: Date.now()
+  });
+  expect(res).not.toBe("ALLOWED");
+  expect(String(res)).toMatch(/permission_denied|denied/i);
+});
+
+test("rules: /credentials/$id — public read by exact id; listing denied; write-once enforced; bad payload denied", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const id = "CNM-T582B-V53WX"; // valid Crockford format
+  const path = "credentials/" + id;
+  const goodHash = "a".repeat(64);
+
+  // Reading the parent /credentials node (listing) is DENIED — no enumeration.
+  const list = await page.evaluate(async () => {
+    try { const s = await firebase.database().ref("credentials").get(); return "READ:" + (s.exists() ? "exists" : "empty"); }
+    catch (e) { return (e && (e.code || e.message)) || "DENIED"; }
+  });
+  expect(list, "/credentials must not be listable").not.toMatch(/^READ:/);
+
+  // Write a well-formed credential entry → ALLOWED.
+  expect(await tryWrite(page, path, {
+    nameHash: goodHash, session: "ABC-DEF", sessionLabel: "Test session",
+    at: Date.now(), retentionUntil: Date.now() + 365 * 86400 * 1000
+  })).toBe("ALLOWED");
+
+  // Reading that exact id back is ALLOWED (rule .read: true on $id).
+  const readBack = await page.evaluate(async (p) => {
+    try { const s = await firebase.database().ref(p).get(); return s.val(); }
+    catch (e) { return "DENIED:" + (e && (e.code || e.message)); }
+  }, path);
+  expect(readBack && readBack.nameHash, "by-id read must return the stored entry").toBe(goodHash);
+
+  // Overwriting is DENIED (write-once).
+  const over = await tryWrite(page, path, {
+    nameHash: "b".repeat(64), session: "ABC-DEF", at: Date.now()
+  });
+  expect(over).not.toBe("ALLOWED");
+
+  // Client-initiated delete is DENIED (withdrawal is admin-only via console).
+  const del = await tryWrite(page, path, null);
+  expect(del).not.toBe("ALLOWED");
+
+  // A bad payload (bad nameHash format) at a fresh id is DENIED.
+  const bad = await tryWrite(page, "credentials/CNM-BADHX-PAYL2", {
+    nameHash: "not-hex", session: "ABC-DEF", at: Date.now()
+  });
+  expect(bad).not.toBe("ALLOWED");
+
+  // A bad key format (not CNM-XXXXX-XXXXX) is DENIED.
+  const badKey = await tryWrite(page, "credentials/not-a-cnm-id", {
+    nameHash: goodHash, session: "ABC-DEF", at: Date.now()
+  });
+  expect(badKey).not.toBe("ALLOWED");
 });
 
 test("rules: a write to a denied path is rejected (rules ARE enforced)", async ({ page }) => {
