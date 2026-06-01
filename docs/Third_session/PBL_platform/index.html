@@ -1077,27 +1077,47 @@
         <div class="stage-row">
           <span id="stage-indicator" class="stage-indicator" aria-live="polite"></span>
           <span id="room-score-chip" class="score-chip hidden" title="Your team's score"></span>
-          <div class="stage-controls">
+          <div class="stage-controls stage-controls--participant">
             <button id="prev-btn">&larr; Back</button>
             <button id="next-btn">Next &rarr;</button>
             <button id="call-prof-btn" class="call-btn"
                     data-i18n="room.call-facilitator">Call a facilitator</button>
-            <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
-            <!-- Sim 2026-05-19 (Hana B1, Camille first-timer, Théo lurker):
-                 "A 'I'm not ready' panic button that just lets me move
-                 into an observer slot for the rest of this stage." Quiet
-                 affordance — no broadcast to the room, no flashing UI.
-                 Writes /sessions/{code}/rooms/{room}/observers/{cid}
-                 which the score engine reads to skip participation-
-                 pressure events for this client. -->
-            <button id="observer-btn" class="observer-btn"
-                    type="button"
-                    data-i18n="room.observer-btn"
-                    data-i18n-title="room.observer-btn-title"
-                    title="Move into the observer role — you can still see everything but no one will ask you to commit.">
-              I'm just observing
-            </button>
-            <button id="leave-btn" title="Leave">Leave</button>
+            <!-- UX-overload #5: on narrow viewports "Call a facilitator" is the
+                 primary action and the secondary room actions (Teams / observe
+                 / leave) collapse behind this "More" disclosure, cutting the
+                 control-row clutter. On desktop the wrapper + menu are
+                 display:contents (see style.css), so these flow inline exactly
+                 as before and the toggle is hidden. (A plain div+button rather
+                 than <details> — a closed <details> hides its content even when
+                 the element is display:contents on WebKit/Android.) SCOPED to
+                 .stage-controls--participant — the admin stage-controls has none
+                 of these buttons and no .stage-overflow, so it is untouched.
+                 Toggle wired by initStageOverflow(). -->
+            <div class="stage-overflow">
+              <button type="button" class="stage-overflow-toggle" id="stage-overflow-toggle"
+                      aria-expanded="false" aria-controls="stage-overflow-menu">
+                <span class="stage-overflow-dots" aria-hidden="true">&middot;&middot;&middot;</span>
+                <span data-i18n="room.more">More</span>
+              </button>
+              <div class="stage-overflow-menu" id="stage-overflow-menu">
+                <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
+                <!-- Sim 2026-05-19 (Hana B1, Camille first-timer, Théo lurker):
+                     "A 'I'm not ready' panic button that just lets me move
+                     into an observer slot for the rest of this stage." Quiet
+                     affordance — no broadcast to the room, no flashing UI.
+                     Writes /sessions/{code}/rooms/{room}/observers/{cid}
+                     which the score engine reads to skip participation-
+                     pressure events for this client. -->
+                <button id="observer-btn" class="observer-btn"
+                        type="button"
+                        data-i18n="room.observer-btn"
+                        data-i18n-title="room.observer-btn-title"
+                        title="Move into the observer role — you can still see everything but no one will ask you to commit.">
+                  I'm just observing
+                </button>
+                <button id="leave-btn" title="Leave">Leave</button>
+              </div>
+            </div>
           </div>
         </div>
         <!-- Global "you are here" stepper (UX-overload fix 2026-06-01). The

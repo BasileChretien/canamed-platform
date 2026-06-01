@@ -3054,6 +3054,7 @@ function wireRoomUI() {
   initCallProf();
   initLeave();
   initObserver();
+  initStageOverflow();
   initEndPoll();
   initTeamName();
   initRolePicker();
@@ -10921,6 +10922,30 @@ function initObserver() {
     } else {
       refObservers.child(clientId).set({ at: Date.now() }).catch(() => {});
     }
+  });
+}
+
+/* Control-row overflow (UX-overload #5): the "··· More" disclosure that holds
+   Teams / observe / leave on narrow viewports (they're display:contents inline
+   on desktop, so this toggle is hidden there). Toggles .is-open on the wrapper;
+   closes on outside click + Escape. The toggle only exists in the participant
+   row, so this no-ops for the admin dashboard. */
+function initStageOverflow() {
+  const toggle = el("stage-overflow-toggle");
+  if (!toggle || toggle.dataset.wired === "1") return;
+  toggle.dataset.wired = "1";
+  const wrap = toggle.closest(".stage-overflow");
+  if (!wrap) return;
+  const setOpen = open => {
+    wrap.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  toggle.addEventListener("click", () => setOpen(!wrap.classList.contains("is-open")));
+  document.addEventListener("click", e => {
+    if (wrap.classList.contains("is-open") && !wrap.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && wrap.classList.contains("is-open")) { setOpen(false); toggle.focus(); }
   });
 }
 
