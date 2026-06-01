@@ -376,6 +376,7 @@
       "waiting.leave": "Leave",
       "waiting.status-not-started": "You have joined. Waiting for a facilitator to start the session…",
       "waiting.status-starting": "The session has started — placing you in a room…",
+      "waiting.status-place-failed": "We could not place you in a room yet. It will try again automatically. If nothing happens after a minute, please reload the page.",
       "waiting.heading": "You have joined",
       "waiting.body": "Hi <strong id=\"waiting-name\"></strong> — you are in the waiting room. A facilitator will place you in a mixed {cohortPair} room and start the session shortly. <strong>Your screen will move automatically</strong> — nothing to do.",
       "waiting.teams-btn": "Join the Teams call",

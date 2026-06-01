@@ -264,6 +264,7 @@
   "waiting.leave": "Quitter",
   "waiting.status-not-started": "Vous avez rejoint la séance. En attente de son démarrage par l'encadrant·e…",
   "waiting.status-starting": "La séance a commencé — vous êtes en cours d'attribution à une salle…",
+  "waiting.status-place-failed": "Nous n'avons pas encore pu vous attribuer une salle. Une nouvelle tentative aura lieu automatiquement. Si rien ne se passe au bout d'une minute, veuillez recharger la page.",
   "waiting.heading": "Vous avez rejoint la séance",
   "waiting.body": "Bonjour <strong id=\"waiting-name\"></strong> — vous êtes dans la salle d'attente. Un·e encadrant·e va vous placer dans une salle mixte {cohortPair} et démarrer la séance dans un instant. <strong>Votre écran avancera automatiquement</strong> — vous n'avez rien à faire.",
   "waiting.teams-btn": "Rejoindre l'appel Teams",

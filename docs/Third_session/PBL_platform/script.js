@@ -1674,6 +1674,7 @@ function wireLanguageSwitcher() {
       callIfFn("renderScore");
       callIfFn("renderStage");
       callIfFn("renderContrib");
+      callIfFn("updateWaitingStatus");   // i18n the waiting-room status on a mid-wait language switch
       // renderAnswers takes a module key — call it for both Module A and B.
       try {
         const fn = window.renderAnswers;
@@ -2265,9 +2266,17 @@ function _joinParticipantWireUp() {
 }
 
 function updateWaitingStatus() {
+  // UX/i18n fix (2026-06-01): these two messages were hardcoded English even
+  // though the waiting.status-* keys already ship in en/fr/ja — so FR/JP
+  // participants saw English on the waiting screen. Use the existing keys
+  // (tFallback keeps the English text if i18n hasn't loaded yet); the
+  // canamed:langchange handler re-calls this so a mid-wait language switch
+  // updates the line.
   el("waiting-status").textContent = started
-    ? "The session has started - placing you in a room…"
-    : "You have joined. Waiting for a facilitator to start the session…";
+    ? tFallback("waiting.status-starting",
+        "The session has started — placing you in a room…")
+    : tFallback("waiting.status-not-started",
+        "You have joined. Waiting for a facilitator to start the session…");
 }
 function renderWaitingList() {
   const list = el("waiting-list");
@@ -3028,9 +3037,9 @@ function maybeSelfAssign() {
     console.error(e);
     clearTimeout(stallGuard);
     selfAssigning = false;
-    el("waiting-status").textContent =
+    el("waiting-status").textContent = tFallback("waiting.status-place-failed",
       "We could not place you in a room yet. It will try again automatically. " +
-      "If nothing happens after a minute, please reload the page.";
+      "If nothing happens after a minute, please reload the page.");
   });
 }
 

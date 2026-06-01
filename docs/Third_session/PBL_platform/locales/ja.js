@@ -264,6 +264,7 @@
   "waiting.leave": "退出",
   "waiting.status-not-started": "参加が完了しました。ファシリテーターがセッションを開始するまでお待ちください…",
   "waiting.status-starting": "セッションが開始されました — ルームへの割り当てを行っています…",
+  "waiting.status-place-failed": "まだルームに割り当てることができませんでした。自動的に再試行します。1分待っても変化がない場合は、ページを再読み込みしてください。",
   "waiting.heading": "参加が完了しました",
   "waiting.body": "<strong id=\"waiting-name\"></strong> さん、待合室にご案内しています。ファシリテーターが {cohortPair} の混成ルームへ振り分け、まもなくセッションを開始します。<strong>画面は自動的に切り替わります</strong> — 何も操作する必要はありません。",
   "waiting.teams-btn": "Teams通話に参加",
