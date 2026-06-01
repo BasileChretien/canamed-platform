@@ -1605,7 +1605,35 @@ html[data-theme="dark"] .next-step-coach {
   font-size: 0.85em;
   margin-left: 2px;
   line-height: 1;
+  /* The 📖 is now a real tap target INSIDE the reveal button: tapping it opens
+     the plain-language gloss (the click handler stopPropagation()s so the
+     reveal itself doesn't fire). Padding gives touch a comfortable hit area
+     without making the span an interactive element (it stays a <span>, so the
+     button keeps a single interactive node — valid HTML). */
+  padding: 3px 5px;
+  border-radius: var(--r-sm, 6px);
+  cursor: help;
 }
+.glossary-marker:hover { background: rgba(0, 0, 0, 0.06); }
+/* Visual gloss popover (touch + keyboard). Screen-reader users get the same
+   text via the button's aria-description, so the popover is aria-hidden to
+   avoid a double announcement. Dismissible (Escape / outside tap / scroll),
+   per WCAG 1.4.13 content-on-focus. */
+.gloss-pop {
+  position: fixed;
+  z-index: 60;
+  max-width: min(280px, 90vw);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  white-space: pre-line;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.gloss-pop[hidden] { display: none; }
 
 /* History sub-grouping (round4-a11y Rec 4): the dense History group is
    split into a short visible cluster + a collapsed "More questions"
@@ -2084,6 +2112,72 @@ footer {
 .stage-indicator { font-weight: 700; font-size: 1.05rem; }
 .stage-wait { color: var(--muted); font-size: 0.9rem; }
 .stage-controls { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; row-gap: 6px; }
+
+/* ── Control-row clarity (UX-overload #5) ──────────────────────────────────
+   Scoped to the PARTICIPANT row (.stage-controls--participant); the admin
+   stage-controls shares only the base class and is untouched.
+
+   Desktop: the "More" wrapper + its menu are display:contents, so Teams /
+   observe / leave flow inline in the control row exactly as before, and the
+   toggle button is hidden. (Plain div + button, not <details>: a closed
+   <details> hides its content even when the element is display:contents on
+   WebKit / Android, which would hide the buttons on desktop too.) */
+.stage-controls--participant .stage-overflow { display: contents; }
+.stage-controls--participant .stage-overflow-menu { display: contents; }
+.stage-controls--participant .stage-overflow-toggle { display: none; }
+
+@media (max-width: 720px) {
+  /* Narrow: "Call a facilitator" becomes the prominent primary action on its
+     own full-width line, and the secondary actions collapse behind the toggle. */
+  .stage-controls--participant #call-prof-btn {
+    flex: 1 1 100%;
+    order: 9;                /* drop below Back / Next / More */
+    background: var(--caen-500, var(--primary));
+    color: #4a3a10;
+    border-color: var(--caen-500, var(--primary));
+    font-weight: 700;
+  }
+  .stage-controls--participant #call-prof-btn:hover { background: var(--caen-500, var(--primary)); }
+  /* A compact "··· More" chip that reveals Teams / observe / leave on tap
+     (initStageOverflow toggles .is-open). */
+  .stage-controls--participant .stage-overflow { display: block; position: relative; }
+  .stage-controls--participant .stage-overflow-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 44px;
+    padding: 9px 12px;
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: var(--caen-ink, var(--ink));
+    background: var(--card);
+    border: 1px solid var(--caen-line, var(--line-strong));
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .stage-controls--participant .stage-overflow.is-open .stage-overflow-toggle {
+    background: var(--surface-sunk, #f3f0e8);
+  }
+  /* the menu is collapsed by default, shown as a popover when open */
+  .stage-controls--participant .stage-overflow-menu { display: none; }
+  .stage-controls--participant .stage-overflow.is-open .stage-overflow-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: absolute;
+    right: 0;
+    z-index: 30;
+    margin-top: 6px;
+    padding: 8px;
+    background: var(--card);
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+    min-width: 12rem;
+  }
+  .stage-controls--participant .stage-overflow.is-open .stage-overflow-menu > * { width: 100%; }
+}
 /* Self-service doc links (facilitator guide, compliance) in the admin chrome. */
 .admin-doc-link {
   font-size: 0.85rem;
@@ -3606,6 +3700,76 @@ h2, h3 { text-wrap: balance; }
     text-align: center;
   }
   .rcol-tab-label { white-space: normal; }
+}
+
+/* ── Mobile sticky bottom tab bar (Module A) ───────────────────────────────
+   A body-level mirror of the right-column .rcol-tabs, for thumb reach on
+   phones (the canonical tab strip is sticky at the TOP of the right column,
+   which on a long Module A scroll drifts far above the thumb). It can't live
+   inside the right column: #app / #stage-1 carry the stage-transition
+   transform and would become the containing block for a position:fixed bar,
+   pinning it to the stage bottom instead of the viewport — hence the
+   body-level <nav id="mobile-rcol-tabbar"> mirrored by updateMobileTabbar().
+   Desktop: never shown. Mobile (<=720px): shown only when JS clears [hidden]
+   (Module A is the visible stage and no text field is focused). */
+.mobile-rcol-tabbar { display: none; }
+@media (max-width: 720px) {
+  .mobile-rcol-tabbar:not([hidden]) {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 50;
+    display: flex;
+    gap: 4px;
+    /* clear the iOS home indicator / gesture bar */
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: var(--card);
+    border-top: 1px solid var(--line-strong);
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.08);
+  }
+  /* when the bar is up, pad the room so its last content clears the bar */
+  body.mtabbar-on #app { padding-bottom: 4.25rem; }
+  .mtab {
+    position: relative;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    min-height: 44px;          /* WCAG 2.5.5 touch target */
+    padding: 4px 2px;
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.7rem;
+    line-height: 1.1;
+    text-align: center;
+    color: var(--ink);
+    background: transparent;
+    border: 0;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+  }
+  .mtab-icon { font-size: 1.2rem; line-height: 1; }
+  .mtab-label { white-space: normal; }
+  .mtab.is-active { color: var(--primary); font-weight: 800; }
+  .mtab.is-locked { opacity: 0.5; }
+  .mtab-badge {
+    position: absolute;
+    top: 1px;
+    right: 18%;
+    min-width: 1.35em;
+    height: 1.35em;
+    padding: 0 5px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: #fff;
+    background: var(--primary);
+    border-radius: var(--r-pill);
+    line-height: 1.35em;
+    box-shadow: 0 0 0 2px var(--card);
+  }
+  .mtab-badge[hidden] { display: none; }
 }
 
 /* ===================== CANAMED SPLASH (top-level gate) =====================

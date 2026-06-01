@@ -3054,6 +3054,7 @@ function wireRoomUI() {
   initCallProf();
   initLeave();
   initObserver();
+  initStageOverflow();
   initEndPoll();
   initTeamName();
   initRolePicker();
@@ -3066,6 +3067,7 @@ function wireRoomUI() {
   if (typeof updateModANextStep === "function") updateModANextStep();
   if (typeof updateModBNextStep === "function") updateModBNextStep();
   initRightColumnTabs();
+  initMobileTabbar();
 }
 
 /* ===================== STAGE 1: right-column tab bar =======================
@@ -3116,6 +3118,7 @@ function switchRcolTab(tab) {
   // (e.g. "open Discussion" vs "you're in Discussion — when ready,
   // open Group answers"). Refresh on every tab change.
   if (typeof updateModANextStep === "function") updateModANextStep();
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
 }
 /* a small attention nudge: when content changes while the user is on a different
    tab, dot that tab so they know there is something new. Always safe to call. */
@@ -3123,12 +3126,87 @@ function nudgeRcolTab(tab) {
   if (tab === activeRcolTab) return;
   const btn = document.querySelector('.rcol-tab[data-tab="' + tab + '"]');
   if (btn) btn.classList.add("has-attention");
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
 }
 function setTabBadge(id, text) {
   const node = document.getElementById(id);
   if (!node) return;
   if (text === "" || text == null) { node.textContent = ""; node.hidden = true; }
   else { node.textContent = String(text); node.hidden = false; }
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
+}
+
+/* ===================== Mobile sticky bottom tab bar (Module A) ============
+   A body-level mirror of the right-column .rcol-tabs, for thumb reach on
+   phones (the canonical strip is sticky at the TOP of the right column, which
+   on a long Module A scroll drifts well above the thumb). It can't live inside
+   the right column: #app / #stage-1 carry the stage-transition transform,
+   which would become the containing block for a position:fixed bar and pin it
+   to the stage bottom instead of the viewport. So the bar is a
+   <nav id="mobile-rcol-tabbar"> at body level and we MIRROR the canonical
+   tabs' state here. Taps proxy to switchRcolTab(); the active / badge / locked
+   state is copied FROM the real .rcol-tab buttons (single source of truth). */
+let _mTabbarTyping = false;
+function initMobileTabbar() {
+  const bar = document.getElementById("mobile-rcol-tabbar");
+  if (!bar || bar.dataset.wired) return;
+  bar.dataset.wired = "1";
+  bar.querySelectorAll(".mtab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (typeof switchRcolTab === "function") switchRcolTab(btn.dataset.tab);
+      updateMobileTabbar();
+    });
+  });
+  // Hide the bar while a text field is focused — a fixed bottom bar would
+  // otherwise float above the on-screen keyboard, covering the very field
+  // being typed into.
+  document.addEventListener("focusin", _mTabbarFocusChange);
+  document.addEventListener("focusout", _mTabbarFocusChange);
+  updateMobileTabbar();
+}
+function _mTabbarFocusChange() {
+  const a = document.activeElement;
+  const typing = !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" ||
+    a.isContentEditable === true);
+  if (typing === _mTabbarTyping) return;
+  _mTabbarTyping = typing;
+  updateMobileTabbar();
+}
+/* Sync the mirror from the canonical tabs, then decide visibility. Safe to
+   call any time; no-ops if the bar isn't in the DOM. */
+function updateMobileTabbar() {
+  const bar = document.getElementById("mobile-rcol-tabbar");
+  if (!bar) return;
+  ["decisions", "discussion", "answers"].forEach(tab => {
+    const src = document.querySelector('.rcol-tab[data-tab="' + tab + '"]');
+    const dst = bar.querySelector('.mtab[data-tab="' + tab + '"]');
+    if (!src || !dst) return;
+    const active = src.classList.contains("is-active");
+    dst.classList.toggle("is-active", active);
+    if (active) dst.setAttribute("aria-current", "true");
+    else dst.removeAttribute("aria-current");
+    dst.classList.toggle("is-locked", src.classList.contains("is-locked"));
+    dst.classList.toggle("has-attention", src.classList.contains("has-attention"));
+    const srcBadge = document.getElementById("tab-badge-" + tab);
+    const dstBadge = document.getElementById("mtab-badge-" + tab);
+    if (srcBadge && dstBadge) {
+      const txt = srcBadge.textContent || "";
+      dstBadge.textContent = txt;
+      dstBadge.hidden = srcBadge.hidden || txt === "";
+    }
+  });
+  // Visible only while Module A (stage-1) is the on-screen stage AND we're in
+  // the room (#app shown), and not while a text field is focused. Gating on
+  // the DOM (not the viewStage variable) keeps it correct under both the real
+  // renderStage() flow and the _test_ harness, which surfaces stage-1 by
+  // toggling .hidden directly. The <=720px gate is pure CSS.
+  const app = document.getElementById("app");
+  const stage1 = document.getElementById("stage-1");
+  const onModuleA = !!app && !app.classList.contains("hidden") &&
+    !!stage1 && !stage1.classList.contains("hidden");
+  const show = onModuleA && !_mTabbarTyping;
+  bar.hidden = !show;
+  if (document.body) document.body.classList.toggle("mtabbar-on", show);
 }
 
 function enterRoom(roomName, asAdmin) {
@@ -3494,8 +3572,20 @@ function startRoom() {
     get: function () { return revealed; },
     configurable: true
   });
+  // The four pilot scripts are LAZY (split out of the eager splash bundle
+  // 2026-06-01). Load them ONLY when the flag is on — non-pilot students never
+  // fetch them; pilot users (?llm=1 / canamedModALLM) load the bundle on room
+  // entry, then init. Async + caught: this must NEVER block room entry, and
+  // when the flag is off nothing is fetched and the legacy click-button UI is
+  // untouched. modALLMInit re-reads the window.* re-exports above (live).
   try {
-    if (typeof window.modALLMInit === "function") window.modALLMInit();
+    var _ld = window.CanamedLoader;
+    if (_ld && typeof _ld.modALLMFlagOn === "function" && _ld.modALLMFlagOn() &&
+        typeof _ld.ensureModALlm === "function") {
+      _ld.ensureModALlm()
+        .then(function () { if (typeof window.modALLMInit === "function") window.modALLMInit(); })
+        .catch(function (e) { console.warn("[modA LLM] lazy-load failed:", e); });
+    }
   } catch (e) {
     console.warn("[modA LLM] init failed:", e);
   }
@@ -7113,6 +7203,9 @@ function renderStage() {
     const s = el("stage-" + i);
     if (s) s.classList.toggle("hidden", i !== viewStage);
   }
+  // the mobile bottom tab bar mirrors Module A (stage-1) and must appear /
+  // disappear with the on-screen stage — refresh once the stages are toggled.
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
   if (viewStage === STAGE_COUNT - 1) renderWrapupSummary();
   // in-platform pre-test (Welcome) and post-test (Wrap-up) — both optional
   // and per-scenario. Render functions are no-ops when the scenario does
@@ -7610,8 +7703,77 @@ function _annotateButtonWithGlossary(btn) {
       mark.setAttribute("aria-label", markLabel);
       btn.appendChild(document.createTextNode(" "));
       btn.appendChild(mark);
+      _wireGlossMarker(btn, mark, glossText);
     }
   }
+}
+
+/* ── Tap/keyboard-reachable glossary (2026-06-01) ──────────────────────────
+   The 📖 .glossary-marker lives INSIDE the reveal <button>, so it must NOT be
+   an interactive element (a focusable/button descendant of a <button> is
+   invalid HTML and browsers flatten it). Instead the marker stays a plain
+   <span> and we:
+     • TAP (touch/mouse): a click handler opens the gloss popover and
+       stopPropagation()s so the parent reveal button does NOT fire.
+     • KEYBOARD: a keyboard user can't focus the marker without nesting
+       interactive content, so we surface the gloss when the BUTTON itself
+       gets KEYBOARD focus (:focus-visible) and hide it on blur. SR users
+       already get the gloss via the button's aria-description; this is the
+       sighted-keyboard equivalent (WCAG 1.4.13).
+   The popover is a single body-level node (outside the button) — purely
+   visual + aria-hidden, since aria-description carries it to SR. */
+let _glossPopEl = null;
+function _glossPop() {
+  if (_glossPopEl) return _glossPopEl;
+  const p = document.createElement("div");
+  p.className = "gloss-pop";
+  p.setAttribute("aria-hidden", "true");
+  p.hidden = true;
+  (document.body || document.documentElement).appendChild(p);
+  // dismiss affordances (WCAG 1.4.13)
+  document.addEventListener("keydown", e => { if (e.key === "Escape") _hideGloss(); });
+  document.addEventListener("pointerdown", e => {
+    if (!_glossPopEl || _glossPopEl.hidden) return;
+    const t = e.target;
+    const onMarker = t && t.classList && t.classList.contains("glossary-marker");
+    if (t !== _glossPopEl && !onMarker) _hideGloss();
+  }, true);
+  window.addEventListener("scroll", _hideGloss, true);
+  window.addEventListener("resize", _hideGloss);
+  _glossPopEl = p;
+  return p;
+}
+function _hideGloss() {
+  if (_glossPopEl) { _glossPopEl.hidden = true; _glossPopEl._anchor = null; }
+}
+function _showGloss(anchor, text) {
+  if (!anchor) return;
+  const p = _glossPop();
+  p.textContent = text;
+  p.hidden = false;
+  p._anchor = anchor;
+  const r = anchor.getBoundingClientRect();
+  const pw = Math.min(p.offsetWidth || 280, window.innerWidth - 12);
+  const left = Math.min(Math.max(6, r.left), Math.max(6, window.innerWidth - pw - 6));
+  let top = r.bottom + 6;
+  if (top + p.offsetHeight > window.innerHeight - 6) {
+    top = Math.max(6, r.top - p.offsetHeight - 6);   // flip above if it'd overflow
+  }
+  p.style.left = left + "px";
+  p.style.top = top + "px";
+}
+function _wireGlossMarker(btn, mark, glossText) {
+  mark.addEventListener("click", e => {
+    e.stopPropagation();   // do NOT trigger the reveal button
+    e.preventDefault();
+    if (_glossPopEl && !_glossPopEl.hidden && _glossPopEl._anchor === mark) _hideGloss();
+    else _showGloss(mark, glossText);
+  });
+  btn.addEventListener("focus", () => {
+    // keyboard focus only (mouse-clicking the reveal must not flash the gloss)
+    if (btn.matches && btn.matches(":focus-visible")) _showGloss(mark, glossText);
+  });
+  btn.addEventListener("blur", _hideGloss);
 }
 function prereqsMet() {
   return SYNTH_PREREQS.every(id => revealed[id]);
@@ -8097,6 +8259,7 @@ function updateDiscussionTabLock(unlocked) {
   if (!tab) return;
   tab.classList.toggle("is-locked", !unlocked);
   tab.setAttribute("aria-disabled", unlocked ? "false" : "true");
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
 }
 
 let promptsWereUnlocked = false;
@@ -8872,7 +9035,66 @@ let lastUnlockedDecisionIds = new Set();
  * answers" goal, now sequenced AFTER the vote rather than skipping it). */
 let lastModuleAVotesAllCommitted = false;
 
+/* ── Live-vote a11y (2026-06-01) ───────────────────────────────────────────
+   renderDecisions() rebuilds #decisions-A / -B via innerHTML on EVERY ballot
+   or presence change (room-wide), which (a) drops keyboard focus to <body>
+   whenever a teammate votes while you're navigating the options, and (b) gives
+   screen-reader users no signal that the tally moved or the team locked in.
+   These helpers preserve focus across the rebuild (vote buttons carry stable
+   data-dec/data-opt; the lock button data-dec-lock) and feed a persistent,
+   visually-hidden polite live region per module. */
+const _decLiveLast = {};
+function _captureDecisionFocus() {
+  const ae = document.activeElement;
+  if (!ae || typeof ae.closest !== "function") return null;
+  if (!ae.closest("#decisions-A, #decisions-B")) return null;
+  if (ae.dataset && ae.dataset.decLock != null) return { lock: ae.dataset.decLock };
+  if (ae.dataset && ae.dataset.dec != null && ae.dataset.opt != null) {
+    return { dec: ae.dataset.dec, opt: ae.dataset.opt };
+  }
+  return null;
+}
+function _restoreDecisionFocus(key) {
+  if (!key) return;
+  const sel = key.lock != null
+    ? '.dec-lock[data-dec-lock="' + key.lock + '"]'
+    : '.dec-opt[data-dec="' + key.dec + '"][data-opt="' + key.opt + '"]';
+  const node = document.querySelector(sel);
+  // A just-committed decision disables/removes its controls — focus then
+  // simply falls back to <body>, same as before; no worse than today.
+  if (node && !node.disabled && typeof node.focus === "function") {
+    try { node.focus({ preventScroll: true }); } catch (_) { node.focus(); }
+  }
+}
+/* Persistent polite live region per module, updated only on CHANGE. The first
+   population per region lifetime is SEEDED silently (region left empty) so a
+   page load / room entry never announces the initial tally — only subsequent
+   ballot/lock changes are spoken. */
+function _announceDecisions(mod, text) {
+  const box = el("decisions-" + mod);
+  if (!box || !box.parentNode) return;
+  let live = document.getElementById("dec-live-" + mod);
+  if (!live) {
+    live = document.createElement("div");
+    live.id = "dec-live-" + mod;
+    live.className = "sr-only";
+    live.setAttribute("aria-live", "polite");
+    live.setAttribute("aria-atomic", "true");
+    box.parentNode.insertBefore(live, box);
+    _decLiveLast[mod] = text;   // seed without announcing
+    return;
+  }
+  if (text !== _decLiveLast[mod]) {
+    _decLiveLast[mod] = text;
+    live.textContent = text;
+  }
+}
+
 function renderDecisions() {
+  // Preserve keyboard focus + collect the per-module SR tally across the full
+  // innerHTML rebuild below (see the _decLive* helpers above).
+  const _focusKey = _captureDecisionFocus();
+  const srLines = { A: [], B: [] };
   // Combined across modules: which decisions are unlocked right now. Chained
   // branches live in Module B (a committed decision unlocks a follow-up), so
   // the unlock-transition nudge must span both modules — a single tracker
@@ -8918,7 +9140,7 @@ function renderDecisions() {
       const gate = decisionUnlocked(d);
       if (gate.unlocked) {
         allUnlockedNow.add(d.id);
-        box.appendChild(buildDecision(d));
+        box.appendChild(buildDecision(d, srLines[mod]));
       } else if (d.hideWhenLocked) {
         // Chained-branch follow-ups stay invisible until they open, so the
         // continuation lands as a surprise fork rather than a spoiler teaser.
@@ -8927,7 +9149,11 @@ function renderDecisions() {
         box.appendChild(buildLockedDecision(d, gate.unmet));
       }
     });
+    // Announce the module's running tally / lock-in state to SR users.
+    _announceDecisions(mod, srLines[mod].join(" · "));
   });
+  // Put keyboard focus back on the control the user was on before the rebuild.
+  _restoreDecisionFocus(_focusKey);
   // Coach nudge on unlock transitions (locked → unlocked), across both modules.
   // Surfaces a one-liner via toast() so the team sees a new decision opened
   // without auto-stealing focus. Skipped on the initial paint (empty tracker).
@@ -9021,7 +9247,7 @@ function buildLockedDecision(d, unmet) {
 
 /* one decision block: the prompt, the option bars with a live tally, who voted,
    and either a "lock in" button or the committed result with its explanation */
-function buildDecision(d) {
+function buildDecision(d, srSink) {
   const v = roomVotes[d.id] || {};
   const ballots = v.ballots || {};
   const committed = (v.committed && typeof v.committed.choice === "number")
@@ -9064,6 +9290,10 @@ function buildDecision(d) {
     const pct = totalBallots ? Math.round((n / totalBallots) * 100) : 0;
     const btn = document.createElement("button");
     btn.type = "button";
+    // stable identity so renderDecisions() can restore keyboard focus to the
+    // same option after the room-wide innerHTML rebuild
+    btn.dataset.dec = d.id;
+    btn.dataset.opt = String(i);
     btn.className = "dec-opt"
       + (myChoice === i ? " mine" : "")
       + (committed === i ? " won" : "")
@@ -9169,6 +9399,7 @@ function buildDecision(d) {
       : totalBallots + " voted";
     const lock = document.createElement("button");
     lock.type = "button";
+    lock.dataset.decLock = d.id;   // stable identity for focus restore
     lock.className = "dec-lock";
     lock.textContent = "Lock in the team's answer";
     lock.disabled = !canLock;
@@ -9180,6 +9411,20 @@ function buildDecision(d) {
     foot.appendChild(lock);
     wrap.appendChild(foot);
     if (isRoomAdmin) status.textContent += " · you are observing";
+  }
+  // Feed the per-module SR live region (reuses the same English tally strings
+  // the visible card shows — the vote component is English-only by design).
+  if (srSink) {
+    const _lbl = tc(d.prompt, lang).split(/\s+/).slice(0, 6).join(" ");
+    if (committed != null) {
+      const _cOpt = d.options[committed] || {};
+      srSink.push(_lbl + ": locked in — " +
+        (_cOpt.correct ? "the safest answer" : "not the safest answer"));
+    } else {
+      const _present = votablePresentCount();
+      srSink.push(_lbl + ": " +
+        (_present ? totalBallots + " of " + _present + " voted" : totalBallots + " voted"));
+    }
   }
   return wrap;
 }
@@ -10682,6 +10927,30 @@ function initObserver() {
     } else {
       refObservers.child(clientId).set({ at: Date.now() }).catch(() => {});
     }
+  });
+}
+
+/* Control-row overflow (UX-overload #5): the "··· More" disclosure that holds
+   Teams / observe / leave on narrow viewports (they're display:contents inline
+   on desktop, so this toggle is hidden there). Toggles .is-open on the wrapper;
+   closes on outside click + Escape. The toggle only exists in the participant
+   row, so this no-ops for the admin dashboard. */
+function initStageOverflow() {
+  const toggle = el("stage-overflow-toggle");
+  if (!toggle || toggle.dataset.wired === "1") return;
+  toggle.dataset.wired = "1";
+  const wrap = toggle.closest(".stage-overflow");
+  if (!wrap) return;
+  const setOpen = open => {
+    wrap.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  toggle.addEventListener("click", () => setOpen(!wrap.classList.contains("is-open")));
+  document.addEventListener("click", e => {
+    if (wrap.classList.contains("is-open") && !wrap.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && wrap.classList.contains("is-open")) { setOpen(false); toggle.focus(); }
   });
 }
 

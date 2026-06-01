@@ -283,6 +283,7 @@
   "stage.welcome.intro": "Thème : Apprendre les un·e·s des autres — une séance d'échange portée par les étudiant·e·s. Toute la séance se déroule depuis cette plateforme. Vous avancez ensemble ; un·e encadrant·e fait passer votre salle d'un bloc au suivant.",
   "stage.welcome.grade-note": "Votre note et votre statut ne sont pas affectés par cet atelier. Les points attribués par la plateforme sont uniquement pédagogiques — ils ne contribuent pas à votre note universitaire. Si vous êtes en désaccord avec un point ou une pénalité, parlez-en à votre encadrant·e ; la notation est révisable.",
   "room.call-facilitator": "Appeler un·e encadrant·e",
+  "room.more": "Plus",
   "room.team-name-label": "Nom de l'équipe",
   "room.team-name.empty": "Saisissez d'abord un nom d'équipe.",
   "room.team-name.not-ready": "Pas encore prêt — réessayez dans une seconde.",

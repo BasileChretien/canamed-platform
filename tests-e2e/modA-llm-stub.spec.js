@@ -37,6 +37,14 @@ async function setupLLMMode(page) {
     if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
       await window.CanamedLoader.ensureCaseContent();
     }
+    // The four LLM scripts were lazy-split out of the eager bundle
+    // (2026-06-01); they now load on demand via ensureModALlm() — the same
+    // path startRoom() uses for ?llm=1 users. Pull them in here so the global
+    // assertions below see modAQuestionScoring / modALLMPrompts / modALLMBridge
+    // / modALLMInit, exactly as the eager <script> tags used to provide them.
+    if (window.CanamedLoader && window.CanamedLoader.ensureModALlm) {
+      await window.CanamedLoader.ensureModALlm();
+    }
   });
 }
 

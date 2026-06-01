@@ -1077,27 +1077,47 @@
         <div class="stage-row">
           <span id="stage-indicator" class="stage-indicator" aria-live="polite"></span>
           <span id="room-score-chip" class="score-chip hidden" title="Your team's score"></span>
-          <div class="stage-controls">
+          <div class="stage-controls stage-controls--participant">
             <button id="prev-btn">&larr; Back</button>
             <button id="next-btn">Next &rarr;</button>
             <button id="call-prof-btn" class="call-btn"
                     data-i18n="room.call-facilitator">Call a facilitator</button>
-            <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
-            <!-- Sim 2026-05-19 (Hana B1, Camille first-timer, Théo lurker):
-                 "A 'I'm not ready' panic button that just lets me move
-                 into an observer slot for the rest of this stage." Quiet
-                 affordance — no broadcast to the room, no flashing UI.
-                 Writes /sessions/{code}/rooms/{room}/observers/{cid}
-                 which the score engine reads to skip participation-
-                 pressure events for this client. -->
-            <button id="observer-btn" class="observer-btn"
-                    type="button"
-                    data-i18n="room.observer-btn"
-                    data-i18n-title="room.observer-btn-title"
-                    title="Move into the observer role — you can still see everything but no one will ask you to commit.">
-              I'm just observing
-            </button>
-            <button id="leave-btn" title="Leave">Leave</button>
+            <!-- UX-overload #5: on narrow viewports "Call a facilitator" is the
+                 primary action and the secondary room actions (Teams / observe
+                 / leave) collapse behind this "More" disclosure, cutting the
+                 control-row clutter. On desktop the wrapper + menu are
+                 display:contents (see style.css), so these flow inline exactly
+                 as before and the toggle is hidden. (A plain div+button rather
+                 than <details> — a closed <details> hides its content even when
+                 the element is display:contents on WebKit/Android.) SCOPED to
+                 .stage-controls--participant — the admin stage-controls has none
+                 of these buttons and no .stage-overflow, so it is untouched.
+                 Toggle wired by initStageOverflow(). -->
+            <div class="stage-overflow">
+              <button type="button" class="stage-overflow-toggle" id="stage-overflow-toggle"
+                      aria-expanded="false" aria-controls="stage-overflow-menu">
+                <span class="stage-overflow-dots" aria-hidden="true">&middot;&middot;&middot;</span>
+                <span data-i18n="room.more">More</span>
+              </button>
+              <div class="stage-overflow-menu" id="stage-overflow-menu">
+                <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
+                <!-- Sim 2026-05-19 (Hana B1, Camille first-timer, Théo lurker):
+                     "A 'I'm not ready' panic button that just lets me move
+                     into an observer slot for the rest of this stage." Quiet
+                     affordance — no broadcast to the room, no flashing UI.
+                     Writes /sessions/{code}/rooms/{room}/observers/{cid}
+                     which the score engine reads to skip participation-
+                     pressure events for this client. -->
+                <button id="observer-btn" class="observer-btn"
+                        type="button"
+                        data-i18n="room.observer-btn"
+                        data-i18n-title="room.observer-btn-title"
+                        title="Move into the observer role — you can still see everything but no one will ask you to commit.">
+                  I'm just observing
+                </button>
+                <button id="leave-btn" title="Leave">Leave</button>
+              </div>
+            </div>
           </div>
         </div>
         <!-- Global "you are here" stepper (UX-overload fix 2026-06-01). The
@@ -3006,6 +3026,39 @@
        runs in local test mode (syncs across tabs of this browser). See README.md.</p>
   </footer>
 
+  <!-- Mobile-only sticky bottom tab bar (Module A). MUST be a body-level
+       element: #app and #stage-1 carry the stage-transition transform, which
+       makes THEM the containing block for any position:fixed descendant — so a
+       bar rendered inside the right column pins to the stage bottom, not the
+       viewport. Living at body level escapes those transforms. This bar MIRRORS
+       the in-page .rcol-tabs (Decide / Debate / Answers); taps proxy to
+       switchRcolTab() and its active / badge / locked state is synced by
+       updateMobileTabbar(). Shown only at <=720px while Module A (stage-1) is
+       the visible stage, and hidden while a text field is focused so it never
+       floats over the on-screen keyboard. Reuses the existing rcol.tab.* i18n
+       keys (no new copy). -->
+  <nav id="mobile-rcol-tabbar" class="mobile-rcol-tabbar"
+       aria-label="Module A sections" hidden>
+    <button class="mtab is-active" type="button" data-tab="decisions"
+            aria-controls="rcol-p-decisions" aria-current="true">
+      <span class="mtab-icon" aria-hidden="true">🗳️</span>
+      <span class="mtab-label" data-i18n="rcol.tab.decisions">Decide together</span>
+      <span class="mtab-badge" id="mtab-badge-decisions" aria-hidden="true" hidden></span>
+    </button>
+    <button class="mtab" type="button" data-tab="discussion"
+            aria-controls="rcol-p-discussion">
+      <span class="mtab-icon" aria-hidden="true">💬</span>
+      <span class="mtab-label" data-i18n="rcol.tab.discussion">Debate</span>
+      <span class="mtab-badge" id="mtab-badge-discussion" aria-hidden="true" hidden></span>
+    </button>
+    <button class="mtab" type="button" data-tab="answers"
+            aria-controls="rcol-p-answers">
+      <span class="mtab-icon" aria-hidden="true">📝</span>
+      <span class="mtab-label" data-i18n="rcol.tab.answers">Our final answers</span>
+      <span class="mtab-badge" id="mtab-badge-answers" aria-hidden="true" hidden></span>
+    </button>
+  </nav>
+
   <!-- Firebase JS SDK 10.12.5 - pinned. Re-check before each academic year:
        https://firebase.google.com/support/release-notes/js
        integrity hashes are sha384 of these exact files; if you bump the version
@@ -3093,22 +3146,20 @@
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
   <script src="script-loader.js?v=v37" defer></script>
-  <!-- Module A LLM-patient pilot (2026-05-28). Dormant unless the feature
-       flag is on (URL ?llm=1 or localStorage canamedModALLM=1). The four
-       files are independent of each other except for load order:
-       modA-question-scoring relies on SCORING from case-content.js (loaded
-       lazily); the bridge and init are activated only after startRoom().
-       Kept as classic scripts (not modules) to share the global namespace
-       with script.js, same as every other file in this platform. -->
-  <script src="modA-question-scoring.js?v=v37" defer></script>
-  <script src="modA-llm-prompts.js?v=v37" defer></script>
-  <script src="modA-llm-bridge.js?v=v37" defer></script>
-  <script src="modA-llm-init.js?v=v37" defer></script>
+  <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
+       (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
+       were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
+       critical-path JS — they are gated behind ?llm=1 and useless to the ~all
+       non-pilot students. They are now injected on demand by
+       window.CanamedLoader.ensureModALlm(), which startRoom() calls only when
+       CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
+       promotion that must survive the join flow is done eagerly in
+       script-loader.js (see its header). -->
   <script src="script.js?v=v37" defer></script>
-  <!-- case-content.js, qrcode.js, tour.js and scenario-author.js are NOT
-       in the initial HTML on purpose — they're injected by
-       script-loader.js on demand. See that file's header for the loading
-       contract. -->
+  <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
+       modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
+       injected by script-loader.js on demand. See that file's header for the
+       loading contract. -->
   <!--
        The previous (synchronous) load list:
          case-content.js, qrcode.js, tour.js, scenario-author.js, script.js

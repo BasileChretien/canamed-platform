@@ -217,6 +217,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     room): lazy-splitting them via script-loader.js (the #48 precedent)
 //     returns far more than this and is the move the next time the budget
 //     is threatened, rather than another bump.
+//
+//   2026-06-01 (UX overload Phase-2): DID the designated reclaim. The four
+//     Module A LLM-patient scripts (modA-question-scoring / modA-llm-prompts /
+//     modA-llm-bridge / modA-llm-init) were SPLIT out of the eager bundle and
+//     are now injected on demand by CanamedLoader.ensureModALlm(), called by
+//     startRoom() ONLY when the ?llm=1 / canamedModALLM flag is on. The ?llm
+//     flag→localStorage promotion (which must survive the join flow) is hoisted
+//     eagerly into script-loader.js (~0.2 KB gz). Net: the eager splash bundle
+//     drops back well under the 325 cap, restoring headroom for the remaining
+//     UX Phase-2/3 items without a bump. Cap LEFT at 325 (not re-tightened) so
+//     those items have runway; revisit tightening once they land.
 const FIRST_PARTY_BYTES_LIMIT_KB = 325;
 
 test.describe("Perf budget — splash", () => {
@@ -312,7 +323,14 @@ test.describe("Perf budget — splash", () => {
       "tour.js",
       "scenario-author.js",
       "script-room.js",
-      "script-admin.js"
+      "script-admin.js",
+      // Module A LLM-patient pilot — lazy-split out of the eager bundle
+      // 2026-06-01 (gated behind ?llm=1; loaded on room entry only for pilot
+      // users via CanamedLoader.ensureModALlm). Off the splash critical path.
+      "modA-question-scoring.js",
+      "modA-llm-prompts.js",
+      "modA-llm-bridge.js",
+      "modA-llm-init.js"
     ]);
     const isLazyChunk = (u) => {
       // Strip host, leading slash, AND any ?v=… cache-buster query string
