@@ -3554,7 +3554,12 @@ h2, h3 { text-wrap: balance; }
   border-radius: 50%;
   background: #e0a86b;
   box-shadow: 0 0 0 2px var(--card);
-  animation: rcol-pulse 1.4s var(--ease-out, ease) infinite;
+  /* UX-overload fix (2026-06-01): pulse a few times, then SETTLE to a static
+     dot instead of pulsing forever. A perpetual pulse on a "new content" cue
+     reads as anxiety and competes for attention indefinitely; the dot still
+     stays visible (the 100% keyframe = solid dot) so the "something new"
+     signal persists — it just stops moving (attention budget). */
+  animation: rcol-pulse 1.4s var(--ease-out, ease) 4;
 }
 .rcol-tab.is-active.has-attention::after { display: none; }
 @keyframes rcol-pulse {
