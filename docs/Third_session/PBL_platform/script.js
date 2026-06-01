@@ -7697,8 +7697,77 @@ function _annotateButtonWithGlossary(btn) {
       mark.setAttribute("aria-label", markLabel);
       btn.appendChild(document.createTextNode(" "));
       btn.appendChild(mark);
+      _wireGlossMarker(btn, mark, glossText);
     }
   }
+}
+
+/* ── Tap/keyboard-reachable glossary (2026-06-01) ──────────────────────────
+   The 📖 .glossary-marker lives INSIDE the reveal <button>, so it must NOT be
+   an interactive element (a focusable/button descendant of a <button> is
+   invalid HTML and browsers flatten it). Instead the marker stays a plain
+   <span> and we:
+     • TAP (touch/mouse): a click handler opens the gloss popover and
+       stopPropagation()s so the parent reveal button does NOT fire.
+     • KEYBOARD: a keyboard user can't focus the marker without nesting
+       interactive content, so we surface the gloss when the BUTTON itself
+       gets KEYBOARD focus (:focus-visible) and hide it on blur. SR users
+       already get the gloss via the button's aria-description; this is the
+       sighted-keyboard equivalent (WCAG 1.4.13).
+   The popover is a single body-level node (outside the button) — purely
+   visual + aria-hidden, since aria-description carries it to SR. */
+let _glossPopEl = null;
+function _glossPop() {
+  if (_glossPopEl) return _glossPopEl;
+  const p = document.createElement("div");
+  p.className = "gloss-pop";
+  p.setAttribute("aria-hidden", "true");
+  p.hidden = true;
+  (document.body || document.documentElement).appendChild(p);
+  // dismiss affordances (WCAG 1.4.13)
+  document.addEventListener("keydown", e => { if (e.key === "Escape") _hideGloss(); });
+  document.addEventListener("pointerdown", e => {
+    if (!_glossPopEl || _glossPopEl.hidden) return;
+    const t = e.target;
+    const onMarker = t && t.classList && t.classList.contains("glossary-marker");
+    if (t !== _glossPopEl && !onMarker) _hideGloss();
+  }, true);
+  window.addEventListener("scroll", _hideGloss, true);
+  window.addEventListener("resize", _hideGloss);
+  _glossPopEl = p;
+  return p;
+}
+function _hideGloss() {
+  if (_glossPopEl) { _glossPopEl.hidden = true; _glossPopEl._anchor = null; }
+}
+function _showGloss(anchor, text) {
+  if (!anchor) return;
+  const p = _glossPop();
+  p.textContent = text;
+  p.hidden = false;
+  p._anchor = anchor;
+  const r = anchor.getBoundingClientRect();
+  const pw = Math.min(p.offsetWidth || 280, window.innerWidth - 12);
+  const left = Math.min(Math.max(6, r.left), Math.max(6, window.innerWidth - pw - 6));
+  let top = r.bottom + 6;
+  if (top + p.offsetHeight > window.innerHeight - 6) {
+    top = Math.max(6, r.top - p.offsetHeight - 6);   // flip above if it'd overflow
+  }
+  p.style.left = left + "px";
+  p.style.top = top + "px";
+}
+function _wireGlossMarker(btn, mark, glossText) {
+  mark.addEventListener("click", e => {
+    e.stopPropagation();   // do NOT trigger the reveal button
+    e.preventDefault();
+    if (_glossPopEl && !_glossPopEl.hidden && _glossPopEl._anchor === mark) _hideGloss();
+    else _showGloss(mark, glossText);
+  });
+  btn.addEventListener("focus", () => {
+    // keyboard focus only (mouse-clicking the reveal must not flash the gloss)
+    if (btn.matches && btn.matches(":focus-visible")) _showGloss(mark, glossText);
+  });
+  btn.addEventListener("blur", _hideGloss);
 }
 function prereqsMet() {
   return SYNTH_PREREQS.every(id => revealed[id]);

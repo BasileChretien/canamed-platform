@@ -1605,7 +1605,35 @@ html[data-theme="dark"] .next-step-coach {
   font-size: 0.85em;
   margin-left: 2px;
   line-height: 1;
+  /* The 📖 is now a real tap target INSIDE the reveal button: tapping it opens
+     the plain-language gloss (the click handler stopPropagation()s so the
+     reveal itself doesn't fire). Padding gives touch a comfortable hit area
+     without making the span an interactive element (it stays a <span>, so the
+     button keeps a single interactive node — valid HTML). */
+  padding: 3px 5px;
+  border-radius: var(--r-sm, 6px);
+  cursor: help;
 }
+.glossary-marker:hover { background: rgba(0, 0, 0, 0.06); }
+/* Visual gloss popover (touch + keyboard). Screen-reader users get the same
+   text via the button's aria-description, so the popover is aria-hidden to
+   avoid a double announcement. Dismissible (Escape / outside tap / scroll),
+   per WCAG 1.4.13 content-on-focus. */
+.gloss-pop {
+  position: fixed;
+  z-index: 60;
+  max-width: min(280px, 90vw);
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  line-height: 1.35;
+  white-space: pre-line;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+}
+.gloss-pop[hidden] { display: none; }
 
 /* History sub-grouping (round4-a11y Rec 4): the dense History group is
    split into a short visible cluster + a collapsed "More questions"
