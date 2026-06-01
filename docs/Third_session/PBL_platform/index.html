@@ -3000,6 +3000,39 @@
        runs in local test mode (syncs across tabs of this browser). See README.md.</p>
   </footer>
 
+  <!-- Mobile-only sticky bottom tab bar (Module A). MUST be a body-level
+       element: #app and #stage-1 carry the stage-transition transform, which
+       makes THEM the containing block for any position:fixed descendant — so a
+       bar rendered inside the right column pins to the stage bottom, not the
+       viewport. Living at body level escapes those transforms. This bar MIRRORS
+       the in-page .rcol-tabs (Decide / Debate / Answers); taps proxy to
+       switchRcolTab() and its active / badge / locked state is synced by
+       updateMobileTabbar(). Shown only at <=720px while Module A (stage-1) is
+       the visible stage, and hidden while a text field is focused so it never
+       floats over the on-screen keyboard. Reuses the existing rcol.tab.* i18n
+       keys (no new copy). -->
+  <nav id="mobile-rcol-tabbar" class="mobile-rcol-tabbar"
+       aria-label="Module A sections" hidden>
+    <button class="mtab is-active" type="button" data-tab="decisions"
+            aria-controls="rcol-p-decisions" aria-current="true">
+      <span class="mtab-icon" aria-hidden="true">🗳️</span>
+      <span class="mtab-label" data-i18n="rcol.tab.decisions">Decide together</span>
+      <span class="mtab-badge" id="mtab-badge-decisions" aria-hidden="true" hidden></span>
+    </button>
+    <button class="mtab" type="button" data-tab="discussion"
+            aria-controls="rcol-p-discussion">
+      <span class="mtab-icon" aria-hidden="true">💬</span>
+      <span class="mtab-label" data-i18n="rcol.tab.discussion">Debate</span>
+      <span class="mtab-badge" id="mtab-badge-discussion" aria-hidden="true" hidden></span>
+    </button>
+    <button class="mtab" type="button" data-tab="answers"
+            aria-controls="rcol-p-answers">
+      <span class="mtab-icon" aria-hidden="true">📝</span>
+      <span class="mtab-label" data-i18n="rcol.tab.answers">Our final answers</span>
+      <span class="mtab-badge" id="mtab-badge-answers" aria-hidden="true" hidden></span>
+    </button>
+  </nav>
+
   <!-- Firebase JS SDK 10.12.5 - pinned. Re-check before each academic year:
        https://firebase.google.com/support/release-notes/js
        integrity hashes are sha384 of these exact files; if you bump the version

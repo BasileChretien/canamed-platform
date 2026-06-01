@@ -3066,6 +3066,7 @@ function wireRoomUI() {
   if (typeof updateModANextStep === "function") updateModANextStep();
   if (typeof updateModBNextStep === "function") updateModBNextStep();
   initRightColumnTabs();
+  initMobileTabbar();
 }
 
 /* ===================== STAGE 1: right-column tab bar =======================
@@ -3116,6 +3117,7 @@ function switchRcolTab(tab) {
   // (e.g. "open Discussion" vs "you're in Discussion — when ready,
   // open Group answers"). Refresh on every tab change.
   if (typeof updateModANextStep === "function") updateModANextStep();
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
 }
 /* a small attention nudge: when content changes while the user is on a different
    tab, dot that tab so they know there is something new. Always safe to call. */
@@ -3123,12 +3125,87 @@ function nudgeRcolTab(tab) {
   if (tab === activeRcolTab) return;
   const btn = document.querySelector('.rcol-tab[data-tab="' + tab + '"]');
   if (btn) btn.classList.add("has-attention");
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
 }
 function setTabBadge(id, text) {
   const node = document.getElementById(id);
   if (!node) return;
   if (text === "" || text == null) { node.textContent = ""; node.hidden = true; }
   else { node.textContent = String(text); node.hidden = false; }
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
+}
+
+/* ===================== Mobile sticky bottom tab bar (Module A) ============
+   A body-level mirror of the right-column .rcol-tabs, for thumb reach on
+   phones (the canonical strip is sticky at the TOP of the right column, which
+   on a long Module A scroll drifts well above the thumb). It can't live inside
+   the right column: #app / #stage-1 carry the stage-transition transform,
+   which would become the containing block for a position:fixed bar and pin it
+   to the stage bottom instead of the viewport. So the bar is a
+   <nav id="mobile-rcol-tabbar"> at body level and we MIRROR the canonical
+   tabs' state here. Taps proxy to switchRcolTab(); the active / badge / locked
+   state is copied FROM the real .rcol-tab buttons (single source of truth). */
+let _mTabbarTyping = false;
+function initMobileTabbar() {
+  const bar = document.getElementById("mobile-rcol-tabbar");
+  if (!bar || bar.dataset.wired) return;
+  bar.dataset.wired = "1";
+  bar.querySelectorAll(".mtab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (typeof switchRcolTab === "function") switchRcolTab(btn.dataset.tab);
+      updateMobileTabbar();
+    });
+  });
+  // Hide the bar while a text field is focused — a fixed bottom bar would
+  // otherwise float above the on-screen keyboard, covering the very field
+  // being typed into.
+  document.addEventListener("focusin", _mTabbarFocusChange);
+  document.addEventListener("focusout", _mTabbarFocusChange);
+  updateMobileTabbar();
+}
+function _mTabbarFocusChange() {
+  const a = document.activeElement;
+  const typing = !!a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" ||
+    a.isContentEditable === true);
+  if (typing === _mTabbarTyping) return;
+  _mTabbarTyping = typing;
+  updateMobileTabbar();
+}
+/* Sync the mirror from the canonical tabs, then decide visibility. Safe to
+   call any time; no-ops if the bar isn't in the DOM. */
+function updateMobileTabbar() {
+  const bar = document.getElementById("mobile-rcol-tabbar");
+  if (!bar) return;
+  ["decisions", "discussion", "answers"].forEach(tab => {
+    const src = document.querySelector('.rcol-tab[data-tab="' + tab + '"]');
+    const dst = bar.querySelector('.mtab[data-tab="' + tab + '"]');
+    if (!src || !dst) return;
+    const active = src.classList.contains("is-active");
+    dst.classList.toggle("is-active", active);
+    if (active) dst.setAttribute("aria-current", "true");
+    else dst.removeAttribute("aria-current");
+    dst.classList.toggle("is-locked", src.classList.contains("is-locked"));
+    dst.classList.toggle("has-attention", src.classList.contains("has-attention"));
+    const srcBadge = document.getElementById("tab-badge-" + tab);
+    const dstBadge = document.getElementById("mtab-badge-" + tab);
+    if (srcBadge && dstBadge) {
+      const txt = srcBadge.textContent || "";
+      dstBadge.textContent = txt;
+      dstBadge.hidden = srcBadge.hidden || txt === "";
+    }
+  });
+  // Visible only while Module A (stage-1) is the on-screen stage AND we're in
+  // the room (#app shown), and not while a text field is focused. Gating on
+  // the DOM (not the viewStage variable) keeps it correct under both the real
+  // renderStage() flow and the _test_ harness, which surfaces stage-1 by
+  // toggling .hidden directly. The <=720px gate is pure CSS.
+  const app = document.getElementById("app");
+  const stage1 = document.getElementById("stage-1");
+  const onModuleA = !!app && !app.classList.contains("hidden") &&
+    !!stage1 && !stage1.classList.contains("hidden");
+  const show = onModuleA && !_mTabbarTyping;
+  bar.hidden = !show;
+  if (document.body) document.body.classList.toggle("mtabbar-on", show);
 }
 
 function enterRoom(roomName, asAdmin) {
@@ -7108,6 +7185,9 @@ function renderStage() {
     const s = el("stage-" + i);
     if (s) s.classList.toggle("hidden", i !== viewStage);
   }
+  // the mobile bottom tab bar mirrors Module A (stage-1) and must appear /
+  // disappear with the on-screen stage — refresh once the stages are toggled.
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
   if (viewStage === STAGE_COUNT - 1) renderWrapupSummary();
   // in-platform pre-test (Welcome) and post-test (Wrap-up) — both optional
   // and per-scenario. Render functions are no-ops when the scenario does
@@ -8092,6 +8172,7 @@ function updateDiscussionTabLock(unlocked) {
   if (!tab) return;
   tab.classList.toggle("is-locked", !unlocked);
   tab.setAttribute("aria-disabled", unlocked ? "false" : "true");
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
 }
 
 let promptsWereUnlocked = false;
