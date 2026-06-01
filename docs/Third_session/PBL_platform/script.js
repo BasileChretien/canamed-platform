@@ -6784,13 +6784,19 @@ function downloadCertificatePdf() {
 // Verify-page URL for a given credential id. Pegs to the live host (the cert
 // is taken offline + scanned anywhere), with a sensible fallback to whatever
 // origin served the platform — useful for staging and local dev.
+//
+// Uses the short "/v?id=" path (a Firebase Hosting rewrite to verify.html, see
+// firebase.json) rather than "/verify.html?id=". Dropping the 10-char filename
+// from the URL keeps the QR-encoded payload low enough to render as a sparser,
+// easier-to-scan QR version (~29x29 instead of 33x33). verify.html still works
+// directly, so certificates printed before this change keep verifying.
 function _verifyUrl(id) {
   const host = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
     typeof CANAMED_CONFIG.verifyOrigin === "string" && CANAMED_CONFIG.verifyOrigin)
     ? CANAMED_CONFIG.verifyOrigin
     : (typeof location !== "undefined" && location.origin) ? location.origin
     : "https://canamed-69785.web.app";
-  return host.replace(/\/+$/, "") + "/verify.html?id=" + encodeURIComponent(id);
+  return host.replace(/\/+$/, "") + "/v?id=" + encodeURIComponent(id);
 }
 
 /* Gather the session's reference cards (historical context, guidelines, recap
