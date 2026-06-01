@@ -810,7 +810,16 @@
           university grade. If you disagree with a point or a penalty,
           tell your facilitator; scoring is reviewable.</p>
       </div>
-      <details class="privacy-note" open>
+      <!-- UX-overload fix (2026-06-01): CLOSED by default. This 6-paragraph
+           GDPR/APPI notice (plus the certificate-verification note now moved
+           inside it) was the single biggest block on the join screen — an
+           open-by-default wall the student had to scroll past before the join
+           action. It is one click away via the summary, and the consent
+           checkboxes below — which reference it ("I have read the data-use
+           notice above") — stay visible on first paint. Collapsing it (rather
+           than hiding the consent control) keeps the lazy-locale-consent
+           "consent renders on first paint" contract intact. -->
+      <details class="privacy-note">
         <summary data-i18n="lobby.privacy.summary">How your data is used (please read before joining)</summary>
         <p data-i18n-html="lobby.privacy.p1">The CaNaMED research team
           (<strong>Université de Caen Normandie &times; Nagoya University</strong>,
@@ -849,6 +858,13 @@
           bases, the joint-use items, the international-transfer safeguards,
           retention periods, your rights with response times, and the
           ethics-committee approvals. Please read it once before joining.</p>
+        <!-- Certificate-verification note (UX-overload fix 2026-06-01): moved
+             here from the consent block, where its ~90 words sat on the
+             critical path to the Join button. It is a data-processing detail,
+             so it belongs inside "How your data is used". Same i18n key. -->
+        <p data-i18n="lobby.consent-verification">
+          Your certificate of attendance is independently verifiable. A verification ID and QR code printed on it link &mdash; in a separate registry &mdash; to a one-way hash of your name and session, so that anyone you give BOTH the ID AND the name to can confirm, on a public CaNaMED page, that they match a genuine CaNaMED certificate. Your name is never published &mdash; the page only answers &ldquo;valid&rdquo; or &ldquo;no match&rdquo;. The registry stores only the hash, for up to 5 years, and you can ask for your entry to be removed at any time (see section 18 of the privacy policy).
+        </p>
       </details>
 
       <div class="lobby-section">
@@ -916,9 +932,6 @@
               participation, my grades or my standing at my university.
             </span>
           </label>
-          <p class="consent-row consent-note" data-i18n="lobby.consent-verification">
-            Your certificate of attendance is independently verifiable. A verification ID and QR code printed on it link &mdash; in a separate registry &mdash; to a one-way hash of your name and session, so that anyone you give BOTH the ID AND the name to can confirm, on a public CaNaMED page, that they match a genuine CaNaMED certificate. Your name is never published &mdash; the page only answers &ldquo;valid&rdquo; or &ldquo;no match&rdquo;. The registry stores only the hash, for up to 5 years, and you can ask for your entry to be removed at any time (see section 18 of the privacy policy).
-          </p>
           <p class="lobby-hint consent-version" id="consent-version">
             <span data-i18n="lobby.consent-version">Notice version PIS v2 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
           </p>
