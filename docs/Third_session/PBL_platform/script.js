@@ -8960,7 +8960,66 @@ let lastUnlockedDecisionIds = new Set();
  * answers" goal, now sequenced AFTER the vote rather than skipping it). */
 let lastModuleAVotesAllCommitted = false;
 
+/* ── Live-vote a11y (2026-06-01) ───────────────────────────────────────────
+   renderDecisions() rebuilds #decisions-A / -B via innerHTML on EVERY ballot
+   or presence change (room-wide), which (a) drops keyboard focus to <body>
+   whenever a teammate votes while you're navigating the options, and (b) gives
+   screen-reader users no signal that the tally moved or the team locked in.
+   These helpers preserve focus across the rebuild (vote buttons carry stable
+   data-dec/data-opt; the lock button data-dec-lock) and feed a persistent,
+   visually-hidden polite live region per module. */
+const _decLiveLast = {};
+function _captureDecisionFocus() {
+  const ae = document.activeElement;
+  if (!ae || typeof ae.closest !== "function") return null;
+  if (!ae.closest("#decisions-A, #decisions-B")) return null;
+  if (ae.dataset && ae.dataset.decLock != null) return { lock: ae.dataset.decLock };
+  if (ae.dataset && ae.dataset.dec != null && ae.dataset.opt != null) {
+    return { dec: ae.dataset.dec, opt: ae.dataset.opt };
+  }
+  return null;
+}
+function _restoreDecisionFocus(key) {
+  if (!key) return;
+  const sel = key.lock != null
+    ? '.dec-lock[data-dec-lock="' + key.lock + '"]'
+    : '.dec-opt[data-dec="' + key.dec + '"][data-opt="' + key.opt + '"]';
+  const node = document.querySelector(sel);
+  // A just-committed decision disables/removes its controls — focus then
+  // simply falls back to <body>, same as before; no worse than today.
+  if (node && !node.disabled && typeof node.focus === "function") {
+    try { node.focus({ preventScroll: true }); } catch (_) { node.focus(); }
+  }
+}
+/* Persistent polite live region per module, updated only on CHANGE. The first
+   population per region lifetime is SEEDED silently (region left empty) so a
+   page load / room entry never announces the initial tally — only subsequent
+   ballot/lock changes are spoken. */
+function _announceDecisions(mod, text) {
+  const box = el("decisions-" + mod);
+  if (!box || !box.parentNode) return;
+  let live = document.getElementById("dec-live-" + mod);
+  if (!live) {
+    live = document.createElement("div");
+    live.id = "dec-live-" + mod;
+    live.className = "sr-only";
+    live.setAttribute("aria-live", "polite");
+    live.setAttribute("aria-atomic", "true");
+    box.parentNode.insertBefore(live, box);
+    _decLiveLast[mod] = text;   // seed without announcing
+    return;
+  }
+  if (text !== _decLiveLast[mod]) {
+    _decLiveLast[mod] = text;
+    live.textContent = text;
+  }
+}
+
 function renderDecisions() {
+  // Preserve keyboard focus + collect the per-module SR tally across the full
+  // innerHTML rebuild below (see the _decLive* helpers above).
+  const _focusKey = _captureDecisionFocus();
+  const srLines = { A: [], B: [] };
   // Combined across modules: which decisions are unlocked right now. Chained
   // branches live in Module B (a committed decision unlocks a follow-up), so
   // the unlock-transition nudge must span both modules — a single tracker
@@ -9006,7 +9065,7 @@ function renderDecisions() {
       const gate = decisionUnlocked(d);
       if (gate.unlocked) {
         allUnlockedNow.add(d.id);
-        box.appendChild(buildDecision(d));
+        box.appendChild(buildDecision(d, srLines[mod]));
       } else if (d.hideWhenLocked) {
         // Chained-branch follow-ups stay invisible until they open, so the
         // continuation lands as a surprise fork rather than a spoiler teaser.
@@ -9015,7 +9074,11 @@ function renderDecisions() {
         box.appendChild(buildLockedDecision(d, gate.unmet));
       }
     });
+    // Announce the module's running tally / lock-in state to SR users.
+    _announceDecisions(mod, srLines[mod].join(" · "));
   });
+  // Put keyboard focus back on the control the user was on before the rebuild.
+  _restoreDecisionFocus(_focusKey);
   // Coach nudge on unlock transitions (locked → unlocked), across both modules.
   // Surfaces a one-liner via toast() so the team sees a new decision opened
   // without auto-stealing focus. Skipped on the initial paint (empty tracker).
@@ -9109,7 +9172,7 @@ function buildLockedDecision(d, unmet) {
 
 /* one decision block: the prompt, the option bars with a live tally, who voted,
    and either a "lock in" button or the committed result with its explanation */
-function buildDecision(d) {
+function buildDecision(d, srSink) {
   const v = roomVotes[d.id] || {};
   const ballots = v.ballots || {};
   const committed = (v.committed && typeof v.committed.choice === "number")
@@ -9152,6 +9215,10 @@ function buildDecision(d) {
     const pct = totalBallots ? Math.round((n / totalBallots) * 100) : 0;
     const btn = document.createElement("button");
     btn.type = "button";
+    // stable identity so renderDecisions() can restore keyboard focus to the
+    // same option after the room-wide innerHTML rebuild
+    btn.dataset.dec = d.id;
+    btn.dataset.opt = String(i);
     btn.className = "dec-opt"
       + (myChoice === i ? " mine" : "")
       + (committed === i ? " won" : "")
@@ -9257,6 +9324,7 @@ function buildDecision(d) {
       : totalBallots + " voted";
     const lock = document.createElement("button");
     lock.type = "button";
+    lock.dataset.decLock = d.id;   // stable identity for focus restore
     lock.className = "dec-lock";
     lock.textContent = "Lock in the team's answer";
     lock.disabled = !canLock;
@@ -9268,6 +9336,20 @@ function buildDecision(d) {
     foot.appendChild(lock);
     wrap.appendChild(foot);
     if (isRoomAdmin) status.textContent += " · you are observing";
+  }
+  // Feed the per-module SR live region (reuses the same English tally strings
+  // the visible card shows — the vote component is English-only by design).
+  if (srSink) {
+    const _lbl = tc(d.prompt, lang).split(/\s+/).slice(0, 6).join(" ");
+    if (committed != null) {
+      const _cOpt = d.options[committed] || {};
+      srSink.push(_lbl + ": locked in — " +
+        (_cOpt.correct ? "the safest answer" : "not the safest answer"));
+    } else {
+      const _present = votablePresentCount();
+      srSink.push(_lbl + ": " +
+        (_present ? totalBallots + " of " + _present + " voted" : totalBallots + " voted"));
+    }
   }
   return wrap;
 }
