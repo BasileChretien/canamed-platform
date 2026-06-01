@@ -761,6 +761,7 @@
       "impact.research-csv": "📊 Research export (CSV)",
       "impact.roster": "📧 Email roster (CSV)",
       "impact.attest": "🎓 Attestations",
+      "impact.revoke-cert": "🗑️ Remove a verification entry",
       "impact.program": "📈 Program overview",
       "impact.guide": "📖 Facilitator guide",
       "impact.compliance": "🛡 Compliance & accessibility",

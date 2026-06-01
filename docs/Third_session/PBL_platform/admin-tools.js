@@ -657,7 +657,45 @@ cards +
     if (typeof toast === "function") toast("🎓 Attestations generated (" + rows.length + ").");
   }
 
-  /* ── Program overview (cross-session) ──────────────────────────────────── */
+  /* ── Withdraw a public-verification entry ──────────────────────────────── */
+  /* GDPR/APPI right-to-erasure for /credentials (PIS v2 §18). Client-side
+     delete is BLOCKED by the rule on purpose (anyone with an id could
+     otherwise vandalise other people's entries) — so this helper does the
+     SAFE thing: it builds the Firebase Console deep-link to the credential
+     node, opens it in a new tab, and shows a copy-pasteable instruction
+     toast. The actual removal is one Console click. Withdrawal request
+     workflow: participant emails canamed-ethics@unicaen.fr with their
+     verification id → facilitator pastes it here → opens Console → Delete. */
+  function _verifyIdRegex() { return /^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/; }
+
+  function _credentialConsoleUrl(certId) {
+    var pid = (typeof CANAMED_FIREBASE !== "undefined" && CANAMED_FIREBASE &&
+               typeof CANAMED_FIREBASE.projectId === "string" && CANAMED_FIREBASE.projectId)
+      ? CANAMED_FIREBASE.projectId : "canamed-69785";
+    return "https://console.firebase.google.com/u/0/project/" + encodeURIComponent(pid) +
+      "/database/" + encodeURIComponent(pid + "-default-rtdb") +
+      "/data/~2Fcredentials~2F" + encodeURIComponent(certId);
+  }
+
+  function removeVerificationEntry() {
+    var raw = "";
+    try { raw = (window.prompt && window.prompt(
+      "Paste the verification id of the certificate to remove (CNM-XXXXX-XXXXX).\n\n" +
+      "Opens the Firebase Console at that entry — click the × on the node to delete it.\n" +
+      "(The participant's printed certificate is unaffected; only the public verify page stops confirming it.)",
+      "")) || ""; } catch (e) { raw = ""; }
+    var id = String(raw).trim().toUpperCase();
+    if (!id) return;
+    if (!_verifyIdRegex().test(id)) {
+      if (typeof toast === "function") toast("Not a CaNaMED verification id (expected CNM-XXXXX-XXXXX).", "", "loss");
+      return;
+    }
+    var url = _credentialConsoleUrl(id);
+    try { window.open(url, "_blank", "noopener"); } catch (e) { /* popup-blocked fallback below */ }
+    if (typeof toast === "function") {
+      toast("Opening Firebase Console for " + id + ". Click × on the highlighted /credentials/" + id + " node to delete it.");
+    }
+  }
   /* Reads the durable LOCAL program-session rollup (written by closeSession in
      script.js, kept across close) and aggregates it into a program-level
      report — cumulative students trained, sessions run, and the satisfaction-
@@ -981,8 +1019,11 @@ esc(when.toLocaleString()) + "</p>" +
   window.CanamedAdminTools.generateResearchExportCSV = generateResearchExportCSV;
   window.CanamedAdminTools.researchCsvParticipantRows = researchCsvParticipantRows; // for tests
   window.CanamedAdminTools.generateAttestations = generateAttestations;
+  window.CanamedAdminTools.removeVerificationEntry = removeVerificationEntry;
+  window.CanamedAdminTools._credentialConsoleUrl = _credentialConsoleUrl;   // for tests
   window.generateAccreditationReport = generateAccreditationReport;
   window.generateResearchExport = generateResearchExport;
   window.generateResearchExportCSV = generateResearchExportCSV;
   window.generateAttestations = generateAttestations;
+  window.removeVerificationEntry = removeVerificationEntry;
 })();

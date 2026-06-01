@@ -552,6 +552,7 @@
   "impact.research-csv": "📊 Export recherche (CSV)",
   "impact.roster": "📧 Liste d'e-mails (CSV)",
   "impact.attest": "🎓 Attestations",
+  "impact.revoke-cert": "🗑️ Supprimer une entrée de vérification",
   "impact.program": "📈 Vue d'ensemble du programme",
   "impact.guide": "📖 Guide de l'animateur",
   "impact.compliance": "🛡 Conformité & accessibilité",
