@@ -37,35 +37,40 @@ test.describe("Sticky right-column (≥961px)", () => {
   });
 });
 
-test.describe("Auto-collapse Module A chart sections on completion", () => {
-  test("a chart-section with all key items revealed gets auto-collapsed once", async ({ page }) => {
+test.describe("Module A chart sections stay open when you reveal items", () => {
+  // 2026-06-02 (user request): the chart sections used to auto-collapse once
+  // ~4 items were revealed, which closed the section the student was actively
+  // clicking in and forced an annoying reopen. The auto-collapse was removed —
+  // revealing items must NEVER collapse a section.
+  test("revealing several items in an OPEN section does NOT collapse it", async ({ page }) => {
     await page.goto("/");
-    await page.waitForFunction(() => typeof window._autoCollapseCompletedChartSections === "function" ||
+    await page.waitForFunction(() => typeof window.renderButtons === "function" ||
       typeof window.CASE === "object", { timeout: 5000 }).catch(() => {});
     const ok = await page.evaluate(() => {
-      // need CASE + revealed in scope — load via the lazy loader and run.
       if (!window.CanamedLoader || !window.CanamedLoader.ensureCaseContent) return "no-loader";
       return window.CanamedLoader.ensureCaseContent().then(() => {
-        // Reveal the first 4 history items — that crosses the
-        // _AUTO_COLLAPSE_MIN threshold so the auto-collapse fires.
         const items = (window.CASE && window.CASE.history) || [];
         const r = {};
-        items.slice(0, 4).forEach((it, i) => {
+        items.slice(0, 5).forEach((it, i) => {
           r["history:" + i] = { by: "T", at: Date.now() };
         });
         if (window._test_setRevealed) window._test_setRevealed(r);
         const sec = document.getElementById("chart-section-history");
         if (!sec) return "no-section";
         sec.setAttribute("open", "");
-        delete sec.dataset.autoCollapsed;
-        if (typeof window._autoCollapseCompletedChartSections !== "function") {
-          return "no-hook";
-        }
-        window._autoCollapseCompletedChartSections();
-        return sec.hasAttribute("open") ? "still-open" : "collapsed";
+        if (typeof window.renderButtons !== "function") return "no-render";
+        window.renderButtons();
+        return sec.hasAttribute("open") ? "stayed-open" : "collapsed";
       });
     });
-    expect(ok).toBe("collapsed");
+    expect(ok).toBe("stayed-open");
+  });
+
+  test("the auto-collapse hook was removed", async ({ page }) => {
+    await page.goto("/");
+    const typeofHook = await page.evaluate(
+      () => typeof window._autoCollapseCompletedChartSections);
+    expect(typeofHook).toBe("undefined");
   });
 });
 

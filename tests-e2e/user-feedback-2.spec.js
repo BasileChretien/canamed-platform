@@ -736,7 +736,9 @@ test.describe("Progressive discussion prompts — structural contract", () => {
       expect(result.hasReply, "#prompt-reply textarea must exist").toBe(true);
       expect(result.hasNext, "#prompt-next button must exist").toBe(true);
       expect(result.hasPrev, "#prompt-prev button must exist").toBe(true);
-      expect(result.hasSkip, "#prompt-skip button must exist").toBe(true);
+      // The "Discussed verbally — skip ahead →" button was removed 2026-06-02
+      // (user request); only Prev / Save-and-next remain.
+      expect(result.hasSkip, "#prompt-skip button must be removed").toBe(false);
       expect(result.hasDoneCta, "#prompt-done-cta button must exist").toBe(true);
       expect(result.hasProgressCurrent, "progress 'N' chip must exist").toBe(true);
       expect(result.hasProgressTotal, "progress 'TOTAL' chip must exist").toBe(true);
