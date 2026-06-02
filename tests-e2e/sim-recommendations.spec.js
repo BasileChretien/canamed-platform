@@ -69,25 +69,10 @@ test.describe("Auto-collapse Module A chart sections on completion", () => {
   });
 });
 
-test.describe("Per-bullet Module A progress checklist", () => {
-  test("DOM exposes 4 bullet rows + a JS update function", async ({ page }) => {
-    await page.goto("/");
-    const info = await page.evaluate(() => {
-      const list = document.getElementById("modA-bullet-progress");
-      if (!list) return { ok: false };
-      const items = Array.from(list.querySelectorAll("li[data-bullet-key]"))
-        .map(li => li.dataset.bulletKey);
-      return {
-        ok: true,
-        items: items,
-        hasUpdater: typeof window._updateModABulletProgress === "function"
-      };
-    });
-    expect(info.ok).toBe(true);
-    expect(info.items.sort()).toEqual(["differ", "disagree", "plan", "takehome"]);
-    expect(info.hasUpdater).toBe(true);
-  });
-});
+// The per-bullet Module A progress checklist (#modA-bullet-progress) and the
+// timed phase stepper were removed 2026-06-02 (user request). Their DOM test was
+// deleted with them; _updateModABulletProgress() now no-ops safely (its target
+// is gone). See tests/stage-ui-fixes.test.js for the removal lock-in.
 
 test.describe("Markdown export of group-answers", () => {
   test("admin dashboard exposes a Download as Markdown button", async ({ page }) => {
