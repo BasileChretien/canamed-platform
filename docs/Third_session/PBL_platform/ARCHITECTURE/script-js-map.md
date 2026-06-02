@@ -34,7 +34,7 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 | CFG | 33 | window.CANAMED_CONFIG (partnership, cohorts, branding) from platform-config.js |
 | COHORTS | 34-40 | Array of { id, label, short, country, color } for universities |
 | COHORT_IDS, COHORT_TOKENS | 40-51 | Indexed cohort names for scoring "cross-cohort difference" |
-| SYNTH_ID, SYNTH_PREREQS, ITEM_IDS | 62-75 | Module A case gates: what item unlocks synthesis, what must be revealed first |
+| SYNTH_ID, SYNTH_PREREQS, ITEM_IDS | 62-75 | Module A: SYNTH_ID (labs:0) is the model-synthesis item — NOT rendered as a button (2026-06-02); its write-up ships in the stage-4 take-home export. SYNTH_PREREQS = the red-flag screen (scoring only). Progression gate is phaseGateOpen() (≥2 hypotheses) |
 | STAGE_COUNT, STAGE_LABELS, COLORS | 132-160 | 4 stages, English fallback labels, room colors |
 | SCORE_AUTO, SCORE_MICRO_BULLETS | 170-231 | Point tables for milestones and micro-level scoring |
 | db, sessionNum, userId, clientId | Module-level | Firebase ref (or LocalDB), session code, auth UID, temp browser session ID |
@@ -192,9 +192,9 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 | renderButtons() | 2753–2793 | Module A render | Render "Ask / Examine / Investigate" button groups |
 | reveal() | 2746–2752 | Button click | Reveal finding when user asks/examines/investigates; write to moduleA/revealed |
 | renderFindings() | 2794–2822 | Findings tab | Render log of revealed findings with timestamps & who revealed them |
-| keyRevealed() | 2823–2826 | Findings changed | Check if the synthesis gate item (SYNTH_ID) has been revealed |
+| keyRevealed() | 2823–2826 | Findings changed | Legacy: whether SYNTH_ID was revealed. SYNTH_ID is no longer rendered as a button (2026-06-02) so this is effectively always false; progression is gated by phaseGateOpen() (≥2 hypotheses) |
 | prereqsMet() | 2743–2745 | Synthesis check | Check if all SYNTH_PREREQS have been revealed |
-| renderPrompts() | 2827–2853 | Discussion tab | Render clinical discussion prompts (unlocked after synthesis) |
+| renderPrompts() | 2827–2853 | Discussion tab | Render clinical discussion prompts (unlocked after ≥2 working hypotheses — phaseGateOpen) |
 | renderLeaderboard() | 3423–3509 | Wrap-up stage | Render per-cohort leaderboard, final scores, "worth remembering" lessons |
 | renderTeamRecap() | 1163–1221 | Waiting / wrap-up | Render recap of team decisions, penalties, lessons learned |
 | renderWrapupSummary() | 1222–1255 | Wrap-up stage | Render final messages, cohort-comparison, next-steps links |

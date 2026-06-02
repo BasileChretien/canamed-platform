@@ -1,19 +1,16 @@
 /* tests/synthesis-chunked.test.js
  *
- * Regression guard for the UX-overload fix (2026-06-01) that segments the
- * Module A clinical-synthesis reveal. The synthesis answer used to be one
- * ~160-word paragraph (a wall for a B1/A2 FR/JP cohort). It now also carries
- * `aParts` — the SAME clinical content split into labelled micro-sections —
- * which the inline-reveal renders one idea at a time.
- *
- * These tests pin:
- *   1. structure: labs[0] keeps key:true + a, and gains a 5-part aParts with
+ * The Module A clinical synthesis carries `aParts` — the model write-up split
+ * into 5 labelled micro-sections (what you found / diagnosis / yellow flags /
+ * safety-net / decide together). The on-screen synthesis reveal was REMOVED
+ * 2026-06-02; that structured write-up now ships only in the stage-4 take-home
+ * export (downloadMyRoomAnswers), so these tests pin:
+ *   1. structure: labs[0] keeps key:true + a, and a 5-part aParts with
  *      non-empty en/fr/ja label + body on every part;
  *   2. CONTENT PRESERVATION: every key clinical token in the flat `a` still
  *      appears across the chunked parts (nothing dropped in the split);
- *   3. render contract: script.js special-cases SYNTH_ID with aParts but
- *      keeps the flat .req-inline-answer fallback;
- *   4. CSS for the chunk labels exists.
+ *   3. export contract: downloadMyRoomAnswers renders the aParts (labelled +
+ *      localised) and keeps the flat `a` fallback.
  */
 "use strict";
 
@@ -26,14 +23,13 @@ const cov = require("../scripts/i18n-coverage-report.js");
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCENARIOS = cov.loadScenarios(path.join(PLATFORM, "case-content.js"));
 const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
-const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
 
 const synth = SCENARIOS["chronic-pain-opioids"].case.labs[0];
 
-test("the synthesis item still gates (key:true) and keeps its flat `a` fallback", () => {
+test("the synthesis item still exists (key:true) and keeps its flat `a` write-up", () => {
   assert.strictEqual(synth.key, true, "labs[0] must remain the key synthesis item");
   assert.ok(synth.a && typeof synth.a.en === "string" && synth.a.en.length > 100,
-    "the flat `a` answer must remain (toast / export / fallback text)");
+    "the flat `a` answer must remain (export fallback text)");
 });
 
 test("aParts is a 5-section list with non-empty en/fr/ja label + body", () => {
@@ -74,17 +70,12 @@ test("CONTENT PRESERVATION: the must-not-miss safety-net + decisions survive (FR
   }
 });
 
-test("renderButtons special-cases the synthesis with aParts but keeps the flat fallback", () => {
-  assert.match(SCRIPT, /id === SYNTH_ID && item && Array\.isArray\(item\.aParts\)/,
-    "the inline-reveal must render aParts only for the synthesis item");
-  assert.match(SCRIPT, /synth-chunk-label/, "the chunk label node must be created");
-  assert.match(SCRIPT, /tc\(part\.label, lang\)/, "chunk labels must be localised via tc()");
-  // the flat fallback (required by user-feedback-2 + non-synth reveals) stays
-  assert.match(SCRIPT, /tc\(item\.a,\s*lang\)/, "the flat answer fallback must remain");
-  assert.match(SCRIPT, /className\s*=\s*"req-inline-answer"/, "the flat answer span must remain");
-});
-
-test("the chunked-synthesis CSS exists", () => {
-  assert.match(CSS, /\.synth-chunk-label\s*\{/, "missing .synth-chunk-label style");
-  assert.match(CSS, /\.synth-chunks\s*\{/, "missing .synth-chunks layout");
+test("the stage-4 take-home export renders the synthesis aParts (labelled + localised)", () => {
+  const start = SCRIPT.indexOf("function downloadMyRoomAnswers(");
+  const dl = SCRIPT.slice(start, start + 4000);
+  assert.match(dl, /itemById\(SYNTH_ID\)/, "the export pulls the SYNTH_ID case item");
+  assert.match(dl, /synItem\.aParts/, "the export iterates the labelled aParts");
+  assert.match(dl, /tc\(part\.label, lang\)/, "aParts labels localised via tc()");
+  assert.match(dl, /tc\(part\.body, lang\)/, "aParts bodies localised via tc()");
+  assert.match(dl, /tc\(synItem\.a, lang\)/, "the flat `a` fallback is kept when aParts is absent");
 });

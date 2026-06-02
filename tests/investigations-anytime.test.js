@@ -3,10 +3,12 @@
  * Dry-run feedback (2026-05-26): investigations (imaging + bloods) should be
  * clickable AT ANY TIME — a real choice the team can get wrong — and penalised
  * if ordered prematurely / without indication, rather than hard-locked behind
- * "add a working hypothesis first". Only the clinical SYNTHESIS (labs:0,
- * key:true) stays gated, and only on the red-flag screen (history:1 +
- * history:2 + exam:3) — NOT on a hypothesis. The penalties already exist
- * (pen_mri / pen_xray / pen_bloods / pen_ct). Static source + content checks.
+ * "add a working hypothesis first". The clinical SYNTHESIS item (labs:0,
+ * key:true) still exists in case-content.js but is NO LONGER rendered on-screen
+ * (2026-06-02) — its write-up ships in the stage-4 take-home export. The ≥2
+ * working-hypotheses phase gate now drives the Debate. The investigation
+ * penalties already exist (pen_mri / pen_xray / pen_bloods / pen_ct). Static
+ * source + content checks.
  */
 
 const test = require("node:test");
@@ -68,15 +70,18 @@ test("investigations are freely clickable like the examination (no warn-cue gate
     "renderButtons clears any stale warn class on investigation buttons");
 });
 
-test("the synthesis is gated on ≥2 working hypotheses (phaseGateOpen), not the red-flag screen", () => {
+test("the on-screen synthesis button is gone; the Debate gates on ≥2 hypotheses (phaseGateOpen)", () => {
+  // 2026-06-02: the Clinical synthesis section was removed; SYNTH_ID is no longer
+  // rendered as a button, so neither renderButtons nor reveal() special-case it.
   const rb = fnSlice("renderButtons");
-  assert.match(rb, /id === SYNTH_ID/, "the synthesis button is still specially gated");
-  assert.match(rb, /phaseGateOpen\(\)/, "synthesis gating uses the ≥2-hypotheses phase gate");
+  assert.doesNotMatch(rb, /id === SYNTH_ID/, "renderButtons no longer special-cases a synthesis button");
   const rv = fnSlice("reveal");
-  assert.match(rv, /id === SYNTH_ID && !phaseGateOpen\(\)/,
-    "reveal() hard-gates ONLY the synthesis, on ≥2 working hypotheses");
+  assert.doesNotMatch(rv, /SYNTH_ID && !phaseGateOpen/,
+    "reveal() no longer carries the synthesis gate guard");
   assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 2/,
     "phaseGateOpen() must be hypothesisCount() >= 2");
+  assert.match(SCRIPT, /const unlocked = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
+    "the discussion prompts unlock on phaseGateOpen()");
 });
 
 test("the hypothesis-first investigations lock is gone (dead code removed)", () => {
@@ -88,22 +93,22 @@ test("the hypothesis-first investigations lock is gone (dead code removed)", () 
     "the investigations panel must no longer be hypothesis-locked");
 });
 
-test("investigations copy frames them as FREE (not locked); the gate is the synthesis", () => {
+test("investigations copy frames them as FREE (not locked); the gate is ≥2 hypotheses", () => {
   const I18N = require("./_i18n_source.js").readI18nSource();
-  // 2026-06-02: the old investigations.locked-hint is retired; the section now
-  // shows a free "yours to choose" hint, and the SYNTHESIS section carries the
-  // ≥2-hypotheses lock hint.
+  // 2026-06-02: the old investigations.locked-hint is retired; the section shows
+  // a free "yours to choose" hint. The Clinical synthesis section was removed, so
+  // its locked-hint key is gone too; the gate is now ≥2 working hypotheses.
   assert.doesNotMatch(I18N, /"modA\.chart\.investigations\.locked-hint"/,
     "the dead investigations.locked-hint key must be removed");
   const hint = I18N.match(/"modA\.chart\.investigations\.hint":\s*"([^"]*)"/);
   assert.ok(hint, "investigations.hint key must exist");
   assert.doesNotMatch(hint[1], /🔒|Locked/i, "the investigations hint must not say the panel is locked");
-  // The synthesis lock hint gates on hypotheses, and the coach gather copy points
-  // at writing hypotheses (not a locked investigations panel).
-  const synLock = I18N.match(/"modA\.chart\.synthesis\.locked-hint":\s*"([^"]*)"/);
-  assert.ok(synLock, "synthesis.locked-hint key must exist");
-  assert.match(synLock[1], /two|2|hypoth/i, "synthesis lock hint must reference ≥2 hypotheses");
+  // The synthesis section is gone — its lock-hint key must be removed.
+  assert.doesNotMatch(I18N, /"modA\.chart\.synthesis\.locked-hint"/,
+    "the dead synthesis.locked-hint key must be removed");
+  // The coach gather copy points at writing hypotheses, not a locked panel.
   const gather = I18N.match(/"modA\.coach\.gather":\s*"([^"]*)"/);
   assert.ok(gather, "coach gather key must exist");
   assert.doesNotMatch(gather[1], /🔒|Locked/i, "coach copy must not frame investigations as locked");
+  assert.match(gather[1], /hypoth/i, "coach gather copy points at writing hypotheses");
 });

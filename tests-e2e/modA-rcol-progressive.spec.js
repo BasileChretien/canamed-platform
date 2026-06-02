@@ -7,7 +7,7 @@
  *
  *   - at entry (nothing gathered)        → the whole right column is collapsed;
  *   - history ≥1 AND exam ≥1             → "Decide together" appears;
- *   - synthesis complete (keyRevealed)   → "Debate" appears (no 🔒 teaser);
+ *   - ≥2 working hypotheses (phaseGateOpen) → "Debate" appears (no 🔒 teaser);
  *   - the Exchange is underway           → "Our final answers" appears.
  *
  * Reveal is sticky (a tab never vanishes once shown). Driven through the

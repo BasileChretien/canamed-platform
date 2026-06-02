@@ -295,10 +295,10 @@
           try { window.reveal(legacyId); } catch (_) { /* defensive */ }
         }
         // NB (2026-06-02): the chat no longer AUTO-reveals the synthesis. The
-        // Clinical synthesis is now its own section (group-synthesis), gated on
-        // ≥2 working hypotheses (phaseGateOpen), with a visible button the team
-        // clicks deliberately — so the old "auto-synthesise when prereqsMet"
-        // shortcut is gone. The red-flag screen is scoring-only now, not a gate.
+        // on-screen Clinical synthesis section was removed entirely — its model
+        // write-up now ships only in the stage-4 take-home (downloadMyRoomAnswers).
+        // The ≥2-hypotheses phase gate (phaseGateOpen) drives the Debate reveal;
+        // the red-flag screen is scoring-only now, not a gate.
       },
       persistTurn: function (role, content) {
         refs.chat.push({ role: role, content: content, at: Date.now() });

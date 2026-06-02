@@ -1,14 +1,15 @@
 /* tests/modA-investigations-synthesis-split.test.js
  *
- * 2026-06-02 Module A restructure: the old combined "Investigations & synthesis"
- * section was split into a FREE "Investigations" section (imaging/bloods, labs:1+)
- * and a gated "Clinical synthesis" section (labs:0). The Working hypotheses block
- * moved BELOW Investigations behind a "Ready to write…" CTA, and writing ≥2
- * hypotheses (phaseGateOpen) unlocks the synthesis + the Debate.
+ * 2026-06-02 Module A restructure (round 2): the on-screen "Clinical synthesis"
+ * section was REMOVED. Investigations stay a free section (imaging/bloods,
+ * labs:1+); the synthesis item (SYNTH_ID = labs:0) is no longer rendered as a
+ * button — its model write-up now ships only in the stage-4 take-home export
+ * (downloadMyRoomAnswers). Writing ≥2 hypotheses (phaseGateOpen) still unlocks
+ * the Debate.
  *
- * Static structural guards (the live flow is exercised by
- * tests-e2e/hypothesis-placement.spec.js, investigations-anytime.spec.js and
- * modA-rcol-progressive.spec.js across the device matrix).
+ * Static structural guards (the live flow is exercised across the device matrix
+ * by tests-e2e/hypothesis-placement.spec.js, investigations-anytime.spec.js and
+ * modA-rcol-progressive.spec.js).
  */
 "use strict";
 
@@ -21,52 +22,58 @@ const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platfo
 const INDEX = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 
-test("the markup has separate Investigations + Synthesis sections + a hypotheses CTA", () => {
+test("Investigations stays; the on-screen Clinical synthesis section is gone", () => {
   assert.match(INDEX, /id="chart-investigations"/, "Investigations section present");
   assert.match(INDEX, /id="group-labs"/, "Investigations button group present");
-  assert.match(INDEX, /id="chart-synthesis"/, "Synthesis section present (split out)");
-  assert.match(INDEX, /id="group-synthesis"/, "Synthesis button group present");
-  assert.match(INDEX, /id="synthesis-locked-hint"/, "Synthesis locked-hint present");
+  assert.doesNotMatch(INDEX, /id="chart-synthesis"/, "Clinical synthesis section removed");
+  assert.doesNotMatch(INDEX, /id="group-synthesis"/, "Synthesis button group removed");
+  assert.doesNotMatch(INDEX, /id="synthesis-progress"/, "Synthesis progress chip removed");
   assert.match(INDEX, /data-i18n="modA\.chart\.hypotheses\.cta"/,
-    "the hypotheses section uses the 'ready to write…' CTA");
-  // The Investigations title is no longer "Investigations & synthesis".
+    "the hypotheses section keeps the 'ready to write…' CTA");
   assert.match(INDEX, /data-i18n="modA\.chart\.investigations\.title">Investigations</,
     "Investigations section is titled just 'Investigations'");
 });
 
-test("buildButtons routes the synthesis (SYNTH_ID) to #group-synthesis, others to #group-labs", () => {
+test("buildButtons skips SYNTH_ID (no synthesis button is rendered)", () => {
   const at = SCRIPT.indexOf("function buildButtons(");
   const body = SCRIPT.slice(at, at + 1600);
-  assert.match(body, /el\("group-synthesis"\)/, "buildButtons targets #group-synthesis");
-  assert.match(body, /id === SYNTH_ID \? synContainer : container|id === SYNTH_ID && synContainer/,
-    "SYNTH_ID routes to the synthesis container, everything else to #group-labs");
+  assert.doesNotMatch(body, /group-synthesis/, "buildButtons no longer targets #group-synthesis");
+  assert.match(body, /if \(id === SYNTH_ID\) return;/, "buildButtons skips the SYNTH_ID item");
 });
 
-test("phaseGateOpen() is the ≥2-hypotheses gate and drives synthesis + Debate", () => {
+test("phaseGateOpen() is the ≥2-hypotheses gate and drives the Debate", () => {
   assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 2/,
     "phaseGateOpen() === hypothesisCount() >= 2");
-  // reveal() hard-gates only the synthesis on it.
+  // reveal() no longer hard-gates the synthesis (there is no synthesis button).
   const rv = SCRIPT.slice(SCRIPT.indexOf("function reveal("), SCRIPT.indexOf("function renderButtons("));
-  assert.match(rv, /id === SYNTH_ID && !phaseGateOpen\(\)/,
-    "reveal() gates the synthesis on phaseGateOpen()");
+  assert.doesNotMatch(rv, /SYNTH_ID && !phaseGateOpen/,
+    "reveal() no longer carries the synthesis gate guard");
   // renderPrompts unlocks the Debate on it.
   assert.match(SCRIPT, /const unlocked = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
     "the discussion prompts unlock on phaseGateOpen()");
 });
 
-test("the chat no longer auto-reveals the synthesis (it's a gated section now)", () => {
+test("the stage-4 take-home export carries the clinical-synthesis write-up", () => {
+  const start = SCRIPT.indexOf("function downloadMyRoomAnswers(");
+  const dl = SCRIPT.slice(start, start + 4000);
+  assert.match(dl, /Clinical synthesis \(model summary\)/,
+    "the export has a Clinical synthesis section heading");
+  assert.match(dl, /itemById\(SYNTH_ID\)/, "the export pulls the SYNTH_ID case item");
+  assert.match(dl, /aParts/, "the export prefers the labelled aParts");
+});
+
+test("the chat no longer auto-reveals the synthesis", () => {
   const llmInit = fs.readFileSync(path.join(PLATFORM, "modA-llm-init.js"), "utf8");
   const onUnlock = llmInit.slice(llmInit.indexOf("onUnlock:"), llmInit.indexOf("onUnlock:") + 900);
   assert.doesNotMatch(onUnlock, /reveal\(window\.SYNTH_ID\)/,
-    "onUnlock must NOT auto-reveal the synthesis any more");
+    "onUnlock must NOT auto-reveal the synthesis");
 });
 
 test("the chat consent button has a dark-mode contrast override (white-on-cyan fails AA)", () => {
   // The consent button fills with var(--primary). In light/high-contrast that's
   // a dark blue (white text passes); in DARK, --primary is the lighter cyan
   // (--nagoya-500), where white text fails 4.5:1 — so dark mode must force dark
-  // text, like the splash primaries. Now that the chat is default-on this is a
-  // live concern for every dark-mode user.
+  // text, like the splash primaries.
   const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
   assert.match(CSS, /html\[data-theme="dark"\] \.moda-chat-consent-btn\s*\{[^}]*color:\s*#0e1620/,
     "dark theme must override the consent button text to dark");
