@@ -486,8 +486,8 @@ const SCORE_AUTO = {
   // without reasoning it (dry-run 2026-05-27: a locked phone unlocked to "your
   // team found the diagnosis").
   synthesis: { points: 10, tier: "milestone", module: "A",
-    title: "Reached the clinical synthesis",
-    did: "Your room finished the red-flag synthesis step — the Exchange prompts are now open." },
+    title: "Committed your working hypotheses",
+    did: "Your room committed at least two working hypotheses — the Exchange prompts are now open." },
   restraint: { points: 20, tier: "milestone", module: "A",
     title: "Diagnostic restraint",
     did: "You held off on imaging that isn't indicated here.",
@@ -7168,6 +7168,25 @@ function downloadMyRoomAnswers() {
     }
     lines.push("");
 
+    // 1b. Clinical synthesis — the model write-up (same for everyone). The
+    //     on-screen synthesis card was removed 2026-06-02, so this take-home is
+    //     now the only place it lands. SYNTH_ID stays defined in
+    //     case-content.js; prefer its labelled aParts, fall back to flat `a`.
+    const synItem = (typeof itemById === "function") ? itemById(SYNTH_ID) : null;
+    if (synItem && (synItem.a || (Array.isArray(synItem.aParts) && synItem.aParts.length))) {
+      lines.push("## Clinical synthesis (model summary)");
+      if (Array.isArray(synItem.aParts) && synItem.aParts.length) {
+        synItem.aParts.forEach(part => {
+          const label = (part && part.label) ? tc(part.label, lang) : "";
+          const body = (part && part.body) ? tc(part.body, lang) : "";
+          if (label || body) lines.push("- **" + _mdEsc(label) + ":** " + _mdEsc(body));
+        });
+      } else {
+        lines.push(_mdEsc(tc(synItem.a, lang)));
+      }
+      lines.push("");
+    }
+
     // 2. Discussion guidelines — the prompts that framed the debate.
     const prompts = (typeof CASE !== "undefined" && CASE && Array.isArray(CASE.prompts)) ? CASE.prompts : [];
     if (prompts.length) {
@@ -7659,18 +7678,17 @@ function buildButtons() {
                     (myRoom || "lobby") + ":" + group;
     const order = _seededShuffleIndexes(CASE[group].length, seedStr);
 
-    // Investigations + Synthesis (split 2026-06-02): the imaging/bloods
-    // (labs:1+) render flat into #group-labs (the free "Investigations"
-    // section); the single clinical SYNTHESIS item (SYNTH_ID, labs:0) renders
-    // into #group-synthesis (its own gated section below). IDs are unchanged
-    // (group:index) so SYNTH_PREREQS / PENALTIES stay valid.
+    // Investigations only (2026-06-02): the imaging/bloods (labs:1+) render
+    // flat into #group-labs (the free "Investigations" section). The single
+    // clinical SYNTHESIS item (SYNTH_ID, labs:0) is NO LONGER rendered as a
+    // button — its model write-up now ships only in the stage-4 take-home
+    // export (downloadMyRoomAnswers). IDs are positional, so skipping the
+    // render keeps labs:1+ / SYNTH_PREREQS / PENALTIES valid.
     if (group === "labs") {
-      const synContainer = el("group-synthesis");
-      if (synContainer) synContainer.innerHTML = "";
       order.forEach(i => {
         const id = group + ":" + i;
-        const target = (id === SYNTH_ID && synContainer) ? synContainer : container;
-        target.appendChild(_makeReqBtn(group, i));
+        if (id === SYNTH_ID) return;
+        container.appendChild(_makeReqBtn(group, i));
       });
       return;
     }
@@ -7914,10 +7932,6 @@ function prereqsMet() {
 let myPendingReveal = null;
 function reveal(id) {
   if (revealed[id] || !refRevealed) return;
-  // The clinical synthesis is now gated on ≥2 working hypotheses (2026-06-02),
-  // not the red-flag screen — the team works the case up freely, commits its
-  // differentials, then synthesises. (Red-flag screening stays as scoring.)
-  if (id === SYNTH_ID && !phaseGateOpen()) return;
 
   // ── Mobile feedback (user report 2026-05-18): on stacked-column
   // layouts the findings log lives FAR below the case panels, so
@@ -7962,23 +7976,13 @@ function renderButtons() {
   // test is a real clinical choice the team can get wrong — every imaging /
   // bloods item carries a penalty (pen_mri / pen_xray / pen_bloods / pen_ct),
   // so a premature or un-indicated order costs points instead of being blocked.
-  // Only the clinical SYNTHESIS (SYNTH_ID, labs:0) stays gated, and only on the
-  // red-flag screen (gateOK) — see the SYNTH_ID branch below. Hypotheses remain
-  // pedagogically encouraged (the coach still nudges them) but no longer gate
-  // the panel.
+  // Nothing in the chart is hard-locked any more: the old clinical-synthesis
+  // button (SYNTH_ID, labs:0) was removed 2026-06-02, so there is no gated item
+  // here. Hypotheses remain pedagogically encouraged (the coach nudges them) and
+  // ≥2 of them open the Debate (phaseGateOpen), but they don't gate this panel.
   document.querySelectorAll(".req-btn").forEach(btn => {
     const id = btn.dataset.id;
     btn.classList.toggle("done", !!revealed[id]);
-    if (id === SYNTH_ID) {
-      // Synthesis is gated on ≥2 working hypotheses (2026-06-02), not the
-      // red-flag screen. Locked + disabled until the team commits its
-      // differentials.
-      const locked = !phaseGateOpen() && !revealed[id];
-      btn.disabled = locked;
-      btn.title = locked
-        ? "Write at least two working hypotheses first to unlock the synthesis"
-        : "";
-    }
     // Investigations (imaging/bloods) are now FREELY clickable, like the
     // Examination (2026-06-02): no "screen the red flags first" warn cue. A
     // premature / un-indicated order still costs points via the scoring engine
@@ -8021,39 +8025,14 @@ function renderButtons() {
         // is set via textContent — case content is author-controlled
         // but we keep the no-eval-by-default discipline.
         inline.textContent = "";
-        // Segmented clinical synthesis (UX-overload fix 2026-06-01): the
-        // synthesis answer was one ~160-word paragraph — a wall for a B1/A2
-        // cohort. When the synthesis item carries aParts (labelled
-        // {label, body} trios), render it as labelled micro-sections so each
-        // idea (what you found / diagnosis / yellow flags / safety-net /
-        // decide together) is processed one at a time. Every OTHER reveal —
-        // and a synthesis without aParts — keeps the flat .req-inline-answer.
-        const useSynthParts = id === SYNTH_ID && item && Array.isArray(item.aParts) &&
-          item.aParts.length > 0;
-        inline.classList.toggle("req-inline-synth", useSynthParts);
-        if (useSynthParts) {
-          const chunks = document.createElement("div");
-          chunks.className = "synth-chunks";
-          item.aParts.forEach(part => {
-            const sec = document.createElement("div");
-            sec.className = "synth-chunk";
-            const h = document.createElement("span");
-            h.className = "synth-chunk-label";
-            h.textContent = tc(part.label, lang);
-            const b = document.createElement("span");
-            b.className = "synth-chunk-body";
-            b.textContent = tc(part.body, lang);
-            sec.appendChild(h);
-            sec.appendChild(b);
-            chunks.appendChild(sec);
-          });
-          inline.appendChild(chunks);
-        } else {
-          const ans = document.createElement("span");
-          ans.className = "req-inline-answer";
-          ans.textContent = tc(item.a, lang);
-          inline.appendChild(ans);
-        }
+        // Inline reveal: the question's answer text, shown under its button.
+        // (The old SYNTH_ID aParts "segmented synthesis" branch was removed
+        // 2026-06-02 with the on-screen synthesis section — SYNTH_ID is no
+        // longer rendered as a button.)
+        const ans = document.createElement("span");
+        ans.className = "req-inline-answer";
+        ans.textContent = tc(item.a, lang);
+        inline.appendChild(ans);
         // Citation badge (sim 2026-05-19 — Lucas): "Inline citation
         // badges (NICE 2021, HAS 2023…) on each finding so we can argue
         // from sources." Pull from CASE item's optional `cite` field
@@ -8196,7 +8175,7 @@ function _autoCollapseCompletedChartSections() {
  * carry the same information at the point of action, no scrolling.
  *
  * The function is retained for two side effects that still matter:
- *   1. It triggers the coach + synthesis-progress updates that fire
+ *   1. It triggers the coach (updateModANextStep) updates that fire
  *      whenever a finding is revealed. (Those used to live elsewhere
  *      but were wired through this entry point.)
  *   2. It keeps seenFindingIds populated so the inline-reveal "just-
@@ -8210,7 +8189,6 @@ function _autoCollapseCompletedChartSections() {
  * the scroll is now redundant. */
 function renderFindings() {
   if (typeof updateModANextStep === "function") updateModANextStep();
-  if (typeof updateSynthesisProgress === "function") updateSynthesisProgress();
   // Mark all currently-revealed items as seen so subsequent renders
   // don't re-fire any future "just appeared" animation/effect.
   ITEM_IDS.forEach(id => {
@@ -8256,9 +8234,10 @@ function keyRevealed() {
 
 /* Module A phase gate (2026-06-02). The team works the case up FREELY (history
  * chat + examination + investigations), then commits ≥2 working hypotheses —
- * THAT is the gate that unlocks the clinical Synthesis section AND the Debate
- * (discussion prompts). Replaces the old "synthesis revealed" / red-flag-screen
- * gate for progression. (keyRevealed / the red-flag screen still drive scoring.) */
+ * THAT is the gate that unlocks the Debate (discussion prompts). Replaces the
+ * old "synthesis revealed" / red-flag-screen gate for progression; the on-screen
+ * Clinical synthesis section was removed 2026-06-02 (its write-up moved to the
+ * stage-4 take-home). (The red-flag screen still drives scoring.) */
 function phaseGateOpen() {
   return (typeof hypothesisCount === "function") && hypothesisCount() >= 2;
 }
@@ -8341,30 +8320,6 @@ function _flushPromptReply() {
     cid: clientId,
     at: Date.now()
   }).catch(e => console.error("prompt reply save failed", e));
-}
-
-/* Synthesis progress chip — shows "X / Y red flags screened" above
- * the Investigations button group. Driven from renderFindings()
- * (where prereq state can change). When all prereqs are met the chip
- * flips to ✓ and the green palette. */
-function updateSynthesisProgress() {
-  const node = el("synthesis-progress");
-  if (!node) return;
-  const total = SYNTH_PREREQS.length;
-  const done = SYNTH_PREREQS.filter(id => revealed[id]).length;
-  const allDone = done === total;
-  node.classList.toggle("is-done", allDone);
-  if (typeof window !== "undefined" && typeof window.t === "function") {
-    const key = allDone ? "modA.synthesis.unlocked" : "modA.synthesis.progress";
-    const tpl = window.t(key);
-    if (tpl && tpl !== key) {
-      node.textContent = tpl.replace("{done}", String(done)).replace("{total}", String(total));
-      return;
-    }
-  }
-  node.textContent = allDone
-    ? "✓ Red-flag screen complete."
-    : done + " / " + total + " red flags screened";
 }
 
 /* Visible lock state on the Discussion tab — driven from renderPrompts()
@@ -8651,9 +8606,13 @@ function checkScoreEvents() {
 
   const imaging = ["labs:1", "labs:2", "labs:3", "labs:4"].some(id => revealed[id]);
   const prereqsDone = SYNTH_PREREQS.every(id => revealed[id]);
+  // SYNTH_ID is no longer revealable (the synthesis button was removed
+  // 2026-06-02); the "reached the synthesis / Exchange opens" milestone now
+  // keys off the real phase gate — ≥2 committed working hypotheses.
+  const reachedSynthesis = (typeof phaseGateOpen === "function") && phaseGateOpen();
   if (prereqsDone && !imaging) setWant("redFlagFirst");  // ORDER: screen before scan
-  if (revealed[SYNTH_ID]) setWant("synthesis");
-  if (revealed[SYNTH_ID] && !imaging) setWant("restraint");
+  if (reachedSynthesis) setWant("synthesis");
+  if (reachedSynthesis && !imaging) setWant("restraint");
 
   /* --- the team's typed answers --- */
   const entriesOf = mk => Object.keys(answers[mk] || {})
@@ -9138,7 +9097,7 @@ function decisionUnlockHint(unmet) {
       case "labsRevealed":
         return t("modA.decision.unlock.labs", "investigate");
       case "synthesis":
-        return t("modA.decision.unlock.synthesis", "complete the clinical synthesis");
+        return t("modA.decision.unlock.synthesis", "write two working hypotheses");
       default:
         return u.key;
     }
@@ -9749,13 +9708,13 @@ function updateModANextStep() {
   } else if (!gateOpen) {
     textEl.textContent = _coachT("modA.coach.gather",
       "Work the case up — ask, examine, investigate. When you're ready, write " +
-      "two working hypotheses to unlock the clinical synthesis and the discussion.");
+      "two working hypotheses to unlock the discussion.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
   } else if (!onDiscussion && !onAnswers && modAAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modA.coach.open-discussion",
-      "✓ Hypotheses in — the Clinical synthesis and Debate are open. Synthesise, " +
-      "then debate the prompts (both a Caen and a Nagoya voice on each compare prompt).");
+      "✓ Hypotheses in — the Debate is open. Debate the prompts " +
+      "(both a Caen and a Nagoya voice on each compare prompt).");
     _coachSetAction(actionsEl, "modA.coach.btn.open-discussion", "Open Debate →",
       () => { if (typeof switchRcolTab === "function") switchRcolTab("discussion"); });
     setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
@@ -9783,7 +9742,7 @@ function updateModANextStep() {
     // catch-all: fall back to the generic next-step text
     textEl.textContent = _coachT("modA.coach.gather",
       "Work the case up — ask, examine, investigate. When you're ready, write " +
-      "two working hypotheses to unlock the clinical synthesis and the discussion.");
+      "two working hypotheses to unlock the discussion.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
   }
@@ -10122,17 +10081,11 @@ function renderHypotheses() {
     list.appendChild(li);
   });
   // Investigations are FREELY clickable (2026-06-02) — that section is never
-  // locked. The clinical SYNTHESIS section is the gated one now: it stays faded
-  // + its locked hint shows until the team has committed ≥2 working hypotheses
-  // (phaseGateOpen). The synthesis BUTTON gates itself the same way in
-  // renderButtons (kept in sync via the refHypotheses listener).
+  // locked. The old clinical-synthesis section (removed 2026-06-02) was the
+  // gated one; the ≥2-hypotheses phase gate (phaseGateOpen) now only drives the
+  // Debate/Decisions reveal in renderPrompts()/revealModARightCol().
   const inv = el("chart-investigations");
   if (inv) inv.classList.remove("is-locked");
-  const syn = el("chart-synthesis");
-  const synHint = el("synthesis-locked-hint");
-  const open = (typeof phaseGateOpen === "function") && phaseGateOpen();
-  if (syn) syn.classList.toggle("is-locked", !open);
-  if (synHint) synHint.classList.toggle("hidden", !!open);
 }
 
 /* Module B role picker (local-only). The HTML chips are radio buttons;
@@ -13590,6 +13543,69 @@ function initObserverChecklist() {
   if (hard) hard.addEventListener("input", persist);
 }
 
+/* ===================== Reference toolbar (Modules A & B) =====================
+ * The three reference lookups (historical context / guidelines / recap) sit as
+ * a single row of buttons at the TOP of each module; clicking a button expands
+ * its panel below and collapses the others (accordion — one open at a time).
+ * Buttons carry aria-controls → panel id and toggle aria-expanded; panels use
+ * the `hidden` attribute. Static HTML, wired once (idempotent). */
+function wireReferenceToolbars() {
+  document.querySelectorAll(".reference-toolbar").forEach(bar => {
+    if (bar.dataset.wired === "1") return;
+    bar.dataset.wired = "1";
+    const btns = Array.prototype.slice.call(bar.querySelectorAll(".reference-btn"));
+    const panelOf = btn => {
+      const id = btn.getAttribute("aria-controls");
+      return id ? document.getElementById(id) : null;
+    };
+    btns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        const wasOpen = btn.getAttribute("aria-expanded") === "true";
+        // Close every button/panel in this toolbar group first.
+        btns.forEach(b => {
+          b.setAttribute("aria-expanded", "false");
+          const p = panelOf(b);
+          if (p) p.hidden = true;
+        });
+        // A second click on the already-open button just closes it.
+        if (!wasOpen) {
+          btn.setAttribute("aria-expanded", "true");
+          const panel = panelOf(btn);
+          if (panel) panel.hidden = false;
+        }
+      });
+    });
+  });
+}
+
+/* ===================== Back-to-top button =====================
+ * The stage card no longer pins to the top of the viewport (2026-06-02), so a
+ * floating "↑ Back to top" button gives a one-tap return to the top once the
+ * user has scrolled down. Visibility is throttled via requestAnimationFrame. */
+function wireBackToTop() {
+  const btn = document.getElementById("back-to-top");
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  const SHOW_AFTER = 600;
+  let ticking = false;
+  const sync = () => {
+    ticking = false;
+    const y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    btn.classList.toggle("is-visible", y > SHOW_AFTER);
+  };
+  window.addEventListener("scroll", () => {
+    if (ticking) return;
+    ticking = true;
+    window.requestAnimationFrame(sync);
+  }, { passive: true });
+  btn.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  sync();
+}
+
 /* ===================== START ===================== */
 initEntry();
 initObserverChecklist();
+wireReferenceToolbars();
+wireBackToTop();

@@ -2,10 +2,11 @@
  *
  * Dry-run feedback (2026-05-26): investigations (imaging + bloods) are
  * clickable AT ANY TIME — ordering one prematurely / without indication is
- * penalised, not blocked — while only the clinical SYNTHESIS (labs:0) stays
- * gated on the red-flag screen. Renders the default scenario's investigation
- * buttons via buildButtons()/renderButtons() (no room/Firebase needed) and
- * checks the disabled state directly.
+ * penalised, not blocked. The clinical SYNTHESIS (labs:0) is no longer rendered
+ * as a button at all (2026-06-02): the on-screen synthesis section was removed
+ * and its write-up moved to the stage-4 take-home. Renders the default
+ * scenario's investigation buttons via buildButtons()/renderButtons() (no
+ * room/Firebase needed) and checks the disabled state directly.
  *
  * Listed in the mobile-iphone / mobile-ipad / mobile-android testMatch in
  * playwright.config.js so it runs per-device (chromium + the three mobile
@@ -29,7 +30,11 @@ async function buildLabs(page, revealed, hyps) {
       const b = document.querySelector('.req-btn[data-id="' + id + '"]');
       return b ? b.disabled : null;
     };
-    return { imaging: dis("labs:1"), bloods: dis("labs:3"), synth: dis("labs:0") };
+    return {
+      imaging: dis("labs:1"),
+      bloods: dis("labs:3"),
+      synthBtn: !!document.querySelector('.req-btn[data-id="labs:0"]')
+    };
   }, { rev: revealed, hyps: hyps });
 }
 
@@ -38,21 +43,21 @@ const TWO_HYPS = {
   b: { text: "axial spondyloarthritis", by: "t", at: 1 }
 };
 
-test.describe("Module A — investigations clickable any time, synthesis gated", () => {
-  test("imaging + bloods are clickable with no hypotheses; synthesis is gated", async ({ page }) => {
+test.describe("Module A — investigations clickable any time, no synthesis button", () => {
+  test("imaging + bloods are clickable with no hypotheses; the synthesis button is gone", async ({ page }) => {
     await page.goto("/");
     const s = await buildLabs(page, {}, {});
     expect(s.imaging, "imaging (labs:1) clickable any time").toBe(false);
     expect(s.bloods, "bloods (labs:3) clickable any time").toBe(false);
-    expect(s.synth, "synthesis (labs:0) gated until ≥2 hypotheses").toBe(true);
+    expect(s.synthBtn, "synthesis (labs:0) is no longer rendered as a button").toBe(false);
   });
 
-  test("synthesis unlocks after ≥2 working hypotheses; investigations stay clickable", async ({ page }) => {
+  test("investigations stay clickable with ≥2 hypotheses; still no synthesis button", async ({ page }) => {
     await page.goto("/");
     const s = await buildLabs(page, {}, TWO_HYPS);
-    expect(s.synth, "synthesis unlocks once ≥2 working hypotheses are written").toBe(false);
     expect(s.imaging, "imaging stays clickable").toBe(false);
     expect(s.bloods, "bloods stays clickable").toBe(false);
+    expect(s.synthBtn, "no synthesis button is rendered even after ≥2 hypotheses").toBe(false);
   });
 
   test("the investigations panel is never greyed out as locked", async ({ page }) => {

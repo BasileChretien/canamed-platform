@@ -989,12 +989,12 @@ var DECISIONS = [
     // which is exactly the bias PBL is meant to prevent.
     id: "dec_plan", module: "A", points: 25, penalty: 15,
     unlockWhen: { hypotheses: 1, historyRevealed: 1, examRevealed: 1 },
-    prompt: { en: "Your team agrees this is non-specific low-back pain. What is the " +
-                  "core of the management plan?",
-              fr: "Votre équipe convient qu'il s'agit d'une lombalgie non spécifique. Quel est " +
-                  "le cœur du plan de prise en charge ?",
-              ja: "あなたのチームはこれを非特異的腰痛と判断しました。治療計画の" +
-                  "中核は何ですか?" },
+    prompt: { en: "What should be the core of this patient's initial " +
+                  "management plan?",
+              fr: "Quel devrait être le cœur du plan de prise en charge initial " +
+                  "de ce patient ?",
+              ja: "この患者の初期治療計画の" +
+                  "中核は何であるべきですか?" },
     options: [
       { text: { en: "Strong opioids and bed rest until the pain settles",
                 fr: "Opioïdes forts et repos au lit jusqu'à ce que la douleur cède",

@@ -188,7 +188,7 @@ test.describe("Student PDFs — study booklet", () => {
           { type: "p", text: "Truth-telling norms changed over time." },
           { type: "table", header: true, rows: [["Country", "Norm"], ["France", "autonomy first"]] }
         ] }],
-        team: { name: "Room 1", score: 120, wins: ["Reached the clinical synthesis"],
+        team: { name: "Room 1", score: 120, wins: ["Committed your working hypotheses"],
                 cohort: [{ label: "Room 1", score: 120, you: true }, { label: "Room 2", score: 90 }] }
       });
       return JSON.stringify(d);
@@ -199,7 +199,7 @@ test.describe("Student PDFs — study booklet", () => {
     expect(doc).toContain("autonomy first");
     expect(doc).toContain("Your team");
     expect(doc).toContain("your team");                 // the "← your team" marker
-    expect(doc).toContain("Reached the clinical synthesis");
+    expect(doc).toContain("Committed your working hypotheses");
   });
 
   test("the booklet has a clickable table of contents (toc node + tocItem headings)", async ({ page }) => {

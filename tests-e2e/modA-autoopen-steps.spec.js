@@ -5,7 +5,7 @@
  * did not open by themselves — students finished a step and didn't notice
  * the next one had become available. This spec pins the auto-open flow:
  *
- *   - completing the synthesis (keyRevealed) auto-opens the Discussion panel;
+ *   - committing ≥2 hypotheses (phaseGateOpen) auto-opens the Discussion panel;
  *   - finishing every Exchange prompt (promptCursor === total, RTDB-synced)
  *     auto-opens the Group answers panel;
  *   - neither auto-open steals focus from someone mid-typing.
@@ -56,13 +56,13 @@ async function setupModA(page) {
 }
 
 test.describe("Module A — steps auto-open as the flow advances", () => {
-  test("completing the synthesis auto-opens the Debate (Discussion) panel", async ({ page }) => {
+  test("committing ≥2 hypotheses auto-opens the Debate (Discussion) panel", async ({ page }) => {
     await setupModA(page);
     const active = await page.evaluate(() => {
-      // Realistic state: the synthesis is completed by clicking a button, so
-      // no text input holds focus. (This partial surfacing leaves the lobby
-      // form in the tree; WebKit parks focus on its first textbox, which would
-      // otherwise trip the "don't interrupt typing" guard.)
+      // Realistic state: the team has just committed its hypotheses, so no text
+      // input holds focus. (This partial surfacing leaves the lobby form in the
+      // tree; WebKit parks focus on its first textbox, which would otherwise
+      // trip the "don't interrupt typing" guard.)
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       window._test_setPromptCursor(0);
       if (window.switchRcolTab) window.switchRcolTab("decisions"); // default, not discussion
@@ -70,7 +70,7 @@ test.describe("Module A — steps auto-open as the flow advances", () => {
       const p = document.querySelector('.rcol-panel[data-panel="discussion"]');
       return !!(p && p.classList.contains("is-active") && !p.hidden);
     });
-    expect(active, "Discussion should auto-open once the synthesis unlocks").toBe(true);
+    expect(active, "Discussion should auto-open once the ≥2-hypotheses gate opens").toBe(true);
   });
 
   test("finishing the discussion with an OPEN Module A vote opens the Decisions panel", async ({ page }) => {

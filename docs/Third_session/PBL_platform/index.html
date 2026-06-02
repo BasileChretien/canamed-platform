@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v40" below to the matching new string.
+         2. Update every "?v=v41" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v40"></script>
-  <link rel="stylesheet" href="style.css?v=v40" />
+  <script src="theme-init.js?v=v41"></script>
+  <link rel="stylesheet" href="style.css?v=v41" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v40" defer></script>
+  <script src="sw-register.js?v=v41" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -1360,6 +1360,178 @@
                removed so the patient vignette stays focused on the patient. -->
         </section>
 
+        <!-- Reference toolbar (2026-06-02): the three reference lookups
+             (historical context / guidelines / recap) are a single row of
+             buttons at the top of the module; each opens its panel below
+             (accordion — one open at a time, wired by wireReferenceToolbars()
+             in script.js). Replaces the old stacked .reference-section that sat
+             below the workflow. -->
+        <section class="reference-section" aria-label="Background &amp; guidelines">
+          <div class="reference-toolbar" role="group" aria-label="Background &amp; guidelines">
+            <button type="button" class="reference-btn" id="refA-btn-history"
+                    aria-expanded="false" aria-controls="refA-panel-history">
+              <span class="reference-btn-emoji" aria-hidden="true">&#128220;</span>
+              <span data-i18n="reference.btn.history">Historical context</span>
+            </button>
+            <button type="button" class="reference-btn" id="refA-btn-guidelines"
+                    aria-expanded="false" aria-controls="refA-panel-guidelines">
+              <span class="reference-btn-emoji" aria-hidden="true">&#128218;</span>
+              <span data-i18n="reference.btn.guidelines">Guidelines</span>
+            </button>
+            <button type="button" class="reference-btn" id="refA-btn-recap"
+                    aria-expanded="false" aria-controls="refA-panel-recap">
+              <span class="reference-btn-emoji" aria-hidden="true">&#128203;</span>
+              <span data-i18n="reference.btn.recap">Recap table</span>
+            </button>
+          </div>
+
+          <div class="reference-panel card history-card" id="refA-panel-history"
+               role="region" aria-labelledby="refA-btn-history" hidden>
+            <p>Opium is one of medicine's oldest drugs &mdash; used in ancient Sumer,
+              praised by Galen, bottled as laudanum from the 17th century. The 19th century
+              industrialised it: morphine was isolated around 1804, the hypodermic syringe
+              arrived in the 1850s, and Bayer marketed heroin in 1898. Repeated waves of
+              addiction made 20th-century Western physicians cautious &mdash; opioids were
+              for cancer and acute pain only.</p>
+            <p>That caution collapsed in the United States. In 1995&ndash;96 pain was
+              promoted as "the fifth vital sign" and OxyContin was launched with aggressive,
+              misleading marketing; prescriptions tripled and hundreds of thousands of
+              overdose deaths followed. Japan took a strikingly different path &mdash; tight
+              narcotics regulation, restrictive insurance rules, conservative training and a
+              deep cultural wariness of <em lang="ja">mayaku</em> (narcotics) &mdash; and today
+              prescribes opioids many times less than the US, with France and the UK in
+              between. Low-back-pain care had its own reversal: until the 1990s bed rest and
+              routine imaging were standard, until trials showed bed rest <em>delays</em>
+              recovery and imaging rarely changes outcomes.</p>
+            <p class="didyouknow">&#128161; <strong>Did you know?</strong> Heroin was sold
+              over the counter as a "non-addictive" cough remedy from 1898 &mdash; a
+              marketing claim eerily echoed a century later for OxyContin.</p>
+            <p class="didyouknow">&#128161; <strong>Did you know?</strong> Japan prescribes
+              opioids more than 20&times; less than the USA &mdash; not because Japanese
+              patients feel less pain, but because of regulation, insurance and culture.</p>
+            <ul class="ref-list">
+              <li>Jones MR et al. A Brief History of the Opioid Epidemic and Strategies for
+                Pain Medicine. <em>Pain and Therapy</em> 2018;7(1):13&ndash;21.
+                <a href="https://doi.org/10.1007/s40122-018-0097-6" target="_blank"
+                   rel="noopener">doi.org/10.1007/s40122-018-0097-6</a></li>
+              <li>Onishi E et al. Comparison of Opioid Prescribing Patterns in the United
+                States and Japan. <em>J Am Board Fam Med</em> 2017;30(2):248&ndash;254.
+                <a href="https://www.jabfm.org/content/30/2/248" target="_blank"
+                   rel="noopener">jabfm.org</a></li>
+              <li>Tompkins DA et al. Providing chronic pain management in the "Fifth Vital
+                Sign" era. <em>Drug Alcohol Depend</em> 2017;173(Suppl 1):S11&ndash;S21.
+                <a href="https://doi.org/10.1016/j.drugalcdep.2016.12.002" target="_blank"
+                   rel="noopener">doi.org/10.1016/j.drugalcdep.2016.12.002</a></li>
+              <li>Waddell G, Feder G, Lewis M. Systematic reviews of bed rest and advice to
+                stay active for acute low back pain. <em>Br J Gen Pract</em>
+                1997;47(423):647&ndash;652.
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC1410119/" target="_blank"
+                   rel="noopener">free full text</a></li>
+              <li>Foster NE et al. Prevention and treatment of low back pain: evidence,
+                challenges, and promising directions. <em>The Lancet</em>
+                2018;391(10137):2368&ndash;2383.
+                <a href="https://doi.org/10.1016/S0140-6736(18)30489-6" target="_blank"
+                   rel="noopener">doi.org/10.1016/S0140-6736(18)30489-6</a></li>
+            </ul>
+          </div>
+
+          <div class="reference-panel card guidelines-card" id="refA-panel-guidelines"
+               role="region" aria-labelledby="refA-btn-guidelines" hidden>
+            <ul class="ref-list">
+              <li><strong>France &mdash;</strong> Haute Autorité de Santé (HAS), <em>Prise en
+                charge du patient présentant une lombalgie commune</em>, 2019.
+                <a href="https://www.has-sante.fr/jcms/c_2961499/fr/prise-en-charge-du-patient-presentant-une-lombalgie-commune"
+                   target="_blank" rel="noopener">has-sante.fr</a></li>
+              <li><strong>Japan &mdash;</strong> Japanese Orthopaedic Association (JOA),
+                <em>Clinical Practice Guideline for the Management of Low Back Pain</em>,
+                revised 2019 edition (English secondary publication, <em>J Orthop Sci</em> 2022).
+                <a href="https://pubmed.ncbi.nlm.nih.gov/34836746/"
+                   target="_blank" rel="noopener">pubmed.ncbi.nlm.nih.gov</a></li>
+              <li><strong>UK &mdash;</strong> NICE, <em>Low back pain and sciatica in over 16s:
+                assessment and management</em>, NG59 (2016, updated 2020).
+                <a href="https://www.nice.org.uk/guidance/ng59"
+                   target="_blank" rel="noopener">nice.org.uk/guidance/ng59</a></li>
+              <li><strong>USA &mdash;</strong> American College of Physicians, <em>Noninvasive
+                Treatments for Acute, Subacute, and Chronic Low Back Pain</em>, 2017
+                <a href="https://pubmed.ncbi.nlm.nih.gov/28192789/"
+                   target="_blank" rel="noopener">pubmed</a>;
+                and CDC, <em>Clinical Practice Guideline for Prescribing Opioids for Pain</em>,
+                2022 <a href="https://www.cdc.gov/mmwr/volumes/71/rr/rr7103a1.htm"
+                   target="_blank" rel="noopener">cdc.gov</a>.</li>
+            </ul>
+            <p class="hint">All four agree on the science: stay active, exercise-based
+              first-line care, image only for red flags, opioids are not first-line for
+              chronic non-specific low-back pain.</p>
+          </div>
+
+          <div class="reference-panel card recap-card" id="refA-panel-recap"
+               role="region" aria-labelledby="refA-btn-recap" hidden>
+            <h4>Red flags &mdash; when to worry</h4>
+            <table class="recap-table">
+              <thead><tr><th>Category</th><th>Ask / look for</th><th>If present</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Cauda equina</strong> (emergency)</td>
+                  <td>Saddle anaesthesia, urinary retention/incontinence, faecal incontinence,
+                    new sexual dysfunction, bilateral leg symptoms</td>
+                  <td>Same-day emergency referral + urgent MRI</td></tr>
+                <tr><td><strong>Malignancy</strong></td>
+                  <td>Age &gt;50, cancer history, unexplained weight loss, rest/night pain,
+                    no improvement after 4&ndash;6 weeks</td>
+                  <td>Bloods (FBC, ESR/CRP, calcium) + imaging; refer</td></tr>
+                <tr><td><strong>Infection</strong></td>
+                  <td>Fever, night sweats, IV drug use, immunosuppression, recent spinal
+                    procedure, focal bony tenderness</td>
+                  <td>ESR/CRP + urgent MRI; refer</td></tr>
+                <tr><td><strong>Fracture</strong></td>
+                  <td>Significant trauma, or minor trauma with osteoporosis risk; focal
+                    midline bony tenderness</td>
+                  <td>X-ray &plusmn; MRI</td></tr>
+                <tr><td><strong>Inflammatory</strong> (axial spondyloarthritis)</td>
+                  <td>Onset &lt;45, morning stiffness &gt;30 min, improves with exercise /
+                    worse with rest, second-half-of-night pain</td>
+                  <td>ESR/CRP, consider HLA-B27, rheumatology referral</td></tr>
+              </tbody>
+            </table>
+            <h4>First-line management of chronic non-specific low-back pain</h4>
+            <ul class="info-list">
+              <li><strong>Education &amp; reassurance</strong> &mdash; not dangerous, not
+                "damage"; hurt &ne; harm; good prognosis.</li>
+              <li><strong>Stay active</strong> &mdash; avoid bed rest; resume work, walking, gym.</li>
+              <li><strong>Structured exercise / physiotherapy</strong> &mdash; the best-evidenced
+                treatment; adherence matters more than the type.</li>
+              <li><strong>Address yellow flags</strong> &mdash; fear of movement, catastrophising,
+                low mood, poor sleep &mdash; treat these directly.</li>
+              <li><strong>Non-opioid analgesia</strong> &mdash; NSAIDs at the lowest effective
+                dose, shortest duration. Paracetamol alone is ineffective.</li>
+              <li><strong>Do NOT</strong> &mdash; routine imaging, opioids, gabapentinoids /
+                benzodiazepines, prolonged bed rest.</li>
+            </ul>
+            <h4>Opioids for chronic non-cancer pain</h4>
+            <p>Small short-term pain benefit at best, no proven benefit on function, no good
+              evidence beyond ~12 weeks; real harms (tolerance, dependence, hyperalgesia,
+              falls, overdose). <strong>All four countries: not first-line.</strong></p>
+            <h4>France &middot; Japan &middot; UK &middot; USA &mdash; at a glance</h4>
+            <table class="recap-table">
+              <thead><tr><th></th><th>Imaging</th><th>Opioids for chronic LBP</th>
+                <th>Prescribing-culture context</th></tr></thead>
+              <tbody>
+                <tr><td><strong>France</strong></td><td>Not without red flags</td>
+                  <td>Not routine; biopsychosocial care first</td>
+                  <td>Moderate use &mdash; above Japan, well below USA</td></tr>
+                <tr><td><strong>Japan</strong></td><td>Restrict to indicated cases</td>
+                  <td>Not first-line; cautious, harm&ndash;benefit weighted</td>
+                  <td>Among the lowest opioid use of high-income countries</td></tr>
+                <tr><td><strong>UK</strong></td><td>Do not routinely image</td>
+                  <td>Do <em>not</em> offer opioids for chronic LBP (NICE)</td>
+                  <td>Risk-stratified, self-management&ndash;led NHS model</td></tr>
+                <tr><td><strong>USA</strong></td><td>Avoid routine imaging</td>
+                  <td>Last resort only; maximise non-opioids first</td>
+                  <td>Historically very high use; opioid crisis</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
         <div class="columns">
           <div class="col-left">
             <!-- Consultation-note framing (pedagogist's strongest claim,
@@ -1512,8 +1684,7 @@
                    data-i18n="modA.chart.hypotheses.hint" data-i18n-html>
                   Agree as a team: <strong>what do you suspect?</strong> List
                   <strong>two or more</strong> differentials you want to rule in or
-                  rule out. Writing two unlocks the clinical synthesis and the
-                  discussion prompts.
+                  rule out. Writing two unlocks the discussion prompts.
                 </p>
                 <ul class="hypothesis-list" id="hypothesis-list"></ul>
                 <p class="hint hypothesis-empty hidden" id="hypothesis-empty"
@@ -1532,29 +1703,13 @@
                    data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
               </details>
 
-              <!-- ── Clinical synthesis (split out 2026-06-02; was labs:0 inside
-                   the old combined section) ── Locked until the team has written
-                   ≥2 working hypotheses above (the new phase gate;
-                   phaseGateOpen() in script.js). .is-locked fades the section +
-                   the synthesis button is disabled in renderButtons until then.
-                   The red-flag screen (serious causes / cauda equina / leg neuro)
-                   is NO LONGER a hard gate — it stays as scoring and shows here as
-                   a progress nudge. #group-synthesis holds the SYNTH_ID button. -->
-              <details class="chart-section chart-synthesis" id="chart-synthesis">
-                <summary class="chart-section-h">
-                  <span class="chart-section-icon" aria-hidden="true">🩺</span>
-                  <span data-i18n="modA.chart.synthesis.title">Clinical synthesis</span>
-                </summary>
-                <p class="chart-section-locked-hint hidden" id="synthesis-locked-hint"
-                   data-i18n="modA.chart.synthesis.locked-hint" data-i18n-html>
-                  Write at least <strong>two</strong> working hypotheses above to unlock the clinical synthesis and the discussion prompts.
-                </p>
-                <p class="synthesis-progress" id="synthesis-progress"
-                   data-i18n="modA.synthesis.progress" aria-live="polite">
-                  0 / 3 red flags screened
-                </p>
-                <div class="btn-group" id="group-synthesis"></div>
-              </details>
+              <!-- Clinical synthesis section removed 2026-06-02: the on-screen
+                   model-answer reveal was redundant. The synthesis write-up
+                   (SYNTH_ID / labs:0, still defined in case-content.js) now
+                   ships only in the stage-4 take-home .md
+                   (downloadMyRoomAnswers). The phase gate stays ≥2 working
+                   hypotheses (phaseGateOpen); the red-flag screen still scores
+                   via prereqsMet(). -->
             </article>
             <button id="reset-btn" class="reset-btn"
                     data-i18n="reset.btn"
@@ -1593,7 +1748,7 @@
                 <span class="rcol-tab-icon" aria-hidden="true">💬</span>
                 <span class="rcol-tab-label" data-i18n="rcol.tab.discussion">Debate</span>
                 <span class="rcol-tab-locked-hint" id="rcol-tab-discussion-locked"
-                      data-i18n="rcol.tab.discussion.locked">🔒 finish synthesis to unlock</span>
+                      data-i18n="rcol.tab.discussion.locked">🔒 write 2 hypotheses to unlock</span>
                 <span class="rcol-tab-badge" id="tab-badge-discussion" hidden></span>
               </button>
               <button class="rcol-tab" type="button" data-tab="answers"
@@ -1620,7 +1775,7 @@
             <div class="synthesis-unlocked-banner hidden"
                  id="synthesis-unlocked-banner" role="status" aria-live="polite"
                  data-i18n="modA.coach.synthesis-unlocked" data-i18n-html>
-              ✓ <strong>Synthesis done — Phase 3 is open.</strong> The 6 discussion prompts
+              ✓ <strong>Hypotheses in — Phase 3 is open.</strong> The 6 discussion prompts
               are below. Both Caen and Nagoya voices must speak on each comparison prompt.
             </div>
             <p class="banner-rule banner-compare"
@@ -1632,7 +1787,7 @@
             <section class="card prompts-card" id="prompts-card">
               <h3 data-i18n="prompts.title">Discussion prompts</h3>
               <p class="empty" id="prompts-locked" data-i18n="prompts.locked">
-                Locked &mdash; complete the clinical synthesis (red-flag review) to unlock the
+                Locked &mdash; write two working hypotheses to unlock the
                 discussion prompts.
               </p>
               <!-- Progressive single-prompt reveal (user request 2026-05-18:
@@ -1817,163 +1972,8 @@
           </div>
         </div>
 
-        <!-- Reference materials (moved out of the rcol tab strip per
-             UX/pedagogy review 2026-05-18). These are utility lookups,
-             not activities — they sit below the workflow as collapsed
-             cards so students can dip in when they want background but
-             they don't compete with the tab choices above. -->
-        <section class="reference-section" aria-labelledby="reference-section-h">
-          <h3 class="reference-section-h" id="reference-section-h"
-              data-i18n="reference-section.title">
-            📚 Background &amp; guidelines (open when you need them)
-          </h3>
-          <details class="card history-card">
-            <summary><strong>&#128220; Historical context &mdash; how we got here</strong></summary>
-            <p>Opium is one of medicine's oldest drugs &mdash; used in ancient Sumer,
-              praised by Galen, bottled as laudanum from the 17th century. The 19th century
-              industrialised it: morphine was isolated around 1804, the hypodermic syringe
-              arrived in the 1850s, and Bayer marketed heroin in 1898. Repeated waves of
-              addiction made 20th-century Western physicians cautious &mdash; opioids were
-              for cancer and acute pain only.</p>
-            <p>That caution collapsed in the United States. In 1995&ndash;96 pain was
-              promoted as "the fifth vital sign" and OxyContin was launched with aggressive,
-              misleading marketing; prescriptions tripled and hundreds of thousands of
-              overdose deaths followed. Japan took a strikingly different path &mdash; tight
-              narcotics regulation, restrictive insurance rules, conservative training and a
-              deep cultural wariness of <em lang="ja">mayaku</em> (narcotics) &mdash; and today
-              prescribes opioids many times less than the US, with France and the UK in
-              between. Low-back-pain care had its own reversal: until the 1990s bed rest and
-              routine imaging were standard, until trials showed bed rest <em>delays</em>
-              recovery and imaging rarely changes outcomes.</p>
-            <p class="didyouknow">&#128161; <strong>Did you know?</strong> Heroin was sold
-              over the counter as a "non-addictive" cough remedy from 1898 &mdash; a
-              marketing claim eerily echoed a century later for OxyContin.</p>
-            <p class="didyouknow">&#128161; <strong>Did you know?</strong> Japan prescribes
-              opioids more than 20&times; less than the USA &mdash; not because Japanese
-              patients feel less pain, but because of regulation, insurance and culture.</p>
-            <ul class="ref-list">
-              <li>Jones MR et al. A Brief History of the Opioid Epidemic and Strategies for
-                Pain Medicine. <em>Pain and Therapy</em> 2018;7(1):13&ndash;21.
-                <a href="https://doi.org/10.1007/s40122-018-0097-6" target="_blank"
-                   rel="noopener">doi.org/10.1007/s40122-018-0097-6</a></li>
-              <li>Onishi E et al. Comparison of Opioid Prescribing Patterns in the United
-                States and Japan. <em>J Am Board Fam Med</em> 2017;30(2):248&ndash;254.
-                <a href="https://www.jabfm.org/content/30/2/248" target="_blank"
-                   rel="noopener">jabfm.org</a></li>
-              <li>Tompkins DA et al. Providing chronic pain management in the "Fifth Vital
-                Sign" era. <em>Drug Alcohol Depend</em> 2017;173(Suppl 1):S11&ndash;S21.
-                <a href="https://doi.org/10.1016/j.drugalcdep.2016.12.002" target="_blank"
-                   rel="noopener">doi.org/10.1016/j.drugalcdep.2016.12.002</a></li>
-              <li>Waddell G, Feder G, Lewis M. Systematic reviews of bed rest and advice to
-                stay active for acute low back pain. <em>Br J Gen Pract</em>
-                1997;47(423):647&ndash;652.
-                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC1410119/" target="_blank"
-                   rel="noopener">free full text</a></li>
-              <li>Foster NE et al. Prevention and treatment of low back pain: evidence,
-                challenges, and promising directions. <em>The Lancet</em>
-                2018;391(10137):2368&ndash;2383.
-                <a href="https://doi.org/10.1016/S0140-6736(18)30489-6" target="_blank"
-                   rel="noopener">doi.org/10.1016/S0140-6736(18)30489-6</a></li>
-            </ul>
-          </details>
-
-          <details class="card guidelines-card">
-            <summary><strong>&#128218; Guidelines &mdash; chronic low-back pain &amp; opioids</strong>
-              (France &middot; Japan &middot; UK &middot; USA)</summary>
-            <ul class="ref-list">
-              <li><strong>France &mdash;</strong> Haute Autorité de Santé (HAS), <em>Prise en
-                charge du patient présentant une lombalgie commune</em>, 2019.
-                <a href="https://www.has-sante.fr/jcms/c_2961499/fr/prise-en-charge-du-patient-presentant-une-lombalgie-commune"
-                   target="_blank" rel="noopener">has-sante.fr</a></li>
-              <li><strong>Japan &mdash;</strong> Japanese Orthopaedic Association (JOA),
-                <em>Clinical Practice Guideline for the Management of Low Back Pain</em>,
-                revised 2019 edition (English secondary publication, <em>J Orthop Sci</em> 2022).
-                <a href="https://pubmed.ncbi.nlm.nih.gov/34836746/"
-                   target="_blank" rel="noopener">pubmed.ncbi.nlm.nih.gov</a></li>
-              <li><strong>UK &mdash;</strong> NICE, <em>Low back pain and sciatica in over 16s:
-                assessment and management</em>, NG59 (2016, updated 2020).
-                <a href="https://www.nice.org.uk/guidance/ng59"
-                   target="_blank" rel="noopener">nice.org.uk/guidance/ng59</a></li>
-              <li><strong>USA &mdash;</strong> American College of Physicians, <em>Noninvasive
-                Treatments for Acute, Subacute, and Chronic Low Back Pain</em>, 2017
-                <a href="https://pubmed.ncbi.nlm.nih.gov/28192789/"
-                   target="_blank" rel="noopener">pubmed</a>;
-                and CDC, <em>Clinical Practice Guideline for Prescribing Opioids for Pain</em>,
-                2022 <a href="https://www.cdc.gov/mmwr/volumes/71/rr/rr7103a1.htm"
-                   target="_blank" rel="noopener">cdc.gov</a>.</li>
-            </ul>
-            <p class="hint">All four agree on the science: stay active, exercise-based
-              first-line care, image only for red flags, opioids are not first-line for
-              chronic non-specific low-back pain.</p>
-          </details>
-
-          <details class="card recap-card">
-            <summary><strong>&#128203; Recap table &mdash; keep this open for reference</strong></summary>
-            <h4>Red flags &mdash; when to worry</h4>
-            <table class="recap-table">
-              <thead><tr><th>Category</th><th>Ask / look for</th><th>If present</th></tr></thead>
-              <tbody>
-                <tr><td><strong>Cauda equina</strong> (emergency)</td>
-                  <td>Saddle anaesthesia, urinary retention/incontinence, faecal incontinence,
-                    new sexual dysfunction, bilateral leg symptoms</td>
-                  <td>Same-day emergency referral + urgent MRI</td></tr>
-                <tr><td><strong>Malignancy</strong></td>
-                  <td>Age &gt;50, cancer history, unexplained weight loss, rest/night pain,
-                    no improvement after 4&ndash;6 weeks</td>
-                  <td>Bloods (FBC, ESR/CRP, calcium) + imaging; refer</td></tr>
-                <tr><td><strong>Infection</strong></td>
-                  <td>Fever, night sweats, IV drug use, immunosuppression, recent spinal
-                    procedure, focal bony tenderness</td>
-                  <td>ESR/CRP + urgent MRI; refer</td></tr>
-                <tr><td><strong>Fracture</strong></td>
-                  <td>Significant trauma, or minor trauma with osteoporosis risk; focal
-                    midline bony tenderness</td>
-                  <td>X-ray &plusmn; MRI</td></tr>
-                <tr><td><strong>Inflammatory</strong> (axial spondyloarthritis)</td>
-                  <td>Onset &lt;45, morning stiffness &gt;30 min, improves with exercise /
-                    worse with rest, second-half-of-night pain</td>
-                  <td>ESR/CRP, consider HLA-B27, rheumatology referral</td></tr>
-              </tbody>
-            </table>
-            <h4>First-line management of chronic non-specific low-back pain</h4>
-            <ul class="info-list">
-              <li><strong>Education &amp; reassurance</strong> &mdash; not dangerous, not
-                "damage"; hurt &ne; harm; good prognosis.</li>
-              <li><strong>Stay active</strong> &mdash; avoid bed rest; resume work, walking, gym.</li>
-              <li><strong>Structured exercise / physiotherapy</strong> &mdash; the best-evidenced
-                treatment; adherence matters more than the type.</li>
-              <li><strong>Address yellow flags</strong> &mdash; fear of movement, catastrophising,
-                low mood, poor sleep &mdash; treat these directly.</li>
-              <li><strong>Non-opioid analgesia</strong> &mdash; NSAIDs at the lowest effective
-                dose, shortest duration. Paracetamol alone is ineffective.</li>
-              <li><strong>Do NOT</strong> &mdash; routine imaging, opioids, gabapentinoids /
-                benzodiazepines, prolonged bed rest.</li>
-            </ul>
-            <h4>Opioids for chronic non-cancer pain</h4>
-            <p>Small short-term pain benefit at best, no proven benefit on function, no good
-              evidence beyond ~12 weeks; real harms (tolerance, dependence, hyperalgesia,
-              falls, overdose). <strong>All four countries: not first-line.</strong></p>
-            <h4>France &middot; Japan &middot; UK &middot; USA &mdash; at a glance</h4>
-            <table class="recap-table">
-              <thead><tr><th></th><th>Imaging</th><th>Opioids for chronic LBP</th>
-                <th>Prescribing-culture context</th></tr></thead>
-              <tbody>
-                <tr><td><strong>France</strong></td><td>Not without red flags</td>
-                  <td>Not routine; biopsychosocial care first</td>
-                  <td>Moderate use &mdash; above Japan, well below USA</td></tr>
-                <tr><td><strong>Japan</strong></td><td>Restrict to indicated cases</td>
-                  <td>Not first-line; cautious, harm&ndash;benefit weighted</td>
-                  <td>Among the lowest opioid use of high-income countries</td></tr>
-                <tr><td><strong>UK</strong></td><td>Do not routinely image</td>
-                  <td>Do <em>not</em> offer opioids for chronic LBP (NICE)</td>
-                  <td>Risk-stratified, self-management&ndash;led NHS model</td></tr>
-                <tr><td><strong>USA</strong></td><td>Avoid routine imaging</td>
-                  <td>Last resort only; maximise non-opioids first</td>
-                  <td>Historically very high use; opioid crisis</td></tr>
-              </tbody>
-            </table>
-          </details>
-        </section>
+        <!-- Reference materials relocated 2026-06-02 to a button toolbar at the
+             TOP of this module (see .reference-toolbar above). -->
       </section>
 
       <!-- STAGE 2: MODULE B -->
@@ -2050,6 +2050,177 @@
                   aria-label="Hide this guidance for the rest of the session"
                   title="Hide for the session">×</button>
         </div>
+
+        <!-- Reference toolbar (2026-06-02): same accordion as Module A — the
+             three reference lookups (historical context / guidelines / recap)
+             are a single row of buttons at the top of the module; each opens its
+             panel below (one open at a time, wired by wireReferenceToolbars()).
+             Replaces the three stacked cards that used to live in .col-left. -->
+        <section class="reference-section" aria-label="Background &amp; guidelines">
+          <div class="reference-toolbar" role="group" aria-label="Background &amp; guidelines">
+            <button type="button" class="reference-btn" id="refB-btn-history"
+                    aria-expanded="false" aria-controls="refB-panel-history">
+              <span class="reference-btn-emoji" aria-hidden="true">&#128220;</span>
+              <span data-i18n="reference.btn.history">Historical context</span>
+            </button>
+            <button type="button" class="reference-btn" id="refB-btn-guidelines"
+                    aria-expanded="false" aria-controls="refB-panel-guidelines">
+              <span class="reference-btn-emoji" aria-hidden="true">&#128218;</span>
+              <span data-i18n="reference.btn.guidelines">Guidelines</span>
+            </button>
+            <button type="button" class="reference-btn" id="refB-btn-recap"
+                    aria-expanded="false" aria-controls="refB-panel-recap">
+              <span class="reference-btn-emoji" aria-hidden="true">&#128203;</span>
+              <span data-i18n="reference.btn.recap">Recap table</span>
+            </button>
+          </div>
+
+          <div class="reference-panel card history-card" id="refB-panel-history"
+               role="region" aria-labelledby="refB-btn-history" hidden>
+            <p>For most of Western medical history, concealing a grave diagnosis was considered
+              <em>good</em> medicine. The 1847 AMA Code of Ethics told doctors to be "the
+              minister of hope and comfort to the sick." As late as 1961, Donald Oken found that
+              about 90% of US physicians preferred <em>not</em> to tell patients they had cancer.</p>
+            <p>The reversal was rapid. Driven by the 1960s&ndash;70s rights movements, the rise
+              of bioethics, research scandals such as Tuskegee, and a new emphasis on autonomy
+              and informed consent, a 1979 replication found roughly 97% of physicians now
+              favoured disclosure. France formalised these patient rights later: the
+              <em lang="fr">loi Kouchner</em> of 4 March 2002 enshrined the right to information, consent
+              and access to one's medical record. Japan's trajectory differed and is unusually
+              well documented: into the early 1990s physicians routinely told only the
+              <em>family</em>, not the patient, of a cancer diagnosis &mdash; disclosure then
+              rose sharply through the 1990s, though Japan moved toward <em>selective</em>
+              rather than universal truth-telling, still weighting family wishes heavily.</p>
+            <p class="didyouknow">&#128161; <strong>Did you know?</strong> In 1961, 9 out of 10
+              American doctors would not tell a patient they had cancer &mdash; within two
+              decades, almost the same proportion said they would.</p>
+            <p class="didyouknow">&#128161; <strong>Did you know?</strong> Until the 1990s,
+              Japanese physicians often told the family but not the patient &mdash; so the
+              "please don't tell my parent" scenario in this roleplay was, until recently,
+              simply standard practice.</p>
+            <ul class="ref-list">
+              <li>Sisk B et al. The Truth about Truth-Telling in American Medicine: A Brief
+                History. <em>The Permanente Journal</em> 2016;20(3):15&ndash;219.
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4991917/" target="_blank"
+                   rel="noopener">free full text</a></li>
+              <li>Oken D. What to tell cancer patients: a study of medical attitudes.
+                <em>JAMA</em> 1961;175(13):1120&ndash;1128.</li>
+              <li>Novack DH et al. Changes in physicians' attitudes toward telling the cancer
+                patient. <em>JAMA</em> 1979;241(9):897&ndash;900.</li>
+              <li>Elwyn TS et al. Cancer disclosure in Japan: historical comparisons, current
+                practices. <em>Soc Sci Med</em> 1998;46(9):1151&ndash;1163.
+                <a href="https://pubmed.ncbi.nlm.nih.gov/9572605/" target="_blank"
+                   rel="noopener">pubmed</a></li>
+              <li>Loi n&deg; 2002-303 du 4 mars 2002 relative aux droits des malades.
+                <em>Journal Officiel</em> 2002.
+                <a href="https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000000227015/"
+                   target="_blank" rel="noopener">legifrance.gouv.fr</a></li>
+            </ul>
+          </div>
+
+          <div class="reference-panel card guidelines-card" id="refB-panel-guidelines"
+               role="region" aria-labelledby="refB-btn-guidelines" hidden>
+            <ul class="ref-list">
+              <li><strong>France &mdash;</strong> Loi n&deg; 2002-303 du 4 mars 2002
+                (<span lang="fr">"loi Kouchner"</span>), right to be informed <em>and</em> the right not to know
+                (<span lang="fr">Code de la santé publique, art. L1111-2</span>)
+                <a href="https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000227015"
+                   target="_blank" rel="noopener">legifrance.gouv.fr</a>;
+                HAS, <em lang="fr">Annoncer une mauvaise nouvelle</em> (2008)
+                <a href="https://www.has-sante.fr/jcms/c_698028/fr/annoncer-une-mauvaise-nouvelle"
+                   target="_blank" rel="noopener">has-sante.fr</a>.</li>
+              <li><strong>Japan &mdash;</strong> Japan Medical Association, <em>Guidelines for
+                Physician's Professional Ethics</em> (2008)
+                <a href="https://www.med.or.jp/english/activities/pdf/2009_02/075_091.pdf"
+                   target="_blank" rel="noopener">med.or.jp</a>;
+                and the <strong>SHARE</strong> model &mdash; a breaking-bad-news framework derived
+                from Japanese cancer patients' own stated preferences (Fujimori et al.)
+                <a href="https://pubmed.ncbi.nlm.nih.gov/24912901/"
+                   target="_blank" rel="noopener">pubmed</a>.</li>
+              <li><strong>UK &mdash;</strong> General Medical Council, <em>Good Medical Practice</em>
+                (2024)
+                <a href="https://www.gmc-uk.org/professional-standards/good-medical-practice-2024"
+                   target="_blank" rel="noopener">gmc-uk.org</a>
+                and <em>Decision making and consent</em> (2020)
+                <a href="https://www.gmc-uk.org/professional-standards/the-professional-standards/decision-making-and-consent"
+                   target="_blank" rel="noopener">gmc-uk.org</a>.</li>
+              <li><strong>USA &mdash;</strong> ASCO, <em>Patient-Clinician Communication
+                Consensus Guideline</em> (2017)
+                <a href="https://pubmed.ncbi.nlm.nih.gov/28892432/"
+                   target="_blank" rel="noopener">pubmed</a>;
+                AMA <em>Code of Medical Ethics</em>, Opinion 2.1.3 "Withholding Information from
+                Patients".</li>
+            </ul>
+            <p class="hint">The cliché "France = autonomy, Japan = family" is half-true at best:
+              France's law also protects the right <em>not</em> to know, and Japan has moved
+              strongly toward patient disclosure. Both systems are negotiating the same tension
+              &mdash; and both are still changing.</p>
+          </div>
+
+          <div class="reference-panel card recap-card" id="refB-panel-recap"
+               role="region" aria-labelledby="refB-btn-recap" hidden>
+            <h4>SPIKES &mdash; the six steps</h4>
+            <table class="recap-table">
+              <thead><tr><th>Step</th><th>What you do</th><th>One phrase</th></tr></thead>
+              <tbody>
+                <tr><td><strong>S</strong>etting</td><td>Sit down, privacy, no interruptions</td>
+                  <td>"Is it alright if we talk now?"</td></tr>
+                <tr><td><strong>P</strong>erception</td><td>Find out what they already understand</td>
+                  <td>"What have you been told so far?"</td></tr>
+                <tr><td><strong>I</strong>nvitation</td><td>Ask how much they want to know</td>
+                  <td>"All the details, or the headlines?"</td></tr>
+                <tr><td><strong>K</strong>nowledge</td><td>Warning shot, then news in small plain
+                  pieces; pause</td><td>"I'm afraid the results are serious&hellip;"</td></tr>
+                <tr><td><strong>E</strong>motions</td><td>Name and acknowledge the feeling; allow
+                  silence</td><td>"I can see this is a shock."</td></tr>
+                <tr><td><strong>S</strong>trategy</td><td>Agree the next concrete step; reaffirm
+                  you won't abandon them</td><td>"Here's what we do next &mdash; I'll be with you."</td></tr>
+              </tbody>
+            </table>
+            <h4>When the family asks you to withhold information</h4>
+            <table class="recap-table">
+              <thead><tr><th>Step</th><th>Do</th><th>Don't</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Pause</strong></td><td>Thank them; the request comes from love/worry</td>
+                  <td>Agree or refuse on the spot</td></tr>
+                <tr><td><strong>Explore</strong></td><td>"Help me understand what worries you most."</td>
+                  <td>Dismiss the fear as irrational</td></tr>
+                <tr><td><strong>Explain</strong></td><td>Can't deceive a patient who wants to know;
+                  needn't force facts on one who doesn't</td><td>Lecture coldly about "the law"</td></tr>
+                <tr><td><strong>Realign</strong></td><td>Ask the <em>patient</em> what they want to
+                  know &amp; who to involve</td><td>Keep a secret <em>from</em> the patient
+                  <em>with</em> the family</td></tr>
+              </tbody>
+            </table>
+            <h4>Disclosure norms &amp; patient-information rights</h4>
+            <table class="recap-table">
+              <thead><tr><th></th><th>Who is told?</th><th>Right <em>not</em> to know?</th>
+                <th>Key instruments</th></tr></thead>
+              <tbody>
+                <tr><td><strong>France</strong></td>
+                  <td>Patient has a legal right to be informed</td>
+                  <td>Yes &mdash; explicit in law</td>
+                  <td>Loi Kouchner 2002; HAS guidance; Code de déontologie</td></tr>
+                <tr><td><strong>Japan</strong></td>
+                  <td>Historically family-first; now patient disclosure is the norm</td>
+                  <td>Respected in practice; supported by case law</td>
+                  <td>JMA ethics guidelines; Cancer Control Act; SHARE model</td></tr>
+                <tr><td><strong>UK</strong></td>
+                  <td>Patient-centred; shared decision-making is the standard</td>
+                  <td>Yes &mdash; patient may decline information</td>
+                  <td>GMC <em>Good Medical Practice</em> 2024; <em>Montgomery</em> 2015</td></tr>
+                <tr><td><strong>USA</strong></td>
+                  <td>Patient-centred; withholding from the patient is ethically unacceptable</td>
+                  <td>Yes &mdash; patient may ask not to be informed</td>
+                  <td>ASCO communication guideline; AMA Opinion 2.1.3</td></tr>
+              </tbody>
+            </table>
+            <p class="hint">Big point: both systems are negotiating the <em>same</em> tension
+              &mdash; respecting the individual vs. protecting them through the family &mdash;
+              and both are still changing.</p>
+          </div>
+        </section>
+
         <!-- Round-4 UX (sim: 16 personas asked for a sticky working panel —
              the real cause was Module B being single-column with the group
              answers dead-last at ~4.8x viewport). Module B now uses the same
@@ -2320,151 +2491,8 @@
              data-i18n="modB.exchange.done">✓ You've worked through all six prompts. Move to Phase 4 to write your team's bullets.</p>
         </section>
 
-        <details class="card history-card">
-          <summary><strong>&#128220; Historical context &mdash; how we got here</strong></summary>
-          <p>For most of Western medical history, concealing a grave diagnosis was considered
-            <em>good</em> medicine. The 1847 AMA Code of Ethics told doctors to be "the
-            minister of hope and comfort to the sick." As late as 1961, Donald Oken found that
-            about 90% of US physicians preferred <em>not</em> to tell patients they had cancer.</p>
-          <p>The reversal was rapid. Driven by the 1960s&ndash;70s rights movements, the rise
-            of bioethics, research scandals such as Tuskegee, and a new emphasis on autonomy
-            and informed consent, a 1979 replication found roughly 97% of physicians now
-            favoured disclosure. France formalised these patient rights later: the
-            <em lang="fr">loi Kouchner</em> of 4 March 2002 enshrined the right to information, consent
-            and access to one's medical record. Japan's trajectory differed and is unusually
-            well documented: into the early 1990s physicians routinely told only the
-            <em>family</em>, not the patient, of a cancer diagnosis &mdash; disclosure then
-            rose sharply through the 1990s, though Japan moved toward <em>selective</em>
-            rather than universal truth-telling, still weighting family wishes heavily.</p>
-          <p class="didyouknow">&#128161; <strong>Did you know?</strong> In 1961, 9 out of 10
-            American doctors would not tell a patient they had cancer &mdash; within two
-            decades, almost the same proportion said they would.</p>
-          <p class="didyouknow">&#128161; <strong>Did you know?</strong> Until the 1990s,
-            Japanese physicians often told the family but not the patient &mdash; so the
-            "please don't tell my parent" scenario in this roleplay was, until recently,
-            simply standard practice.</p>
-          <ul class="ref-list">
-            <li>Sisk B et al. The Truth about Truth-Telling in American Medicine: A Brief
-              History. <em>The Permanente Journal</em> 2016;20(3):15&ndash;219.
-              <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4991917/" target="_blank"
-                 rel="noopener">free full text</a></li>
-            <li>Oken D. What to tell cancer patients: a study of medical attitudes.
-              <em>JAMA</em> 1961;175(13):1120&ndash;1128.</li>
-            <li>Novack DH et al. Changes in physicians' attitudes toward telling the cancer
-              patient. <em>JAMA</em> 1979;241(9):897&ndash;900.</li>
-            <li>Elwyn TS et al. Cancer disclosure in Japan: historical comparisons, current
-              practices. <em>Soc Sci Med</em> 1998;46(9):1151&ndash;1163.
-              <a href="https://pubmed.ncbi.nlm.nih.gov/9572605/" target="_blank"
-                 rel="noopener">pubmed</a></li>
-            <li>Loi n&deg; 2002-303 du 4 mars 2002 relative aux droits des malades.
-              <em>Journal Officiel</em> 2002.
-              <a href="https://www.legifrance.gouv.fr/jorf/id/JORFTEXT000000227015/"
-                 target="_blank" rel="noopener">legifrance.gouv.fr</a></li>
-          </ul>
-        </details>
-
-        <details class="card guidelines-card">
-          <summary><strong>&#128218; Guidelines &amp; standards &mdash; breaking bad news &amp;
-            disclosure</strong> (France &middot; Japan &middot; UK &middot; USA)</summary>
-          <ul class="ref-list">
-            <li><strong>France &mdash;</strong> Loi n&deg; 2002-303 du 4 mars 2002
-              (<span lang="fr">"loi Kouchner"</span>), right to be informed <em>and</em> the right not to know
-              (<span lang="fr">Code de la santé publique, art. L1111-2</span>)
-              <a href="https://www.legifrance.gouv.fr/loda/id/JORFTEXT000000227015"
-                 target="_blank" rel="noopener">legifrance.gouv.fr</a>;
-              HAS, <em lang="fr">Annoncer une mauvaise nouvelle</em> (2008)
-              <a href="https://www.has-sante.fr/jcms/c_698028/fr/annoncer-une-mauvaise-nouvelle"
-                 target="_blank" rel="noopener">has-sante.fr</a>.</li>
-            <li><strong>Japan &mdash;</strong> Japan Medical Association, <em>Guidelines for
-              Physician's Professional Ethics</em> (2008)
-              <a href="https://www.med.or.jp/english/activities/pdf/2009_02/075_091.pdf"
-                 target="_blank" rel="noopener">med.or.jp</a>;
-              and the <strong>SHARE</strong> model &mdash; a breaking-bad-news framework derived
-              from Japanese cancer patients' own stated preferences (Fujimori et al.)
-              <a href="https://pubmed.ncbi.nlm.nih.gov/24912901/"
-                 target="_blank" rel="noopener">pubmed</a>.</li>
-            <li><strong>UK &mdash;</strong> General Medical Council, <em>Good Medical Practice</em>
-              (2024)
-              <a href="https://www.gmc-uk.org/professional-standards/good-medical-practice-2024"
-                 target="_blank" rel="noopener">gmc-uk.org</a>
-              and <em>Decision making and consent</em> (2020)
-              <a href="https://www.gmc-uk.org/professional-standards/the-professional-standards/decision-making-and-consent"
-                 target="_blank" rel="noopener">gmc-uk.org</a>.</li>
-            <li><strong>USA &mdash;</strong> ASCO, <em>Patient-Clinician Communication
-              Consensus Guideline</em> (2017)
-              <a href="https://pubmed.ncbi.nlm.nih.gov/28892432/"
-                 target="_blank" rel="noopener">pubmed</a>;
-              AMA <em>Code of Medical Ethics</em>, Opinion 2.1.3 "Withholding Information from
-              Patients".</li>
-          </ul>
-          <p class="hint">The cliché "France = autonomy, Japan = family" is half-true at best:
-            France's law also protects the right <em>not</em> to know, and Japan has moved
-            strongly toward patient disclosure. Both systems are negotiating the same tension
-            &mdash; and both are still changing.</p>
-        </details>
-
-        <details class="card recap-card">
-          <summary><strong>&#128203; Recap table &mdash; keep this open for reference</strong></summary>
-          <h4>SPIKES &mdash; the six steps</h4>
-          <table class="recap-table">
-            <thead><tr><th>Step</th><th>What you do</th><th>One phrase</th></tr></thead>
-            <tbody>
-              <tr><td><strong>S</strong>etting</td><td>Sit down, privacy, no interruptions</td>
-                <td>"Is it alright if we talk now?"</td></tr>
-              <tr><td><strong>P</strong>erception</td><td>Find out what they already understand</td>
-                <td>"What have you been told so far?"</td></tr>
-              <tr><td><strong>I</strong>nvitation</td><td>Ask how much they want to know</td>
-                <td>"All the details, or the headlines?"</td></tr>
-              <tr><td><strong>K</strong>nowledge</td><td>Warning shot, then news in small plain
-                pieces; pause</td><td>"I'm afraid the results are serious&hellip;"</td></tr>
-              <tr><td><strong>E</strong>motions</td><td>Name and acknowledge the feeling; allow
-                silence</td><td>"I can see this is a shock."</td></tr>
-              <tr><td><strong>S</strong>trategy</td><td>Agree the next concrete step; reaffirm
-                you won't abandon them</td><td>"Here's what we do next &mdash; I'll be with you."</td></tr>
-            </tbody>
-          </table>
-          <h4>When the family asks you to withhold information</h4>
-          <table class="recap-table">
-            <thead><tr><th>Step</th><th>Do</th><th>Don't</th></tr></thead>
-            <tbody>
-              <tr><td><strong>Pause</strong></td><td>Thank them; the request comes from love/worry</td>
-                <td>Agree or refuse on the spot</td></tr>
-              <tr><td><strong>Explore</strong></td><td>"Help me understand what worries you most."</td>
-                <td>Dismiss the fear as irrational</td></tr>
-              <tr><td><strong>Explain</strong></td><td>Can't deceive a patient who wants to know;
-                needn't force facts on one who doesn't</td><td>Lecture coldly about "the law"</td></tr>
-              <tr><td><strong>Realign</strong></td><td>Ask the <em>patient</em> what they want to
-                know &amp; who to involve</td><td>Keep a secret <em>from</em> the patient
-                <em>with</em> the family</td></tr>
-            </tbody>
-          </table>
-          <h4>Disclosure norms &amp; patient-information rights</h4>
-          <table class="recap-table">
-            <thead><tr><th></th><th>Who is told?</th><th>Right <em>not</em> to know?</th>
-              <th>Key instruments</th></tr></thead>
-            <tbody>
-              <tr><td><strong>France</strong></td>
-                <td>Patient has a legal right to be informed</td>
-                <td>Yes &mdash; explicit in law</td>
-                <td>Loi Kouchner 2002; HAS guidance; Code de déontologie</td></tr>
-              <tr><td><strong>Japan</strong></td>
-                <td>Historically family-first; now patient disclosure is the norm</td>
-                <td>Respected in practice; supported by case law</td>
-                <td>JMA ethics guidelines; Cancer Control Act; SHARE model</td></tr>
-              <tr><td><strong>UK</strong></td>
-                <td>Patient-centred; shared decision-making is the standard</td>
-                <td>Yes &mdash; patient may decline information</td>
-                <td>GMC <em>Good Medical Practice</em> 2024; <em>Montgomery</em> 2015</td></tr>
-              <tr><td><strong>USA</strong></td>
-                <td>Patient-centred; withholding from the patient is ethically unacceptable</td>
-                <td>Yes &mdash; patient may ask not to be informed</td>
-                <td>ASCO communication guideline; AMA Opinion 2.1.3</td></tr>
-            </tbody>
-          </table>
-          <p class="hint">Big point: both systems are negotiating the <em>same</em> tension
-            &mdash; respecting the individual vs. protecting them through the family &mdash;
-            and both are still changing.</p>
-        </details>
+        <!-- Reference materials relocated 2026-06-02 to a button toolbar at the
+             TOP of this module (see .reference-toolbar above). -->
         <section class="card decisions-card" id="decisions-B"></section>
 
           </div><!-- /.col-left -->
@@ -3068,6 +3096,14 @@
     </button>
   </nav>
 
+  <!-- Floating "back to top" (2026-06-02) — the stage card no longer pins to the
+       top, so this is the quick way back up. Shown by wireBackToTop() once the
+       page is scrolled. The visible glyph is an arrow; the accessible name +
+       tooltip are localised via data-i18n-aria-label / data-i18n-title. -->
+  <button id="back-to-top" class="back-to-top" type="button"
+          data-i18n-aria-label="backToTop.label" data-i18n-title="backToTop.label"
+          aria-label="Back to top" title="Back to top">&#8593;</button>
+
   <!-- Firebase JS SDK 10.12.5 - pinned. Re-check before each academic year:
        https://firebase.google.com/support/release-notes/js
        integrity hashes are sha384 of these exact files; if you bump the version
@@ -3104,46 +3140,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v40" defer></script>
+  <script src="firebase-config.js?v=v41" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v40" defer></script>
+  <script src="orgs.js?v=v41" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v40" defer></script>
+  <script src="platform-config.js?v=v41" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v40" defer></script>
+  <script src="telemetry.js?v=v41" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v40" defer></script>
+  <script src="purify.min.js?v=v41" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v40" defer></script>
+  <script src="i18n.js?v=v41" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v40" defer></script>
+  <script src="localdb.js?v=v41" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v40" defer></script>
+  <script src="lib.js?v=v41" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v40" defer></script>
+  <script src="pure-utils.js?v=v41" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3154,7 +3190,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v40" defer></script>
+  <script src="script-loader.js?v=v41" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3164,7 +3200,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v40" defer></script>
+  <script src="script.js?v=v41" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
