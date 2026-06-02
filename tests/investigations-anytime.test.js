@@ -88,14 +88,22 @@ test("the hypothesis-first investigations lock is gone (dead code removed)", () 
     "the investigations panel must no longer be hypothesis-locked");
 });
 
-test("the panel hint + coach copy no longer claim investigations are locked", () => {
+test("investigations copy frames them as FREE (not locked); the gate is the synthesis", () => {
   const I18N = require("./_i18n_source.js").readI18nSource();
-  // locked-hint reworded — no 'Locked' / lock emoji framing for investigations.
-  const hint = I18N.match(/"modA\.chart\.investigations\.locked-hint":\s*"([^"]*)"/);
-  assert.ok(hint, "locked-hint key must still exist");
-  assert.doesNotMatch(hint[1], /🔒|Locked/i, "the hint must not say the panel is locked");
-  // coach add-hypothesis must not claim 'Investigations unlock once you have one'.
-  const coach = I18N.match(/"modA\.coach\.add-hypothesis":\s*"([^"]*)"/);
-  assert.ok(coach, "coach add-hypothesis key must still exist");
-  assert.doesNotMatch(coach[1], /unlock/i, "coach copy must not claim investigations unlock on a hypothesis");
+  // 2026-06-02: the old investigations.locked-hint is retired; the section now
+  // shows a free "yours to choose" hint, and the SYNTHESIS section carries the
+  // ≥2-hypotheses lock hint.
+  assert.doesNotMatch(I18N, /"modA\.chart\.investigations\.locked-hint"/,
+    "the dead investigations.locked-hint key must be removed");
+  const hint = I18N.match(/"modA\.chart\.investigations\.hint":\s*"([^"]*)"/);
+  assert.ok(hint, "investigations.hint key must exist");
+  assert.doesNotMatch(hint[1], /🔒|Locked/i, "the investigations hint must not say the panel is locked");
+  // The synthesis lock hint gates on hypotheses, and the coach gather copy points
+  // at writing hypotheses (not a locked investigations panel).
+  const synLock = I18N.match(/"modA\.chart\.synthesis\.locked-hint":\s*"([^"]*)"/);
+  assert.ok(synLock, "synthesis.locked-hint key must exist");
+  assert.match(synLock[1], /two|2|hypoth/i, "synthesis lock hint must reference ≥2 hypotheses");
+  const gather = I18N.match(/"modA\.coach\.gather":\s*"([^"]*)"/);
+  assert.ok(gather, "coach gather key must exist");
+  assert.doesNotMatch(gather[1], /🔒|Locked/i, "coach copy must not frame investigations as locked");
 });

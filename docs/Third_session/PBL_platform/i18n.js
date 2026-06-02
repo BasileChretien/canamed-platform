@@ -668,7 +668,6 @@
       "modA.chart.exam.title": "Examination",
       "modA.chart.investigations.title": "Investigations",
       "modA.chart.investigations.hint": "Order any investigation you think is indicated — these are yours to choose, like the examination. Ordering one that isn't indicated still costs points.",
-      "modA.chart.investigations.locked-hint": "You can order any investigation at any time — but ordering one that isn't indicated, or before screening the red flags, costs points. The clinical synthesis unlocks once you've screened the red flags (serious causes, cauda equina, leg neuro).",
       "modA.chart.synthesis.title": "Clinical synthesis",
       "modA.chart.synthesis.locked-hint": "Write at least <strong>two</strong> working hypotheses above to unlock the clinical synthesis and the discussion prompts.",
       "modA.coach.add-hypothesis": "You've gathered some info — now agree on at least one working hypothesis above (what do you suspect?) before you commit to investigations and a plan.",

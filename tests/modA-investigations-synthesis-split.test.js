@@ -60,3 +60,17 @@ test("the chat no longer auto-reveals the synthesis (it's a gated section now)",
   assert.doesNotMatch(onUnlock, /reveal\(window\.SYNTH_ID\)/,
     "onUnlock must NOT auto-reveal the synthesis any more");
 });
+
+test("the chat consent button has a dark-mode contrast override (white-on-cyan fails AA)", () => {
+  // The consent button fills with var(--primary). In light/high-contrast that's
+  // a dark blue (white text passes); in DARK, --primary is the lighter cyan
+  // (--nagoya-500), where white text fails 4.5:1 — so dark mode must force dark
+  // text, like the splash primaries. Now that the chat is default-on this is a
+  // live concern for every dark-mode user.
+  const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
+  assert.match(CSS, /html\[data-theme="dark"\] \.moda-chat-consent-btn\s*\{[^}]*color:\s*#0e1620/,
+    "dark theme must override the consent button text to dark");
+  assert.match(CSS,
+    /prefers-color-scheme: dark[\s\S]{0,200}\.moda-chat-consent-btn\s*\{[^}]*color:\s*#0e1620/,
+    "auto (prefers-color-scheme: dark) must also override the consent button text");
+});
