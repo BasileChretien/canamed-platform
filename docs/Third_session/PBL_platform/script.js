@@ -3103,6 +3103,19 @@ function initRightColumnTabs() {
 function switchRcolTab(tab) {
   if (!tab) return;
   activeRcolTab = tab;
+  // Progressive reveal (2026-06-01): switching TO a Module A tab must make it
+  // visible. Callers include the auto-open-on-unlock flow, the coach's "Open
+  // …" action buttons, and tests-e2e/modA-autoopen-steps.spec.js, which jump
+  // straight to a panel before its phase-gated reveal has fired. Un-hide the
+  // target button + un-collapse the right column so the chosen panel can show.
+  // (revealModARightCol keeps it visible via the sticky data-revealed flag.)
+  const targetBtn = document.querySelector('#stage-1 .rcol-tab[data-tab="' + tab + '"]');
+  if (targetBtn) {
+    targetBtn.dataset.revealed = "1";
+    targetBtn.hidden = false;
+    const cols = document.querySelector("#stage-1 .columns");
+    if (cols) cols.classList.remove("rcol-collapsed");
+  }
   document.querySelectorAll(".rcol-tab").forEach(b => {
     const on = b.dataset.tab === tab;
     b.classList.toggle("is-active", on);
@@ -3120,6 +3133,80 @@ function switchRcolTab(tab) {
   if (typeof updateModANextStep === "function") updateModANextStep();
   if (typeof updateMobileTabbar === "function") updateMobileTabbar();
 }
+
+/* Progressive right-column reveal (2026-06-01 UX de-clutter). Module A used to
+ * show all three tabs (Decide together / Debate / Our final answers) from the
+ * moment the student landed on the stage — Debate even carried a 🔒 "locked"
+ * teaser. None are usable at the start, so the whole strip was noise. This shows
+ * each tab only once it becomes actionable, one per phase:
+ *   • Decide together → the team has interviewed AND examined the patient
+ *     (history ≥1 and exam ≥1) — the point where the plan decisions become live.
+ *   • Debate         → the clinical synthesis (red-flag screen) is complete.
+ *   • Our final answers → the Exchange is underway (a prompt reply or an answer
+ *     exists, the debate is done, or the Module A votes are settled).
+ * Reveal is STICKY (data-revealed) so a tab never vanishes under the user if the
+ * underlying state momentarily regresses. While nothing is revealed the whole
+ * right column is collapsed (.rcol-collapsed on #stage-1 .columns → single
+ * column, no empty grid track). Idempotent; safe to call on every state change. */
+function revealModARightCol() {
+  const cols = document.querySelector("#stage-1 .columns");
+  if (!cols) return;
+
+  // Phase signals — mirror the reads in updateModANextStep().
+  const histDone = (typeof revealedCountByGroup === "function") &&
+    revealedCountByGroup("history") >= 1;
+  const examDone = (typeof revealedCountByGroup === "function") &&
+    revealedCountByGroup("exam") >= 1;
+  const synthDone = (typeof keyRevealed === "function") && keyRevealed();
+
+  const modAAnswers = Object.keys((answers && answers.moduleA) || {})
+    .map(k => answers.moduleA[k]).filter(Boolean);
+  const hasPromptReply = !!(typeof promptReplies !== "undefined" &&
+    promptReplies && Object.keys(promptReplies).length > 0);
+  const hasModAVote = (typeof DECISIONS !== "undefined") &&
+    DECISIONS.some(d => d && d.module === "A");
+  const moduleASettled = hasModAVote &&
+    (typeof hasOpenUncommittedModuleAVote !== "function" || !hasOpenUncommittedModuleAVote());
+
+  const reveal = {
+    decisions: histDone && examDone,
+    discussion: synthDone,
+    answers: synthDone &&
+      (promptsWereDone || hasPromptReply || modAAnswers.length > 0 || moduleASettled)
+  };
+
+  let anyVisible = false;
+  ["decisions", "discussion", "answers"].forEach(tab => {
+    const btn = cols.querySelector('.rcol-tab[data-tab="' + tab + '"]');
+    if (!btn) return;
+    const show = reveal[tab] || btn.dataset.revealed === "1";
+    if (show) { btn.dataset.revealed = "1"; btn.hidden = false; anyVisible = true; }
+    else { btn.hidden = true; }
+  });
+
+  cols.classList.toggle("rcol-collapsed", !anyVisible);
+
+  // Once the column appears, make sure a *visible* tab owns the panel — the
+  // default-active "decisions" tab may still be hidden when "discussion" is the
+  // first to reveal. switchRcolTab re-enters here, but activeRcolTab is set to
+  // the (now-visible) target first, so this branch does not fire again.
+  if (anyVisible) {
+    const active = cols.querySelector('.rcol-tab[data-tab="' + activeRcolTab + '"]');
+    if (!active || active.hidden) {
+      const firstVisible = [...cols.querySelectorAll(".rcol-tab")].find(b => !b.hidden);
+      if (firstVisible && typeof switchRcolTab === "function") {
+        switchRcolTab(firstVisible.dataset.tab);
+      }
+    }
+  }
+
+  // Keep the mobile thumb-reach mirror in lockstep with the canonical reveal
+  // (it mirrors the per-tab hidden state + hides the whole bar until a tab
+  // appears). switchRcolTab already calls it, but a reveal driven purely by a
+  // state change (e.g. history+exam) wouldn't otherwise refresh the bar.
+  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
+}
+
 /* a small attention nudge: when content changes while the user is on a different
    tab, dot that tab so they know there is something new. Always safe to call. */
 function nudgeRcolTab(tab) {
@@ -3177,10 +3264,17 @@ function _mTabbarFocusChange() {
 function updateMobileTabbar() {
   const bar = document.getElementById("mobile-rcol-tabbar");
   if (!bar) return;
+  let anyRevealed = false;
   ["decisions", "discussion", "answers"].forEach(tab => {
     const src = document.querySelector('.rcol-tab[data-tab="' + tab + '"]');
     const dst = bar.querySelector('.mtab[data-tab="' + tab + '"]');
     if (!src || !dst) return;
+    // Mirror the progressive-reveal hidden state (2026-06-02): the canonical
+    // tabs reveal one per phase (revealModARightCol), so the thumb-reach mirror
+    // must hide the same buttons — otherwise the bottom bar shows Debate /
+    // Our final answers before they're actionable. (.mtab[hidden] in CSS.)
+    dst.hidden = src.hidden;
+    if (!src.hidden) anyRevealed = true;
     const active = src.classList.contains("is-active");
     dst.classList.toggle("is-active", active);
     if (active) dst.setAttribute("aria-current", "true");
@@ -3204,7 +3298,9 @@ function updateMobileTabbar() {
   const stage1 = document.getElementById("stage-1");
   const onModuleA = !!app && !app.classList.contains("hidden") &&
     !!stage1 && !stage1.classList.contains("hidden");
-  const show = onModuleA && !_mTabbarTyping;
+  // Keep the bar down until at least one tab has been revealed — mirrors the
+  // collapsed right column on desktop, so a fresh Module A shows neither.
+  const show = onModuleA && !_mTabbarTyping && anyRevealed;
   bar.hidden = !show;
   if (document.body) document.body.classList.toggle("mtabbar-on", show);
 }
@@ -7192,10 +7288,15 @@ function showLateBanner(stage) {
 
 /* one short, plain-language "do this now" line per stage - the single biggest
    help for a stressed second-language student who has lost the thread */
+// De-dup (2026-06-01): Module A (index 1) and Module B (index 2) used to repeat
+// the whole flow here ("ask, examine, investigate — then debate…"), duplicating
+// the localized, state-aware next-step coach that owns "what to do now" inside
+// each module. Those two are now blank so the coach is the single source. Welcome
+// (0) and Wrap-up (3) keep their line — there is no coach on those stages.
 const STAGE_NOW = [
   "Watch the opening presentation together. While you wait, name your team below.",
-  "Work the case up: ask, examine, investigate — then debate the prompts and write your four answers together.",
-  "Run the breaking-bad-news roleplay in your group, then write your three answers together.",
+  "",
+  "",
   "You're finished — open the questionnaire below. Thank you for taking part!"
 ];
 function renderStage() {
@@ -7224,8 +7325,13 @@ function renderStage() {
       ? ""
       : (viewStage < roomStage ? "" : (STAGE_NOW[viewStage] || ""));
   }
+  // De-dup (2026-06-01): the module name used to be appended here AND shown on
+  // the current segment of the #global-stage-progress stepper below — the same
+  // "Module A — …" string twice, stacked. The stepper now owns the visible name
+  // (its current segment renders stageLabel() + carries it in aria-label /
+  // aria-current); this line is just the compact position counter.
   el("stage-indicator").textContent =
-    "Stage " + (viewStage + 1) + " of " + STAGE_COUNT + " · " + stageLabel(viewStage);
+    "Stage " + (viewStage + 1) + " of " + STAGE_COUNT;
   // Global "you are here" stepper — a compact visual map of the whole session
   // arc so the Module A LOCAL phase-stepper reads as sub-progress, not session
   // position (UX-overload fix 2026-06-01). Built with createElement +
@@ -9208,6 +9314,10 @@ function renderDecisions() {
     }
   }
   lastModuleAVotesAllCommitted = moduleASettled;
+
+  // Keep the progressive tab reveal in sync with decision-unlock transitions
+  // (the Decide-together tab appears when the plan decisions become live).
+  if (typeof revealModARightCol === "function") revealModARightCol();
 }
 
 /* Slim locked-state placeholder for a decision that hasn't yet met its
@@ -9671,6 +9781,12 @@ function updateModANextStep() {
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
   }
+
+  // Progressive right-column reveal rides the same state hook as the coach —
+  // this is called from renderFindings / renderPrompts / renderAnswers /
+  // switchRcolTab / room entry, so the tabs appear exactly when their phase
+  // becomes actionable.
+  if (typeof revealModARightCol === "function") revealModARightCol();
 }
 
 function updateModBNextStep() {
@@ -9701,8 +9817,11 @@ function updateModBNextStep() {
   // (renderModBPhase), so the coach only supplies guidance text — it no longer
   // sets the stepper state (that would fight the shared phase).
   if (!rolePicked) {
+    // De-dup (2026-06-01): this used to repeat the role-picker card's own prompt
+    // ("Pick your role… the observer keeps time"). It now frames the approach and
+    // points down to the picker, which carries the mechanic.
     textEl.textContent = _coachT("modB.coach.pick-role",
-      "Pick your role below before starting the roleplay. The observer keeps time.");
+      "Read the situation together, then take a seat below — there's no wrong choice, and you'll swap roles and replay.");
     _coachSetAction(actionsEl, null);
   } else if (modBAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modB.coach.roleplay",

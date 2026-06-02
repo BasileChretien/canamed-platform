@@ -389,8 +389,7 @@
   "modA.phase.exchange.time": "10 min",
   "modA.phase.bullets.label": "Écrire les bullets",
   "modA.phase.bullets.time": "5 min",
-  "modA.vignette.hint": "Décidez ce que vous voulez <em>demander</em>, <em>examiner</em> et <em>investiguer</em> — chaque résultat est révélé sur demande. Compléter la synthèse clinique débloque les questions de discussion.",
-  "modA.vignette.everyone": "👥 <strong>Travaillez à égalité — chaque voix dans la salle.</strong> Avant de terminer une question \"Comparer France &amp; Japon\", vérifiez qu'une voix de Caen <em>et</em> une de Nagoya se sont exprimées.",
+  // modA.vignette.hint / modA.vignette.everyone retirés 2026-06-01 (dé-duplication).
   "modA.discussion.compare-rule": "🗣️ <strong>Questions de comparaison :</strong> une voix de Caen <em>et</em> une de Nagoya doivent parler avant de passer à la suivante. Le but est de comparer et débattre, pas de se mettre d'accord rapidement.",
   "modA.answers.title": "Réponses de groupe — Module A",
   "modA.answers.bullet.plan.label": "1. La conduite à tenir de première intention de votre groupe pour ce patient",
@@ -437,7 +436,10 @@
   "coach.dismiss": "Masquer ce guide pour le reste de la séance",
   "reference-section.title": "📚 Contexte & recommandations (à ouvrir au besoin)",
   "modA.chart.title": "Votre note de consultation — <em>M. Lefebvre</em>, aujourd'hui",
-  "modA.chart.team-click-warning": "👥 <strong>Chaque clic est une décision d'équipe.</strong> Tout ce que vous demandez, examinez, investiguez ou décidez est enregistré pour <em>toute la salle</em> — et compte comme le choix de l'équipe. <strong>Discutez d'abord, puis cliquez ensemble.</strong>",
+  // Fusionné 2026-06-01 : porte désormais le cadrage « dossier partagé » (ex
+  // modA.chart.subtitle, retiré) ET la règle « chaque clic est une décision
+  // d'équipe ».
+  "modA.chart.team-click-warning": "👥 <strong>Votre dossier partagé pour M. Lefebvre.</strong> Tout ce que l'équipe demande, examine, investigue ou décide est enregistré pour <em>toute la salle</em> et compte comme le choix de l'équipe. <strong>Discutez d'abord, puis cliquez ensemble.</strong>",
   "modA.decision.ready-when": "Disponible quand :",
   "modA.decision.unlocked": "Une nouvelle décision d'équipe vient de s'ouvrir",
   "modA.decision.unlock.hypotheses": "ajouter une hypothèse de travail",
@@ -446,7 +448,7 @@
   "modA.decision.unlock.labs": "lancer au moins une investigation",
   "modA.decision.unlock.synthesis": "compléter la synthèse clinique",
   "modA.decision.unlock.after": "l'équipe verrouille la décision précédente",
-  "modA.chart.subtitle": "Vous et vos partenaires êtes les médecins qui voient M. Lefebvre. Tout ce que vous demandez, examinez, investiguez ou décidez s'inscrit dans <em>votre dossier partagé</em>.",
+  // modA.chart.subtitle retiré 2026-06-01 — fusionné dans team-click-warning.
   "modA.chart.hypotheses.title": "Hypothèses de travail",
   "modA.chart.hypotheses.hint": "Maintenant que vous avez interrogé et examiné le patient, mettez-vous d'accord en équipe : <strong>qu'est-ce que vous suspectez ?</strong> Listez 2 diagnostics différentiels ou plus à confirmer ou à éliminer. (Les investigations se débloquent quand vous avez une hypothèse ET que les drapeaux rouges (causes graves + queue de cheval + examen neuro des MI) sont vérifiés.)",
   "modA.chart.impressions.title": "Premières impressions (facultatif)",
@@ -482,7 +484,7 @@
   "modA.coach.btn.open-discussion": "Ouvrir Discussion →",
   "modA.coach.btn.open-answers": "Ouvrir Réponses de groupe →",
   "modA.coach.synthesis-unlocked": "✓ <strong>Synthèse faite — la phase 3 est ouverte.</strong> Les 6 questions de discussion sont en dessous. Une voix de Caen et une de Nagoya doivent s'exprimer sur chaque question de comparaison.",
-  "modB.coach.pick-role": "Choisissez votre rôle ci-dessous avant de commencer le jeu de rôle. L'observateur·rice chronomètre.",
+  "modB.coach.pick-role": "Lisez la situation ensemble, puis prenez place ci-dessous — aucun mauvais choix, et vous échangerez les rôles pour rejouer.",
   "modB.coach.roleplay": "Rôles attribués ! Jouez la scène — la phase 2 est le jeu de rôle, la phase 3 est la discussion avec les questions ci-dessous.",
   "modB.coach.bullets-partial": "Saisie des bullets — {n} encore à ajouter pour couvrir les 3.",
   "modB.coach.bullets-complete": "✓ Les 3 bullets sont couvertes. Ajoutez des précisions ou attendez votre encadrant·e.",
