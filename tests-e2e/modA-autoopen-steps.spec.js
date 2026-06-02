@@ -27,11 +27,19 @@ async function setupModA(page) {
     if (typeof window._test_rebuildCaseDerived === "function") {
       window._test_rebuildCaseDerived();
     }
-    // Reveal every Module A item so keyRevealed() (the synthesis gate) is true.
+    // Reveal every Module A item AND commit ≥2 working hypotheses, so the phase
+    // gate (phaseGateOpen = hypothesisCount() >= 2, 2026-06-02) that unlocks the
+    // Debate + Synthesis is open.
     const ids = window._test_getItemIds ? window._test_getItemIds() : [];
     const r = {};
     ids.forEach(id => { r[id] = { by: "T", at: Date.now() }; });
     window._test_setRevealed(r);
+    if (window._test_setHypotheses) {
+      window._test_setHypotheses({
+        h1: { text: "mechanical low back pain", by: "T", at: 1 },
+        h2: { text: "axial spondyloarthritis", by: "T", at: 1 }
+      });
+    }
     // Surface Module A (stage-1) so the right-column panels are in the layout.
     document.body.classList.remove("locked");
     const splash = document.getElementById("splash");

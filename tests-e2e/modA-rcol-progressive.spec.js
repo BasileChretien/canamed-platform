@@ -68,8 +68,9 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
 
   test("'Decide together' appears once the patient is interviewed AND examined", async ({ page }) => {
     await surfaceModA(page);
-    // Reveal one history item + one exam item — enough for the Decide gate, but
-    // not the full red-flag screen, so the synthesis (and Debate) stays locked.
+    // Reveal one history item + one exam item — enough for the Decide gate. No
+    // hypotheses yet, so the phase gate (≥2 hypotheses) is closed → Debate +
+    // Answers stay hidden.
     const picked = await page.evaluate(() => {
       const ids = window._test_getItemIds ? window._test_getItemIds() : [];
       const h = ids.find(id => id.indexOf("history:") === 0);
@@ -79,26 +80,31 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     expect(picked.h, "case must define a history item").toBeTruthy();
     expect(picked.e, "case must define an exam item").toBeTruthy();
 
-    // Only assert Debate stays hidden if these two reveals don't already satisfy
-    // the synthesis gate (keep the test deterministic across scenarios).
     await reveal(page, [picked.h, picked.e]);
-    const synthDone = await page.evaluate(() =>
-      typeof window.keyRevealed === "function" ? !!window.keyRevealed() : false);
-
     await expect(page.locator("#rcol-tab-decisions")).toBeVisible();
-    if (!synthDone) {
-      await expect(page.locator("#rcol-tab-discussion")).toBeHidden();
-      await expect(page.locator("#rcol-tab-answers")).toBeHidden();
-    }
+    await expect(page.locator("#rcol-tab-discussion")).toBeHidden();
+    await expect(page.locator("#rcol-tab-answers")).toBeHidden();
   });
 
-  test("'Debate' appears once the clinical synthesis is complete (no lock teaser)", async ({ page }) => {
+  test("'Debate' appears once ≥2 working hypotheses are written (no lock teaser)", async ({ page }) => {
     await surfaceModA(page);
     const allIds = await page.evaluate(() =>
       window._test_getItemIds ? window._test_getItemIds() : []);
     await reveal(page, allIds);
+    // One hypothesis → still locked; the second crosses the gate.
     await page.evaluate(() => {
-      if (typeof window.renderPrompts === "function") window.renderPrompts();
+      window._test_setHypotheses({ a: { text: "mechanical LBP", by: "T", at: 1 } });
+      if (window.renderPrompts) window.renderPrompts();
+      if (window.revealModARightCol) window.revealModARightCol();
+    });
+    await expect(page.locator("#rcol-tab-discussion")).toBeHidden();
+    await page.evaluate(() => {
+      window._test_setHypotheses({
+        a: { text: "mechanical LBP", by: "T", at: 1 },
+        b: { text: "axial spondyloarthritis", by: "T", at: 1 }
+      });
+      if (window.renderPrompts) window.renderPrompts();
+      if (window.revealModARightCol) window.revealModARightCol();
     });
     await expect(page.locator("#rcol-tab-discussion")).toBeVisible();
     // The 🔒 locked teaser must NOT be showing (it only renders under .is-locked).
@@ -110,9 +116,14 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     const allIds = await page.evaluate(() =>
       window._test_getItemIds ? window._test_getItemIds() : []);
     await reveal(page, allIds);
-    // Walk the team through every Exchange prompt → the bullets phase begins.
+    // Open the gate (≥2 hypotheses), then walk through every Exchange prompt →
+    // the bullets phase begins.
     await page.evaluate(() => {
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      window._test_setHypotheses({
+        a: { text: "mechanical LBP", by: "T", at: 1 },
+        b: { text: "axial spondyloarthritis", by: "T", at: 1 }
+      });
       const total = ((window._test_getCase() && window._test_getCase().prompts) || []).length;
       window._test_setPromptCursor(total);
       if (typeof window.renderPrompts === "function") window.renderPrompts();
@@ -148,11 +159,9 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     s = await mtabHidden();
     expect(s.decisions, "Decide mirror shows after history+exam").toBe(false);
     expect(s.barHidden, "the bar comes up once a tab is revealed").toBe(false);
-    const synthDone = await page.evaluate(() =>
-      typeof window.keyRevealed === "function" ? !!window.keyRevealed() : false);
-    if (!synthDone) {
-      expect(s.discussion, "Debate mirror stays hidden pre-synthesis").toBe(true);
-      expect(s.answers, "Answers mirror stays hidden pre-Exchange").toBe(true);
-    }
+    // No hypotheses yet → the phase gate is closed → Debate + Answers mirrors
+    // stay hidden.
+    expect(s.discussion, "Debate mirror stays hidden before ≥2 hypotheses").toBe(true);
+    expect(s.answers, "Answers mirror stays hidden before ≥2 hypotheses").toBe(true);
   });
 });

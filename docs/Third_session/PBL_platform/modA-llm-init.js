@@ -288,29 +288,17 @@
         });
       },
       onUnlock: function (legacyId) {
-        // Synthesise a reveal via the existing first-write-wins path so
-        // SYNTH_PREREQS / prereqsMet() stay deterministic.
+        // The chat's red-flag questions still reveal their legacy history items
+        // (e.g. history:1) via the first-write-wins path, so SYNTH_PREREQS /
+        // prereqsMet() and the red-flag SCORING stay deterministic.
         if (typeof window.reveal === "function") {
           try { window.reveal(legacyId); } catch (_) { /* defensive */ }
         }
-        // Auto-trigger synthesis once all SYNTH_PREREQS are met. In
-        // chat-only mode the synthesis button is hidden, so the legacy
-        // "click to synthesise" path is unreachable. We replicate the
-        // unlock here: when prereqsMet() flips to true, reveal SYNTH_ID
-        // (labs:0) once, which unlocks the Discussion prompts via the
-        // existing pipeline. setTimeout(..., 200) gives the just-fired
-        // reveal time to land in `revealed[]` before we re-check.
-        setTimeout(function () {
-          try {
-            if (typeof window.prereqsMet === "function" &&
-                typeof window.SYNTH_ID === "string" &&
-                window.prereqsMet() &&
-                !(window.revealed && window.revealed[window.SYNTH_ID]) &&
-                typeof window.reveal === "function") {
-              window.reveal(window.SYNTH_ID);
-            }
-          } catch (_) { /* defensive */ }
-        }, 200);
+        // NB (2026-06-02): the chat no longer AUTO-reveals the synthesis. The
+        // Clinical synthesis is now its own section (group-synthesis), gated on
+        // ≥2 working hypotheses (phaseGateOpen), with a visible button the team
+        // clicks deliberately — so the old "auto-synthesise when prereqsMet"
+        // shortcut is gone. The red-flag screen is scoring-only now, not a gate.
       },
       persistTurn: function (role, content) {
         refs.chat.push({ role: role, content: content, at: Date.now() });

@@ -2003,11 +2003,16 @@ body[data-observer="1"] #modB-next-step {
 }
 .hypothesis-add button:hover { background: var(--primary-hover); }
 
-/* ── Investigations panel locked state ── */
+/* ── Gated chart-section locked state ── (the Clinical synthesis section is
+   locked until ≥2 working hypotheses; the legacy .chart-investigations selector
+   is kept for back-compat though investigations are no longer locked). */
+.chart-synthesis.is-locked,
 .chart-investigations.is-locked {
   opacity: 0.65;
 }
+.chart-synthesis.is-locked .btn-group,
 .chart-investigations.is-locked .btn-group { pointer-events: none; }
+.chart-synthesis.is-locked .req-btn,
 .chart-investigations.is-locked .req-btn {
   cursor: not-allowed;
   opacity: 0.55;

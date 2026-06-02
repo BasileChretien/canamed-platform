@@ -22,35 +22,35 @@
 const { test, expect } = require("./fixtures.js");
 
 test.describe("Module A hypothesis-block placement (specialist consensus)", () => {
-  test("'Working hypotheses' sits BETWEEN Examination and Investigations in the DOM", async ({ page }) => {
+  test("DOM order is History < Examination < Investigations < Hypotheses < Synthesis", async ({ page }) => {
+    // 2026-06-02 restructure: the team works up FREELY (history chat + exam +
+    // investigations), THEN commits ≥2 working hypotheses (the gate), which
+    // unlocks the Clinical synthesis section. So hypotheses now sit AFTER
+    // Investigations, and Synthesis is its own section last.
     await page.goto("/");
     const order = await page.evaluate(() => {
       const ids = ["chart-section-history", "chart-section-exam",
-                   "chart-hypotheses", "chart-investigations"];
-      const found = ids.map(id => {
+                   "chart-investigations", "chart-hypotheses", "chart-synthesis"];
+      const map = {};
+      ids.forEach(id => {
         const el = document.getElementById(id);
-        if (!el) return { id, pos: null };
-        // Document order ranking via Node.compareDocumentPosition.
-        let rank = 0;
-        let prev = el;
-        // Walk previous sibling chain to count chart-section siblings.
+        if (!el) { map[id] = null; return; }
+        let rank = 0, prev = el;
         while (prev = prev.previousElementSibling) {
           if (prev.classList && prev.classList.contains("chart-section")) rank++;
         }
-        return { id, pos: rank };
+        map[id] = rank;
       });
-      return found;
+      return map;
     });
-    const map = {};
-    order.forEach(o => { map[o.id] = o.pos; });
-    expect(map["chart-section-history"], "history must be present").not.toBeNull();
-    expect(map["chart-section-exam"], "exam must be present").not.toBeNull();
-    expect(map["chart-hypotheses"], "hypotheses must be present").not.toBeNull();
-    expect(map["chart-investigations"], "investigations must be present").not.toBeNull();
-    // The contract: history < exam < hypotheses < investigations.
-    expect(map["chart-section-exam"]).toBeGreaterThan(map["chart-section-history"]);
-    expect(map["chart-hypotheses"]).toBeGreaterThan(map["chart-section-exam"]);
-    expect(map["chart-investigations"]).toBeGreaterThan(map["chart-hypotheses"]);
+    for (const id of ["chart-section-history", "chart-section-exam",
+                      "chart-investigations", "chart-hypotheses", "chart-synthesis"]) {
+      expect(order[id], id + " must be present").not.toBeNull();
+    }
+    expect(order["chart-section-exam"]).toBeGreaterThan(order["chart-section-history"]);
+    expect(order["chart-investigations"]).toBeGreaterThan(order["chart-section-exam"]);
+    expect(order["chart-hypotheses"]).toBeGreaterThan(order["chart-investigations"]);
+    expect(order["chart-synthesis"]).toBeGreaterThan(order["chart-hypotheses"]);
   });
 
   test("'First impressions' textarea sits at the top of the chart + is non-gating", async ({ page }) => {
@@ -74,53 +74,56 @@ test.describe("Module A hypothesis-block placement (specialist consensus)", () =
     expect(info.beforeHistory, "impressions must come BEFORE history in the DOM").toBe(true);
   });
 
-  test("Investigations are clickable any time; only the synthesis is red-flag-gated", async ({ page }) => {
-    // Dry-run 2026-05-26: investigations (imaging + bloods) are no longer
-    // hypothesis-locked — ordering one prematurely is penalised, not blocked.
-    // The clinical synthesis (labs:0) stays gated on the red-flag screen.
+  test("Investigations are clickable any time; the synthesis gates on ≥2 hypotheses", async ({ page }) => {
+    // 2026-06-02: investigations (imaging + bloods) are freely clickable; the
+    // clinical synthesis (labs:0) is gated on ≥2 working hypotheses — NOT the
+    // red-flag screen, which is now scoring-only.
     await page.goto("/");
     const out = await page.evaluate(async () => {
       if (!window.CanamedLoader || !window.CanamedLoader.ensureCaseContent) return "no-loader";
       await window.CanamedLoader.ensureCaseContent();
-      if (window._test_setHypotheses) window._test_setHypotheses({});
       const disabled = (sel) => {
         const b = document.querySelector(sel);
         return b ? b.disabled : null;
       };
-      // Empty state — no hypothesis, no reveals.
+      // Empty state — no hypotheses, no reveals. Synthesis locked, imaging free.
       if (window._test_setRevealed) window._test_setRevealed({});
+      if (window._test_setHypotheses) window._test_setHypotheses({});
       if (typeof window.buildButtons === "function") window.buildButtons();
       if (typeof window.renderButtons === "function") window.renderButtons();
-      const imagingNoState = disabled('.req-btn[data-id="labs:1"]');
-      const synthNoState = disabled('.req-btn[data-id="labs:0"]');
-      // After the red-flag screen — synthesis unlocks; imaging stays clickable.
-      if (window._test_setRevealed) window._test_setRevealed({
-        "history:1": { at: 1, by: "t" },
-        "history:2": { at: 1, by: "t" },
-        "exam:3":    { at: 1, by: "t" }
+      const imagingNoHyp = disabled('.req-btn[data-id="labs:1"]');
+      const synthNoHyp = disabled('.req-btn[data-id="labs:0"]');
+      // One hypothesis is not enough; the synthesis stays locked.
+      if (window._test_setHypotheses) window._test_setHypotheses({ a: { text: "x", by: "t", at: 1 } });
+      if (typeof window.renderButtons === "function") window.renderButtons();
+      const synthOneHyp = disabled('.req-btn[data-id="labs:0"]');
+      // Two hypotheses → the synthesis unlocks; imaging stays free throughout.
+      if (window._test_setHypotheses) window._test_setHypotheses({
+        a: { text: "x", by: "t", at: 1 }, b: { text: "y", by: "t", at: 1 }
       });
       if (typeof window.renderButtons === "function") window.renderButtons();
-      const imagingAfter = disabled('.req-btn[data-id="labs:1"]');
-      const synthAfter = disabled('.req-btn[data-id="labs:0"]');
-      return { imagingNoState, synthNoState, imagingAfter, synthAfter };
+      const imagingTwoHyp = disabled('.req-btn[data-id="labs:1"]');
+      const synthTwoHyp = disabled('.req-btn[data-id="labs:0"]');
+      return { imagingNoHyp, synthNoHyp, synthOneHyp, imagingTwoHyp, synthTwoHyp };
     });
-    expect(out.imagingNoState, "imaging is clickable even with no hypothesis / no red-flag screen").toBe(false);
-    expect(out.synthNoState, "synthesis stays gated until the red-flag screen is done").toBe(true);
-    expect(out.imagingAfter, "imaging stays clickable").toBe(false);
-    expect(out.synthAfter, "synthesis unlocks once the red-flag screen is complete").toBe(false);
+    expect(out.imagingNoHyp, "imaging is clickable with no hypotheses").toBe(false);
+    expect(out.synthNoHyp, "synthesis is locked with no hypotheses").toBe(true);
+    expect(out.synthOneHyp, "synthesis is still locked with only one hypothesis").toBe(true);
+    expect(out.imagingTwoHyp, "imaging stays clickable").toBe(false);
+    expect(out.synthTwoHyp, "synthesis unlocks once ≥2 hypotheses are written").toBe(false);
   });
 
-  test("Investigations hint reframes ordering as a penalised choice, not a lock", async ({ page }) => {
+  test("Investigations show a free hint; the Synthesis section carries the ≥2-hyp lock hint", async ({ page }) => {
     await page.goto("/");
-    const t = await page.evaluate(() => {
-      const h = document.getElementById("investigations-locked-hint");
-      return h ? (h.textContent || "") : "";
-    });
-    // New copy: investigations are open; the synthesis is what gates on red flags.
-    expect(t).toMatch(/red flag|red-flag|cauda|leg neuro|drapeau|レッドフラッグ/i);
-    expect(t).toMatch(/synthesis|synthèse|総合判断|any time|tout moment|いつでも/i);
-    // Must NOT present the panel as locked any more.
-    expect(t).not.toMatch(/🔒|Locked|Verrouillé|ロック中/);
+    const t = await page.evaluate(() => ({
+      inv: (document.querySelector('#chart-investigations .chart-section-hint') || {}).textContent || "",
+      synLock: (document.getElementById("synthesis-locked-hint") || {}).textContent || ""
+    }));
+    // Investigations: a free "yours to choose, like the examination" hint — no lock.
+    expect(t.inv).toMatch(/indicated|choose|examination|indiqué|choisir|適応|選ぶ/i);
+    expect(t.inv).not.toMatch(/🔒|Locked|Verrouillé|ロック中/);
+    // Synthesis: locked until ≥2 working hypotheses.
+    expect(t.synLock).toMatch(/two|2|deux|hypoth|仮説/i);
   });
 });
 
