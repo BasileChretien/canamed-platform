@@ -5,15 +5,17 @@
  * bridge itself stays Firebase-agnostic — the hooks defined here are the
  * single integration point.
  *
- * Activation gate (all four must be true):
- *   1. URL contains `?llm=1` OR localStorage.canamedModALLM === "1"
+ * Activation gate (all must be true):
+ *   1. The LLM chat is NOT opted out — i.e. NOT `?llm=0` and
+ *      localStorage.canamedModALLM !== "0". It is ON by default (2026-06-02):
+ *      the chat is Module A's history-taking interface for every session.
  *   2. window.modALLMBridge / modAQuestionScoring / modALLMPrompts loaded
  *   3. startRoom() has populated refRevealed (i.e. we are in a real room)
  *   4. The room is in Module A (stage === 1)
  *
- * Until then this file is dormant — it adds zero behaviour to a normal
- * session. Disabled-by-default mirrors the dormant `sendQueuedMail`
- * pattern in functions/index.js.
+ * The HF backend still degrades gracefully: if the `hfPatient` function is
+ * disabled (`MODA_LLM_ENABLED=false`) or errors, the bridge falls back to a
+ * canned stub patient, so the chat never leaves Module A dead.
  */
 
 (function () {
@@ -26,24 +28,26 @@
   // stripped along the way, so by the time startRoom() calls modALLMInit(),
   // ?llm=1 is gone and the flag check fails. Persisting to localStorage on
   // FIRST page-load makes the flag survive the entire flow.
+  // Default-ON (2026-06-02): persist only the OPT-OUT so it survives the
+  // multi-step join flow (which strips the query string). `?llm=0` → sticky
+  // off (facilitator demo / debug); `?llm=1` → clear the opt-out (back to
+  // default). Mirrors modALLMFlagOn() in script-loader.js.
   try {
     var _initialParams = new URLSearchParams(location.search);
-    if (_initialParams.get("llm") === "1" && window.localStorage) {
-      localStorage.setItem("canamedModALLM", "1");
-    }
-    // Opt-out path: ?llm=0 clears the flag (for facilitator demos / debug).
-    if (_initialParams.get("llm") === "0" && window.localStorage) {
-      localStorage.removeItem("canamedModALLM");
+    if (window.localStorage) {
+      if (_initialParams.get("llm") === "0") localStorage.setItem("canamedModALLM", "0");
+      else if (_initialParams.get("llm") === "1") localStorage.removeItem("canamedModALLM");
     }
   } catch (_) { /* private mode / locked-down env — fall back to URL-only check */ }
 
   function _flagOn() {
     try {
-      var p = new URLSearchParams(location.search);
-      if (p.get("llm") === "1") return true;
-      if (window.localStorage && localStorage.getItem("canamedModALLM") === "1") return true;
-    } catch (_) { /* SSR / locked-down env — flag stays off */ }
-    return false;
+      var q = new URLSearchParams(location.search).get("llm");
+      if (q === "0") return false;                                          // explicit opt-out
+      if (q === "1") return true;                                           // explicit opt-in
+      if (window.localStorage && localStorage.getItem("canamedModALLM") === "0") return false; // sticky opt-out
+    } catch (_) { /* SSR / locked-down env — fall through to the default */ }
+    return true;   // default ON
   }
 
   function _$(id) { return document.getElementById(id); }
@@ -284,29 +288,17 @@
         });
       },
       onUnlock: function (legacyId) {
-        // Synthesise a reveal via the existing first-write-wins path so
-        // SYNTH_PREREQS / prereqsMet() stay deterministic.
+        // The chat's red-flag questions still reveal their legacy history items
+        // (e.g. history:1) via the first-write-wins path, so SYNTH_PREREQS /
+        // prereqsMet() and the red-flag SCORING stay deterministic.
         if (typeof window.reveal === "function") {
           try { window.reveal(legacyId); } catch (_) { /* defensive */ }
         }
-        // Auto-trigger synthesis once all SYNTH_PREREQS are met. In
-        // chat-only mode the synthesis button is hidden, so the legacy
-        // "click to synthesise" path is unreachable. We replicate the
-        // unlock here: when prereqsMet() flips to true, reveal SYNTH_ID
-        // (labs:0) once, which unlocks the Discussion prompts via the
-        // existing pipeline. setTimeout(..., 200) gives the just-fired
-        // reveal time to land in `revealed[]` before we re-check.
-        setTimeout(function () {
-          try {
-            if (typeof window.prereqsMet === "function" &&
-                typeof window.SYNTH_ID === "string" &&
-                window.prereqsMet() &&
-                !(window.revealed && window.revealed[window.SYNTH_ID]) &&
-                typeof window.reveal === "function") {
-              window.reveal(window.SYNTH_ID);
-            }
-          } catch (_) { /* defensive */ }
-        }, 200);
+        // NB (2026-06-02): the chat no longer AUTO-reveals the synthesis. The
+        // Clinical synthesis is now its own section (group-synthesis), gated on
+        // ≥2 working hypotheses (phaseGateOpen), with a visible button the team
+        // clicks deliberately — so the old "auto-synthesise when prereqsMet"
+        // shortcut is gone. The red-flag screen is scoring-only now, not a gate.
       },
       persistTurn: function (role, content) {
         refs.chat.push({ role: role, content: content, at: Date.now() });

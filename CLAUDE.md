@@ -177,9 +177,17 @@ DB). Until that Console toggle is flipped, clients still hit "Checking…" →
      `MODA_LLM_ENABLED=false`, then `firebase deploy --only functions`.
      Returns `{state:"disabled"}` within ~30s; all clients seamlessly
      fall back to the local stub patient.
-   - **Pilot gate:** the chat UI itself stays hidden unless a user passes
-     `?llm=1` in the URL or sets `localStorage.canamedModALLM=1`. The
-     facilitator controls who sees it during the pilot window.
+   - **~~Pilot gate~~ → DEFAULT-ON (2026-06-02).** The chat is now Module A's
+     standard history-taking interface for **every** session — no `?llm=1`
+     needed (user request: "I want to keep only the solution with the LLM"). The
+     only opt-out is `?llm=0` (sticky via `localStorage.canamedModALLM="0"`),
+     which restores the legacy click-button workup for a facilitator demo/debug.
+     Gate logic lives in `modALLMFlagOn()` (script-loader.js) and `_flagOn()`
+     (modA-llm-init.js), both defaulting to true. The server-side
+     `MODA_LLM_ENABLED` flag + the bridge's stub fallback remain the real
+     kill-switch for the HF backend (see Panic button above).
+     `Verify:` `grep -A6 "function modALLMFlagOn" docs/.../script-loader.js`
+     ends with `return true`.
    - **App Check on hfPatient — ✅ DONE & DEPLOYED (verified 2026-05-30).**
      `firebase functions:list` shows `hfPatient` live (v2 callable); its last
      deploy (`gcloud functions describe` updateTime `2026-05-28T11:38:37Z`)

@@ -15,12 +15,13 @@
 // @ts-check
 const { test, expect } = require("./fixtures.js");
 
-async function buildLabs(page, revealed) {
-  return page.evaluate(async (rev) => {
+async function buildLabs(page, revealed, hyps) {
+  return page.evaluate(async (args) => {
+    const rev = args.rev, hyps = args.hyps;
     if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
       await window.CanamedLoader.ensureCaseContent();
     }
-    if (window._test_setHypotheses) window._test_setHypotheses({});
+    if (window._test_setHypotheses) window._test_setHypotheses(hyps || {});
     if (window._test_setRevealed) window._test_setRevealed(rev || {});
     if (typeof window.buildButtons === "function") window.buildButtons();
     if (typeof window.renderButtons === "function") window.renderButtons();
@@ -29,28 +30,27 @@ async function buildLabs(page, revealed) {
       return b ? b.disabled : null;
     };
     return { imaging: dis("labs:1"), bloods: dis("labs:3"), synth: dis("labs:0") };
-  }, revealed);
+  }, { rev: revealed, hyps: hyps });
 }
 
-const RED_FLAGS = {
-  "history:1": { at: 1, by: "t" },
-  "history:2": { at: 1, by: "t" },
-  "exam:3":    { at: 1, by: "t" }
+const TWO_HYPS = {
+  a: { text: "mechanical low back pain", by: "t", at: 1 },
+  b: { text: "axial spondyloarthritis", by: "t", at: 1 }
 };
 
 test.describe("Module A — investigations clickable any time, synthesis gated", () => {
-  test("imaging + bloods are clickable with no reveals; synthesis is gated", async ({ page }) => {
+  test("imaging + bloods are clickable with no hypotheses; synthesis is gated", async ({ page }) => {
     await page.goto("/");
-    const s = await buildLabs(page, {});
+    const s = await buildLabs(page, {}, {});
     expect(s.imaging, "imaging (labs:1) clickable any time").toBe(false);
     expect(s.bloods, "bloods (labs:3) clickable any time").toBe(false);
-    expect(s.synth, "synthesis (labs:0) gated until red-flag screen").toBe(true);
+    expect(s.synth, "synthesis (labs:0) gated until ≥2 hypotheses").toBe(true);
   });
 
-  test("synthesis unlocks after the red-flag screen; investigations stay clickable", async ({ page }) => {
+  test("synthesis unlocks after ≥2 working hypotheses; investigations stay clickable", async ({ page }) => {
     await page.goto("/");
-    const s = await buildLabs(page, RED_FLAGS);
-    expect(s.synth, "synthesis unlocks once history:1+history:2+exam:3 are revealed").toBe(false);
+    const s = await buildLabs(page, {}, TWO_HYPS);
+    expect(s.synth, "synthesis unlocks once ≥2 working hypotheses are written").toBe(false);
     expect(s.imaging, "imaging stays clickable").toBe(false);
     expect(s.bloods, "bloods stays clickable").toBe(false);
   });

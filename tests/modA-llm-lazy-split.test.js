@@ -60,14 +60,23 @@ test("script-loader exposes the lazy LLM API and loads all 4 in order", () => {
   assert.match(LOADER, /modALLMFlagOn\b/);
 });
 
-test("the ?llm flag is promoted to localStorage EAGERLY (survives the join flow)", () => {
-  // This promotion used to live in modA-llm-init.js's IIFE (eager). Now that
-  // file is lazy, so the promotion must be hoisted into the eager loader or the
-  // pilot flag is lost by the time startRoom() runs.
-  assert.match(LOADER, /setItem\("canamedModALLM", "1"\)/,
-    "script-loader must persist ?llm=1 to localStorage on first load");
-  assert.match(LOADER, /llm.*===\s*"1"/,
-    "script-loader must read the ?llm query param");
+test("the LLM chat is ON by default; ?llm=0 opt-out is promoted to localStorage", () => {
+  // 2026-06-02: the LLM patient chat is Module A's default history interface —
+  // no ?llm=1 needed. The eager loader now persists only the OPT-OUT so a
+  // facilitator demo of the legacy click-button workup survives the multi-step
+  // join flow (which strips the query string).
+  assert.match(LOADER, /setItem\("canamedModALLM", "0"\)/,
+    "script-loader must persist the ?llm=0 opt-out to localStorage on first load");
+  assert.match(LOADER, /llm.*===\s*"0"/,
+    "script-loader must read the ?llm=0 opt-out");
+  // modALLMFlagOn must DEFAULT to true (chat on) and only return false on an
+  // explicit opt-out.
+  const at = LOADER.indexOf("function modALLMFlagOn(");
+  const body = LOADER.slice(at, at + 600);
+  assert.match(body, /=== "0"\) return false/, "an explicit ?llm=0 must opt out");
+  assert.match(body, /getItem\("canamedModALLM"\) === "0"\) return false/,
+    "a sticky localStorage opt-out must be honoured");
+  assert.match(body, /return true;[^\n]*\n\s*\}/, "modALLMFlagOn must default to ON (return true)");
 });
 
 test("startRoom lazy-loads the LLM bundle ONLY when the flag is on", () => {

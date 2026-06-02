@@ -36,7 +36,7 @@ test("revealModARightCol exists and reveals one tab per phase", () => {
   // The three phase gates.
   assert.match(body, /revealedCountByGroup\("history"\)/, "Decide gate reads history reveals");
   assert.match(body, /revealedCountByGroup\("exam"\)/, "Decide gate reads exam reveals");
-  assert.match(body, /keyRevealed\(\)/, "Debate gate is the synthesis (keyRevealed)");
+  assert.match(body, /phaseGateOpen\(\)/, "Debate gate is the ≥2-hypotheses phase gate");
   assert.match(body, /rcol-collapsed/, "collapses the column while nothing is revealed");
   assert.match(body, /dataset\.revealed/, "reveal must be sticky (dataset.revealed flag)");
 });

@@ -3157,7 +3157,10 @@ function revealModARightCol() {
     revealedCountByGroup("history") >= 1;
   const examDone = (typeof revealedCountByGroup === "function") &&
     revealedCountByGroup("exam") >= 1;
-  const synthDone = (typeof keyRevealed === "function") && keyRevealed();
+  // Debate + final answers now reveal on the ≥2-hypotheses phase gate
+  // (2026-06-02), together with the Synthesis section — not on the synthesis
+  // being revealed.
+  const gateOpen = (typeof phaseGateOpen === "function") && phaseGateOpen();
 
   const modAAnswers = Object.keys((answers && answers.moduleA) || {})
     .map(k => answers.moduleA[k]).filter(Boolean);
@@ -3170,8 +3173,8 @@ function revealModARightCol() {
 
   const reveal = {
     decisions: histDone && examDone,
-    discussion: synthDone,
-    answers: synthDone &&
+    discussion: gateOpen,
+    answers: gateOpen &&
       (promptsWereDone || hasPromptReply || modAAnswers.length > 0 || moduleASettled)
   };
 
@@ -3515,6 +3518,10 @@ function startRoom() {
     hypotheses = snap.val() || {};
     if (typeof renderHypotheses === "function") renderHypotheses();
     if (typeof renderButtons === "function") renderButtons();
+    // ≥2 hypotheses is the phase gate (2026-06-02): re-render the prompts so the
+    // Debate unlocks the moment the team crosses two, and refresh the coach +
+    // right-column reveal.
+    if (typeof renderPrompts === "function") renderPrompts();
     if (typeof updateModANextStep === "function") updateModANextStep();
   });
   // Progressive prompt state (cross-room synced).
@@ -7650,10 +7657,19 @@ function buildButtons() {
                     (myRoom || "lobby") + ":" + group;
     const order = _seededShuffleIndexes(CASE[group].length, seedStr);
 
-    // Investigations stay flat — the gated synthesis + the imaging/bloods are
-    // few and the gating already structures them; no clinical-category split.
+    // Investigations + Synthesis (split 2026-06-02): the imaging/bloods
+    // (labs:1+) render flat into #group-labs (the free "Investigations"
+    // section); the single clinical SYNTHESIS item (SYNTH_ID, labs:0) renders
+    // into #group-synthesis (its own gated section below). IDs are unchanged
+    // (group:index) so SYNTH_PREREQS / PENALTIES stay valid.
     if (group === "labs") {
-      order.forEach(i => container.appendChild(_makeReqBtn(group, i)));
+      const synContainer = el("group-synthesis");
+      if (synContainer) synContainer.innerHTML = "";
+      order.forEach(i => {
+        const id = group + ":" + i;
+        const target = (id === SYNTH_ID && synContainer) ? synContainer : container;
+        target.appendChild(_makeReqBtn(group, i));
+      });
       return;
     }
 
@@ -7896,7 +7912,10 @@ function prereqsMet() {
 let myPendingReveal = null;
 function reveal(id) {
   if (revealed[id] || !refRevealed) return;
-  if (id === SYNTH_ID && !prereqsMet()) return;   // must do the workup first
+  // The clinical synthesis is now gated on ≥2 working hypotheses (2026-06-02),
+  // not the red-flag screen — the team works the case up freely, commits its
+  // differentials, then synthesises. (Red-flag screening stays as scoring.)
+  if (id === SYNTH_ID && !phaseGateOpen()) return;
 
   // ── Mobile feedback (user report 2026-05-18): on stacked-column
   // layouts the findings log lives FAR below the case panels, so
@@ -7936,7 +7955,6 @@ function reveal(id) {
     });
 }
 function renderButtons() {
-  const gateOK = prereqsMet();
   // Dry-run change (2026-05-26): investigations (imaging + bloods) are NO
   // LONGER hard-locked behind "add a working hypothesis first". Ordering a
   // test is a real clinical choice the team can get wrong — every imaging /
@@ -7950,47 +7968,30 @@ function renderButtons() {
     const id = btn.dataset.id;
     btn.classList.toggle("done", !!revealed[id]);
     if (id === SYNTH_ID) {
-      const locked = !gateOK && !revealed[id];
+      // Synthesis is gated on ≥2 working hypotheses (2026-06-02), not the
+      // red-flag screen. Locked + disabled until the team commits its
+      // differentials.
+      const locked = !phaseGateOpen() && !revealed[id];
       btn.disabled = locked;
       btn.title = locked
-        ? "First screen the red flags by asking the patient and/or by examination"
+        ? "Write at least two working hypotheses first to unlock the synthesis"
         : "";
     }
-    // imaging buttons: a soft "order matters" cue while the red-flag screen is
-    // unfinished - it is still the room's choice, but the consequence is visible.
-    // The warning is a REAL sibling node (not ::after content) so screen readers
-    // read it and the button is linked to it via aria-describedby.
+    // Investigations (imaging/bloods) are now FREELY clickable, like the
+    // Examination (2026-06-02): no "screen the red flags first" warn cue. A
+    // premature / un-indicated order still costs points via the scoring engine
+    // (pen_mri / pen_xray / …), but the UI no longer nags. Clear any stale warn
+    // node left by an older render.
     const isImaging = id && id.indexOf("labs:") === 0 && id !== SYNTH_ID;
     if (isImaging) {
-      const warn = !gateOK && !revealed[id];
-      btn.classList.toggle("warn", warn);
-      // Walk past any sibling req-inline-reveal to find the warn-note slot
-      // (the inline-reveal is unconditional; the warn-note follows it).
-      let note = btn.nextElementSibling;
-      while (note && note.classList.contains("req-inline-reveal")) {
-        note = note.nextElementSibling;
+      btn.classList.remove("warn");
+      btn.removeAttribute("aria-describedby");
+      let staleNote = btn.nextElementSibling;
+      while (staleNote && staleNote.classList.contains("req-inline-reveal")) {
+        staleNote = staleNote.nextElementSibling;
       }
-      if (note && !note.classList.contains("req-warn-note")) note = null;
-      if (warn) {
-        if (!note) {
-          note = document.createElement("p");
-          note.className = "req-warn-note";
-          note.id = "warn-" + id.replace(":", "-");
-          note.textContent = "Screen the red flags and examine the legs first — " +
-            "ordering a scan now costs the 'safety first' points.";
-          // Insert AFTER the inline-reveal if present, else after the button.
-          const anchor = (btn.nextElementSibling &&
-            btn.nextElementSibling.classList.contains("req-inline-reveal"))
-              ? btn.nextElementSibling : btn;
-          anchor.insertAdjacentElement("afterend", note);
-        }
-        btn.setAttribute("aria-describedby", note.id);
-        btn.title = "";
-      } else {
-        if (note) note.remove();
-        btn.removeAttribute("aria-describedby");
-        if (!revealed[id]) btn.title = "";
-      }
+      if (staleNote && staleNote.classList.contains("req-warn-note")) staleNote.remove();
+      if (!revealed[id]) btn.title = "";
     }
     // Bug 2 (user-feedback-2): on stacked mobile layout (<=960px) the right-
     // column findings log lives below the buttons, so the operator's tap and
@@ -8251,6 +8252,15 @@ function keyRevealed() {
   return ITEM_IDS.some(id => revealed[id] && itemById(id).key);
 }
 
+/* Module A phase gate (2026-06-02). The team works the case up FREELY (history
+ * chat + examination + investigations), then commits ≥2 working hypotheses —
+ * THAT is the gate that unlocks the clinical Synthesis section AND the Debate
+ * (discussion prompts). Replaces the old "synthesis revealed" / red-flag-screen
+ * gate for progression. (keyRevealed / the red-flag screen still drive scoring.) */
+function phaseGateOpen() {
+  return (typeof hypothesisCount === "function") && hypothesisCount() >= 2;
+}
+
 /* Test hooks — top-level `let` bindings (revealed, promptCursor,
  * promptReplies, ITEM_IDS, CASE) are script-scoped and can't be
  * reached via `window.X = ...` assignments from E2E tests. These
@@ -8351,7 +8361,7 @@ function updateSynthesisProgress() {
     }
   }
   node.textContent = allDone
-    ? "✓ Red-flag screen complete — synthesis is unlocked."
+    ? "✓ Red-flag screen complete."
     : done + " / " + total + " red flags screened";
 }
 
@@ -8371,7 +8381,10 @@ function updateDiscussionTabLock(unlocked) {
 let promptsWereUnlocked = false;
 let promptsWereDone = false;   // fire-once guard for auto-opening Group answers
 function renderPrompts() {
-  const unlocked = keyRevealed();
+  // The Debate (discussion prompts) now unlock on ≥2 working hypotheses
+  // (2026-06-02 phase gate), together with the Synthesis section — not on the
+  // synthesis being revealed.
+  const unlocked = (typeof phaseGateOpen === "function") && phaseGateOpen();
   el("prompts-locked").classList.toggle("hidden", unlocked);
   // Hide the legacy <ol> permanently (kept in HTML for back-compat).
   const legacyList = el("prompts-list");
@@ -9711,7 +9724,6 @@ function updateModANextStep() {
 
   // Read observable state.
   const revealedCount = ITEM_IDS.filter(id => revealed[id]).length;
-  const keyDone = (typeof keyRevealed === "function") ? keyRevealed() : false;
   const onDiscussion = activeRcolTab === "discussion";
   const onAnswers = activeRcolTab === "answers";
   const modAAnswerEntries = Object.keys(answers.moduleA || {})
@@ -9722,35 +9734,27 @@ function updateModANextStep() {
   const allBulletsCovered = ["plan", "differ", "disagree", "takehome"]
     .every(k => bulletsCovered.has(k));
 
-  // Hypothesis-first scaffold: if the team has gathered enough info
-  // to form a hypothesis (≥3 findings) but hasn't recorded one yet,
-  // nudge them to add one. Investigations are gated on this.
-  const hypoCount = (typeof hypothesisCount === "function") ? hypothesisCount() : 0;
+  // Phase gate (2026-06-02): the team works the case up freely, then commits
+  // ≥2 working hypotheses — that unlocks the Clinical synthesis + the Debate.
+  const gateOpen = (typeof phaseGateOpen === "function") ? phaseGateOpen() : false;
 
   // State machine (highest-priority match wins).
   if (revealedCount === 0) {
     textEl.textContent = _coachT("modA.coach.read-case",
-      "Read the case below, then tap any button on the left (Ask the patient / " +
-      "Examine / Investigations) to start gathering info.");
+      "Read the case, then ask Mr Lefebvre, examine and investigate to work it up.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "setup", []);
-  } else if (revealedCount >= 2 && hypoCount === 0) {
-    textEl.textContent = _coachT("modA.coach.add-hypothesis",
-      "You've gathered some info — now agree on at least one working hypothesis " +
-      "above (what do you suspect?) before you commit to investigations and a plan.");
-    _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "case", ["setup"]);
-  } else if (!keyDone) {
+  } else if (!gateOpen) {
     textEl.textContent = _coachT("modA.coach.gather",
-      "Keep gathering case info — when you're ready, complete the clinical " +
-      "synthesis (red-flag review) to unlock the Discussion prompts.");
+      "Work the case up — ask, examine, investigate. When you're ready, write " +
+      "two working hypotheses to unlock the clinical synthesis and the discussion.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
   } else if (!onDiscussion && !onAnswers && modAAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modA.coach.open-discussion",
-      "✓ Synthesis done! Open Discussion to start the Exchange. " +
-      "Make sure both Caen and Nagoya voices speak on each compare prompt.");
-    _coachSetAction(actionsEl, "modA.coach.btn.open-discussion", "Open Discussion →",
+      "✓ Hypotheses in — the Clinical synthesis and Debate are open. Synthesise, " +
+      "then debate the prompts (both a Caen and a Nagoya voice on each compare prompt).");
+    _coachSetAction(actionsEl, "modA.coach.btn.open-discussion", "Open Debate →",
       () => { if (typeof switchRcolTab === "function") switchRcolTab("discussion"); });
     setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
   } else if (onDiscussion && modAAnswerEntries.length === 0) {
@@ -9776,8 +9780,8 @@ function updateModANextStep() {
   } else {
     // catch-all: fall back to the generic next-step text
     textEl.textContent = _coachT("modA.coach.gather",
-      "Keep gathering case info — when you're ready, complete the clinical " +
-      "synthesis to unlock the Discussion prompts.");
+      "Work the case up — ask, examine, investigate. When you're ready, write " +
+      "two working hypotheses to unlock the clinical synthesis and the discussion.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
   }
@@ -10115,15 +10119,18 @@ function renderHypotheses() {
     }
     list.appendChild(li);
   });
-  // Investigations are clickable at any time now (dry-run 2026-05-26) — the
-  // panel is never locked. The hint is a standing "order with a reason" advisory
-  // shown until the synthesis is done; the synthesis button gates itself on the
-  // red-flag screen (see renderButtons), and each imaging button shows its own
-  // premature-order warning.
+  // Investigations are FREELY clickable (2026-06-02) — that section is never
+  // locked. The clinical SYNTHESIS section is the gated one now: it stays faded
+  // + its locked hint shows until the team has committed ≥2 working hypotheses
+  // (phaseGateOpen). The synthesis BUTTON gates itself the same way in
+  // renderButtons (kept in sync via the refHypotheses listener).
   const inv = el("chart-investigations");
-  const hint = el("investigations-locked-hint");
   if (inv) inv.classList.remove("is-locked");
-  if (hint) hint.classList.toggle("hidden", !!revealed[SYNTH_ID]);
+  const syn = el("chart-synthesis");
+  const synHint = el("synthesis-locked-hint");
+  const open = (typeof phaseGateOpen === "function") && phaseGateOpen();
+  if (syn) syn.classList.toggle("is-locked", !open);
+  if (synHint) synHint.classList.toggle("hidden", !!open);
 }
 
 /* Module B role picker (local-only). The HTML chips are radio buttons;

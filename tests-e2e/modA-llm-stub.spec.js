@@ -166,4 +166,37 @@ test.describe("Module A — LLM-patient stub (feature flag on)", () => {
     const fatal = errors.filter(e => /modA-|modAQuestion|modALLM|csp|content security/i.test(e));
     expect(fatal, "no fatal LLM-script errors in console: " + fatal.join("; ")).toEqual([]);
   });
+
+  // 2026-06-02: the LLM patient chat is the DEFAULT Module A experience — it
+  // must load with NO ?llm=1 in the URL and NO localStorage flag set. ?llm=0 is
+  // the only opt-out.
+  test("default-on: the chat loads WITHOUT ?llm=1 (no flag needed)", async ({ page }) => {
+    await page.goto("/");                       // plain URL — no ?llm, no localStorage seed
+    const state = await page.evaluate(async () => {
+      if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+        await window.CanamedLoader.ensureCaseContent();
+      }
+      const flagDefault = !!(window.CanamedLoader &&
+        typeof window.CanamedLoader.modALLMFlagOn === "function" &&
+        window.CanamedLoader.modALLMFlagOn());
+      if (window.CanamedLoader && window.CanamedLoader.ensureModALlm) {
+        await window.CanamedLoader.ensureModALlm();
+      }
+      return {
+        flagDefault,
+        initFn: typeof window.modALLMInit === "function",
+        bridge: !!(window.modALLMBridge && typeof window.modALLMBridge.create === "function")
+      };
+    });
+    expect(state.flagDefault, "modALLMFlagOn() must be true by default (no ?llm=1)").toBe(true);
+    expect(state.initFn, "the lazy LLM bundle loads on a plain URL").toBe(true);
+    expect(state.bridge, "the chat bridge is available by default").toBe(true);
+  });
+
+  test("opt-out: ?llm=0 turns the chat OFF (legacy click-button workup)", async ({ page }) => {
+    await page.goto("/?llm=0");
+    const off = await page.evaluate(() => !(window.CanamedLoader &&
+      window.CanamedLoader.modALLMFlagOn && window.CanamedLoader.modALLMFlagOn()));
+    expect(off, "?llm=0 must opt out of the chat").toBe(true);
+  });
 });

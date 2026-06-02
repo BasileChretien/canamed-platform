@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v38" below to the matching new string.
+         2. Update every "?v=v39" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v38"></script>
-  <link rel="stylesheet" href="style.css?v=v38" />
+  <script src="theme-init.js?v=v39"></script>
+  <link rel="stylesheet" href="style.css?v=v39" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v38" defer></script>
+  <script src="sw-register.js?v=v39" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -1471,33 +1471,49 @@
                 <div class="btn-group" id="group-exam"></div>
               </details>
 
-              <!-- ── Working hypotheses (PBL 7-jump brainstorm step) ──
-                   Placement decided by sim 2026-05-19 specialist panel
-                   (4 perspectives: PBL pedagogist, clinical educator,
-                   UX practitioner, healthcare/CDSS reviewer). Consensus
-                   was to move this block from ABOVE History to BETWEEN
-                   Examination and Investigations: (a) real consultation
-                   teaches history → exam → differential → targeted
-                   investigations; (b) chronic-pain cases need the
-                   red-flag screen done first to avoid missing cauda
-                   equina (NICE NG59); (c) hypothesising cold from the
-                   case stem trains anchoring bias.
-                   The Investigations gate is extended to also require
-                   the red-flag screen (history:1 + history:2 + exam:3)
-                   so unlocking by typing a throwaway hypothesis is no
-                   longer possible. Cross-room synced via Firebase
-                   (refHypotheses). -->
+              <!-- ── Investigations (split out + freed 2026-06-02) ──
+                   Was the combined "Investigations & synthesis" block. The
+                   imaging/bloods (labs:1+) are FREELY clickable, like the
+                   Examination — ordering one that isn't indicated still costs
+                   points (pen_* scoring), but nothing is hard-blocked and no
+                   lock/"red flags first" nag is shown. The clinical SYNTHESIS
+                   (labs:0) now lives in its OWN section below, gated on ≥2
+                   working hypotheses. buildButtons() routes labs:0 → the
+                   synthesis section and labs:1+ → #group-labs here. -->
+              <details class="chart-section chart-investigations" id="chart-investigations">
+                <summary class="chart-section-h">
+                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
+                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
+                    2-3l-5-9V3" /><path d="M7.5 14h9" /></svg>
+                  <span data-i18n="modA.chart.investigations.title">Investigations</span>
+                </summary>
+                <p class="chart-section-hint"
+                   data-i18n="modA.chart.investigations.hint">
+                  Order any investigation you think is indicated — these are yours to choose, like the examination. Ordering one that isn't indicated still costs points.
+                </p>
+                <div class="btn-group" id="group-labs"></div>
+              </details>
+
+              <!-- ── Working hypotheses (PBL differential step) ──
+                   Moved BELOW Investigations 2026-06-02: the team works the case
+                   up freely (history chat + examination + investigations), then
+                   opens this to commit their differentials. Writing ≥2 hypotheses
+                   is the gate that unlocks BOTH the Clinical synthesis section
+                   and the discussion prompts (Debate). Collapsed by default — the
+                   summary IS the "ready to write hypotheses?" call to action.
+                   Cross-room synced via Firebase (refHypotheses). -->
               <details class="chart-section chart-hypotheses" id="chart-hypotheses">
                 <summary class="chart-section-h">
                   <span class="chart-section-icon" aria-hidden="true">💭</span>
-                  <span data-i18n="modA.chart.hypotheses.title">Working hypotheses</span>
+                  <span data-i18n="modA.chart.hypotheses.cta">Ready to write your working hypotheses?</span>
                 </summary>
                 <p class="chart-section-hint"
                    data-i18n="modA.chart.hypotheses.hint" data-i18n-html>
-                  Now that you've taken a history and examined the patient, agree as a team:
-                  <strong>what do you suspect?</strong> List 2 or more differentials you want
-                  to rule in or rule out. (Investigations unlock once you have a hypothesis
-                  AND have completed the red-flag screen + leg neuro exam.)
+                  Agree as a team: <strong>what do you suspect?</strong> List
+                  <strong>two or more</strong> differentials you want to rule in or
+                  rule out. Writing two unlocks the clinical synthesis and the
+                  discussion prompts.
                 </p>
                 <ul class="hypothesis-list" id="hypothesis-list"></ul>
                 <p class="hint hypothesis-empty hidden" id="hypothesis-empty"
@@ -1516,29 +1532,28 @@
                    data-i18n="room.answer-input-language-hint">Write in any language &mdash; English, French or Japanese. You're not marked on your English; it's your clinical thinking that counts.</p>
               </details>
 
-              <!-- ── Investigations (was "Investigations & synthesis") ──
-                   Locked until the team has (a) recorded a working
-                   hypothesis AND (b) screened red flags (NICE NG59:
-                   serious causes + cauda equina + leg neuro). The
-                   .is-locked class fades the section + the buttons
-                   are disabled in renderButtons until the gate opens. -->
-              <details class="chart-section chart-investigations" id="chart-investigations">
+              <!-- ── Clinical synthesis (split out 2026-06-02; was labs:0 inside
+                   the old combined section) ── Locked until the team has written
+                   ≥2 working hypotheses above (the new phase gate;
+                   phaseGateOpen() in script.js). .is-locked fades the section +
+                   the synthesis button is disabled in renderButtons until then.
+                   The red-flag screen (serious causes / cauda equina / leg neuro)
+                   is NO LONGER a hard gate — it stays as scoring and shows here as
+                   a progress nudge. #group-synthesis holds the SYNTH_ID button. -->
+              <details class="chart-section chart-synthesis" id="chart-synthesis">
                 <summary class="chart-section-h">
-                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
-                    2-3l-5-9V3" /><path d="M7.5 14h9" /></svg>
-                  <span data-i18n="modA.chart.investigations.title">Investigations &amp; synthesis</span>
+                  <span class="chart-section-icon" aria-hidden="true">🩺</span>
+                  <span data-i18n="modA.chart.synthesis.title">Clinical synthesis</span>
                 </summary>
-                <p class="chart-section-locked-hint hidden" id="investigations-locked-hint"
-                   data-i18n="modA.chart.investigations.locked-hint">
-                  You can order any investigation at any time — but ordering one that isn't indicated, or before screening the red flags, costs points. The clinical synthesis unlocks once you've screened the red flags (serious causes, cauda equina, leg neuro).
+                <p class="chart-section-locked-hint hidden" id="synthesis-locked-hint"
+                   data-i18n="modA.chart.synthesis.locked-hint" data-i18n-html>
+                  Write at least <strong>two</strong> working hypotheses above to unlock the clinical synthesis and the discussion prompts.
                 </p>
                 <p class="synthesis-progress" id="synthesis-progress"
                    data-i18n="modA.synthesis.progress" aria-live="polite">
                   0 / 3 red flags screened
                 </p>
-                <div class="btn-group" id="group-labs"></div>
+                <div class="btn-group" id="group-synthesis"></div>
               </details>
             </article>
             <button id="reset-btn" class="reset-btn"
@@ -3089,46 +3104,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v38" defer></script>
+  <script src="firebase-config.js?v=v39" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v38" defer></script>
+  <script src="orgs.js?v=v39" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v38" defer></script>
+  <script src="platform-config.js?v=v39" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v38" defer></script>
+  <script src="telemetry.js?v=v39" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v38" defer></script>
+  <script src="purify.min.js?v=v39" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v38" defer></script>
+  <script src="i18n.js?v=v39" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v38" defer></script>
+  <script src="localdb.js?v=v39" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v38" defer></script>
+  <script src="lib.js?v=v39" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v38" defer></script>
+  <script src="pure-utils.js?v=v39" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3139,7 +3154,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v38" defer></script>
+  <script src="script-loader.js?v=v39" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3149,7 +3164,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v38" defer></script>
+  <script src="script.js?v=v39" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
