@@ -296,6 +296,16 @@ main {
 #stage-1 .columns.rcol-collapsed { grid-template-columns: 1fr; }
 #stage-1 .columns.rcol-collapsed > .col-right { display: none; }
 
+/* Module B right-column collapse (2026-06-02). Module B's right column holds
+   ONLY the group-answers card, which is itself phase-gated to the final
+   "bullets" phase. During the setup / roleplay / discussion phases that card is
+   hidden, so the right grid track sat empty and the content was squeezed into
+   ~63% of the screen with a blank band on the right (user report). applyModB-
+   PhaseVisibility() now adds .rcol-collapsed for every phase except "bullets",
+   giving the content the full width until the answers card is actually shown. */
+#stage-2 .columns.rcol-collapsed { grid-template-columns: 1fr; }
+#stage-2 .columns.rcol-collapsed > .col-right { display: none; }
+
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }
 .wrapup-download-btn.hidden { display: none; }
@@ -2024,6 +2034,18 @@ body[data-observer="1"] #modB-next-step {
 .reference-btn-emoji { font-size: 1.05em; line-height: 1; }
 .reference-panel { margin-top: var(--s-3); }
 .reference-panel[hidden] { display: none; }
+/* Beautiful line-breaking for the reference prose (user request 2026-06-02).
+   The dense historical paragraphs wrapped purely by line-width, cutting phrases
+   at awkward mid-clause points; text-wrap:pretty lets the engine choose nicer
+   break points and avoids lone last-line words. hyphens:none stops mid-word
+   hyphenation. Progressive enhancement — engines without text-wrap:pretty keep
+   the previous normal wrapping, so nothing regresses. Scoped to the prose +
+   did-you-know callouts; the citation list keeps its own per-entry layout. */
+.reference-panel p,
+.reference-panel .info-list li {
+  text-wrap: pretty;
+  hyphens: none;
+}
 @media (max-width: 520px) {
   .reference-btn { flex-basis: 100%; }   /* stack to full-width buttons on phones */
 }
@@ -2155,6 +2177,11 @@ footer {
 .stage-indicator { font-weight: 700; font-size: 1.05rem; }
 .stage-wait { color: var(--muted); font-size: 0.9rem; }
 .stage-controls { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; row-gap: 6px; }
+/* The "Stage X of 4" indicator is now sr-only (hidden visually, 2026-06-02), so
+   it no longer occupies the left of the row to push the controls right via
+   space-between. Keep the participant controls right-aligned with an auto left
+   margin; the (usually hidden) score chip still sits at the left when shown. */
+.stage-controls--participant { margin-left: auto; }
 
 /* ── Control-row clarity (UX-overload #5) ──────────────────────────────────
    Scoped to the PARTICIPANT row (.stage-controls--participant); the admin
@@ -2579,6 +2606,18 @@ footer {
 /* ---------- wrap-up summary ---------- */
 .wrapup-mod { font-size: 0.98rem; margin: var(--s-4) 0 6px; }
 .wrapup-mod:first-child { margin-top: 0; }
+/* The case's actual diagnosis, surfaced at wrap-up (Module A). A calm tinted
+   callout so the answer stands out from the team's recorded answers below it. */
+.wrapup-diagnosis {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  border-left: 3px solid var(--ok, #2e9fdf);
+  background: var(--surface-sunk, rgba(46,159,223,.08));
+  border-radius: var(--r-sm, 6px);
+}
+.wrapup-diagnosis strong { color: var(--ink); }
 
 /* ---------- room view layout: main + admin sidebar ---------- */
 #app { display: flex; gap: var(--s-4); align-items: flex-start; }
@@ -2828,7 +2867,14 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 .history-card > summary::-webkit-details-marker { display: none; }
 .history-card > summary::before { content: "\25B8  "; color: var(--muted); }
 .history-card[open] > summary::before { content: "\25BE  "; }
-.history-card p { font-size: 0.95rem; max-width: 70ch; }
+/* No max-width here (2026-06-02): the 70ch cap was a leftover from when the
+   reference cards lived in a narrow sidebar column. Now that the panel is a
+   full-width accordion at the top of the module, the cap squeezed the historical
+   prose into a ~574px column with empty space beside it, forcing many short,
+   phrase-cutting line breaks while the citation list below spanned the full
+   width. Letting the prose use the full panel width (like the citations) means
+   fewer, cleaner wraps. */
+.history-card p { font-size: 0.95rem; }
 .didyouknow {
   background: var(--caen-50);
   border-left: 3px solid var(--caen-line);

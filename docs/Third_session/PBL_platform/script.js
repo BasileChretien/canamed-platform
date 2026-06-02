@@ -1197,6 +1197,7 @@ let wired = false;         // room-view event listeners attached once
 let firstStageFire = true; // detect a late join (room already past stage 0)
 let roomStage = 0;         // the room's stage (admin-controlled)
 let viewStage = 0;         // the stage this participant is looking at (<= roomStage)
+let _lastRenderedViewStage = -1; // last stage we scrolled-to-top for (see renderStage)
 let revealed = {};
 let seenFindingIds = {};   // findings already shown once, so new ones can flash in
 let presence = {};
@@ -2979,6 +2980,26 @@ function renderTeamRecap() {
     box.appendChild(ul);
   }
 }
+/* The Module A "answer" — the case's actual diagnosis — for the wrap-up. Read
+ * from the active scenario's clinical-synthesis item (SYNTH_ID), whose aParts
+ * carry a labelled "Diagnosis" segment. Returns { label, body } localised, or
+ * null when the scenario's synthesis has no diagnosis segment (so it simply
+ * shows nothing rather than guessing). */
+function moduleADiagnosis() {
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  try {
+    const syn = (typeof itemById === "function") ? itemById(SYNTH_ID) : null;
+    if (syn && Array.isArray(syn.aParts)) {
+      const dx = syn.aParts.find(p => {
+        if (!p || !p.label) return false;
+        const l = (p.label.en || "") + " " + (p.label.fr || "") + " " + (p.label.ja || "");
+        return /diagnos|診断/i.test(l);   // "diagnos*" / "diagnostic" / 診断
+      });
+      if (dx && dx.body) return { label: tc(dx.label, lang), body: tc(dx.body, lang) };
+    }
+  } catch (_) { /* scenario without a synthesis diagnosis — show nothing */ }
+  return null;
+}
 function renderWrapupSummary() {
   renderTeamRecap();
   const box = el("wrapup-summary");
@@ -2989,6 +3010,21 @@ function renderWrapupSummary() {
       const h = document.createElement("h4");
       h.className = "wrapup-mod"; h.textContent = label;
       box.appendChild(h);
+      // Module A wrap-up: surface the case's actual diagnosis (user request
+      // 2026-06-02) — the on-screen clinical synthesis was removed earlier, so
+      // the wrap-up is where students see the answer to "what did he have?".
+      if (moduleKey === "moduleA") {
+        const dx = moduleADiagnosis();
+        if (dx) {
+          const p = document.createElement("p");
+          p.className = "wrapup-diagnosis";
+          const strong = document.createElement("strong");
+          strong.textContent = (dx.label || "Diagnosis") + ": ";
+          p.appendChild(strong);
+          p.appendChild(document.createTextNode(dx.body));
+          box.appendChild(p);
+        }
+      }
       const entries = entriesSorted(answers[moduleKey]);
       if (entries.length === 0) {
         const e = document.createElement("p");
@@ -3053,7 +3089,6 @@ function wireRoomUI() {
   initStageNav();
   initCallProf();
   initLeave();
-  initObserver();
   initStageOverflow();
   initEndPoll();
   initTeamName();
@@ -7335,6 +7370,17 @@ function renderStage() {
   // the mobile bottom tab bar mirrors Module A (stage-1) and must appear /
   // disappear with the on-screen stage — refresh once the stages are toggled.
   if (typeof updateMobileTabbar === "function") updateMobileTabbar();
+  // Scroll back to the top of the window whenever the VIEWED stage actually
+  // changes — via Back/Next, or the room advancing under a caught-up student —
+  // so a new stage always starts at the top instead of wherever the previous
+  // stage was scrolled to (user request 2026-06-02). Guarded on an actual
+  // change so re-renders that leave viewStage put (e.g. the room rolling
+  // forward while a student is reviewing an earlier stage) never yank the page.
+  if (viewStage !== _lastRenderedViewStage) {
+    _lastRenderedViewStage = viewStage;
+    try { window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" }); }
+    catch (_) { try { window.scrollTo(0, 0); } catch (__) {} }
+  }
   if (viewStage === STAGE_COUNT - 1) renderWrapupSummary();
   // in-platform pre-test (Welcome) and post-test (Wrap-up) — both optional
   // and per-scenario. Render functions are no-ops when the scenario does
@@ -9833,6 +9879,12 @@ function applyModBPhaseVisibility(phaseKey) {
       node.classList.toggle("is-phase-hidden", phases.indexOf(phaseKey) === -1);
     });
   });
+  // The right column only carries the group-answers card, which shows in the
+  // "bullets" phase only. In every other phase that track is empty, so collapse
+  // the two-column grid to full width (mirrors Module A's rcol-collapsed) rather
+  // than leaving a blank band on the right (user report 2026-06-02).
+  const cols = stage.querySelector(".columns.modB-columns");
+  if (cols) cols.classList.toggle("rcol-collapsed", phaseKey !== "bullets");
 }
 
 function _modBT(key, fallback, vars) {
@@ -10971,45 +11023,11 @@ function initLeave() {
   });
 }
 
-/* "I'm just observing" — sim 2026-05-19 feature for anxious / B1 /
- * first-timer personas. Writes /sessions/{code}/rooms/{room}/observers/
- * {clientId} = {at} so other clients (and the scoring engine) can
- * distinguish observers from active participants. Local UX: button
- * flips to "Rejoin actively" and the room view gets data-observer="1"
- * so CSS can soften participation prompts (toned-down call-to-action
- * styling on Decisions, Hypotheses, etc.). No broadcast / no toast —
- * intentionally quiet so a stressed student can step back without
- * announcing it to the room. */
-function initObserver() {
-  const btn = el("observer-btn");
-  if (!btn || isRoomAdmin) {
-    if (btn) btn.classList.add("hidden");
-    return;
-  }
-  if (btn.dataset.wired === "1") return;
-  btn.dataset.wired = "1";
-  // Reflect any pre-existing observer state (e.g. after a refresh).
-  if (refObservers) {
-    refObservers.child(clientId).on("value", snap => {
-      const isObs = !!snap.val();
-      document.body.dataset.observer = isObs ? "1" : "";
-      btn.textContent = isObs
-        ? tFallback("room.observer-rejoin", "Rejoin actively")
-        : tFallback("room.observer-btn",   "I'm just observing");
-      btn.classList.toggle("is-active", isObs);
-    });
-  }
-  btn.addEventListener("click", () => {
-    if (!refObservers) return;
-    const isObs = document.body.dataset.observer === "1";
-    if (isObs) {
-      // toggle off
-      refObservers.child(clientId).remove().catch(() => {});
-    } else {
-      refObservers.child(clientId).set({ at: Date.now() }).catch(() => {});
-    }
-  });
-}
+/* The participant "I'm just observing" button was removed 2026-06-02 (user
+ * request). It used to write /sessions/{code}/rooms/{room}/observers/{clientId}
+ * and set body[data-observer="1"]; with the button gone nothing populates that
+ * node, so the related CSS softening simply never triggers. Module B's roleplay
+ * observer ROLE is a separate mechanism (the role picker) and is unaffected. */
 
 /* Control-row overflow (UX-overload #5): the "··· More" disclosure that holds
    Teams / observe / leave on narrow viewports (they're display:contents inline

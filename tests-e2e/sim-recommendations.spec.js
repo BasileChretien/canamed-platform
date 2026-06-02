@@ -237,26 +237,9 @@ test.describe("Anonymised cohort progress strip", () => {
   });
 });
 
-test.describe("'I'm just observing' panic button", () => {
-  test("observer button is in the DOM with a 44px tap target", async ({ page }) => {
-    await page.goto("/");
-    const info = await page.evaluate(() => {
-      ["splash","lobby","waiting","admin-app","session-ended"].forEach(id => {
-        const e = document.getElementById(id);
-        if (e) e.classList.add("hidden");
-      });
-      document.getElementById("app").classList.remove("hidden");
-      document.body.classList.remove("locked");
-      const b = document.getElementById("observer-btn");
-      if (!b) return null;
-      const r = b.getBoundingClientRect();
-      return { hidden: b.classList.contains("hidden"), height: r.height };
-    });
-    expect(info, "observer button must exist").not.toBeNull();
-    expect(info.hidden).toBe(false);
-    expect(info.height).toBeGreaterThanOrEqual(40);
-  });
-});
+// The "I'm just observing" panic button (#observer-btn) was removed 2026-06-02
+// (user request). Its DOM/tap-target test was deleted with it. Module B's
+// roleplay observer ROLE is covered separately (student-satisfaction.test.js).
 
 test.describe("End-of-session reflection poll", () => {
   test("wrap-up stage exposes #endpoll-card with two inputs + submit", async ({ page }) => {

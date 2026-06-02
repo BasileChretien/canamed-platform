@@ -1075,7 +1075,11 @@
     <div id="room-main">
       <section class="card stage-card">
         <div class="stage-row">
-          <span id="stage-indicator" class="stage-indicator" aria-live="polite"></span>
+          <!-- "Stage X of 4" is redundant with the numbered #global-stage-progress
+               stepper below (2026-06-02), so it is hidden VISUALLY but kept as an
+               sr-only aria-live region so screen-reader users still hear their
+               position when the stage changes. -->
+          <span id="stage-indicator" class="stage-indicator sr-only" aria-live="polite"></span>
           <span id="room-score-chip" class="score-chip hidden" title="Your team's score"></span>
           <div class="stage-controls stage-controls--participant">
             <button id="prev-btn">&larr; Back</button>
@@ -1101,20 +1105,10 @@
               </button>
               <div class="stage-overflow-menu" id="stage-overflow-menu">
                 <a id="teams-btn" class="teams-btn hidden" target="_blank" rel="noopener">Teams call</a>
-                <!-- Sim 2026-05-19 (Hana B1, Camille first-timer, Théo lurker):
-                     "A 'I'm not ready' panic button that just lets me move
-                     into an observer slot for the rest of this stage." Quiet
-                     affordance — no broadcast to the room, no flashing UI.
-                     Writes /sessions/{code}/rooms/{room}/observers/{cid}
-                     which the score engine reads to skip participation-
-                     pressure events for this client. -->
-                <button id="observer-btn" class="observer-btn"
-                        type="button"
-                        data-i18n="room.observer-btn"
-                        data-i18n-title="room.observer-btn-title"
-                        title="Move into the observer role — you can still see everything but no one will ask you to commit.">
-                  I'm just observing
-                </button>
+                <!-- The "I'm just observing" button was removed 2026-06-02 (user
+                     request: judged useless). Module B still has its own role-based
+                     "I'd rather just observe" affordance (#modB-observe-instead-btn),
+                     which is the observer ROLE in the roleplay — unrelated to this. -->
                 <button id="leave-btn" title="Leave">Leave</button>
               </div>
             </div>

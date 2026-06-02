@@ -2,11 +2,11 @@
  *
  * UX-overload Phase-3 item #5: control-row clarity.
  *
- *   - Desktop: Teams / observe / leave stay inline in the control row (the
- *     overflow <details> is display:contents), so nothing regresses.
+ *   - Desktop: Teams / leave stay inline in the control row (the overflow
+ *     <details> is display:contents), so nothing regresses.
  *   - Narrow: "Call a facilitator" is the prominent primary action and the
  *     secondary actions collapse behind a "More" disclosure; opening it reveals
- *     observe / leave.
+ *     leave. (The "I'm just observing" button was removed 2026-06-02.)
  *
  * The participant control row lives in the always-present #app stage-row, so we
  * just surface #app. Registered in the mobile testMatch for per-device cover.
@@ -39,8 +39,8 @@ test.describe("Control-row clarity", () => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await surfaceRoom(page);
     // Call + the secondary actions are all visible inline; the More toggle is not.
+    // (#observer-btn "I'm just observing" was removed 2026-06-02 — Leave remains.)
     await expect(page.locator("#call-prof-btn")).toBeVisible();
-    await expect(page.locator("#observer-btn")).toBeVisible();
     await expect(page.locator("#leave-btn")).toBeVisible();
     await expect(page.locator(".stage-controls--participant .stage-overflow-toggle")).toBeHidden();
   });
@@ -53,13 +53,11 @@ test.describe("Control-row clarity", () => {
     const toggle = page.locator(".stage-controls--participant .stage-overflow-toggle");
     await expect(toggle).toBeVisible();
 
-    // collapsed by default: observe / leave are not shown
-    await expect(page.locator("#observer-btn")).toBeHidden();
+    // collapsed by default: the secondary actions (Leave) are not shown
     await expect(page.locator("#leave-btn")).toBeHidden();
 
     // open the disclosure → the secondary actions appear
     await toggle.click();
-    await expect(page.locator("#observer-btn")).toBeVisible();
     await expect(page.locator("#leave-btn")).toBeVisible();
   });
 
