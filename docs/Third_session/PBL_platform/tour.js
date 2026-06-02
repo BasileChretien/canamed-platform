@@ -130,7 +130,7 @@
     ],
     // Module A first-entry mini-tour: 3 steps × ~10s each.
     studentModA: [
-      { anchor: "modA-bullet-progress",
+      { anchor: "modA-next-step",
         titleKey: "tour.studentModA.1.title", bodyKey: "tour.studentModA.1.body",
         placement: "bottom" },
       { anchor: "chart-section-history",

@@ -45,13 +45,12 @@ test("leaderboard ships CLOSED (no open attribute on #leaderboard-card)", () => 
     "the leaderboard must not be open by default (was dominating Welcome + Module A)");
 });
 
-test("renderStage auto-opens the leaderboard only at Wrap-up, not Welcome", () => {
-  // the surviving auto-open is gated on the LAST stage only
-  assert.match(SCRIPT, /lb && viewStage === STAGE_COUNT - 1\)\s*lb\.open = true/,
-    "leaderboard should auto-open only at the wrap-up stage");
-  // the old Welcome (viewStage 0) auto-open must be gone
-  assert.doesNotMatch(SCRIPT, /viewStage === 0 \|\| viewStage === STAGE_COUNT - 1\)\s*lb\.open/,
-    "leaderboard must no longer force-open at Welcome (empty board)");
+test("renderStage never auto-opens the leaderboard (manual disclosure only)", () => {
+  // User request 2026-06-02: the leaderboard must open ONLY when the student
+  // clicks its triangle — renderStage must not force `.open` on it on ANY stage
+  // (the previous Wrap-up auto-open read as the page opening it by itself).
+  assert.doesNotMatch(SCRIPT, /lb\.open\s*=\s*true/,
+    "renderStage must not auto-open the leaderboard on any stage");
 });
 
 /* ---------------------- Stage-1 callouts demoted ---------------------- */
