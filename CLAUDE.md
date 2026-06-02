@@ -90,10 +90,15 @@ DB). Until that Console toggle is flipped, clients still hit "Checking…" →
 2. **Restrict the API key (HIGH).** The Firebase web API key is necessarily
    public in the served HTML, but it should be locked down:
    - GCP Console → Credentials → the browser key → Application restrictions =
-     HTTP referrers (`canamed.web.app`, `*.firebaseapp.com`); API
+     HTTP referrers (`canamed-69785.web.app`, `*.firebaseapp.com`); API
      restrictions = only the Firebase services actually used.
    - ✅ **Done 2026-05-23** — browser key locked to HTTP referrers and scoped
      to only the Firebase services in use.
+   - NB (corrected 2026-06-02): the **live platform URL is
+     `https://canamed-69785.web.app`** (the project's default Hosting site) —
+     NOT `canamed.web.app`, which 404s. The referrer allowlist must therefore
+     include `canamed-69785.web.app` (the site works, so the real Console
+     allowlist already does; this doc previously read `canamed.web.app`).
    - `Verify:` GCP Console → APIs & Services → Credentials → browser key shows
      HTTP-referrer + API restrictions (Console-only — no code signal).
 
