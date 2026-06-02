@@ -7102,17 +7102,22 @@ body.locked .global-settings { display: none; }
   justify-content: center;
   padding: 4px 0;
 }
+/* Filled primary CTA — white on --primary (blue), the same a11y-safe pattern
+   as .rcol-tab.is-active. The previous outline style used var(--accent), which
+   resolves to the brand ORANGE (#e08a1e): orange-on-white is only 2.68:1 and
+   failed axe color-contrast once the chat became the Module A default
+   (2026-06-02). White-on-primary clears 4.5:1 in every theme. */
 .moda-chat-consent-btn {
   padding: 8px 14px;
   border-radius: 6px;
-  border: 1px solid var(--accent, #1763a6);
-  background: var(--card-bg-inset, #fff);
-  color: var(--accent, #1763a6);
+  border: 1px solid var(--primary, #1763a6);
+  background: var(--primary, #1763a6);
+  color: #fff;
   cursor: pointer;
   font: inherit;
   font-weight: 600;
 }
-.moda-chat-consent-btn:hover { background: var(--accent-bg-subtle, #eef5fb); }
+.moda-chat-consent-btn:hover { filter: brightness(0.94); }
 .moda-chat-transcript {
   display: flex;
   flex-direction: column;
