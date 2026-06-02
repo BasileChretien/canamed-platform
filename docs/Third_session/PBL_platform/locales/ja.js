@@ -389,8 +389,7 @@
   "modA.phase.exchange.time": "10分",
   "modA.phase.bullets.label": "要点を書く",
   "modA.phase.bullets.time": "5分",
-  "modA.vignette.hint": "何を <em>問診</em>・<em>診察</em>・<em>検査</em> するかをグループで決めてください — 各結果は要求に応じて開示されます。臨床総合判断を完了すると、ディスカッション項目が解放されます。",
-  "modA.vignette.everyone": "👥 <strong>全員が対等に — 部屋の全ての声を聞く。</strong>「フランスと日本を比較する」項目を終える前に、Caenと名古屋の両方の声が発言されたか確認してください。",
+  // modA.vignette.hint / modA.vignette.everyone は 2026-06-01 に重複削除。
   "modA.discussion.compare-rule": "🗣️ <strong>比較項目:</strong> 次に進む前に、Caenと名古屋の両方の声が発言する必要があります。早く合意することではなく、比較し議論することが目的です。",
   "modA.answers.title": "グループ回答 — モジュールA",
   "modA.answers.bullet.plan.label": "1. この患者へのあなたのグループの第一選択の方針",
@@ -437,7 +436,9 @@
   "coach.dismiss": "このガイドをこのセッションの間非表示にする",
   "reference-section.title": "📚 背景・ガイドライン (必要に応じて開いてください)",
   "modA.chart.title": "あなたのコンサルテーションノート — <em>ルフェーブル氏</em>、本日",
-  "modA.chart.team-click-warning": "👥 <strong>クリックはすべてチームの意思決定です。</strong> 問診・診察・検査・決定したことはすべて<em>ルームの全員</em>に記録され、チームの選択として扱われます。<strong>まず話し合ってから、一緒にクリックしてください。</strong>",
+  // 2026-06-01 統合：「共有カルテ」の枠組み（旧 modA.chart.subtitle、廃止）と
+  // 「クリックはすべてチームの意思決定」のルールをこの 1 行に集約。
+  "modA.chart.team-click-warning": "👥 <strong>ルフェーブル氏の共有カルテです。</strong> チームが問診・診察・検査・決定したことはすべて<em>ルームの全員</em>に記録され、チームの選択として扱われます。<strong>まず話し合ってから、一緒にクリックしてください。</strong>",
   "modA.decision.ready-when": "解除条件:",
   "modA.decision.unlocked": "新しいチーム意思決定が開きました",
   "modA.decision.unlock.hypotheses": "作業仮説を追加する",
@@ -446,7 +447,7 @@
   "modA.decision.unlock.labs": "少なくとも1つの検査を行う",
   "modA.decision.unlock.synthesis": "臨床総合判断を完了する",
   "modA.decision.unlock.after": "チームが前の意思決定を確定する",
-  "modA.chart.subtitle": "あなたとパートナーがルフェーブル氏を診る医師です。問診・診察・検査・決定したことはすべて<em>共有カルテ</em>に記録されます。",
+  // modA.chart.subtitle は 2026-06-01 に廃止 — team-click-warning に統合。
   "modA.chart.hypotheses.title": "作業仮説",
   "modA.chart.hypotheses.hint": "問診と身体診察が終わったところで、チームで合意してください: <strong>何を疑いますか?</strong> 確定したいまたは除外したい鑑別診断を2つ以上挙げましょう。(検査は、仮説があり、かつレッドフラッグ(重篤な原因+馬尾症候群+下肢神経)のスクリーニングが完了すると解禁されます。)",
   "modA.chart.impressions.title": "最初の印象(任意)",
@@ -482,7 +483,7 @@
   "modA.coach.btn.open-discussion": "ディスカッションを開く →",
   "modA.coach.btn.open-answers": "グループ回答を開く →",
   "modA.coach.synthesis-unlocked": "✓ <strong>総合判断完了 — フェーズ3が開きました。</strong> 下に6つのディスカッション項目があります。各比較項目では、Caenと名古屋の両方の声が発言する必要があります。",
-  "modB.coach.pick-role": "ロールプレイを始める前に下で役割を選んでください。観察者がタイムキーパーを務めます。",
+  "modB.coach.pick-role": "まず状況を一緒に読み、それから下で役割に就いてください — 正解はありません。あとで役割を交代して再演します。",
   "modB.coach.roleplay": "役割が決まりました! 場面を演じてください — フェーズ2はロールプレイ、フェーズ3は下の項目を使ったディスカッションです。",
   "modB.coach.bullets-partial": "要点を記録中 — 3つすべてを満たすには、あと{n}つ追加が必要です。",
   "modB.coach.bullets-complete": "✓ 3つの要点がすべて記録されました。さらに加筆するか、ファシリテーターをお待ちください。",

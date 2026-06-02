@@ -557,9 +557,11 @@
       "modA.phase.bullets.label": "Write bullets",
       "modA.phase.bullets.time": "5 min",
 
-      // Module A — vignette hints
-      "modA.vignette.hint": "Decide what to <em>ask</em>, <em>examine</em> and <em>investigate</em> — each result is revealed on request. Completing the clinical synthesis unlocks the discussion prompts.",
-      "modA.vignette.everyone": "👥 <strong>Work as equals — every voice in the room.</strong> Before you finish a \"Compare France &amp; Japan\" prompt, check that both a Caen <em>and</em> a Nagoya voice have spoken.",
+      // Module A — vignette hints REMOVED 2026-06-01 (de-dup): modA.vignette.hint
+      // duplicated the state-aware coach + the investigations-locked hint;
+      // modA.vignette.everyone duplicated modA.discussion.compare-rule (below),
+      // which is pinned in the Discussion panel exactly when the compare prompts
+      // are live. Both keys retired — fr/ja copies removed too.
 
       // Module A — Discussion-panel banner
       "modA.discussion.compare-rule": "🗣️ <strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice must speak before you move on. The point is to compare and debate, not to agree quickly.",
@@ -626,7 +628,10 @@
 
       // Chart-metaphor framing (2026-05-18 pedagogist's strongest claim)
       "modA.chart.title": "Your consultation note — <em>M. Lefebvre</em>, today",
-      "modA.chart.team-click-warning": "👥 <strong>Every click is a team decision.</strong> Anything you ask, examine, investigate or decide is recorded for <em>everyone</em> in your room — and counts as the team's choice. <strong>Discuss first, then click together.</strong>",
+      // Merged 2026-06-01: now carries both the "shared chart" framing (was
+      // modA.chart.subtitle, retired) and the "every click is a team decision"
+      // rule — they repeated the same verb-list and idea.
+      "modA.chart.team-click-warning": "👥 <strong>Your shared chart for M. Lefebvre.</strong> Everything the team asks, examines, investigates or decides is recorded for <em>everyone</em> in the room and counts as the team's choice. <strong>Discuss first, then click together.</strong>",
       // Locked-decision UI (per 2026-05-18 PBL specialist panel)
       "modA.decision.ready-when": "Ready when:",
       "modA.decision.unlocked": "A new team decision just opened",
@@ -636,7 +641,7 @@
       "modA.decision.unlock.labs": "run at least one investigation",
       "modA.decision.unlock.synthesis": "complete the clinical synthesis",
       "modA.decision.unlock.after": "the team locks in the previous decision",
-      "modA.chart.subtitle": "You and your partners are the clinicians seeing M. Lefebvre. Everything you ask, examine, investigate or decide goes into <em>your shared chart</em>.",
+      // modA.chart.subtitle RETIRED 2026-06-01 — merged into team-click-warning.
       "modA.chart.hypotheses.title": "Working hypotheses",
       "modA.chart.hypotheses.hint": "Now that you've taken a history and examined the patient, agree as a team: <strong>what do you suspect?</strong> List 2 or more differentials you want to rule in or rule out. (Investigations unlock once you have a hypothesis AND have completed the red-flag screen + leg neuro exam.)",
       "modA.chart.impressions.title": "First impressions (optional)",

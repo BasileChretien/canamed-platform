@@ -285,6 +285,16 @@ main {
   .columns.modB-columns { grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); }
 }
 
+/* Progressive right-column reveal (2026-06-01). While none of Module A's
+   right-column tabs (Decide together / Debate / Our final answers) have become
+   actionable yet, revealModARightCol() adds .rcol-collapsed so the case work
+   (col-left) gets the full width instead of sitting beside an empty grid track.
+   Scoped to #stage-1 so it can never affect Module B or the wrap-up. The
+   per-tab `hidden` reveal reuses the existing `.rcol-tab[hidden]{display:none}`
+   rule further down. */
+#stage-1 .columns.rcol-collapsed { grid-template-columns: 1fr; }
+#stage-1 .columns.rcol-collapsed > .col-right { display: none; }
+
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }
 .wrapup-download-btn.hidden { display: none; }
@@ -3770,6 +3780,10 @@ h2, h3 { text-wrap: balance; }
     box-shadow: 0 0 0 2px var(--card);
   }
   .mtab-badge[hidden] { display: none; }
+  /* Progressive reveal (2026-06-02): a mirrored tab whose canonical source is
+     not yet revealed is [hidden] — but .mtab sets display:flex, which would
+     beat the UA [hidden] default, so hide it explicitly. */
+  .mtab[hidden] { display: none; }
 }
 
 /* ===================== CANAMED SPLASH (top-level gate) =====================
