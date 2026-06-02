@@ -179,6 +179,68 @@
     el.dataset.kind = kind || "";
   }
 
+  /* ------------- points-scored feedback (2026-06-02) ------------- *
+   * The scoring engine already AWARDS/penalises a typed question (the bridge
+   * calls onAward/onPenalty synchronously at submit time, and the right-column
+   * score sidebar updates). What was missing was point-of-action feedback so
+   * students SEE that a question scored (or cost) points. We render two
+   * surfaces per newly-scored family: a floating toast (green gain / amber
+   * loss, reusing script.js toast()) and an inline chip under the chat. The
+   * chip is aria-hidden because the toast (role=status) + the sidebar already
+   * announce the change to screen readers. */
+  function _scoreLabel(fam) {
+    if (!fam) return "";
+    var lbl = fam.label;
+    if (lbl && typeof lbl === "object") {
+      var lang = _curLang();
+      return lbl[lang] || lbl.en || "";
+    }
+    return lbl ? String(lbl) : "";
+  }
+
+  function _renderScoreChip(transcriptEl, kind, points, label) {
+    if (!transcriptEl) return;
+    var chip = _ce("div", {
+      "class": "moda-chat-score " + (kind === "award" ? "is-award" : "is-penalty"),
+      "aria-hidden": "true"
+    });
+    var pts = _ce("span", { "class": "moda-chat-score-pts" },
+      (kind === "award" ? "✓ +" : "✗ −") + points);
+    var lab = _ce("span", { "class": "moda-chat-score-label" }, label);
+    chip.appendChild(pts);
+    chip.appendChild(lab);
+    transcriptEl.appendChild(chip);
+    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+  }
+
+  function _showScoreFeedback(res, transcriptEl) {
+    if (!res || !res.score) return;
+    var SC = window.modAQuestionScoring;
+    var byId = (SC && typeof SC.familyById === "function")
+      ? SC.familyById : function () { return null; };
+    var doToast = (typeof window.toast === "function") ? window.toast : null;
+    (res.score.award || []).forEach(function (id) {
+      var fam = byId(id);
+      var pts = (fam && fam.points) || 0;
+      var label = _scoreLabel(fam);
+      _renderScoreChip(transcriptEl, "award", pts, label);
+      if (doToast) {
+        doToast("+" + pts + " ✓ " + label,
+          _t("modA.chat.score.awardSub", "Good question — points added to your team."), "gain");
+      }
+    });
+    (res.score.penalty || []).forEach(function (id) {
+      var fam = byId(id);
+      var pts = (fam && fam.points) || 0;
+      var label = _scoreLabel(fam);
+      _renderScoreChip(transcriptEl, "penalty", pts, label);
+      if (doToast) {
+        doToast("−" + pts + " — " + label,
+          _t("modA.chat.score.penaltySub", "That cost your team points — see why in the score panel."), "loss");
+      }
+    });
+  }
+
   /* ------------- Firebase wiring ------------- */
 
   function _refs() {
@@ -391,6 +453,10 @@
           _fallbackStreak = 0;
           _setStatus(statusEl, "", "");
         }
+        // Point-of-action feedback for any points the question just scored
+        // (or cost). Runs on the fallback path too — scoring is local + already
+        // applied, so the team still earns the points even if the LLM was down.
+        _showScoreFeedback(res, transcriptEl);
       }).catch(function (err) {
         _setStatus(statusEl, _t("modA.chat.error",
           "Something went wrong — try a different question."), "error");

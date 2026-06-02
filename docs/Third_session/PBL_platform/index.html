@@ -1772,11 +1772,6 @@
                             id="prompt-prev"
                             data-i18n="prompts.prev"
                             aria-label="Previous prompt">← Previous</button>
-                    <button type="button" class="prompt-skip"
-                            id="prompt-skip"
-                            data-i18n="prompts.skip">
-                      Discussed verbally — skip ahead →
-                    </button>
                     <button type="button" class="prompt-next"
                             id="prompt-next"
                             data-i18n="prompts.next">
@@ -1917,6 +1912,21 @@
 
               <p class="typing-line hidden" id="typing-moduleA"></p>
 
+              <!-- Completion CTA (2026-06-02): appears once all four bullets
+                   above have at least one entry (toggled by updateModANextStep).
+                   Pings the facilitator (callForHelp) that the room is ready to
+                   move on to Module B. -->
+              <div class="answers-complete-cta hidden" id="modA-answers-complete">
+                <p class="answers-complete-msg"
+                   data-i18n="modA.answers.complete.msg">
+                  ✓ All four answers are in. Ready for the roleplay?
+                </p>
+                <button type="button" class="call-next-btn" id="modA-call-next-btn"
+                        data-i18n="modA.answers.complete.cta">
+                  Call a facilitator to move to Module B →
+                </button>
+              </div>
+
               <!-- Unsorted bucket: pre-refactor entries (no bulletKey) and
                    anything the new code couldn't categorise. Hidden when
                    empty; shown with a heading explaining the bucket. -->
@@ -1947,59 +1957,10 @@
              prompts remained but are presented under a thin Phase 3
              heading with the ground rule pinned; the 3 bullets became
              the labels of a structured Group answers form. -->
-        <nav class="phase-stepper" aria-label="Module B phases">
-          <ol class="phase-stepper-list">
-            <li class="phase-step is-current" data-phase="setup">
-              <button type="button" class="phase-step-btn">
-                <span class="phase-step-num">1</span>
-                <span class="phase-step-label" data-i18n="stage.modB.phase1.title">Phase 1 — Set up</span>
-                <span class="phase-step-time" data-i18n="modB.phase.setup.time">6 min</span>
-              </button>
-            </li>
-            <li class="phase-step" data-phase="play">
-              <button type="button" class="phase-step-btn">
-                <span class="phase-step-num">2</span>
-                <span class="phase-step-label" data-i18n="stage.modB.phase2.title">Phase 2 — Play it out</span>
-                <span class="phase-step-time" data-i18n="modB.phase.play.time">12 + 3 min</span>
-              </button>
-            </li>
-            <li class="phase-step" data-phase="exchange">
-              <button type="button" class="phase-step-btn">
-                <span class="phase-step-num">3</span>
-                <span class="phase-step-label" data-i18n="stage.modB.phase3.title">Phase 3 — The exchange</span>
-                <span class="phase-step-time" data-i18n="modB.phase.exchange.time">15 min</span>
-              </button>
-            </li>
-            <li class="phase-step" data-phase="bullets">
-              <button type="button" class="phase-step-btn">
-                <span class="phase-step-num">4</span>
-                <span class="phase-step-label" data-i18n="stage.modB.phase4.title">Phase 4 — Write bullets</span>
-                <span class="phase-step-time" data-i18n="modB.phase.bullets.time">5 min</span>
-              </button>
-            </li>
-          </ol>
-        </nav>
-
-        <!-- Synced phase navigation (2026-05-27): the room's phase is shared via
-             RTDB (rooms/$room/moduleB/phase); any participant can move it with
-             Prev/Next or by tapping a phase chip above. Only the current phase's
-             action sections show (applyModBPhaseVisibility); reference material
-             (SPIKES, useful sentences, history, guidelines, recap) stays
-             available throughout. -->
-        <div class="phase-nav" id="modB-phase-nav">
-          <button class="phase-nav-btn" id="modB-phase-prev" type="button"
-                  data-i18n="modB.phase.prev">← Previous</button>
-          <span class="phase-nav-indicator" id="modB-phase-indicator"
-                role="status" aria-live="polite"></span>
-          <button class="phase-nav-btn phase-nav-btn--next" id="modB-phase-next" type="button"
-                  data-i18n="modB.phase.next">Next →</button>
-        </div>
-        <!-- Make the advance mechanic explicit (user request 2026-06-02): the
-             phases are shared, so any participant tapping Next moves the WHOLE
-             room on. Students weren't sure when to do that. -->
-        <p class="phase-nav-hint" id="modB-phase-nav-hint"
-           data-i18n="modB.phase.nav-hint" data-i18n-html>Everyone moves together — tap
-          <strong>Next →</strong> when your group has finished this phase.</p>
+        <!-- The 4-phase stepper + phase-nav were RELOCATED 2026-06-02 (user
+             request) to sit directly after the "Pick your role" card below, so
+             students choose a role first and only then meet the phase timeline.
+             See the .phase-stepper block inside .col-left. -->
 
         <div class="next-step-coach" id="modB-next-step" role="status" aria-live="polite">
           <span class="next-step-icon" aria-hidden="true">👉</span>
@@ -2319,6 +2280,60 @@
              role="status" aria-live="polite"></p>
         </div>
 
+        <!-- Phase stepper + synced phase navigation (RELOCATED here 2026-06-02,
+             user request): shown right after the role picker so the phase
+             timeline appears only once roles are chosen. The room's phase is
+             shared via RTDB (rooms/$room/moduleB/phase); any participant can
+             move it with Prev/Next or by tapping a phase chip. Only the current
+             phase's action sections show (applyModBPhaseVisibility); reference
+             material stays available throughout. -->
+        <nav class="phase-stepper" aria-label="Module B phases">
+          <ol class="phase-stepper-list">
+            <li class="phase-step is-current" data-phase="setup">
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">1</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase1.title">Phase 1 — Set up</span>
+                <span class="phase-step-time" data-i18n="modB.phase.setup.time">6 min</span>
+              </button>
+            </li>
+            <li class="phase-step" data-phase="play">
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">2</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase2.title">Phase 2 — Play it out</span>
+                <span class="phase-step-time" data-i18n="modB.phase.play.time">12 + 3 min</span>
+              </button>
+            </li>
+            <li class="phase-step" data-phase="exchange">
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">3</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase3.title">Phase 3 — The exchange</span>
+                <span class="phase-step-time" data-i18n="modB.phase.exchange.time">15 min</span>
+              </button>
+            </li>
+            <li class="phase-step" data-phase="bullets">
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">4</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase4.title">Phase 4 — Write bullets</span>
+                <span class="phase-step-time" data-i18n="modB.phase.bullets.time">5 min</span>
+              </button>
+            </li>
+          </ol>
+        </nav>
+        <div class="phase-nav" id="modB-phase-nav">
+          <button class="phase-nav-btn" id="modB-phase-prev" type="button"
+                  data-i18n="modB.phase.prev">← Previous</button>
+          <span class="phase-nav-indicator" id="modB-phase-indicator"
+                role="status" aria-live="polite"></span>
+          <button class="phase-nav-btn phase-nav-btn--next" id="modB-phase-next" type="button"
+                  data-i18n="modB.phase.next">Next →</button>
+        </div>
+        <!-- Make the advance mechanic explicit (user request 2026-06-02): the
+             phases are shared, so any participant tapping Next moves the WHOLE
+             room on. Students weren't sure when to do that. -->
+        <p class="phase-nav-hint" id="modB-phase-nav-hint"
+           data-i18n="modB.phase.nav-hint" data-i18n-html>Everyone moves together — tap
+          <strong>Next →</strong> when your group has finished this phase.</p>
+
         <!-- SPIKES + useful sentences: compact reference strips, available
              throughout the scene without taking column-inches.  -->
         <div class="spikes-strip">
@@ -2518,6 +2533,21 @@
           </div>
 
           <p class="typing-line hidden" id="typing-moduleB"></p>
+
+          <!-- Completion CTA (2026-06-02): appears once all three bullets above
+               have at least one entry (toggled by updateModBNextStep). Pings the
+               facilitator (callForHelp) that the room is ready for the final
+               (wrap-up) section. -->
+          <div class="answers-complete-cta hidden" id="modB-answers-complete">
+            <p class="answers-complete-msg"
+               data-i18n="modB.answers.complete.msg">
+              ✓ All three answers are in. Ready to wrap up?
+            </p>
+            <button type="button" class="call-next-btn" id="modB-call-next-btn"
+                    data-i18n="modB.answers.complete.cta">
+              Call a facilitator to go to the final section →
+            </button>
+          </div>
 
           <div class="answer-bullet answer-bullet-unsorted hidden" data-bullet-key="_unsorted">
             <label class="answer-bullet-label answer-bullet-label-muted"

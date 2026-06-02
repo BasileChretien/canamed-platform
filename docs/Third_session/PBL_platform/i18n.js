@@ -423,6 +423,7 @@
       // the help button). {seconds} is interpolated client-side.
       "room.call.throttle-recall": "Please wait {seconds}s before re-calling a facilitator.",
       "room.call.throttle-again": "Please wait {seconds}s before calling a facilitator again.",
+      "room.call.sent": "Facilitator called ✓",
       // group-answer edit / delete error alerts (network failures)
       "room.answer.err.edit-failed": "Your edit could not be saved — check your connection. Your text: ",
       "room.answer.err.delete-failed": "That point could not be deleted — check your connection and try again.",
@@ -578,6 +579,11 @@
       "modA.answers.bullet.takehome.label": "4. One thing you each take home",
       "modA.answers.bullet.takehome.placeholder": "one sentence per person",
       "modA.answers.bullet.unsorted.label": "Other points (not yet attached to a bullet)",
+      // Completion CTA — appears once all four Module A bullets have an entry.
+      "modA.answers.complete.msg": "✓ All four answers are in. Ready for the roleplay?",
+      "modA.answers.complete.cta": "Call a facilitator to move to Module B →",
+      // facilitator-facing message sent on the help-call (shown on the dashboard)
+      "modA.answers.complete.callMsg": "Module A done — ready to move on to Module B.",
 
       // Module B — phase stepper time chips (titles re-use existing
       // stage.modB.phaseN.title keys for cross-version stability)
@@ -616,6 +622,11 @@
       "modB.answers.bullet.practice-change.label": "3. One thing each of you will do differently, in your own country, because of this discussion",
       "modB.answers.bullet.practice-change.placeholder": "one sentence per person",
       "modB.answers.bullet.unsorted.label": "Other points (not yet attached to a bullet)",
+      // Completion CTA — appears once all three Module B bullets have an entry.
+      "modB.answers.complete.msg": "✓ All three answers are in. Ready to wrap up?",
+      "modB.answers.complete.cta": "Call a facilitator to go to the final section →",
+      // facilitator-facing message sent on the help-call (shown on the dashboard)
+      "modB.answers.complete.callMsg": "Module B done — ready for the final wrap-up section.",
 
       // Shared button label used by every "Add" button in the new
       // bulleted form. Kept short so it fits next to the input.
@@ -666,6 +677,9 @@
       "modA.chat.thinking": "Mr. Lefebvre is thinking…",
       "modA.chat.fallbackNotice": "Patient endpoint unavailable — using a stub reply so the team can keep going.",
       "modA.chat.error": "Something went wrong — try a different question.",
+      // Points-scored feedback shown when a typed question earns (or costs) points.
+      "modA.chat.score.awardSub": "Good question — points added to your team.",
+      "modA.chat.score.penaltySub": "That cost your team points — see why in the score panel.",
       "modA.contrib.acted": "contributed",
       "modA.contrib.not-yet": "not yet",
       "modA.glossary.marker-label": "has a plain-language definition",
@@ -909,7 +923,6 @@
       // Progressive single-prompt UI (2026-05-18 user request)
       "prompts.reply.placeholder": "Type a short note from your group's discussion — anyone in the room can edit and it autosaves.",
       "prompts.prev": "← Previous",
-      "prompts.skip": "Discussed verbally — skip ahead →",
       "prompts.next": "Save and next →",
       "prompts.next.last": "Save and finish →",
       "prompts.done.msg": "✓ <strong>You've worked through all the discussion prompts.</strong> Now capture your team's bullets.",

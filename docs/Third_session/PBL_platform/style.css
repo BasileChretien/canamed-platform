@@ -7339,3 +7339,112 @@ body[data-theme="high-contrast"] .moda-chat-bub-assistant {
 body.moda-llm-active #group-history {
   display: none !important;
 }
+
+/* ==========================================================================
+   2026-06-02 user-requested polish (Module A/B)
+   - red "inappropriate choice" reveal buttons (was green for all)
+   - green "points gained" award toast
+   - in-chat points-scored chips
+   - Group-answers "call a facilitator to advance" completion CTA
+   Appended last so these override the base button / toast rules above.
+   ========================================================================== */
+
+/* (#3) An inappropriate exam/investigation (one the case did not need): the
+   revealed button + its inline answer turn RED instead of the usual green ✓,
+   so students see at a glance the move cost points. Higher specificity than
+   `.req-btn.done` / `.req-btn.done::before` so it wins regardless of order. */
+/* Hardcoded #c0392b / #fdecea (NOT the --key token) so the red treatment is
+   identical in light + dark — matches the existing wrong-decision styling
+   (.decision.committed.wrong). The dark-theme --key is a light salmon, which
+   would give poor contrast on the light "wrong" background. */
+.req-btn.done.wrong-choice {
+  background: #fdecea;
+  color: #c0392b;
+  border-color: #c0392b;
+}
+.req-btn.done.wrong-choice:hover {
+  background: #fdecea;
+  border-color: #c0392b;
+}
+.req-btn.done.wrong-choice::before {
+  content: "\2717  ";              /* ✗ */
+  color: #c0392b;
+  font-weight: 700;
+}
+.req-inline-reveal.wrong .req-inline-answer { color: #c0392b; }
+.req-inline-reveal.wrong { border-left: 3px solid #c0392b; padding-left: 8px; }
+
+@media (prefers-contrast: more) {
+  .req-btn.done.wrong-choice { border-width: 2px; }
+}
+
+/* (#2) Award toast — calm green, mirrors `.toast.loss` (amber) for losses. */
+.toast.gain {
+  background: var(--ok-strong, #176b3a);
+  color: #fff;
+  border: 1px solid var(--ok, #1e8449);
+}
+.toast.gain .toast-sub { opacity: 0.95; }
+
+/* (#2) In-chat points chip rendered under the student's question turn. Green
+   for points earned, amber/red for points lost. aria-hidden in markup — the
+   toast + the right-column score sidebar carry the same info for SR users. */
+.moda-chat-score {
+  align-self: flex-start;
+  margin: 2px 0 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+  display: inline-flex;
+  gap: 6px;
+  max-width: 100%;
+}
+.moda-chat-score .moda-chat-score-label { font-weight: 600; }
+/* Hardcoded palettes (theme-independent) so the chip keeps strong contrast on
+   the chat transcript in both light + dark themes. */
+.moda-chat-score.is-award {
+  background: #e6f4ec;
+  color: #176b3a;
+  border: 1px solid #1e8449;
+}
+.moda-chat-score.is-penalty {
+  background: #fdecea;
+  color: #c0392b;
+  border: 1px solid #c0392b;
+}
+
+/* (#5/#6) Completion CTA inside the Group-answers card — appears once every
+   bullet has an entry, inviting the room to ping the facilitator to advance. */
+.answers-complete-cta {
+  margin-top: var(--s-2, 14px);
+  padding: 12px 14px;
+  border: 1px solid #1e8449;
+  border-radius: var(--r-sm, 8px);
+  background: #e6f4ec;            /* hardcoded so it stays high-contrast in dark mode */
+}
+.answers-complete-cta.hidden { display: none; }
+.answers-complete-msg {
+  margin: 0 0 8px;
+  font-weight: 700;
+  color: #176b3a;
+}
+.call-next-btn {
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: var(--r-sm, 8px);
+  border: 1px solid #1e8449;
+  background: #1e8449;
+  color: #fff;
+}
+.call-next-btn:hover { background: #176b3a; }
+.call-next-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.call-next-btn.called {
+  background: #e6f4ec;
+  color: #176b3a;
+  cursor: default;
+}

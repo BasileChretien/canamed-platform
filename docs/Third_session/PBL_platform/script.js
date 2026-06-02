@@ -141,6 +141,12 @@ let SYNTH_ID = "labs:0";          // the gate item that unlocks the prompts
 // must screen serious causes + cauda equina + examine the legs before synthesis
 let SYNTH_PREREQS = ["history:1", "history:2", "exam:3"];
 let ITEM_IDS = [];
+// Set of reveal-item ids that are a DELIBERATELY-WRONG clinical choice (each
+// maps to an entry in PENALTIES with a points cost). Used by renderButtons to
+// colour a revealed "inappropriate" item RED instead of the normal green
+// (user request 2026-06-02 — Module A examinations/investigations). Rebuilt
+// from window.PENALTIES whenever the scenario changes (applyScenario).
+let PENALTY_ITEM_IDS = new Set();
 function rebuildCaseDerived() {
   ITEM_IDS = [];
   if (typeof CASE !== "object" || !CASE) return;
@@ -149,6 +155,13 @@ function rebuildCaseDerived() {
       CASE[g].forEach((_, i) => ITEM_IDS.push(g + ":" + i));
     }
   });
+  // Derive the penalised-item set from the active PENALTIES list (window.PENALTIES
+  // wins after applyScenario; the top-level `PENALTIES` from case-content.js is
+  // the default). Each penalty's `item` is a "group:index" reveal id.
+  const pens = (typeof window !== "undefined" && Array.isArray(window.PENALTIES))
+    ? window.PENALTIES
+    : (typeof PENALTIES !== "undefined" && Array.isArray(PENALTIES)) ? PENALTIES : [];
+  PENALTY_ITEM_IDS = new Set(pens.map(p => p && p.item).filter(Boolean));
 }
 rebuildCaseDerived();
 function itemById(id) { const [g, i] = id.split(":"); return CASE[g][+i]; }
@@ -935,8 +948,9 @@ function toast(msg, sub, kind) {
     t.setAttribute("role", "status");
     document.body.appendChild(t);
   }
-  // "loss" gives the penalty toast its own (calm amber/red) styling
-  t.className = "toast" + (kind === "loss" ? " loss" : "");
+  // "loss" gives the penalty toast its own (calm amber/red) styling;
+  // "gain" gives an award toast a calm green so points-earned reads positive.
+  t.className = "toast" + (kind === "loss" ? " loss" : kind === "gain" ? " gain" : "");
   // build the visible content
   t.innerHTML = "";
   const head = document.createElement("div");
@@ -7619,6 +7633,56 @@ function renderCallProf() {
   }
 }
 
+/* ── Contextual "call a facilitator to advance" buttons (2026-06-02) ──────────
+ * When a room finishes Module A's four group-answer bullets (or Module B's
+ * three), a button appears in the Group-answers card that pings the facilitator
+ * with a phase-specific reason ("ready to move to Module B" / "ready for the
+ * final section"). It reuses the existing callForHelp channel + the same 30s
+ * throttle as #call-prof-btn, so the facilitator dashboard surfaces it exactly
+ * like any other help call (the reason rides in callForHelp.msg, ≤200 chars). */
+function _callFacilitatorToAdvance(msgKey, fallbackMsg) {
+  if (!refCallForHelp || isRoomAdmin) return false;
+  const now = Date.now();
+  if (now < lastHelpCallAt + HELP_CALL_THROTTLE_MS) {
+    const wait = Math.ceil((lastHelpCallAt + HELP_CALL_THROTTLE_MS - now) / 1000);
+    const msg = tFallback("room.call.throttle-again",
+      "Please wait {seconds}s before calling a facilitator again.").replace("{seconds}", wait);
+    alert(msg);
+    return false;
+  }
+  lastHelpCallAt = now;
+  const reason = tFallback(msgKey, fallbackMsg).slice(0, 200);
+  refCallForHelp.set({ by: myName, at: now, msg: reason })
+    .catch(e => console.error("advance call failed", e));
+  logEvent(myRoom, "help", { msg: reason });
+  if (typeof toast === "function") {
+    toast(tFallback("room.call.sent", "Facilitator called ✓"), reason, "gain");
+  }
+  return true;
+}
+
+/* Wire one of the advance buttons once; clicking pings the facilitator and
+ * flips the button into a "called" confirmation state. Idempotent. */
+function _wireAdvanceCallBtn(btnId, msgKey, fallbackMsg) {
+  const btn = el(btnId);
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  btn.addEventListener("click", () => {
+    if (_callFacilitatorToAdvance(msgKey, fallbackMsg)) {
+      btn.classList.add("called");
+      btn.textContent = tFallback("room.call.sent", "Facilitator called ✓");
+    }
+  });
+}
+
+/* Show/hide a Group-answers completion CTA. Also (re)wires its button so it
+ * works even if the card was rendered after initCallProf ran. */
+function _updateAnswersCompleteCta(boxId, btnId, complete, msgKey, fallbackMsg) {
+  _wireAdvanceCallBtn(btnId, msgKey, fallbackMsg);
+  const box = el(boxId);
+  if (box) box.classList.toggle("hidden", !complete);
+}
+
 /* ===================== ROOM VIEW: INTERACTIVE CASE ===================== */
 /* Seeded shuffle helpers for the case-action button display order.
  * User request (2026-05-18): "the ask the patients, examination,
@@ -8035,6 +8099,12 @@ function renderButtons() {
   document.querySelectorAll(".req-btn").forEach(btn => {
     const id = btn.dataset.id;
     btn.classList.toggle("done", !!revealed[id]);
+    // Inappropriate choice (an exam/investigation this case does not need):
+    // colour the revealed item RED instead of the normal green ✓, so students
+    // see at a glance that the move cost points (user request 2026-06-02). The
+    // penalty itself is still applied by the scoring engine (pen_mri / pen_dre /
+    // …). Only meaningful once revealed, so gate on revealed[id].
+    btn.classList.toggle("wrong-choice", !!revealed[id] && PENALTY_ITEM_IDS.has(id));
     // Investigations (imaging/bloods) are now FREELY clickable, like the
     // Examination (2026-06-02): no "screen the red flags first" warn cue. A
     // premature / un-indicated order still costs points via the scoring engine
@@ -8068,6 +8138,8 @@ function renderButtons() {
         // visual relationship "answer is under its button".
         btn.insertAdjacentElement("afterend", inline);
       }
+      // Tint the inline answer red too when this was an inappropriate choice.
+      inline.classList.toggle("wrong", PENALTY_ITEM_IDS.has(id));
       const item = itemById(id);
       const meta = revealed[id];
       if (item) {
@@ -8113,12 +8185,11 @@ function renderButtons() {
       inline.remove();
     }
   });
-  // Auto-collapse a chart section once every KEY item in it is revealed
-  // — sim 2026-05-19 finding (25 personas): "Could Module A let me
-  // collapse a chart section the moment I've ticked a 'done' box?"
-  // We only collapse ONCE per section (data-auto-collapsed flag) so a
-  // student who manually reopens it later isn't fought by the engine.
-  _autoCollapseCompletedChartSections();
+  // NB (2026-06-02): the chart sections used to auto-collapse once ~4 items in
+  // them were revealed (sim 2026-05-19 feature). That backfired — revealing an
+  // item closed the section the student was actively clicking in, forcing a
+  // reopen on every further click (user report). The auto-collapse was removed;
+  // students now open/close sections themselves and a click never closes them.
 }
 
 /* Build the anonymised per-room cohort progress strip used by
@@ -8183,44 +8254,11 @@ function _updateModABulletProgress() {
   });
 }
 
-/* Per chart-section: collapse the section once the team has done a
- * reasonable workup in it. "Reasonable" = the section's flagged `key`
- * item was revealed AND there are ≥ 4 items revealed, OR (for sections
- * without a key item like history/exam) ≥ 4 items revealed. Idempotent
- * — leaves alone any section the user reopened after our auto-collapse
- * (`data-auto-collapsed` flag) so the engine never fights an explicit
- * user choice. Sim 2026-05-19 (25 personas asked for this). */
-const _AUTO_COLLAPSE_MIN = 4;
-function _autoCollapseCompletedChartSections() {
-  const sectionIds = {
-    history: "chart-section-history",
-    exam:    "chart-section-exam",
-    labs:    "chart-investigations"
-  };
-  Object.keys(sectionIds).forEach(group => {
-    const sec = document.getElementById(sectionIds[group]);
-    if (!sec || !sec.hasAttribute("open")) return;
-    if (sec.dataset.autoCollapsed === "1") return;
-    const items = (CASE && CASE[group]) || [];
-    if (!items.length) return;
-    let revealedCount = 0;
-    let keyRevealed = false;
-    let keyExists = false;
-    items.forEach((it, i) => {
-      if (revealed[group + ":" + i]) revealedCount++;
-      if (it && it.key) {
-        keyExists = true;
-        if (revealed[group + ":" + i]) keyRevealed = true;
-      }
-    });
-    const done = (keyExists && keyRevealed) ||
-                 (revealedCount >= _AUTO_COLLAPSE_MIN);
-    if (done) {
-      sec.dataset.autoCollapsed = "1";
-      sec.removeAttribute("open");
-    }
-  });
-}
+/* The chart sections (Ask the patient / Examination / Investigations) no longer
+ * auto-collapse on reveal (removed 2026-06-02). Revealing an item used to close
+ * the section the student was clicking in once ~4 items were revealed, which
+ * forced an annoying reopen on every further click. Students now control the
+ * open/closed state themselves; a reveal never collapses a section. */
 /* renderFindings was the renderer for the "What we're finding" tab
  * (a chronological log of all revealed items). That tab was removed
  * 2026-05-18 — the inline-reveal chips under each chart button now
@@ -8319,6 +8357,11 @@ if (typeof window !== "undefined") {
   window._test_setRoomVotes     = function (m) { roomVotes = m || {}; };
   window._test_setModBExchangeReplies = function (m) { modBExchangeReplies = m || {}; };
   window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
+  // Set the group-answers map (per module) so E2E can drive the
+  // all-bullets-covered completion CTAs without a Firebase round-trip.
+  window._test_setAnswers       = function (m) {
+    answers = { moduleA: (m && m.moduleA) || {}, moduleB: (m && m.moduleB) || {} };
+  };
   window._test_setViewStage     = function (n) {
     // Drive both viewStage and roomStage so renderStage's lock/coach
     // branches see a consistent state. Used by tour-stage-dismiss.
@@ -8469,7 +8512,6 @@ function renderPrompts() {
   const textEl = el("prompt-text");
   const replyEl = el("prompt-reply");
   const prevBtn = el("prompt-prev");
-  const skipBtn = el("prompt-skip");
   const nextBtn = el("prompt-next");
 
   if (currentEl) currentEl.textContent = String(cursor + 1);
@@ -8507,7 +8549,6 @@ function renderPrompts() {
   if (progressive && !progressive.dataset.wired) {
     progressive.dataset.wired = "1";
     if (nextBtn) nextBtn.addEventListener("click", () => _advancePromptCursor(+1));
-    if (skipBtn) skipBtn.addEventListener("click", () => _advancePromptCursor(+1));
     if (prevBtn) prevBtn.addEventListener("click", () => _advancePromptCursor(-1));
     if (replyEl) {
       replyEl.addEventListener("input", _onPromptReplyInput);
@@ -9758,6 +9799,12 @@ function updateModANextStep() {
   const allBulletsCovered = ["plan", "differ", "disagree", "takehome"]
     .every(k => bulletsCovered.has(k));
 
+  // When all four bullets are captured, reveal the "call a facilitator to move
+  // to Module B" button in the Group-answers card (user request 2026-06-02).
+  _updateAnswersCompleteCta("modA-answers-complete", "modA-call-next-btn",
+    allBulletsCovered, "modA.answers.complete.callMsg",
+    "Module A done — ready to move on to Module B.");
+
   // Phase gate (2026-06-02): the team works the case up freely, then commits
   // ≥2 working hypotheses — that unlocks the Clinical synthesis + the Debate.
   const gateOpen = (typeof phaseGateOpen === "function") ? phaseGateOpen() : false;
@@ -9840,6 +9887,12 @@ function updateModBNextStep() {
   );
   const allBulletsCovered = ["family-sentence", "differ-converge", "practice-change"]
     .every(k => bulletsCovered.has(k));
+
+  // When all three bullets are captured, reveal the "call a facilitator to go to
+  // the final section" button in the Group-answers card (user request 2026-06-02).
+  _updateAnswersCompleteCta("modB-answers-complete", "modB-call-next-btn",
+    allBulletsCovered, "modB.answers.complete.callMsg",
+    "Module B done — ready for the final wrap-up section.");
 
   // NB: the phase stepper is now driven by the synced room phase
   // (renderModBPhase), so the coach only supplies guidance text — it no longer
