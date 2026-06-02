@@ -43,7 +43,7 @@ test("the participant control row is scoped with a modifier class", () => {
     "the admin row must keep a plain .stage-controls (unscoped, untouched)");
 });
 
-test("Call a facilitator stays in the row; Teams/observe/leave move to an overflow", () => {
+test("Call a facilitator stays in the row; Teams/leave move to an overflow", () => {
   assert.ok(partRow, "participant stage-controls block not found");
   const row = partRow[0];
   // #call-prof-btn is a direct primary control (NOT inside the overflow menu)
@@ -52,12 +52,15 @@ test("Call a facilitator stays in the row; Teams/observe/leave move to an overfl
   assert.ok(callAt > 0, "#call-prof-btn must be present");
   assert.ok(overflowStart > 0, "the .stage-overflow <details> must exist");
   assert.ok(callAt < overflowStart, "#call-prof-btn must stay ahead of (outside) the overflow");
-  // the three secondary actions live inside the overflow menu
+  // the secondary actions live inside the overflow menu. ("I'm just observing"
+  // / #observer-btn was removed 2026-06-02 — Teams + Leave remain.)
   const menu = row.match(/<div[^>]*class="stage-overflow-menu"[^>]*>[\s\S]*?<\/div>/);
   assert.ok(menu, ".stage-overflow-menu must exist");
-  for (const id of ["teams-btn", "observer-btn", "leave-btn"]) {
+  for (const id of ["teams-btn", "leave-btn"]) {
     assert.ok(menu[0].includes('id="' + id + '"'), id + " must be inside the overflow menu");
   }
+  assert.ok(!menu[0].includes('id="observer-btn"'),
+    "the removed observer-btn must NOT reappear in the overflow menu");
   assert.ok(!menu[0].includes('id="call-prof-btn"'), "Call must NOT be in the overflow");
 });
 
