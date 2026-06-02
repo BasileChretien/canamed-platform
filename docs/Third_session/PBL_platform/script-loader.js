@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v38";
+  var SHELL_VERSION = "v39";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   function ensureCaseContent() { return loadScript(v("case-content.js")); }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
@@ -140,19 +140,27 @@
   // before startRoom() runs, so we persist ?llm=1 to localStorage now. This is
   // the same promotion modA-llm-init.js does inside its IIFE — hoisted here so
   // it still happens when that file is no longer eagerly loaded.
+  // DEFAULT-ON (2026-06-02): the LLM patient chat IS Module A's history-taking
+  // interface — no `?llm=1` needed any more. We now persist only the OPT-OUT
+  // (`?llm=0`) to localStorage so a facilitator demo of the legacy click-button
+  // workup survives the multi-step join flow; `?llm=1` clears the opt-out (back
+  // to default). The server-side `MODA_LLM_ENABLED` flag + the bridge's stub
+  // fallback remain the real kill-switch for the HF backend.
   try {
     var _llmParams = new URLSearchParams(location.search);
     if (window.localStorage) {
-      if (_llmParams.get("llm") === "1") localStorage.setItem("canamedModALLM", "1");
-      else if (_llmParams.get("llm") === "0") localStorage.removeItem("canamedModALLM");
+      if (_llmParams.get("llm") === "0") localStorage.setItem("canamedModALLM", "0");
+      else if (_llmParams.get("llm") === "1") localStorage.removeItem("canamedModALLM");
     }
   } catch (_) { /* private mode — the URL-only check in modALLMFlagOn still works */ }
   function modALLMFlagOn() {
     try {
-      if (new URLSearchParams(location.search).get("llm") === "1") return true;
-      if (window.localStorage && localStorage.getItem("canamedModALLM") === "1") return true;
-    } catch (_) { /* locked-down env — flag stays off */ }
-    return false;
+      var q = new URLSearchParams(location.search).get("llm");
+      if (q === "0") return false;                                          // explicit opt-out
+      if (q === "1") return true;                                           // explicit opt-in
+      if (window.localStorage && localStorage.getItem("canamedModALLM") === "0") return false; // sticky opt-out
+    } catch (_) { /* locked-down env — fall through to the default */ }
+    return true;   // default ON
   }
   // The four scripts must run in document order — init wires the others:
   // scoring → prompts → bridge → init. loadScript de-dupes, so re-calls are
