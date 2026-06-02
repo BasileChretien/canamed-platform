@@ -1262,47 +1262,13 @@
                - Time budgets → small chips inside the phase stepper
              See ARCHITECTURE/script-js-map.md "Phase stepper" for the
              component contract. -->
-        <nav class="phase-stepper" aria-label="Module A phases">
-          <ol class="phase-stepper-list">
-            <li class="phase-step is-current" data-phase="setup">
-              <span class="phase-step-num">1</span>
-              <span class="phase-step-label" data-i18n="modA.phase.setup.label">Set up</span>
-              <span class="phase-step-time" data-i18n="modA.phase.setup.time">2 min</span>
-            </li>
-            <li class="phase-step" data-phase="case">
-              <span class="phase-step-num">2</span>
-              <span class="phase-step-label" data-i18n="modA.phase.case.label">Work the case</span>
-              <span class="phase-step-time" data-i18n="modA.phase.case.time">22 min</span>
-            </li>
-            <li class="phase-step" data-phase="exchange">
-              <span class="phase-step-num">3</span>
-              <span class="phase-step-label" data-i18n="modA.phase.exchange.label">The Exchange</span>
-              <span class="phase-step-time" data-i18n="modA.phase.exchange.time">10 min</span>
-            </li>
-            <li class="phase-step" data-phase="bullets">
-              <span class="phase-step-num">4</span>
-              <span class="phase-step-label" data-i18n="modA.phase.bullets.label">Write bullets</span>
-              <span class="phase-step-time" data-i18n="modA.phase.bullets.time">5 min</span>
-            </li>
-          </ol>
-        </nav>
-
-        <!-- Per-bullet progress checklist — sim 2026-05-19 (Hiroshi,
-             Lucas): "Show me my team's progress against the four
-             bullets at the top of Module A — checkbox style." A bullet
-             is marked done when its answers list has at least one
-             entry; updated live by renderAnswers(). -->
-        <ul class="modA-bullet-progress" id="modA-bullet-progress"
-            aria-label="Group-answer progress">
-          <li data-bullet-key="plan"
-              data-i18n="modA.bullet-progress.plan">Plan</li>
-          <li data-bullet-key="differ"
-              data-i18n="modA.bullet-progress.differ">Differentials</li>
-          <li data-bullet-key="disagree"
-              data-i18n="modA.bullet-progress.disagree">Disagreements</li>
-          <li data-bullet-key="takehome"
-              data-i18n="modA.bullet-progress.takehome">Take-home</li>
-        </ul>
+        <!-- The Module A timed phase stepper (Set up / Work the case / The
+             Exchange / Write bullets, with minute budgets) and the per-bullet
+             progress checklist (Plan / Differentials / Disagreements / Take-home)
+             were removed 2026-06-02 (user request). The phase GATE logic
+             (≥2 hypotheses unlocks the Debate) is unaffected — it lived in
+             script.js, not in these display widgets; setPhaseStepperState() and
+             _updateModABulletProgress() no-op safely now their targets are gone. -->
 
         <!-- "What to do next" coach — updates contextually from
              updateModANextStep(). Hidden once student dismisses it for
@@ -2025,9 +1991,15 @@
                   data-i18n="modB.phase.prev">← Previous</button>
           <span class="phase-nav-indicator" id="modB-phase-indicator"
                 role="status" aria-live="polite"></span>
-          <button class="phase-nav-btn" id="modB-phase-next" type="button"
+          <button class="phase-nav-btn phase-nav-btn--next" id="modB-phase-next" type="button"
                   data-i18n="modB.phase.next">Next →</button>
         </div>
+        <!-- Make the advance mechanic explicit (user request 2026-06-02): the
+             phases are shared, so any participant tapping Next moves the WHOLE
+             room on. Students weren't sure when to do that. -->
+        <p class="phase-nav-hint" id="modB-phase-nav-hint"
+           data-i18n="modB.phase.nav-hint" data-i18n-html>Everyone moves together — tap
+          <strong>Next →</strong> when your group has finished this phase.</p>
 
         <div class="next-step-coach" id="modB-next-step" role="status" aria-live="polite">
           <span class="next-step-icon" aria-hidden="true">👉</span>

@@ -88,3 +88,36 @@ test.describe("Module A diagnosis at wrap-up", () => {
     expect(dx.body).toMatch(/low-back pain/i);
   });
 });
+
+test.describe("Module B follow-ups (2026-06-02)", () => {
+  test("team decisions appear in the exchange phase, not setup", async ({ page }) => {
+    await surfaceApp(page);
+    await showStage(page, "stage-2");
+    const dec = page.locator("#decisions-B");
+    await expect(dec).toHaveCount(1);
+    // setup: gated out (is-phase-hidden → not visible)
+    await page.evaluate(() => window.applyModBPhaseVisibility("setup"));
+    await expect(dec).toHaveClass(/is-phase-hidden/);
+    // exchange: revealed
+    await page.evaluate(() => window.applyModBPhaseVisibility("exchange"));
+    await expect(dec).not.toHaveClass(/is-phase-hidden/);
+  });
+
+  test("the phase-nav has a prominent Next + an explicit 'tap Next' hint", async ({ page }) => {
+    await surfaceApp(page);
+    await showStage(page, "stage-2");
+    await expect(page.locator("#modB-phase-next.phase-nav-btn--next")).toHaveCount(1);
+    await expect(page.locator("#modB-phase-nav-hint")).toBeVisible();
+  });
+
+  test("the safety-note prose is no longer capped to the narrow reading column", async ({ page }) => {
+    await surfaceApp(page);
+    await showStage(page, "stage-2");
+    await page.evaluate(() => window.applyModBPhaseVisibility("setup"));
+    const maxW = await page.evaluate(() => {
+      const p = document.querySelector("#stage-2 .safety-note p");
+      return p ? getComputedStyle(p).maxWidth : null;
+    });
+    expect(maxW).toBe("none");
+  });
+});

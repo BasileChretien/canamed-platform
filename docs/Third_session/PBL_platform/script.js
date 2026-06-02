@@ -3010,43 +3010,54 @@ function renderWrapupSummary() {
       const h = document.createElement("h4");
       h.className = "wrapup-mod"; h.textContent = label;
       box.appendChild(h);
-      // Module A wrap-up: surface the case's actual diagnosis (user request
-      // 2026-06-02) — the on-screen clinical synthesis was removed earlier, so
-      // the wrap-up is where students see the answer to "what did he have?".
-      if (moduleKey === "moduleA") {
-        const dx = moduleADiagnosis();
-        if (dx) {
-          const p = document.createElement("p");
-          p.className = "wrapup-diagnosis";
-          const strong = document.createElement("strong");
-          strong.textContent = (dx.label || "Diagnosis") + ": ";
-          p.appendChild(strong);
-          p.appendChild(document.createTextNode(dx.body));
-          box.appendChild(p);
-        }
-      }
+      // 1. The team's OWN answers (what they actually wrote) come first — this
+      //    is what the "Your room's answers" heading promises.
       const entries = entriesSorted(answers[moduleKey]);
       if (entries.length === 0) {
         const e = document.createElement("p");
-        e.className = "empty"; e.textContent = "No points recorded.";
+        e.className = "empty"; e.textContent = "No answers recorded.";
         box.appendChild(e);
-        return;
+      } else {
+        const ul = document.createElement("ul");
+        ul.className = "answers-list";
+        entries.forEach(en => {
+          const li = document.createElement("li");
+          li.className = "answer-entry";
+          const dot = document.createElement("span");
+          dot.className = "dot"; dot.style.background = colorFor(en.by);
+          const who = document.createElement("span");
+          who.className = "answer-by"; who.textContent = en.by;
+          const txt = document.createElement("span");
+          txt.className = "answer-text"; txt.textContent = en.text;
+          li.appendChild(dot); li.appendChild(who); li.appendChild(txt);
+          ul.appendChild(li);
+        });
+        box.appendChild(ul);
       }
-      const ul = document.createElement("ul");
-      ul.className = "answers-list";
-      entries.forEach(en => {
-        const li = document.createElement("li");
-        li.className = "answer-entry";
-        const dot = document.createElement("span");
-        dot.className = "dot"; dot.style.background = colorFor(en.by);
-        const who = document.createElement("span");
-        who.className = "answer-by"; who.textContent = en.by;
-        const txt = document.createElement("span");
-        txt.className = "answer-text"; txt.textContent = en.text;
-        li.appendChild(dot); li.appendChild(who); li.appendChild(txt);
-        ul.appendChild(li);
-      });
-      box.appendChild(ul);
+      // 2. THEN the official model answer, clearly labelled and visually set
+      //    apart so it never reads as something the team wrote (user request
+      //    2026-06-02). Module A only — Module B is a roleplay with no single
+      //    "correct" diagnosis to score against.
+      if (moduleKey === "moduleA") {
+        const dx = moduleADiagnosis();
+        if (dx) {
+          const block = document.createElement("div");
+          block.className = "wrapup-official";
+          const lbl = document.createElement("p");
+          lbl.className = "wrapup-official-label";
+          lbl.textContent = tFallback("wrap.official-answer",
+            "✓ Official answer — the case diagnosis");
+          const body = document.createElement("p");
+          body.className = "wrapup-official-body";
+          const strong = document.createElement("strong");
+          strong.textContent = (dx.label || "Diagnosis") + ": ";
+          body.appendChild(strong);
+          body.appendChild(document.createTextNode(dx.body));
+          block.appendChild(lbl);
+          block.appendChild(body);
+          box.appendChild(block);
+        }
+      }
     });
 }
 function maybeSelfAssign() {
@@ -7437,15 +7448,10 @@ function renderStage() {
       gsp.appendChild(li);
     }
   }
-  // UX-overload fix (2026-06-01): auto-open the leaderboard ONLY at Wrap-up,
-  // where celebrating the shared cohort progress is the point. It used to also
-  // force-open at Welcome (viewStage 0), where the board is empty/zeroed, and
-  // it never closed for Module A/B — so the competitive widget sat open at the
-  // top of the work scroll competing with the clinical task. We only ever
-  // OPEN it here (never force-close) so a student who expands it mid-case
-  // keeps it open; the default is closed (no `open` attr in index.html).
-  const lb = el("leaderboard-card");
-  if (lb && viewStage === STAGE_COUNT - 1) lb.open = true;
+  // The leaderboard is never auto-opened (user request 2026-06-02): it stays
+  // closed on every stage — including Wrap-up — and opens ONLY when the student
+  // clicks its disclosure triangle. (It used to force-open at Wrap-up, which
+  // read as the page "opening it by itself" when navigating between stages.)
   // a celebration when the room reaches the wrap-up (once)
   if (!wrapCelebrated && roomStage === STAGE_COUNT - 1 && viewStage === STAGE_COUNT - 1) {
     wrapCelebrated = true;
@@ -9275,6 +9281,17 @@ function renderDecisions() {
         box.appendChild(buildLockedDecision(d, gate.unmet));
       }
     });
+    // "Disappear when filled" (user request 2026-06-02, Module B): once the team
+    // has committed EVERY decision, hide the whole card so the discussion phase
+    // declutters. The votes still live in RTDB (wrap-up + export read them); only
+    // the on-screen card is hidden. Module A keeps its decisions tab as-is.
+    if (mod === "B") {
+      const allCommitted = list.every(d => {
+        const v = roomVotes[d.id] || {};
+        return v.committed && typeof v.committed.choice === "number";
+      });
+      box.classList.toggle("decisions-locked", allCommitted);
+    }
     // Announce the module's running tally / lock-in state to SR users.
     _announceDecisions(mod, srLines[mod].join(" · "));
   });
@@ -9868,6 +9885,11 @@ const MODB_PHASE_SECTIONS = [
   { sel: "#observer-checklist",    phases: ["play"] },
   { sel: ".micro-framework-card",  phases: ["play"] },
   { sel: ".prompts-card-modB",     phases: ["exchange"] },
+  // Team decisions ("vote together") only appear in the discussion phase — they
+  // used to sit visible from the very start (user request 2026-06-02). Once the
+  // team has committed them all, renderDecisions() hides the card (see
+  // `decisions-locked`), so they also disappear when filled.
+  { sel: "#decisions-B",           phases: ["exchange"] },
   { sel: ".answers-card-bulleted", phases: ["bullets"] }
 ];
 

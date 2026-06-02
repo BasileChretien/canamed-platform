@@ -173,6 +173,18 @@ p { margin: 0.6em 0; }
 .safety-note p, .privacy-note p, .micro-framework p {
   max-width: 70ch;
 }
+/* …except in Module B, which now runs full-width in its non-bullets phases
+   (rcol-collapsed). There the 70ch cap left the prose (safety note, situation,
+   frameworks, prompts) hugging the left with a wide empty band on the right
+   (user report 2026-06-02). Let Module B prose use the available width so it
+   reads as a full block, matching the citation/reference layout. */
+#stage-2 .vignette p,
+#stage-2 .safety-note p,
+#stage-2 .micro-framework p,
+#stage-2 .info-list,
+#stage-2 .prompts-card p {
+  max-width: none;
+}
 
 /* ---------- header ---------- */
 header {
@@ -1029,6 +1041,22 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 }
 .phase-nav-btn:hover:not(:disabled) { background: var(--surface-sunk, #f3f0e8); }
 .phase-nav-btn:disabled { opacity: 0.45; cursor: default; }
+/* Emphasise the forward action so it's obvious how to advance the room's phase
+   (user request 2026-06-02). A primary-coloured ring + bold — theme-safe (no
+   white-on-primary, which fails contrast in dark mode); dimmed automatically on
+   the last phase via :disabled above. */
+.phase-nav-btn--next:not(:disabled) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+  font-weight: 700;
+}
+.phase-nav-hint {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+.phase-nav-hint strong { color: var(--ink); }
 .phase-nav-indicator {
   font-size: 0.85rem;
   font-weight: 700;
@@ -2606,18 +2634,25 @@ footer {
 /* ---------- wrap-up summary ---------- */
 .wrapup-mod { font-size: 0.98rem; margin: var(--s-4) 0 6px; }
 .wrapup-mod:first-child { margin-top: 0; }
-/* The case's actual diagnosis, surfaced at wrap-up (Module A). A calm tinted
-   callout so the answer stands out from the team's recorded answers below it. */
-.wrapup-diagnosis {
-  margin: 0 0 8px;
-  padding: 8px 10px;
-  font-size: 0.95rem;
-  line-height: 1.45;
+/* The official model answer (Module A case diagnosis), shown at wrap-up AFTER
+   the team's own answers and clearly set apart with its own label so it never
+   reads as something the team wrote (user request 2026-06-02). */
+.wrapup-official {
+  margin: 8px 0 4px;
+  padding: 8px 10px 9px;
   border-left: 3px solid var(--ok, #2e9fdf);
   background: var(--surface-sunk, rgba(46,159,223,.08));
   border-radius: var(--r-sm, 6px);
 }
-.wrapup-diagnosis strong { color: var(--ink); }
+.wrapup-official-label {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ok, #2e9fdf);
+}
+.wrapup-official-body { margin: 0; font-size: 0.95rem; line-height: 1.45; }
+.wrapup-official-body strong { color: var(--ink); }
 
 /* ---------- room view layout: main + admin sidebar ---------- */
 #app { display: flex; gap: var(--s-4); align-items: flex-start; }
@@ -3463,6 +3498,9 @@ h2, h3 { text-wrap: balance; }
 /* ===================== TEAM DECISIONS - Kahoot-style voting ================= */
 .decisions-card { border-left: 4px solid var(--nagoya-500, #2e9fdf); }
 .decisions-card.hidden { display: none; }
+/* Module B "vote together" card disappears once the team has committed every
+   decision (renderDecisions adds .decisions-locked). User request 2026-06-02. */
+.decisions-card.decisions-locked { display: none; }
 .dec-head h3 { margin: 0 0 4px; }
 .dec-head .hint { margin: 0 0 4px; }
 .decision {

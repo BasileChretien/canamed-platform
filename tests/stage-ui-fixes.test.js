@@ -16,6 +16,10 @@ const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platfo
 const INDEX = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
 const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
 const JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
+const I18N = fs.readFileSync(path.join(PLATFORM, "i18n.js"), "utf8");
+const FR = fs.readFileSync(path.join(PLATFORM, "locales", "fr.js"), "utf8");
+const JA = fs.readFileSync(path.join(PLATFORM, "locales", "ja.js"), "utf8");
+const TOUR = fs.readFileSync(path.join(PLATFORM, "tour.js"), "utf8");
 
 function fnBody(name) {
   const start = JS.indexOf("function " + name + "(");
@@ -79,6 +83,56 @@ test("Item 7 — the Module A diagnosis is surfaced at the wrap-up", () => {
   assert.match(fn, /itemById\(SYNTH_ID\)/, "must read the active scenario's synthesis item");
   assert.match(fn, /diagnos|診断/, "must locate the labelled Diagnosis segment");
   assert.match(JS, /moduleADiagnosis\(\)/, "renderWrapupSummary must call moduleADiagnosis");
-  assert.match(JS, /p\.className = "wrapup-diagnosis"/, "must render the diagnosis with the wrapup-diagnosis class");
-  assert.match(CSS, /\.wrapup-diagnosis\s*\{/, "the .wrapup-diagnosis style must exist");
+  // The official answer renders AFTER the team's own answers, in a clearly
+  // labelled block so it doesn't read as something the team wrote.
+  assert.match(JS, /className = "wrapup-official"/, "must render the official-answer block");
+  assert.match(JS, /wrapup-official-label/, "must carry an explicit 'official answer' label");
+  assert.match(CSS, /\.wrapup-official\s*\{/, "the .wrapup-official style must exist");
+  // The official block must come AFTER the team's answers list in the source.
+  const wrapFn = JS.slice(JS.indexOf("function renderWrapupSummary"));
+  const body = wrapFn.slice(0, wrapFn.indexOf("\nfunction ", 1));
+  assert.ok(body.indexOf('className = "answers-list"') < body.indexOf('className = "wrapup-official"'),
+    "the team's answers must render before the official answer");
+});
+
+/* ---- 2026-06-02 second batch (Module A/B follow-ups) ---- */
+
+test("Module B prose fills the width (70ch cap lifted inside #stage-2)", () => {
+  assert.match(CSS, /#stage-2 \.safety-note p[\s\S]{0,160}max-width:\s*none/,
+    "Module B safety-note prose must not be capped to the narrow reading column");
+});
+
+test("Module A timed phase stepper + bullet-progress are removed", () => {
+  assert.ok(!/class="phase-stepper" aria-label="Module A phases"/.test(INDEX),
+    "the Module A phase stepper must be gone");
+  assert.ok(!INDEX.includes('id="modA-bullet-progress"'),
+    "the Module A bullet-progress checklist must be gone");
+  // The Module B phase stepper stays (it's a separate, kept feature).
+  assert.match(INDEX, /class="phase-stepper" aria-label="Module B phases"/,
+    "the Module B phase stepper must remain");
+  // The studentModA tour must not point at the deleted bullet-progress.
+  assert.ok(!TOUR.includes('anchor: "modA-bullet-progress"'),
+    "the tour must no longer anchor to the removed bullet-progress");
+});
+
+test("Module B: a clear 'tap Next' affordance (prominent button + hint, all langs)", () => {
+  assert.match(INDEX, /id="modB-phase-next"[^>]*phase-nav-btn--next|phase-nav-btn--next[^>]*id="modB-phase-next"/,
+    "the Next button must carry the prominence modifier class");
+  assert.match(INDEX, /id="modB-phase-nav-hint"/, "the phase-nav hint must exist");
+  assert.match(CSS, /\.phase-nav-btn--next:not\(:disabled\)/, "the prominent Next style must exist");
+  for (const [name, src] of [["en", I18N], ["fr", FR], ["ja", JA]]) {
+    assert.match(src, /"modB\.phase\.nav-hint"\s*:/, `modB.phase.nav-hint must exist in ${name}`);
+  }
+});
+
+test("Module B: team decisions gated to the exchange phase + hidden when filled", () => {
+  const sections = JS.slice(JS.indexOf("MODB_PHASE_SECTIONS = ["));
+  const arr = sections.slice(0, sections.indexOf("];"));
+  assert.match(arr, /sel:\s*"#decisions-B",\s*phases:\s*\["exchange"\]/,
+    "#decisions-B must be gated to the exchange phase");
+  // renderDecisions hides the card once every Module B decision is committed.
+  assert.match(JS, /classList\.toggle\("decisions-locked",\s*allCommitted\)/,
+    "renderDecisions must toggle decisions-locked when all are committed");
+  assert.match(CSS, /\.decisions-card\.decisions-locked\s*\{\s*display:\s*none/,
+    "a committed Module B decisions card must be hidden");
 });
