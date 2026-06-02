@@ -3664,9 +3664,11 @@ function startRoom() {
   window.sessionNum = sessionNum;
   window.db = db;
   window.viewStage = viewStage;
-  // SYNTH_ID / prereqsMet are needed for the chat-mode auto-synthesis
-  // trigger (the synthesis button is hidden in LLM mode, so the bridge
-  // calls reveal(SYNTH_ID) automatically once prereqsMet returns true).
+  // SYNTH_ID / prereqsMet are re-exported for the chat bridge's red-flag
+  // SCORING (it reveals legacy history items so prereqsMet/SYNTH_PREREQS stay
+  // deterministic) and for the E2E hooks. NB (2026-06-02): the chat no longer
+  // auto-reveals the synthesis — it's a deliberate gated section now, unlocked
+  // by ≥2 working hypotheses (phaseGateOpen), not by prereqsMet.
   // revealed is mutable script-state; expose it via a getter so the LLM
   // init reads the live value, not a snapshot at startRoom() time.
   window.SYNTH_ID = SYNTH_ID;
