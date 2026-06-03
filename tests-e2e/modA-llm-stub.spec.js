@@ -82,7 +82,10 @@ test.describe("Module A — LLM-patient stub (feature flag on)", () => {
         opioid: SC.scoreQuestion("OK, I'll prescribe oxycodone for you today.", {})
       };
     });
-    expect(results.en.award).toContain("qr_redflags");
+    // Red flags now score per category (2026-06-03): "Any fever or weight loss?"
+    // hits infection (fever) AND malignancy (weight loss).
+    expect(results.en.award).toContain("qr_rf_infection");
+    expect(results.en.award).toContain("qr_rf_malignancy");
     expect(results.en.unlocks).toContain("history:1");
     expect(results.fr.award).toContain("qr_cauda");
     expect(results.fr.unlocks).toContain("history:2");
@@ -111,7 +114,10 @@ test.describe("Module A — LLM-patient stub (feature flag on)", () => {
         replies: [r1 && r1.reply, r2 && r2.reply].map(r => (r || "").length > 0)
       };
     });
-    expect(out.calls.award).toContain("qr_redflags");
+    // "Any fever, weight loss or night pain?" scores each red-flag category it
+    // touches (infection + malignancy), then cauda equina on the second turn.
+    expect(out.calls.award).toContain("qr_rf_infection");
+    expect(out.calls.award).toContain("qr_rf_malignancy");
     expect(out.calls.award).toContain("qr_cauda");
     expect(out.calls.unlock).toContain("history:1");
     expect(out.calls.unlock).toContain("history:2");

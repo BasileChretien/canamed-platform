@@ -614,6 +614,19 @@
       "modB.observe.reassure": "That's completely fine — you're observing now. Watch the SPIKES steps, and step back in whenever you're ready.",
       "modB.role.observer.brief": "You time the scene and run Phase 3. Watch the SPIKES steps — note one thing the physician <em>said</em> that worked and one moment that was hard.",
 
+      // Module B — per-role "how to play your part" guides (2026-06-03). Each
+      // shows only for the participant holding that role (applyModBRoleVisibility).
+      "modB.guide.patient.summary": "<strong>Playing the patient — make it real</strong>",
+      "modB.guide.patient.p1": "<strong>Decide privately now</strong> — deep down, do you want to know everything, or would you rather not? Don't announce it; let the physician discover it through their questions.",
+      "modB.guide.patient.p2": "<strong>React like a person, not a textbook.</strong> You can go quiet, ask \"is it cancer?\", well up, or freeze. There is no script.",
+      "modB.guide.patient.p3": "<strong>Answer honestly</strong> if the physician asks how much you want to know — from the stance you chose.",
+      "modB.guide.patient.p4": "It is okay to still be upset at the end. A good consultation does not always end calmly.",
+      "modB.guide.family.summary": "<strong>Playing the family member (adult child)</strong>",
+      "modB.guide.family.p1": "<strong>Partway through — not at the start</strong> — quietly take the physician aside and ask them not to tell your parent everything.",
+      "modB.guide.family.p2": "<strong>Your worry comes from love.</strong> Press gently if they hesitate: \"It would crush them,\" \"In our family we don't say the word.\"",
+      "modB.guide.family.p3": "<strong>You are not the villain</strong> — you hand the physician the real cross-cultural dilemma to navigate.",
+      "modB.guide.family.p4": "Let the physician explore your worry; don't back down the instant they push back.",
+
       // Module B — structured Group-answers form
       "modB.answers.bullet.family-sentence.label": "1. One concrete sentence your group would use to answer the family's request to withhold information",
       "modB.answers.bullet.family-sentence.placeholder": "e.g. \"Let me first ask your parent how much they want to know...\"",

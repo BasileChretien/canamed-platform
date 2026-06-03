@@ -63,7 +63,7 @@ test("submit() with empty text resolves null and calls no hooks", async () => {
   assert.equal(m.calls.turns.length, 0);
 });
 
-test("stub mode: a red-flag question awards qr_redflags, unlocks history:1, persists both turns", async () => {
+test("stub mode: a red-flag question awards each category, unlocks history:1, persists both turns", async () => {
   const ctx = loadAll();
   const m = mockHooks();
   const bridge = ctx.modALLMBridge.create(m.hooks);
@@ -72,8 +72,10 @@ test("stub mode: a red-flag question awards qr_redflags, unlocks history:1, pers
   const out = await bridge.submit("Any fever, weight loss or night pain recently?");
   assert.ok(out, "submit returns a result");
   assert.ok(out.reply && out.reply.length > 0, "stub patient replied");
-  assert.deepEqual(m.calls.award.map(x => x.famId), ["qr_redflags"]);
-  assert.deepEqual(m.calls.unlock, ["history:1"]);
+  const awardedIds = m.calls.award.map(x => x.famId);
+  assert.ok(awardedIds.includes("qr_rf_infection"), "fever scores infection");
+  assert.ok(awardedIds.includes("qr_rf_malignancy"), "weight loss / night pain scores malignancy");
+  assert.ok(m.calls.unlock.includes("history:1"), "any red flag unlocks history:1");
   assert.equal(m.calls.turns.length, 2, "user + assistant persisted");
   assert.equal(m.calls.turns[0].role, "user");
   assert.equal(m.calls.turns[1].role, "assistant");
@@ -85,9 +87,9 @@ test("once-only: asking the same family twice awards once, unlocks once", async 
   const bridge = ctx.modALLMBridge.create(m.hooks);
   bridge.setLang("en");
 
-  await bridge.submit("Any fever or weight loss?");
-  await bridge.submit("And any night pain?");
-  assert.equal(m.calls.award.length, 1, "qr_redflags only fires once");
+  await bridge.submit("Any fever recently?");
+  await bridge.submit("And are you still feverish?");
+  assert.equal(m.calls.award.length, 1, "qr_rf_infection only fires once");
   assert.equal(m.calls.unlock.length, 1);
   assert.deepEqual(m.calls.unlock, ["history:1"]);
 });

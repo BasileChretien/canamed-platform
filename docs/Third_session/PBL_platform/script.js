@@ -9935,8 +9935,17 @@ const MODB_PHASE_SECTIONS = [
   { sel: ".vignette",              phases: ["setup"] },
   { sel: ".safety-note",           phases: ["setup"] },
   { sel: "#modB-role-picker",      phases: ["setup", "play"] },
+  // Scene-prep reference strips: useful while setting up and playing, but pure
+  // noise once the room moves to the cross-country discussion (Phase 3) and the
+  // bullet write-up (Phase 4) — hidden there (2026-06-03 user request).
+  { sel: ".spikes-strip",          phases: ["setup", "play"] },
+  { sel: ".phrases-box",           phases: ["setup", "play"] },
+  // Per-role guidance — phase-gated to setup+play AND role-gated (see
+  // MODB_ROLE_SECTIONS): each shows only for the role that holds it.
   { sel: "#observer-checklist",    phases: ["play"] },
   { sel: ".micro-framework-card",  phases: ["play"] },
+  { sel: "#modB-patient-guide",    phases: ["setup", "play"] },
+  { sel: "#modB-family-guide",     phases: ["setup", "play"] },
   { sel: ".prompts-card-modB",     phases: ["exchange"] },
   // Team decisions ("vote together") only appear in the discussion phase — they
   // used to sit visible from the very start (user request 2026-06-02). Once the
@@ -9960,6 +9969,32 @@ function applyModBPhaseVisibility(phaseKey) {
   // than leaving a blank band on the right (user report 2026-06-02).
   const cols = stage.querySelector(".columns.modB-columns");
   if (cols) cols.classList.toggle("rcol-collapsed", phaseKey !== "bullets");
+}
+
+/* ── Module B — per-role section visibility (2026-06-03) ───────────────────
+ * Each role-specific guidance block shows ONLY for the participant holding
+ * that role. This is independent of the phase toggle above: a block is
+ * visible only when it carries NEITHER `is-phase-hidden` NOR `is-role-hidden`.
+ * `role` is the viewer's own pick (null when none chosen → all hidden).
+ * Called from showRoleObjective(), so every pick / deselect / restore / swap
+ * keeps the gating in sync. */
+const MODB_ROLE_SECTIONS = [
+  { sel: ".micro-framework-card", roles: ["physician"] },
+  { sel: "#observer-checklist",   roles: ["observer"] },
+  { sel: "#modB-patient-guide",   roles: ["patient"] },
+  { sel: "#modB-family-guide",    roles: ["family"] }
+];
+
+function applyModBRoleVisibility(role) {
+  if (typeof document === "undefined") return;
+  const stage = document.getElementById("stage-2");
+  if (!stage) return;
+  MODB_ROLE_SECTIONS.forEach(({ sel, roles }) => {
+    const show = !!role && roles.indexOf(role) !== -1;
+    stage.querySelectorAll(sel).forEach(node => {
+      node.classList.toggle("is-role-hidden", !show);
+    });
+  });
 }
 
 function _modBT(key, fallback, vars) {
@@ -10232,6 +10267,10 @@ function renderHypotheses() {
    other). Passing a falsy role hides the panel (no role held). */
 function showRoleObjective(role) {
   if (typeof document === "undefined") return;
+  // Keep the role-specific guidance blocks in sync with the held role — this
+  // is the single choke-point every pick / deselect / restore / swap flows
+  // through, so role-gating never drifts from the private brief.
+  applyModBRoleVisibility(role);
   const panel = el("modB-role-objective");
   if (!panel) return;
   const textEl = el("modB-role-objective-text");
@@ -10262,14 +10301,19 @@ function initRolePicker() {
   const chips = picker.querySelectorAll(".role-chip");
   const STORAGE_KEY = "canamed_modB_role";
   // restore saved selection
+  let restored = null;
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
+      restored = saved;
       chips.forEach(c => c.setAttribute("aria-checked",
         c.dataset.role === saved ? "true" : "false"));
-      showRoleObjective(saved);   // re-show the restored role's private brief
     }
   } catch (e) { /* localStorage may be blocked; OK */ }
+  // Always run once — re-shows a restored role's private brief AND establishes
+  // the role-gating baseline (with no saved role, hides every role-specific
+  // block so nothing leaks before a role is picked).
+  showRoleObjective(restored);
   // Single selection routine shared by click AND arrow keys. Per the
   // WAI-ARIA radiogroup pattern (round4-a11y Rec 3 / WCAG 2.1.1) arrow
   // keys must MOVE focus AND SELECT — previously they only moved focus,
