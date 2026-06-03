@@ -140,4 +140,20 @@ test.describe("Module B — per-role guidance visibility", () => {
     await expect(page.locator("#modB-role-objective")).toHaveClass(/attention-flash/);
     await expect(page.locator("#stage-2 #modB-patient-guide")).toHaveClass(/attention-flash/);
   });
+
+  test("Phase 1 (setup): each role's section shows once picked — including physician/observer", async ({ page }) => {
+    await openModuleBPlay(page);
+    await page.evaluate(() => window.setModBPhase(0));   // back to Phase 1 (setup)
+    // Nothing role-specific shows before a pick.
+    for (const sel of Object.values(ROLE_SECTION)) {
+      expect(await visible(page, sel), sel + " hidden before any pick (setup)").toBe(false);
+    }
+    // Each role's section is readable in SETUP once that role is picked — this is
+    // the fix for the report that physician/observer (previously play-only)
+    // showed no role section in Phase 1.
+    for (const [role, sel] of Object.entries(ROLE_SECTION)) {
+      await pickRole(page, role);
+      expect(await visible(page, sel), sel + " visible in setup for " + role).toBe(true);
+    }
+  });
 });

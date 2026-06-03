@@ -45,7 +45,10 @@ test.describe("Module B — synced phase flow", () => {
     await setupModB(page);
     expect(await shown(page, ".vignette"), "vignette shows in setup").toBe(true);
     expect(await shown(page, "#modB-role-picker"), "role picker shows in setup").toBe(true);
-    expect(await shown(page, "#observer-checklist"), "observer checklist hidden in setup").toBe(false);
+    // The role-specific guides are PHASE-visible from setup now (so a student can
+    // read their role before the scene) — their per-role gating is covered in
+    // modab-role-sections.spec.js. The genuinely later-phase action sections stay
+    // hidden in setup:
     expect(await shown(page, ".prompts-card-modB"), "prompts hidden in setup").toBe(false);
     expect(await shown(page, ".answers-card-bulleted"), "answers form hidden in setup").toBe(false);
     // Scene-prep reference strips show during setup + play.

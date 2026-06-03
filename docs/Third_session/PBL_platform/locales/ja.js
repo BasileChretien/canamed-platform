@@ -317,6 +317,7 @@
   "admin.start-session": "セッション開始 — 全員をルームに振り分け",
   "admin.advance-all": "全ルームを進める →",
   "admin.download-all": "全グループの回答をダウンロード",
+  "admin.more.tools": "その他のツール",
   "admin.download-md": "Markdown形式でダウンロード",
   "admin.end-session": "セッション終了 & アーカイブをダウンロード",
   "stage.modB.title": "モジュールB — 悪い知らせを伝える: 異文化間ロールプレイ",

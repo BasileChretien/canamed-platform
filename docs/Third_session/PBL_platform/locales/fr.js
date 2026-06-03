@@ -317,6 +317,7 @@
   "admin.start-session": "Démarrer la séance — placer tout le monde dans les salles",
   "admin.advance-all": "Avancer toutes les salles →",
   "admin.download-all": "Télécharger toutes les réponses",
+  "admin.more.tools": "Plus d'outils",
   "admin.download-md": "Télécharger en Markdown",
   "admin.end-session": "Clôturer la séance & télécharger l'archive",
   "stage.modB.title": "Module B — Annoncer une mauvaise nouvelle : un jeu de rôle interculturel",
