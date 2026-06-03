@@ -453,6 +453,7 @@
       "admin.start-session": "Start session — place everyone in rooms",
       "admin.advance-all": "Advance all rooms →",
       "admin.download-all": "Download all group answers",
+      "admin.more.tools": "More tools",
       "admin.download-md": "Download as Markdown",
       "admin.end-session": "End session & download archive",
 

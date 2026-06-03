@@ -2311,6 +2311,45 @@ footer {
 .admin-doc-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .admin-controls { display: flex; gap: 6px; }
 
+/* "More tools" dropdown for the decluttered admin toolbar (2026-06-03). Closed
+   by default; opened by initAdminToolsMenu() toggling .is-open on the wrapper.
+   The panel floats so it never re-bloats the control row. */
+.admin-overflow { position: relative; display: inline-block; }
+.admin-overflow-caret { font-size: 0.8em; margin-left: 2px; }
+.admin-overflow.is-open .admin-overflow-caret { transform: rotate(180deg); display: inline-block; }
+.admin-overflow-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 250px;
+  max-width: min(92vw, 340px);
+  max-height: 72vh;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--s-2);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-md, 0 10px 28px rgba(0,0,0,.20));
+}
+.admin-overflow.is-open .admin-overflow-menu { display: flex; }
+.admin-overflow-menu > button,
+.admin-overflow-menu > a.admin-doc-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  margin: 0;
+}
+@media (max-width: 520px) {
+  /* On a narrow facilitator screen, drop the panel to the right edge so it
+     doesn't overflow the viewport. */
+  .admin-overflow-menu { left: auto; right: 0; }
+}
+
 .presence-line {
   margin-top: var(--s-3);
   display: flex;
@@ -3442,11 +3481,20 @@ h2, h3 { text-wrap: balance; }
    understand they have to click on it and read it"). Triggered by
    flashRoleSections() on a deliberate role pick / swap. ~2 pulses, well under
    the 3-flash/sec seizure threshold. */
+/* The inset shadow paints a translucent tint OVER the background but UNDER the
+   text (so content stays readable in light AND dark themes), and the outset ring
+   draws a thick primary halo that isn't clipped (cards have no overflow:hidden).
+   3 pulses ≈ a clear "clignote" without crossing the 3-flash/sec seizure line. */
 @keyframes role-attention-flash {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(15,78,133,0); }
-  25%, 65% { box-shadow: 0 0 0 4px var(--primary); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(46,159,223,0), inset 0 0 0 0 rgba(46,159,223,0); }
+  35%, 70% { box-shadow: 0 0 0 5px var(--primary), inset 0 0 0 9999px rgba(46,159,223,.16); }
 }
-.attention-flash { animation: role-attention-flash 1.4s ease-in-out 2; border-radius: var(--r-md, 10px); }
+.attention-flash {
+  animation: role-attention-flash 0.7s ease-in-out 3;
+  border-radius: var(--r-md, 10px);
+  position: relative;
+  z-index: 1;                 /* lift the halo above neighbours while it pulses */
+}
 
 @media (prefers-reduced-motion: reduce) {
   .lb-bumped, .lb-shared-bumped .lb-shared-head span, .attention-flash {

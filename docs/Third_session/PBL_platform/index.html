@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v44" below to the matching new string.
+         2. Update every "?v=v45" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v44"></script>
-  <link rel="stylesheet" href="style.css?v=v44" />
+  <script src="theme-init.js?v=v45"></script>
+  <link rel="stylesheet" href="style.css?v=v45" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v44" defer></script>
+  <script src="sw-register.js?v=v45" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -2752,88 +2752,103 @@
     <section class="card stage-card">
       <div class="stage-row">
         <span class="stage-indicator">Admin dashboard</span>
+        <!-- Decluttered 2026-06-03 (user request: "clean the admin dashboard
+             that has many useless buttons"). Only the controls a facilitator
+             reaches DURING a live session stay inline (download answers, open
+             debrief, end session, pseudonymise, leave); every rarely-used
+             dean / research / accreditation / reporting tool moved behind a
+             single "More ▾" menu. Nothing was deleted and every button keeps
+             its id, so all existing wiring is untouched. Toggle wired by
+             initAdminToolsMenu(). -->
         <div class="stage-controls">
           <button id="admin-download-btn"
                   data-i18n="admin.download-all">Download all group answers</button>
-          <!-- Markdown variant — sim 2026-05-19 (Hiroshi, Antoine, Hugo,
-               Lucas): "Let me export my team's group-answers + transcript
-               as a markdown file at the end." Same payload as the .txt
-               download, formatted as markdown for easy paste into notes
-               apps + revision tools. -->
-          <button id="admin-download-md-btn"
-                  data-i18n="admin.download-md">Download as Markdown</button>
           <button id="admin-debrief-btn" type="button"
                   data-i18n="debrief.toggle"
                   aria-controls="admin-debrief" aria-expanded="false">Open debrief</button>
-          <!-- Impact report (2026-05-22): a one-click, dean-ready summary of the
-               session — participation/equity, decision quality, engagement and
-               satisfaction — assembled client-side from data already on the
-               dashboard, opened as a self-contained printable page (Save as PDF).
-               Aggregate + pseudonymous; no individual names. -->
-          <button id="admin-impact-btn" type="button"
-                  data-i18n="impact.button"
-                  title="Open a printable, dean-ready impact summary of this session">📊 Impact report</button>
-          <!-- Accreditation evidence (2026-05-22): maps the session's
-               activities to communication/clinical-reasoning competencies with
-               outcomes, for an accreditation dossier (HCERES / JACME). Lazy
-               admin-tools.js. -->
-          <button id="admin-accred-btn" type="button"
-                  data-i18n="impact.accred"
-                  title="Competency evidence mapped to your framework (for accreditation)">📋 Accreditation evidence</button>
-          <!-- Research export (2026-05-22): analysis-ready, pseudonymous JSON
-               aligned to the study protocol/SAP, for the R pipeline. -->
-          <button id="admin-research-btn" type="button"
-                  data-i18n="impact.research"
-                  title="Download an analysis-ready, pseudonymous JSON for the research pipeline">🔬 Research export</button>
-          <!-- Research export CSV (2026-05-22): same pseudonymous data as the
-               JSON button, but as flat CSV files (participant pre/post scores +
-               survey responses + room decisions) that open straight in Excel. -->
-          <button id="admin-research-csv-btn" type="button"
-                  data-i18n="impact.research-csv"
-                  title="Download analysis-ready CSV (participant pre/post scores + feedback survey + room decisions) — opens in Excel">📊 Research export (CSV)</button>
-          <!-- Email roster (2026-05-27): facilitator-only export of participant
-               emails captured into the /rosters subtree (Google-signed-in
-               participants who consented to research). Identifiable; readable
-               only by the session creator. Kept separate from the pseudonymous
-               research export. -->
-          <button id="admin-roster-btn" type="button"
-                  data-i18n="impact.roster"
-                  title="Download participant emails (identifiable) — only the facilitator who created this session can read these">📧 Email roster (CSV)</button>
-          <!-- Attestations (2026-05-22): printable per-participant certificates
-               of the competencies practiced. -->
-          <button id="admin-attest-btn" type="button"
-                  data-i18n="impact.attest"
-                  title="Generate printable certificates of participation per student">🎓 Attestations</button>
-          <!-- Withdraw a verification entry (PIS v2 §18): GDPR/APPI erasure for
-               /credentials. Opens the Firebase Console pre-pointed at the entry
-               so the facilitator removes it in one click. -->
-          <button id="admin-revoke-cert-btn" type="button"
-                  data-i18n="impact.revoke-cert"
-                  title="Remove a participant's certificate-verification entry (GDPR/APPI erasure for /credentials)">🗑️ Remove a verification entry</button>
-          <!-- Program overview (2026-05-22): cross-session rollup — cumulative
-               students, sessions, and the equity/decision-quality trend, for a
-               program-level (dean) view. -->
-          <button id="admin-program-btn" type="button"
-                  data-i18n="impact.program"
-                  title="Cross-session program overview (cumulative reach + trend)">📈 Program overview</button>
-          <!-- Item difficulty (2026-05-22): which decisions consistently trip
-               rooms up → curriculum-improvement feedback. -->
-          <button id="admin-itemdiff-btn" type="button"
-                  data-i18n="impact.itemdiff"
-                  title="Which decisions trip rooms up — curriculum feedback">🧭 Item difficulty</button>
-          <!-- Cohort comparison (2026-05-22): Caen × Nagoya split — the
-               built-in quasi-experiment (one intervention, two cohorts). -->
-          <button id="admin-cohort-btn" type="button"
-                  data-i18n="impact.cohort"
-                  title="Compare cohorts (Caen × Nagoya) — participation + learning gain">🌍 Cohort comparison</button>
-          <!-- Self-service facilitator kit + compliance statement (2026-05-22):
-               discoverable links so any faculty member can run a session and so
-               the DPO/accreditation can find the conformance statement. Static
-               pages, opened in a new tab. -->
-          <a class="admin-doc-link" href="facilitator-guide.html" target="_blank" rel="noopener"
-             data-i18n="impact.guide">📖 Facilitator guide</a>
-          <a class="admin-doc-link" href="compliance.html" target="_blank" rel="noopener"
-             data-i18n="impact.compliance">🛡 Compliance &amp; accessibility</a>
+
+          <!-- More ▾ : everything a facilitator only needs occasionally (after
+               the session, or for deans / accreditation / research). -->
+          <div class="admin-overflow">
+            <button type="button" class="admin-overflow-toggle" id="admin-overflow-toggle"
+                    aria-expanded="false" aria-controls="admin-overflow-menu" aria-haspopup="true">
+              <span data-i18n="admin.more.tools">More tools</span>
+              <span class="admin-overflow-caret" aria-hidden="true">&#9662;</span>
+            </button>
+            <div class="admin-overflow-menu" id="admin-overflow-menu" role="menu"
+                 aria-label="More facilitator tools">
+              <!-- Markdown variant — sim 2026-05-19 (Hiroshi, Antoine, Hugo,
+                   Lucas): same payload as the .txt download, formatted as
+                   markdown for easy paste into notes / revision tools. -->
+              <button id="admin-download-md-btn" role="menuitem"
+                      data-i18n="admin.download-md">Download as Markdown</button>
+              <!-- Impact report (2026-05-22): one-click, dean-ready summary —
+                   participation/equity, decision quality, engagement,
+                   satisfaction — opened as a printable page. Pseudonymous. -->
+              <button id="admin-impact-btn" type="button" role="menuitem"
+                      data-i18n="impact.button"
+                      title="Open a printable, dean-ready impact summary of this session">📊 Impact report</button>
+              <!-- Accreditation evidence (2026-05-22): competencies mapped to
+                   outcomes for an accreditation dossier (HCERES / JACME). -->
+              <button id="admin-accred-btn" type="button" role="menuitem"
+                      data-i18n="impact.accred"
+                      title="Competency evidence mapped to your framework (for accreditation)">📋 Accreditation evidence</button>
+              <!-- Research export (2026-05-22): analysis-ready, pseudonymous
+                   JSON aligned to the study protocol/SAP, for the R pipeline. -->
+              <button id="admin-research-btn" type="button" role="menuitem"
+                      data-i18n="impact.research"
+                      title="Download an analysis-ready, pseudonymous JSON for the research pipeline">🔬 Research export</button>
+              <!-- Research export CSV (2026-05-22): same pseudonymous data as
+                   the JSON button, as flat CSV that opens in Excel. -->
+              <button id="admin-research-csv-btn" type="button" role="menuitem"
+                      data-i18n="impact.research-csv"
+                      title="Download analysis-ready CSV (participant pre/post scores + feedback survey + room decisions) — opens in Excel">📊 Research export (CSV)</button>
+              <!-- Email roster (2026-05-27): facilitator-only export of
+                   participant emails. Identifiable; readable only by the creator. -->
+              <button id="admin-roster-btn" type="button" role="menuitem"
+                      data-i18n="impact.roster"
+                      title="Download participant emails (identifiable) — only the facilitator who created this session can read these">📧 Email roster (CSV)</button>
+              <!-- Attestations (2026-05-22): printable per-participant
+                   certificates of the competencies practiced. -->
+              <button id="admin-attest-btn" type="button" role="menuitem"
+                      data-i18n="impact.attest"
+                      title="Generate printable certificates of participation per student">🎓 Attestations</button>
+              <!-- Withdraw a verification entry (PIS v2 §18): GDPR/APPI erasure
+                   for /credentials. -->
+              <button id="admin-revoke-cert-btn" type="button" role="menuitem"
+                      data-i18n="impact.revoke-cert"
+                      title="Remove a participant's certificate-verification entry (GDPR/APPI erasure for /credentials)">🗑️ Remove a verification entry</button>
+              <!-- Program overview (2026-05-22): cross-session rollup for a
+                   program-level (dean) view. -->
+              <button id="admin-program-btn" type="button" role="menuitem"
+                      data-i18n="impact.program"
+                      title="Cross-session program overview (cumulative reach + trend)">📈 Program overview</button>
+              <!-- Item difficulty (2026-05-22): which decisions trip rooms up. -->
+              <button id="admin-itemdiff-btn" type="button" role="menuitem"
+                      data-i18n="impact.itemdiff"
+                      title="Which decisions trip rooms up — curriculum feedback">🧭 Item difficulty</button>
+              <!-- Cohort comparison (2026-05-22): Caen × Nagoya split. -->
+              <button id="admin-cohort-btn" type="button" role="menuitem"
+                      data-i18n="impact.cohort"
+                      title="Compare cohorts (Caen × Nagoya) — participation + learning gain">🌍 Cohort comparison</button>
+              <!-- Telemetry export — the in-page error/CSP-violation buffer,
+                   useful for postmortems. -->
+              <button type="button" id="admin-error-log-btn" role="menuitem"
+                      data-i18n="admin.download-error-log"
+                      title="Download the in-page error log captured this session">Download error log</button>
+              <!-- Bug report — opens a pre-filled mail; nothing is transmitted
+                   by us. -->
+              <button type="button" id="admin-bug-report-btn" role="menuitem"
+                      data-i18n="admin.report-bug"
+                      title="Open mail to report a bug with session + browser context">Report a bug</button>
+              <!-- Self-service facilitator kit + compliance statement. -->
+              <a class="admin-doc-link" href="facilitator-guide.html" target="_blank" rel="noopener"
+                 role="menuitem" data-i18n="impact.guide">📖 Facilitator guide</a>
+              <a class="admin-doc-link" href="compliance.html" target="_blank" rel="noopener"
+                 role="menuitem" data-i18n="impact.compliance">🛡 Compliance &amp; accessibility</a>
+            </div>
+          </div>
+
           <!-- End session is destructive — hidden by default and only enabled
                once the session is actually started. Prevents an accidental
                click from closing a session before any students have joined. -->
@@ -2877,21 +2892,9 @@
             </option>
           </select>
         </label>
-        <!-- Telemetry export — opens a download of the in-page
-             error/CSP-violation buffer. Useful in postmortems when a
-             student reports "the page broke and I had to refresh". -->
-        <button type="button" id="admin-error-log-btn" class="admin-pref-btn"
-                data-i18n="admin.download-error-log"
-                title="Download the in-page error log captured this session">
-          Download error log
-        </button>
-        <!-- Bug report — opens the user's mail client with a pre-filled
-             summary; we never transmit anything ourselves. -->
-        <button type="button" id="admin-bug-report-btn" class="admin-pref-btn"
-                data-i18n="admin.report-bug"
-                title="Open mail to report a bug with session + browser context">
-          Report a bug
-        </button>
+        <!-- Telemetry export + bug report moved into the "More tools" menu
+             above (2026-06-03 declutter) — kept here as a comment so the
+             relocation is discoverable; the buttons keep the same ids. -->
       </div>
       <p class="hint" id="admin-mode-line"></p>
       <!-- the session code, always visible to the facilitator so they can
@@ -3176,46 +3179,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v44" defer></script>
+  <script src="firebase-config.js?v=v45" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v44" defer></script>
+  <script src="orgs.js?v=v45" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v44" defer></script>
+  <script src="platform-config.js?v=v45" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v44" defer></script>
+  <script src="telemetry.js?v=v45" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v44" defer></script>
+  <script src="purify.min.js?v=v45" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v44" defer></script>
+  <script src="i18n.js?v=v45" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v44" defer></script>
+  <script src="localdb.js?v=v45" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v44" defer></script>
+  <script src="lib.js?v=v45" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v44" defer></script>
+  <script src="pure-utils.js?v=v45" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3226,7 +3229,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v44" defer></script>
+  <script src="script-loader.js?v=v45" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3236,7 +3239,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v44" defer></script>
+  <script src="script.js?v=v45" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the

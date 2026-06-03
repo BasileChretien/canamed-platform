@@ -4054,6 +4054,7 @@ function enterAdminApp() {
     if (confirm("Leave the admin dashboard? You will return to the lobby.")) location.reload();
   });
   el("admin-download-btn").addEventListener("click", downloadAllAnswers);
+  initAdminToolsMenu();   // wire the "More tools ▾" dropdown (decluttered toolbar)
   const mdBtn = el("admin-download-md-btn");
   if (mdBtn) mdBtn.addEventListener("click", downloadAllAnswersMarkdown);
   const debriefBtn = el("admin-debrief-btn");
@@ -7521,14 +7522,14 @@ function renderStage() {
       " - Back / Advance move the whole room's stage.";
   } else {
     el("prev-btn").textContent = "← Review previous stage";
-    el("next-btn").textContent = "Return to current stage →";
+    el("next-btn").textContent = "Go to next stage →";
     el("prev-btn").classList.remove("hidden");
     el("prev-btn").disabled = viewStage === 0;
     // Students never move the room forward - only show Next to return after Back.
     el("next-btn").classList.toggle("hidden", viewStage >= roomStage);
     if (viewStage < roomStage) {
       wait.textContent = "You are looking back at an earlier stage. " +
-        "Press \"Return to current stage\" to come back.";
+        "Press \"Go to next stage\" to move forward again.";
     } else if (roomStage < STAGE_COUNT - 1) {
       wait.textContent = "Waiting for a facilitator to open the next stage.";
     } else {
@@ -9964,9 +9965,12 @@ const MODB_PHASE_SECTIONS = [
   { sel: ".spikes-strip",          phases: ["setup", "play"] },
   { sel: ".phrases-box",           phases: ["setup", "play"] },
   // Per-role guidance — phase-gated to setup+play AND role-gated (see
-  // MODB_ROLE_SECTIONS): each shows only for the role that holds it.
-  { sel: "#observer-checklist",    phases: ["play"] },
-  { sel: ".micro-framework-card",  phases: ["play"] },
+  // MODB_ROLE_SECTIONS): each shows only for the role that holds it. All four
+  // appear from Phase 1 (setup) so the student can READ their role brief before
+  // the scene starts (2026-06-03 user report: the role section wasn't visible in
+  // Phase 1 for physician/observer, which were play-only).
+  { sel: "#observer-checklist",    phases: ["setup", "play"] },
+  { sel: ".micro-framework-card",  phases: ["setup", "play"] },
   { sel: "#modB-patient-guide",    phases: ["setup", "play"] },
   { sel: "#modB-family-guide",     phases: ["setup", "play"] },
   { sel: ".prompts-card-modB",     phases: ["exchange"] },
@@ -10048,6 +10052,10 @@ function flashRoleSections(role) {
   const card = stage && stage.querySelector(map.sel);
   if (card && !card.classList.contains("is-phase-hidden") &&
       !card.classList.contains("is-role-hidden")) {
+    // The role's guide card sits below the picker (often below the fold), so the
+    // student didn't notice it appear. Bring it into view, then blink it.
+    try { card.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
+    catch (_) { try { card.scrollIntoView(); } catch (__) {} }
     _flashEl(card);
   }
 }
@@ -11221,6 +11229,35 @@ function initStageOverflow() {
     toggle.setAttribute("aria-expanded", String(open));
   };
   toggle.addEventListener("click", () => setOpen(!wrap.classList.contains("is-open")));
+  document.addEventListener("click", e => {
+    if (wrap.classList.contains("is-open") && !wrap.contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && wrap.classList.contains("is-open")) { setOpen(false); toggle.focus(); }
+  });
+}
+
+/* "More tools ▾" dropdown for the decluttered admin toolbar (2026-06-03). Keeps
+   the rarely-used dean/research/accreditation/reporting actions one click away
+   without crowding the live-session control row. Mirrors initStageOverflow:
+   toggle .is-open, close on item-pick / outside-click / Escape. */
+function initAdminToolsMenu() {
+  const toggle = el("admin-overflow-toggle");
+  if (!toggle || toggle.dataset.wired === "1") return;
+  toggle.dataset.wired = "1";
+  const wrap = toggle.closest(".admin-overflow");
+  if (!wrap) return;
+  const setOpen = open => {
+    wrap.classList.toggle("is-open", open);
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  toggle.addEventListener("click", e => {
+    e.stopPropagation();
+    setOpen(!wrap.classList.contains("is-open"));
+  });
+  // Picking any tool closes the menu (the doc links open in a new tab anyway).
+  wrap.querySelectorAll(".admin-overflow-menu > button, .admin-overflow-menu > a")
+    .forEach(item => item.addEventListener("click", () => setOpen(false)));
   document.addEventListener("click", e => {
     if (wrap.classList.contains("is-open") && !wrap.contains(e.target)) setOpen(false);
   });
