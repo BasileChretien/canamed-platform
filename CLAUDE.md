@@ -83,9 +83,10 @@ DB). Until that Console toggle is flipped, clients still hit "Checking…" →
      Firebase App Check metrics); consider reCAPTCHA Enterprise or a longer
      App-Check token TTL / proactive refresh before re-enforcing.
    - `Verify:` Firebase Console → App Check → APIs → Realtime Database shows
-     *Monitored* (Console-only — no code signal). The `hfPatient` function
-     still has `APP_CHECK_ENFORCE=true` (item 4) — flip it to Monitor too if
-     the Module A LLM pilot runs before reCAPTCHA is fixed.
+     *Monitored* (Console-only — no code signal). The `hfPatient` function's
+     App Check was **also reverted to Monitor (`APP_CHECK_ENFORCE=false`)
+     2026-06-03** (see item 4) — after the chat fell back to the stub on every
+     message because Enforce rejected every call when no reCAPTCHA token minted.
 
 2. **Restrict the API key (HIGH).** The Firebase web API key is necessarily
    public in the served HTML, but it should be locked down:
@@ -193,7 +194,16 @@ DB). Until that Console toggle is flipped, clients still hit "Checking…" →
      kill-switch for the HF backend (see Panic button above).
      `Verify:` `grep -A6 "function modALLMFlagOn" docs/.../script-loader.js`
      ends with `return true`.
-   - **App Check on hfPatient — ✅ DONE & DEPLOYED (verified 2026-05-30).**
+   - **App Check on hfPatient — ⚠️ REVERTED to Monitor 2026-06-03
+     (`APP_CHECK_ENFORCE=false`, redeployed).** The chat fell back to the stub
+     patient on *every* message; a tokenless probe of the live function now
+     returns the handler's own `auth required` (not an App-Check rejection),
+     confirming Enforce was the gate — same reCAPTCHA-can't-mint-a-token failure
+     as the RTDB revert (item 1). The room-membership check (`_verifyMembership`:
+     `roomCode`/`roomId` → `uidMembers`) remains the security boundary; re-enable
+     (`true` + redeploy) only once reCAPTCHA reliability is understood. History
+     below (enforcement was ON 2026-05-28 → 2026-06-03).
+   - **App Check on hfPatient — was ✅ DONE & DEPLOYED (verified 2026-05-30).**
      `firebase functions:list` shows `hfPatient` live (v2 callable); its last
      deploy (`gcloud functions describe` updateTime `2026-05-28T11:38:37Z`)
      postdates the `functions/.env` change that set `APP_CHECK_ENFORCE=true`
@@ -209,10 +219,12 @@ DB). Until that Console toggle is flipped, clients still hit "Checking…" →
      redeploy marker references the `APP_CHECK_ENFORCE` param, indicating the
      deploy carrying it was made (same deploy that activated the pilot).
    - `Verify:` `grep APP_CHECK_ENFORCE docs/Third_session/PBL_platform/functions/.env`
-     = `true`; `grep CANAMED_RECAPTCHA_SITE_KEY .../firebase-config.js` is a
-     real key (not empty/placeholder). Live-deploy confirmation is CLI-only:
-     `firebase functions:list` / a call to `hfPatient` **without** an App Check
-     token should be rejected (`unauthenticated`). `.env` is git-ignored, so
+     = `false` (since 2026-06-03); `grep CANAMED_RECAPTCHA_SITE_KEY
+     .../firebase-config.js` is a real key (not empty/placeholder). Live-deploy
+     confirmation is CLI-only: a tokenless POST to the `hfPatient` callable now
+     returns `{"error":{"message":"auth required","status":"UNAUTHENTICATED"}}`
+     (handler reached → App Check NOT enforcing). If instead it were rejected by
+     the App-Check layer, Enforce would still be on. `.env` is git-ignored, so
      this label cannot be auto-checked from the repo alone.
 
 ## Known security follow-ups (code, tracked)
