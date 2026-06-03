@@ -91,12 +91,12 @@ module.exports = defineConfig({
     {
       name: "mobile-iphone",
       use: { ...devices["iPhone 14 Pro"] },
-      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|lobby-join-density|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark|modA-autoopen-steps|modA-rcol-progressive|modA-llm-stub|modb-phase-flow|modb-exchange-answers|student-pdf|verify-page|splash-authored-scenarios|mobile-bottom-tabbar|vote-tally-access|glossary-marker-tap|control-row-overflow|reference-toolbar|stage-ui-fixes|modab-2026-06-02-fixes|modab-role-sections).spec.js$/
+      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|lobby-join-density|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark|modA-autoopen-steps|modA-rcol-progressive|modA-llm-stub|modb-phase-flow|modb-exchange-answers|student-pdf|verify-page|splash-authored-scenarios|mobile-bottom-tabbar|vote-tally-access|glossary-marker-tap|control-row-overflow|reference-toolbar|stage-ui-fixes|modab-2026-06-02-fixes|modab-role-sections|live-leaderboard).spec.js$/
     },
     {
       name: "mobile-ipad",
       use: { ...devices["iPad Pro 11"] },
-      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|lobby-join-density|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark|modA-autoopen-steps|modA-rcol-progressive|modA-llm-stub|modb-phase-flow|modb-exchange-answers|student-pdf|verify-page|splash-authored-scenarios|mobile-bottom-tabbar|vote-tally-access|glossary-marker-tap|control-row-overflow|reference-toolbar|stage-ui-fixes|modab-2026-06-02-fixes|modab-role-sections).spec.js$/
+      testMatch: /(?:mobile|lazy-locale-consent|survey-feedback|lobby-form-semantics|lobby-join-density|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark|modA-autoopen-steps|modA-rcol-progressive|modA-llm-stub|modb-phase-flow|modb-exchange-answers|student-pdf|verify-page|splash-authored-scenarios|mobile-bottom-tabbar|vote-tally-access|glossary-marker-tap|control-row-overflow|reference-toolbar|stage-ui-fixes|modab-2026-06-02-fixes|modab-role-sections|live-leaderboard).spec.js$/
     },
     // Pixel 7 (Android Chrome) emulation pass — user feedback (Bug 3)
     // reported the Module A findings reveal was invisible on Android
@@ -107,7 +107,7 @@ module.exports = defineConfig({
     {
       name: "mobile-android",
       use: { ...devices["Pixel 7"] },
-      testMatch: /(?:android-findings|lazy-locale-consent|survey-feedback|lobby-form-semantics|lobby-join-density|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark|modA-autoopen-steps|modA-rcol-progressive|modA-llm-stub|modb-phase-flow|modb-exchange-answers|student-pdf|verify-page|splash-authored-scenarios|mobile-bottom-tabbar|vote-tally-access|glossary-marker-tap|control-row-overflow|reference-toolbar|stage-ui-fixes|modab-2026-06-02-fixes|modab-role-sections).spec.js$/
+      testMatch: /(?:android-findings|lazy-locale-consent|survey-feedback|lobby-form-semantics|lobby-join-density|facilitator-profile|modb-role-objective|case-cluster-by-category|investigations-anytime|modb-observer-dark|modA-autoopen-steps|modA-rcol-progressive|modA-llm-stub|modb-phase-flow|modb-exchange-answers|student-pdf|verify-page|splash-authored-scenarios|mobile-bottom-tabbar|vote-tally-access|glossary-marker-tap|control-row-overflow|reference-toolbar|stage-ui-fixes|modab-2026-06-02-fixes|modab-role-sections|live-leaderboard).spec.js$/
     }
   ],
   // Auto-start the static server before the suite runs; auto-shut down after.

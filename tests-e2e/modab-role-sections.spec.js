@@ -132,4 +132,12 @@ test.describe("Module B — per-role guidance visibility", () => {
     await page.evaluate(() => window.setModBPhase(2));   // exchange
     expect(await visible(page, ROLE_SECTION.patient), "patient guide hidden in exchange").toBe(false);
   });
+
+  test("picking a role blinks the role section so the student notices + reads it", async ({ page }) => {
+    await openModuleBPlay(page);
+    await pickRole(page, "patient");
+    // The private-brief panel flashes, and so does the now-visible patient guide.
+    await expect(page.locator("#modB-role-objective")).toHaveClass(/attention-flash/);
+    await expect(page.locator("#stage-2 #modB-patient-guide")).toHaveClass(/attention-flash/);
+  });
 });
