@@ -766,6 +766,12 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 .ref-list a, .recap-table a { color: var(--nagoya-700); word-break: break-word; }
 
 .recap-card h4:first-of-type { margin-top: var(--s-3); }
+/* The recap card's prose lists sit among full-width tables, so the global
+   .info-list 70ch readability cap (see typography base) leaves them squeezed
+   against the left while the tables span the card — fixed 2026-06-03 (user
+   report: "the management list is constrained on the left side"). Let the list
+   use the card's full width to match the adjacent recap tables. */
+.recap-card .info-list { max-width: none; }
 .recap-table {
   width: 100%;
   border-collapse: collapse;
@@ -1019,6 +1025,11 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 /* Generic per-phase visibility toggle (Module B): a section/prompt not in the
    current phase is removed from the flow entirely. */
 .is-phase-hidden { display: none !important; }
+/* Generic per-role visibility toggle (Module B, 2026-06-03): role-specific
+   guidance (physician framework, observer checklist, patient/family guides)
+   shows only for the participant holding that role. Independent of the phase
+   toggle above — an element is visible only when it carries NEITHER class. */
+.is-role-hidden { display: none !important; }
 
 /* Synced phase prev/next bar */
 .phase-nav {
@@ -1285,25 +1296,35 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   line-height: 1.55;
 }
 
-/* Pause/Explore/Explain/Realign — collapsed-by-default reference card. */
-.micro-framework-card {
+/* Pause/Explore/Explain/Realign — collapsed-by-default reference card.
+   The per-role "how to play your part" guides (patient + family, 2026-06-03)
+   share the same collapsible-card chrome; only the left-accent colour differs
+   so each role's card reads as its own thing. */
+.micro-framework-card,
+.role-guide-card {
   background: var(--surface-sunk);
   border-left: 4px solid var(--ok);
   padding: 10px 14px;
 }
-.micro-framework-card summary {
+.role-guide-card { border-left-color: var(--primary); }
+.micro-framework-card summary,
+.role-guide-card summary {
   cursor: pointer;
   font-size: 0.95rem;
   color: var(--ink);
   list-style: none;
 }
-.micro-framework-card summary::-webkit-details-marker { display: none; }
-.micro-framework-card summary::before {
+.micro-framework-card summary::-webkit-details-marker,
+.role-guide-card summary::-webkit-details-marker { display: none; }
+.micro-framework-card summary::before,
+.role-guide-card summary::before {
   content: "\25B8\00A0";
   color: var(--muted);
 }
-.micro-framework-card[open] summary::before { content: "\25BE\00A0"; }
-.micro-framework-card .info-list { margin-top: var(--s-2); }
+.micro-framework-card[open] summary::before,
+.role-guide-card[open] summary::before { content: "\25BE\00A0"; }
+.micro-framework-card .info-list,
+.role-guide-card .info-list { margin-top: var(--s-2); }
 
 /* "What to do next" coach card — the persistent (but dismissible)
    guidance under the phase stepper. Designed to be eye-catching

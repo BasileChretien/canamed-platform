@@ -520,13 +520,54 @@ var SCORING = {
    * awarded ids at sessions/<code>/rooms/<r>/modA/scoring/awarded/<id>).
    * ========================================================================== */
   moduleA_questions: [
-    { id: "qr_redflags", points: 8, unlocks: "history:1",
-      label: { en: "Screened systemic red flags",
-               fr: "A recherché les drapeaux rouges systémiques",
-               ja: "全身性レッドフラッグをスクリーニング" },
-      any: ["fever", "weight loss", "night pain", "trauma", "cancer", "history of cancer",
-            "red flag", "fièvre", "perte de poids", "douleur nocturne", "traumatis",
-            "drapeau rouge", "発熱", "体重減少", "夜間", "外傷", "がん", "癌"] },
+    /* Systemic red flags, scored PER CATEGORY (2026-06-03, user request:
+     * "points should be given for every red flag assessed"). The single
+     * lumped `qr_redflags` family was split into the four non-cauda red-flag
+     * categories of the recap table (cauda equina stays its own family,
+     * qr_cauda below) so a student who screens fever AND weight loss AND
+     * trauma earns more than one who names only fever. EACH carries
+     * `unlocks: "history:1"` so screening ANY red flag still opens the
+     * synthesis gate (SYNTH_PREREQS), matching the old behaviour; the bridge
+     * applies reveal()s idempotently, so the duplicate unlocks are harmless. */
+    { id: "qr_rf_malignancy", points: 6, unlocks: "history:1",
+      label: { en: "Screened malignancy red flags",
+               fr: "A recherché les drapeaux rouges de malignité",
+               ja: "悪性腫瘍のレッドフラッグをスクリーニング" },
+      any: ["weight loss", "lost weight", "losing weight", "cancer", "history of cancer",
+            "malignan", "night pain", "pain at night", "rest pain", "pain at rest", "tumour", "tumor",
+            "perte de poids", "perdu du poids", "antécédent de cancer", "douleur nocturne",
+            "douleur la nuit", "douleur au repos", "tumeur",
+            "体重減少", "体重が減", "がん", "癌", "悪性", "夜間痛", "夜間の痛み", "安静時痛", "腫瘍"] },
+
+    { id: "qr_rf_infection", points: 6, unlocks: "history:1",
+      label: { en: "Screened infection red flags",
+               fr: "A recherché les drapeaux rouges d'infection",
+               ja: "感染症のレッドフラッグをスクリーニング" },
+      any: ["fever", "feverish", "night sweat", "chills", "shiver", "iv drug", "intravenous",
+            "drug use", "immunosupp", "infection",
+            "fièvre", "fébril", "sueurs nocturnes", "frissons", "toxicomanie", "immunodépr",
+            "immunosuppr",
+            "発熱", "寝汗", "悪寒", "感染", "免疫", "注射"] },
+
+    { id: "qr_rf_fracture", points: 5, unlocks: "history:1",
+      label: { en: "Screened fracture red flags",
+               fr: "A recherché les drapeaux rouges de fracture",
+               ja: "骨折のレッドフラッグをスクリーニング" },
+      any: ["trauma", "injur", "a fall", "fell", "accident", "osteoporos", "steroid", "fracture",
+            "broke", "broken bone",
+            "traumatis", "blessure", "chute", "tombé", "ostéoporos", "corticoïde",
+            "外傷", "けが", "怪我", "転倒", "転んだ", "骨折", "骨粗", "ステロイド", "事故"] },
+
+    { id: "qr_rf_inflammatory", points: 5, unlocks: "history:1",
+      label: { en: "Screened inflammatory (axial SpA) red flags",
+               fr: "A recherché les drapeaux rouges inflammatoires (SpA axiale)",
+               ja: "炎症性(体軸性脊椎関節炎)のレッドフラッグをスクリーニング" },
+      any: ["morning stiffness", "stiffness in the morning", "stiff in the morning",
+            "better with exercise", "improves with exercise", "worse with rest",
+            "second half of the night", "inflammat", "spondyloarth", "ankylos",
+            "raideur matinale", "raideur le matin", "amélior", "pire au repos", "inflammatoire",
+            "spondyloarthr", "spondylarthr",
+            "朝のこわばり", "朝こわばり", "運動で改善", "安静で悪化", "炎症", "脊椎関節炎", "強直性"] },
 
     { id: "qr_cauda", points: 10, unlocks: "history:2",
       label: { en: "Screened cauda equina",

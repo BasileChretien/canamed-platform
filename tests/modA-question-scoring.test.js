@@ -64,12 +64,26 @@ test("case-content.js exposes the moduleA_questions and penalty families", () =>
   });
 });
 
-test("EN red-flag question fires qr_redflags with unlocks=history:1", () => {
+test("EN red-flag question scores EACH category assessed, all unlock history:1", () => {
   const { scoreQuestion } = loadScoring();
+  // fever → infection ; weight loss + night pain → malignancy. Both categories
+  // must score (2026-06-03: "points for every red flag assessed").
   const r = scoreQuestion("Any fever, weight loss or night pain?", {});
-  assert.deepEqual(r.award, ["qr_redflags"]);
-  assert.deepEqual(r.unlocks, ["history:1"]);
+  assert.ok(r.award.includes("qr_rf_infection"), "fever scores infection");
+  assert.ok(r.award.includes("qr_rf_malignancy"), "weight loss / night pain scores malignancy");
+  assert.ok(r.unlocks.includes("history:1"), "any red flag unlocks the synthesis gate");
   assert.deepEqual(r.penalty, []);
+});
+
+test("a comprehensive red-flag screen scores EACH of the four categories", () => {
+  const { scoreQuestion } = loadScoring();
+  const r = scoreQuestion(
+    "Any fever or night sweats, recent weight loss or history of cancer, " +
+    "any recent trauma or a fall, and morning stiffness that improves with exercise?",
+    {});
+  ["qr_rf_infection", "qr_rf_malignancy", "qr_rf_fracture", "qr_rf_inflammatory"]
+    .forEach(id => assert.ok(r.award.includes(id), id + " must score"));
+  assert.ok(r.unlocks.includes("history:1"));
 });
 
 test("FR cauda-equina question fires qr_cauda with unlocks=history:2", () => {
@@ -141,11 +155,12 @@ test("Penalty: dismissive language fires pen_chat_dismissive", () => {
 test("Once-only: a family already awarded is not awarded again", () => {
   const { scoreQuestion } = loadScoring();
   const r1 = scoreQuestion("Any fever?", {});
-  assert.deepEqual(r1.award, ["qr_redflags"]);
+  assert.deepEqual(r1.award, ["qr_rf_infection"]);
+  assert.deepEqual(r1.unlocks, ["history:1"]);
 
-  const awarded = { qr_redflags: true };
-  const r2 = scoreQuestion("Any night pain or weight loss?", awarded);
-  assert.deepEqual(r2.award, [], "must not double-award");
+  const awarded = { qr_rf_infection: true };
+  const r2 = scoreQuestion("And are you still feverish?", awarded);
+  assert.deepEqual(r2.award, [], "must not double-award the same family");
   assert.deepEqual(r2.unlocks, [], "no fresh unlocks once already awarded");
 });
 

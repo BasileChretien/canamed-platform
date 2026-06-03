@@ -48,17 +48,28 @@ test.describe("Module B — synced phase flow", () => {
     expect(await shown(page, "#observer-checklist"), "observer checklist hidden in setup").toBe(false);
     expect(await shown(page, ".prompts-card-modB"), "prompts hidden in setup").toBe(false);
     expect(await shown(page, ".answers-card-bulleted"), "answers form hidden in setup").toBe(false);
-    // Reference material stays available in every phase.
-    expect(await shown(page, ".spikes-strip"), "SPIKES reference always shows").toBe(true);
+    // Scene-prep reference strips show during setup + play.
+    expect(await shown(page, ".spikes-strip"), "SPIKES strip shows in setup").toBe(true);
+    expect(await shown(page, ".phrases-box"), "useful sentences show in setup").toBe(true);
   });
 
-  test("Phase 3 (exchange) shows the prompts, hides setup sections; reference stays", async ({ page }) => {
+  test("Phase 3 (exchange) shows the prompts, hides setup + scene-prep strips", async ({ page }) => {
     await setupModB(page);
     await page.evaluate(() => window.setModBPhase(2));
     expect(await shown(page, ".prompts-card-modB"), "prompts show in exchange").toBe(true);
     expect(await shown(page, ".vignette"), "vignette hidden in exchange").toBe(false);
     expect(await shown(page, "#modB-role-picker"), "role picker hidden in exchange").toBe(false);
-    expect(await shown(page, ".spikes-strip"), "SPIKES reference still shows").toBe(true);
+    // SPIKES + useful sentences are scene-prep noise during the discussion —
+    // hidden in Phase 3/4 (2026-06-03 user request).
+    expect(await shown(page, ".spikes-strip"), "SPIKES strip hidden in exchange").toBe(false);
+    expect(await shown(page, ".phrases-box"), "useful sentences hidden in exchange").toBe(false);
+  });
+
+  test("Phase 4 (bullets) also hides the SPIKES + useful-sentences strips", async ({ page }) => {
+    await setupModB(page);
+    await page.evaluate(() => window.setModBPhase(3));
+    expect(await shown(page, ".spikes-strip"), "SPIKES strip hidden in bullets").toBe(false);
+    expect(await shown(page, ".phrases-box"), "useful sentences hidden in bullets").toBe(false);
   });
 
   test("Phase 4 (bullets) shows the group-answers form", async ({ page }) => {

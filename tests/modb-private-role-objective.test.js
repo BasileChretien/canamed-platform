@@ -81,8 +81,10 @@ test("select / deselect / restore / swap all drive the private objective panel",
   // deselect hides it
   const dz = fn.slice(fn.indexOf("const deselect = chip =>"), fn.indexOf("chips.forEach(chip =>"));
   assert.match(dz, /showRoleObjective\(null\)/, "deselect() must hide the objective panel");
-  // restore-from-localStorage on init reveals the saved role's objective
-  assert.match(fn, /showRoleObjective\(saved\)/,
+  // restore-from-localStorage on init reveals the saved role's objective (and,
+  // since 2026-06-03, runs unconditionally so role-gating gets a baseline even
+  // when no role is saved — the saved value is captured in `restored`).
+  assert.match(fn, /showRoleObjective\(restored\)/,
     "init must reveal the restored role's objective");
   // role swap (replay) updates the panel to the new role
   const swapStart = SCRIPT.indexOf("function applyRoleSwap");

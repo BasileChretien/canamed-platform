@@ -2353,6 +2353,46 @@
           &middot; "Take your time." &middot; "What questions do you have for me?"</span>
         </div>
 
+        <!-- Per-role "how to play your part" guides (2026-06-03, user request:
+             each role gets its own explanatory section, shown ONLY to the
+             participant holding that role — mirrors the physician's
+             Pause/Explore/Explain/Realign card and the observer's checklist).
+             Role-gated by applyModBRoleVisibility() (is-role-hidden) and
+             phase-gated to setup+play by MODB_PHASE_SECTIONS, so they vanish
+             in Phase 3/4 like the rest of the scene-prep material. -->
+        <details class="card role-guide-card" id="modB-patient-guide" open>
+          <summary>
+            <span data-i18n="modB.guide.patient.summary" data-i18n-html><strong>Playing the patient &mdash; make it real</strong></span>
+          </summary>
+          <ol class="info-list">
+            <li data-i18n="modB.guide.patient.p1" data-i18n-html><strong>Decide privately now</strong> &mdash; deep down, do you want to
+              know everything, or would you rather not? Don't announce it; let the physician
+              discover it through their questions.</li>
+            <li data-i18n="modB.guide.patient.p2" data-i18n-html><strong>React like a person, not a textbook.</strong> You can go quiet,
+              ask "is it cancer?", well up, or freeze. There is no script.</li>
+            <li data-i18n="modB.guide.patient.p3" data-i18n-html><strong>Answer honestly</strong> if the physician asks how much you want
+              to know &mdash; from the stance you chose.</li>
+            <li data-i18n="modB.guide.patient.p4" data-i18n-html>It is okay to still be upset at the end. A good consultation does
+              not always end calmly.</li>
+          </ol>
+        </details>
+
+        <details class="card role-guide-card" id="modB-family-guide" open>
+          <summary>
+            <span data-i18n="modB.guide.family.summary" data-i18n-html><strong>Playing the family member (adult child)</strong></span>
+          </summary>
+          <ol class="info-list">
+            <li data-i18n="modB.guide.family.p1" data-i18n-html><strong>Partway through &mdash; not at the start</strong> &mdash; quietly
+              take the physician aside and ask them not to tell your parent everything.</li>
+            <li data-i18n="modB.guide.family.p2" data-i18n-html><strong>Your worry comes from love.</strong> Press gently if they
+              hesitate: "It would crush them," "In our family we don't say the word."</li>
+            <li data-i18n="modB.guide.family.p3" data-i18n-html><strong>You are not the villain</strong> &mdash; you hand the physician
+              the real cross-cultural dilemma to navigate.</li>
+            <li data-i18n="modB.guide.family.p4" data-i18n-html>Let the physician explore your worry; don't back down the instant
+              they push back.</li>
+          </ol>
+        </details>
+
         <!-- Observer's structured SPIKES observation pad (roleplay review
              2026-05-20: "the observer had no structured tool — give them a
              SPIKES tick-list + note field to anchor the Phase-3 debrief").
