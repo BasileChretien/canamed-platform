@@ -156,4 +156,32 @@ test.describe("Module B — per-role guidance visibility", () => {
       expect(await visible(page, sel), sel + " visible in setup for " + role).toBe(true);
     }
   });
+
+  test("the private brief renders directly BELOW the picked role's guide (Phase 1)", async ({ page }) => {
+    await openModuleBPlay(page);
+    await page.evaluate(() => window.setModBPhase(0));   // Phase 1 (setup)
+    await pickRole(page, "physician");
+
+    const brief = page.locator("#modB-role-objective");
+    await expect(brief).toBeVisible();
+    await expect(brief).toContainText("Your private brief");
+    await expect(brief).toContainText("Deliver the news with empathy");
+
+    // It FOLLOWS the role's guide card in the DOM — and since the three other
+    // guides are display:none, the single brief panel renders right under the
+    // one visible guide. (DOM order, not pixel boxes, to avoid racing the
+    // smooth scroll-into-view.)
+    const briefFollowsGuide = await page.evaluate(guideSel => {
+      const guide = document.querySelector("#stage-2 " + guideSel);
+      const briefEl = document.getElementById("modB-role-objective");
+      return !!(guide && briefEl &&
+        (guide.compareDocumentPosition(briefEl) & Node.DOCUMENT_POSITION_FOLLOWING));
+    }, ROLE_SECTION.physician);
+    expect(briefFollowsGuide, "brief panel comes right after the guide card").toBe(true);
+
+    // Switching role swaps the brief content (still one panel, below the new guide).
+    await pickRole(page, "patient");
+    await expect(brief).toContainText("You suspected something was wrong");
+    await expect(brief).not.toContainText("Deliver the news with empathy");
+  });
 });
