@@ -2252,7 +2252,13 @@ function _joinParticipantWireUp() {
   // (The cancel() above clears any stale removal armed by an older build.)
   saveResume(resumeRoom);
 
-  refRoomCount.on("value", snap => { roomCount = snap.val() || 4; });
+  refRoomCount.on("value", snap => {
+    roomCount = snap.val() || 4;
+    // The leaderboard iterates roomNames(roomCount); a late/changed room count
+    // must refresh it so a new room's score can show live (not only after the
+    // next score write). No-op if the board isn't mounted yet.
+    if (typeof renderLeaderboard === "function") { try { renderLeaderboard(); } catch (_) {} }
+  });
   refStarted.on("value", snap => { started = !!snap.val(); maybeSelfAssign(); updateWaitingStatus(); });
   refTeams.on("value", snap => { teamsLink = snap.val() || ""; renderTeamsButtons(); });
   refQuiz.on("value", snap => { quizLink = snap.val() || ""; renderQuizButton(); });
@@ -9617,6 +9623,13 @@ function buildDecision(d, srSink) {
   return wrap;
 }
 
+/* Per-room totals at the last render, so renderLeaderboard() can flag which
+   rooms just scored and pulse them — makes the live update visible (2026-06-03
+   user report: "the score doesn't feel like it updates live"). null = first
+   paint (no pulse on the initial render). */
+let _lbPrevTotals = null;
+let _lbPrevTogether = null;
+
 /* the live leaderboard - a cooperative shared goal first, then a gentle ranking
    (top three only; everyone else shown but never labelled "last") */
 function renderLeaderboard() {
@@ -9627,13 +9640,23 @@ function renderLeaderboard() {
     return { room: r, name: (data.teamName || r), total: scoreTotal(data) };
   }).sort((a, b) => b.total - a.total || a.room.localeCompare(b.room));
   box.innerHTML = "";
+  // Which rooms went UP since the last paint? Those rows get a one-shot pulse.
+  const prevTotals = _lbPrevTotals;
+  const bumped = {};
+  if (prevTotals) {
+    rows.forEach(r => { if (prevTotals[r.room] != null && r.total > prevTotals[r.room]) bumped[r.room] = true; });
+  }
+  _lbPrevTotals = {};
+  rows.forEach(r => { _lbPrevTotals[r.room] = r.total; });
 
   // --- the cooperative shared goal: every room's points count together ---
   const together = rows.reduce((s, r) => s + r.total, 0);
+  const togetherUp = (_lbPrevTogether != null) && (together > _lbPrevTogether);
+  _lbPrevTogether = together;
   const goal = Math.max(1, roomCount) * 220;
   const pct = Math.min(100, Math.round(together / goal * 100));
   const shared = document.createElement("div");
-  shared.className = "lb-shared";
+  shared.className = "lb-shared" + (togetherUp ? " lb-shared-bumped" : "");
   const sh = document.createElement("div");
   sh.className = "lb-shared-head";
   sh.innerHTML = "<strong>Together</strong><span>" + together + " / " + goal +
@@ -9680,7 +9703,7 @@ function renderLeaderboard() {
     const ranked = i < 3;
     const row = document.createElement("li");
     row.className = "lb-row" + (r.room === myRoom ? " me" : "") +
-      (ranked ? " ranked" : "");
+      (ranked ? " ranked" : "") + (bumped[r.room] ? " lb-bumped" : "");
     const rankWord = ranked ? ("rank " + (i + 1)) : "in play";
     row.setAttribute("aria-label",
       r.name + (r.room === myRoom ? " (your team)" : "") + ", " + rankWord +
@@ -9995,6 +10018,38 @@ function applyModBRoleVisibility(role) {
       node.classList.toggle("is-role-hidden", !show);
     });
   });
+}
+
+/* Blink a node once to draw the eye (used when a Module B role is picked, so
+   the student notices the section that just appeared and reads it). The
+   remove→reflow→add dance restarts the CSS animation even on a rapid re-pick;
+   the class is cleared on animationend so the node returns to its base style. */
+function _flashEl(node) {
+  if (!node) return;
+  node.classList.remove("attention-flash");
+  void node.offsetWidth;                 // force reflow so the animation restarts
+  node.classList.add("attention-flash");
+  node.addEventListener("animationend", function handler() {
+    node.classList.remove("attention-flash");
+    node.removeEventListener("animationend", handler);
+  });
+}
+
+/* When a student PICKS a Module B role, flash the role-specific section(s) that
+   appear so they understand to read (and, for the collapsible guides, click)
+   them. Always flashes the private-brief panel; also flashes the role's guide
+   card when it is currently visible (not phase/role-hidden). */
+function flashRoleSections(role) {
+  if (typeof document === "undefined" || !role) return;
+  _flashEl(el("modB-role-objective"));
+  const map = MODB_ROLE_SECTIONS.find(s => s.roles.indexOf(role) !== -1);
+  if (!map) return;
+  const stage = document.getElementById("stage-2");
+  const card = stage && stage.querySelector(map.sel);
+  if (card && !card.classList.contains("is-phase-hidden") &&
+      !card.classList.contains("is-role-hidden")) {
+    _flashEl(card);
+  }
 }
 
 function _modBT(key, fallback, vars) {
@@ -10322,6 +10377,7 @@ function initRolePicker() {
     chips.forEach(c => c.setAttribute("aria-checked", "false"));
     chip.setAttribute("aria-checked", "true");
     showRoleObjective(chip.dataset.role);   // reveal MY private brief only
+    flashRoleSections(chip.dataset.role);   // blink it so they notice + read it
     try { localStorage.setItem(STORAGE_KEY, chip.dataset.role); } catch (e) {}
     // Publish my pick so the room sees it live (double-claim becomes visible).
     // Best-effort: keyed by clientId, the rule lets me write only my own slot.
@@ -10513,6 +10569,7 @@ function applyRoleSwap(steps, round) {
     chips.forEach(c =>
       c.setAttribute("aria-checked", c.dataset.role === next ? "true" : "false"));
     showRoleObjective(next);   // swap-and-replay: reveal the rotated role's brief
+    flashRoleSections(next);   // blink the rotated role's section so they re-read it
     try { localStorage.setItem("canamed_modB_role", next); } catch (e) {}
     try {
       if (MODE === "shared" && refRoleChoices && clientId && !isRoomAdmin) {

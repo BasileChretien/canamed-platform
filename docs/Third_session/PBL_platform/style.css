@@ -3417,6 +3417,43 @@ h2, h3 { text-wrap: balance; }
 }
 .lb-shared-note { margin: 6px 0 0; font-size: 0.82rem; color: var(--muted); }
 
+/* Live-update feedback (2026-06-03, user: "the score doesn't feel like it
+   updates live"). The board re-renders silently on every score change; without
+   a cue the change is easy to miss. A room whose total just went UP gets a
+   one-shot ring pulse, and the cohort "Together" number pops — so the liveness
+   is visible. Classes are applied by renderLeaderboard() to freshly-built nodes,
+   so the animation plays once on insert. */
+@keyframes lb-bump {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34,160,90,0); }
+  20%, 60% { box-shadow: 0 0 0 2px var(--ok); }
+}
+.lb-bumped { animation: lb-bump 1.2s ease-in-out; border-radius: var(--r-sm, 6px); }
+@keyframes lb-together-pop {
+  0%, 100% { transform: none; }
+  30% { transform: scale(1.12); }
+}
+.lb-shared-bumped .lb-shared-head span {
+  animation: lb-together-pop .6s var(--ease-out, ease-out);
+  color: var(--ok);
+}
+
+/* Attention "blink" for the Module B per-role section that appears when a
+   student picks a role (2026-06-03 user request: "must clignoter so they
+   understand they have to click on it and read it"). Triggered by
+   flashRoleSections() on a deliberate role pick / swap. ~2 pulses, well under
+   the 3-flash/sec seizure threshold. */
+@keyframes role-attention-flash {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(15,78,133,0); }
+  25%, 65% { box-shadow: 0 0 0 4px var(--primary); }
+}
+.attention-flash { animation: role-attention-flash 1.4s ease-in-out 2; border-radius: var(--r-md, 10px); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lb-bumped, .lb-shared-bumped .lb-shared-head span, .attention-flash {
+    animation: none;
+  }
+}
+
 /* --- the gentle ranking --- */
 #leaderboard { margin-top: var(--s-3); }
 .lb-row.ranked { background: var(--card); }

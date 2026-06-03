@@ -144,5 +144,12 @@ test.describe("Live leaderboard + dashboard update without facilitator refresh",
     }, code);
     await expect(togetherHead).toContainText("33 /", { timeout: 500 });
     expect(Date.now() - t0).toBeLessThan(500);
+
+    // The room that just scored gets a one-shot "bumped" highlight so the live
+    // update is VISIBLE, not silent (2026-06-03: "the score doesn't feel like it
+    // updates live"). Room 2 (0 → 33) is the only room that went up.
+    const bumped = page.locator("#leaderboard .lb-row.lb-bumped");
+    await expect(bumped).toHaveCount(1, { timeout: 1000 });
+    await expect(bumped).toContainText("Room 2");
   });
 });
