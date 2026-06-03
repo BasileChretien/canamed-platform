@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v45" below to the matching new string.
+         2. Update every "?v=v46" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v45"></script>
-  <link rel="stylesheet" href="style.css?v=v45" />
+  <script src="theme-init.js?v=v46"></script>
+  <link rel="stylesheet" href="style.css?v=v46" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v45" defer></script>
+  <script src="sw-register.js?v=v46" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -2229,20 +2229,14 @@
           </div>
           <p class="role-deselect-hint" data-i18n="modB.role.deselect-hint">Picked the wrong role? Tap it again to clear your choice.</p>
 
-          <!-- Private per-role objective (2026-05-26): the role chips above used
-               to print every role's full brief publicly, which leaked the
-               patient's hidden stance and the family's secret request to the
-               physician before the scene began. Chips now show only the NAME;
-               the brief of the role YOU picked is revealed here, on your device
-               only (showRoleObjective() in script.js binds this panel to the
-               selected role's existing modB.role.<role>.brief key and re-runs
-               applyI18n so it stays translated + sanitised). Hidden until a
-               role is chosen. aria-live=polite so a screen reader announces the
-               brief when it appears. -->
-          <div class="role-objective hidden" id="modB-role-objective" role="status" aria-live="polite">
-            <p class="role-objective-label" data-i18n="modB.role.objective-label">Your private brief — only you see this:</p>
-            <p class="role-objective-text" id="modB-role-objective-text" data-i18n-html></p>
-          </div>
+          <!-- Private per-role objective (2026-05-26): chips show only the role
+               NAME; the brief of the role YOU picked is revealed privately on
+               your device. RELOCATED 2026-06-03 (user request) out of the picker
+               to sit DIRECTLY BELOW the role's guidance card (see
+               #modB-role-objective after the per-role guides), so each role's
+               brief reads as the footer of its own section rather than floating
+               up by the chips. showRoleObjective() still binds it to the
+               selected role's modB.role.<role>.brief key. -->
 
           <!-- "I'd rather observe" panic affordance (2026-05-22): the
                safety-note promises "you can move into the observer role at any
@@ -2448,6 +2442,18 @@
               worry becomes part of the conversation, not a secret kept from the patient.</li>
           </ol>
         </details>
+
+        <!-- Private per-role brief — RELOCATED here 2026-06-03 (user request) so
+             it renders directly below the selected role's guidance card. Only one
+             role guide is visible at a time (the other three are display:none via
+             role/phase gating), so this single panel always sits right under it.
+             showRoleObjective() fills it with the picked role's brief; phase-gated
+             to setup+play (MODB_PHASE_SECTIONS) so it hides in Phase 3/4 like the
+             guides. role=status + aria-live=polite announces it on a screen reader. -->
+        <div class="role-objective hidden" id="modB-role-objective" role="status" aria-live="polite">
+          <p class="role-objective-label" data-i18n="modB.role.objective-label">Your private brief — only you see this:</p>
+          <p class="role-objective-text" id="modB-role-objective-text" data-i18n-html></p>
+        </div>
 
         <!-- Phase 3 discussion: pinned ground rule + the 6 questions as
              discrete prompt cards. -->
@@ -3179,46 +3185,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v45" defer></script>
+  <script src="firebase-config.js?v=v46" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v45" defer></script>
+  <script src="orgs.js?v=v46" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v45" defer></script>
+  <script src="platform-config.js?v=v46" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v45" defer></script>
+  <script src="telemetry.js?v=v46" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v45" defer></script>
+  <script src="purify.min.js?v=v46" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v45" defer></script>
+  <script src="i18n.js?v=v46" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v45" defer></script>
+  <script src="localdb.js?v=v46" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v45" defer></script>
+  <script src="lib.js?v=v46" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v45" defer></script>
+  <script src="pure-utils.js?v=v46" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3229,7 +3235,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v45" defer></script>
+  <script src="script-loader.js?v=v46" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3239,7 +3245,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v45" defer></script>
+  <script src="script.js?v=v46" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the

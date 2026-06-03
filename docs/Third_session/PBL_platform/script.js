@@ -9973,6 +9973,9 @@ const MODB_PHASE_SECTIONS = [
   { sel: ".micro-framework-card",  phases: ["setup", "play"] },
   { sel: "#modB-patient-guide",    phases: ["setup", "play"] },
   { sel: "#modB-family-guide",     phases: ["setup", "play"] },
+  // The private brief now sits below the role guides (relocated out of the
+  // picker 2026-06-03), so it needs its own phase gate to hide in Phase 3/4.
+  { sel: "#modB-role-objective",   phases: ["setup", "play"] },
   { sel: ".prompts-card-modB",     phases: ["exchange"] },
   // Team decisions ("vote together") only appear in the discussion phase — they
   // used to sit visible from the very start (user request 2026-06-02). Once the
