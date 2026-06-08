@@ -11650,6 +11650,17 @@ function paintJoinQr(code) {
     wrap.hidden = true;
   }
 }
+/* peekDeepLinkCode(): read ?s=CODE from the URL WITHOUT consuming it — no
+ * input fill, no history rewrite, no click. Returns the session code in the
+ * SAME normalised form as the stored pointer (sanitizeCode → lowercase) so the
+ * two are directly comparable, or "" when no link is present. initEntry() uses
+ * this to decide whether an incoming link should override the silent
+ * auto-resume of a previously-joined session. */
+function peekDeepLinkCode() {
+  try {
+    return sanitizeCode(new URLSearchParams(window.location.search).get("s"));
+  } catch (e) { return ""; }
+}
 function tryConsumeDeepLink() {
   try {
     const params = new URLSearchParams(window.location.search);
@@ -12134,7 +12145,21 @@ function initEntry() {
   // and show the splash (with a one-time "session ended" hint), not
   // auto-resume into a session that's about to kick the user out.
   const stored = sanitizeCode(localStorage.getItem("canamed_session"));
-  if (stored) {
+  // A deep link (?s=CODE) is an EXPLICIT request to join that specific session
+  // and must take precedence over the silent auto-resume of a previously-joined
+  // session. Without this gate, a user who joined session A and is later handed
+  // a link to session B silently lands back in A: the stored pointer short-
+  // circuits initEntry (the `return` below) before tryConsumeDeepLink() — which
+  // only runs inside showSplash() — ever gets a chance to consume the link.
+  // (Reported 2026-06-08.) We still auto-resume when there is no link, or when
+  // the link points at the SAME session the device already holds (the smoother
+  // path — restores name/consent and rejoins without a splash round-trip). When
+  // the link names a DIFFERENT session we fall through to showSplash(), whose
+  // tryConsumeDeepLink() joins the new session; the stored A pointer is left
+  // intact until that join overwrites it, so a dead-link typo still falls back
+  // to resuming A on the next reload rather than stranding the user.
+  const linkCode = peekDeepLinkCode();
+  if (stored && (!linkCode || linkCode === stored)) {
     sessionStatus(stored).then(status => {
       if (status.exists && !status.closed) {
         enterUnlockedSession(stored);
