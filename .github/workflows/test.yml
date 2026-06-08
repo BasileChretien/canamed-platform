@@ -63,7 +63,7 @@ jobs:
         # if: always() ensures we still get a report even if a single test
         # flaked (coverage is computed from the runs that did execute).
         if: always()
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage/lcov.info
           flags: unit
