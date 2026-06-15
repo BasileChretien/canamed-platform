@@ -1,0 +1,71 @@
+# Validates the Cloud Functions package (docs/Third_session/PBL_platform/functions)
+# on every push + pull request.
+#
+# Why this exists: the "Unit tests" job (test.yml) only syntax-checks the
+# browser-side PBL_platform files — it never installs or loads the Functions
+# tree. So a dependency bump there could break index.js at deploy/runtime while
+# CI stays green. That is not hypothetical: firebase-admin v14 removed the
+# legacy admin.database() accessor (used by index.js), and the Dependabot
+# auto-merge bot lands npm patch/minor bumps automatically once the *required*
+# checks pass — none of which touched this package.
+#
+# This job closes the gap: install the exact locked deps, syntax-check, and
+# actually require() index.js, so a broken import or a breaking dependency
+# change fails CI before it can merge or deploy.
+#
+# Runs on Node 22 to match functions/package.json `engines.node` (and
+# firebase-admin v14, which dropped Node <= 20).
+#
+# To make this gate merges like the other suites, add the
+# "functions (load + require)" check to the branch-protection required
+# status checks for main (GitHub repo settings — see README).
+
+name: Functions CI
+
+# Least-privilege token: this workflow only needs to read the repo.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: functions-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: docs/Third_session/PBL_platform/functions
+
+jobs:
+  functions:
+    name: functions (load + require)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/Third_session/PBL_platform/functions/package-lock.json
+      - name: Show node + npm versions
+        run: |
+          node --version
+          npm --version
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Syntax-check the function sources
+        run: |
+          node --check index.js
+          node --check lib/hf-helpers.js
+      - name: Load index.js (catches breaking dependency changes at require time)
+        # Requiring the entry point exercises every top-level import + the
+        # firebase-functions handler registration. A removed/renamed export in
+        # a bumped dependency (e.g. firebase-admin's admin.database()) throws
+        # here. GCLOUD_PROJECT lets admin.initializeApp() resolve without creds.
+        env:
+          GCLOUD_PROJECT: demo-functions-ci
+        run: node -e "require('./index.js'); console.log('index.js loaded OK under', process.version);"
