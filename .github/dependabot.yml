@@ -56,6 +56,14 @@ updates:
       - "dependencies"
       - "npm"
       - "functions"
+    # firebase-functions (7.2.5, the latest) peers firebase-admin to
+    # ^11 || ^12 || ^13, so firebase-admin v14 is NOT installable here yet — a
+    # clean `npm ci` fails ERESOLVE (see the Functions CI job, which caught
+    # exactly this). Hold the major until firebase-functions adds v14 support,
+    # then remove this ignore (and migrate admin.database() -> getDatabase()).
+    ignore:
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
