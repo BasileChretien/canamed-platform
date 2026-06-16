@@ -91,7 +91,7 @@ test.describe("Wrap-up feedback survey", () => {
     expect(r.hints).toBeGreaterThanOrEqual(2);
   });
 
-  test("the questionnaire is gated behind the post-test (combined wrap-up flow)", async ({ page }) => {
+  test("_surveyReadyAfterPostTest helper stays exposed (retained; renderSurvey no longer gates on it, 2026-06-16)", async ({ page }) => {
     await page.goto("/");
     const r = await page.evaluate(() => {
       const f = window._surveyReadyAfterPostTest;
