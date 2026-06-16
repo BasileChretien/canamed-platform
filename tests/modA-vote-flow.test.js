@@ -130,3 +130,18 @@ test("renderDecisions completes the flow to Group answers once the vote is settl
   assert.match(fn, /lastModuleAVotesAllCommitted/, "fires once on the settle transition");
   assert.match(fn, /switchRcolTab\("answers"\)/, "opens Group answers when settled");
 });
+
+test("the hypotheses listener repaints the decisions panel (gate-refresh bug, 2026-06-16)", () => {
+  // A hypotheses-gated vote (dec_plan, unlockWhen.hypotheses) must drop its
+  // "Ready when: add a working hypothesis" lock the moment the team crosses
+  // two working hypotheses — the refHypotheses 'value' handler must therefore
+  // re-render the decisions panel, not only the prompts. Previously it called
+  // renderPrompts() but not renderDecisions(), so the management-plan vote
+  // stayed locked until the next presence/score event happened to repaint it.
+  const start = SCRIPT.indexOf('refHypotheses.on("value"');
+  assert.ok(start >= 0, "refHypotheses 'value' listener must exist");
+  const handler = SCRIPT.slice(start, SCRIPT.indexOf("});", start) + 3);
+  assert.match(handler, /renderPrompts\(\)/, "still unlocks the discussion prompts on the gate");
+  assert.match(handler, /renderDecisions\(\)/,
+    "must also repaint a hypotheses-gated decision so it unlocks live");
+});
