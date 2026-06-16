@@ -416,25 +416,23 @@
               ] },
             certId
               ? { width: "auto", alignment: "center", margin: [12, 0, 12, 0], stack: [
-                    // Scannability: pure black on an explicit white field (max
-                    // camera contrast — navy modules binarise poorly), eccLevel
-                    // "L" so the short /v?id= verify URL stays a low QR version
-                    // (≈29x29) instead of a dense 33x33, a larger fit so each
-                    // module clears the ~0.7 mm a phone needs, and a bottom
-                    // margin to keep a clean quiet zone above the id label.
-                    { qr: (verifyUrl || certId), fit: 72,
-                      foreground: "#000000", background: "#ffffff",
-                      eccLevel: "L", alignment: "center", margin: [0, 0, 0, 6] },
-                    { text: L.certVerifyId, style: "certLbl", alignment: "center", margin: [0, 3, 0, 0] },
+                    // QR hidden 2026-06-16 (PI request): the verify URL is baked
+                    // into each PDF from the hosting domain at generation time, so
+                    // a future host migration would rot already-printed codes. The
+                    // Verification ID below stays — enough to look a certificate up
+                    // against the facilitator registry. To restore scannable
+                    // verification, reinstate the pdfmake QR stack entry here; the
+                    // verifyUrl + verify.html plumbing is left intact.
+                    { text: L.certVerifyId, style: "certLbl", alignment: "center", margin: [0, 0, 0, 0] },
                     { text: certId, style: "certId", alignment: "center" }
                   ] }
               : { width: 0, text: "" },
             { width: "auto", stack: [
                 { text: L.certIssued + dateStr, style: "foot", alignment: "right" },
                 { text: L.certSession + sessionCode, style: "foot", alignment: "right" },
-                certId
-                  ? { text: L.certVerifyOnline, style: "footSmall", alignment: "right", margin: [0, 4, 0, 0] }
-                  : { text: "" }
+                // "Verify online — scan the QR" line removed with the QR
+                // (2026-06-16, PI request); the Verification ID block remains.
+                { text: "" }
               ] }
           ], columnGap: 22, margin: [0, 10, 0, 0] }
       ],

@@ -9855,23 +9855,25 @@ function updateModANextStep() {
     textEl.textContent = _coachT("modA.coach.open-discussion",
       "✓ Hypotheses in — the Debate is open. Debate the prompts " +
       "(both a Caen and a Nagoya voice on each compare prompt).");
-    _coachSetAction(actionsEl, "modA.coach.btn.open-discussion", "Open Debate →",
-      () => { if (typeof switchRcolTab === "function") switchRcolTab("discussion"); });
+    // No "Open Debate →" jump button (2026-06-16, PI request): students reach
+    // the Debate via the right-column tab once the gate opens, not via a
+    // one-click coach shortcut that lets one student race ahead of the group.
+    _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
   } else if (onDiscussion && modAAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modA.coach.in-discussion",
       "Debate the prompts with your group — when you're ready, open Group answers " +
       "to capture your 4 bullets.");
-    _coachSetAction(actionsEl, "modA.coach.btn.open-answers", "Open Group answers →",
-      () => { if (typeof switchRcolTab === "function") switchRcolTab("answers"); });
+    // No "Open Group answers →" jump button (2026-06-16, PI request).
+    _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
   } else if (modAAnswerEntries.length > 0 && !allBulletsCovered) {
     const remaining = 4 - bulletsCovered.size;
     const tpl = _coachT("modA.coach.bullets-partial",
       "Capturing bullets — {n} still to add to cover all 4.");
     textEl.textContent = tpl.replace("{n}", String(remaining));
-    _coachSetAction(actionsEl, onAnswers ? null : "modA.coach.btn.open-answers", "Open Group answers →",
-      () => { if (typeof switchRcolTab === "function") switchRcolTab("answers"); });
+    // No "Open Group answers →" jump button (2026-06-16, PI request).
+    _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
   } else if (allBulletsCovered) {
     textEl.textContent = _coachT("modA.coach.bullets-complete",
