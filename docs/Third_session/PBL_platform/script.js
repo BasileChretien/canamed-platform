@@ -3588,6 +3588,12 @@ function startRoom() {
     // Debate unlocks the moment the team crosses two, and refresh the coach +
     // right-column reveal.
     if (typeof renderPrompts === "function") renderPrompts();
+    // ...and the decisions panel: a hypotheses-gated vote (e.g. dec_plan,
+    // unlockWhen.hypotheses) must drop its "Ready when: add a working hypothesis"
+    // lock the moment the gate opens — not wait for the next presence/score event
+    // to repaint it. (Bug 2026-06-16: the management-plan vote stayed locked after
+    // the team had already written two working hypotheses.)
+    if (typeof renderDecisions === "function") renderDecisions();
     if (typeof updateModANextStep === "function") updateModANextStep();
   });
   // Progressive prompt state (cross-room synced).
