@@ -69,13 +69,13 @@ test("certificate uses localized default competencies but honours a caller overr
   assert.ok(override.includes("Shared decision-making"));
 });
 
-test("certificate still gates the QR + verification id on a supplied certId", () => {
+test("certificate gates the verification id on a supplied certId (QR hidden 2026-06-16)", () => {
   const withId = J(Pdf.buildCertificateDocDefinition({ name: "A", certId: "CNM-AAAAA-BBBBB" }));
-  assert.ok(withId.includes('"qr"'));
-  assert.ok(withId.includes("CNM-AAAAA-BBBBB"));
+  assert.ok(!withId.includes('"qr"'), "the certificate QR is hidden");
+  assert.ok(withId.includes("CNM-AAAAA-BBBBB"), "the verification id is printed");
   const noId = J(Pdf.buildCertificateDocDefinition({ name: "A" }));
   assert.ok(!noId.includes('"qr"'));
-  assert.ok(!noId.includes("Verification ID"));
+  assert.ok(!noId.includes("Verification ID"), "no id line when no id supplied");
 });
 
 test("_linkify turns DOIs and URLs into clickable runs and leaves plain text a string", () => {

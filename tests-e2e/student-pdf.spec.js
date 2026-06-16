@@ -69,7 +69,7 @@ test.describe("Student PDFs — certificate of attendance", () => {
     expect(out.dflt).toContain("Dr. Basile Chr");
   });
 
-  test("the certificate carries a verification QR + ID when one is issued (and neither when not)", async ({ page }) => {
+  test("the certificate carries a verification ID when one is issued (QR hidden 2026-06-16)", async ({ page }) => {
     await page.goto("/");
     const out = await page.evaluate(async () => {
       await window.CanamedLoader.ensureStudentPdf();
@@ -79,16 +79,16 @@ test.describe("Student PDFs — certificate of attendance", () => {
       const noId = JSON.stringify(window.CanamedPdf.buildCertificateDocDefinition({ name: "A" }));
       return { id: id, withId: withId, noId: noId };
     });
-    // Issued cert: the id text + a pdfmake QR node are present.
+    // Issued cert: the id text is present; the QR is hidden (PI request).
     expect(out.withId).toContain(out.id);
     expect(out.withId).toContain("Verification ID");
-    expect(out.withId).toContain('"qr"');
-    // No id supplied → no QR node and no id line.
+    expect(out.withId).not.toContain('"qr"');
+    // No id supplied → no id line (and still no QR).
     expect(out.noId).not.toContain('"qr"');
     expect(out.noId).not.toContain("Verification ID");
   });
 
-  test("pdfmake renders the certificate with the verification QR (chromium smoke)", async ({ page, browserName }) => {
+  test("pdfmake renders the certificate (chromium smoke)", async ({ page, browserName }) => {
     test.skip(browserName !== "chromium", "2 MB pdfmake render smoke runs on chromium only");
     await page.goto("/");
     const out = await page.evaluate(async () => {

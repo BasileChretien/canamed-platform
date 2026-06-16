@@ -59,37 +59,19 @@ test("the facilitator export + attestations recompute the id from the same seed"
   assert.match(ADMIN, /Verification ID:/, "attestation cards must show the verification id");
 });
 
-test("the certificate builder embeds the id + a QR only when an id is supplied", () => {
+test("the certificate embeds the verification id, with the QR hidden (2026-06-16, PI request)", () => {
   const fn = STUDENT_PDF.slice(STUDENT_PDF.indexOf("function buildCertificateDocDefinition"),
                                STUDENT_PDF.indexOf("function _safe"));
   assert.match(fn, /var certId = _str\(data\.certId/, "builder must read data.certId");
-  // QR encodes the verify URL when one is supplied (public verification flow),
-  // and the bare id otherwise (facilitator-only path).
-  assert.match(fn, /qr:\s*\(\s*verifyUrl\s*\|\|\s*certId\s*\)/,
-    "QR must encode verifyUrl when present, else the bare id");
-  // The id label is now localized (EN "Verification ID" / FR / JA) via the STR
-  // table, so the builder references L.certVerifyId rather than a literal. The
-  // rendered "Verification ID" text is asserted in tests/student-pdf-i18n.test.js
-  // and the e2e suite.
+  // The QR was hidden at PI request (the baked-in verify URL would rot on a host
+  // migration). The printed Verification ID is the verification surface now; no
+  // qr node should be emitted. The verifyUrl + verify.html plumbing is left
+  // intact so the QR can be restored by re-adding a { qr: ... } node here.
+  assert.doesNotMatch(fn, /\{\s*qr:/, "the certificate QR node must be hidden (no { qr: ... } node)");
+  // The id label is localized (EN "Verification ID" / FR / JA) via the STR table.
   assert.match(fn, /L\.certVerifyId/, "builder must label the id (localized)");
-  // Guarded so a cert with no id renders neither the QR nor the id line.
-  assert.match(fn, /certId\s*\?\s*\{[\s\S]*qr:/, "QR must be gated on certId presence");
-});
-
-test("the certificate QR is rendered for phone-camera scannability", () => {
-  const fn = STUDENT_PDF.slice(STUDENT_PDF.indexOf("function buildCertificateDocDefinition"),
-                               STUDENT_PDF.indexOf("function _safe"));
-  const qr = fn.slice(fn.indexOf("qr:"), fn.indexOf("qr:") + 240);
-  // Pure black on an explicit white field — navy modules binarise poorly on
-  // phone cameras; #000 on #fff gives the maximum contrast scanners expect.
-  assert.match(qr, /foreground:\s*"#000000"/, "QR foreground must be pure black");
-  assert.match(qr, /background:\s*"#ffffff"/, "QR must sit on an explicit white field");
-  // eccLevel "L" keeps the short /v?id= URL at a low (sparse) QR version, so
-  // each module is large enough to scan; "M"/"Q"/"H" would push it denser.
-  assert.match(qr, /eccLevel:\s*"L"/, "QR must use eccLevel L to stay sparse");
-  // A larger fit than the original 60 pt so each module clears ~0.7 mm.
-  const fit = qr.match(/fit:\s*(\d+)/);
-  assert.ok(fit && Number(fit[1]) >= 72, "QR fit must be at least 72 pt (was 60)");
+  // Guarded so a cert with no id renders no id block at all.
+  assert.match(fn, /certId\s*\?\s*\{[\s\S]*L\.certVerifyId/, "the id block must be gated on certId presence");
 });
 
 test("_verifyUrl encodes the short /v?id= path (keeps the QR sparse)", () => {
