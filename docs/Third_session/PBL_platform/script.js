@@ -2742,8 +2742,9 @@ function _surveyProfileVal(key) {
 }
 
 /* Build the scrollable survey form into #survey-body. Exposed for E2E so a
-   test can mount it without a live wrap-up stage. */
-function _mountSurveyForm() {
+   test can mount it without a live wrap-up stage. When `preview` is true the
+   form renders read-only (inputs disabled, no submit) for the facilitator. */
+function _mountSurveyForm(preview) {
   const body = el("survey-body");
   const bank = _surveyBank();
   if (!body || !bank.length) return;
@@ -2784,6 +2785,7 @@ function _mountSurveyForm() {
         b.setAttribute("role", "radio");
         b.setAttribute("aria-label", n + " — " + _tFmt("survey.likert." + n));
         b.setAttribute("aria-checked", "false");
+        if (preview) b.disabled = true;
         b.addEventListener("click", () => {
           picked.v = n;
           Array.from(scale.children).forEach((c, i) => {
@@ -2804,6 +2806,7 @@ function _mountSurveyForm() {
       const sel = document.createElement("select");
       sel.className = "survey-select";
       sel.setAttribute("aria-label", tc(item.q, lang));
+      if (preview) sel.disabled = true;
       const ph = document.createElement("option");
       ph.value = ""; ph.textContent = _tFmt("survey.choose");
       sel.appendChild(ph);
@@ -2832,6 +2835,7 @@ function _mountSurveyForm() {
       ta.className = "survey-open";
       ta.rows = 3; ta.maxLength = 2000;
       ta.setAttribute("aria-label", tc(item.q, lang));
+      if (preview) ta.readOnly = true;
       field.appendChild(ta);
       getters[item.id] = () => (ta.value || "").trim();
     }
@@ -2839,6 +2843,14 @@ function _mountSurveyForm() {
   });
   body.appendChild(form);
 
+  if (preview) {
+    const note = document.createElement("p");
+    note.className = "survey-preview-note hint";
+    note.textContent = _tFmt("survey.preview-note",
+      "Facilitator preview — students fill this in at wrap-up; nothing is saved here.");
+    body.appendChild(note);
+    return;
+  }
   const submit = document.createElement("button");
   submit.type = "button";
   submit.className = "teams-btn survey-submit";
@@ -2879,62 +2891,68 @@ function renderSurvey() {
   const card = el("survey-card");
   if (!card) return;
   const bank = _surveyBank();
-  if (!bank.length || !myRoom || isRoomAdmin) {
-    card.classList.add("hidden");
+  if (!bank.length) { card.classList.add("hidden"); return; }
+  // Facilitator preview (2026-06-16, PI request): show the questionnaire
+  // read-only so the facilitator can see exactly what students fill in.
+  // Nothing entered here is saved.
+  if (isRoomAdmin) {
+    card.classList.remove("hidden");
+    const intro = el("survey-card-intro");
+    if (intro) intro.textContent = _tFmt("survey.preview-intro",
+      "Facilitator preview — this is the questionnaire students complete at wrap-up. Nothing you enter here is saved.");
+    const startBtn = el("survey-start-btn"); if (startBtn) startBtn.classList.add("hidden");
+    const skipBtn = el("survey-skip-btn"); if (skipBtn) skipBtn.classList.add("hidden");
+    _mountSurveyForm(true);
     return;
   }
-  const postBank = _testBank("post");
-  const gate = postBank.length
-    ? _loadTestStatus("post").then(r => _surveyReadyAfterPostTest(postBank.length, r))
-    : Promise.resolve(true);
-  gate.then(ready => {
-    if (!ready) { card.classList.add("hidden"); return; }
-    card.classList.remove("hidden");
-    _loadSurveyStatus().then(rec => {
-      const startBtn = el("survey-start-btn");
-      const skipBtn = el("survey-skip-btn");
-      const body = el("survey-body");
-      const intro = el("survey-card-intro");
-      if (!startBtn || !skipBtn || !body) return;
-      const completed = rec && typeof rec.completedAt === "number";
-      const skipped = rec && rec.skipped === true;
-      if (completed) {
-        if (intro) intro.textContent = _tFmt("survey.already-done");
+  if (!myRoom) { card.classList.add("hidden"); return; }
+  // Post-test gate dropped 2026-06-16 (PI request): the questionnaire now always
+  // shows for students at wrap-up, independent of the post-test.
+  card.classList.remove("hidden");
+  _loadSurveyStatus().then(rec => {
+    const startBtn = el("survey-start-btn");
+    const skipBtn = el("survey-skip-btn");
+    const body = el("survey-body");
+    const intro = el("survey-card-intro");
+    if (!startBtn || !skipBtn || !body) return;
+    const completed = rec && typeof rec.completedAt === "number";
+    const skipped = rec && rec.skipped === true;
+    if (completed) {
+      if (intro) intro.textContent = _tFmt("survey.already-done");
+      startBtn.classList.add("hidden");
+      skipBtn.classList.add("hidden");
+      body.classList.add("hidden");
+      body.innerHTML = "";
+      return;
+    }
+    if (skipped) {
+      if (intro) intro.textContent = _tFmt("survey.skipped");
+      startBtn.classList.remove("hidden");
+      skipBtn.classList.add("hidden");
+    } else {
+      startBtn.classList.remove("hidden");
+      skipBtn.classList.remove("hidden");
+    }
+    if (!startBtn.dataset.bound) {
+      startBtn.dataset.bound = "1";
+      startBtn.addEventListener("click", () => {
+        _saveSurveyStart();
         startBtn.classList.add("hidden");
+        skipBtn.classList.add("hidden");
+        _mountSurveyForm();
+      });
+    }
+    if (!skipBtn.dataset.bound) {
+      skipBtn.dataset.bound = "1";
+      skipBtn.addEventListener("click", () => {
+        _saveSurveySkipped();
+        startBtn.classList.remove("hidden");
         skipBtn.classList.add("hidden");
         body.classList.add("hidden");
         body.innerHTML = "";
-        return;
-      }
-      if (skipped) {
         if (intro) intro.textContent = _tFmt("survey.skipped");
-        startBtn.classList.remove("hidden");
-        skipBtn.classList.add("hidden");
-      } else {
-        startBtn.classList.remove("hidden");
-        skipBtn.classList.remove("hidden");
-      }
-      if (!startBtn.dataset.bound) {
-        startBtn.dataset.bound = "1";
-        startBtn.addEventListener("click", () => {
-          _saveSurveyStart();
-          startBtn.classList.add("hidden");
-          skipBtn.classList.add("hidden");
-          _mountSurveyForm();
-        });
-      }
-      if (!skipBtn.dataset.bound) {
-        skipBtn.dataset.bound = "1";
-        skipBtn.addEventListener("click", () => {
-          _saveSurveySkipped();
-          startBtn.classList.remove("hidden");
-          skipBtn.classList.add("hidden");
-          body.classList.add("hidden");
-          body.innerHTML = "";
-          if (intro) intro.textContent = _tFmt("survey.skipped");
-        });
-      }
-    });
+      });
+    }
   });
 }
 
@@ -3122,6 +3140,7 @@ function wireRoomUI() {
   initLeave();
   initStageOverflow();
   initEndPoll();
+  initRetentionReminder();
   initTeamName();
   initRolePicker();
   initModBPhaseNav();
@@ -11284,17 +11303,16 @@ function initAdminToolsMenu() {
  * overwrites the existing entry. No facilitator notification (the
  * facilitator reads /poll later as part of the archive). */
 function initEndPoll() {
-  const card = el("endpoll-card");
-  if (!card || isRoomAdmin) {
-    if (card) card.classList.add("hidden");
+  // The quick-reflection end-poll was removed 2026-06-16 (PI request); the full
+  // subjective questionnaire (#survey-card, renderSurvey) is the reflection
+  // surface now. This function now only wires the student wrap-up downloads
+  // (room answers / certificate / booklet). The facilitator retention reminder
+  // is wired separately in initRetentionReminder().
+  if (isRoomAdmin) {
     // Admins have their own all-rooms export; hide the student per-room one.
-    if (isRoomAdmin) { const d = el("wrapup-download-btn"); if (d) d.classList.add("hidden"); }
+    const d = el("wrapup-download-btn"); if (d) d.classList.add("hidden");
     return;
   }
-  if (card.dataset.wired === "1") return;
-  card.dataset.wired = "1";
-  // Round-4: wire the student room-answers export (student-only — this whole
-  // function early-returns for admins, who have their own all-rooms export).
   const dlBtn = el("wrapup-download-btn");
   if (dlBtn && !dlBtn.dataset.wired) {
     dlBtn.dataset.wired = "1";
@@ -11312,73 +11330,90 @@ function initEndPoll() {
     bookletBtn.dataset.wired = "1";
     bookletBtn.addEventListener("click", downloadStudyBookletPdf);
   }
-  // Spaced-reinforcement: point the retention-check link at this session's
-  // scenario + language, and draw a scan-to-save QR (lazy qrcode.js).
-  const revisit = el("wrapup-revisit-link");
-  if (revisit && !revisit.dataset.wired) {
-    revisit.dataset.wired = "1";
-    const sid = (typeof window.CURRENT_SCENARIO_ID === "string") ? window.CURRENT_SCENARIO_ID : "";
-    const lang = (typeof _curLang === "function") ? _curLang() : "en";
-    const url = "revisit.html?s=" + encodeURIComponent(sid) + "&lang=" + encodeURIComponent(lang);
-    revisit.href = url;
-    try {
-      const loader = window.CanamedLoader;
-      if (loader && loader.ensureQrcode) {
-        loader.ensureQrcode().then(() => {
-          const holder = el("wrapup-revisit-qr");
-          if (!holder || typeof QRCode === "undefined") return;   // link still works
-          holder.innerHTML = "";
-          const abs = new URL(url, location.href).href;
-          /* eslint-disable no-new */
-          new QRCode(holder, {
-            text: abs, width: 132, height: 132,
-            colorDark: "#000000", colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M
-          });
-          holder.setAttribute("aria-label", "QR code linking to your retention check");
-        }).catch(() => { /* QR optional — the link still works */ });
-      }
-    } catch (e) { /* QR optional */ }
-  }
-  const hard = el("endpoll-hardest");
-  const feel = el("endpoll-feeling");
-  const btn = el("endpoll-submit");
-  const thanks = el("endpoll-thanks");
-  if (!btn || !hard || !feel) return;
-  // Pre-fill if the user already submitted this session (refresh case).
-  if (!refPoll && db && typeof sPath === "function") {
-    try { refPoll = db.ref(sPath("poll/" + clientId)); } catch (e) {}
-  }
-  if (refPoll) {
-    refPoll.once("value").then(snap => {
-      const v = snap && snap.val();
-      if (v) {
-        if (hard) hard.value = String(v.hardest || "");
-        if (feel) feel.value = String(v.feeling || "");
-        if (thanks) thanks.classList.remove("hidden");
-      }
-    }).catch(() => {});
-  }
-  btn.addEventListener("click", () => {
-    if (!refPoll) {
-      try { refPoll = db.ref(sPath("poll/" + clientId)); } catch (e) { return; }
-    }
-    const payload = {
-      hardest: (hard.value || "").trim().slice(0, 280),
-      feeling: (feel.value || "").trim().slice(0, 40),
-      by:      (myName || "anon").slice(0, 40),
-      at:      Date.now()
-    };
-    // R4 linkage: stamp the durable per-person id so the wrap-up poll can be
-    // joined to this student's pre/post tests + questionnaire without the
-    // ephemeral per-tab clientId (Round-4 research-methods finding #1).
-    if (typeof stableId === "string" && stableId) payload.stableId = stableId;
-    if (!payload.hardest && !payload.feeling) return;   // nothing to send
-    btn.disabled = true;
-    refPoll.set(payload).then(() => {
-      if (thanks) thanks.classList.remove("hidden");
-      setTimeout(() => { btn.disabled = false; }, 1500);
-    }).catch(() => { btn.disabled = false; });
+}
+
+/* Facilitator retention reminder (2026-06-16, PI request) — replaces the old
+   student "test your retention" card. Shows a facilitator-only card with a
+   one-click calendar event (≈3 weeks out) reminding them to send students the
+   revisit self-check link. Two routes: an .ics download (Apple/Outlook) and a
+   Google Calendar template deep-link. The student revisit.html page is unchanged.
+   Pure-ish: _retentionReminderEvent() builds the event data and is unit-tested. */
+function _retentionReminderEvent(nowMs, revisitUrl) {
+  // Fire ~3 weeks (21 days) after the session, at 09:00 local, 30 min long.
+  const start = new Date(nowMs + 21 * 24 * 60 * 60 * 1000);
+  start.setHours(9, 0, 0, 0);
+  const end = new Date(start.getTime() + 30 * 60 * 1000);
+  return {
+    title: "CaNaMED — send the retention quiz link to students",
+    details: "Spaced revisiting is what makes the learning stick. Send your students "
+      + "this short self-check link (it scores on their device; nothing is sent):\n\n"
+      + revisitUrl,
+    start: start,
+    end: end
+  };
+}
+function _icsStamp(d) {
+  // UTC basic format YYYYMMDDTHHMMSSZ
+  const p = n => String(n).padStart(2, "0");
+  return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) + "T"
+    + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + "Z";
+}
+function _buildIcs(ev, stampNowMs) {
+  const esc = s => String(s).replace(/\\/g, "\\\\").replace(/;/g, "\\;")
+    .replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+  return [
+    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CaNaMED//retention-reminder//EN",
+    "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
+    "UID:canamed-retention-" + stampNowMs + "@canamed",
+    "DTSTAMP:" + _icsStamp(new Date(stampNowMs)),
+    "DTSTART:" + _icsStamp(ev.start), "DTEND:" + _icsStamp(ev.end),
+    "SUMMARY:" + esc(ev.title), "DESCRIPTION:" + esc(ev.details),
+    "BEGIN:VALARM", "TRIGGER:-PT0M", "ACTION:DISPLAY",
+    "DESCRIPTION:" + esc(ev.title), "END:VALARM",
+    "END:VEVENT", "END:VCALENDAR"
+  ].join("\r\n");
+}
+function _gcalUrl(ev) {
+  const dates = _icsStamp(ev.start) + "/" + _icsStamp(ev.end);
+  return "https://calendar.google.com/calendar/render?action=TEMPLATE"
+    + "&text=" + encodeURIComponent(ev.title)
+    + "&dates=" + dates
+    + "&details=" + encodeURIComponent(ev.details);
+}
+function initRetentionReminder() {
+  const card = el("retention-reminder-card");
+  if (!card) return;
+  if (!isRoomAdmin) { card.classList.add("hidden"); return; }
+  card.classList.remove("hidden");
+  if (card.dataset.wired === "1") return;
+  card.dataset.wired = "1";
+  const sid = (typeof window.CURRENT_SCENARIO_ID === "string") ? window.CURRENT_SCENARIO_ID : "";
+  const revisitUrl = new URL("revisit.html" + (sid ? "?s=" + encodeURIComponent(sid) : ""),
+    location.href).href;
+  const ev = _retentionReminderEvent(Date.now(), revisitUrl);
+  // Show the exact link the facilitator will send.
+  const urlEl = el("retention-reminder-url");
+  if (urlEl) { urlEl.href = revisitUrl; urlEl.textContent = revisitUrl; }
+  // Google Calendar deep-link.
+  const gcal = el("retention-gcal-link");
+  if (gcal) gcal.href = _gcalUrl(ev);
+  // .ics download (Apple / Outlook).
+  const icsBtn = el("retention-ics-btn");
+  if (icsBtn) icsBtn.addEventListener("click", () => {
+    const ics = _buildIcs(ev, Date.now());
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "canamed-retention-reminder.ics";
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
   });
+}
+if (typeof window !== "undefined") {
+  // Exposed for unit/E2E tests (pure event/.ics/gcal builders).
+  window._retentionReminderEvent = _retentionReminderEvent;
+  window._buildIcs = _buildIcs;
+  window._gcalUrl = _gcalUrl;
 }
 
 /* ===================== CANAMED SPLASH / SESSION-CODE GATE ===================

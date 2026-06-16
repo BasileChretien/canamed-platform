@@ -62,7 +62,7 @@ test("SURVEY bank loads and every item is well-formed in en/fr/ja", () => {
 /* ── In-platform survey runner (script.js) ─────────────────────────────── */
 test("survey runner exists and writes to the per-room survey node", () => {
   assert.match(SCRIPT, /function renderSurvey\(\)/, "renderSurvey() must exist");
-  assert.match(SCRIPT, /function _mountSurveyForm\(\)/, "_mountSurveyForm() must exist");
+  assert.match(SCRIPT, /function _mountSurveyForm\(/, "_mountSurveyForm() must exist");
   const ref = SCRIPT.slice(SCRIPT.indexOf("function _surveyRef"),
     SCRIPT.indexOf("function _surveyRef") + 400);
   assert.match(ref, /rooms\/"\s*\+\s*myRoom\s*\+\s*"\/survey\/"\s*\+\s*clientId/,

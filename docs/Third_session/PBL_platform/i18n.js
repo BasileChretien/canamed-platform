@@ -732,6 +732,11 @@
       "stage.wrap.retention.title": "🔁 Test your retention in a few days",
       "stage.wrap.retention.hint": "Save this link and come back in 2–3 days for a short self-check — revisiting is what makes it stick. It scores on your device; nothing is sent.",
       "stage.wrap.retention.link": "Open my retention check →",
+      "stage.wrap.reminder.title": "📅 Schedule the retention reminder",
+      "stage.wrap.reminder.hint": "Add a reminder to your calendar to send students the retention self-check link in 3 weeks — spaced revisiting is what makes the learning stick.",
+      "stage.wrap.reminder.ics": "⤓ Add to calendar (.ics — Apple / Outlook)",
+      "stage.wrap.reminder.gcal": "Add to Google Calendar →",
+      "stage.wrap.reminder.linklabel": "Link to send students:",
 
       // pre/post knowledge test (per-scenario in-platform MCQ) — optional;
       // students can always skip. Pre-test shown on the Welcome stage,
@@ -764,6 +769,8 @@
       // end-of-session feedback survey (in-platform questionnaire on Wrap-up)
       "survey.title": "Your feedback on today's session",
       "survey.intro": "A short questionnaire helps us improve future sessions. Your answers are linked to you for the CaNaMED study; it's optional and does not affect your grade.",
+      "survey.preview-intro": "Facilitator preview — this is the questionnaire students complete at wrap-up. Nothing you enter here is saved.",
+      "survey.preview-note": "Facilitator preview — students fill this in at wrap-up; nothing is saved here.",
       "survey.start": "Start the questionnaire",
       "survey.skip": "Skip",
       "survey.skipped": "You skipped the questionnaire. You can still complete it if you change your mind.",

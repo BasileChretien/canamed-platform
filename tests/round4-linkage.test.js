@@ -40,7 +40,7 @@ test("rules: tests pre+post validate permits stableId in BOTH trees", () => {
   }
 });
 
-test("script.js: stableId is stamped onto the test stream + the wrap-up poll", () => {
+test("script.js: stableId is stamped onto the test stream (pre/post)", () => {
   // test start writes stableId
   const startFn = SCRIPT.slice(SCRIPT.indexOf("function _saveTestStart"),
     SCRIPT.indexOf("function _saveTestStart") + 600);
@@ -51,9 +51,10 @@ test("script.js: stableId is stamped onto the test stream + the wrap-up poll", (
     SCRIPT.indexOf("function _saveTestSkipped") + 700);
   assert.match(skipFn, /stableId/,
     "_saveTestSkipped must keep stableId so non-completers still link");
-  // poll payload carries stableId
-  const pollIdx = SCRIPT.indexOf("hardest: (hard.value");
-  const pollBlk = SCRIPT.slice(pollIdx, pollIdx + 500);
-  assert.match(pollBlk, /payload\.stableId\s*=\s*stableId/,
-    "the wrap-up poll payload must carry stableId");
+  // The wrap-up quick-reflection poll was removed 2026-06-16 (PI request); the
+  // survey now carries stableId for linkage (_saveSurveyStart/_saveSurveySkipped),
+  // so the poll-payload stableId stamping is no longer asserted here.
+  assert.match(SCRIPT.slice(SCRIPT.indexOf("function _saveSurveyStart"),
+    SCRIPT.indexOf("function _saveSurveyStart") + 400), /stableId/,
+    "the survey must carry stableId for pre/post linkage");
 });

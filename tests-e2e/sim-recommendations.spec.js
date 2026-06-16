@@ -231,21 +231,17 @@ test.describe("Anonymised cohort progress strip", () => {
 // (user request). Its DOM/tap-target test was deleted with it. Module B's
 // roleplay observer ROLE is covered separately (student-satisfaction.test.js).
 
-test.describe("End-of-session reflection poll", () => {
-  test("wrap-up stage exposes #endpoll-card with two inputs + submit", async ({ page }) => {
+test.describe("End-of-session reflection", () => {
+  test("the quick-reflection end-poll is removed; the questionnaire is the reflection surface", async ({ page }) => {
     await page.goto("/");
     const info = await page.evaluate(() => ({
-      card:     !!document.getElementById("endpoll-card"),
-      hardest:  !!document.getElementById("endpoll-hardest"),
-      feeling:  !!document.getElementById("endpoll-feeling"),
-      submit:   !!document.getElementById("endpoll-submit"),
-      thanks:   !!document.getElementById("endpoll-thanks")
+      endpoll: !!document.getElementById("endpoll-card"),
+      survey:  !!document.getElementById("survey-card")
     }));
-    expect(info.card).toBe(true);
-    expect(info.hardest).toBe(true);
-    expect(info.feeling).toBe(true);
-    expect(info.submit).toBe(true);
-    expect(info.thanks).toBe(true);
+    // The 2-question quick-reflection end-poll was removed 2026-06-16 (PI request).
+    expect(info.endpoll, "#endpoll-card must be gone").toBe(false);
+    // The full subjective questionnaire (#survey-card) is the reflection surface now.
+    expect(info.survey, "#survey-card must exist").toBe(true);
   });
 });
 
