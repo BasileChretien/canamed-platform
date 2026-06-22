@@ -972,7 +972,7 @@
   // LOCALE_VERSION must track the ?v= cache-buster used by the eager scripts
   // in index.html / script-loader.js (SHELL_VERSION) and sw.js so a deploy
   // that bumps the shell version also re-fetches the locale chunks.
-  const LOCALE_VERSION = "v4";
+  const LOCALE_VERSION = "v5";
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
