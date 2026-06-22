@@ -146,6 +146,8 @@
       "splash.my-sessions.status-open": "Open — click Close to end it",
       "splash.my-sessions.status-unknown": "Status unknown",
       "splash.my-sessions.already-closed": "Already closed — will be removed",
+      "splash.my-sessions.ended": "Ended — no longer on the server; removing from your list",
+      "splash.my-sessions.ended-on-close": "This session has already ended — removing it from your list.",
       "splash.my-sessions.close-btn": "Close session",
       "splash.my-sessions.forget-btn": "Remove from list",
       "splash.my-sessions.close-confirm": "End this session? Participants will see the wrap-up screen and cannot interact further. The data stays in the database — you can re-open the admin dashboard later to download the archive.",
