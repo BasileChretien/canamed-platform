@@ -206,3 +206,61 @@ test.describe("Module A — LLM-patient stub (feature flag on)", () => {
     expect(off, "?llm=0 must opt out of the chat").toBe(true);
   });
 });
+
+/* Session-1 live-session regressions (2026-06-23). These drive the real
+ * modALLMInit() wiring (not just a bare bridge) under LocalDB, so they cover the
+ * two integration bugs that the bridge-only tests above cannot: the patient
+ * answering in each participant's browser language, and re-entry stacking a
+ * second chat listener (every message rendered twice). LocalDB does not model
+ * Firebase child_added (its .on() is whole-path "value"), so we assert the
+ * listener-subscription count rather than rendered bubbles. */
+test.describe("Module A — LLM-patient session-1 fixes (live init wiring)", () => {
+  async function setupRoom(page, sessionCode) {
+    await setupLLMMode(page);
+    return page.evaluate((code) => {
+      // Minimal room so modALLMInit()'s _refs() resolves under LocalDB.
+      if (!window.db && window.LocalDB) window.db = new window.LocalDB();
+      if (window._test_setSessionNum) window._test_setSessionNum(code);
+      window.myRoom = "Room 1";
+      return !!window.db;
+    }, sessionCode);
+  }
+
+  test("patient reply language is pinned to English, NOT the participant's UI language", async ({ page }) => {
+    expect(await setupRoom(page, "e2e-lang"), "LocalDB available").toBe(true);
+    const out = await page.evaluate(async () => {
+      // Force this participant's UI language to French — the exact session-1
+      // condition where Mr. Lefebvre wrongly answered French-browser students
+      // in French.
+      if (typeof window.setLang === "function") { await window.setLang("fr"); }
+      const ok = !!(window.modALLMInit && window.modALLMInit());
+      const bridge = window.modALLMRuntime && window.modALLMRuntime.bridge;
+      return {
+        ok,
+        uiLang: typeof window.getLang === "function" ? window.getLang() : "?",
+        bridgeLang: bridge && bridge._internal ? bridge._internal.getLang() : "?"
+      };
+    });
+    expect(out.ok, "modALLMInit() wired the chat under LocalDB").toBe(true);
+    expect(out.uiLang, "participant UI language is French").toBe("fr");
+    expect(out.bridgeLang, "patient replies stay English regardless of UI language").toBe("en");
+  });
+
+  test("re-entry is idempotent — chat listeners never stack (no double render)", async ({ page }) => {
+    expect(await setupRoom(page, "e2e-idemp"), "LocalDB available").toBe(true);
+    const counts = await page.evaluate(() => {
+      const chatSubs = () => (window.db._subs || [])
+        .filter((s) => /\/moduleA\/chat$/.test(s.path)).length;
+      window.modALLMInit();
+      const afterFirst = chatSubs();
+      window.modALLMInit();   // a second enterRoom() (room switch / re-entry)
+      window.modALLMInit();   // and a third, for good measure
+      return { afterFirst, afterThird: chatSubs() };
+    });
+    expect(counts.afterFirst, "exactly one chat listener after first init").toBe(1);
+    // The bug: each init attached another child_added listener (teardownRoom
+    // never detached them), so every chat turn rendered N×. The fix tears down
+    // the previous wiring before re-wiring.
+    expect(counts.afterThird, "still exactly one chat listener after re-entry").toBe(1);
+  });
+});

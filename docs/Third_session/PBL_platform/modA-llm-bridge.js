@@ -352,6 +352,7 @@ if (typeof window === "undefined") { var window = globalThis; }
       _internal: {                 // exposed for tests only
         runScoring: _runScoring,
         getTranscript: function () { return transcript.slice(); },
+        getLang: function () { return cfg.lang; },
         sanitiseReply: _sanitiseReply,
         stubReply: function (t, c, l) { return _stubReply(t, c, l); }
       }

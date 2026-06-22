@@ -73,6 +73,21 @@
     return "en";
   }
 
+  /* The Module A simulated patient speaks ONE language for the whole room — the
+   * session language — NOT each participant's browser/UI language. Pinned to
+   * English (session 1 fix, 2026-06-23): before this, setLang(_curLang()) made
+   * Mr. Lefebvre answer a French-browser student in French and a Japanese-
+   * browser student in Japanese inside a single shared English consultation, so
+   * teammates saw the patient reply in three different languages. The chat
+   * CHROME (placeholder, disclosure, status) stays localised per participant via
+   * _t()/_curLang(); only the PATIENT'S OWN REPLIES are pinned here. A non-
+   * English cohort can override with window.CANAMED_MODA_LLM_LANG = "fr"|"ja". */
+  function _patientLang() {
+    var override = (typeof window !== "undefined") && window.CANAMED_MODA_LLM_LANG;
+    var L = String(override || "en").toLowerCase().slice(0, 2);
+    return (L === "fr" || L === "ja") ? L : "en";
+  }
+
   function _t(key, fallback) {
     // i18n.js exposes window.t(key) — returns the active-language string
     // or "" if the key is missing. Fall back to the inline English copy
@@ -278,6 +293,18 @@
     var refs = _refs();
     if (!refs) return false;
 
+    // Idempotency (session 1 fix, 2026-06-23). enterRoom() → modALLMInit() can
+    // run more than once for the same browser: an admin switching rooms, a
+    // participant re-entering, a reconnect. The panel is REUSED across runs, but
+    // each run used to attach a FRESH child_added / value / submit / keydown /
+    // langchange listener while teardownRoom() never detached them — so every
+    // chat turn rendered twice (or N×). Tear down the previous wiring before we
+    // re-wire, so exactly one set of listeners is ever live.
+    if (window.modALLMRuntime && typeof window.modALLMRuntime.destroy === "function") {
+      try { window.modALLMRuntime.destroy(); } catch (_) { /* defensive */ }
+    }
+    window.modALLMRuntime = null;
+
     // Chat-only mode (user request 2026-05-28): the legacy click-button
     // workup (Ask the patient / Examine / Investigations / Synthesis) is
     // entirely replaced by the chat. We add a body class so the CSS
@@ -296,17 +323,18 @@
     // Local cache of the awarded map (mirrors RTDB; the bridge reads it
     // synchronously). The .on() subscription below keeps it fresh.
     var awarded = {};
-    refs.awarded.on("value", function (snap) {
-      awarded = snap.val() || {};
-    });
+    // Named handlers (not anonymous) so destroy() can detach them precisely.
+    function _onAwardedValue(snap) { awarded = snap.val() || {}; }
+    refs.awarded.on("value", _onAwardedValue);
 
     // Replay existing transcript when a teammate refreshes mid-session.
-    refs.chat.on("child_added", function (snap) {
+    function _onChatChild(snap) {
       var t = snap.val();
       if (!t || !t.role || !t.content) return;
       _renderTurn(transcriptEl, t.role, t.content);
       // Seed the local context ring lazily — bridge has its own copy.
-    });
+    }
+    refs.chat.on("child_added", _onChatChild);
 
     var bridge = window.modALLMBridge.create({
       getAwarded: function () { return awarded; },
@@ -373,7 +401,10 @@
       }
     });
 
-    bridge.setLang(_curLang());
+    // Pin the patient's reply language to the session language (English), NOT
+    // each participant's browser language — see _patientLang(). The chat chrome
+    // stays localised; only Mr. Lefebvre's replies are pinned.
+    bridge.setLang(_patientLang());
 
     // Wire the patient endpoint. Priority order:
     //   1. Firebase HTTPS callable (when the SDK + the deployed function
@@ -419,10 +450,11 @@
       }
     }
 
-    // Re-sync language when the global lang switcher fires.
-    window.addEventListener("canamed:langchange", function () {
-      bridge.setLang(_curLang());
-    });
+    // Re-assert the (fixed) patient language if the global lang switcher fires.
+    // The patient does NOT follow the participant's UI language — see
+    // _patientLang(). Named so destroy() can detach it.
+    function _onLangChange() { bridge.setLang(_patientLang()); }
+    window.addEventListener("canamed:langchange", _onLangChange);
 
     // Track consecutive fallbacks so we can escalate the facilitator banner
     // when the LLM endpoint is dead for the whole room, not just one turn.
@@ -473,14 +505,28 @@
 
     formEl.addEventListener("submit", _onSubmit);
     // Enter submits, Shift+Enter adds a newline (familiar chat ergonomics)
-    inputEl.addEventListener("keydown", function (e) {
+    function _onKeydown(e) {
       if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
         e.preventDefault();
         _onSubmit(e);
       }
-    });
+    }
+    inputEl.addEventListener("keydown", _onKeydown);
 
-    window.modALLMRuntime = { bridge: bridge, refs: refs };
+    // Detach every listener/handler this run attached, and clear the transcript
+    // DOM so a later re-init's child_added replay starts from a clean panel
+    // instead of stacking a second copy of every turn. Called by the next
+    // modALLMInit() (idempotency, above) and by teardownRoom() on room exit.
+    function destroy() {
+      try { refs.awarded.off("value", _onAwardedValue); } catch (_) {}
+      try { refs.chat.off("child_added", _onChatChild); } catch (_) {}
+      try { formEl.removeEventListener("submit", _onSubmit); } catch (_) {}
+      try { inputEl.removeEventListener("keydown", _onKeydown); } catch (_) {}
+      try { window.removeEventListener("canamed:langchange", _onLangChange); } catch (_) {}
+      try { if (transcriptEl) transcriptEl.textContent = ""; } catch (_) {}
+    }
+
+    window.modALLMRuntime = { bridge: bridge, refs: refs, destroy: destroy };
     return true;
   }
 

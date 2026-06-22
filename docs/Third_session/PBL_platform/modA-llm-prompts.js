@@ -264,13 +264,46 @@ if (typeof window === "undefined") { var window = globalThis; }
            example;
   }
 
+  /* Server-cap mirror. The hfPatient Cloud Function HARD-REJECTS any request
+   * whose messages array exceeds these caps (functions/lib/hf-helpers.js:
+   * MAX_BODY_MESSAGES / MAX_BODY_CHARS, checked by validateMessages BEFORE the
+   * server prepends its own guard). The bridge keeps a longer local ring for
+   * display continuity, so without trimming here the payload outgrows the cap
+   * after ~7 exchanges and EVERY later turn fails with invalid-argument — the
+   * "chat disconnects after a few questions" bug (session 1, 2026-06-23). Keep
+   * these in lockstep with the server constants. */
+  var MAX_SEND_MESSAGES = 16;
+  var MAX_SEND_CHARS    = 12000;
+
+  function _msgsChars(msgs) {
+    var n = 0;
+    for (var i = 0; i < msgs.length; i++) {
+      n += (msgs[i] && typeof msgs[i].content === "string") ? msgs[i].content.length : 0;
+    }
+    return n;
+  }
+
+  /* Drop the OLDEST non-system turns until the payload fits both caps. The
+   * system prompt (msgs[0]) and the newest turn (msgs[last]) are never dropped:
+   * system + one ≤500-char user turn is always well under the caps, so this
+   * always converges. The patient "forgets" the earliest part of a very long
+   * consultation, which is fine for history-taking — and infinitely better than
+   * the chat silently dying. */
+  function _fitServerCaps(msgs) {
+    while (msgs.length > 2 &&
+           (msgs.length > MAX_SEND_MESSAGES || _msgsChars(msgs) > MAX_SEND_CHARS)) {
+      msgs.splice(1, 1);
+    }
+    return msgs;
+  }
+
   /* buildChatMessages(lang, transcript, userText, opts?) → [{role, content}]
    *
    * transcript: [{role: "user"|"assistant", content: string}, ...] last N turns.
    * userText:   the new question to ask. Appended as the final {role:"user"}.
    *
-   * Returned in OpenAI/Mistral/HF chat-completion format. The bridge POSTs
-   * this verbatim to whichever endpoint is configured. */
+   * Returned in OpenAI/Mistral/HF chat-completion format, TRIMMED to the server
+   * caps. The bridge POSTs this verbatim to whichever endpoint is configured. */
   function buildChatMessages(lang, transcript, userText, opts) {
     var msgs = [{ role: "system", content: buildPatientPrompt(lang, opts) }];
     if (Array.isArray(transcript)) {
@@ -283,7 +316,7 @@ if (typeof window === "undefined") { var window = globalThis; }
     if (userText && String(userText).trim()) {
       msgs.push({ role: "user", content: String(userText).trim() });
     }
-    return msgs;
+    return _fitServerCaps(msgs);
   }
 
   W.modALLMPrompts = {
