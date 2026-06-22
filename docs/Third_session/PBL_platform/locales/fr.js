@@ -76,6 +76,8 @@
   "splash.my-sessions.status-open": "Ouverte — cliquez sur Fermer pour la terminer",
   "splash.my-sessions.status-unknown": "Statut inconnu",
   "splash.my-sessions.already-closed": "Déjà fermée — sera retirée",
+  "splash.my-sessions.ended": "Terminée — absente du serveur, sera retirée de votre liste",
+  "splash.my-sessions.ended-on-close": "Cette session est déjà terminée — retrait de votre liste.",
   "splash.my-sessions.close-btn": "Fermer la session",
   "splash.my-sessions.forget-btn": "Retirer de la liste",
   "splash.my-sessions.close-confirm": "Terminer cette session ? Les participants verront l'écran de conclusion et ne pourront plus interagir. Les données restent en base — vous pourrez rouvrir le tableau de bord pour télécharger l'archive.",

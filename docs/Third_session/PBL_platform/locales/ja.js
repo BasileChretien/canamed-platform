@@ -76,6 +76,8 @@
   "splash.my-sessions.status-open": "開設中 — 「閉じる」をクリックして終了",
   "splash.my-sessions.status-unknown": "状態不明",
   "splash.my-sessions.already-closed": "既に閉じられています — リストから削除します",
+  "splash.my-sessions.ended": "終了済み — サーバーに存在しません。リストから削除します",
+  "splash.my-sessions.ended-on-close": "このセッションは既に終了しています — リストから削除します。",
   "splash.my-sessions.close-btn": "セッションを閉じる",
   "splash.my-sessions.forget-btn": "リストから削除",
   "splash.my-sessions.close-confirm": "このセッションを終了しますか？ 参加者にはまとめ画面が表示され、操作できなくなります。データはデータベースに残ります — 管理ダッシュボードを再度開いてアーカイブをダウンロードできます。",

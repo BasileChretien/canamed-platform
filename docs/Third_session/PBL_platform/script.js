@@ -11810,8 +11810,11 @@ function addMySession(code, label) {
 }
 function removeMySession(code) {
   if (!code) return;
-  const c = String(code).toUpperCase();
-  _writeMySessions(_readMySessions().filter(s => s.code !== c));
+  // Match case-insensitively (via the canonical lower-case key) so a session
+  // stored under either case — legacy upper-cased entries or new lower-case
+  // ones — is removed regardless of how the caller spells the code.
+  const c = sanitizeCode(code);
+  _writeMySessions(_readMySessions().filter(s => sanitizeCode(s.code) !== c));
 }
 function getMySessions() { return _readMySessions(); }
 
@@ -11928,25 +11931,47 @@ function renderMySessions() {
     row.appendChild(actions);
     list.appendChild(row);
 
-    // Best-effort live status check: is the session already closed in the
-    // DB? If we can read it, update the status text + disable Close.
-    // Silently ignores read-permission errors (LOCAL mode or rules deny).
+    // Best-effort live status check via the platform's canonical
+    // sessionStatus() helper, which probes the session's `created` and
+    // `closed` nodes (the same pair the splash join-gate uses) and returns
+    // { exists, closed, unreachable }. That resolves the row into one of:
+    //   • closed              → facilitator already ended it → prune.
+    //   • !exists (reachable) → the whole session no longer exists on the
+    //       server (ended long ago, or removed by the retention policy). It
+    //       can NEVER be closed — the close-write rule requires the session's
+    //       adminPasswordHash to exist — so flag it as ended and prune rather
+    //       than offering a Close button that can only fail with a misleading
+    //       "check your connection" error.
+    //   • otherwise           → genuinely open.
+    // `unreachable` (offline / rules-deny before auth) degrades to
+    // "Status unknown" so we never prune a session that's merely offline.
+    const pruneSoon = () => setTimeout(() => {
+      removeMySession(s.code);
+      renderMySessions();
+      paintMySessionsLink();
+    }, 1500);
     try {
-      if (db && typeof db.ref === "function") {
-        db.ref(oPath(s.code, "closed")).once("value")
-          .then(snap => {
-            if (snap.val()) {
+      if (db && typeof sessionStatus === "function") {
+        // Probe the canonical (lower-case) key — see closeMySession() — so the
+        // status reflects the session that actually exists in the DB rather
+        // than an upper-cased path that never does.
+        sessionStatus(sanitizeCode(s.code))
+          .then(st => {
+            if (st.unreachable) {
+              status.textContent = tFallback("splash.my-sessions.status-unknown",
+                "Status unknown");
+            } else if (st.closed) {
               status.textContent = tFallback("splash.my-sessions.already-closed",
                 "Already closed — will be removed");
               closeBtn.disabled = true;
-              // Auto-prune the local entry after a short visible delay so
-              // the user notices the list shrank rather than items just
-              // silently vanishing.
-              setTimeout(() => {
-                removeMySession(s.code);
-                renderMySessions();
-                paintMySessionsLink();
-              }, 1200);
+              // Auto-prune after a short visible delay so the user notices the
+              // list shrank rather than items just silently vanishing.
+              pruneSoon();
+            } else if (!st.exists) {
+              status.textContent = tFallback("splash.my-sessions.ended",
+                "Ended — no longer on the server; removing from your list");
+              closeBtn.disabled = true;
+              pruneSoon();
             } else {
               status.textContent = tFallback("splash.my-sessions.status-open",
                 "Open — click Close to end it");
@@ -11973,7 +11998,16 @@ function renderMySessions() {
  * write, then removes the local entry on success. */
 function closeMySession(code, btn, statusEl) {
   if (!code) return;
-  const c = String(code).toUpperCase();
+  // Canonicalise to the SAME case the session is stored under. Session codes
+  // are generated and joined in lower case (generateSessionCode + sanitizeCode
+  // are lower-case), so the session subtree lives at sessions/<lower>/… . The
+  // my-sessions tracker historically upper-cased the code, which made every
+  // read/write here target sessions/<UPPER>/… — a path that does not exist —
+  // so the close-write was rejected (PERMISSION_DENIED: the rule checks
+  // sessions/<UPPER>/adminPasswordHash, which is absent). sanitizeCode() maps
+  // either case to the real lower-case key.
+  const c = sanitizeCode(code);
+  if (!c) return;
 
   // Confirm with the platform's branded in-page modal (canamedConfirm), NOT
   // native window.confirm(). Native dialogs were the bug here: after a couple
@@ -11993,7 +12027,7 @@ function closeMySession(code, btn, statusEl) {
     ? canamedConfirm({
         title: tFallback("splash.my-sessions.close-btn", "Close session"),
         message: message,
-        detail: c,                                   // session code, monospace
+        detail: c.toUpperCase(),                     // session code, monospace (display upper)
         okLabel: tFallback("splash.my-sessions.close-btn", "Close session"),
         danger: true
       })
@@ -12020,12 +12054,40 @@ function closeMySession(code, btn, statusEl) {
       setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 700);
     }).catch(e => {
       console.warn("Could not close session", c, e);
-      if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.close-failed",
-        "Could not close — check your connection and try again.");
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
-      }
+      // Distinguish "session no longer exists" from a genuine transient
+      // failure. The close-write is denied (PERMISSION_DENIED) when the
+      // session's adminPasswordHash is absent — which is exactly what happens
+      // once a session has been ended long ago or removed by the retention
+      // policy. Such a session can never be closed and is already effectively
+      // over, so drop the stale local entry with an honest message instead of
+      // nagging the facilitator about their connection. Only fall back to the
+      // generic retry message when the session DOES still exist (or we can't
+      // tell).
+      const showRetry = () => {
+        if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.close-failed",
+          "Could not close — check your connection and try again.");
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
+        }
+      };
+      // Only treat the failure as "already ended" when sessionStatus can
+      // CONFIRM the session is gone (reachable + no `created` node). On an
+      // unreachable/unknown read, show the retry message rather than wrongly
+      // dropping a session that's merely offline.
+      const probe = (typeof sessionStatus === "function")
+        ? sessionStatus(c) : Promise.reject();
+      probe.then(st => {
+        if (st && !st.unreachable && !st.exists) {
+          if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.ended-on-close",
+            "This session has already ended — removing it from your list.");
+          if (btn) { btn.disabled = true; btn.textContent = tFallback("splash.my-sessions.closed-btn", "Closed"); }
+          removeMySession(c);
+          setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 1200);
+        } else {
+          showRetry();
+        }
+      }).catch(showRetry);
     });
   });
 }
