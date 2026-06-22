@@ -11974,36 +11974,59 @@ function renderMySessions() {
 function closeMySession(code, btn, statusEl) {
   if (!code) return;
   const c = String(code).toUpperCase();
-  const ok = window.confirm(tFallback("splash.my-sessions.close-confirm",
-    "End session " + c + "? Participants will see the wrap-up screen and " +
+
+  // Confirm with the platform's branded in-page modal (canamedConfirm), NOT
+  // native window.confirm(). Native dialogs were the bug here: after a couple
+  // of prompts Chrome offers a "Don't allow this page to create more dialogs"
+  // checkbox, and once ticked every later window.confirm() returns false
+  // WITHOUT showing anything — so `if (!ok) return` aborted silently and the
+  // Close button became a dead no-op until a full reload. (Native dialogs also
+  // freeze automated tests and are suppressed entirely in some in-app
+  // browsers.) canamedConfirm is the same modal the rest of the platform uses;
+  // it falls back to native confirm() internally only when the <dialog>
+  // element is missing, so we never deadlock on a missing modal.
+  const message = tFallback("splash.my-sessions.close-confirm",
+    "End this session? Participants will see the wrap-up screen and " +
     "cannot interact further. The data stays in the database — you can " +
-    "re-open the admin dashboard later to download the archive."));
-  if (!ok) return;
-  if (btn) { btn.disabled = true; btn.textContent = tFallback("splash.my-sessions.closing", "Closing…"); }
+    "re-open the admin dashboard later to download the archive.");
+  const ask = (typeof canamedConfirm === "function")
+    ? canamedConfirm({
+        title: tFallback("splash.my-sessions.close-btn", "Close session"),
+        message: message,
+        detail: c,                                   // session code, monospace
+        okLabel: tFallback("splash.my-sessions.close-btn", "Close session"),
+        danger: true
+      })
+    : Promise.resolve(window.confirm(message));
 
-  const write = () => db.ref(oPath(c, "closed")).set({
-    by: (myName || "Admin").toString().slice(0, 40),
-    at: Date.now()
-  });
+  ask.then(ok => {
+    if (!ok) return;
+    if (btn) { btn.disabled = true; btn.textContent = tFallback("splash.my-sessions.closing", "Closing…"); }
 
-  // ensureSignedIn() is the platform's standard pre-write gate — the
-  // closed-write rule requires auth != null even though it doesn't
-  // require admin password verification (we trust the local UX gate
-  // since we only show sessions THIS browser created).
-  const auth = (typeof ensureSignedIn === "function") ? ensureSignedIn() : Promise.resolve();
-  auth.then(write).then(() => {
-    if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.closed-ok", "Closed ✓");
-    if (btn) btn.textContent = tFallback("splash.my-sessions.closed-btn", "Closed");
-    removeMySession(c);
-    setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 700);
-  }).catch(e => {
-    console.warn("Could not close session", c, e);
-    if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.close-failed",
-      "Could not close — check your connection and try again.");
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
-    }
+    const write = () => db.ref(oPath(c, "closed")).set({
+      by: (myName || "Admin").toString().slice(0, 40),
+      at: Date.now()
+    });
+
+    // ensureSignedIn() is the platform's standard pre-write gate — the
+    // closed-write rule requires auth != null even though it doesn't
+    // require admin password verification (we trust the local UX gate
+    // since we only show sessions THIS browser created).
+    const auth = (typeof ensureSignedIn === "function") ? ensureSignedIn() : Promise.resolve();
+    return auth.then(write).then(() => {
+      if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.closed-ok", "Closed ✓");
+      if (btn) btn.textContent = tFallback("splash.my-sessions.closed-btn", "Closed");
+      removeMySession(c);
+      setTimeout(() => { renderMySessions(); paintMySessionsLink(); }, 700);
+    }).catch(e => {
+      console.warn("Could not close session", c, e);
+      if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.close-failed",
+        "Could not close — check your connection and try again.");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = tFallback("splash.my-sessions.close-btn", "Close session");
+      }
+    });
   });
 }
 
