@@ -102,8 +102,13 @@ test.describe("My open sessions — reaper for abandoned sessions", () => {
   });
 
   test("'Close session' writes the closed marker, removes the entry, surfaces feedback", async ({ page, context }) => {
-    // Real session needed so the write actually succeeds against LocalDB.
-    page.on("dialog", (d) => { try { d.accept(); } catch (_) {} });
+    // Confirmation is now the branded in-page modal (canamedConfirm), NOT a
+    // native window.confirm — so a stray native dialog here signals a
+    // regression. Fail loudly rather than silently auto-accepting it.
+    page.on("dialog", (d) => {
+      try { d.dismiss(); } catch (_) {}
+      throw new Error("unexpected native dialog: close-session must use the in-page modal");
+    });
 
     // Create a session as facilitator.
     await page.goto("/");
@@ -136,8 +141,13 @@ test.describe("My open sessions — reaper for abandoned sessions", () => {
     const row = page.locator(`.my-session-row[data-code='${code}']`);
     await expect(row).toBeVisible();
 
-    // Click Close. window.confirm is auto-accepted by the page.on("dialog") above.
+    // Click Close → the branded in-page modal opens (NOT a native confirm).
     await row.locator(".my-session-close").click();
+    const modal = page.locator("#canamed-modal");
+    await expect(modal, "close must open the in-page modal").toBeVisible({ timeout: 5000 });
+    // The session code is surfaced in the modal's monospace detail block.
+    await expect(modal.locator("#canamed-modal-detail")).toHaveText(code);
+    await modal.locator("#canamed-modal-confirm").click();
 
     // After the write the row should be removed from the list; the local
     // tracker should no longer contain this code; and the DB should have
@@ -154,6 +164,60 @@ test.describe("My open sessions — reaper for abandoned sessions", () => {
     }, code);
     expect(dbClosed, "DB must have a closed marker after the click").not.toBeNull();
     expect(typeof dbClosed.at, "closed.at must be a number").toBe("number");
+  });
+
+  test("'Close session' uses the in-page modal — cancel aborts without writing or freezing", async ({ page }) => {
+    // Regression: the Close button used to call native window.confirm(),
+    // which Chrome suppresses ("don't allow this page to create more dialogs")
+    // after a couple of prompts — turning the button into a silent no-op — and
+    // which freezes automation. It must use the branded in-page modal, and
+    // Cancel must leave the session OPEN.
+    let nativeDialogFired = false;
+    page.on("dialog", (d) => { nativeDialogFired = true; try { d.dismiss(); } catch (_) {} });
+
+    // Create a real session so a (mistaken) write would be observable.
+    await page.goto("/");
+    await page.locator("#splash-go-create").click();
+    await page.locator("#splash-create-name").fill("E2E Cancel Fac");
+    await page.locator("#splash-create-label").fill("E2E cancel workshop");
+    await page.locator("#splash-create-pass").fill("e2e-cancel-pw");
+    await page.locator("#splash-create-submit").click();
+    const codeNode = page.locator("#splash-shown-code");
+    await expect(codeNode).toHaveText(/^[A-Z0-9]{3}-[A-Z0-9]{3}$/i, { timeout: 10_000 });
+    const code = (await codeNode.textContent()).trim();
+
+    await page.evaluate(() => {
+      try {
+        localStorage.removeItem("canamed_session");
+        localStorage.removeItem("canamed_resume");
+      } catch (e) {}
+    });
+    await page.reload();
+    await expect(page.locator("#splash-my-sessions-row")).toBeVisible({ timeout: 10_000 });
+    await page.locator("#splash-go-my-sessions").click();
+
+    const row = page.locator(`.my-session-row[data-code='${code}']`);
+    await expect(row).toBeVisible();
+
+    // Click Close → modal opens. Cancel it.
+    await row.locator(".my-session-close").click();
+    const modal = page.locator("#canamed-modal");
+    await expect(modal, "close must open the in-page modal").toBeVisible({ timeout: 5000 });
+    await modal.locator("#canamed-modal-cancel").click();
+    await expect(modal, "cancel must close the modal").toBeHidden({ timeout: 5000 });
+
+    // Cancel must NOT have used a native dialog, NOT written the closed
+    // marker, and NOT removed the row — the Close button stays actionable.
+    expect(nativeDialogFired, "must not use a native window.confirm").toBe(false);
+    await expect(row, "row stays after cancel").toBeVisible();
+    await expect(row.locator(".my-session-close")).toHaveText(/close session/i);
+    const stillTracked = await page.evaluate(() => getMySessions().map(s => s.code));
+    expect(stillTracked, "session stays tracked after cancel").toContain(code);
+    const dbClosed = await page.evaluate(async (c) => {
+      const snap = await db.ref(oPath(c, "closed")).once("value");
+      return snap.val();
+    }, code);
+    expect(dbClosed, "cancel must NOT write a closed marker").toBeNull();
   });
 
   test("a session already marked closed in the DB is auto-pruned from the list", async ({ page }) => {
