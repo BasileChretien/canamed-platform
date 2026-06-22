@@ -293,3 +293,60 @@ test("loadTranscript() seeds context for the next call", async () => {
   assert.deepEqual(roles, ["system", "user", "assistant", "user"]);
   assert.equal(lastBody.messages[1].content, "earlier question");
 });
+
+/* ---- Server-cap regression (session 1 fix, 2026-06-23) ---------------------
+ * The hfPatient Cloud Function HARD-REJECTS any request with >16 messages or
+ * >12000 chars (functions/lib/hf-helpers.js validateMessages, run BEFORE the
+ * server prepends its own guard). The client used to send a 24-turn ring + the
+ * system prompt + the new turn, so a consultation past ~7 exchanges failed
+ * EVERY subsequent call with invalid-argument and the patient silently degraded
+ * to canned stub replies — the "chat disconnects after a few questions" bug.
+ * These tests assert the SENT payload always passes the REAL server validator,
+ * so the client and server can never drift back out of sync. */
+const hfHelpers = require(path.join(P, "functions", "lib", "hf-helpers.js"));
+
+test("long conversation: every sent payload passes the server's validateMessages caps", async () => {
+  const ctx = loadAll();
+  const m = mockHooks();
+  const bodies = [];
+  ctx.fetch = function (url, init) {
+    bodies.push(JSON.parse(init.body));
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ reply: "It still aches, doctor." }) });
+  };
+  ctx.AbortController = function () { this.abort = () => {}; this.signal = {}; };
+  ctx.setTimeout = setTimeout; ctx.clearTimeout = clearTimeout;
+
+  const bridge = ctx.modALLMBridge.create(m.hooks);
+  bridge.setEndpoint("https://example.invalid/llm", null);
+  bridge.setLang("en");
+
+  // 25 turns — well past the ~7-exchange point where the server used to start
+  // rejecting EVERY request.
+  for (let i = 0; i < 25; i++) {
+    await bridge.submit("Turn " + i + ": tell me more about how your back feels through the day, doctor?");
+  }
+  assert.equal(bodies.length, 25, "all 25 turns reached the endpoint");
+  bodies.forEach((b, i) => {
+    assert.ok(Array.isArray(b.messages), "turn " + i + ": messages[] present");
+    assert.ok(hfHelpers.validateMessages(b.messages),
+      "turn " + i + ": payload (" + b.messages.length + " msgs / " +
+      b.messages.reduce((n, mm) => n + mm.content.length, 0) + " chars) must pass the server validator");
+    assert.equal(b.messages[0].role, "system", "turn " + i + ": system prompt kept first");
+    assert.equal(b.messages[b.messages.length - 1].role, "user", "turn " + i + ": newest user turn kept last");
+  });
+});
+
+test("buildChatMessages trims an oversized transcript to fit the server caps", () => {
+  const ctx = loadAll();
+  const big = [];
+  for (let i = 0; i < 50; i++) {
+    big.push({ role: i % 2 ? "assistant" : "user", content: "filler ".repeat(60).trim() });
+  }
+  const msgs = ctx.modALLMPrompts.buildChatMessages("en", big, "one last question, doctor?");
+  assert.ok(msgs.length <= hfHelpers.MAX_BODY_MESSAGES,
+    "≤" + hfHelpers.MAX_BODY_MESSAGES + " messages — got " + msgs.length);
+  assert.equal(msgs[0].role, "system", "system prompt preserved as first message");
+  assert.equal(msgs[msgs.length - 1].content, "one last question, doctor?",
+    "newest user turn preserved as last message");
+  assert.ok(hfHelpers.validateMessages(msgs), "trimmed payload passes the server validator");
+});

@@ -3488,6 +3488,16 @@ function teardownRoom() {
     if (refAnswerReplies) refAnswerReplies.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
+    // Module A LLM-patient chat listeners (chat + awarded under
+    // rooms/<id>/moduleA) are room-scoped. Release them like every other room
+    // subscription so a room switch / leave doesn't leave a stale child_added
+    // stacking duplicate chat bubbles on the next entry (session 1 double-render
+    // fix, 2026-06-23). modALLMInit() is idempotent too, but tearing down here
+    // keeps the contract uniform with the rest of teardownRoom.
+    if (window.modALLMRuntime && typeof window.modALLMRuntime.destroy === "function") {
+      try { window.modALLMRuntime.destroy(); } catch (e) { /* ignore */ }
+      window.modALLMRuntime = null;
+    }
     // NOTE: refClosed is session-scoped (not room-scoped). It is owned by
     // enterUnlockedSession / subscribeClosedListener, not by startRoom, so
     // teardownRoom does NOT unsubscribe it - we want the kick-screen to fire
