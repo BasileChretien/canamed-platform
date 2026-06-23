@@ -19,10 +19,11 @@ const INDEX = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
 
-test("the three tab buttons still exist in the markup (reveal is runtime-only)", () => {
+test("the two tab buttons still exist in the markup (reveal is runtime-only)", () => {
   // The reveal toggles the `hidden` attribute at runtime; the buttons must stay
-  // in the static HTML so a11y / structural guards keep finding them.
-  for (const id of ["rcol-tab-decisions", "rcol-tab-discussion", "rcol-tab-answers"]) {
+  // in the static HTML so a11y / structural guards keep finding them. The Debate
+  // tab was merged into "answers" (Discuss together) on 2026-06-23.
+  for (const id of ["rcol-tab-decisions", "rcol-tab-answers"]) {
     assert.match(INDEX, new RegExp('id="' + id + '"'),
       `tab button #${id} must remain in index.html`);
   }
@@ -36,7 +37,7 @@ test("revealModARightCol exists and reveals one tab per phase", () => {
   // The three phase gates.
   assert.match(body, /revealedCountByGroup\("history"\)/, "Decide gate reads history reveals");
   assert.match(body, /revealedCountByGroup\("exam"\)/, "Decide gate reads exam reveals");
-  assert.match(body, /phaseGateOpen\(\)/, "Debate gate is the ≥2-hypotheses phase gate");
+  assert.match(body, /phaseGateOpen\(\)/, "Discuss-together gate is the ≥1-hypothesis phase gate");
   assert.match(body, /rcol-collapsed/, "collapses the column while nothing is revealed");
   assert.match(body, /dataset\.revealed/, "reveal must be sticky (dataset.revealed flag)");
 });

@@ -48,9 +48,10 @@ const panels = panelTags.map((p) => ({
 const tabIds = new Set(tabs.map((t) => t.id).filter(Boolean));
 const panelIds = new Set(panels.map((p) => p.id).filter(Boolean));
 
-test("there are 3 Module A tabs and 3 tabpanels", () => {
-  assert.equal(tabs.length, 3, "expected Decide / Debate / Answers tabs");
-  assert.equal(panels.length, 3, "expected one panel per tab");
+test("there are 2 Module A tabs and 2 tabpanels", () => {
+  // Merged 2026-06-23: the Debate tab + panel were folded into "Discuss together".
+  assert.equal(tabs.length, 2, "expected Decide together / Discuss together tabs");
+  assert.equal(panels.length, 2, "expected one panel per tab");
 });
 
 test("every Module A tab button has an id and role=tab", () => {
@@ -59,7 +60,7 @@ test("every Module A tab button has an id and role=tab", () => {
     assert.equal(t.role, "tab", `${t.id} should have role="tab"`);
   }
   // the specific ids the panels expect must exist
-  for (const id of ["rcol-tab-decisions", "rcol-tab-discussion", "rcol-tab-answers"]) {
+  for (const id of ["rcol-tab-decisions", "rcol-tab-answers"]) {
     assert.ok(tabIds.has(id), `tab button id #${id} must exist`);
   }
 });

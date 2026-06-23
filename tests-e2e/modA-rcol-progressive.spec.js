@@ -1,14 +1,14 @@
 /* tests-e2e/modA-rcol-progressive.spec.js
  *
- * UX de-clutter (2026-06-01): Module A used to show all three right-column tabs
- * (Decide together / Debate / Our final answers) from the moment the student
- * landed on the stage — none of them usable yet, and "Debate" even carried a 🔒
- * "locked" teaser. They now reveal one per phase, as each becomes actionable:
+ * UX de-clutter (2026-06-01) + merge (2026-06-23): Module A's right-column tabs
+ * reveal one per phase, as each becomes actionable. The separate "Debate" tab
+ * was folded into a single "Discuss together" section (data-tab "answers"), so
+ * there are now TWO tabs, and the phase gate opens at ≥1 working hypothesis
+ * (was ≥2):
  *
  *   - at entry (nothing gathered)        → the whole right column is collapsed;
  *   - history ≥1 AND exam ≥1             → "Decide together" appears;
- *   - ≥2 working hypotheses (phaseGateOpen) → "Debate" appears (no 🔒 teaser);
- *   - the Exchange is underway           → "Our final answers" appears.
+ *   - ≥1 working hypothesis (phaseGateOpen) → "Discuss together" appears.
  *
  * Reveal is sticky (a tab never vanishes once shown). Driven through the
  * platform's _test_ hooks in LOCAL mode (no Firebase). Listed in the mobile
@@ -62,15 +62,14 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     await surfaceModA(page);
     await expect(page.locator("#stage-1 .columns")).toHaveClass(/rcol-collapsed/);
     await expect(page.locator("#rcol-tab-decisions")).toBeHidden();
-    await expect(page.locator("#rcol-tab-discussion")).toBeHidden();
     await expect(page.locator("#rcol-tab-answers")).toBeHidden();
   });
 
   test("'Decide together' appears once the patient is interviewed AND examined", async ({ page }) => {
     await surfaceModA(page);
     // Reveal one history item + one exam item — enough for the Decide gate. No
-    // hypotheses yet, so the phase gate (≥2 hypotheses) is closed → Debate +
-    // Answers stay hidden.
+    // hypotheses yet, so the phase gate (≥1 hypothesis) is closed → the merged
+    // "Discuss together" tab stays hidden.
     const picked = await page.evaluate(() => {
       const ids = window._test_getItemIds ? window._test_getItemIds() : [];
       const h = ids.find(id => id.indexOf("history:") === 0);
@@ -82,72 +81,43 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
 
     await reveal(page, [picked.h, picked.e]);
     await expect(page.locator("#rcol-tab-decisions")).toBeVisible();
-    await expect(page.locator("#rcol-tab-discussion")).toBeHidden();
     await expect(page.locator("#rcol-tab-answers")).toBeHidden();
   });
 
-  test("'Debate' appears once ≥2 working hypotheses are written (no lock teaser)", async ({ page }) => {
+  test("'Discuss together' appears once ≥1 working hypothesis is written (no lock teaser)", async ({ page }) => {
+    // Merged 2026-06-23: the separate Debate tab is gone; the single
+    // "Discuss together" tab (data-tab "answers") reveals on the phase gate,
+    // which now opens at ≥1 working hypothesis (was ≥2).
     await surfaceModA(page);
     const allIds = await page.evaluate(() =>
       window._test_getItemIds ? window._test_getItemIds() : []);
     await reveal(page, allIds);
-    // One hypothesis → still locked; the second crosses the gate.
+    // No hypotheses yet → still hidden.
+    await expect(page.locator("#rcol-tab-answers")).toBeHidden();
     await page.evaluate(() => {
       window._test_setHypotheses({ a: { text: "mechanical LBP", by: "T", at: 1 } });
-      if (window.renderPrompts) window.renderPrompts();
       if (window.revealModARightCol) window.revealModARightCol();
-    });
-    await expect(page.locator("#rcol-tab-discussion")).toBeHidden();
-    await page.evaluate(() => {
-      window._test_setHypotheses({
-        a: { text: "mechanical LBP", by: "T", at: 1 },
-        b: { text: "axial spondyloarthritis", by: "T", at: 1 }
-      });
-      if (window.renderPrompts) window.renderPrompts();
-      if (window.revealModARightCol) window.revealModARightCol();
-    });
-    await expect(page.locator("#rcol-tab-discussion")).toBeVisible();
-    // The 🔒 locked teaser must NOT be showing (it only renders under .is-locked).
-    await expect(page.locator("#rcol-tab-discussion")).not.toHaveClass(/is-locked/);
-  });
-
-  test("'Our final answers' appears once the Exchange is underway", async ({ page }) => {
-    await surfaceModA(page);
-    const allIds = await page.evaluate(() =>
-      window._test_getItemIds ? window._test_getItemIds() : []);
-    await reveal(page, allIds);
-    // Open the gate (≥2 hypotheses), then walk through every Exchange prompt →
-    // the bullets phase begins.
-    await page.evaluate(() => {
-      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      window._test_setHypotheses({
-        a: { text: "mechanical LBP", by: "T", at: 1 },
-        b: { text: "axial spondyloarthritis", by: "T", at: 1 }
-      });
-      const total = ((window._test_getCase() && window._test_getCase().prompts) || []).length;
-      window._test_setPromptCursor(total);
-      if (typeof window.renderPrompts === "function") window.renderPrompts();
-      if (typeof window.revealModARightCol === "function") window.revealModARightCol();
     });
     await expect(page.locator("#rcol-tab-answers")).toBeVisible();
+    // The 🔒 locked teaser must NOT show (it only renders under .is-locked).
+    await expect(page.locator("#rcol-tab-answers")).not.toHaveClass(/is-locked/);
   });
 
-  test("the mobile thumb-reach bar mirrors the reveal (no premature Debate/Answers)", async ({ page }) => {
+  test("the mobile thumb-reach bar mirrors the reveal (no premature Discuss-together)", async ({ page }) => {
     // DOM-property reads (el.hidden) so this is viewport-independent: on desktop
     // the whole bar is display:none, but the per-tab hidden mirroring still must
     // be correct for when the phone layout shows it.
     await surfaceModA(page);
     const mtabHidden = () => page.evaluate(() => ({
       decisions: document.querySelector('.mtab[data-tab="decisions"]').hidden,
-      discussion: document.querySelector('.mtab[data-tab="discussion"]').hidden,
       answers: document.querySelector('.mtab[data-tab="answers"]').hidden,
       barHidden: document.getElementById("mobile-rcol-tabbar").hidden
     }));
 
-    // At entry: every mirrored tab hidden, and the bar itself is down.
+    // At entry: both mirrored tabs hidden, and the bar itself is down.
     let s = await mtabHidden();
     expect(s, "no mobile tab before any phase is reached").toEqual(
-      { decisions: true, discussion: true, answers: true, barHidden: true });
+      { decisions: true, answers: true, barHidden: true });
 
     // After history + exam: only the Decide mirror is revealed.
     const picked = await page.evaluate(() => {
@@ -159,9 +129,7 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     s = await mtabHidden();
     expect(s.decisions, "Decide mirror shows after history+exam").toBe(false);
     expect(s.barHidden, "the bar comes up once a tab is revealed").toBe(false);
-    // No hypotheses yet → the phase gate is closed → Debate + Answers mirrors
-    // stay hidden.
-    expect(s.discussion, "Debate mirror stays hidden before ≥2 hypotheses").toBe(true);
-    expect(s.answers, "Answers mirror stays hidden before ≥2 hypotheses").toBe(true);
+    // No hypotheses yet → the phase gate is closed → Discuss-together mirror stays hidden.
+    expect(s.answers, "Discuss-together mirror stays hidden before a hypothesis").toBe(true);
   });
 });

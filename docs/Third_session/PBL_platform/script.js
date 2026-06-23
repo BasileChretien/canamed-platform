@@ -3258,13 +3258,15 @@ function revealModARightCol() {
 
   const reveal = {
     decisions: histDone && examDone,
-    discussion: gateOpen,
-    answers: gateOpen &&
-      (promptsWereDone || hasPromptReply || modAAnswers.length > 0 || moduleASettled)
+    // Merged section (2026-06-23): the single "Discuss together" tab (data-tab
+    // "answers") replaces the separate Debate + final-answers tabs. It opens as
+    // soon as the phase gate does (≥1 working hypothesis) — no longer waits for
+    // discussion-prompt replies.
+    answers: gateOpen
   };
 
   let anyVisible = false;
-  ["decisions", "discussion", "answers"].forEach(tab => {
+  ["decisions", "answers"].forEach(tab => {
     const btn = cols.querySelector('.rcol-tab[data-tab="' + tab + '"]');
     if (!btn) return;
     const show = reveal[tab] || btn.dataset.revealed === "1";
@@ -3353,7 +3355,7 @@ function updateMobileTabbar() {
   const bar = document.getElementById("mobile-rcol-tabbar");
   if (!bar) return;
   let anyRevealed = false;
-  ["decisions", "discussion", "answers"].forEach(tab => {
+  ["decisions", "answers"].forEach(tab => {
     const src = document.querySelector('.rcol-tab[data-tab="' + tab + '"]');
     const dst = bar.querySelector('.mtab[data-tab="' + tab + '"]');
     if (!src || !dst) return;
@@ -8371,7 +8373,10 @@ function keyRevealed() {
  * Clinical synthesis section was removed 2026-06-02 (its write-up moved to the
  * stage-4 take-home). (The red-flag screen still drives scoring.) */
 function phaseGateOpen() {
-  return (typeof hypothesisCount === "function") && hypothesisCount() >= 2;
+  // The merged "Discuss together" section unlocks at ≥1 working hypothesis
+  // (PI decision, 2026-06-23; was ≥2). One committed hypothesis is enough to
+  // open the group discussion + answer capture.
+  return (typeof hypothesisCount === "function") && hypothesisCount() >= 1;
 }
 
 /* Test hooks — top-level `let` bindings (revealed, promptCursor,
@@ -8475,9 +8480,11 @@ function updateDiscussionTabLock(unlocked) {
 let promptsWereUnlocked = false;
 let promptsWereDone = false;   // fire-once guard for auto-opening Group answers
 function renderPrompts() {
-  // The Debate (discussion prompts) now unlock on ≥2 working hypotheses
-  // (2026-06-02 phase gate), together with the Synthesis section — not on the
-  // synthesis being revealed.
+  // Merged section (2026-06-23): the standalone Debate panel (progressive
+  // discussion prompts) was folded into the single "Discuss together" section,
+  // so the prompts DOM no longer exists. This legacy renderer is now an inert
+  // no-op when its container is gone — kept so older callers don't throw.
+  if (!el("prompts-locked")) return;
   const unlocked = (typeof phaseGateOpen === "function") && phaseGateOpen();
   el("prompts-locked").classList.toggle("hidden", unlocked);
   // Hide the legacy <ol> permanently (kept in HTML for back-compat).
@@ -9848,18 +9855,18 @@ function updateModANextStep() {
 
   // Read observable state.
   const revealedCount = ITEM_IDS.filter(id => revealed[id]).length;
-  const onDiscussion = activeRcolTab === "discussion";
   const onAnswers = activeRcolTab === "answers";
   const modAAnswerEntries = Object.keys(answers.moduleA || {})
     .map(k => answers.moduleA[k]).filter(Boolean);
   const bulletsCovered = new Set(
     modAAnswerEntries.map(e => e.bulletKey).filter(Boolean)
   );
-  const allBulletsCovered = ["plan", "differ", "disagree", "takehome"]
-    .every(k => bulletsCovered.has(k));
+  // Merged section (2026-06-23): two focused fields — the plan and the
+  // France↔Japan pain-management difference.
+  const allBulletsCovered = ["plan", "differ"].every(k => bulletsCovered.has(k));
 
-  // When all four bullets are captured, reveal the "call a facilitator to move
-  // to Module B" button in the Group-answers card (user request 2026-06-02).
+  // When both answers are captured, reveal the "call a facilitator to move
+  // to Module B" button in the Discuss-together card.
   _updateAnswersCompleteCta("modA-answers-complete", "modA-call-next-btn",
     allBulletsCovered, "modA.answers.complete.callMsg",
     "Module A done — ready to move on to Module B.");
@@ -9876,44 +9883,35 @@ function updateModANextStep() {
     setPhaseStepperState("stage-1", "setup", []);
   } else if (!gateOpen) {
     textEl.textContent = _coachT("modA.coach.gather",
-      "Work the case up — ask, examine, investigate. When you're ready, write " +
-      "two working hypotheses to unlock the discussion.");
+      "Work the case up — ask, examine, investigate. When you're ready, write a " +
+      "working hypothesis to unlock the discussion.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
-  } else if (!onDiscussion && !onAnswers && modAAnswerEntries.length === 0) {
+  } else if (!onAnswers && modAAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modA.coach.open-discussion",
-      "✓ Hypotheses in — the Debate is open. Debate the prompts " +
-      "(both a Caen and a Nagoya voice on each compare prompt).");
-    // No "Open Debate →" jump button (2026-06-16, PI request): students reach
-    // the Debate via the right-column tab once the gate opens, not via a
-    // one-click coach shortcut that lets one student race ahead of the group.
-    _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
-  } else if (onDiscussion && modAAnswerEntries.length === 0) {
-    textEl.textContent = _coachT("modA.coach.in-discussion",
-      "Debate the prompts with your group — when you're ready, open Group answers " +
-      "to capture your 4 bullets.");
-    // No "Open Group answers →" jump button (2026-06-16, PI request).
+      "✓ Hypothesis in — open “Discuss together”. As a group, discuss the case " +
+      "and how pain management differs between France and Japan, then capture " +
+      "your plan and the key difference.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
   } else if (modAAnswerEntries.length > 0 && !allBulletsCovered) {
-    const remaining = 4 - bulletsCovered.size;
+    const remaining = 2 - bulletsCovered.size;
     const tpl = _coachT("modA.coach.bullets-partial",
-      "Capturing bullets — {n} still to add to cover all 4.");
+      "Capturing your answer — {n} still to add (your plan + the France/Japan difference).");
     textEl.textContent = tpl.replace("{n}", String(remaining));
     // No "Open Group answers →" jump button (2026-06-16, PI request).
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
   } else if (allBulletsCovered) {
     textEl.textContent = _coachT("modA.coach.bullets-complete",
-      "✓ All 4 bullets covered. Add more refinements or wait for your facilitator.");
+      "✓ Both answers captured. Add more or wait for your facilitator.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
   } else {
     // catch-all: fall back to the generic next-step text
     textEl.textContent = _coachT("modA.coach.gather",
-      "Work the case up — ask, examine, investigate. When you're ready, write " +
-      "two working hypotheses to unlock the discussion.");
+      "Work the case up — ask, examine, investigate. When you're ready, write a " +
+      "working hypothesis to unlock the discussion.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
   }
@@ -10779,7 +10777,11 @@ let lastAnswerCount = { moduleA: 0, moduleB: 0 };
  * keys not yet known to the running client). Keep in sync with the HTML
  * data-bullet-key attributes in index.html. */
 const ANSWER_BULLETS = {
-  moduleA: ["plan", "differ", "disagree", "takehome"],
+  // Merged "Discuss together" section (2026-06-23): two focused fields —
+  // the group's plan, and the France↔Japan pain-management cultural difference.
+  // (Was plan/differ/disagree/takehome; legacy disagree/takehome entries still
+  // render in the hidden _unsorted bucket via renderAnswers.)
+  moduleA: ["plan", "differ"],
   moduleB: ["family-sentence", "differ-converge", "practice-change"]
 };
 

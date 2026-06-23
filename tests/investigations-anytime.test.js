@@ -78,8 +78,8 @@ test("the on-screen synthesis button is gone; the Debate gates on ≥2 hypothese
   const rv = fnSlice("reveal");
   assert.doesNotMatch(rv, /SYNTH_ID && !phaseGateOpen/,
     "reveal() no longer carries the synthesis gate guard");
-  assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 2/,
-    "phaseGateOpen() must be hypothesisCount() >= 2");
+  assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 1/,
+    "phaseGateOpen() must be hypothesisCount() >= 1");
   assert.match(SCRIPT, /const unlocked = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
     "the discussion prompts unlock on phaseGateOpen()");
 });
