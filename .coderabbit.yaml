@@ -1,0 +1,62 @@
+# CodeRabbit configuration for BasileChretien/canamed-platform
+# Docs: https://docs.coderabbit.ai/guides/configure-coderabbit
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+early_access: false
+reviews:
+  # "chill" = concise, low-noise reviews — this is a small, fast-moving teaching
+  # platform, not a large team repo. Flip to "assertive" for deeper nitpicking.
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  review_status: true
+  poem: false
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    # Review DRAFT PRs too: clinical/curriculum changes are opened as drafts for
+    # PI review before merge, and we still want CodeRabbit's pass on them.
+    drafts: true
+    base_branches:
+      - main
+  # Don't waste review on vendored/minified bundles.
+  path_filters:
+    - "!docs/Third_session/PBL_platform/pdfmake.min.js"
+    - "!docs/Third_session/PBL_platform/purify.min.js"
+    - "!docs/Third_session/PBL_platform/vfs_fonts.js"
+    - "!docs/Third_session/PBL_platform/fb-timings.min.js"
+    - "!docs/Third_session/PBL_platform/qrcode.js"
+    - "!package-lock.json"
+  # Project-specific review guidance CodeRabbit applies per path.
+  path_instructions:
+    - path: "docs/Third_session/PBL_platform/**"
+      instructions: >-
+        Vanilla-JS PBL platform (no framework); the live app is served from this
+        directory. Service-worker cache-busting: when any precached shell asset
+        changes (index.html, script.js, sw.js, or a lazy chunk loaded via
+        script-loader.js), the SHELL_VERSION MUST move in lockstep across THREE
+        markers — the ?v=vN query on every <script>/<link> in index.html,
+        `var SHELL_VERSION` in script-loader.js, and `const SHELL_VERSION` in
+        sw.js. Flag any change that bumps one marker but not all three, or that
+        edits a shell asset without bumping at all. User-facing strings must stay
+        in i18n parity across i18n.js (en), locales/fr.js and locales/ja.js —
+        flag a key added, changed or removed in one language but not the others.
+        firebase-config.js holds a PUBLIC Firebase client key (apiKey etc.), not
+        a secret — do not flag it as a leaked credential.
+    - path: "docs/Third_session/PBL_platform/database.rules.json"
+      instructions: >-
+        Firebase Realtime Database security rules. Scrutinise every .read/.write
+        for over-broad access (especially cross-room/cross-session reads or
+        writes), and confirm .validate constraints match the data shape the
+        client writes. Reads that swallow permission errors silently are a known
+        failure mode here.
+    - path: "**/*.spec.js"
+      instructions: >-
+        Playwright E2E. Project rule: UI changes to the Module A workshop should
+        ship coverage on desktop AND the mobile-iphone / mobile-ipad /
+        mobile-android viewports (see the mobile testMatch in
+        playwright.config.js). Flag Module A UI changes that lack per-device
+        coverage. Prefer locator.dispatchEvent("click") over geometric clicks for
+        right-column tab chips (a documented hit-testing gotcha on iPad).
+chat:
+  auto_reply: true
