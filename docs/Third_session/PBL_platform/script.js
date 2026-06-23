@@ -3733,16 +3733,19 @@ function startRoom() {
     // and re-subscribe ONCE in case membership simply hadn't landed yet.
     var _lbResubscribed = false;
     var _onLb = function (snap) { allRooms = snap.val() || {}; renderLeaderboard(); };
-    refLeaderboard.on("value", _onLb, function (err) {
+    // Named error handler so the retry below ALSO passes it — otherwise a second
+    // denied/raced read would fail silently again (CodeRabbit, 2026-06-23).
+    var _onLbErr = function (err) {
       try { console.warn("[leaderboard] all-rooms read failed:", err && err.code); } catch (_) {}
       renderLeaderboard();
       if (!_lbResubscribed) {
         _lbResubscribed = true;
         setTimeout(function () {
-          try { if (refLeaderboard && !isRoomAdmin) refLeaderboard.on("value", _onLb); } catch (_) {}
+          try { if (refLeaderboard && !isRoomAdmin) refLeaderboard.on("value", _onLb, _onLbErr); } catch (_) {}
         }, 1500);
       }
-    });
+    };
+    refLeaderboard.on("value", _onLb, _onLbErr);
   }
 
   if (!isRoomAdmin) {
@@ -9699,7 +9702,10 @@ function renderLeaderboard() {
   const view = Object.assign({}, allRooms);
   if (myRoom && !isRoomAdmin) {
     const own = view[myRoom] ? Object.assign({}, view[myRoom]) : {};
-    if (!own.score && roomScore && Object.keys(roomScore).length) own.score = roomScore;
+    // Always prefer the local live roomScore for the student's OWN room — it's
+    // the authoritative, freshest source (refScore), so it must override a stale
+    // or empty allRooms[myRoom].score, not just a missing one (CodeRabbit).
+    if (roomScore && Object.keys(roomScore).length) own.score = roomScore;
     if (!own.teamName && teamName) own.teamName = teamName;
     view[myRoom] = own;
   }

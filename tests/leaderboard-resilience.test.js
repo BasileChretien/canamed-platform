@@ -40,13 +40,18 @@ function fnBody(name) {
 test("the all-rooms leaderboard subscription has an error callback (no silent swallow)", () => {
   // The .on("value", success, ERROR) third argument must be present so a denied
   // read is logged + retried instead of leaving the board blank forever.
-  const m = SCRIPT.match(/refLeaderboard\.on\("value",[\s\S]{0,400}?\)/);
-  assert.ok(m, "the refLeaderboard value subscription must exist");
-  const block = m[0];
-  assert.match(SCRIPT, /refLeaderboard\.on\("value",\s*_onLb,\s*function/,
-    "the subscription must pass an error callback (3-arg .on)");
+  // The initial subscription AND the retry must pass the same named error
+  // handler (3-arg .on), so a denied/raced read is never swallowed — including
+  // on the retry.
+  assert.match(SCRIPT, /refLeaderboard\.on\("value",\s*_onLb,\s*_onLbErr\)/,
+    "the subscription must pass the named error callback (3-arg .on)");
+  assert.match(SCRIPT, /var _onLbErr = function/,
+    "the error handler must be a named function so the retry can reuse it");
+  // The retry inside the error handler must ALSO pass _onLbErr.
+  assert.match(SCRIPT, /setTimeout\([\s\S]{0,200}?refLeaderboard\.on\("value",\s*_onLb,\s*_onLbErr\)/,
+    "the retry re-subscribe must also pass the error callback (no silent second failure)");
   assert.match(SCRIPT, /\[leaderboard\][^\n]*read failed/,
-    "the error callback must log the failed all-rooms read");
+    "the error handler must log the failed all-rooms read");
   assert.match(SCRIPT, /_lbResubscribed/,
     "the subscription must re-subscribe once after an error (membership-race self-heal)");
 });
