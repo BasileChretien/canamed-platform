@@ -3722,7 +3722,27 @@ function startRoom() {
   refTeamName.on("value", snap => { teamName = snap.val() || ""; renderScore(); });
   // everyone in a room sees the live board; admins also get it via refRooms
   if (!isRoomAdmin) {
-    refLeaderboard.on("value", snap => { allRooms = snap.val() || {}; renderLeaderboard(); });
+    // The live leaderboard reads ALL rooms (sPath("rooms")), which requires
+    // session membership. The old subscription passed NO error callback, so a
+    // denied/raced all-rooms read (e.g. the listener registering before
+    // claimMembership() has propagated) was swallowed silently: allRooms stayed
+    // {}, the board showed "No points yet" for the whole session, while the
+    // student's own-room score panel (the narrower refScore read) kept working —
+    // exactly the first-session symptom (2026-06-23). Log the failure, fall back
+    // to the own-room view (renderLeaderboard seeds allRooms[myRoom] locally),
+    // and re-subscribe ONCE in case membership simply hadn't landed yet.
+    var _lbResubscribed = false;
+    var _onLb = function (snap) { allRooms = snap.val() || {}; renderLeaderboard(); };
+    refLeaderboard.on("value", _onLb, function (err) {
+      try { console.warn("[leaderboard] all-rooms read failed:", err && err.code); } catch (_) {}
+      renderLeaderboard();
+      if (!_lbResubscribed) {
+        _lbResubscribed = true;
+        setTimeout(function () {
+          try { if (refLeaderboard && !isRoomAdmin) refLeaderboard.on("value", _onLb); } catch (_) {}
+        }, 1500);
+      }
+    });
   }
 
   if (!isRoomAdmin) {
@@ -9671,8 +9691,20 @@ let _lbPrevTogether = null;
 function renderLeaderboard() {
   const box = el("leaderboard");
   if (!box) return;
+  // Graceful degradation (2026-06-23): the cross-room read (refLeaderboard /
+  // refRooms → allRooms) can be empty or lagging — a denied/raced all-rooms read,
+  // or a slow first paint. The student's OWN team total is always known locally
+  // (roomScore), so seed it into the view so the board never shows a false
+  // "No points yet" while this room is actively scoring. Never mutates allRooms.
+  const view = Object.assign({}, allRooms);
+  if (myRoom && !isRoomAdmin) {
+    const own = view[myRoom] ? Object.assign({}, view[myRoom]) : {};
+    if (!own.score && roomScore && Object.keys(roomScore).length) own.score = roomScore;
+    if (!own.teamName && teamName) own.teamName = teamName;
+    view[myRoom] = own;
+  }
   const rows = roomNames(roomCount).map(r => {
-    const data = allRooms[r] || {};
+    const data = view[r] || {};
     return { room: r, name: (data.teamName || r), total: scoreTotal(data) };
   }).sort((a, b) => b.total - a.total || a.room.localeCompare(b.room));
   box.innerHTML = "";
