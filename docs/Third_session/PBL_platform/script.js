@@ -9895,7 +9895,10 @@ function updateModANextStep() {
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
   } else if (modAAnswerEntries.length > 0 && !allBulletsCovered) {
-    const remaining = 2 - bulletsCovered.size;
+    // Count only the two TRACKED fields still missing — bulletsCovered may also
+    // contain legacy disagree/takehome keys, so `2 - size` could go 0/negative
+    // even while plan/differ are unfilled (CodeRabbit, 2026-06-23).
+    const remaining = ["plan", "differ"].filter(k => !bulletsCovered.has(k)).length;
     const tpl = _coachT("modA.coach.bullets-partial",
       "Capturing your answer — {n} still to add (your plan + the France/Japan difference).");
     textEl.textContent = tpl.replace("{n}", String(remaining));
