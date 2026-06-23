@@ -46,7 +46,9 @@ test("Module A: Investigations is collapsed by default", () => {
     "Investigations must NOT carry the open attribute");
 });
 
-test("Module A: First impressions remains collapsed (unchanged)", () => {
-  assert.doesNotMatch(detailsTagFor("chart-impressions"), /\bopen\b/,
-    "First-impressions stays collapsed as before");
+test("Module A: the First-impressions section is removed (2026-06-23)", () => {
+  assert.doesNotMatch(INDEX, /id="chart-impressions"/,
+    "the chart-impressions section must be gone");
+  assert.doesNotMatch(INDEX, /id="impressions-input"/,
+    "the impressions textarea must be gone");
 });

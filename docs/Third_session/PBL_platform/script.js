@@ -500,7 +500,7 @@ const SCORE_AUTO = {
   // team found the diagnosis").
   synthesis: { points: 10, tier: "milestone", module: "A",
     title: "Committed your working hypotheses",
-    did: "Your room committed at least two working hypotheses — the Exchange prompts are now open." },
+    did: "Your room committed a working hypothesis — the discussion is now open." },
   restraint: { points: 20, tier: "milestone", module: "A",
     title: "Diagnostic restraint",
     did: "You held off on imaging that isn't indicated here.",
@@ -9239,7 +9239,7 @@ function decisionUnlockHint(unmet) {
       case "labsRevealed":
         return t("modA.decision.unlock.labs", "investigate");
       case "synthesis":
-        return t("modA.decision.unlock.synthesis", "write two working hypotheses");
+        return t("modA.decision.unlock.synthesis", "write a working hypothesis");
       default:
         return u.key;
     }
@@ -10254,36 +10254,11 @@ function initCoachDismiss() {
 function hypothesisCount() {
   return Object.keys(hypotheses || {}).length;
 }
-/* "First impressions (optional)" — sim 2026-05-19 UX-practitioner
- * recommendation. A small textarea at the top of the Module A chart
- * that lets a Y3/first-timer note their gut-feel BEFORE asking the
- * patient anything. Per-tab only (localStorage); never written to
- * Firebase, never shown to teammates, never assessed — the entire
- * purpose is to give the student a place to externalise their first
- * guess so they have something to refine after History + Exam.
- * Keyed per session+room so it doesn't bleed across sessions. */
-function initImpressions() {
-  const ta = el("impressions-input");
-  if (!ta || ta._wired) return;
-  ta._wired = true;
-  const key = "canamed_impressions:" + (sessionNum || "?") + ":" + (myRoom || "?");
-  try {
-    const prev = localStorage.getItem(key);
-    if (prev) ta.value = prev;
-  } catch (e) { /* private mode — non-fatal */ }
-  ta.addEventListener("input", () => {
-    try { localStorage.setItem(key, ta.value); } catch (e) {}
-  });
-}
-
 function initHypotheses() {
   const input = el("hypothesis-input");
   const btn = el("hypothesis-add-btn");
   if (!input || !btn || btn._wired) return;
   btn._wired = true;
-  // Wire the sibling "first impressions" textarea while we're here —
-  // they share a setup phase in Module A.
-  initImpressions();
   const submit = () => {
     const text = (input.value || "").trim().slice(0, 160);
     if (!text || !refHypotheses) return;

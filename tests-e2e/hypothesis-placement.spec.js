@@ -6,9 +6,7 @@
  *   1. The canonical "Working hypotheses" block sits BETWEEN
  *      Examination and Investigations in the DOM order — NOT above
  *      History (anchoring-bias risk per healthcare-CDSS reviewer).
- *   2. A small "First impressions (optional)" textarea sits above
- *      History as a private, free-text gut-feel — no Firebase write,
- *      no gating.
+ *   2. (The "First impressions" textarea was removed 2026-06-23 — PI request.)
  *   3. The Investigations unlock gate requires (a) ≥1 hypothesis AND
  *      (b) the red-flag screen (history:1 + history:2 + exam:3 all
  *      revealed). Typing a throwaway hypothesis alone no longer
@@ -55,25 +53,14 @@ test.describe("Module A hypothesis-block placement (specialist consensus)", () =
     expect(order["chart-hypotheses"]).toBeGreaterThan(order["chart-investigations"]);
   });
 
-  test("'First impressions' textarea sits at the top of the chart + is non-gating", async ({ page }) => {
+  test("the First-impressions section is gone (removed 2026-06-23)", async ({ page }) => {
     await page.goto("/");
-    const info = await page.evaluate(() => {
-      const im = document.getElementById("chart-impressions");
-      if (!im) return null;
-      const ta = document.getElementById("impressions-input");
-      // history should come AFTER impressions in document order.
-      const hist = document.getElementById("chart-section-history");
-      const ordered = im.compareDocumentPosition(hist) & Node.DOCUMENT_POSITION_FOLLOWING;
-      return {
-        hasSection: true,
-        hasTextarea: !!ta && ta.tagName === "TEXTAREA",
-        beforeHistory: !!ordered,
-        // No data-i18n on the section title is fine — testing structure only.
-      };
-    });
-    expect(info, "chart-impressions section must exist").not.toBeNull();
-    expect(info.hasTextarea, "must include a TEXTAREA input").toBe(true);
-    expect(info.beforeHistory, "impressions must come BEFORE history in the DOM").toBe(true);
+    const gone = await page.evaluate(() => ({
+      noSection: !document.getElementById("chart-impressions"),
+      noTextarea: !document.getElementById("impressions-input")
+    }));
+    expect(gone.noSection, "chart-impressions section must be removed").toBe(true);
+    expect(gone.noTextarea, "impressions textarea must be removed").toBe(true);
   });
 
   test("Investigations are clickable any time; there is no on-screen synthesis button", async ({ page }) => {

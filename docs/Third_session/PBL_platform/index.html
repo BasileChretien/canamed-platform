@@ -1537,32 +1537,8 @@
                 </p>
               </header>
 
-              <!-- ── First impressions — small optional prompt at the
-                   top of the chart. Sim 2026-05-19 specialist panel
-                   (UX practitioner): give Y3/first-timers a place to
-                   note their gut-feel BEFORE asking the patient, so
-                   they have something to refine after History + Exam.
-                   Intentionally lightweight + non-blocking — no gating,
-                   no Firebase write. Persists per-tab only.
-                   The CANONICAL "Working hypotheses" block sits BELOW
-                   Examination (see comment further down). -->
-              <details class="chart-section chart-impressions" id="chart-impressions">
-                <summary class="chart-section-h">
-                  <span class="chart-section-icon" aria-hidden="true">💡</span>
-                  <span data-i18n="modA.chart.impressions.title">First impressions (optional)</span>
-                </summary>
-                <p class="chart-section-hint"
-                   data-i18n="modA.chart.impressions.hint">
-                  Your gut-feel before you ask the patient. Just for you — no one
-                  else sees this, and you'll come back to refine it after History
-                  + Examination.
-                </p>
-                <textarea id="impressions-input" rows="2" maxlength="500"
-                          data-i18n-attr="placeholder"
-                          data-i18n="modA.chart.impressions.placeholder"
-                          placeholder="A line or two — what do you suspect, what would surprise you?"></textarea>
-              </details>
-
+              <!-- First-impressions section removed 2026-06-23 (PI request):
+                   the gut-feel textarea was dropped to streamline Module A. -->
               <!-- ── History (was "Ask the patient") ──
                    <details>-wrapped per Sim 2026-05-18 finding: the
                    stacked chart had ~30 buttons visible at once, 4.6×
@@ -1643,8 +1619,8 @@
                 <p class="chart-section-hint"
                    data-i18n="modA.chart.hypotheses.hint" data-i18n-html>
                   Agree as a team: <strong>what do you suspect?</strong> List
-                  <strong>two or more</strong> differentials you want to rule in or
-                  rule out. Writing two unlocks the discussion prompts.
+                  <strong>one or more</strong> differentials you want to rule in or
+                  rule out. Writing one unlocks the discussion.
                 </p>
                 <ul class="hypothesis-list" id="hypothesis-list"></ul>
                 <p class="hint hypothesis-empty hidden" id="hypothesis-empty"
