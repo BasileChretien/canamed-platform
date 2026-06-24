@@ -53,3 +53,4 @@ docs/Third_session/PBL_platform/functions/.env.*
 # OS junk
 .DS_Store
 Thumbs.db
+.dict-cache/

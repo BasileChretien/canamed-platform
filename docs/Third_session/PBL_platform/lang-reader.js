@@ -56,9 +56,23 @@
     } catch (e) { /* private mode */ }
     syncToggle(on);
     if (!on) hide();
-    // Pull the glossary in lazily the first time the reader is switched on.
-    if (on && !glossary() && window.CanamedLoader && window.CanamedLoader.ensureGlossary) {
-      window.CanamedLoader.ensureGlossary().catch(function () { /* degrade quietly */ });
+    if (on) {
+      // Pull the glossary in lazily the first time the reader is switched on.
+      if (!glossary() && window.CanamedLoader && window.CanamedLoader.ensureGlossary) {
+        window.CanamedLoader.ensureGlossary().catch(function () { /* degrade quietly */ });
+      }
+      ensureDictForLang();
+    }
+  }
+
+  // Fetch the general dictionary for the current target language (fr/ja) once,
+  // in the background. getDict() starts returning it as soon as it's parsed; a
+  // hover before then just falls back to glossary-only. ~1.5 MB, so only ever
+  // pulled when the reader is actually on.
+  function ensureDictForLang() {
+    var l = targetLang();
+    if ((l === "fr" || l === "ja") && window.CanamedReaderDict) {
+      window.CanamedReaderDict.ensureDict(l).catch(function () { /* optional */ });
     }
   }
 
@@ -82,11 +96,12 @@
     return null;
   }
 
-  /* Look up the gloss under a viewport point. Returns { node, hit } or null. */
+  /* Look up the gloss under a viewport point. Returns { node, hit } or null.
+   * Curated clinical glossary wins; the general bundled dictionary (Phase 2)
+   * is the fallback for everyday words the glossary doesn't cover. */
   function lookupAt(x, y) {
     var c = core();
-    var g = glossary();
-    if (!c || !g) return null;
+    if (!c) return null;
     var caret = caretFromPoint(x, y);
     if (!caret) return null;
     var node = caret.node;
@@ -96,7 +111,14 @@
         parent.closest(".reader-pop, .gloss-pop, script, style, [data-no-reader]")) {
       return null;
     }
-    var hit = c.glossAt(node.nodeValue || "", caret.offset, g, targetLang());
+    var lang = targetLang();
+    var text = node.nodeValue || "";
+    var g = glossary();
+    var hit = g ? c.glossAt(text, caret.offset, g, lang) : null;
+    if (!hit && c.dictAt) {
+      var dict = window.CanamedReaderDict && window.CanamedReaderDict.getDict(lang);
+      if (dict) hit = c.dictAt(text, caret.offset, dict);
+    }
     if (!hit) return null;
     return { node: node, hit: hit };
   }
@@ -222,12 +244,19 @@
     document.addEventListener("keydown", function (e) { if (e.key === "Escape") hide(); });
     window.addEventListener("scroll", hide, true);
     window.addEventListener("resize", hide);
-    // Re-anchoring on language change is overkill; just close any open popover.
-    window.addEventListener("canamed:langchange", hide);
+    // On language change: close any open popover and, if the reader is on,
+    // start loading the newly-selected language's dictionary.
+    window.addEventListener("canamed:langchange", function () {
+      hide();
+      if (enabled()) ensureDictForLang();
+    });
     wireToggle();
     // If the user had it on from a previous visit, make sure the data is ready.
-    if (enabled() && !glossary() && window.CanamedLoader && window.CanamedLoader.ensureGlossary) {
-      window.CanamedLoader.ensureGlossary().catch(function () { /* optional */ });
+    if (enabled()) {
+      if (!glossary() && window.CanamedLoader && window.CanamedLoader.ensureGlossary) {
+        window.CanamedLoader.ensureGlossary().catch(function () { /* optional */ });
+      }
+      ensureDictForLang();
     }
   }
 

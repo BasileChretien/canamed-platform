@@ -324,6 +324,7 @@ test.describe("Perf budget — splash", () => {
       // lang-reader.js the DOM glue.
       "reader-core.js",
       "lang-reader.js",
+      "reader-dict.js",
       "admin-tools.js",
       "qrcode.js",
       "tour.js",
