@@ -368,16 +368,19 @@ test("i18n: localizedHref('privacy') returns the canonical ?lang= URL (R3 deep-i
 // still pass) — only which one t() reads changed.
 test("i18n English-only: workshop chrome renders English even under fr/ja", () => {
   const CHROME = ["splash.enter.submit", "waiting.heading", "lobby.admin-toggle"];
-  for (const lang of ["fr", "ja"]) {
-    i18n.setLang(lang);
-    for (const k of CHROME) {
-      // sanity: a real, differing translation exists in the table…
-      assert.notStrictEqual(T[lang][k], T.en[k], `${k} ${lang} should differ in the table`);
-      // …but t() now returns the English canonical anyway.
-      assert.strictEqual(i18n.t(k), T.en[k], `${k} should render English under ${lang}`);
+  try {
+    for (const lang of ["fr", "ja"]) {
+      i18n.setLang(lang);
+      for (const k of CHROME) {
+        // sanity: a real, differing translation exists in the table…
+        assert.notStrictEqual(T[lang][k], T.en[k], `${k} ${lang} should differ in the table`);
+        // …but t() now returns the English canonical anyway.
+        assert.strictEqual(i18n.t(k), T.en[k], `${k} should render English under ${lang}`);
+      }
     }
+  } finally {
+    i18n.setLang("en"); // reset shared module state even if an assertion throws
   }
-  i18n.setLang("en"); // reset shared module state
 });
 
 test("i18n English-only: consent / safety / privacy still follow the language", () => {
@@ -389,13 +392,16 @@ test("i18n English-only: consent / safety / privacy still follow the language", 
     "stage.welcome.grade-note", // anti-coercion grade note
     "modA.chat.consentCta"      // LLM-chat consent
   ];
-  i18n.setLang("fr");
-  for (const k of LOCALIZED) {
-    assert.strictEqual(i18n.t(k), T.fr[k], `${k} should render the fr translation`);
-    assert.notStrictEqual(i18n.t(k), T.en[k], `${k} should NOT be English under fr`);
+  try {
+    i18n.setLang("fr");
+    for (const k of LOCALIZED) {
+      assert.strictEqual(i18n.t(k), T.fr[k], `${k} should render the fr translation`);
+      assert.notStrictEqual(i18n.t(k), T.en[k], `${k} should NOT be English under fr`);
+    }
+    // the language switcher's own option labels stay localized so it's usable
+    assert.strictEqual(i18n.t("lang.fr"), T.fr["lang.fr"]);
+    assert.strictEqual(i18n.t("splash.lang-label"), T.fr["splash.lang-label"]);
+  } finally {
+    i18n.setLang("en"); // reset shared module state even if an assertion throws
   }
-  // the language switcher's own option labels stay localized so it's usable
-  assert.strictEqual(i18n.t("lang.fr"), T.fr["lang.fr"]);
-  assert.strictEqual(i18n.t("splash.lang-label"), T.fr["splash.lang-label"]);
-  i18n.setLang("en"); // reset shared module state
 });
