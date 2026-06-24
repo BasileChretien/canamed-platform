@@ -2683,13 +2683,19 @@ footer {
 .privacy-note p { margin: var(--s-2) 0 0; }
 .anon-toggle {
   display: inline-flex;
+  flex-wrap: wrap;              /* let the block hint drop to its own line */
   align-items: center;
   gap: 6px;
   font-size: 0.85rem;
   color: var(--muted);
-  white-space: nowrap;
+  white-space: nowrap;         /* keep the short "Pseudonymise names…" label intact */
 }
 .anon-toggle input { width: auto; min-height: 0; }
+/* The explanatory hint is a full-width block under the toggle label — it must
+   wrap, not inherit the label's nowrap (otherwise the ~80-word note is forced
+   onto one ~800px line, overflowing the page width on a phone and zooming the
+   whole admin dashboard out → the Start button becomes untappable). */
+.anon-toggle .hint-block-small { flex-basis: 100%; white-space: normal; }
 
 /* ---------- late-joiner banner ---------- */
 .late-banner {

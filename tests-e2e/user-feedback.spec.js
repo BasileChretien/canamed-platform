@@ -220,3 +220,49 @@ test.describe("Bug 2b — Module A right-column labels (English-canonical UI)", 
     await page.evaluate(() => window.setLang("en")); // reset
   });
 });
+
+test.describe("Bug 4 — admin dashboard fits the viewport on a phone", () => {
+  // Root cause of the original report ("Start session button is unclickable on
+  // Android"): the pseudonymise toggle's long explanatory hint inherited the
+  // toggle's `white-space: nowrap`, so the ~80-word note was forced onto one
+  // ~800px line. That overflowed the admin dashboard past the phone's width,
+  // and a mobile browser responds to horizontal overflow by ZOOMING THE PAGE
+  // OUT — which shrinks every control and shifts the tap geometry so the Start
+  // button could no longer be tapped (Playwright saw the header intercept the
+  // click). The fix lets the hint wrap onto its own full-width line. This test
+  // guards the root cause directly: the admin dashboard must never overflow the
+  // viewport horizontally (trivially true on desktop; the real guard on phones).
+  test("the admin dashboard has no horizontal overflow", async ({ page }) => {
+    await page.goto("/");
+    await page.locator("#splash-go-create").click();
+    await page.locator("#splash-create-name").fill("E2E Fac NoHScroll");
+    await page.locator("#splash-create-label").fill("Bug4 — admin fits");
+    await page.locator("#splash-create-pass").fill("e2e-fits-pw");
+    await page.locator("#splash-create-submit").click();
+    await expect(page.locator("#splash-shown-code"))
+      .toHaveText(/^[A-Z0-9]{3}-[A-Z0-9]{3}$/i, { timeout: 10_000 });
+    await page.locator("#splash-go-admin").click();
+    await expect(page.locator("#admin-prestart")).toBeVisible({ timeout: 10_000 });
+
+    // scrollWidth > clientWidth ⇒ the page overflows sideways ⇒ phones zoom out.
+    // A 1px tolerance absorbs sub-pixel rounding under device emulation.
+    const overflow = await page.evaluate(() => {
+      const doc = document.documentElement;
+      return { scrollW: doc.scrollWidth, clientW: doc.clientWidth };
+    });
+    expect(overflow.scrollW,
+      `admin dashboard overflows horizontally: scrollWidth=${overflow.scrollW} > clientWidth=${overflow.clientW}`)
+      .toBeLessThanOrEqual(overflow.clientW + 1);
+
+    // And the Start button is the real hit-target at its own centre (i.e. nothing
+    // overlays it) — the user-visible symptom this whole bug was about.
+    const onTarget = await page.evaluate(() => {
+      const btn = document.getElementById("start-session-btn");
+      btn.scrollIntoView({ block: "center" });
+      const r = btn.getBoundingClientRect();
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      return !!hit && (hit === btn || btn.contains(hit));
+    });
+    expect(onTarget, "#start-session-btn is not the topmost element at its own centre").toBe(true);
+  });
+});
