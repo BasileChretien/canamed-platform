@@ -237,4 +237,24 @@ test.describe("Word help — general-dictionary fallback (Phase 2)", () => {
     expect(hit, "dictionary resolved the plural via deinflection").not.toBeNull();
     expect(hit.text).toContain("胆");
   });
+
+  test("switching language loads the newly-selected dictionary (langchange fires on document)", async ({ page }) => {
+    // Regression: i18n.js dispatches `canamed:langchange` on `document`
+    // (non-bubbling), so the reader MUST listen there. A `window` listener never
+    // fired — meaning on a JA-OS only the init-time ja dict loaded, and switching
+    // to French never loaded en-fr.txt.gz, so French hovering silently failed.
+    const s = "The patient seemed reluctant to continue.";
+    await setupDict(page, "ja", s);                  // start in Japanese (ja dict loaded)
+    // Switch to French; the document langchange listener must trigger ensureDict('fr').
+    await page.evaluate(() => window.setLang("fr"));
+    await page.waitForFunction(
+      () => !!(window.CanamedReaderDict && window.CanamedReaderDict.getDict("fr")),
+      null, { timeout: 15_000 }
+    );
+    // A French general-word hover now resolves via the freshly-loaded dict.
+    const { x, y } = await centerOf(page, s, "reluctant");
+    const hit = await lookup(page, x, y);
+    expect(hit, "French dict resolved after switching language").not.toBeNull();
+    expect(hit.text.toLowerCase()).toMatch(/réticent|réfractaire|récalcitrant/);
+  });
 });

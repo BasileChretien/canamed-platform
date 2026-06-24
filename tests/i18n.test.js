@@ -383,24 +383,33 @@ test("i18n English-only: workshop chrome renders English even under fr/ja", () =
   }
 });
 
-test("i18n English-only: consent / safety / privacy still follow the language", () => {
-  const LOCALIZED = [
-    "lobby.consent-workshop",   // workshop consent
-    "lobby.privacy.p1",         // privacy notice
-    "data-rights.export-btn",   // GDPR self-export
-    "room.call-facilitator",    // safety: call a facilitator
-    "stage.welcome.grade-note", // anti-coercion grade note
+test("i18n: ONLY the consent block follows the chosen language; everything else is English", () => {
+  // User 2026-06-24: "only the consent must be in the 3 languages; all the rest
+  // must be in English." The consent block (consent checkboxes + the data/
+  // privacy notice it references + the LLM-chat consent) follows fr/ja; safety,
+  // grade-note, call-facilitator, GDPR export and all chrome stay English.
+  const CONSENT = [
+    "lobby.consent-workshop",   // consent checkbox
+    "lobby.privacy.p1",         // data/privacy notice the consent references
     "modA.chat.consentCta"      // LLM-chat consent
   ];
+  const NON_CONSENT = [
+    "data-rights.export-btn",   // GDPR self-export — NOT consent → English
+    "room.call-facilitator",    // call a facilitator — NOT consent → English
+    "stage.welcome.grade-note", // anti-coercion grade note — NOT consent → English
+    "splash.enter.submit"       // chrome → English
+  ];
   try {
-    i18n.setLang("fr");
-    for (const k of LOCALIZED) {
-      assert.strictEqual(i18n.t(k), T.fr[k], `${k} should render the fr translation`);
-      assert.notStrictEqual(i18n.t(k), T.en[k], `${k} should NOT be English under fr`);
+    for (const lang of ["fr", "ja"]) {
+      i18n.setLang(lang);
+      for (const k of CONSENT) {
+        assert.notStrictEqual(T[lang][k], T.en[k], `${k} ${lang} should differ in the table`);
+        assert.strictEqual(i18n.t(k), T[lang][k], `consent ${k} should render ${lang}`);
+      }
+      for (const k of NON_CONSENT) {
+        assert.strictEqual(i18n.t(k), T.en[k], `non-consent ${k} should render English under ${lang}`);
+      }
     }
-    // the language switcher's own option labels stay localized so it's usable
-    assert.strictEqual(i18n.t("lang.fr"), T.fr["lang.fr"]);
-    assert.strictEqual(i18n.t("splash.lang-label"), T.fr["splash.lang-label"]);
   } finally {
     i18n.setLang("en"); // reset shared module state even if an assertion throws
   }

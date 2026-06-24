@@ -78,9 +78,10 @@ test.describe("Lobby i18n — privacy notice + consent block", () => {
     await expect(tab.locator("#consent-version"))
       .toContainText(/Version de la notice/i);
 
-    // The grade-note has been promoted into the lobby and is in French
+    // Grade-note is NOT consent (user: only the consent block is translated),
+    // so it renders English even with French selected.
     await expect(tab.locator(".lobby-grade-note"))
-      .toContainText(/note universitaire/i);
+      .toContainText(/not affected/i);
 
     // Phase 3 (English-canonical UI): the consent + privacy copy above stays
     // French, but the waiting-room is informational chrome and now renders in
@@ -115,9 +116,9 @@ test.describe("Lobby i18n — privacy notice + consent block", () => {
     await expect(tab.locator("#consent-version"))
       .toContainText(/説明文書のバージョン/);
 
-    // Grade-note in JA above the consent block
+    // Grade-note is NOT consent → English even with Japanese selected.
     await expect(tab.locator(".lobby-grade-note"))
-      .toContainText(/成績/);
+      .toContainText(/not affected/i);
 
     // Phase 3 (English-canonical UI): consent + privacy stays Japanese above;
     // the waiting-room is informational chrome and now renders in English.

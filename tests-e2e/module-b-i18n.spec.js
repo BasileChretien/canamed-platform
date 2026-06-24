@@ -18,12 +18,11 @@
 const { test, expect } = require("./fixtures.js");
 
 test.describe("Module B body i18n", () => {
-  test("Module B safety note stays Japanese but the learning body is English-canonical (Phase 3)", async ({ page }) => {
-    // Phase 3 — English-canonical UI: the Module B SAFETY briefing (a
-    // consent/safety string) stays in the participant's language; the clinical
-    // vignette, SPIKES strip, phase headings and group-answers chrome are
-    // learning content and now render in English for everyone (word-level help
-    // comes from the in-page reading aid).
+  test("Module B renders fully in English even with Japanese selected (only consent is translated)", async ({ page }) => {
+    // English-only UI: only the consent block follows the chosen language, so
+    // ALL of Module B — the safety briefing, the clinical vignette, the SPIKES
+    // strip, the phase headings and the group-answers chrome — renders in
+    // English even under ja. Word-level help comes from the in-page reading aid.
     await page.addInitScript(() => {
       try { localStorage.setItem("canamed_lang", "ja"); } catch (e) {}
     });
@@ -46,11 +45,13 @@ test.describe("Module B body i18n", () => {
       if (stage2) stage2.classList.remove("hidden");
     });
 
-    // Safety note (whitelisted consent/safety) STAYS Japanese.
+    // Safety note is NOT consent → English even under ja.
     await expect(page.locator("[data-i18n='stage.modB.safety.heading']"))
-      .toContainText("始める前に");
+      .toContainText(/Before you start/i);
+    await expect(page.locator("[data-i18n='stage.modB.safety.heading']"))
+      .not.toContainText("始める前に");
     await expect(page.locator("[data-i18n='stage.modB.safety.language']"))
-      .toContainText("第二・第三言語");
+      .toContainText(/second or third language/i);
 
     // Vignette is now English ("The situation…"), not Japanese ("状況設定").
     const vignette = page.locator("[data-i18n='stage.modB.vignette.body']");
