@@ -190,10 +190,14 @@ test.describe("Word help — general-dictionary fallback (Phase 2)", () => {
     const s = "The patient seemed reluctant to continue.";
     await setupDict(page, "fr", s);
     // 'reluctant' is everyday vocabulary, NOT a curated clinical glossary term.
-    const inGlossary = await page.evaluate(() =>
-      !!(window.CANAMED_GLOSSARY &&
-         Object.keys(window.CANAMED_GLOSSARY).some((k) => "reluctant".indexOf(k) !== -1)));
-    expect(inGlossary).toBe(false);
+    // Use the real glossAt resolver rather than a fragile substring scan (a
+    // short glossary key could otherwise be a coincidental substring of
+    // "reluctant" and wrongly flip this).
+    const glossaryResolves = await page.evaluate(() => {
+      const c = window.CanamedReaderCore, g = window.CANAMED_GLOSSARY;
+      return !!(c && g && c.glossAt("reluctant", 3, g, "fr"));
+    });
+    expect(glossaryResolves).toBe(false);
     const { x, y } = await centerOf(page, s, "reluctant");
     const hit = await lookup(page, x, y);
     expect(hit, "dictionary resolved 'reluctant'").not.toBeNull();

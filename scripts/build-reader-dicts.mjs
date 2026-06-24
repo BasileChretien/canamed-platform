@@ -23,6 +23,10 @@
  * of CI (it downloads ~30 MB). Raw downloads are cached under .dict-cache/
  * (gitignored) so re-runs are fast. Run:  node scripts/build-reader-dicts.mjs
  *
+ * Requires Node >= 22.13.0 (or >= 23.4.0): `node:sqlite` (DatabaseSync) is only
+ * available without the --experimental-sqlite flag from those versions on. The
+ * repo's package.json engines.node is pinned accordingly.
+ *
  * The byte output is deterministic (same sources + same code -> same gzip), so
  * the committed assets can be regenerated and diffed.
  */
