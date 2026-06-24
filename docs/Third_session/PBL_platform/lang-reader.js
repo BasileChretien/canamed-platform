@@ -253,8 +253,12 @@
     window.addEventListener("scroll", hide, true);
     window.addEventListener("resize", hide);
     // On language change: close any open popover and, if the reader is on,
-    // start loading the newly-selected language's dictionary.
-    window.addEventListener("canamed:langchange", function () {
+    // start loading the newly-selected language's dictionary. NB: i18n.js
+    // dispatches this on `document` (non-bubbling), so we MUST listen there —
+    // a `window` listener never fires, which is why switching to French never
+    // loaded the FR dictionary (the default-language dict loaded on init, so
+    // only that language's reader worked).
+    document.addEventListener("canamed:langchange", function () {
       hide();
       if (enabled()) ensureDictForLang();
     });
