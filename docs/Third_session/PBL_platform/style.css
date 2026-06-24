@@ -1683,6 +1683,27 @@ html[data-theme="dark"] .next-step-coach {
 }
 .gloss-pop[hidden] { display: none; }
 
+/* Reading-aid popover (lang-reader.js). Inherits the .gloss-pop frame; this
+   only adds the term/definition typographic split. Decorative + pointer-driven
+   (aria-hidden), so it never double-announces for screen-reader users. */
+.reader-pop { white-space: normal; max-width: min(300px, 92vw); }
+.reader-pop .reader-term { color: var(--primary, #1763a6); font-weight: 700; }
+.reader-pop .reader-def { color: var(--ink); }
+/* "Word help" toggle in the settings cog: checkbox + sub-hint line. */
+.global-settings-check {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary, #1763a6);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.global-settings-hint {
+  margin: -2px 0 2px;
+  font-size: 0.78rem;
+  color: var(--muted, #6a665d);
+  line-height: 1.35;
+}
+
 /* History sub-grouping (round4-a11y Rec 4): the dense History group is
    split into a short visible cluster + a collapsed "More questions"
    <details>, cutting the at-once button count for the A2/B1 cohort. Both
