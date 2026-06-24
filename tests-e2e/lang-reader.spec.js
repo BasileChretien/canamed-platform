@@ -1,0 +1,137 @@
+/* tests-e2e/lang-reader.spec.js
+ *
+ * The in-page reading aid (lang-reader.js + reader-core.js): with "Word help"
+ * on, hovering (desktop) or tapping (touch) a glossed word shows a popover with
+ * the term + a gloss in the chosen language — fully client-side, no network.
+ *
+ * Runs per-device (registered in the mobile testMatch) because the desktop
+ * path is HOVER and the touch path is TAP — different code branches we must
+ * exercise on real engines. The end-to-end pipeline check goes through the
+ * browser's own caret hit-testing (caretRangeFromPoint / caretPositionFromPoint)
+ * so it covers chromium/webkit/firefox.
+ */
+
+// @ts-check
+const { test, expect } = require("./fixtures.js");
+
+const SENTENCE = "Consider an opioid taper now.";
+const WORD = "opioid";
+const FR_NEEDLE = "antalgique"; // in the French gloss for "opioid"
+const JA_NEEDLE = "モルヒネ";    // in the Japanese gloss for "opioid"
+
+async function setup(page, lang) {
+  await page.goto("/");
+  await page.evaluate(async () => {
+    if (window.CanamedLoader) {
+      if (window.CanamedLoader.ensureGlossary) await window.CanamedLoader.ensureGlossary();
+      if (window.CanamedLoader.ensureLangReader) await window.CanamedLoader.ensureLangReader();
+    }
+    // Reveal the body — the splash gate covers it otherwise.
+    document.body.classList.remove("locked");
+    const splash = document.getElementById("splash");
+    if (splash) splash.classList.add("hidden");
+    // A known glossed word, pinned near the top so coords are scroll-free.
+    const p = document.createElement("p");
+    p.id = "reader-fixture";
+    p.textContent = "Consider an opioid taper now.";
+    p.style.cssText =
+      "position:fixed;top:120px;left:20px;margin:0;font-size:28px;" +
+      "z-index:9999;background:#fff;color:#000";
+    document.body.appendChild(p);
+  });
+  if (lang) await page.evaluate((l) => window.setLang(l), lang);
+}
+
+function enable(page, on) {
+  return page.evaluate((v) => window.CanamedReader.setEnabled(v), on);
+}
+
+// Viewport centre of the word "opioid" within the fixture sentence.
+function wordCenter(page) {
+  return page.evaluate(({ sentence, word }) => {
+    const p = document.getElementById("reader-fixture");
+    const txt = p.firstChild;
+    const i = sentence.indexOf(word);
+    const r = document.createRange();
+    r.setStart(txt, i);
+    r.setEnd(txt, i + word.length);
+    const b = r.getBoundingClientRect();
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  }, { sentence: SENTENCE, word: WORD });
+}
+
+test.describe("Word help — in-page reading aid", () => {
+  test("resolves the word under the cursor to its French gloss (full pipeline)", async ({ page }) => {
+    await setup(page, "fr");
+    await enable(page, true);
+    const { x, y } = await wordCenter(page);
+    const hit = await page.evaluate(({ x, y }) => {
+      const res = window.CanamedReader.lookupAt(x, y);
+      return res ? { term: res.hit.term, text: res.hit.text, en: res.hit.en } : null;
+    }, { x, y });
+    expect(hit, "a gloss was found under the cursor").not.toBeNull();
+    expect(hit.term).toBe(WORD);
+    expect(hit.text).toContain(FR_NEEDLE);
+    expect(hit.text).not.toBe(hit.en); // really the French, not the English fallback
+  });
+
+  test("hover (desktop) / tap (touch) opens the popover with the gloss", async ({ page }, testInfo) => {
+    const isTouch = !!(testInfo.project.use && testInfo.project.use.hasTouch);
+    await setup(page, "fr");
+    await enable(page, true);
+    const { x, y } = await wordCenter(page);
+    if (isTouch) await page.touchscreen.tap(x, y);
+    else await page.mouse.move(x, y);
+    const popPromise = page.locator(".reader-pop");
+    await expect(popPromise).toBeVisible();
+    await expect(popPromise).toContainText(FR_NEEDLE);
+  });
+
+  test("Japanese is selected when the chosen language is ja", async ({ page }) => {
+    await setup(page, "ja");
+    await enable(page, true);
+    const { x, y } = await wordCenter(page);
+    const text = await page.evaluate(({ x, y }) => {
+      const res = window.CanamedReader.lookupAt(x, y);
+      return res ? res.hit.text : null;
+    }, { x, y });
+    expect(text).toContain(JA_NEEDLE);
+  });
+
+  test("no popover when Word help is OFF", async ({ page }, testInfo) => {
+    const isTouch = !!(testInfo.project.use && testInfo.project.use.hasTouch);
+    await setup(page, "fr");
+    await enable(page, false);
+    const { x, y } = await wordCenter(page);
+    if (isTouch) await page.touchscreen.tap(x, y);
+    else await page.mouse.move(x, y);
+    // Give the debounce a beat, then assert nothing showed.
+    await page.waitForTimeout(200);
+    await expect(page.locator(".reader-pop")).toBeHidden();
+  });
+
+  test("the settings checkbox is two-way wired to the reader state", async ({ page }) => {
+    await setup(page, "fr");
+    // The fixed-position word fixture overlays the settings panel on small
+    // viewports — drop it; this test only needs the checkbox.
+    await page.evaluate(() => {
+      const f = document.getElementById("reader-fixture");
+      if (f) f.remove();
+    });
+    // Open the settings panel so the checkbox is interactable.
+    await page.evaluate(() => { document.getElementById("global-settings-panel").hidden = false; });
+    const cb = page.locator("#reader-toggle");
+    await expect(cb).not.toBeChecked();
+    // user → state: clicking the checkbox turns the reader on.
+    await cb.click();
+    await expect(cb).toBeChecked();
+    expect(await page.evaluate(() => window.CanamedReader.isEnabled())).toBe(true);
+    // state → UI: a programmatic disable is mirrored back into the checkbox.
+    // (Done via the API rather than a second synthetic tap, which flakes on
+    // mobile WebKit — the change handler has no preventDefault, so real taps
+    // toggle natively; we assert the binding, not the browser's tap engine.)
+    await page.evaluate(() => window.CanamedReader.setEnabled(false));
+    await expect(cb).not.toBeChecked();
+    expect(await page.evaluate(() => window.CanamedReader.isEnabled())).toBe(false);
+  });
+});

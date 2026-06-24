@@ -665,6 +665,8 @@
   "settings.title": "Paramètres",
   "settings.restart-tour": "Revoir la visite d'introduction",
   "settings.close": "Fermer",
+  "settings.reader-help": "📖 Aide à la lecture",
+  "settings.reader-help-hint": "Survolez ou touchez un mot pour une courte explication dans la langue choisie ci-dessus.",
   "tour.student.1.title": "Bienvenue dans votre salle",
   "tour.student.1.body": "Voici l'espace de votre équipe pour toute la séance. Petite visite des contrôles que vous utiliserez le plus.",
   "tour.student.2.title": "Nommer votre équipe",

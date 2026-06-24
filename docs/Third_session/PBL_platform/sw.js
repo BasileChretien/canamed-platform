@@ -36,7 +36,7 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v55";
+const SHELL_VERSION = "canamed-shell-v56";
 
 const SHELL_ASSETS = [
   "/",
@@ -76,6 +76,13 @@ const SHELL_ASSETS = [
 // by ensureLang and then picked up by the runtime cache-on-fetch path in
 // handleSameOrigin() below, so it survives a later offline blip. Precaching
 // all 7 here would re-bloat the install we just trimmed off the splash.
+//
+// Same rationale for the reading aid (reader-core.js + lang-reader.js,
+// ensureLangReader): it's lazy + opt-in ("Word help" toggle), so it's NOT
+// precached. handleSameOrigin caches with { ignoreSearch: false }, so a
+// precache of the bare "/lang-reader.js" would never match the versioned
+// "lang-reader.js?v=vNN" the loader requests anyway — the cache-on-fetch path
+// is what actually makes it survive offline once it's been loaded once.
 
 // Hostnames whose fetches should ALWAYS go to network (never cached) —
 // these are dynamic, auth-tokened, and stateful.

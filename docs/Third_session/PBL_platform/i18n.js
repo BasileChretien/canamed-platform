@@ -893,6 +893,8 @@
       "settings.title": "Settings",
       "settings.restart-tour": "Show introduction tour again",
       "settings.close": "Close",
+      "settings.reader-help": "📖 Word help",
+      "settings.reader-help-hint": "Hover or tap any word for a short explanation in the language chosen above.",
       "tour.student.1.title": "Welcome to the room",
       "tour.student.1.body": "This is your team's space for the whole session. A quick tour to show the controls you'll use most.",
       "tour.student.2.title": "Name your team",

@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v55";
+  var SHELL_VERSION = "v56";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   function ensureCaseContent() { return loadScript(v("case-content.js")); }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
@@ -113,6 +113,15 @@
   // (_annotateButtonWithGlossary) no-ops gracefully until window.CANAMED_GLOSSARY
   // exists and re-annotates on the next button render.
   function ensureGlossary()    { return loadScript(v("glossary.js")); }
+  // lang-reader.js + reader-core.js — the in-page reading aid (hover/tap a word
+  // → a short native-language gloss, fully client-side). Lazy + idle-prefetched
+  // like glossary; pulled in immediately if "Word help" was left on from a prior
+  // visit. reader-core (the pure brain) MUST resolve before lang-reader (which
+  // calls it).
+  function ensureLangReader() {
+    return loadScript(v("reader-core.js"))
+      .then(function () { return loadScript(v("lang-reader.js")); });
+  }
   // admin-tools.js — facilitator/decision-maker reports (accreditation
   // evidence, research export, attestations, program rollup). Lazy: only an
   // admin who opens the dashboard needs it, never the student splash.
@@ -182,6 +191,7 @@
     ensureTour,
     ensureScenarioAuthor,
     ensureGlossary,
+    ensureLangReader,
     ensureAdminTools,
     ensurePdfmake,
     ensureStudentPdf,
@@ -198,6 +208,7 @@
       ensureCaseContent().catch(() => { /* will retry on actual join */ });
       ensureTour().catch(() => { /* tour is optional */ });
       ensureGlossary().catch(() => { /* tooltips are optional, degrade gracefully */ });
+      ensureLangReader().catch(() => { /* reading aid is optional, degrade gracefully */ });
     };
     if (typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(fire, { timeout: 2000 });
