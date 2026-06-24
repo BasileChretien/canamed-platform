@@ -664,6 +664,8 @@
   "settings.title": "設定",
   "settings.restart-tour": "はじめてのご案内をもう一度",
   "settings.close": "閉じる",
+  "settings.reader-help": "📖 単語ヘルプ",
+  "settings.reader-help-hint": "上で選択した言語で短い説明を見るには、単語にカーソルを合わせるかタップしてください。",
   "tour.student.1.title": "ルームへようこそ",
   "tour.student.1.body": "ここはセッション中、皆さんのチーム専用の場所です。よく使う操作を簡単にご案内します。",
   "tour.student.2.title": "チーム名を決めましょう",
