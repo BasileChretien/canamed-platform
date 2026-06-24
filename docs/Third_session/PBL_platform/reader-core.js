@@ -141,11 +141,120 @@
     };
   }
 
+  /* ──────────────────────────────────────────────────────────────────────
+   * Phase 2 — general-dictionary fallback (reader-dict.js loads the bundled
+   * EN->JA / EN->FR dictionaries; this resolves the hovered word against them
+   * when the curated clinical glossary misses).
+   * ────────────────────────────────────────────────────────────────────── */
+
+  // A few high-frequency irregular forms whose base can't be reached by the
+  // regular rules below. The bundled dictionaries already list many irregulars
+  // as their own headwords, so this is a small safety net, not exhaustive.
+  var IRREGULAR = {
+    children: "child", men: "man", women: "woman", feet: "foot",
+    teeth: "tooth", geese: "goose", mice: "mouse", people: "person",
+    lives: "life", knives: "knife", wives: "wife", leaves: "leaf",
+    wolves: "wolf", halves: "half", shelves: "shelf",
+    went: "go", gone: "go", did: "do", done: "do", had: "have", has: "have",
+    was: "be", were: "be", been: "be", said: "say", made: "make",
+    came: "come", took: "take", taken: "take", got: "get", gotten: "get",
+    saw: "see", seen: "see", gave: "give", given: "give", found: "find",
+    better: "good", best: "good", worse: "bad", worst: "bad"
+  };
+
+  function pushUnique(arr, seen, w) {
+    if (w && w.length > 1 && !seen[w]) { seen[w] = 1; arr.push(w); }
+  }
+
+  /* Candidate base forms for an English surface word, most-likely first, so a
+   * lemma-keyed dictionary resolves inflected hovers ("running" -> "run",
+   * "studies" -> "study", "happier" -> "happy"). The word itself is always
+   * first (many entries are surface forms). Rules are intentionally broad —
+   * validity is decided downstream by dictionary membership, so an
+   * over-generated non-word candidate simply never matches. English inflection
+   * is far simpler than the Japanese deinflection Rikaikun/Yomitan need. */
+  function englishDeinflect(word) {
+    var w = normalizeWord(word);
+    var out = [];
+    var seen = {};
+    if (!w) return out;
+    pushUnique(out, seen, w);
+    if (Object.prototype.hasOwnProperty.call(IRREGULAR, w)) {
+      pushUnique(out, seen, IRREGULAR[w]);
+      return out;                                   // irregular handled
+    }
+    var last = w.charAt(w.length - 1);
+    // plural / 3rd-person -s
+    if (/(ches|shes|sses|xes|zes)$/.test(w)) pushUnique(out, seen, w.slice(0, -2));      // boxes->box
+    if (/ies$/.test(w) && w.length > 4) pushUnique(out, seen, w.slice(0, -3) + "y");      // studies->study
+    if (/ves$/.test(w) && w.length > 3) {
+      pushUnique(out, seen, w.slice(0, -3) + "f");                                        // knives->knife
+      pushUnique(out, seen, w.slice(0, -3) + "fe");
+    }
+    if (last === "s" && w.slice(-2) !== "ss") pushUnique(out, seen, w.slice(0, -1));      // cats->cat
+    if (/es$/.test(w)) pushUnique(out, seen, w.slice(0, -2));                             // goes->go
+    // verb -ing
+    if (/ing$/.test(w) && w.length > 4) {
+      var ingStem = w.slice(0, -3);
+      pushUnique(out, seen, ingStem);                                                     // walking->walk
+      pushUnique(out, seen, ingStem + "e");                                               // making->make
+      if (/(.)\1$/.test(ingStem)) pushUnique(out, seen, ingStem.slice(0, -1));            // running->run
+    }
+    // verb -ed
+    if (/ied$/.test(w)) pushUnique(out, seen, w.slice(0, -3) + "y");                      // tried->try
+    if (/ed$/.test(w) && w.length > 3) {
+      var edStem = w.slice(0, -2);
+      pushUnique(out, seen, edStem);                                                      // walked->walk
+      pushUnique(out, seen, edStem + "e");                                                // used->use
+      if (/(.)\1$/.test(edStem)) pushUnique(out, seen, edStem.slice(0, -1));              // stopped->stop
+    }
+    // comparative / superlative
+    if (/ier$/.test(w)) pushUnique(out, seen, w.slice(0, -3) + "y");                      // happier->happy
+    if (/iest$/.test(w)) pushUnique(out, seen, w.slice(0, -4) + "y");                     // happiest->happy
+    if (/er$/.test(w) && w.length > 3) {
+      var erStem = w.slice(0, -2);
+      pushUnique(out, seen, erStem);                                                      // faster->fast
+      pushUnique(out, seen, erStem + "e");                                                // larger->large
+      if (/(.)\1$/.test(erStem)) pushUnique(out, seen, erStem.slice(0, -1));              // bigger->big
+    }
+    if (/est$/.test(w) && w.length > 4) {
+      var estStem = w.slice(0, -3);
+      pushUnique(out, seen, estStem);                                                     // fastest->fast
+      pushUnique(out, seen, estStem + "e");                                               // largest->large
+      if (/(.)\1$/.test(estStem)) pushUnique(out, seen, estStem.slice(0, -1));            // biggest->big
+    }
+    // adverb -ly
+    if (/ly$/.test(w) && w.length > 3) {
+      if (/ily$/.test(w)) pushUnique(out, seen, w.slice(0, -3) + "y");                    // happily->happy
+      pushUnique(out, seen, w.slice(0, -2));                                              // quickly->quick
+    }
+    return out;
+  }
+
+  /* Dictionary fallback: the word under the caret, de-inflected and matched
+   * against a Map of lowercased headword -> gloss. Returns
+   * { term, start, end, text } (term = the original-case hovered word) or null.
+   * Called only after glossAt() misses, so the curated glossary always wins. */
+  function dictAt(text, offset, dictMap) {
+    if (text == null || !dictMap || typeof dictMap.get !== "function") return null;
+    var w = extractWordAt(text, offset);
+    if (!w) return null;
+    var cands = englishDeinflect(w.raw);
+    for (var i = 0; i < cands.length; i++) {
+      if (dictMap.has(cands[i])) {
+        return { term: w.raw, start: w.start, end: w.end, text: dictMap.get(cands[i]) };
+      }
+    }
+    return null;
+  }
+
   return {
     isWordChar: isWordChar,
     normalizeWord: normalizeWord,
     extractWordAt: extractWordAt,
     glossText: glossText,
-    glossAt: glossAt
+    glossAt: glossAt,
+    englishDeinflect: englishDeinflect,
+    dictAt: dictAt
   };
 });

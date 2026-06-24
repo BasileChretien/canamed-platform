@@ -126,3 +126,60 @@ test("every real glossary entry has en, fr and ja glosses", () => {
     assert.ok(entry.ja, `${term} missing ja`);
   }
 });
+
+// ── Phase 2: English deinflector + dictionary fallback ──────────────────────
+
+test("englishDeinflect always offers the word itself first", () => {
+  assert.equal(core.englishDeinflect("walk")[0], "walk");
+  assert.equal(core.englishDeinflect("Running")[0], "running"); // normalised
+});
+
+test("englishDeinflect handles regular plurals", () => {
+  assert.ok(core.englishDeinflect("cats").includes("cat"));
+  assert.ok(core.englishDeinflect("boxes").includes("box"));
+  assert.ok(core.englishDeinflect("studies").includes("study"));
+  assert.ok(core.englishDeinflect("knives").includes("knife"));
+});
+
+test("englishDeinflect handles verb -ing / -ed with de-doubling and silent-e", () => {
+  assert.ok(core.englishDeinflect("running").includes("run"));
+  assert.ok(core.englishDeinflect("making").includes("make"));
+  assert.ok(core.englishDeinflect("walking").includes("walk"));
+  assert.ok(core.englishDeinflect("stopped").includes("stop"));
+  assert.ok(core.englishDeinflect("used").includes("use"));
+  assert.ok(core.englishDeinflect("tried").includes("try"));
+});
+
+test("englishDeinflect handles comparatives / superlatives / adverbs", () => {
+  assert.ok(core.englishDeinflect("bigger").includes("big"));
+  assert.ok(core.englishDeinflect("happier").includes("happy"));
+  assert.ok(core.englishDeinflect("largest").includes("large"));
+  assert.ok(core.englishDeinflect("quickly").includes("quick"));
+});
+
+test("englishDeinflect handles irregulars", () => {
+  assert.ok(core.englishDeinflect("mice").includes("mouse"));
+  assert.ok(core.englishDeinflect("children").includes("child"));
+  assert.ok(core.englishDeinflect("went").includes("go"));
+  assert.ok(core.englishDeinflect("better").includes("good"));
+});
+
+test("dictAt resolves an inflected hovered word against a Map", () => {
+  const dict = new Map([
+    ["run", "courir"],
+    ["study", "étudier"],
+    ["reluctant", "réticent"]
+  ]);
+  const s = "they were running fast";
+  const hit = core.dictAt(s, 11, dict); // inside "running"
+  assert.equal(hit.term, "running");
+  assert.equal(hit.text, "courir");
+  assert.equal(s.slice(hit.start, hit.end), "running");
+
+  const s2 = "a reluctant witness";
+  assert.equal(core.dictAt(s2, 4, dict).text, "réticent");
+  // a word not in the dict → null
+  assert.equal(core.dictAt("the cat sat", 4, dict), null);
+  // off a word → null
+  assert.equal(core.dictAt("a b", 1, dict), null);
+});

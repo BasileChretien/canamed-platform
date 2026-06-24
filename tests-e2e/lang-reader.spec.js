@@ -135,3 +135,92 @@ test.describe("Word help — in-page reading aid", () => {
     expect(await page.evaluate(() => window.CanamedReader.isEnabled())).toBe(false);
   });
 });
+
+// ── Phase 2: general-dictionary fallback ────────────────────────────────────
+// Exercises the real runtime path: fetch dict/en-<lang>.txt.gz, decompress via
+// DecompressionStream, parse into a Map, and resolve a word the curated
+// clinical glossary doesn't cover. Runs per-device (file is in the mobile
+// testMatch) so the gz-decompress path is validated on every engine.
+test.describe("Word help — general-dictionary fallback (Phase 2)", () => {
+  async function setupDict(page, lang, sentence) {
+    await page.goto("/");
+    await page.evaluate(async () => {
+      if (window.CanamedLoader && window.CanamedLoader.ensureLangReader) {
+        await window.CanamedLoader.ensureLangReader();
+      }
+      document.body.classList.remove("locked");
+      const splash = document.getElementById("splash");
+      if (splash) splash.classList.add("hidden");
+    });
+    await page.evaluate((l) => window.setLang(l), lang);
+    await page.evaluate(() => window.CanamedReader.setEnabled(true));
+    // Block until the dictionary has fetched + decompressed + parsed.
+    await page.evaluate((l) => window.CanamedReaderDict.ensureDict(l), lang);
+    await page.evaluate((s) => {
+      const p = document.createElement("p");
+      p.id = "dict-fixture";
+      p.textContent = s;
+      p.style.cssText =
+        "position:fixed;top:120px;left:20px;margin:0;font-size:28px;" +
+        "z-index:9999;background:#fff;color:#000";
+      document.body.appendChild(p);
+    }, sentence);
+  }
+
+  function centerOf(page, sentence, word) {
+    return page.evaluate(({ sentence, word }) => {
+      const txt = document.getElementById("dict-fixture").firstChild;
+      const i = sentence.indexOf(word);
+      const r = document.createRange();
+      r.setStart(txt, i);
+      r.setEnd(txt, i + word.length);
+      const b = r.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }, { sentence, word });
+  }
+
+  function lookup(page, x, y) {
+    return page.evaluate(({ x, y }) => {
+      const res = window.CanamedReader.lookupAt(x, y);
+      return res ? { term: res.hit.term, text: res.hit.text } : null;
+    }, { x, y });
+  }
+
+  test("resolves a non-glossary word to French via the bundled dictionary", async ({ page }) => {
+    const s = "The patient seemed reluctant to continue.";
+    await setupDict(page, "fr", s);
+    // 'reluctant' is everyday vocabulary, NOT a curated clinical glossary term.
+    // Use the real glossAt resolver rather than a fragile substring scan (a
+    // short glossary key could otherwise be a coincidental substring of
+    // "reluctant" and wrongly flip this).
+    const glossaryResolves = await page.evaluate(() => {
+      const c = window.CanamedReaderCore, g = window.CANAMED_GLOSSARY;
+      return !!(c && g && c.glossAt("reluctant", 3, g, "fr"));
+    });
+    expect(glossaryResolves).toBe(false);
+    const { x, y } = await centerOf(page, s, "reluctant");
+    const hit = await lookup(page, x, y);
+    expect(hit, "dictionary resolved 'reluctant'").not.toBeNull();
+    expect(hit.term).toBe("reluctant");
+    expect(hit.text.toLowerCase()).toMatch(/réticent|réfractaire|récalcitrant/);
+  });
+
+  test("resolves a non-glossary word to Japanese (other gz file)", async ({ page }) => {
+    const s = "They examined the gallbladder on the scan.";
+    await setupDict(page, "ja", s);
+    const { x, y } = await centerOf(page, s, "gallbladder");
+    const hit = await lookup(page, x, y);
+    expect(hit, "dictionary resolved 'gallbladder'").not.toBeNull();
+    expect(hit.text).toContain("胆"); // 胆のう (gallbladder)
+  });
+
+  test("de-inflects an inflected hover before lookup (plural)", async ({ page }) => {
+    const s = "Both gallbladders were imaged.";
+    await setupDict(page, "ja", s);
+    const { x, y } = await centerOf(page, s, "gallbladders");
+    const hit = await lookup(page, x, y);
+    // 'gallbladders' (plural) resolves via deinflection to 'gallbladder'.
+    expect(hit, "dictionary resolved the plural via deinflection").not.toBeNull();
+    expect(hit.text).toContain("胆");
+  });
+});

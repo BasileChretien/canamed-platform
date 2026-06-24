@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v56";
+  var SHELL_VERSION = "v57";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   function ensureCaseContent() { return loadScript(v("case-content.js")); }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
@@ -117,9 +117,13 @@
   // → a short native-language gloss, fully client-side). Lazy + idle-prefetched
   // like glossary; pulled in immediately if "Word help" was left on from a prior
   // visit. reader-core (the pure brain) MUST resolve before lang-reader (which
-  // calls it).
+  // calls it). reader-dict.js (Phase 2) loads the bundled general dictionaries
+  // on demand; it reads CanamedLoader.SHELL_VERSION to cache-bust the dict
+  // files in lockstep, so it must load after this namespace exists (it does —
+  // the whole chain is lazy, long after this IIFE runs).
   function ensureLangReader() {
     return loadScript(v("reader-core.js"))
+      .then(function () { return loadScript(v("reader-dict.js")); })
       .then(function () { return loadScript(v("lang-reader.js")); });
   }
   // admin-tools.js — facilitator/decision-maker reports (accreditation
@@ -185,6 +189,7 @@
   // `window.CanamedLoader.ensureX()` without polluting the global namespace
   // with several free functions.
   window.CanamedLoader = {
+    SHELL_VERSION: SHELL_VERSION,
     loadScript,
     ensureCaseContent,
     ensureQrcode,
