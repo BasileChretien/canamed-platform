@@ -39,12 +39,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Desktop cross-browser matrix + mobile (iPhone + iPad device
-        # emulation against the splash + privacy pages). The "visual"
+        # Desktop cross-browser matrix + mobile (iPhone + iPad on webkit,
+        # Pixel 7 Android on chromium) device emulation. The "visual"
         # project (snapshot diffs, chromium only) is wired up but skipped
         # in CI by default — see tests-e2e/visual.spec.js for the
         # RUN_VISUAL=1 escape hatch used after baselines are committed.
-        project: [chromium, firefox, webkit, mobile-iphone, mobile-ipad, a11y, perf]
+        project: [chromium, firefox, webkit, mobile-iphone, mobile-ipad, mobile-android, a11y, perf]
         include:
           - project: chromium
             browser: chromium
@@ -59,6 +59,10 @@ jobs:
             browser: webkit
           - project: mobile-ipad
             browser: webkit
+          # Pixel 7 emulates Android Chrome, so this project runs on the
+          # chromium engine (shares the chromium browser cache above).
+          - project: mobile-android
+            browser: chromium
           # axe-core accessibility suite runs against Desktop Chrome
           # (Chromium engine). Asserts zero serious/critical WCAG 2.1 AA
           # violations; moderate/minor are surfaced as annotations only.
