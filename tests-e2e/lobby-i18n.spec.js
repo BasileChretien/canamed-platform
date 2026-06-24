@@ -82,16 +82,16 @@ test.describe("Lobby i18n — privacy notice + consent block", () => {
     await expect(tab.locator(".lobby-grade-note"))
       .toContainText(/note universitaire/i);
 
-    // Waiting-room heading + body render in FR after joining
+    // Phase 3 (English-canonical UI): the consent + privacy copy above stays
+    // French, but the waiting-room is informational chrome and now renders in
+    // English for everyone.
     await tab.locator("#name-input").fill("Camille");
     const realUni = await tab.locator("#uni-input option:not([disabled])").first().getAttribute("value");
     await tab.locator("#uni-input").selectOption(realUni);
     await tab.locator("#consent-workshop").check();
     await tab.locator("#join-btn").click();
     await expect(tab.locator("#waiting")).toBeVisible({ timeout: 10_000 });
-    await expect(tab.locator("#waiting h2")).toContainText(/Vous avez rejoint/i);
-    await expect(tab.locator("#waiting"))
-      .toContainText(/salle d'attente/i);
+    await expect(tab.locator("#waiting h2")).toContainText(/joined/i);
 
     await tab.close();
   });
@@ -119,16 +119,15 @@ test.describe("Lobby i18n — privacy notice + consent block", () => {
     await expect(tab.locator(".lobby-grade-note"))
       .toContainText(/成績/);
 
-    // Waiting-room heading + body in JA
+    // Phase 3 (English-canonical UI): consent + privacy stays Japanese above;
+    // the waiting-room is informational chrome and now renders in English.
     await tab.locator("#name-input").fill("ユキ");
     const realUni = await tab.locator("#uni-input option:not([disabled])").first().getAttribute("value");
     await tab.locator("#uni-input").selectOption(realUni);
     await tab.locator("#consent-workshop").check();
     await tab.locator("#join-btn").click();
     await expect(tab.locator("#waiting")).toBeVisible({ timeout: 10_000 });
-    await expect(tab.locator("#waiting h2")).toContainText(/参加が完了/);
-    await expect(tab.locator("#waiting"))
-      .toContainText(/待合室/);
+    await expect(tab.locator("#waiting h2")).toContainText(/joined/i);
 
     await tab.close();
   });

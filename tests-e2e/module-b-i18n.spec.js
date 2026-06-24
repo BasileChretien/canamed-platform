@@ -18,26 +18,20 @@
 const { test, expect } = require("./fixtures.js");
 
 test.describe("Module B body i18n", () => {
-  test("renders Japanese vignette + safety + SPIKES + phases when lang=ja", async ({ page }) => {
-    // Seed the language BEFORE any platform script runs so i18n.js'
-    // DOMContentLoaded init picks up ja on the very first paint.
+  test("Module B safety note stays Japanese but the learning body is English-canonical (Phase 3)", async ({ page }) => {
+    // Phase 3 — English-canonical UI: the Module B SAFETY briefing (a
+    // consent/safety string) stays in the participant's language; the clinical
+    // vignette, SPIKES strip, phase headings and group-answers chrome are
+    // learning content and now render in English for everyone (word-level help
+    // comes from the in-page reading aid).
     await page.addInitScript(() => {
       try { localStorage.setItem("canamed_lang", "ja"); } catch (e) {}
     });
 
     await page.goto("/");
-
-    // Confirm the language detection actually landed on Japanese — if
-    // this fails, every assertion below would be a misleading red.
     const lang = await page.evaluate(() => (window.getLang && window.getLang()));
     expect(lang).toBe("ja");
 
-    // Stage 2 is hidden on first load (the participant sees splash). We
-    // surface it so its data-i18n nodes are in the layout tree; i18n.js
-    // already populated their textContent / innerHTML during init. We
-    // also unlock the body (the splash gate adds `body.locked` to hide
-    // #app entirely until a session code is entered) and unhide #app +
-    // stage-2 itself.
     await page.evaluate(() => {
       document.body.classList.remove("locked");
       const splash = document.getElementById("splash");
@@ -52,69 +46,43 @@ test.describe("Module B body i18n", () => {
       if (stage2) stage2.classList.remove("hidden");
     });
 
-    // Vignette body — Japanese opener "状況設定 (一度、皆で読みましょう)。"
-    // is unmistakable; the English equivalent starts with "The situation".
-    const vignette = page.locator("[data-i18n='stage.modB.vignette.body']");
-    await expect(vignette).toBeVisible();
-    await expect(vignette).toContainText("状況設定");
-    await expect(vignette).not.toContainText("The situation");
-
-    // Safety note headers + paragraphs.
+    // Safety note (whitelisted consent/safety) STAYS Japanese.
     await expect(page.locator("[data-i18n='stage.modB.safety.heading']"))
       .toContainText("始める前に");
     await expect(page.locator("[data-i18n='stage.modB.safety.language']"))
       .toContainText("第二・第三言語");
 
-    // SPIKES strip — both the label and an expanded letter.
-    await expect(page.locator("[data-i18n='stage.modB.spikes.label']"))
-      .toHaveText("SPIKES");
-    await expect(page.locator("[data-i18n='stage.modB.spikes.p']"))
-      .toContainText("erception");
-    await expect(page.locator("[data-i18n='stage.modB.spikes.p']"))
-      .toContainText("理解");
+    // Vignette is now English ("The situation…"), not Japanese ("状況設定").
+    const vignette = page.locator("[data-i18n='stage.modB.vignette.body']");
+    await expect(vignette).toBeVisible();
+    await expect(vignette).toContainText(/situation/i);
+    await expect(vignette).not.toContainText("状況設定");
 
-    // Useful-sentences box — the English example phrases are preserved
-    // intentionally (they ARE the script learners should rehearse), but
-    // the surrounding label must be Japanese.
-    await expect(page.locator("[data-i18n='stage.modB.spikes.useful.label']"))
-      .toContainText("役立つフレーズ");
-
-    // Phase titles — confirm each of the four headings localized.
+    // Phase headings + group-answers chrome are English.
     await expect(page.locator("[data-i18n='stage.modB.phase1.title']"))
-      .toContainText("フェーズ1");
-    await expect(page.locator("[data-i18n='stage.modB.phase2.title']"))
-      .toContainText("フェーズ2");
-    await expect(page.locator("[data-i18n='stage.modB.phase3.title']"))
-      .toContainText("フェーズ3");
-    await expect(page.locator("[data-i18n='stage.modB.phase4.title']"))
-      .toContainText("フェーズ4");
-
-    // Answer-input language hint (also added in this PR; appears above
-    // both the Module A and Module B free-text inputs).
-    const hints = page.locator(".answer-input-language-hint");
-    await expect(hints.first()).toContainText("好きな言語");
-
-    // Module B group answers heading.
+      .toContainText(/Phase 1/i);
+    await expect(page.locator("[data-i18n='stage.modB.phase1.title']"))
+      .not.toContainText("フェーズ");
     await expect(page.locator("[data-i18n='stage.modB.answers.title']"))
-      .toContainText("グループ回答");
+      .not.toContainText("グループ回答");
 
-    // Sanity: the original English fallback shouldn't appear anywhere
-    // in the visible Module B body region.
+    // The shared free-text language hint is English-canonical too.
+    const hints = page.locator(".answer-input-language-hint");
+    await expect(hints.first()).not.toContainText("好きな言語");
+
+    // The English learning body now legitimately appears (it used to be the
+    // forbidden fallback).
     const stage2Text = await page.locator("#stage-2").innerText();
-    expect(stage2Text).not.toContain("Before you start — two things");
-    expect(stage2Text).not.toContain("Phase 1 — Set up");
+    expect(stage2Text).toContain("Phase 1");
   });
 
-  test("answer-input language hint renders French when lang=fr", async ({ page }) => {
+  test("answer-input language hint is English-canonical (Phase 3)", async ({ page }) => {
     await page.addInitScript(() => {
       try { localStorage.setItem("canamed_lang", "fr"); } catch (e) {}
     });
 
     await page.goto("/");
 
-    // Surface stage-2 to put the Module B hint in the layout tree (the
-    // Module A hint lives in the always-rendered answers panel of
-    // stage-1, but it too is hidden until the participant is in a room).
     await page.evaluate(() => {
       document.body.classList.remove("locked");
       const splash = document.getElementById("splash");
@@ -128,15 +96,15 @@ test.describe("Module B body i18n", () => {
     });
 
     const hints = page.locator(".answer-input-language-hint");
-    // The shared language hint now sits at every free-text contribution
-    // point (inclusion 2026-05-21): the Module A + Module B group-answer
-    // cards and the working-hypotheses input — 3 in all.
-    // Each uses the same i18n key, so all must show the French message.
+    // The shared language hint sits at every free-text contribution point
+    // (Module A + Module B group-answer cards + the working-hypotheses input)
+    // — 3 in all. Under the English-canonical UI all three render English,
+    // even with fr selected (the hint says you MAY write in any language).
     const count = await hints.count();
     expect(count).toBe(3);
     for (let i = 0; i < count; i++) {
-      await expect(hints.nth(i))
-        .toContainText("Écrivez dans la langue de votre choix");
+      await expect(hints.nth(i)).not.toContainText("Écrivez dans la langue");
+      await expect(hints.nth(i)).toContainText(/any language/i);
     }
   });
 });

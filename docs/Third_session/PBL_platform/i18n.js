@@ -1038,9 +1038,53 @@
     return "en";
   }
 
+  // ── Phase 3: English-canonical UI ─────────────────────────────────────────
+  // The workshop UI renders in English for everyone; word-level help for non-
+  // native readers comes from the in-page reading aid (lang-reader.js), NOT
+  // from translating the chrome. Only these CONSENT / SAFETY / PRIVACY strings
+  // (plus the language switcher's own labels) keep following the chosen
+  // language, so a FR/JA participant still gives informed consent and can reach
+  // the call-facilitator, the anti-coercion grade note, and the privacy copy in
+  // their own language. Erring toward KEEPING a string localized is safer than
+  // accidentally English-ing a consent string — when in doubt, add it here.
+  // This list IS the English-only boundary; edit it to adjust what stays
+  // translated.
+  const LOCALIZED_PREFIXES = [
+    "lobby.consent",        // workshop + research consent, version, required hints
+    "lobby.err.consent",    // consent-required validation message
+    "lobby.privacy",        // the in-lobby privacy notice paragraphs
+    "privacy.",             // the standalone privacy.html page chrome
+    "data-rights.",         // GDPR Art. 15 self-export
+    "room.call",            // call-a-facilitator (safety) button + throttle msgs
+    "stage.modB.safety",    // Module B roleplay safety briefing
+    "modA.chat.consent",    // LLM-patient chat consent (HF sub-processor disclosure)
+    "lang."                 // language switcher option labels (native names)
+  ];
+  const LOCALIZED_KEYS = {
+    "splash.lang-label": 1,             // switcher aria-label
+    "stage.welcome.grade-note": 1,      // anti-coercion: "your grade is not affected"
+    "verify.privacy-note": 1,           // privacy note on the public cert page
+    "modA.answers.complete.callMsg": 1, // "call a facilitator" (safety)
+    "modB.answers.complete.callMsg": 1
+  };
+  function isLocalizedKey(key) {
+    if (!key) return false;
+    if (LOCALIZED_KEYS[key]) return true;
+    for (let i = 0; i < LOCALIZED_PREFIXES.length; i++) {
+      if (key.indexOf(LOCALIZED_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
+
   function t(key) {
     const lang = _currentLang || detectLang();
-    const table = T[lang] || T.en;
+    // English-canonical UI (Phase 3): non-whitelisted keys always render the
+    // canonical English; only consent / safety / privacy strings follow the
+    // chosen language. See isLocalizedKey above. The translation TABLES are
+    // untouched (every locale still carries every key) — this only changes
+    // which one t() reads, so the change is fully reversible.
+    const useLang = (lang !== "en" && isLocalizedKey(key)) ? lang : "en";
+    const table = T[useLang] || T.en;
     let raw;
     if (Object.prototype.hasOwnProperty.call(table, key)) raw = table[key];
     else if (Object.prototype.hasOwnProperty.call(T.en, key)) raw = T.en[key];
@@ -1062,7 +1106,7 @@
       const cohorts = (typeof window !== "undefined" && window.COHORTS) ||
         (typeof global !== "undefined" && global.COHORTS) || null;
       if (typeof tplFn === "function" && typeof pairFn === "function") {
-        return tplFn(raw, { cohortPair: pairFn(cohorts, lang) });
+        return tplFn(raw, { cohortPair: pairFn(cohorts, useLang) });
       }
     }
     return raw;

@@ -29,31 +29,20 @@ test.describe("Splash language switcher — R2-42", () => {
     expect(values).toEqual(ALL_LANGS);
   });
 
-  test("selecting each language re-renders the splash in that language + persists to localStorage", async ({ page }) => {
-    const expectedSubstring = {
-      en: /Enter\s*→/i,
-      fr: /Entrer\s*→/i,
-      ja: /入室/,
-      es: /Entrar\s*→/i,
-      pt: /Entrar\s*→/i,
-      de: /Beitreten/,
-      ko: /입장/,
-      zh: /进入/
-    };
-
+  test("selecting a language persists it + syncs the dropdown; the splash UI stays English (Phase 3)", async ({ page }) => {
+    // Phase 3 — English-canonical UI: switching language NO LONGER re-renders
+    // the workshop chrome. The switcher persists the choice (which drives the
+    // consent-copy language + the in-page reading-aid target) and stays in
+    // sync, but the splash itself stays English for every selection.
     await page.goto("/");
     await page.waitForSelector("#splash-lang-select", { state: "visible" });
 
     for (const lang of ALL_LANGS) {
-      // Drive the switcher via setLang() — equivalent to a user picking
-      // the dropdown option, but deterministic across browsers (some
-      // engines suppress the change event when selectOption picks the
-      // already-selected value, which would mask a real regression).
+      // Drive the switcher via setLang() — equivalent to a user picking the
+      // dropdown option, but deterministic across browsers.
       await page.evaluate((l) => window.setLang(l), lang);
-      await expect(page.locator("#splash-enter")).toContainText(
-        expectedSubstring[lang],
-        { timeout: 5_000 }
-      );
+      // Chrome stays English regardless of the selected language.
+      await expect(page.locator("#splash-enter")).toContainText(/Enter\s*→/i, { timeout: 5_000 });
       const stored = await page.evaluate(() => localStorage.getItem("canamed_lang"));
       expect(stored).toBe(lang);
       // And the <select> stays in sync with the active language.
@@ -62,16 +51,17 @@ test.describe("Splash language switcher — R2-42", () => {
     }
   });
 
-  test("a pre-set localStorage language paints the splash in that language on first load", async ({ page }) => {
+  test("a pre-set localStorage language persists but the splash still paints English (Phase 3)", async ({ page }) => {
     // Pre-set Spanish via init script BEFORE the page's i18n.js runs.
     await page.addInitScript(() => {
       try { localStorage.setItem("canamed_lang", "es"); } catch (e) {}
     });
     await page.goto("/");
     await page.waitForSelector("#splash-lang-select", { state: "visible" });
-    // The Enter button should already be in Spanish on first paint.
-    await expect(page.locator("#splash-enter")).toContainText(/Entrar/i);
-    // And the dropdown should reflect the persisted choice.
+    // English-canonical: the Enter button is English even with es persisted…
+    await expect(page.locator("#splash-enter")).toContainText(/Enter\s*→/i);
+    // …but the dropdown still reflects the persisted choice (it drives consent
+    // copy + the reading-aid target, not the chrome).
     const sel = await page.locator("#splash-lang-select").inputValue();
     expect(sel).toBe("es");
   });
