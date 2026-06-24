@@ -35,6 +35,9 @@
   var curKey = null;      // term@start currently shown — avoids re-render flicker
   var lastX = 0;
   var lastY = 0;
+  // In-memory mirror of the on/off choice, so an explicit opt-out still holds
+  // for the session when localStorage is unavailable (private mode / blocked).
+  var memEnabled = null;  // null = untouched this session (use the default-on)
 
   function core() { return window.CanamedReaderCore; }
   function glossary() { return window.CANAMED_GLOSSARY; }
@@ -43,17 +46,22 @@
   }
 
   function enabled() {
-    try { return localStorage.getItem(STORAGE_KEY) === "1"; }
-    catch (e) { return false; }
+    // Default ON: the reader works out of the box ("just hover any word") for
+    // every student; only an explicit opt-out ("0", via the Word-help toggle)
+    // turns it off. Existing visitors who never touched the toggle have no
+    // flag, so they get the reader automatically.
+    try { return localStorage.getItem(STORAGE_KEY) !== "0"; }
+    catch (e) { return memEnabled !== false; }   // storage blocked → honour this session's choice (default ON)
   }
   function setEnabled(on) {
     on = !!on;
-    // Store only the non-default "on" bit; remove for the default-off state
-    // (mirrors the canamedModALLM convention elsewhere in the app).
+    memEnabled = on;   // remember the choice even if storage write fails below
+    // Reader is ON by default; persist only the explicit OFF ("0"). Turning it
+    // back on removes the flag (returns to the default-on state).
     try {
-      if (on) localStorage.setItem(STORAGE_KEY, "1");
-      else localStorage.removeItem(STORAGE_KEY);
-    } catch (e) { /* private mode */ }
+      if (on) localStorage.removeItem(STORAGE_KEY);
+      else localStorage.setItem(STORAGE_KEY, "0");
+    } catch (e) { /* private mode — memEnabled holds the choice */ }
     syncToggle(on);
     if (!on) hide();
     if (on) {

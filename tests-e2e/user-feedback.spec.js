@@ -154,9 +154,9 @@ test.describe("Bug 2a — global language switcher is always visible", () => {
     // The floating switcher is now reachable from the admin dashboard.
     const sw = page.locator("#global-lang-select");
     await expect(sw).toBeVisible();
-    // It exposes the same 8 languages as the splash one.
+    // English-canonical UI: it exposes the same 3 cohort languages as the splash one.
     const values = await sw.locator("option").evaluateAll(opts => opts.map(o => o.value));
-    expect(values).toEqual(["en", "fr", "ja", "es", "pt", "de", "ko", "zh"]);
+    expect(values).toEqual(["en", "fr", "ja"]);
   });
 
   test("changing the global switcher persists to localStorage AND re-renders translated nodes",

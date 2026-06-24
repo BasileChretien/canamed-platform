@@ -110,7 +110,19 @@ test.describe("Word help — in-page reading aid", () => {
     await expect(page.locator(".reader-pop")).toBeHidden();
   });
 
-  test("the settings checkbox is two-way wired to the reader state", async ({ page }) => {
+  test("reader is ON by default — hovering/tapping works without enabling anything", async ({ page }, testInfo) => {
+    const isTouch = !!(testInfo.project.use && testInfo.project.use.hasTouch);
+    await setup(page, "fr");   // deliberately NO enable() call
+    // Out of the box, with no localStorage flag, the reader is active.
+    expect(await page.evaluate(() => window.CanamedReader.isEnabled())).toBe(true);
+    const { x, y } = await wordCenter(page);
+    if (isTouch) await page.touchscreen.tap(x, y);
+    else await page.mouse.move(x, y);
+    await expect(page.locator(".reader-pop")).toBeVisible();
+    await expect(page.locator(".reader-pop")).toContainText(FR_NEEDLE);
+  });
+
+  test("the settings checkbox reflects + toggles the reader state (default ON)", async ({ page }) => {
     await setup(page, "fr");
     // The fixed-position word fixture overlays the settings panel on small
     // viewports — drop it; this test only needs the checkbox.
@@ -121,18 +133,20 @@ test.describe("Word help — in-page reading aid", () => {
     // Open the settings panel so the checkbox is interactable.
     await page.evaluate(() => { document.getElementById("global-settings-panel").hidden = false; });
     const cb = page.locator("#reader-toggle");
-    await expect(cb).not.toBeChecked();
-    // user → state: clicking the checkbox turns the reader on.
-    await cb.click();
+    // Default ON: the checkbox is checked and the reader is enabled out of the box.
     await expect(cb).toBeChecked();
     expect(await page.evaluate(() => window.CanamedReader.isEnabled())).toBe(true);
-    // state → UI: a programmatic disable is mirrored back into the checkbox.
-    // (Done via the API rather than a second synthetic tap, which flakes on
-    // mobile WebKit — the change handler has no preventDefault, so real taps
-    // toggle natively; we assert the binding, not the browser's tap engine.)
-    await page.evaluate(() => window.CanamedReader.setEnabled(false));
+    // user → state: a real click turns the reader OFF.
+    await cb.click();
     await expect(cb).not.toBeChecked();
     expect(await page.evaluate(() => window.CanamedReader.isEnabled())).toBe(false);
+    // state → UI: a programmatic re-enable is mirrored back into the checkbox.
+    // (Via the API, not a 2nd synthetic tap, which flakes on mobile WebKit —
+    // the change handler has no preventDefault, so real taps toggle natively;
+    // we assert the binding, not the browser's tap engine.)
+    await page.evaluate(() => window.CanamedReader.setEnabled(true));
+    await expect(cb).toBeChecked();
+    expect(await page.evaluate(() => window.CanamedReader.isEnabled())).toBe(true);
   });
 });
 

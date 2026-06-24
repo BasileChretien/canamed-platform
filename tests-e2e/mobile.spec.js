@@ -80,7 +80,9 @@ test.describe("mobile splash usability", () => {
   // new <select> switcher. The dropdown must contain exactly the 8
   // languages and switching to any of them must persist into
   // localStorage so a deep-link or refresh keeps the choice.
-  test("R2-42: splash language switcher lists all 8 supported languages", async ({ page }) => {
+  test("R2-42: splash language switcher lists the 3 cohort languages (en/fr/ja)", async ({ page }) => {
+    // English-canonical UI: the picker offers only the cohort languages (it sets
+    // the word-help gloss language + consent copy, not a UI language).
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });
     const langSelect = page.locator("#splash-lang-select");
@@ -88,7 +90,7 @@ test.describe("mobile splash usability", () => {
     const values = await langSelect.locator("option").evaluateAll(
       opts => opts.map(o => o.value)
     );
-    expect(values).toEqual(["en", "fr", "ja", "es", "pt", "de", "ko", "zh"]);
+    expect(values).toEqual(["en", "fr", "ja"]);
   });
 
   // R2-36 / WCAG 2.5.8: the consent checkboxes must be at least 24x24
