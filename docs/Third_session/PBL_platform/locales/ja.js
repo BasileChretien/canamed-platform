@@ -31,7 +31,7 @@
   "splash.tagline": "大学間の医学教育連携を支える協働プラットフォーム。",
   "splash.signed-in-as": "ログイン中:",
   "splash.sign-out": "ログアウト",
-  "splash.lang-label": "言語",
+  "splash.lang-label": "あなたの言語",
   "splash.saved-session-as": "再開ユーザー",
   "splash.saved-session-in": "セッション",
   "splash.saved-session-clear": "あなたではありませんか？ 切断して最初からやり直す →",

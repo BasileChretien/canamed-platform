@@ -101,7 +101,7 @@
       "splash.tagline": "A collaborative platform for medical-education partnerships between universities.",
       "splash.signed-in-as": "Signed in as",
       "splash.sign-out": "Sign out",
-      "splash.lang-label": "Language",
+      "splash.lang-label": "Your language",
       "splash.saved-session-as": "Resuming as",
       "splash.saved-session-in": "in session",
       "splash.saved-session-clear": "Not you? Disconnect & start fresh →",
@@ -1021,6 +1021,14 @@
     return p;
   }
 
+  // Under the English-canonical UI the main-app language control offers only
+  // the three cohort languages (English / Français / 日本語) — they set the
+  // word-help gloss language + the consent/safety copy. We therefore clamp
+  // BROWSER auto-detection to those three (an es/de-locale browser resolves to
+  // English on the main app), but still HONOUR an explicitly-stored supported
+  // language — privacy.html legitimately sets es/pt/de/ko/zh via ?lang= and
+  // needs detectLang() to return it for its localised fallback banner. The full
+  // SUPPORTED table is kept for the i18n machinery / future re-expansion.
   function detectLang() {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
@@ -1030,11 +1038,6 @@
       ? navigator.language.toLowerCase() : "en";
     if (nav.indexOf("fr") === 0) return "fr";
     if (nav.indexOf("ja") === 0) return "ja";
-    if (nav.indexOf("es") === 0) return "es";
-    if (nav.indexOf("pt") === 0) return "pt";
-    if (nav.indexOf("de") === 0) return "de";
-    if (nav.indexOf("ko") === 0) return "ko";
-    if (nav.indexOf("zh") === 0) return "zh";
     return "en";
   }
 

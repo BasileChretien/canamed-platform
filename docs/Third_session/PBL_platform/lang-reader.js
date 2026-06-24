@@ -43,16 +43,20 @@
   }
 
   function enabled() {
-    try { return localStorage.getItem(STORAGE_KEY) === "1"; }
-    catch (e) { return false; }
+    // Default ON: the reader works out of the box ("just hover any word") for
+    // every student; only an explicit opt-out ("0", via the Word-help toggle)
+    // turns it off. Existing visitors who never touched the toggle have no
+    // flag, so they get the reader automatically.
+    try { return localStorage.getItem(STORAGE_KEY) !== "0"; }
+    catch (e) { return true; }
   }
   function setEnabled(on) {
     on = !!on;
-    // Store only the non-default "on" bit; remove for the default-off state
-    // (mirrors the canamedModALLM convention elsewhere in the app).
+    // Reader is ON by default; persist only the explicit OFF ("0"). Turning it
+    // back on removes the flag (returns to the default-on state).
     try {
-      if (on) localStorage.setItem(STORAGE_KEY, "1");
-      else localStorage.removeItem(STORAGE_KEY);
+      if (on) localStorage.removeItem(STORAGE_KEY);
+      else localStorage.setItem(STORAGE_KEY, "0");
     } catch (e) { /* private mode */ }
     syncToggle(on);
     if (!on) hide();

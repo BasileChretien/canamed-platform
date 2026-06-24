@@ -31,7 +31,7 @@
   "splash.tagline": "Une plateforme collaborative pour les partenariats pédagogiques entre facultés de médecine.",
   "splash.signed-in-as": "Connecté·e en tant que",
   "splash.sign-out": "Se déconnecter",
-  "splash.lang-label": "Langue",
+  "splash.lang-label": "Votre langue",
   "splash.saved-session-as": "Reprise en tant que",
   "splash.saved-session-in": "dans la session",
   "splash.saved-session-clear": "Ce n'est pas vous ? Se déconnecter et repartir à zéro →",
