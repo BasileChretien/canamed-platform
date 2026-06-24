@@ -318,6 +318,12 @@ test.describe("Perf budget — splash", () => {
     const LAZY_CHUNKS = new Set([
       "case-content.js",
       "glossary.js",
+      // Reading aid (2026-06-24): idle-prefetched + opt-in via the "Word help"
+      // toggle, only actually used in Module A/B — never on the splash critical
+      // path, same class as glossary.js. reader-core.js is the pure brain;
+      // lang-reader.js the DOM glue.
+      "reader-core.js",
+      "lang-reader.js",
       "admin-tools.js",
       "qrcode.js",
       "tour.js",
