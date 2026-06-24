@@ -186,33 +186,37 @@ test.describe("Bug 2a — global language switcher is always visible", () => {
   });
 });
 
-test.describe("Bug 2b — new high-impact i18n keys", () => {
-  test("findings, prompts, reset, and right-column tab labels translate to fr",
+test.describe("Bug 2b — Module A right-column labels (English-canonical UI)", () => {
+  test("findings, prompts, reset, and tab labels render English even under fr/ja (Phase 3)",
        async ({ page }) => {
-    // We can verify the translations exist in the i18n table without
-    // needing to be inside a room — the same key strings the app reads
-    // are accessible via window.t(). This is faster + more deterministic
-    // than spinning up a full room.
+    // Phase 3 — English-canonical UI: these Module A chrome strings are NOT
+    // consent/safety, so t() returns the canonical English for everyone. We
+    // capture the English values and assert fr + ja resolve to the same thing
+    // (rather than hardcoding the English copy, which can be re-worded).
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });
-    await page.evaluate(() => window.setLang("fr"));
 
-    // Tab labels were renamed to activity verbs per the 2026-05-18
-    // UX/pedagogy specialist panel ("Findings"→"What we're finding",
-    // "Team decisions"→"Decide together"). The PANEL/log titles
-    // (findings.title, prompts.title) and the reset button stayed,
-    // so the test keeps asserting those. Tab keys assert the new
-    // verb labels.
+    const CHROME = [
+      "rcol.tab.findings",
+      "rcol.tab.decisions",
+      "findings.title",
+      "prompts.title",
+      "reset.btn"
+    ];
     const t = (k) => page.evaluate((key) => window.t(key), k);
-    expect(await t("rcol.tab.findings")).toEqual("Ce qu'on trouve");
-    expect(await t("rcol.tab.decisions")).toEqual("Décider ensemble");
-    expect(await t("findings.title")).toEqual("Journal des résultats");
-    expect(await t("prompts.title")).toEqual("Questions de discussion");
-    expect(await t("reset.btn")).toEqual("Réinitialiser le cas de cette salle");
 
-    // And in Japanese.
-    await page.evaluate(() => window.setLang("ja"));
-    expect(await page.evaluate(() => window.t("rcol.tab.findings"))).toEqual("分かったこと");
-    expect(await page.evaluate(() => window.t("findings.title"))).toEqual("所見ログ");
+    await page.evaluate(() => window.setLang("en"));
+    const en = {};
+    for (const k of CHROME) en[k] = await t(k);
+
+    for (const lang of ["fr", "ja"]) {
+      await page.evaluate((l) => window.setLang(l), lang);
+      for (const k of CHROME) {
+        expect(await t(k), `${k} should be English-canonical under ${lang}`).toEqual(en[k]);
+      }
+    }
+    // sanity: the keys resolve to real, non-empty strings (not the raw key).
+    for (const k of CHROME) expect(en[k]).not.toEqual(k);
+    await page.evaluate(() => window.setLang("en")); // reset
   });
 });
