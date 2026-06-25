@@ -245,9 +245,14 @@ test.describe("Bug 2 — findings answer appears under the button on mobile", ()
     });
 });
 
-test.describe("Bug 3 — language switcher re-renders dynamic case content", () => {
-  test("switching lang while in-room re-renders the finding-button labels",
+test.describe("Module A finding buttons are English-only (picker drives the reader, not case content)", () => {
+  test("switching lang while in-room keeps the finding-button labels in English",
     async ({ page }) => {
+      // User 2026-06-25: the whole UI — case content included — is English-only.
+      // _curLang() is pinned to "en", so tc(item.q, _curLang()) always renders
+      // English. Switching the picker to French still fires canamed:langchange
+      // (which re-runs buildButtons and re-targets the in-page reading aid), but
+      // the finding-button labels must STAY English — not flip to French.
       await page.goto("/");
       const result = await page.evaluate(async () => {
         // Land in stage 1 with the case buttons rendered.
@@ -262,18 +267,13 @@ test.describe("Bug 3 — language switcher re-renders dynamic case content", () 
           '.req-btn[data-id="history:0"]');
         if (!firstBtn) return { reason: "no req-btn rendered" };
 
-        // Make sure we start in English so the switch to FR is
-        // observable (textContent must actually change).
         if (typeof window.setLang === "function") window.setLang("en");
         if (typeof window.buildButtons === "function") window.buildButtons();
         const enText = firstBtn.textContent.trim();
 
-        // Switch to French. The Bug 3 fix wires a canamed:langchange
-        // listener that re-calls buildButtons (which reads
-        // `tc(item.q, _curLang())`), so the button text re-flows.
-        // #48: French is now a lazy-loaded locale chunk, so setLang() is
-        // async — await it so the fr table has loaded and the langchange
-        // re-render has run before we read the (recreated) button text.
+        // Switch the picker to French and let the langchange re-render settle
+        // (setLang is async — it lazy-loads the fr table, though t()/tc() no
+        // longer read it for the UI).
         if (typeof window.setLang === "function") await window.setLang("fr");
         // Re-fetch since buildButtons() recreates the DOM nodes.
         const afterFr = document.querySelector(
@@ -282,10 +282,10 @@ test.describe("Bug 3 — language switcher re-renders dynamic case content", () 
         return { enText, frText };
       });
       expect(result.enText, "EN text must be present").toBeTruthy();
-      expect(result.frText, "FR text must be present").toBeTruthy();
+      expect(result.frText, "label must still be present after the switch").toBeTruthy();
       expect(result.frText,
-        "FR text must differ from EN — proves the lang-change listener re-ran buildButtons")
-        .not.toEqual(result.enText);
+        "the finding-button label must STAY English after switching to French (UI is English-only)")
+        .toEqual(result.enText);
     });
 });
 

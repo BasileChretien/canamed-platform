@@ -111,32 +111,27 @@ test.describe("Lazy-loaded locales — consent first-paint safety (#48)", () => 
     await tab.close();
   });
 
-  test("switching to French lazy-loads only locales/fr.js and localizes the consent block", async ({ page, context }) => {
+  test("switching language keeps the consent block in English and still joinable", async ({ page, context }) => {
+    // User 2026-06-25: the whole UI is English-only now — consent included. The
+    // language picker no longer localizes any UI string; it only re-targets the
+    // in-page reading-aid's per-word hover gloss (lang-reader.js). So switching
+    // to French must NOT translate the consent block, and must not break join.
     const code = await createSession(page, "lazy FR run");
-    const { tab, localeHits } = await openLobbyTab(context, code);
+    const { tab } = await openLobbyTab(context, code);
 
-    // Starts English, nothing fetched yet.
+    // Starts English.
     await expect(tab.locator("#consent-version")).toContainText(/Notice version/i);
-    expect(localeHits).toEqual([]);
 
-    // Switch language — this is what triggers the on-demand locale load.
+    // Switch the picker to French and wait for the langchange re-render to settle.
     await tab.evaluate(() => window.setLang("fr"));
+    await expect(tab.locator("html")).toHaveAttribute("lang", "fr");
 
-    // Consent block localizes to French (web-first wait covers the fetch +
-    // apply round-trip). If lazy-load were broken, this would stay English.
-    await expect(tab.locator("#consent-version")).toContainText(/Version de la notice/i, { timeout: 10_000 });
+    // Consent text stays ENGLISH (the old French "Version de la notice" must NOT
+    // appear) — the picker drives the reader, not the UI copy.
+    await expect(tab.locator("#consent-version")).toContainText(/Notice version/i);
+    await expect(tab.locator("#consent-version")).not.toContainText(/Version de la notice/i);
 
-    // Exactly one locale was fetched, and it was French.
-    await expect.poll(
-      () => localeHits.filter((l) => l === "fr").length,
-      { timeout: 10_000, message: "locales/fr.js should have been fetched once" }
-    ).toBeGreaterThan(0);
-    expect(
-      localeHits.every((l) => l === "fr"),
-      `only fr should load, saw: [${localeHits.join(", ")}]`
-    ).toBe(true);
-
-    // Consent still works in French: tick enables Join.
+    // Consent still works after the switch: tick enables Join.
     await tab.locator("#consent-workshop").check();
     await expect(tab.locator("#join-btn")).toBeEnabled();
 

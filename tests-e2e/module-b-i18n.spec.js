@@ -18,11 +18,12 @@
 const { test, expect } = require("./fixtures.js");
 
 test.describe("Module B body i18n", () => {
-  test("Module B renders fully in English even with Japanese selected (only consent is translated)", async ({ page }) => {
-    // English-only UI: only the consent block follows the chosen language, so
-    // ALL of Module B — the safety briefing, the clinical vignette, the SPIKES
-    // strip, the phase headings and the group-answers chrome — renders in
-    // English even under ja. Word-level help comes from the in-page reading aid.
+  test("Module B renders fully in English even with Japanese selected (UI is English-only)", async ({ page }) => {
+    // English-only UI (user 2026-06-25): NO UI string follows the chosen
+    // language anymore — consent included. ALL of Module B — the safety
+    // briefing, the clinical vignette, the SPIKES strip, the phase headings and
+    // the group-answers chrome — renders in English even under ja. Word-level
+    // help comes from the in-page reading aid (the picker's only remaining job).
     await page.addInitScript(() => {
       try { localStorage.setItem("canamed_lang", "ja"); } catch (e) {}
     });

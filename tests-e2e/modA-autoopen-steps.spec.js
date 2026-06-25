@@ -5,7 +5,7 @@
  * did not open by themselves — students finished a step and didn't notice
  * the next one had become available. This spec pins the auto-open flow:
  *
- *   - committing ≥2 hypotheses (phaseGateOpen) auto-opens the Discussion panel;
+ *   - committing ≥1 hypothesis (phaseGateOpen) auto-opens the Discussion panel;
  *   - finishing every Exchange prompt (promptCursor === total, RTDB-synced)
  *     auto-opens the Group answers panel;
  *   - neither auto-open steals focus from someone mid-typing.
@@ -27,9 +27,10 @@ async function setupModA(page) {
     if (typeof window._test_rebuildCaseDerived === "function") {
       window._test_rebuildCaseDerived();
     }
-    // Reveal every Module A item AND commit ≥2 working hypotheses, so the phase
-    // gate (phaseGateOpen = hypothesisCount() >= 2, 2026-06-02) that unlocks the
-    // Debate + Synthesis is open.
+    // Reveal every Module A item AND commit two working hypotheses (the gate
+    // needs only one — phaseGateOpen = hypothesisCount() >= 1 since 2026-06-25 —
+    // but committing two is a realistic state and still opens it), so the phase
+    // gate that unlocks the Debate + Synthesis is open.
     const ids = window._test_getItemIds ? window._test_getItemIds() : [];
     const r = {};
     ids.forEach(id => { r[id] = { by: "T", at: Date.now() }; });
@@ -56,7 +57,7 @@ async function setupModA(page) {
 }
 
 test.describe("Module A — steps auto-open as the flow advances", () => {
-  test("committing ≥2 hypotheses auto-opens the Debate (Discussion) panel", async ({ page }) => {
+  test("committing a working hypothesis auto-opens the Debate (Discussion) panel", async ({ page }) => {
     await setupModA(page);
     const active = await page.evaluate(() => {
       // Realistic state: the team has just committed its hypotheses, so no text
@@ -70,7 +71,7 @@ test.describe("Module A — steps auto-open as the flow advances", () => {
       const p = document.querySelector('.rcol-panel[data-panel="discussion"]');
       return !!(p && p.classList.contains("is-active") && !p.hidden);
     });
-    expect(active, "Discussion should auto-open once the ≥2-hypotheses gate opens").toBe(true);
+    expect(active, "Discussion should auto-open once the ≥1-hypothesis gate opens").toBe(true);
   });
 
   test("finishing the discussion with an OPEN Module A vote opens the Decisions panel", async ({ page }) => {

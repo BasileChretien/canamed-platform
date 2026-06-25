@@ -70,7 +70,7 @@ test("investigations are freely clickable like the examination (no warn-cue gate
     "renderButtons clears any stale warn class on investigation buttons");
 });
 
-test("the on-screen synthesis button is gone; the Debate gates on ≥2 hypotheses (phaseGateOpen)", () => {
+test("the on-screen synthesis button is gone; the Debate gates on ≥1 hypothesis (phaseGateOpen)", () => {
   // 2026-06-02: the Clinical synthesis section was removed; SYNTH_ID is no longer
   // rendered as a button, so neither renderButtons nor reveal() special-case it.
   const rb = fnSlice("renderButtons");
@@ -78,8 +78,9 @@ test("the on-screen synthesis button is gone; the Debate gates on ≥2 hypothese
   const rv = fnSlice("reveal");
   assert.doesNotMatch(rv, /SYNTH_ID && !phaseGateOpen/,
     "reveal() no longer carries the synthesis gate guard");
-  assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 2/,
-    "phaseGateOpen() must be hypothesisCount() >= 2");
+  // Gate threshold lowered to ≥1 hypothesis (user 2026-06-25).
+  assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 1/,
+    "phaseGateOpen() must be hypothesisCount() >= 1");
   assert.match(SCRIPT, /const unlocked = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
     "the discussion prompts unlock on phaseGateOpen()");
 });
@@ -93,11 +94,11 @@ test("the hypothesis-first investigations lock is gone (dead code removed)", () 
     "the investigations panel must no longer be hypothesis-locked");
 });
 
-test("investigations copy frames them as FREE (not locked); the gate is ≥2 hypotheses", () => {
+test("investigations copy frames them as FREE (not locked); the gate is ≥1 hypothesis", () => {
   const I18N = require("./_i18n_source.js").readI18nSource();
   // 2026-06-02: the old investigations.locked-hint is retired; the section shows
   // a free "yours to choose" hint. The Clinical synthesis section was removed, so
-  // its locked-hint key is gone too; the gate is now ≥2 working hypotheses.
+  // its locked-hint key is gone too; the gate is now ≥1 working hypothesis.
   assert.doesNotMatch(I18N, /"modA\.chart\.investigations\.locked-hint"/,
     "the dead investigations.locked-hint key must be removed");
   const hint = I18N.match(/"modA\.chart\.investigations\.hint":\s*"([^"]*)"/);

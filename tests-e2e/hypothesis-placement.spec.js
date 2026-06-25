@@ -6,10 +6,7 @@
  *   1. The canonical "Working hypotheses" block sits BETWEEN
  *      Examination and Investigations in the DOM order — NOT above
  *      History (anchoring-bias risk per healthcare-CDSS reviewer).
- *   2. A small "First impressions (optional)" textarea sits above
- *      History as a private, free-text gut-feel — no Firebase write,
- *      no gating.
- *   3. The Investigations unlock gate requires (a) ≥1 hypothesis AND
+ *   2. The Investigations unlock gate requires (a) ≥1 hypothesis AND
  *      (b) the red-flag screen (history:1 + history:2 + exam:3 all
  *      revealed). Typing a throwaway hypothesis alone no longer
  *      unlocks the panel — students must also screen NICE NG59
@@ -24,7 +21,7 @@ const { test, expect } = require("./fixtures.js");
 test.describe("Module A hypothesis-block placement (specialist consensus)", () => {
   test("DOM order is History < Examination < Investigations < Hypotheses", async ({ page }) => {
     // 2026-06-02 restructure: the team works up FREELY (history chat + exam +
-    // investigations), THEN commits ≥2 working hypotheses (the gate that unlocks
+    // investigations), THEN commits ≥1 working hypothesis (the gate that unlocks
     // the Debate). The on-screen Clinical synthesis section was REMOVED (its
     // write-up moved to the stage-4 take-home), so hypotheses is now the last
     // chart section.
@@ -55,31 +52,20 @@ test.describe("Module A hypothesis-block placement (specialist consensus)", () =
     expect(order["chart-hypotheses"]).toBeGreaterThan(order["chart-investigations"]);
   });
 
-  test("'First impressions' textarea sits at the top of the chart + is non-gating", async ({ page }) => {
+  test("the 'First impressions' textarea has been removed from the chart", async ({ page }) => {
+    // 2026-06-25: the optional first-impressions note was deleted (user request).
+    // Lock that it stays gone so it can't silently creep back in.
     await page.goto("/");
-    const info = await page.evaluate(() => {
-      const im = document.getElementById("chart-impressions");
-      if (!im) return null;
-      const ta = document.getElementById("impressions-input");
-      // history should come AFTER impressions in document order.
-      const hist = document.getElementById("chart-section-history");
-      const ordered = im.compareDocumentPosition(hist) & Node.DOCUMENT_POSITION_FOLLOWING;
-      return {
-        hasSection: true,
-        hasTextarea: !!ta && ta.tagName === "TEXTAREA",
-        beforeHistory: !!ordered,
-        // No data-i18n on the section title is fine — testing structure only.
-      };
-    });
-    expect(info, "chart-impressions section must exist").not.toBeNull();
-    expect(info.hasTextarea, "must include a TEXTAREA input").toBe(true);
-    expect(info.beforeHistory, "impressions must come BEFORE history in the DOM").toBe(true);
+    const gone = await page.evaluate(() =>
+      !document.getElementById("chart-impressions") &&
+      !document.getElementById("impressions-input"));
+    expect(gone, "chart-impressions section + textarea must be removed").toBe(true);
   });
 
   test("Investigations are clickable any time; there is no on-screen synthesis button", async ({ page }) => {
     // 2026-06-02: investigations (imaging + bloods) are freely clickable. The
     // Clinical synthesis section was removed, so labs:0 (SYNTH_ID) is never
-    // rendered as a button. The Debate now gates on ≥2 working hypotheses
+    // rendered as a button. The Debate now gates on ≥1 working hypothesis
     // (covered in modA-rcol-progressive.spec.js).
     await page.goto("/");
     const out = await page.evaluate(async () => {

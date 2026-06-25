@@ -46,7 +46,11 @@ test("Module A: Investigations is collapsed by default", () => {
     "Investigations must NOT carry the open attribute");
 });
 
-test("Module A: First impressions remains collapsed (unchanged)", () => {
-  assert.doesNotMatch(detailsTagFor("chart-impressions"), /\bopen\b/,
-    "First-impressions stays collapsed as before");
+test("Module A: the First-impressions section has been removed", () => {
+  // 2026-06-25 (user request): the optional "First impressions" note was
+  // deleted from the chart. Assert the <details id="chart-impressions"> markup
+  // is gone so it can't quietly creep back.
+  const re = /<details[^>]*\bid="chart-impressions"[^>]*>/;
+  assert.ok(!re.test(INDEX),
+    "chart-impressions <details> must no longer exist in index.html");
 });

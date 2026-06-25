@@ -1562,26 +1562,6 @@ html[data-theme="dark"] .next-step-coach {
   display: none !important;
 }
 
-/* --- "First impressions (optional)" top-of-chart note ---
-   UX-practitioner recommendation: a private, free-text gut-feel
-   note that lets first-timers externalise their initial thinking
-   before the canonical hypothesis block. Visually de-emphasised so
-   it doesn't compete with the main case-workup actions. */
-.chart-impressions { opacity: 0.92; }
-.chart-impressions > textarea {
-  width: 100%;
-  min-height: 56px;
-  margin-top: 6px;
-  padding: 8px 10px;
-  font-family: inherit;
-  font-size: 0.95rem;
-  background: var(--card);
-  color: var(--ink);
-  border: 1px dashed var(--line-strong, var(--line));
-  border-radius: var(--r-sm, 8px);
-  resize: vertical;
-}
-
 /* --- Module A per-bullet progress checklist --- */
 .modA-bullet-progress {
   list-style: none;
@@ -2067,13 +2047,34 @@ body[data-observer="1"] #modB-next-step {
    module; each button toggles its panel below (accordion — one open at a time;
    wireReferenceToolbars() in script.js). Replaced a stack of cards that used to
    sit below the workflow. */
+/* Floating reference bar (user 2026-06-25): the row of three lookup buttons
+   (Historical context / Guidelines / Recap) pins to the top of the viewport so
+   it's always reachable while students scroll the whole module. The section is a
+   full-width band directly inside the stage (above .columns), so its sticky range
+   spans the entire module scroll — the buttons stay on screen throughout. Opaque
+   themed background + a soft hairline shadow keep content scrolling underneath
+   visually separated. Stacks ABOVE page content + the right-column sticky tabs
+   (z 5) but BELOW the global pills (z 1500), banners (z 80) and modals. */
 .reference-section {
+  position: sticky;
+  top: 0;
+  z-index: 30;
   margin: 0 0 var(--s-4);
+  padding: var(--s-2) 0;
+  background: var(--bg);
+  box-shadow: 0 4px 10px -6px rgba(0, 0, 0, 0.25);
 }
 .reference-toolbar {
   display: flex;
   flex-wrap: wrap;
   gap: var(--s-2);
+}
+/* While the bar is pinned and a panel is open, cap the panel so a long reference
+   text can't blanket the screen — it scrolls inside the floating bar instead,
+   leaving the student's own work visible below. */
+.reference-section .reference-panel:not([hidden]) {
+  max-height: min(58vh, 520px);
+  overflow: auto;
 }
 .reference-btn {
   flex: 1 1 auto;

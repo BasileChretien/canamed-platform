@@ -159,7 +159,7 @@ test.describe("Bug 2a — global language switcher is always visible", () => {
     expect(values).toEqual(["en", "fr", "ja"]);
   });
 
-  test("changing the global switcher persists to localStorage AND re-renders translated nodes",
+  test("changing the global switcher persists to localStorage and sets the html lang",
        async ({ page }) => {
     await page.goto("/");
     await page.locator("#splash-go-create").click();

@@ -113,17 +113,20 @@ test.describe("Module A — reveal buttons clustered by clinical category", () =
     await expect(firstBtn).toBeVisible();
   });
 
-  test("category headings re-translate on language switch", async ({ page }) => {
+  test("category headings stay English after a language switch (UI is English-only)", async ({ page }) => {
+    // User 2026-06-25: the whole UI is English-only — the language picker only
+    // drives the in-page reading aid, not the case content. Switching to French
+    // re-renders the chart (canamed:langchange → buildButtons) but the category
+    // headings must STAY English, not flip to "Anamnèse et antécédents".
     await renderChart(page);
     const first = page.locator("#group-history .req-category-label").first();
     await expect(first).toHaveText(/History & background/i);
 
-    // Switch to French and re-render (canamed:langchange drives buildButtons).
     await page.evaluate(async () => {
       if (window.setLang) await window.setLang("fr");
       if (typeof window.buildButtons === "function") window.buildButtons();
     });
     await expect(page.locator("#group-history .req-category-label").first())
-      .toHaveText(/Anamnèse et antécédents/i);
+      .toHaveText(/History & background/i);
   });
 });

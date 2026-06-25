@@ -20,11 +20,11 @@ const { test, expect } = require("./fixtures.js");
 const ALL_LANGS = ["en", "fr", "ja", "es", "pt", "de", "ko", "zh"];
 
 test.describe("Splash language switcher — R2-42", () => {
-  // English-canonical UI: the control is now a small "Your language" picker
-  // limited to the three cohort languages (it sets the word-help gloss language
-  // + the consent/safety copy, NOT a UI language). The second-wave locales
-  // (es/pt/de/ko/zh) remain in the i18n tables for privacy.html / future use
-  // but are no longer offered in the app picker.
+  // English-only UI (user 2026-06-25): the control is a small "Your language"
+  // picker limited to the three cohort languages. It ONLY sets the in-page
+  // reading-aid's word-help gloss language — it no longer changes ANY UI string
+  // (consent included). The second-wave locales (es/pt/de/ko/zh) remain in the
+  // i18n tables for privacy.html / future use but are not offered in the picker.
   const PICKER_LANGS = ["en", "fr", "ja"];
 
   test("dropdown lists exactly the 3 cohort languages (en/fr/ja), in canonical order", async ({ page }) => {

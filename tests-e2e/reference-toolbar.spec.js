@@ -95,6 +95,75 @@ test.describe("Reference toolbar — 3-button accordion at the top of each modul
   }
 });
 
+test.describe("Reference bar floats at the top of the screen (sticky)", () => {
+  // User 2026-06-25: "make that line a floating menu so it always appears on the
+  // top of their screen." The reference bar (the row of Historical context /
+  // Guidelines / Recap buttons) is now position:sticky; top:0 in BOTH modules,
+  // so the lookups stay reachable however far the student scrolls. Verified
+  // per-device (this file is in the mobile testMatch).
+  for (const mod of MODULES) {
+    test(`${mod.name}: the reference bar is sticky-pinned to the top of the viewport`, async ({ page }) => {
+      await surfaceStage(page, mod.stage);
+      const section = page.locator(`#${mod.stage} .reference-section`);
+
+      // Wait out the stage's `card-rise` entrance animation. It briefly applies a
+      // translateY transform to the stage, which (like any transformed ancestor)
+      // makes a sticky descendant compute its pin offset in the transform's frame
+      // — so measuring mid-animation reads a transient few-px offset. Once the
+      // animation settles to transform:none, sticky pins to the viewport exactly.
+      await page.evaluate((stageId) => {
+        const st = document.getElementById(stageId);
+        const anims = st && st.getAnimations ? st.getAnimations() : [];
+        return Promise.all(anims.map((a) => a.finished.catch(() => {})));
+      }, mod.stage);
+
+      // Declared sticky at top:0 — the floating-menu contract.
+      const css = await section.evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return { position: cs.position, top: cs.top };
+      });
+      expect(css.position).toBe("sticky");
+      expect(css.top).toBe("0px");
+
+      // It starts below the top of the viewport (there's a header + vignette
+      // above it), so scrolling past it is a meaningful test of pinning.
+      const startTop = await section.evaluate((el) =>
+        Math.round(el.getBoundingClientRect().top));
+      expect(startTop, "the bar starts below the top of the viewport").toBeGreaterThan(0);
+
+      // Guarantee the page is tall enough to scroll the bar all the way to the
+      // top. In this synthetic surfaced stage the chart buttons aren't built, so
+      // the natural content below the bar can be shorter than `startTop` — which
+      // would clamp the scroll before the bar ever reaches the top and tell us
+      // nothing about stickiness. A tall spacer at the end of the stage isolates
+      // the CSS behaviour from incidental content height.
+      await page.evaluate((stageId) => {
+        const sp = document.createElement("div");
+        sp.id = "__sticky-test-spacer";
+        sp.style.height = "2000px";
+        document.getElementById(stageId).appendChild(sp);
+      }, mod.stage);
+
+      // Scroll well past the bar's natural position but stay inside its sticky
+      // range. A NON-sticky element would now sit at ≈ -600px (off-screen); a
+      // sticky one pins at the viewport top (rect.top ≈ 0).
+      await page.evaluate((t) => window.scrollTo(0, t + 600), startTop);
+      await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => r())));
+
+      const pinnedTop = await section.evaluate((el) =>
+        Math.round(el.getBoundingClientRect().top));
+      await page.evaluate(() => {
+        const sp = document.getElementById("__sticky-test-spacer");
+        if (sp) sp.remove();
+      });
+      expect(pinnedTop, "the reference bar stays pinned at the top after scrolling")
+        .toBeLessThanOrEqual(1);
+      expect(pinnedTop, "the reference bar does not scroll off-screen")
+        .toBeGreaterThanOrEqual(-2);
+    });
+  }
+});
+
 test.describe("Back-to-top button + un-pinned stage card", () => {
   test("appears after scrolling down and returns to the top", async ({ page }) => {
     await surfaceStage(page, "stage-1");
