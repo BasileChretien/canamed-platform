@@ -6900,7 +6900,12 @@ m.unevenRooms + " room(s) flagged as uneven for facilitator follow-up.</p>" +
  * B, …" per room (same scheme as the old export). Robust to the Module A
  * answer restructure — it reads whatever answer entries exist, by bulletKey. */
 function _archiveCsvCell(v) {
-  const s = String(v == null ? "" : v);
+  let s = String(v == null ? "" : v);
+  // Neutralise spreadsheet formula injection: a cell beginning with = + - @ (or
+  // a leading tab/CR Excel trims) is run as a formula (e.g. =HYPERLINK / =cmd|).
+  // The archive flattens untrusted free-text answers into cells, so prefix a
+  // single quote to force literal text in Excel / Sheets.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function _sessionArchiveData(anon) {

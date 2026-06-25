@@ -41,6 +41,7 @@ test("gain flows into _impactMetrics + the session summary", () => {
 
 test("the impact report renders a Knowledge gain section", () => {
   const i = SCRIPT.indexOf("function generateImpactReport");
+  assert.match(SCRIPT, /function _archiveCsvCell\b/, "slice end-anchor _archiveCsvCell must exist");
   const blk = SCRIPT.slice(i, SCRIPT.indexOf("function _archiveCsvCell"));
   assert.match(blk, /Knowledge gain \(pre/, "must render a knowledge-gain section");
   assert.match(blk, /normalized learning gain|Hake/i, "must explain the normalized-gain metric");

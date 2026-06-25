@@ -141,6 +141,34 @@ test.describe("Session archive export (CSV / JSON)", () => {
     expect(text).toMatch(/moduleA/);
     expect(text).toMatch(/first/);
   });
+
+  test("CSV archive neutralises spreadsheet formula injection in free-text", async ({ page }) => {
+    await page.goto("/");
+    const text = await page.evaluate(() => {
+      if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
+      if (window._test_setRoomCount)  window._test_setRoomCount(1);
+      if (window._test_setAllRooms)   window._test_setAllRooms({
+        "Room 1": { stage: 3, answers: { moduleA: { x: { by: "A", text: "=1+2" } } } }
+      });
+      const realCO = URL.createObjectURL.bind(URL);
+      const realRO = URL.revokeObjectURL.bind(URL);
+      let captured = null;
+      URL.createObjectURL = function (b) { captured = b; return "blob:test/dummy"; };
+      URL.revokeObjectURL = function () {};
+      try {
+        if (typeof window.downloadSessionArchive !== "function") return Promise.resolve("no-fn");
+        window.downloadSessionArchive("csv");
+      } finally {
+        URL.createObjectURL = realCO;
+        URL.revokeObjectURL = realRO;
+      }
+      return captured ? captured.text() : "no-blob";
+    });
+    // A leading "=" is prefixed with a single quote so Excel/Sheets treat it as
+    // literal text, not a formula.
+    expect(text).toContain("'=1+2");
+    expect(text).not.toMatch(/(^|,)=1\+2/m);
+  });
 });
 
 test.describe("Glossary tooltips on clinical buttons", () => {

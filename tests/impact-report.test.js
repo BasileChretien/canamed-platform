@@ -43,6 +43,7 @@ test("_impactMetrics aggregates participation, equity, decisions and engagement"
 
 test("generateImpactReport builds a self-contained, escaped, printable report", () => {
   assert.match(SCRIPT, /function generateImpactReport\(\)/, "generateImpactReport must exist");
+  assert.match(SCRIPT, /function _archiveCsvCell\b/, "slice end-anchor _archiveCsvCell must exist");
   const fn = SCRIPT.slice(SCRIPT.indexOf("function generateImpactReport"),
     SCRIPT.indexOf("function _archiveCsvCell"));
   assert.match(fn, /Session Impact Report/, "must render a titled report");
