@@ -79,6 +79,11 @@ test.describe("2026-06-02 Module A/B fixes", () => {
     expect(before, "CTA must start hidden").toBe(true);
 
     const after = await page.evaluate(() => {
+      // The merged Debate & answers form is only reachable past the
+      // ≥1-hypothesis gate, so open it before answering (realistic state).
+      if (window._test_setHypotheses) {
+        window._test_setHypotheses({ h: { text: "mechanical LBP", by: "T", at: 1 } });
+      }
       // Debate + answers MERGED into two questions (2026-06-25): diagnosis & plan,
       // and pain across cultures. Both covered → the "go to Module B" CTA shows.
       window._test_setAnswers({ moduleA: {
