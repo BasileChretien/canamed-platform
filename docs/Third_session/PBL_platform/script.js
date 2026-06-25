@@ -427,8 +427,11 @@ function stageLabel(i) {
     if (i === 1) trio = window.CURRENT_SCENARIO_MODULE_A_NAME || null;
     else if (i === 2) trio = window.CURRENT_SCENARIO_MODULE_B_NAME || null;
     if (trio) {
-      const lang = (typeof window.getLang === "function")
-        ? window.getLang() : "en";
+      // English-only UI (2026-06-25): resolve the scenario module name through
+      // _curLang() (pinned "en"), NOT getLang() (the picker) — otherwise a
+      // student who picks FR/JA for the reading aid still sees the Module A/B
+      // titles translated. The picker only drives the hover dictionaries now.
+      const lang = (typeof _curLang === "function") ? _curLang() : "en";
       const v = window.tc(trio, lang);
       if (v) return v;
     }
