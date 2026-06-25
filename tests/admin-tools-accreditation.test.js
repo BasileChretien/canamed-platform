@@ -52,14 +52,13 @@ test("generateAccreditationReport builds a printable, escaped report keyed on ou
   assert.match(TOOLS, /aggregate \+ pseudonymous/i, "must declare aggregate + pseudonymous");
 });
 
-test("the chunk is lazy-loaded and wired to the admin button", () => {
+test("the admin-tools chunk is lazy-loaded via runAdminTool (accred button removed from the lean menu 2026-06-25)", () => {
   assert.match(LOADER, /function ensureAdminTools\(\)\s*\{\s*return loadScript\(v\("admin-tools\.js"\)\)/,
     "loader must expose ensureAdminTools");
   assert.match(LOADER, /ensureAdminTools/, "ensureAdminTools must be in the public API");
-  assert.match(HTML, /id="admin-accred-btn"/, "the accreditation button must exist");
+  assert.doesNotMatch(HTML, /id="admin-accred-btn"/, "the accreditation button is gone from the lean menu");
   assert.match(SCRIPT, /function runAdminTool\(fnName\)/, "runAdminTool lazy-invoke helper must exist");
   assert.match(SCRIPT, /ensureAdminTools\(\)\.then\(call\)/, "runAdminTool must lazy-load then invoke");
-  assert.match(SCRIPT, /runAdminTool\("generateAccreditationReport"\)/, "the button must call the report");
 });
 
 test("admin-tools.js is excluded from the splash budget + precached for offline", () => {

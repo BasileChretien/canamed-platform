@@ -79,50 +79,95 @@ test.describe("Module A chart sections stay open when you reveal items", () => {
 // deleted with them; _updateModABulletProgress() now no-ops safely (its target
 // is gone). See tests/stage-ui-fixes.test.js for the removal lock-in.
 
-test.describe("Markdown export of group-answers", () => {
-  test("admin dashboard exposes a Download as Markdown button", async ({ page }) => {
+test.describe("Session archive export (CSV / JSON)", () => {
+  // 2026-06-25 (user request): the plain-text / Markdown "download all group
+  // answers" exports were replaced by a single structured archive offered in
+  // CSV or JSON from the admin dashboard.
+  test("admin dashboard exposes CSV + JSON archive buttons (no plain/markdown dump)", async ({ page }) => {
     await page.goto("/");
-    const present = await page.evaluate(() => {
-      const b = document.getElementById("admin-download-md-btn");
-      return !!b;
-    });
-    expect(present).toBe(true);
+    const ids = await page.evaluate(() => ({
+      csv: !!document.getElementById("admin-archive-csv-btn"),
+      json: !!document.getElementById("admin-archive-json-btn"),
+      oldTxt: !!document.getElementById("admin-download-btn"),
+      oldMd: !!document.getElementById("admin-download-md-btn")
+    }));
+    expect(ids.csv).toBe(true);
+    expect(ids.json).toBe(true);
+    expect(ids.oldTxt).toBe(false);
+    expect(ids.oldMd).toBe(false);
   });
-  test("downloadAllAnswersMarkdown emits valid markdown (smoke-test the function)", async ({ page }) => {
-    await page.goto("/");
-    const result = await page.evaluate(() => {
-      // Drive module state through the platform's test hooks so the
-      // function sees the right session + room shape.
+
+  // Capture the Blob the export builds (the code revokes the blob URL the moment
+  // click() returns, so stub createObjectURL to grab it synchronously).
+  async function captureArchive(page, format) {
+    return page.evaluate((fmt) => {
       if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
       if (window._test_setRoomCount)  window._test_setRoomCount(1);
       if (window._test_setAllRooms)   window._test_setAllRooms({
         "Room 1": { stage: 3, answers: { moduleA: { x: { by: "A", text: "first" } } } }
       });
-      // Stub URL.createObjectURL to capture the Blob synchronously
-      // (the production code revokes the blob URL the moment click()
-      // returns, so a later fetch(blob:…) is too late).
       const realCO = URL.createObjectURL.bind(URL);
       const realRO = URL.revokeObjectURL.bind(URL);
       let captured = null;
-      URL.createObjectURL = function (blob) {
-        captured = blob;
-        return "blob:test/dummy";
-      };
+      URL.createObjectURL = function (blob) { captured = blob; return "blob:test/dummy"; };
       URL.revokeObjectURL = function () {};
       try {
-        if (typeof window.downloadAllAnswersMarkdown !== "function") return Promise.resolve("no-fn");
-        window.downloadAllAnswersMarkdown();
+        if (typeof window.downloadSessionArchive !== "function") return Promise.resolve("no-fn");
+        window.downloadSessionArchive(fmt);
       } finally {
         URL.createObjectURL = realCO;
         URL.revokeObjectURL = realRO;
       }
       if (!captured) return Promise.resolve("no-blob");
       return captured.text();
+    }, format);
+  }
+
+  test("downloadSessionArchive('json') emits structured JSON", async ({ page }) => {
+    await page.goto("/");
+    const text = await captureArchive(page, "json");
+    const obj = JSON.parse(text);
+    expect(obj.session).toBe("TEST-CODE");
+    expect(Array.isArray(obj.rooms)).toBe(true);
+    expect(obj.rooms[0].room).toBe("Room 1");
+    expect(obj.rooms[0].answers.moduleA[0].text).toBe("first");
+  });
+
+  test("downloadSessionArchive('csv') emits a CSV with headers + a row", async ({ page }) => {
+    await page.goto("/");
+    const text = await captureArchive(page, "csv");
+    expect(text).toMatch(/room,stageReached,score,section,author,university,bulletKey,text/);
+    expect(text).toMatch(/Room 1/);
+    expect(text).toMatch(/moduleA/);
+    expect(text).toMatch(/first/);
+  });
+
+  test("CSV archive neutralises spreadsheet formula injection in free-text", async ({ page }) => {
+    await page.goto("/");
+    const text = await page.evaluate(() => {
+      if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
+      if (window._test_setRoomCount)  window._test_setRoomCount(1);
+      if (window._test_setAllRooms)   window._test_setAllRooms({
+        "Room 1": { stage: 3, answers: { moduleA: { x: { by: "A", text: "=1+2" } } } }
+      });
+      const realCO = URL.createObjectURL.bind(URL);
+      const realRO = URL.revokeObjectURL.bind(URL);
+      let captured = null;
+      URL.createObjectURL = function (b) { captured = b; return "blob:test/dummy"; };
+      URL.revokeObjectURL = function () {};
+      try {
+        if (typeof window.downloadSessionArchive !== "function") return Promise.resolve("no-fn");
+        window.downloadSessionArchive("csv");
+      } finally {
+        URL.createObjectURL = realCO;
+        URL.revokeObjectURL = realRO;
+      }
+      return captured ? captured.text() : "no-blob";
     });
-    expect(result).toMatch(/^# CaNaMED Session TEST-CODE/);
-    expect(result).toMatch(/^## Room 1/m);
-    expect(result).toMatch(/^### Module A/m);
-    expect(result).toMatch(/- \*\*A:\*\* first/);
+    // A leading "=" is prefixed with a single quote so Excel/Sheets treat it as
+    // literal text, not a formula.
+    expect(text).toContain("'=1+2");
+    expect(text).not.toMatch(/(^|,)=1\+2/m);
   });
 });
 

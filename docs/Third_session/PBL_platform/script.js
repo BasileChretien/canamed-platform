@@ -427,8 +427,11 @@ function stageLabel(i) {
     if (i === 1) trio = window.CURRENT_SCENARIO_MODULE_A_NAME || null;
     else if (i === 2) trio = window.CURRENT_SCENARIO_MODULE_B_NAME || null;
     if (trio) {
-      const lang = (typeof window.getLang === "function")
-        ? window.getLang() : "en";
+      // English-only UI (2026-06-25): resolve the scenario module name through
+      // _curLang() (pinned "en"), NOT getLang() (the picker) — otherwise a
+      // student who picks FR/JA for the reading aid still sees the Module A/B
+      // titles translated. The picker only drives the hover dictionaries now.
+      const lang = (typeof _curLang === "function") ? _curLang() : "en";
       const v = window.tc(trio, lang);
       if (v) return v;
     }
@@ -4116,28 +4119,29 @@ function enterAdminApp() {
   el("admin-leave-btn").addEventListener("click", () => {
     if (confirm("Leave the admin dashboard? You will return to the lobby.")) location.reload();
   });
-  el("admin-download-btn").addEventListener("click", downloadAllAnswers);
+  // Download archive (CSV / JSON) — replaces the old plain-text "Download all
+  // group answers" button + its Markdown variant (2026-06-25, user request).
+  const archCsvBtn = el("admin-archive-csv-btn");
+  if (archCsvBtn && !archCsvBtn.dataset.wired) {
+    archCsvBtn.dataset.wired = "1";
+    archCsvBtn.addEventListener("click", () => downloadSessionArchive("csv"));
+  }
+  const archJsonBtn = el("admin-archive-json-btn");
+  if (archJsonBtn && !archJsonBtn.dataset.wired) {
+    archJsonBtn.dataset.wired = "1";
+    archJsonBtn.addEventListener("click", () => downloadSessionArchive("json"));
+  }
   initAdminToolsMenu();   // wire the "More tools ▾" dropdown (decluttered toolbar)
-  const mdBtn = el("admin-download-md-btn");
-  if (mdBtn) mdBtn.addEventListener("click", downloadAllAnswersMarkdown);
   const debriefBtn = el("admin-debrief-btn");
   if (debriefBtn && !debriefBtn.dataset.wired) {
     debriefBtn.dataset.wired = "1";
     debriefBtn.addEventListener("click", toggleDebrief);
   }
-  const impactBtn = el("admin-impact-btn");
-  if (impactBtn && !impactBtn.dataset.wired) {
-    impactBtn.dataset.wired = "1";
-    impactBtn.addEventListener("click", generateImpactReport);
-  }
-  // Admin-tools buttons (accreditation evidence, …) — the report code lives in
-  // the lazy admin-tools.js chunk; ensure it's loaded, then invoke. A brief
-  // toast covers the (usually sub-second) load.
-  const accredBtn = el("admin-accred-btn");
-  if (accredBtn && !accredBtn.dataset.wired) {
-    accredBtn.dataset.wired = "1";
-    accredBtn.addEventListener("click", () => runAdminTool("generateAccreditationReport"));
-  }
+  // Admin-tools buttons — the report code lives in the lazy admin-tools.js
+  // chunk; ensure it's loaded, then invoke. A brief toast covers the (usually
+  // sub-second) load. (The lean menu keeps only the most-needed tools — the
+  // Impact / Accreditation / Program / Item-difficulty / Cohort reports were
+  // removed from the UI 2026-06-25; their generators remain in admin-tools.js.)
   const researchBtn = el("admin-research-btn");
   if (researchBtn && !researchBtn.dataset.wired) {
     researchBtn.dataset.wired = "1";
@@ -4162,21 +4166,6 @@ function enterAdminApp() {
   if (revokeBtn && !revokeBtn.dataset.wired) {
     revokeBtn.dataset.wired = "1";
     revokeBtn.addEventListener("click", () => runAdminTool("removeVerificationEntry"));
-  }
-  const programBtn = el("admin-program-btn");
-  if (programBtn && !programBtn.dataset.wired) {
-    programBtn.dataset.wired = "1";
-    programBtn.addEventListener("click", () => runAdminTool("generateProgramDashboard"));
-  }
-  const itemDiffBtn = el("admin-itemdiff-btn");
-  if (itemDiffBtn && !itemDiffBtn.dataset.wired) {
-    itemDiffBtn.dataset.wired = "1";
-    itemDiffBtn.addEventListener("click", () => runAdminTool("generateItemDifficulty"));
-  }
-  const cohortBtn = el("admin-cohort-btn");
-  if (cohortBtn && !cohortBtn.dataset.wired) {
-    cohortBtn.dataset.wired = "1";
-    cohortBtn.addEventListener("click", () => runAdminTool("generateCohortComparison"));
   }
   const closeBtn = el("admin-close-btn");
   if (closeBtn && !closeBtn.dataset.wired) {
@@ -6307,7 +6296,7 @@ function downloadMyData() {
 /* download the full session tree as a single JSON file. The shape mirrors the
    database exactly, so a researcher can re-import it for analysis later.
    R2-23 fix: honours the "Pseudonymise names in export" admin toggle the
-   same way downloadAllAnswers() does — when on, the JSON archive's
+   same way the session-archive download does — when on, the JSON archive's
    session subtree is walked and every real participant name (in pool,
    answers.{}.by, score.manual.{}.by, calls.{}.by, etc.) is replaced
    with the deterministic Student-A / Student-B / ... codes used by
@@ -6903,76 +6892,34 @@ m.unevenRooms + " room(s) flagged as uneven for facilitator follow-up.</p>" +
   if (typeof toast === "function") toast("📊 Impact report generated.");
 }
 
-function downloadAllAnswers() {
-  // these are named opinions on sensitive medical-ethics topics - let the prof
-  // export them pseudonymised (Student A, Student B...) per room when sharing
-  const anon = !!(el("anon-export") && el("anon-export").checked);
-  const lines = [];
-  lines.push("CaNaMED Session " + sessionNum + " - Group Answers");
-  lines.push("Exported: " + new Date().toLocaleString());
-  if (anon) lines.push("(names pseudonymised per room)");
-  lines.push("");
-  roomNames(roomCount).forEach(r => {
-    const data = allRooms[r] || {};
-    const st = typeof data.stage === "number" ? data.stage : 0;
-    const ans = data.answers || {};
-    const aliasMap = {};
-    let aliasN = 0;
-    const labelFor = nm => {
-      if (!anon) return nm;
-      if (!(nm in aliasMap)) {
-        const letter = String.fromCharCode(65 + (aliasN % 26));
-        const suffix = aliasN >= 26 ? String(Math.floor(aliasN / 26) + 1) : "";
-        aliasMap[nm] = "Student " + letter + suffix;
-        aliasN++;
-      }
-      return aliasMap[nm];
-    };
-    lines.push("======================================");
-    lines.push(r + "   (reached: " + STAGE_LABELS[st] + ")");
-    lines.push("======================================");
-    ["moduleA", "moduleB"].forEach(mk => {
-      lines.push(mk === "moduleA"
-        ? "-- Module A: Chronic Pain --" : "-- Module B: Breaking Bad News --");
-      const entries = entriesSorted(ans[mk]);
-      if (entries.length === 0) lines.push("(no points recorded)");
-      else entries.forEach(e => lines.push("- [" + labelFor(e.by) +
-        (e.university ? " / " + e.university : "") + "] " + e.text));
-      lines.push("");
-    });
-  });
-  const blob = new Blob([lines.join("\n")], { type: "text/plain;charset=utf-8" });
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(blob);
-  a.download = "CaNaMED_Session" + sessionNum +
-    (anon ? "_group_answers_pseudonymised.txt" : "_group_answers.txt");
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
+/* Download archive (2026-06-25, user request) — replaces the old plain-text /
+ * Markdown "download all group answers" exports with a single structured
+ * snapshot of the whole session, offered in CSV or JSON. Built inline (no lazy
+ * admin-tools chunk) so it's always available from the dashboard. Honours the
+ * "Pseudonymise names" toggle: when on, contributor names become "Student A,
+ * B, …" per room (same scheme as the old export). Robust to the Module A
+ * answer restructure — it reads whatever answer entries exist, by bulletKey. */
+function _archiveCsvCell(v) {
+  let s = String(v == null ? "" : v);
+  // Neutralise spreadsheet formula injection: a cell beginning with = + - @ (or
+  // a leading tab/CR Excel trims) is run as a formula (e.g. =HYPERLINK / =cmd|).
+  // The archive flattens untrusted free-text answers into cells, so prefix a
+  // single quote to force literal text in Excel / Sheets.
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
-
-/* Markdown variant of downloadAllAnswers — sim 2026-05-19 feature for
- * the `writes_lots` / `methodical` / `checks_evidence` personas who
- * want a revision-friendly export. Same payload + pseudonymisation
- * toggle as the .txt version; structure mirrors the .txt one with
- * markdown headings (room = h2, module = h3) and bulleted answers. */
-function downloadAllAnswersMarkdown() {
-  const anon = !!(el("anon-export") && el("anon-export").checked);
-  const lines = [];
-  lines.push("# CaNaMED Session " + sessionNum + " — Group Answers");
-  lines.push("");
-  lines.push("- **Exported:** " + new Date().toLocaleString());
-  if (anon) lines.push("- _Names pseudonymised per room (Student A, B, …)._");
-  lines.push("");
+function _sessionArchiveData(anon) {
+  const rooms = [];
   roomNames(roomCount).forEach(r => {
     const data = allRooms[r] || {};
     const st = typeof data.stage === "number" ? data.stage : 0;
     const ans = data.answers || {};
+    const hyps = (data.moduleA && data.moduleA.hypotheses) || {};
     const aliasMap = {};
     let aliasN = 0;
     const labelFor = nm => {
-      if (!anon) return nm;
+      if (!anon) return nm || "";
+      if (!nm) return "";
       if (!(nm in aliasMap)) {
         const letter = String.fromCharCode(65 + (aliasN % 26));
         const suffix = aliasN >= 26 ? String(Math.floor(aliasN / 26) + 1) : "";
@@ -6981,26 +6928,61 @@ function downloadAllAnswersMarkdown() {
       }
       return aliasMap[nm];
     };
-    lines.push("## " + r + " — reached " + STAGE_LABELS[st]);
-    lines.push("");
-    ["moduleA", "moduleB"].forEach(mk => {
-      lines.push("### " + (mk === "moduleA"
-        ? "Module A — Chronic Pain"
-        : "Module B — Breaking Bad News"));
-      const entries = entriesSorted(ans[mk]);
-      if (entries.length === 0) lines.push("_(no points recorded)_");
-      else entries.forEach(e => lines.push("- **" + labelFor(e.by) +
-        (e.university ? " / " + e.university : "") + ":** " +
-        // escape markdown-sensitive chars in user-typed content
-        String(e.text || "").replace(/([*_`#|])/g, "\\$1")));
-      lines.push("");
+    const mapEntries = mk => entriesSorted(ans[mk]).map(e => ({
+      by: labelFor(e.by), university: e.university || "",
+      bulletKey: e.bulletKey || "", text: e.text || ""
+    }));
+    const hypList = Object.keys(hyps).map(k => hyps[k]).filter(Boolean)
+      .sort((a, b) => (a.at || 0) - (b.at || 0))
+      .map(h => ({ by: labelFor(h.by), university: h.university || "", text: h.text || "" }));
+    rooms.push({
+      room: r,
+      stageReached: STAGE_LABELS[st] || ("Stage " + (st + 1)),
+      score: (typeof scoreTotal === "function") ? scoreTotal(data) : null,
+      hypotheses: hypList,
+      answers: { moduleA: mapEntries("moduleA"), moduleB: mapEntries("moduleB") }
     });
   });
-  const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  return {
+    session: sessionNum,
+    exportedAt: new Date().toISOString(),
+    pseudonymised: !!anon,
+    rooms: rooms
+  };
+}
+function _sessionArchiveToCSV(archive) {
+  const headers = ["room", "stageReached", "score", "section", "author", "university", "bulletKey", "text"];
+  const rows = [];
+  (archive.rooms || []).forEach(rm => {
+    const base = [rm.room, rm.stageReached, rm.score == null ? "" : rm.score];
+    rm.hypotheses.forEach(h => rows.push(base.concat(["hypothesis", h.by, h.university, "", h.text])));
+    rm.answers.moduleA.forEach(e => rows.push(base.concat(["moduleA", e.by, e.university, e.bulletKey, e.text])));
+    rm.answers.moduleB.forEach(e => rows.push(base.concat(["moduleB", e.by, e.university, e.bulletKey, e.text])));
+    if (!rm.hypotheses.length && !rm.answers.moduleA.length && !rm.answers.moduleB.length) {
+      rows.push(base.concat(["(empty)", "", "", "", ""]));
+    }
+  });
+  const head = headers.join(",");
+  const body = rows.map(row => row.map(_archiveCsvCell).join(",")).join("\r\n");
+  // Leading BOM so Excel reads the UTF-8 correctly.
+  return "﻿" + head + "\r\n" + body + "\r\n";
+}
+function downloadSessionArchive(format) {
+  const anon = !!(el("anon-export") && el("anon-export").checked);
+  const archive = _sessionArchiveData(anon);
+  let text, ext, mime;
+  if (format === "json") {
+    text = JSON.stringify(archive, null, 2);
+    ext = "json"; mime = "application/json";
+  } else {
+    text = _sessionArchiveToCSV(archive);
+    ext = "csv"; mime = "text/csv";
+  }
+  const blob = new Blob([text], { type: mime + ";charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "CaNaMED_Session" + sessionNum +
-    (anon ? "_group_answers_pseudonymised.md" : "_group_answers.md");
+  a.download = "CaNaMED_Session" + sessionNum + "_archive" +
+    (anon ? "_pseudonymised" : "") + "." + ext;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

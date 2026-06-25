@@ -36,9 +36,8 @@ test("generateCohortComparison renders a per-cohort table + exposes itself", () 
   assert.match(TOOLS, /window\.generateCohortComparison = generateCohortComparison/, "must be exposed");
 });
 
-test("the cohort button is wired + localised", () => {
-  assert.match(HTML, /id="admin-cohort-btn"/, "the button must exist");
-  assert.match(SCRIPT, /runAdminTool\("generateCohortComparison"\)/, "the button must be wired");
+test("the cohort comparison generator is localised (button removed from the lean menu 2026-06-25)", () => {
+  assert.doesNotMatch(HTML, /id="admin-cohort-btn"/, "the cohort button is gone from the lean menu");
   const n = (I18N.match(/"impact\.cohort":/g) || []).length;
   assert.ok(n >= 3, "impact.cohort must be defined in en, fr and ja (got " + n + ")");
 });

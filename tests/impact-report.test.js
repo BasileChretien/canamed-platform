@@ -20,11 +20,12 @@ const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
 
-test("the admin dashboard exposes an Impact report button, wired to the generator", () => {
-  assert.match(HTML, /id="admin-impact-btn"/, "the impact-report button must exist");
-  assert.match(SCRIPT, /el\("admin-impact-btn"\)/, "the button must be looked up");
-  assert.match(SCRIPT, /addEventListener\("click", generateImpactReport\)/,
-    "the button must be wired to generateImpactReport");
+test("the Impact report generator is defined (kept in code; removed from the lean menu 2026-06-25)", () => {
+  // The "More tools" menu was slimmed to a lean set 2026-06-25 — the Impact
+  // report button was removed from the UI, but the generator stays in script.js
+  // (still tested below) so it can be re-surfaced if needed.
+  assert.match(SCRIPT, /function generateImpactReport\(\)/, "generateImpactReport must still exist");
+  assert.doesNotMatch(HTML, /id="admin-impact-btn"/, "the impact-report button must be gone from the lean menu");
 });
 
 test("_impactMetrics aggregates participation, equity, decisions and engagement", () => {
@@ -42,8 +43,9 @@ test("_impactMetrics aggregates participation, equity, decisions and engagement"
 
 test("generateImpactReport builds a self-contained, escaped, printable report", () => {
   assert.match(SCRIPT, /function generateImpactReport\(\)/, "generateImpactReport must exist");
+  assert.match(SCRIPT, /function _archiveCsvCell\b/, "slice end-anchor _archiveCsvCell must exist");
   const fn = SCRIPT.slice(SCRIPT.indexOf("function generateImpactReport"),
-    SCRIPT.indexOf("function downloadAllAnswers"));
+    SCRIPT.indexOf("function _archiveCsvCell"));
   assert.match(fn, /Session Impact Report/, "must render a titled report");
   assert.match(fn, /window\.print\(\)/, "must offer Print / Save as PDF");
   assert.match(fn, /_impactEsc/, "interpolated values must be HTML-escaped");

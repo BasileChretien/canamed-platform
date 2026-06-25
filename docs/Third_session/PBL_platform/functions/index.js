@@ -170,7 +170,7 @@ const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@2.2";   // bumped to force redeploy: server-authoritative system guard (FINDING-01), HF_URL allowlist, lang allowlist
+const PROMPT_VERSION = "modA-llm@2.3";   // bumped to force redeploy: chattier patient (2–4 sentences, max_tokens 320, temp 0.55, natural elaboration without volunteering clinical facts) — prev 2.2: server-authoritative system guard (FINDING-01), HF_URL allowlist, lang allowlist
 
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
@@ -399,8 +399,8 @@ exports.hfPatient = onCall({
   const reqBody = JSON.stringify({
     model: _hfModel(lang),
     messages,
-    max_tokens: 220,
-    temperature: 0.3,
+    max_tokens: 320,
+    temperature: 0.55,
     top_p: 0.9,
     presence_penalty: 0.3,
     stop: ["\nDoctor:", "\n- ", "[INST]", "</s>"],

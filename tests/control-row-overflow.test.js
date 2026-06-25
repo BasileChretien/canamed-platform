@@ -66,7 +66,7 @@ test("Call a facilitator stays in the row; Teams/leave move to an overflow", () 
 
 test("the admin stage-controls is untouched (no participant scoping / overflow)", () => {
   // isolate the admin row: the stage-controls that contains the admin buttons
-  const adminRow = INDEX.match(/<div class="stage-controls">[\s\S]*?admin-download-btn[\s\S]*?<\/div>/);
+  const adminRow = INDEX.match(/<div class="stage-controls">[\s\S]*?admin-archive-csv-btn[\s\S]*?<\/div>/);
   assert.ok(adminRow, "admin stage-controls not found");
   assert.ok(!adminRow[0].includes("stage-controls--participant"), "admin row must not be scoped as participant");
   assert.ok(!adminRow[0].includes("stage-overflow"), "admin row must not gain an overflow");

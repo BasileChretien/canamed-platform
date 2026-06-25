@@ -75,6 +75,54 @@ test.describe("Word help — in-page reading aid", () => {
     expect(hit.text).not.toBe(hit.en); // really the French, not the English fallback
   });
 
+  test("Word help works in the admin dashboard (dictionaries usable over the leaderboard)", async ({ page }) => {
+    // User 2026-06-25: the hover dictionaries must be usable in the admin
+    // leaderboard. The reader is document-wide + default-on and the toggle lives
+    // in the global-settings cog (reachable in the admin view) — this pins that
+    // it glosses text rendered inside #admin-app.
+    await page.goto("/");
+    await page.evaluate(async () => {
+      if (window.CanamedLoader) {
+        if (window.CanamedLoader.ensureGlossary) await window.CanamedLoader.ensureGlossary();
+        if (window.CanamedLoader.ensureLangReader) await window.CanamedLoader.ensureLangReader();
+      }
+      ["splash", "lobby", "waiting", "app", "session-ended"].forEach(id => {
+        const e = document.getElementById(id); if (e) e.classList.add("hidden");
+      });
+      document.body.classList.remove("locked");
+      const admin = document.getElementById("admin-app");
+      if (admin) {
+        admin.classList.remove("hidden");
+        const p = document.createElement("p");
+        p.id = "admin-reader-fixture";
+        p.textContent = "Consider an opioid taper now.";
+        p.style.cssText =
+          "position:fixed;top:120px;left:20px;margin:0;font-size:28px;" +
+          "z-index:9999;background:#fff;color:#000";
+        admin.appendChild(p);
+      }
+    });
+    await page.evaluate((l) => window.setLang(l), "fr");
+    await enable(page, true);
+    // The reader toggle (global-settings cog) is present/reachable in admin too.
+    await expect(page.locator("#reader-toggle")).toHaveCount(1);
+    const { x, y } = await page.evaluate(({ sentence, word }) => {
+      const p = document.getElementById("admin-reader-fixture");
+      const txt = p.firstChild;
+      const i = sentence.indexOf(word);
+      const r = document.createRange();
+      r.setStart(txt, i); r.setEnd(txt, i + word.length);
+      const b = r.getBoundingClientRect();
+      return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+    }, { sentence: SENTENCE, word: WORD });
+    const hit = await page.evaluate(({ x, y }) => {
+      const res = window.CanamedReader.lookupAt(x, y);
+      return res ? res.hit.text : null;
+    }, { x, y });
+    expect(hit, "gloss found over admin-view text").not.toBeNull();
+    expect(hit).toContain(FR_NEEDLE);
+  });
+
   test("hover (desktop) / tap (touch) opens the popover with the gloss", async ({ page }, testInfo) => {
     const isTouch = !!(testInfo.project.use && testInfo.project.use.hasTouch);
     await setup(page, "fr");
