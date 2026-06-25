@@ -1557,9 +1557,111 @@ html[data-theme="dark"] .next-step-coach {
 /* Browser-native <details> collapse hides non-summary children, but the
    .btn-group's explicit display:flex (defined above) wins specificity
    against the implicit shadow-slot. Force-hide non-summary children
-   when the section is collapsed. */
-.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
+   when the section is collapsed. Scoped to `details.chart-section` so it
+   does NOT match the workup tab PANELS (<section class="chart-section
+   chart-tab-panel">), which carry no `open` attr and would otherwise have
+   their contents — incl. the mounted chat — hidden by this :not([open]). */
+details.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   display: none !important;
+}
+
+/* --- Patient-workup tab strip (Dialogue / Examination / Investigations) ---
+   2026-06-25: the three data-gathering sections moved from stacked <details>
+   into a horizontal tab strip (one visible at a time). Visual language clones
+   the right column's .rcol-tabs (active = filled --primary pill) so students
+   meet one tab idiom, not two. Panels keep the .chart-section base styling +
+   their original ids; .chart-tab-panel[hidden] does the show/hide. */
+.chart-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 12px;
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-sm);
+}
+.chart-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1 1 auto;
+  justify-content: center;
+  padding: 9px 12px;
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.86rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              border-color var(--dur-base, .18s) var(--ease-out, ease),
+              color var(--dur-base, .18s) var(--ease-out, ease);
+}
+.chart-tab:hover { background: var(--surface-sunk, #f3f0e8); }
+.chart-tab.is-active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: var(--sh-sm);
+}
+.chart-tab-icon { display: inline-flex; line-height: 1; }
+.chart-tab-icon .ico { width: 17px; height: 17px; }
+.chart-tab-label { white-space: nowrap; }
+.chart-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5em;
+  height: 1.5em;
+  padding: 0 6px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--primary);
+  background: var(--surface-sunk, #f3f0e8);
+  border-radius: var(--r-pill);
+  line-height: 1;
+}
+.chart-tab.is-active .chart-tab-badge { color: var(--primary); background: #fff; }
+.chart-tab-badge[hidden] { display: none; }
+/* a calm "Mr Lefebvre answered" dot when a reply lands while a different tab
+   is open (set by modA-llm-init.js; cleared by switchChartTab on return). */
+.chart-tab.has-attention::after {
+  content: "";
+  position: absolute;
+  top: 4px; right: 6px;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #e0a86b;
+  box-shadow: 0 0 0 2px var(--card);
+  animation: rcol-pulse 1.4s var(--ease-out, ease) 4;
+}
+.chart-tab.is-active.has-attention::after { display: none; }
+.chart-tab-panel[hidden] { display: none !important; }
+.chart-tab-panel.is-active {
+  animation: rcol-fadein var(--dur-base, .18s) var(--ease-out, ease);
+}
+@media (prefers-reduced-motion: reduce) {
+  .chart-tab.has-attention::after { animation: none; }
+  .chart-tab-panel.is-active { animation: none; }
+}
+/* Narrow screens: stack icon over a wrapping label so all three tabs still
+   fit one row on a 375px phone (matches the .rcol-tab mobile treatment). */
+@media (max-width: 720px) {
+  .chart-tab {
+    flex-direction: column;
+    gap: 3px;
+    padding: 8px 6px;
+    font-size: 0.72rem;
+    line-height: 1.15;
+    text-align: center;
+  }
+  .chart-tab-label { white-space: normal; }
 }
 
 /* --- Module A per-bullet progress checklist --- */

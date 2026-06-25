@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v63" below to the matching new string.
+         2. Update every "?v=v64" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v63"></script>
-  <link rel="stylesheet" href="style.css?v=v63" />
+  <script src="theme-init.js?v=v64"></script>
+  <link rel="stylesheet" href="style.css?v=v64" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v63" defer></script>
+  <script src="sw-register.js?v=v64" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -1536,69 +1536,92 @@
                 </p>
               </header>
 
-              <!-- ── History (was "Ask the patient") ──
-                   <details>-wrapped per Sim 2026-05-18 finding: the
-                   stacked chart had ~30 buttons visible at once, 4.6×
-                   viewport tall, overwhelming students with low-English
-                   or anxious traits. Each chart-section is now
-                   collapsible (default-open). Collapsing a section a
-                   student is done with shortens the scroll without
-                   removing any gameplay options. -->
-              <details class="chart-section" open id="chart-section-history">
-                <summary class="chart-section-h">
-                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                    stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path
-                    d="M4 5h16v11H9l-4 4v-4H4z" /><circle cx="9" cy="10.5" r="1"
-                    fill="#1763a6" stroke="none" /><circle cx="12" cy="10.5" r="1"
-                    fill="#1763a6" stroke="none" /><circle cx="15" cy="10.5" r="1"
-                    fill="#1763a6" stroke="none" /></svg>
-                  <span data-i18n="modA.chart.history.title">History &mdash; ask the patient</span>
-                </summary>
+              <!-- ── Patient workup — three data-gathering modes as TABS
+                   (2026-06-25) ──
+                   Dialogue (chat with the patient), Examination and
+                   Investigations were three stacked <details>; a student had
+                   to scroll past a long chat transcript to reach exam/labs. A
+                   horizontal tab strip presents them as the three peers they
+                   are and shows ONE at a time — far less scroll, clearer
+                   "talk / examine / order tests" mental model. Working
+                   hypotheses stays a <details> BELOW the strip: it's a
+                   sequential commit step, not a data-gathering mode. Mirrors
+                   the right column's .rcol-tabs pattern (role=tablist/tab/
+                   tabpanel + arrow-key roving focus, wired by initChartTabs()
+                   in script.js). The panel ids (chart-section-history /
+                   chart-section-exam / chart-investigations) and group ids
+                   (group-history / group-exam / group-labs) are UNCHANGED so
+                   buildButtons(), the LLM chat mount (modA-llm-init.js hosts
+                   #modA-chat-panel into #chart-section-history), tour.js and
+                   the is-locked toggle all keep working. Tab SVG icons use
+                   currentColor so they invert to white on the active tab's
+                   --primary fill. -->
+              <div class="chart-tabs" role="tablist"
+                   data-i18n-attr="aria-label" data-i18n="modA.chart.tabs.aria"
+                   aria-label="Patient workup">
+                <button class="chart-tab is-active" type="button" data-chart-tab="dialogue"
+                        id="chart-tab-dialogue" role="tab" aria-selected="true"
+                        aria-controls="chart-section-history">
+                  <span class="chart-tab-icon" aria-hidden="true"><svg class="ico"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linejoin="round"><path d="M4 5h16v11H9l-4 4v-4H4z" /><circle
+                    cx="9" cy="10.5" r="1" fill="currentColor" stroke="none" /><circle
+                    cx="12" cy="10.5" r="1" fill="currentColor" stroke="none" /><circle
+                    cx="15" cy="10.5" r="1" fill="currentColor" stroke="none" /></svg></span>
+                  <span class="chart-tab-label" data-i18n="modA.chart.tabs.dialogue">Dialogue</span>
+                  <span class="chart-tab-badge" id="chart-tab-badge-dialogue" hidden aria-hidden="true"></span>
+                </button>
+                <button class="chart-tab" type="button" data-chart-tab="exam"
+                        id="chart-tab-exam-btn" role="tab" aria-selected="false" tabindex="-1"
+                        aria-controls="chart-section-exam">
+                  <span class="chart-tab-icon" aria-hidden="true"><svg class="ico"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round"><path d="M6 3v6a5 5 0 0 0 10 0V3" /><circle
+                    cx="18" cy="15" r="3" /><path d="M11 14v2a4 4 0 0 0 4 4" /></svg></span>
+                  <span class="chart-tab-label" data-i18n="modA.chart.exam.title">Examination</span>
+                </button>
+                <button class="chart-tab" type="button" data-chart-tab="labs"
+                        id="chart-tab-labs-btn" role="tab" aria-selected="false" tabindex="-1"
+                        aria-controls="chart-investigations">
+                  <span class="chart-tab-icon" aria-hidden="true"><svg class="ico"
+                    viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6l-5
+                    9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3" /><path d="M7.5 14h9" /></svg></span>
+                  <span class="chart-tab-label" data-i18n="modA.chart.investigations.title">Investigations</span>
+                </button>
+              </div>
+
+              <!-- Dialogue panel — the LLM chat mounts here (modA-llm-init.js
+                   hosts #modA-chat-panel into #chart-section-history). In the
+                   legacy ?llm=0 mode this shows the click-based History
+                   buttons (#group-history) instead. Active tab on entry. -->
+              <section class="chart-section chart-tab-panel is-active" id="chart-section-history"
+                       role="tabpanel" data-chart-panel="dialogue"
+                       aria-labelledby="chart-tab-dialogue">
                 <div class="btn-group" id="group-history"></div>
-              </details>
+              </section>
 
-              <!-- ── Examination (was "Examine") ──
-                   Collapsed by default (sim 2026-05-20 recurring finding +
-                   UX-pedagogist review): Module A opened with ~30 buttons /
-                   ~5x viewport. Progressive disclosure — History stays open
-                   as the first step; Examination, Working hypotheses and
-                   Investigations open on demand as the team works down the
-                   chart. renderButtons still populates the (hidden) groups,
-                   so no gameplay option is removed. -->
-              <details class="chart-section" id="chart-section-exam">
-                <summary class="chart-section-h">
-                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                    stroke-width="2" stroke-linecap="round" aria-hidden="true"><path
-                    d="M6 3v6a5 5 0 0 0 10 0V3" /><circle cx="18" cy="15" r="3" /><path
-                    d="M11 14v2a4 4 0 0 0 4 4" /></svg>
-                  <span data-i18n="modA.chart.exam.title">Examination</span>
-                </summary>
+              <!-- Examination panel -->
+              <section class="chart-section chart-tab-panel" id="chart-section-exam" hidden
+                       role="tabpanel" data-chart-panel="exam"
+                       aria-labelledby="chart-tab-exam-btn">
                 <div class="btn-group" id="group-exam"></div>
-              </details>
+              </section>
 
-              <!-- ── Investigations (split out + freed 2026-06-02) ──
-                   Was the combined "Investigations & synthesis" block. The
-                   imaging/bloods (labs:1+) are FREELY clickable, like the
-                   Examination — ordering one that isn't indicated still costs
-                   points (pen_* scoring), but nothing is hard-blocked and no
-                   lock/"red flags first" nag is shown. The clinical SYNTHESIS
-                   (labs:0) now lives in its OWN section below, gated on ≥2
-                   working hypotheses. buildButtons() routes labs:0 → the
-                   synthesis section and labs:1+ → #group-labs here. -->
-              <details class="chart-section chart-investigations" id="chart-investigations">
-                <summary class="chart-section-h">
-                  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
-                    aria-hidden="true"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0
-                    2-3l-5-9V3" /><path d="M7.5 14h9" /></svg>
-                  <span data-i18n="modA.chart.investigations.title">Investigations</span>
-                </summary>
+              <!-- Investigations panel — freely clickable, never hard-locked.
+                   The imaging/bloods (labs:1+) cost points if not indicated
+                   (pen_* scoring) but nothing is blocked. The clinical
+                   SYNTHESIS (labs:0) is not rendered as a button (its write-up
+                   ships in the stage-4 take-home). -->
+              <section class="chart-section chart-tab-panel chart-investigations" id="chart-investigations" hidden
+                       role="tabpanel" data-chart-panel="labs"
+                       aria-labelledby="chart-tab-labs-btn">
                 <p class="chart-section-hint"
                    data-i18n="modA.chart.investigations.hint">
                   Order any investigation you think is indicated — these are yours to choose, like the examination. Ordering one that isn't indicated still costs points.
                 </p>
                 <div class="btn-group" id="group-labs"></div>
-              </details>
+              </section>
 
               <!-- ── Working hypotheses (PBL differential step) ──
                    Moved BELOW Investigations 2026-06-02: the team works the case
@@ -3006,46 +3029,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v63" defer></script>
+  <script src="firebase-config.js?v=v64" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v63" defer></script>
+  <script src="orgs.js?v=v64" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v63" defer></script>
+  <script src="platform-config.js?v=v64" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v63" defer></script>
+  <script src="telemetry.js?v=v64" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v63" defer></script>
+  <script src="purify.min.js?v=v64" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v63" defer></script>
+  <script src="i18n.js?v=v64" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v63" defer></script>
+  <script src="localdb.js?v=v64" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v63" defer></script>
+  <script src="lib.js?v=v64" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v63" defer></script>
+  <script src="pure-utils.js?v=v64" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3056,7 +3079,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v63" defer></script>
+  <script src="script-loader.js?v=v64" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3066,7 +3089,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v63" defer></script>
+  <script src="script.js?v=v64" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the

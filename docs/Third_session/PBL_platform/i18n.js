@@ -711,6 +711,8 @@
       "modA.glossary.marker-label": "has a plain-language definition",
       "modA.chart.exam.title": "Examination",
       "modA.chart.investigations.title": "Investigations",
+      "modA.chart.tabs.aria": "Patient workup",
+      "modA.chart.tabs.dialogue": "Dialogue",
       "modA.chart.investigations.hint": "Order any investigation you think is indicated — these are yours to choose, like the examination. Ordering one that isn't indicated still costs points.",
       "modA.coach.add-hypothesis": "You've gathered some info — now agree on at least one working hypothesis above (what do you suspect?) before you commit to investigations and a plan.",
       "modA.coach.read-case": "Read the case, then ask Mr Lefebvre, examine and investigate to work it up.",
