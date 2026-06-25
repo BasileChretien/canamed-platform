@@ -63,24 +63,25 @@ test("the bar is BODY-LEVEL (after </footer>, outside the transformed #app)", ()
   assert.ok(navAt > appClose, "the bar must live outside <main id=\"app\">");
 });
 
-test("the bar mirrors the 3 Module A tabs and REUSES the existing i18n keys", () => {
+test("the bar mirrors the 2 Module A tabs and REUSES the existing i18n keys", () => {
+  // Debate + answers MERGED into one tab (2026-06-25): decisions / answers.
   const nav = INDEX.match(/<nav\b[^>]*id="mobile-rcol-tabbar"[\s\S]*?<\/nav>/)[0];
   const mtabs = [...nav.matchAll(/<button\b[^>]*class="mtab\b[^"]*"[\s\S]*?data-tab="([^"]+)"/g)]
     .map((m) => m[1]);
   assert.deepEqual(
     mtabs.sort(),
-    ["answers", "decisions", "discussion"],
-    "the bar must mirror decisions / discussion / answers"
+    ["answers", "decisions"],
+    "the bar must mirror decisions / answers"
   );
   // No NEW copy: each label reuses the canonical rcol.tab.* key.
-  for (const key of ["rcol.tab.decisions", "rcol.tab.discussion", "rcol.tab.answers"]) {
+  for (const key of ["rcol.tab.decisions", "rcol.tab.answers"]) {
     assert.ok(
       nav.includes('data-i18n="' + key + '"'),
       "the bar must reuse the existing i18n key " + key + " (no new copy)"
     );
   }
   // a mirrored badge per tab
-  for (const tab of ["decisions", "discussion", "answers"]) {
+  for (const tab of ["decisions", "answers"]) {
     assert.ok(nav.includes('id="mtab-badge-' + tab + '"'), "missing badge mirror for " + tab);
   }
 });

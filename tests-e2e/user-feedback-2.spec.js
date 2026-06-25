@@ -707,67 +707,39 @@ test.describe("Wrong decisions are visibly RED, not green/amber", () => {
  * If the static contract holds and the visual works in production
  * (hand-verified), a future refactor that drops the contract will
  * break these tests immediately. */
-test.describe("Progressive discussion prompts — structural contract", () => {
-  test("DOM: progressive panel + done card + reply textarea + next/prev buttons exist",
+test.describe("Merged Debate & answers — structural contract", () => {
+  test("DOM: the merged panel holds the two questions; the progressive prompt UI is gone",
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
-      const result = await page.evaluate(() => {
-        return {
-          hasProgressive: !!document.getElementById("prompt-progressive"),
-          hasDone: !!document.getElementById("prompt-done"),
-          hasText: !!document.getElementById("prompt-text"),
-          hasReply: !!document.getElementById("prompt-reply"),
-          hasNext: !!document.getElementById("prompt-next"),
-          hasPrev: !!document.getElementById("prompt-prev"),
-          hasSkip: !!document.getElementById("prompt-skip"),
-          hasDoneCta: !!document.getElementById("prompt-done-cta"),
-          hasProgressCurrent: !!document.getElementById("prompt-progress-current"),
-          hasProgressTotal: !!document.getElementById("prompt-progress-total"),
-          legacyHasHidden: (function () {
-            const el = document.getElementById("prompts-list");
-            return el ? el.classList.contains("hidden") : null;
-          })()
-        };
-      });
-      expect(result.hasProgressive, "#prompt-progressive must exist in the DOM").toBe(true);
-      expect(result.hasDone, "#prompt-done must exist in the DOM").toBe(true);
-      expect(result.hasText, "#prompt-text must exist").toBe(true);
-      expect(result.hasReply, "#prompt-reply textarea must exist").toBe(true);
-      expect(result.hasNext, "#prompt-next button must exist").toBe(true);
-      expect(result.hasPrev, "#prompt-prev button must exist").toBe(true);
-      // The "Discussed verbally — skip ahead →" button was removed 2026-06-02
-      // (user request); only Prev / Save-and-next remain.
-      expect(result.hasSkip, "#prompt-skip button must be removed").toBe(false);
-      expect(result.hasDoneCta, "#prompt-done-cta jump button removed 2026-06-16 (PI request)").toBe(false);
-      expect(result.hasProgressCurrent, "progress 'N' chip must exist").toBe(true);
-      expect(result.hasProgressTotal, "progress 'TOTAL' chip must exist").toBe(true);
-      expect(result.legacyHasHidden,
-        "the legacy <ol id='prompts-list'> must start with class='hidden' " +
-        "(it's only kept for back-compat with code that still looks it up)")
-        .toBe(true);
+      const result = await page.evaluate(() => ({
+        hasProgressive: !!document.getElementById("prompt-progressive"),
+        hasDiscussionPanel: !!document.getElementById("rcol-p-discussion"),
+        hasAnswersPanel: !!document.getElementById("rcol-p-answers"),
+        hasDiagnosis: !!document.getElementById("answer-input-moduleA-diagnosis"),
+        hasCulture: !!document.getElementById("answer-input-moduleA-culture")
+      }));
+      // Debate + answers MERGED (2026-06-25): the standalone Debate panel + its
+      // progressive single-prompt UI were removed; the two questions live in the
+      // merged "Debate & answers" panel.
+      expect(result.hasProgressive, "the progressive prompt UI must be gone").toBe(false);
+      expect(result.hasDiscussionPanel, "the standalone Debate panel must be gone").toBe(false);
+      expect(result.hasAnswersPanel, "the merged Debate & answers panel must exist").toBe(true);
+      expect(result.hasDiagnosis, "Q1 (diagnosis & plan) input must exist").toBe(true);
+      expect(result.hasCulture, "Q2 (pain across cultures) input must exist").toBe(true);
     });
 
-  test("JS source: renderPrompts contains the progressive-state branches",
+  test("JS source: renderPrompts is a guarded no-op; ANSWER_BULLETS has the two questions",
     async ({ page }) => {
-      await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
       const src = await page.evaluate(async () => {
         const r = await fetch("/script.js");
         return r.text();
       });
-      // renderPrompts must reference the new IDs + the cursor/replies.
-      expect(src).toMatch(/getElementById\("prompt-progressive"\)|el\("prompt-progressive"\)/);
-      expect(src).toMatch(/getElementById\("prompt-done"\)|el\("prompt-done"\)/);
-      expect(src).toMatch(/promptCursor/);
-      expect(src).toMatch(/promptReplies/);
-      // Cross-room sync via Firebase refs.
-      expect(src).toMatch(/refPromptCursor\s*=/);
-      expect(src).toMatch(/refPromptReplies\s*=/);
-      // Advance handler exists.
-      expect(src).toMatch(/_advancePromptCursor/);
-      // The reply autosave path exists.
-      expect(src).toMatch(/_onPromptReplyInput|_flushPromptReply/);
+      // renderPrompts early-returns when the removed prompts card is absent.
+      expect(src).toMatch(/function renderPrompts\(\)\s*\{[\s\S]*?if \(!el\("prompts-card"\)\) return;/);
+      // Module A's two merged answer bullets.
+      expect(src).toMatch(/moduleA:\s*\["diagnosis",\s*"culture"\]/);
     });
 
   test("DB rules: new promptCursor + promptReplies schemas present",

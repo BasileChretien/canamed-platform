@@ -575,7 +575,7 @@
       "modA.discussion.compare-rule": "🗣️ <strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice must speak before you move on. The point is to compare and debate, not to agree quickly.",
 
       // Module A — structured Group-answers form
-      "modA.answers.title": "Group answers — Module A",
+      "modA.answers.title": "Debate & answers — Module A",
       "modA.answers.bullet.plan.label": "1. Your group's first-line plan for the patient",
       "modA.answers.bullet.plan.placeholder": "e.g. NSAID + active rehab; reassess in 4 weeks",
       "modA.answers.bullet.differ.label": "2. One way France and Japan genuinely <strong>differ</strong> on this case",
@@ -586,7 +586,7 @@
       "modA.answers.bullet.takehome.placeholder": "one sentence per person",
       "modA.answers.bullet.unsorted.label": "Other points (not yet attached to a bullet)",
       // Completion CTA — appears once all four Module A bullets have an entry.
-      "modA.answers.complete.msg": "✓ All four answers are in. Ready for the roleplay?",
+      "modA.answers.complete.msg": "✓ Both answers are in. Ready for the roleplay?",
       "modA.answers.complete.cta": "Call a facilitator to move to Module B →",
       // facilitator-facing message sent on the help-call (shown on the dashboard)
       "modA.answers.complete.callMsg": "Module A done — ready to move on to Module B.",
@@ -708,10 +708,10 @@
       "modA.coach.add-hypothesis": "You've gathered some info — now agree on at least one working hypothesis above (what do you suspect?) before you commit to investigations and a plan.",
       "modA.coach.read-case": "Read the case, then ask Mr Lefebvre, examine and investigate to work it up.",
       "modA.coach.gather": "Work the case up — ask, examine, investigate. When you're ready, write a working hypothesis to unlock the discussion.",
-      "modA.coach.open-discussion": "✓ Hypotheses in — the Debate is open. Debate the prompts (both a Caen and a Nagoya voice on each compare prompt).",
+      "modA.coach.open-discussion": "✓ Hypotheses in — open Debate & answers and tackle the two questions together: your diagnosis & plan, and pain across cultures.",
       "modA.coach.in-discussion": "Debate the prompts with your group — when you're ready, open Group answers to capture your 4 bullets.",
-      "modA.coach.bullets-partial": "Capturing bullets — {n} still to add to cover all 4.",
-      "modA.coach.bullets-complete": "✓ All 4 bullets covered. Add more refinements or wait for your facilitator.",
+      "modA.coach.bullets-partial": "Capturing answers — {n} still to add to cover both questions.",
+      "modA.coach.bullets-complete": "✓ Both questions answered. Add more refinements or wait for your facilitator.",
       "modA.coach.btn.open-discussion": "Open Debate →",
       "modA.coach.btn.open-answers": "Open Group answers →",
       "modA.coach.synthesis-unlocked": "✓ <strong>Hypotheses in — Phase 3 (Debate) is open.</strong> The discussion prompts are below; both a Caen and a Nagoya voice must speak on each comparison prompt.",
@@ -935,7 +935,7 @@
       "rcol.tab.findings": "What we're finding",
       "rcol.tab.decisions": "Decide together",
       "rcol.tab.discussion": "Debate",
-      "rcol.tab.answers": "Our final answers",
+      "rcol.tab.answers": "Debate & answers",
       "rcol.tab.reference": "Reference",
       // Lock-state suffix shown on tabs that aren't yet unlocked. The
       // unlock condition is named so students know exactly what to do
