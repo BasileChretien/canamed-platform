@@ -70,7 +70,7 @@ test.describe("2026-06-02 Module A/B fixes", () => {
     expect(result.okGreen, "a legitimate examination reveal must stay green (done, not wrong)").toBe(true);
   });
 
-  test("#5 Module A 'go to Module B' CTA appears when all four bullets are filled", async ({ page }) => {
+  test("#5 Module A 'go to Module B' CTA appears when both merged questions are answered", async ({ page }) => {
     await showStage(page, "stage-1");
     const before = await page.evaluate(() => {
       const box = document.getElementById("modA-answers-complete");
@@ -79,16 +79,21 @@ test.describe("2026-06-02 Module A/B fixes", () => {
     expect(before, "CTA must start hidden").toBe(true);
 
     const after = await page.evaluate(() => {
+      // The merged Debate & answers form is only reachable past the
+      // ≥1-hypothesis gate, so open it before answering (realistic state).
+      if (window._test_setHypotheses) {
+        window._test_setHypotheses({ h: { text: "mechanical LBP", by: "T", at: 1 } });
+      }
+      // Debate + answers MERGED into two questions (2026-06-25): diagnosis & plan,
+      // and pain across cultures. Both covered → the "go to Module B" CTA shows.
       window._test_setAnswers({ moduleA: {
-        a: { id: "a", bulletKey: "plan", text: "x", by: "T" },
-        b: { id: "b", bulletKey: "differ", text: "x", by: "T" },
-        c: { id: "c", bulletKey: "disagree", text: "x", by: "T" },
-        d: { id: "d", bulletKey: "takehome", text: "x", by: "T" }
+        a: { id: "a", bulletKey: "diagnosis", text: "x", by: "T" },
+        b: { id: "b", bulletKey: "culture", text: "x", by: "T" }
       } });
       window.updateModANextStep();
       return document.getElementById("modA-answers-complete").classList.contains("hidden");
     });
-    expect(after, "CTA must show once all four bullets are covered").toBe(false);
+    expect(after, "CTA must show once both questions are answered").toBe(false);
     // The button is wired inside the (now-revealed) completion box. Its on-screen
     // visibility depends on the answers tab being active — that tab machinery is
     // covered elsewhere; here we assert the button is present and the box opened.

@@ -3266,13 +3266,13 @@ function revealModARightCol() {
 
   const reveal = {
     decisions: histDone && examDone,
-    discussion: gateOpen,
-    answers: gateOpen &&
-      (promptsWereDone || hasPromptReply || modAAnswers.length > 0 || moduleASettled)
+    // Debate + answers MERGED (2026-06-25): the single "answers" tab carries the
+    // two questions and reveals as soon as the ≥1-hypothesis gate opens.
+    answers: gateOpen
   };
 
   let anyVisible = false;
-  ["decisions", "discussion", "answers"].forEach(tab => {
+  ["decisions", "answers"].forEach(tab => {
     const btn = cols.querySelector('.rcol-tab[data-tab="' + tab + '"]');
     if (!btn) return;
     const show = reveal[tab] || btn.dataset.revealed === "1";
@@ -3361,7 +3361,7 @@ function updateMobileTabbar() {
   const bar = document.getElementById("mobile-rcol-tabbar");
   if (!bar) return;
   let anyRevealed = false;
-  ["decisions", "discussion", "answers"].forEach(tab => {
+  ["decisions", "answers"].forEach(tab => {
     const src = document.querySelector('.rcol-tab[data-tab="' + tab + '"]');
     const dst = bar.querySelector('.mtab[data-tab="' + tab + '"]');
     if (!src || !dst) return;
@@ -8486,9 +8486,12 @@ function updateDiscussionTabLock(unlocked) {
 let promptsWereUnlocked = false;
 let promptsWereDone = false;   // fire-once guard for auto-opening Group answers
 function renderPrompts() {
-  // The Debate (discussion prompts) now unlock on ≥1 working hypothesis
-  // (2026-06-02 phase gate), together with the Synthesis section — not on the
-  // synthesis being revealed.
+  // Debate/discussion-prompt panel was MERGED into the two-question answers
+  // panel (2026-06-25): the prompt UI no longer exists in the DOM, so this is a
+  // safe no-op now (the RTDB prompt wiring stays dormant). Guard so dormant
+  // callers — the langchange re-render, the hypotheses listener, the cursor
+  // sync — don't crash on the removed #prompts-card / #compare-card elements.
+  if (!el("prompts-card")) return;
   const unlocked = (typeof phaseGateOpen === "function") && phaseGateOpen();
   el("prompts-locked").classList.toggle("hidden", unlocked);
   // Hide the legacy <ol> permanently (kept in HTML for back-compat).
@@ -9874,24 +9877,24 @@ function updateModANextStep() {
 
   // Read observable state.
   const revealedCount = ITEM_IDS.filter(id => revealed[id]).length;
-  const onDiscussion = activeRcolTab === "discussion";
-  const onAnswers = activeRcolTab === "answers";
   const modAAnswerEntries = Object.keys(answers.moduleA || {})
     .map(k => answers.moduleA[k]).filter(Boolean);
   const bulletsCovered = new Set(
     modAAnswerEntries.map(e => e.bulletKey).filter(Boolean)
   );
-  const allBulletsCovered = ["plan", "differ", "disagree", "takehome"]
+  // Debate + answers MERGED (2026-06-25): two questions — diagnosis & plan,
+  // and pain across cultures. "Done" = both have at least one entry.
+  const allBulletsCovered = ["diagnosis", "culture"]
     .every(k => bulletsCovered.has(k));
 
-  // When all four bullets are captured, reveal the "call a facilitator to move
-  // to Module B" button in the Group-answers card (user request 2026-06-02).
+  // When both questions are answered, reveal the "call a facilitator to move to
+  // Module B" button in the Debate & answers card (user request 2026-06-02).
   _updateAnswersCompleteCta("modA-answers-complete", "modA-call-next-btn",
     allBulletsCovered, "modA.answers.complete.callMsg",
     "Module A done — ready to move on to Module B.");
 
-  // Phase gate (2026-06-02): the team works the case up freely, then commits
-  // ≥1 working hypothesis — that unlocks the Clinical synthesis + the Debate.
+  // Phase gate: the team works the case up freely, then commits ≥1 working
+  // hypothesis — that unlocks the merged Debate & answers section.
   const gateOpen = (typeof phaseGateOpen === "function") ? phaseGateOpen() : false;
 
   // State machine (highest-priority match wins).
@@ -9906,33 +9909,22 @@ function updateModANextStep() {
       "a working hypothesis to unlock the discussion.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "case", ["setup"]);
-  } else if (!onDiscussion && !onAnswers && modAAnswerEntries.length === 0) {
+  } else if (modAAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modA.coach.open-discussion",
-      "✓ Hypotheses in — the Debate is open. Debate the prompts " +
-      "(both a Caen and a Nagoya voice on each compare prompt).");
-    // No "Open Debate →" jump button (2026-06-16, PI request): students reach
-    // the Debate via the right-column tab once the gate opens, not via a
-    // one-click coach shortcut that lets one student race ahead of the group.
+      "✓ Hypotheses in — open Debate & answers and tackle the two questions " +
+      "together: your diagnosis & plan, and pain across cultures.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
-  } else if (onDiscussion && modAAnswerEntries.length === 0) {
-    textEl.textContent = _coachT("modA.coach.in-discussion",
-      "Debate the prompts with your group — when you're ready, open Group answers " +
-      "to capture your 4 bullets.");
-    // No "Open Group answers →" jump button (2026-06-16, PI request).
-    _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
-  } else if (modAAnswerEntries.length > 0 && !allBulletsCovered) {
-    const remaining = 4 - bulletsCovered.size;
+  } else if (!allBulletsCovered) {
+    const remaining = 2 - bulletsCovered.size;
     const tpl = _coachT("modA.coach.bullets-partial",
-      "Capturing bullets — {n} still to add to cover all 4.");
+      "Capturing answers — {n} still to add to cover both questions.");
     textEl.textContent = tpl.replace("{n}", String(remaining));
-    // No "Open Group answers →" jump button (2026-06-16, PI request).
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
   } else if (allBulletsCovered) {
     textEl.textContent = _coachT("modA.coach.bullets-complete",
-      "✓ All 4 bullets covered. Add more refinements or wait for your facilitator.");
+      "✓ Both questions answered. Add more refinements or wait for your facilitator.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
   } else {
@@ -10780,7 +10772,9 @@ let lastAnswerCount = { moduleA: 0, moduleB: 0 };
  * keys not yet known to the running client). Keep in sync with the HTML
  * data-bullet-key attributes in index.html. */
 const ANSWER_BULLETS = {
-  moduleA: ["plan", "differ", "disagree", "takehome"],
+  // Module A merged Debate + answers into TWO questions (2026-06-25):
+  // diagnosis & plan, and pain across cultures.
+  moduleA: ["diagnosis", "culture"],
   moduleB: ["family-sentence", "differ-converge", "practice-change"]
 };
 

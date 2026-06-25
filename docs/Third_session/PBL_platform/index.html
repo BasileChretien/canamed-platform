@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v62" below to the matching new string.
+         2. Update every "?v=v63" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v62"></script>
-  <link rel="stylesheet" href="style.css?v=v62" />
+  <script src="theme-init.js?v=v63"></script>
+  <link rel="stylesheet" href="style.css?v=v63" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v62" defer></script>
+  <script src="sw-register.js?v=v63" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -1675,20 +1675,17 @@
                 <span class="rcol-tab-label" data-i18n="rcol.tab.decisions">Decide together</span>
                 <span class="rcol-tab-badge" id="tab-badge-decisions" hidden></span>
               </button>
-              <button class="rcol-tab is-locked" type="button" data-tab="discussion"
-                      role="tab" aria-selected="false" aria-controls="rcol-p-discussion"
-                      id="rcol-tab-discussion">
-                <span class="rcol-tab-icon" aria-hidden="true">💬</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.discussion">Debate</span>
-                <span class="rcol-tab-locked-hint" id="rcol-tab-discussion-locked"
-                      data-i18n="rcol.tab.discussion.locked">🔒 write 1 hypothesis to unlock</span>
-                <span class="rcol-tab-badge" id="tab-badge-discussion" hidden></span>
-              </button>
+              <!-- Debate + Our-final-answers MERGED into one tab (2026-06-25,
+                   user request): the team debates AND writes its two answers in
+                   the same place. The separate "Debate" discussion-prompt tab was
+                   removed; this tab now carries the two questions. The 🔒 lock
+                   teaser moved here (it gates on ≥1 hypothesis, like the old
+                   Debate tab did). -->
               <button class="rcol-tab" type="button" data-tab="answers"
                       id="rcol-tab-answers"
                       role="tab" aria-selected="false" aria-controls="rcol-p-answers">
-                <span class="rcol-tab-icon" aria-hidden="true">📝</span>
-                <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Our final answers</span>
+                <span class="rcol-tab-icon" aria-hidden="true">💬</span>
+                <span class="rcol-tab-label" data-i18n="rcol.tab.answers">Debate &amp; answers</span>
                 <span class="rcol-tab-badge" id="tab-badge-answers" hidden></span>
               </button>
             </div>
@@ -1697,106 +1694,6 @@
                  role="tabpanel" data-panel="decisions" aria-labelledby="rcol-tab-decisions">
             <section class="card decisions-card" id="decisions-A"></section>
             </div><!-- /decisions panel -->
-
-            <div class="rcol-panel" id="rcol-p-discussion" hidden
-                 role="tabpanel" data-panel="discussion"
-                 aria-labelledby="rcol-tab-discussion">
-            <!-- Auto-injected by updateModANextStep() when the platform
-                 switches to this panel because the synthesis was just
-                 revealed. Hidden by default; .auto-fade triggers
-                 dismissal after ~6s. -->
-            <div class="synthesis-unlocked-banner hidden"
-                 id="synthesis-unlocked-banner" role="status" aria-live="polite"
-                 data-i18n="modA.coach.synthesis-unlocked" data-i18n-html>
-              ✓ <strong>Hypotheses in — Phase 3 is open.</strong> The discussion prompts
-              are below. Both Caen and Nagoya voices must speak on each comparison prompt.
-            </div>
-            <p class="banner-rule banner-compare"
-               data-i18n="modA.discussion.compare-rule" data-i18n-html>
-              🗣️ <strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice
-              must speak before you move on. The point is to compare and debate, not to agree
-              quickly.
-            </p>
-            <section class="card prompts-card" id="prompts-card">
-              <h3 data-i18n="prompts.title">Discussion prompts</h3>
-              <p class="empty" id="prompts-locked" data-i18n="prompts.locked">
-                Locked &mdash; write a working hypothesis to unlock the
-                discussion prompts.
-              </p>
-              <!-- Progressive single-prompt reveal (user request 2026-05-18:
-                   'The compare prompt is too much text. It must be smoother.
-                   Maybe point by point. And they write a reply, then the
-                   next point appears.'). Cursor + replies cross-room
-                   synced via Firebase (refPromptCursor + refPromptReplies)
-                   so the whole team moves through the prompts together. -->
-              <div class="prompt-progressive hidden" id="prompt-progressive">
-                <p class="prompt-progress" id="prompt-progress">
-                  <span id="prompt-progress-current">1</span> /
-                  <span id="prompt-progress-total">?</span>
-                </p>
-                <div class="prompt-text" id="prompt-text"></div>
-                <div class="prompt-reply-area">
-                  <textarea id="prompt-reply" maxlength="600"
-                            data-i18n="prompts.reply.placeholder"
-                            data-i18n-attr="placeholder"
-                            placeholder="Type a short note from your group's discussion — anyone in the room can edit and it autosaves."></textarea>
-                  <div class="prompt-controls">
-                    <button type="button" class="prompt-prev"
-                            id="prompt-prev"
-                            data-i18n="prompts.prev"
-                            aria-label="Previous prompt">← Previous</button>
-                    <button type="button" class="prompt-next"
-                            id="prompt-next"
-                            data-i18n="prompts.next">
-                      Save and next →
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div class="prompt-done hidden" id="prompt-done">
-                <p data-i18n="prompts.done.msg" data-i18n-html>
-                  ✓ <strong>You've worked through all the discussion prompts.</strong>
-                  Now capture your team's bullets.
-                </p>
-                <!-- "Open Group answers →" jump button removed 2026-06-16 (PI
-                     request): students open the Group-answers tab themselves. -->
-                <button type="button" class="prompt-review"
-                        id="prompt-review"
-                        data-i18n="prompts.review"
-                        aria-label="Go back to review the prompts">
-                  ← Review prompts
-                </button>
-              </div>
-              <!-- Legacy <ol> kept hidden so any code that still references
-                   #prompts-list (back-compat for the rest of the engine)
-                   doesn't crash. The progressive UI above is the real one. -->
-              <ol id="prompts-list" class="hidden" aria-hidden="true"></ol>
-            </section>
-
-            <section class="card compare-card hidden" id="compare-card">
-              <h3><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="#1763a6"
-                stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path
-                d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" /></svg>
-                Country compare &mdash; opioids &amp; chronic pain</h3>
-              <p>Per-capita opioid consumption differs sharply between countries:</p>
-              <ul>
-                <li><strong>Japan:</strong> among the lowest opioid consumption of high-income
-                  countries.</li>
-                <li><strong>France:</strong> moderate &mdash; well below the USA, above Japan.</li>
-                <li><strong>USA:</strong> historically very high, with a well-known opioid crisis.</li>
-              </ul>
-              <p class="hint">
-                Guidelines for chronic non-specific low-back pain are broadly similar across
-                countries (stay active, exercise, limit imaging, opioids not first-line) &mdash;
-                but prescribing culture, regulation and patient expectations differ sharply.
-                <strong>The guidelines barely differ &mdash; so any difference you find between
-                France and Japan is cultural and regulatory, not scientific. That is exactly
-                what this module is about.</strong> <em>Discuss:</em> is lower opioid use
-                protective, or does it risk under-treating pain?
-              </p>
-            </section>
-            </div><!-- /discussion panel -->
-
 
             <div class="rcol-panel" id="rcol-p-answers" hidden
                  role="tabpanel" data-panel="answers"
@@ -1816,66 +1713,54 @@
               <p class="hint answer-input-language-hint"
                  data-i18n="room.answer-input-language-hint">Write in any language &mdash; your facilitator and teammates can read English, French and Japanese.</p>
 
-              <div class="answer-bullet" data-bullet-key="plan">
-                <label class="answer-bullet-label" for="answer-input-moduleA-plan"
-                       data-i18n="modA.answers.bullet.plan.label">
-                  1. Your group's first-line plan for the patient
+              <!-- Two merged questions (2026-06-25, user request): the Debate
+                   prompts + the old four answer bullets collapsed into TWO shared
+                   free-text questions — Q1 diagnosis & plan, Q2 pain across
+                   cultures (with the WHO analgesic-ladder reference). English-only
+                   UI, so the labels/hints are static (no data-i18n). -->
+              <div class="answer-bullet" data-bullet-key="diagnosis">
+                <label class="answer-bullet-label" for="answer-input-moduleA-diagnosis"
+                       data-i18n="modA.answers.bullet.diagnosis.label">
+                  1. Your diagnosis and plan
                 </label>
-                <ul class="answers-list" id="answers-list-moduleA-plan"></ul>
+                <p class="hint" data-i18n="modA.answers.bullet.diagnosis.hint">
+                  How did your team reach its working diagnosis — what in the history,
+                  examination and tests pointed you there, and what did you rule out? Then
+                  give the first-line treatment plan you'd propose for Mr Lefebvre.
+                </p>
+                <ul class="answers-list" id="answers-list-moduleA-diagnosis"></ul>
                 <div class="answer-add">
-                  <input type="text" id="answer-input-moduleA-plan" maxlength="500"
-                         data-bullet-key="plan"
-                         data-i18n="modA.answers.bullet.plan.placeholder" data-i18n-attr="placeholder"
-                         placeholder="e.g. NSAID + active rehab; reassess in 4 weeks" />
-                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="plan"
+                  <input type="text" id="answer-input-moduleA-diagnosis" maxlength="500"
+                         data-bullet-key="diagnosis"
+                         data-i18n="modA.answers.bullet.diagnosis.placeholder" data-i18n-attr="placeholder"
+                         placeholder="e.g. mechanical low-back pain; first-line = stay active + NSAID + reassurance, no opioids" />
+                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="diagnosis"
                           data-i18n="room.answer.add" title="Add">Add</button>
                 </div>
               </div>
 
-              <div class="answer-bullet" data-bullet-key="differ">
-                <label class="answer-bullet-label" for="answer-input-moduleA-differ"
-                       data-i18n="modA.answers.bullet.differ.label" data-i18n-html>
-                  2. One way France and Japan genuinely <strong>differ</strong> on this case
+              <div class="answer-bullet" data-bullet-key="culture">
+                <label class="answer-bullet-label" for="answer-input-moduleA-culture"
+                       data-i18n="modA.answers.bullet.culture.label">
+                  2. Pain across cultures
                 </label>
-                <ul class="answers-list" id="answers-list-moduleA-differ"></ul>
+                <p class="hint" data-i18n="modA.answers.bullet.culture.hint" data-i18n-html>
+                  Compare how different countries (e.g. France and Japan) approach pain —
+                  cultural attitudes to pain, how freely opioids are prescribed and by whom,
+                  and the usual drugs and doses at each step of the WHO analgesic ladder
+                  (<em>Palier 1 → 3</em>). Where do they genuinely differ?
+                </p>
+                <p class="hint">
+                  <a href="https://www.ncbi.nlm.nih.gov/books/NBK554435/" target="_blank"
+                     rel="noopener" data-i18n="modA.answers.bullet.culture.who-link">↗ WHO analgesic ladder reference</a>
+                </p>
+                <ul class="answers-list" id="answers-list-moduleA-culture"></ul>
                 <div class="answer-add">
-                  <input type="text" id="answer-input-moduleA-differ" maxlength="500"
-                         data-bullet-key="differ"
-                         data-i18n="modA.answers.bullet.differ.placeholder" data-i18n-attr="placeholder"
-                         placeholder="e.g. how readily opioids are prescribed for chronic pain" />
-                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="differ"
-                          data-i18n="room.answer.add" title="Add">Add</button>
-                </div>
-              </div>
-
-              <div class="answer-bullet" data-bullet-key="disagree">
-                <label class="answer-bullet-label" for="answer-input-moduleA-disagree"
-                       data-i18n="modA.answers.bullet.disagree.label" data-i18n-html>
-                  3. One thing your group <strong>disagreed</strong> about and could not fully resolve
-                </label>
-                <ul class="answers-list" id="answers-list-moduleA-disagree"></ul>
-                <div class="answer-add">
-                  <input type="text" id="answer-input-moduleA-disagree" maxlength="500"
-                         data-bullet-key="disagree"
-                         data-i18n="modA.answers.bullet.disagree.placeholder" data-i18n-attr="placeholder"
-                         placeholder="e.g. whether imaging is reassuring or a waste of resources" />
-                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="disagree"
-                          data-i18n="room.answer.add" title="Add">Add</button>
-                </div>
-              </div>
-
-              <div class="answer-bullet" data-bullet-key="takehome">
-                <label class="answer-bullet-label" for="answer-input-moduleA-takehome"
-                       data-i18n="modA.answers.bullet.takehome.label">
-                  4. One thing you each take home
-                </label>
-                <ul class="answers-list" id="answers-list-moduleA-takehome"></ul>
-                <div class="answer-add">
-                  <input type="text" id="answer-input-moduleA-takehome" maxlength="500"
-                         data-bullet-key="takehome"
-                         data-i18n="modA.answers.bullet.takehome.placeholder" data-i18n-attr="placeholder"
-                         placeholder="one sentence per person" />
-                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="takehome"
+                  <input type="text" id="answer-input-moduleA-culture" maxlength="500"
+                         data-bullet-key="culture"
+                         data-i18n="modA.answers.bullet.culture.placeholder" data-i18n-attr="placeholder"
+                         placeholder="e.g. Japan prescribes opioids far less than France; Palier-1 paracetamol/NSAID, Palier-2 codeine/tramadol, Palier-3 morphine" />
+                  <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="culture"
                           data-i18n="room.answer.add" title="Add">Add</button>
                 </div>
               </div>
@@ -3069,16 +2954,10 @@
       <span class="mtab-label" data-i18n="rcol.tab.decisions">Decide together</span>
       <span class="mtab-badge" id="mtab-badge-decisions" aria-hidden="true" hidden></span>
     </button>
-    <button class="mtab" type="button" data-tab="discussion"
-            aria-controls="rcol-p-discussion">
-      <span class="mtab-icon" aria-hidden="true">💬</span>
-      <span class="mtab-label" data-i18n="rcol.tab.discussion">Debate</span>
-      <span class="mtab-badge" id="mtab-badge-discussion" aria-hidden="true" hidden></span>
-    </button>
     <button class="mtab" type="button" data-tab="answers"
             aria-controls="rcol-p-answers">
-      <span class="mtab-icon" aria-hidden="true">📝</span>
-      <span class="mtab-label" data-i18n="rcol.tab.answers">Our final answers</span>
+      <span class="mtab-icon" aria-hidden="true">💬</span>
+      <span class="mtab-label" data-i18n="rcol.tab.answers">Debate &amp; answers</span>
       <span class="mtab-badge" id="mtab-badge-answers" aria-hidden="true" hidden></span>
     </button>
   </nav>
@@ -3127,46 +3006,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v62" defer></script>
+  <script src="firebase-config.js?v=v63" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v62" defer></script>
+  <script src="orgs.js?v=v63" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v62" defer></script>
+  <script src="platform-config.js?v=v63" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v62" defer></script>
+  <script src="telemetry.js?v=v63" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v62" defer></script>
+  <script src="purify.min.js?v=v63" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v62" defer></script>
+  <script src="i18n.js?v=v63" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v62" defer></script>
+  <script src="localdb.js?v=v63" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v62" defer></script>
+  <script src="lib.js?v=v63" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v62" defer></script>
+  <script src="pure-utils.js?v=v63" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3177,7 +3056,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v62" defer></script>
+  <script src="script-loader.js?v=v63" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3187,7 +3066,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v62" defer></script>
+  <script src="script.js?v=v63" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the

@@ -1,14 +1,10 @@
 /* tests-e2e/modA-autoopen-steps.spec.js
  *
- * Dry-run feedback (2026-05-27): the right-column steps ("decide together"
- * decisions, the Debate/Discussion prompts, and the final Group answers)
- * did not open by themselves — students finished a step and didn't notice
- * the next one had become available. This spec pins the auto-open flow:
- *
- *   - committing ≥1 hypothesis (phaseGateOpen) auto-opens the Discussion panel;
- *   - finishing every Exchange prompt (promptCursor === total, RTDB-synced)
- *     auto-opens the Group answers panel;
- *   - neither auto-open steals focus from someone mid-typing.
+ * Debate + answers MERGED (2026-06-25): the standalone Debate discussion-prompt
+ * tab/panel + its progressive-prompt subsystem were removed. The Debate and the
+ * two answer questions now live in ONE "Debate & answers" tab (#rcol-tab-answers)
+ * that reveals on the ≥1-hypothesis phase gate. This spec pins that reveal + the
+ * merged panel's two question inputs.
  *
  * Driven through the platform's _test_ hooks (no Firebase round-trip), the
  * same lightweight approach as case-cluster-by-category / sim-recommendations.
@@ -28,9 +24,9 @@ async function setupModA(page) {
       window._test_rebuildCaseDerived();
     }
     // Reveal every Module A item AND commit two working hypotheses (the gate
-    // needs only one — phaseGateOpen = hypothesisCount() >= 1 since 2026-06-25 —
-    // but committing two is a realistic state and still opens it), so the phase
-    // gate that unlocks the Debate + Synthesis is open.
+    // needs only one — phaseGateOpen = hypothesisCount() >= 1 — but committing
+    // two is a realistic state), so the phase gate that reveals the merged
+    // "Debate & answers" tab is open.
     const ids = window._test_getItemIds ? window._test_getItemIds() : [];
     const r = {};
     ids.forEach(id => { r[id] = { by: "T", at: Date.now() }; });
@@ -56,76 +52,35 @@ async function setupModA(page) {
   });
 }
 
-test.describe("Module A — steps auto-open as the flow advances", () => {
-  test("committing a working hypothesis auto-opens the Debate (Discussion) panel", async ({ page }) => {
+test.describe("Module A — the merged Debate & answers tab reveals on the gate", () => {
+  test("committing a working hypothesis reveals the merged Debate & answers tab", async ({ page }) => {
     await setupModA(page);
-    const active = await page.evaluate(() => {
-      // Realistic state: the team has just committed its hypotheses, so no text
-      // input holds focus. (This partial surfacing leaves the lobby form in the
-      // tree; WebKit parks focus on its first textbox, which would otherwise
-      // trip the "don't interrupt typing" guard.)
-      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      window._test_setPromptCursor(0);
-      if (window.switchRcolTab) window.switchRcolTab("decisions"); // default, not discussion
-      window.renderPrompts();
-      const p = document.querySelector('.rcol-panel[data-panel="discussion"]');
-      return !!(p && p.classList.contains("is-active") && !p.hidden);
+    const out = await page.evaluate(() => {
+      if (window.revealModARightCol) window.revealModARightCol();
+      const tab = document.getElementById("rcol-tab-answers");
+      return {
+        revealed: !!(tab && !tab.hidden),
+        noDiscussionTab: !document.getElementById("rcol-tab-discussion")
+      };
     });
-    expect(active, "Discussion should auto-open once the ≥1-hypothesis gate opens").toBe(true);
+    expect(out.revealed, "Debate & answers reveals once ≥1 hypothesis is committed").toBe(true);
+    expect(out.noDiscussionTab, "the standalone Debate tab is gone (merged)").toBe(true);
   });
 
-  test("finishing the discussion with an OPEN Module A vote opens the Decisions panel", async ({ page }) => {
+  test("switching to the merged tab shows the two questions (diagnosis + culture)", async ({ page }) => {
     await setupModA(page);
-    const active = await page.evaluate(() => {
+    const out = await page.evaluate(() => {
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      const total = ((window._test_getCase() && window._test_getCase().prompts) || []).length;
-      window._test_setRoomVotes({});          // vote still open (no commit)
-      window._test_setPromptCursor(0);
-      if (window.switchRcolTab) window.switchRcolTab("decisions");
-      window.renderPrompts();                // lands on Discussion
-      window._test_setPromptCursor(total);    // team cycled every prompt
-      window.renderPrompts();                // → done → route to the open vote
-      const p = document.querySelector('.rcol-panel[data-panel="decisions"]');
-      return !!(p && p.classList.contains("is-active") && !p.hidden);
-    });
-    expect(active, "an unsettled 'decide together' vote must be surfaced before Group answers").toBe(true);
-  });
-
-  test("once the Module A vote is committed, finishing the discussion opens Group answers", async ({ page }) => {
-    await setupModA(page);
-    const active = await page.evaluate(() => {
-      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
-      const total = ((window._test_getCase() && window._test_getCase().prompts) || []).length;
-      // Commit every unlocked Module A vote, then finish the discussion.
-      const votes = {};
-      (window.DECISIONS || []).filter(d => d && d.module === "A").forEach(d => {
-        votes[d.id] = { committed: { choice: 0, at: Date.now() } };
-      });
-      window._test_setRoomVotes(votes);
-      window._test_setPromptCursor(0);
-      if (window.switchRcolTab) window.switchRcolTab("decisions");
-      window.renderPrompts();                // lands on Discussion
-      window._test_setPromptCursor(total);    // team cycled every prompt
-      window.renderPrompts();                // → done → vote settled → answers
+      if (window.revealModARightCol) window.revealModARightCol();
+      if (window.switchRcolTab) window.switchRcolTab("answers");
       const p = document.querySelector('.rcol-panel[data-panel="answers"]');
-      return !!(p && p.classList.contains("is-active") && !p.hidden);
+      return {
+        active: !!(p && p.classList.contains("is-active") && !p.hidden),
+        diagnosis: !!document.getElementById("answer-input-moduleA-diagnosis"),
+        culture: !!document.getElementById("answer-input-moduleA-culture")
+      };
     });
-    expect(active, "Group answers should open once the vote is settled").toBe(true);
-  });
-
-  test("auto-open does not steal focus while someone is typing", async ({ page }) => {
-    await setupModA(page);
-    const discussionStayedClosed = await page.evaluate(() => {
-      window._test_setPromptCursor(0);
-      if (window.switchRcolTab) window.switchRcolTab("decisions");
-      // Simulate a teammate mid-answer: a focused textarea.
-      const ta = document.createElement("textarea");
-      document.body.appendChild(ta);
-      ta.focus();
-      window.renderPrompts();
-      const p = document.querySelector('.rcol-panel[data-panel="discussion"]');
-      return !(p && p.classList.contains("is-active"));
-    });
-    expect(discussionStayedClosed, "typing must suppress the auto-switch").toBe(true);
+    expect(out.active, "the merged panel is active after switching to it").toBe(true);
+    expect(out.diagnosis && out.culture, "both question inputs are present").toBe(true);
   });
 });
