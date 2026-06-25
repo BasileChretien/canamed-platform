@@ -383,31 +383,32 @@ test("i18n English-only: workshop chrome renders English even under fr/ja", () =
   }
 });
 
-test("i18n: ONLY the consent block follows the chosen language; everything else is English", () => {
-  // User 2026-06-24: "only the consent must be in the 3 languages; all the rest
-  // must be in English." The consent block (consent checkboxes + the data/
-  // privacy notice it references + the LLM-chat consent) follows fr/ja; safety,
-  // grade-note, call-facilitator, GDPR export and all chrome stay English.
+test("i18n: the consent block ALSO renders English (no language exception left)", () => {
+  // User 2026-06-25 (overrides the earlier consent-only-translation rule):
+  // "delete all the French and Japanese inside the website; keep only the
+  // dictionaries." t() now resolves EVERY key to canonical English — consent
+  // included. The only FR/JA left is the in-page reading aid's per-word hover
+  // gloss (lang-reader.js), not any UI string. The translation TABLES stay
+  // intact (parity tests above still pass + privacy.html still uses them).
   const CONSENT = [
-    "lobby.consent-workshop",   // consent checkbox
-    "lobby.privacy.p1",         // data/privacy notice the consent references
-    "modA.chat.consentCta"      // LLM-chat consent
+    "lobby.consent-workshop",   // consent checkbox — formerly localized
+    "lobby.privacy.p1",         // data/privacy notice — formerly localized
+    "modA.chat.consentCta"      // LLM-chat consent — formerly localized
   ];
-  const NON_CONSENT = [
-    "data-rights.export-btn",   // GDPR self-export — NOT consent → English
-    "room.call-facilitator",    // call a facilitator — NOT consent → English
-    "stage.welcome.grade-note", // anti-coercion grade note — NOT consent → English
-    "splash.enter.submit"       // chrome → English
+  const CHROME = [
+    "data-rights.export-btn",   // GDPR self-export
+    "room.call-facilitator",    // call a facilitator
+    "stage.welcome.grade-note", // anti-coercion grade note
+    "splash.enter.submit"       // chrome
   ];
   try {
     for (const lang of ["fr", "ja"]) {
       i18n.setLang(lang);
-      for (const k of CONSENT) {
+      for (const k of [...CONSENT, ...CHROME]) {
+        // The table still carries a differing fr/ja string (kept for privacy.html)…
         assert.notStrictEqual(T[lang][k], T.en[k], `${k} ${lang} should differ in the table`);
-        assert.strictEqual(i18n.t(k), T[lang][k], `consent ${k} should render ${lang}`);
-      }
-      for (const k of NON_CONSENT) {
-        assert.strictEqual(i18n.t(k), T.en[k], `non-consent ${k} should render English under ${lang}`);
+        // …but t() renders the English canonical for everything now, consent included.
+        assert.strictEqual(i18n.t(k), T.en[k], `${k} should render English under ${lang}`);
       }
     }
   } finally {

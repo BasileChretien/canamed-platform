@@ -4,7 +4,7 @@
  * section was REMOVED. Investigations stay a free section (imaging/bloods,
  * labs:1+); the synthesis item (SYNTH_ID = labs:0) is no longer rendered as a
  * button — its model write-up now ships only in the stage-4 take-home export
- * (downloadMyRoomAnswers). Writing ≥2 hypotheses (phaseGateOpen) still unlocks
+ * (downloadMyRoomAnswers). Writing ≥1 hypothesis (phaseGateOpen) still unlocks
  * the Debate.
  *
  * Static structural guards (the live flow is exercised across the device matrix
@@ -41,9 +41,9 @@ test("buildButtons skips SYNTH_ID (no synthesis button is rendered)", () => {
   assert.match(body, /if \(id === SYNTH_ID\) return;/, "buildButtons skips the SYNTH_ID item");
 });
 
-test("phaseGateOpen() is the ≥2-hypotheses gate and drives the Debate", () => {
-  assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 2/,
-    "phaseGateOpen() === hypothesisCount() >= 2");
+test("phaseGateOpen() is the ≥1-hypothesis gate and drives the Debate", () => {
+  assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 1/,
+    "phaseGateOpen() === hypothesisCount() >= 1");
   // reveal() no longer hard-gates the synthesis (there is no synthesis button).
   const rv = SCRIPT.slice(SCRIPT.indexOf("function reveal("), SCRIPT.indexOf("function renderButtons("));
   assert.doesNotMatch(rv, /SYNTH_ID && !phaseGateOpen/,

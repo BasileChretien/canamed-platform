@@ -1,16 +1,17 @@
 /* tests-e2e/lobby-i18n.spec.js
  *
- * Regression tests for the lobby + waiting-room i18n wiring fixed in
- * fix/participant-i18n-core. The simulation in
- * docs/Third_session/PBL_platform/ARCHITECTURE/SIMULATION_PARTICIPANTS.md
- * flagged the lobby privacy-note and the waiting-room HTML as English-
- * only despite the surrounding consent text being localised. This test
- * pins down the FR + JA renderings so any future regression (a missing
- * data-i18n attribute, a deleted key) shows up red.
+ * English-only lobby contract (user 2026-06-25: "delete all the French and
+ * Japanese inside the website; keep only the dictionaries"). The whole UI —
+ * consent + privacy notice included — renders in English regardless of the
+ * language picker. The picker now only re-targets the in-page reading-aid's
+ * per-word hover gloss (lang-reader.js), never any UI string. These tests pin
+ * that: selecting French or Japanese leaves the lobby English and joinable, and
+ * the localized strings that used to appear (e.g. "responsables conjoints",
+ * "共同管理者") must NOT leak through. The translation TABLES stay intact for the
+ * standalone privacy.html legal page + the i18n parity unit tests.
  *
  * Strategy: stub localStorage.canamed_lang BEFORE the i18n module's
- * auto-detect runs, so the page paints in the requested language on
- * first load (no flash of English).
+ * auto-detect runs, so the page boots with that language selected.
  */
 
 // @ts-check
@@ -53,39 +54,35 @@ async function openLobbyInLanguage(page, context, lang) {
   return { tab, code };
 }
 
-test.describe("Lobby i18n — privacy notice + consent block", () => {
-  test("French lobby renders the privacy paragraphs in French (not English)", async ({ page, context }) => {
+test.describe("Lobby i18n — English-only, picker drives the reader not the UI", () => {
+  test("French selected: the lobby + consent stay English and still join", async ({ page, context }) => {
     const { tab } = await openLobbyInLanguage(page, context, "fr");
 
-    // The privacy <details> summary
+    // The privacy <details> summary renders the English canonical…
     await expect(tab.locator(".privacy-note summary"))
-      .toContainText(/Utilisation de vos données/i);
+      .toContainText(/How your data is used/i);
+    // …and the old French renditions must NOT leak through.
+    await expect(tab.locator(".privacy-note summary"))
+      .not.toContainText(/Utilisation de vos données/i);
 
-    // P1 — controllers paragraph
+    // P1 — controllers paragraph in English ("joint controllers"), not the
+    // French "responsables conjoints".
     await expect(tab.locator(".privacy-note p").first())
-      .toContainText(/Caen Normandie/i);
-    // The French rendition mentions "responsables conjoints" (joint
-    // controllers under GDPR Art. 26). If we still see the English
-    // "joint controllers" phrase, the data-i18n-html wiring is broken.
-    await expect(tab.locator(".privacy-note p").first())
-      .toContainText(/responsables conjoints/i);
-
-    // P3 — Belgium / EU transfer note in FR
+      .toContainText(/joint controllers/i);
     await expect(tab.locator(".privacy-note"))
-      .toContainText(/transfert transfrontalier/i);
+      .not.toContainText(/responsables conjoints/i);
 
-    // Consent-version line is now translated
+    // Consent-version line is English now (consent is no longer localized).
     await expect(tab.locator("#consent-version"))
-      .toContainText(/Version de la notice/i);
+      .toContainText(/Notice version/i);
+    await expect(tab.locator("#consent-version"))
+      .not.toContainText(/Version de la notice/i);
 
-    // Grade-note is NOT consent (user: only the consent block is translated),
-    // so it renders English even with French selected.
+    // Grade-note stays English (as it always did).
     await expect(tab.locator(".lobby-grade-note"))
       .toContainText(/not affected/i);
 
-    // Phase 3 (English-canonical UI): the consent + privacy copy above stays
-    // French, but the waiting-room is informational chrome and now renders in
-    // English for everyone.
+    // The whole flow still joins with French selected.
     await tab.locator("#name-input").fill("Camille");
     const realUni = await tab.locator("#uni-input option:not([disabled])").first().getAttribute("value");
     await tab.locator("#uni-input").selectOption(realUni);
@@ -97,32 +94,22 @@ test.describe("Lobby i18n — privacy notice + consent block", () => {
     await tab.close();
   });
 
-  test("Japanese lobby renders the privacy paragraphs in Japanese (not English)", async ({ page, context }) => {
+  test("Japanese selected: the lobby + consent stay English and still join", async ({ page, context }) => {
     const { tab } = await openLobbyInLanguage(page, context, "ja");
 
     await expect(tab.locator(".privacy-note summary"))
-      .toContainText(/データの利用方法/);
+      .toContainText(/How your data is used/i);
     await expect(tab.locator(".privacy-note p").first())
-      .toContainText(/名古屋大学/);
-    // Anchor on the controller-pair string — if EN leaked through we'd
-    // see "joint controllers under GDPR" instead.
+      .toContainText(/joint controllers/i);
+    // No Japanese must leak into the consent / privacy block.
     await expect(tab.locator(".privacy-note"))
-      .toContainText(/共同管理者/);
-    // P3 — Belgium/EU storage note in JA
-    await expect(tab.locator(".privacy-note"))
-      .toContainText(/越境移転/);
-
-    // Consent-version line is translated
+      .not.toContainText(/共同管理者|データの利用方法/);
     await expect(tab.locator("#consent-version"))
-      .toContainText(/説明文書のバージョン/);
+      .toContainText(/Notice version/i);
+    await expect(tab.locator("#consent-version"))
+      .not.toContainText(/説明文書のバージョン/);
 
-    // Grade-note is NOT consent → English even with Japanese selected.
-    await expect(tab.locator(".lobby-grade-note"))
-      .toContainText(/not affected/i);
-
-    // Phase 3 (English-canonical UI): consent + privacy stays Japanese above;
-    // the waiting-room is informational chrome and now renders in English.
-    await tab.locator("#name-input").fill("ユキ");
+    await tab.locator("#name-input").fill("Yuki");
     const realUni = await tab.locator("#uni-input option:not([disabled])").first().getAttribute("value");
     await tab.locator("#uni-input").selectOption(realUni);
     await tab.locator("#consent-workshop").check();
@@ -133,47 +120,17 @@ test.describe("Lobby i18n — privacy notice + consent block", () => {
     await tab.close();
   });
 
-  test("Join button lock-tooltip is translated and clears once consent ticked", async ({ page, context }) => {
+  test("Join button lock-tooltip is English and clears once consent ticked", async ({ page, context }) => {
     const { tab } = await openLobbyInLanguage(page, context, "fr");
     const joinBtn = tab.locator("#join-btn");
-    // Disabled at first, with a French tooltip
+    // Disabled at first, with the English tooltip (not the old French one).
     await expect(joinBtn).toBeDisabled();
-    await expect(joinBtn).toHaveAttribute(
-      "title",
-      /Cochez la case de consentement/i
-    );
+    await expect(joinBtn).toHaveAttribute("title", /workshop-consent box/i);
+    await expect(joinBtn).not.toHaveAttribute("title", /Cochez la case de consentement/i);
     // Ticking consent clears the tooltip and enables the button.
     await tab.locator("#consent-workshop").check();
     await expect(joinBtn).toBeEnabled();
     await expect(joinBtn).not.toHaveAttribute("title", /.+/);
-    await tab.close();
-  });
-
-  // R2-43: the lobby.privacy.* and lobby.consent-version* keys used to
-  // exist only for en/fr/ja. Spanish / Portuguese / German / Korean /
-  // Chinese participants saw English privacy paragraphs in an otherwise
-  // translated lobby. This test walks the lobby in Spanish + Chinese
-  // and asserts the privacy notice has actually been localised.
-  test("R2-43: Spanish lobby renders privacy notice + consent-version in Spanish", async ({ page, context }) => {
-    const { tab } = await openLobbyInLanguage(page, context, "es");
-    await expect(tab.locator(".privacy-note summary"))
-      .toContainText(/Cómo se utilizan|Cómo se usan|Como se utilizan/i);
-    await expect(tab.locator(".privacy-note p").first())
-      .toContainText(/Nagoya|investigación CaNaMED/i);
-    // Consent-version line is now translated.
-    await expect(tab.locator("#consent-version"))
-      .toContainText(/Versión del aviso/i);
-    await tab.close();
-  });
-
-  test("R2-43: Chinese lobby renders privacy notice + consent-version in Chinese", async ({ page, context }) => {
-    const { tab } = await openLobbyInLanguage(page, context, "zh");
-    await expect(tab.locator(".privacy-note summary"))
-      .toContainText(/数据|您的数据/);
-    await expect(tab.locator(".privacy-note p").first())
-      .toContainText(/名古屋大学|CaNaMED 研究团队/);
-    await expect(tab.locator("#consent-version"))
-      .toContainText(/告知版本/);
     await tab.close();
   });
 

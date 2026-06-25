@@ -81,8 +81,9 @@ test.describe("mobile splash usability", () => {
   // languages and switching to any of them must persist into
   // localStorage so a deep-link or refresh keeps the choice.
   test("R2-42: splash language switcher lists the 3 cohort languages (en/fr/ja)", async ({ page }) => {
-    // English-canonical UI: the picker offers only the cohort languages (it sets
-    // the word-help gloss language + consent copy, not a UI language).
+    // English-only UI: the picker offers only the cohort languages and sets
+    // ONLY the in-page reading-aid's word-help gloss language — no UI string
+    // (consent included) follows it anymore.
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });
     const langSelect = page.locator("#splash-lang-select");

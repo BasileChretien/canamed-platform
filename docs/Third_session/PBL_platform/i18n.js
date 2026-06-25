@@ -670,12 +670,12 @@
       "modA.decision.unlock.history": "ask the patient at least once",
       "modA.decision.unlock.exam": "examine at least once",
       "modA.decision.unlock.labs": "run at least one investigation",
-      "modA.decision.unlock.synthesis": "write two working hypotheses",
+      "modA.decision.unlock.synthesis": "write a working hypothesis",
       "modA.decision.unlock.after": "the team locks in the previous decision",
       // modA.chart.subtitle RETIRED 2026-06-01 — merged into team-click-warning.
       "modA.chart.hypotheses.title": "Working hypotheses",
       "modA.chart.hypotheses.cta": "Ready to write your working hypotheses?",
-      "modA.chart.hypotheses.hint": "Agree as a team: <strong>what do you suspect?</strong> List <strong>two or more</strong> differentials you want to rule in or rule out. Writing two unlocks the discussion prompts.",
+      "modA.chart.hypotheses.hint": "Agree as a team: <strong>what do you suspect?</strong> List the differentials you want to rule in or rule out. Writing <strong>one</strong> unlocks the discussion prompts.",
       "modA.chart.impressions.title": "First impressions (optional)",
       "modA.chart.impressions.hint": "Your gut-feel before you ask the patient. Just for you — no one else sees this, and you'll come back to refine it after History + Examination.",
       "modA.chart.impressions.placeholder": "A line or two — what do you suspect, what would surprise you?",
@@ -704,7 +704,7 @@
       "modA.chart.investigations.hint": "Order any investigation you think is indicated — these are yours to choose, like the examination. Ordering one that isn't indicated still costs points.",
       "modA.coach.add-hypothesis": "You've gathered some info — now agree on at least one working hypothesis above (what do you suspect?) before you commit to investigations and a plan.",
       "modA.coach.read-case": "Read the case, then ask Mr Lefebvre, examine and investigate to work it up.",
-      "modA.coach.gather": "Work the case up — ask, examine, investigate. When you're ready, write two working hypotheses to unlock the discussion.",
+      "modA.coach.gather": "Work the case up — ask, examine, investigate. When you're ready, write a working hypothesis to unlock the discussion.",
       "modA.coach.open-discussion": "✓ Hypotheses in — the Debate is open. Debate the prompts (both a Caen and a Nagoya voice on each compare prompt).",
       "modA.coach.in-discussion": "Debate the prompts with your group — when you're ready, open Group answers to capture your 4 bullets.",
       "modA.coach.bullets-partial": "Capturing bullets — {n} still to add to cover all 4.",
@@ -938,13 +938,13 @@
       // unlock condition is named so students know exactly what to do
       // (specialist panel: "Discussion lies about being available" —
       // explicit lock + unlock condition fixes that).
-      "rcol.tab.discussion.locked": "🔒 write 2 hypotheses to unlock",
+      "rcol.tab.discussion.locked": "🔒 write 1 hypothesis to unlock",
 
       // Findings + discussion panel chrome (in-room, high-visibility).
       "findings.title": "Findings log",
       "findings.empty": "Nothing asked yet — use the buttons on the left to work the case.",
       "prompts.title": "Discussion prompts",
-      "prompts.locked": "Locked — write at least two working hypotheses to unlock the discussion prompts.",
+      "prompts.locked": "Locked — write a working hypothesis to unlock the discussion prompts.",
       // Progressive single-prompt UI (2026-05-18 user request)
       "prompts.reply.placeholder": "Type a short note from your group's discussion — anyone in the room can edit and it autosaves.",
       "prompts.prev": "← Previous",
@@ -1041,38 +1041,21 @@
     return "en";
   }
 
-  // ── English-only UI, EXCEPT consent ───────────────────────────────────────
-  // The whole workshop UI renders in English for everyone EXCEPT the consent
-  // block, which follows the chosen language (en/fr/ja) so a participant gives
-  // informed consent they actually understand (user 2026-06-24: "only the
-  // consent must be in the 3 languages; all the rest must be in English").
-  // "Consent" here = the consent checkboxes + the data/privacy notice they
-  // reference + the LLM-chat consent. EVERYTHING else — chrome, safety note,
-  // grade-note, call-facilitator, GDPR self-export, privacy.html page chrome,
-  // switcher labels — is English. Word-level help comes from the reading aid
-  // (lang-reader.js); the standalone privacy POLICY page (privacy.html) keeps
-  // its reviewed FR/JA/EN legal bodies via its own data-priv-lang mechanism.
-  const CONSENT_PREFIXES = [
-    "lobby.consent",      // consent checkboxes + version + required hints
-    "lobby.err.consent",  // consent-required validation message
-    "lobby.privacy",      // the data/privacy notice the consent references
-    "modA.chat.consent"   // LLM-patient chat consent (HF sub-processor disclosure)
-  ];
-  function isConsentKey(key) {
-    if (!key) return false;
-    for (var i = 0; i < CONSENT_PREFIXES.length; i++) {
-      if (key.indexOf(CONSENT_PREFIXES[i]) === 0) return true;
-    }
-    return false;
-  }
+  // ── English-only UI ───────────────────────────────────────────────────────
+  // The ENTIRE workshop UI renders in English for everyone — consent included
+  // (user 2026-06-25: "delete all the French and Japanese inside the website;
+  // keep only the dictionaries"). The earlier consent/safety whitelist is gone.
+  // The only FR/JA left is the in-page reading aid's per-word hover gloss
+  // (lang-reader.js + the bundled dictionaries), whose target language the
+  // picker (getLang()) still selects. The full SUPPORTED locale tables remain
+  // loaded for the standalone privacy POLICY page (privacy.html, which keeps its
+  // reviewed FR/JA legal bodies via its own data-priv-lang mechanism), but t()
+  // never reads them.
   function t(key) {
-    const lang = _currentLang || detectLang();
-    // English everywhere except the consent block (see isConsentKey).
-    const useLang = (lang !== "en" && isConsentKey(key)) ? lang : "en";
-    const table = T[useLang] || T.en;
+    // Always English — the selected language no longer changes any UI string.
+    const useLang = "en";
     let raw;
-    if (Object.prototype.hasOwnProperty.call(table, key)) raw = table[key];
-    else if (Object.prototype.hasOwnProperty.call(T.en, key)) raw = T.en[key];
+    if (Object.prototype.hasOwnProperty.call(T.en, key)) raw = T.en[key];
     else return key;  // last-ditch: return the key so a missing string is visible
     // R3 deep-i18n: substitute {cohortPair} from the active COHORTS via
     // lib.js's buildCohortPair, so a Berlin-Tokyo partnership renders

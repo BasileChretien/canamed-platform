@@ -387,7 +387,7 @@
         // NB (2026-06-02): the chat no longer AUTO-reveals the synthesis. The
         // on-screen Clinical synthesis section was removed entirely — its model
         // write-up now ships only in the stage-4 take-home (downloadMyRoomAnswers).
-        // The ≥2-hypotheses phase gate (phaseGateOpen) drives the Debate reveal;
+        // The ≥1-hypothesis phase gate (phaseGateOpen) drives the Debate reveal;
         // the red-flag screen is scoring-only now, not a gate.
       },
       persistTurn: function (role, content) {

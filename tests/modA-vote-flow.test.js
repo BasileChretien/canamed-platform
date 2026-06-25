@@ -133,8 +133,8 @@ test("renderDecisions completes the flow to Group answers once the vote is settl
 
 test("the hypotheses listener repaints the decisions panel (gate-refresh bug, 2026-06-16)", () => {
   // A hypotheses-gated vote (dec_plan, unlockWhen.hypotheses) must drop its
-  // "Ready when: add a working hypothesis" lock the moment the team crosses
-  // two working hypotheses — the refHypotheses 'value' handler must therefore
+  // "Ready when: add a working hypothesis" lock the moment the team adds
+  // a working hypothesis — the refHypotheses 'value' handler must therefore
   // re-render the decisions panel, not only the prompts. Previously it called
   // renderPrompts() but not renderDecisions(), so the management-plan vote
   // stayed locked until the next presence/score event happened to repaint it.

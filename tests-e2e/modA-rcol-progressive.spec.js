@@ -7,7 +7,7 @@
  *
  *   - at entry (nothing gathered)        → the whole right column is collapsed;
  *   - history ≥1 AND exam ≥1             → "Decide together" appears;
- *   - ≥2 working hypotheses (phaseGateOpen) → "Debate" appears (no 🔒 teaser);
+ *   - ≥1 working hypothesis (phaseGateOpen) → "Debate" appears (no 🔒 teaser);
  *   - the Exchange is underway           → "Our final answers" appears.
  *
  * Reveal is sticky (a tab never vanishes once shown). Driven through the
@@ -69,7 +69,7 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
   test("'Decide together' appears once the patient is interviewed AND examined", async ({ page }) => {
     await surfaceModA(page);
     // Reveal one history item + one exam item — enough for the Decide gate. No
-    // hypotheses yet, so the phase gate (≥2 hypotheses) is closed → Debate +
+    // hypotheses yet, so the phase gate (≥1 hypothesis) is closed → Debate +
     // Answers stay hidden.
     const picked = await page.evaluate(() => {
       const ids = window._test_getItemIds ? window._test_getItemIds() : [];
@@ -86,23 +86,24 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     await expect(page.locator("#rcol-tab-answers")).toBeHidden();
   });
 
-  test("'Debate' appears once ≥2 working hypotheses are written (no lock teaser)", async ({ page }) => {
+  test("'Debate' appears once the first working hypothesis is written (no lock teaser)", async ({ page }) => {
+    // Gate threshold lowered to ≥1 hypothesis (user 2026-06-25). No hypotheses →
+    // Debate stays hidden; the FIRST hypothesis crosses the gate.
     await surfaceModA(page);
     const allIds = await page.evaluate(() =>
       window._test_getItemIds ? window._test_getItemIds() : []);
     await reveal(page, allIds);
-    // One hypothesis → still locked; the second crosses the gate.
+    // Zero hypotheses → still locked (the rest of the chart being revealed must
+    // NOT open the Debate on its own).
     await page.evaluate(() => {
-      window._test_setHypotheses({ a: { text: "mechanical LBP", by: "T", at: 1 } });
+      window._test_setHypotheses({});
       if (window.renderPrompts) window.renderPrompts();
       if (window.revealModARightCol) window.revealModARightCol();
     });
     await expect(page.locator("#rcol-tab-discussion")).toBeHidden();
+    // One hypothesis crosses the gate.
     await page.evaluate(() => {
-      window._test_setHypotheses({
-        a: { text: "mechanical LBP", by: "T", at: 1 },
-        b: { text: "axial spondyloarthritis", by: "T", at: 1 }
-      });
+      window._test_setHypotheses({ a: { text: "mechanical LBP", by: "T", at: 1 } });
       if (window.renderPrompts) window.renderPrompts();
       if (window.revealModARightCol) window.revealModARightCol();
     });
@@ -116,7 +117,7 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     const allIds = await page.evaluate(() =>
       window._test_getItemIds ? window._test_getItemIds() : []);
     await reveal(page, allIds);
-    // Open the gate (≥2 hypotheses), then walk through every Exchange prompt →
+    // Open the gate (≥1 hypothesis), then walk through every Exchange prompt →
     // the bullets phase begins.
     await page.evaluate(() => {
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -161,7 +162,7 @@ test.describe("Module A — right-column tabs reveal one per phase", () => {
     expect(s.barHidden, "the bar comes up once a tab is revealed").toBe(false);
     // No hypotheses yet → the phase gate is closed → Debate + Answers mirrors
     // stay hidden.
-    expect(s.discussion, "Debate mirror stays hidden before ≥2 hypotheses").toBe(true);
-    expect(s.answers, "Answers mirror stays hidden before ≥2 hypotheses").toBe(true);
+    expect(s.discussion, "Debate mirror stays hidden before any hypothesis").toBe(true);
+    expect(s.answers, "Answers mirror stays hidden before any hypothesis").toBe(true);
   });
 });

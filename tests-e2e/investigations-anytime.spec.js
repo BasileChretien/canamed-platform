@@ -52,12 +52,12 @@ test.describe("Module A — investigations clickable any time, no synthesis butt
     expect(s.synthBtn, "synthesis (labs:0) is no longer rendered as a button").toBe(false);
   });
 
-  test("investigations stay clickable with ≥2 hypotheses; still no synthesis button", async ({ page }) => {
+  test("investigations stay clickable with hypotheses committed; still no synthesis button", async ({ page }) => {
     await page.goto("/");
     const s = await buildLabs(page, {}, TWO_HYPS);
     expect(s.imaging, "imaging stays clickable").toBe(false);
     expect(s.bloods, "bloods stays clickable").toBe(false);
-    expect(s.synthBtn, "no synthesis button is rendered even after ≥2 hypotheses").toBe(false);
+    expect(s.synthBtn, "no synthesis button is rendered even with hypotheses committed").toBe(false);
   });
 
   test("the investigations panel is never greyed out as locked", async ({ page }) => {
