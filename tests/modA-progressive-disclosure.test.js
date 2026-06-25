@@ -50,7 +50,7 @@ test("Module A: the First-impressions section has been removed", () => {
   // 2026-06-25 (user request): the optional "First impressions" note was
   // deleted from the chart. Assert the <details id="chart-impressions"> markup
   // is gone so it can't quietly creep back.
-  const re = /<details[^>]*\bid="chart-impressions"[^>]*>/;
+  const re = /<details[^>]*\bid=(["'])chart-impressions\1[^>]*>/;
   assert.ok(!re.test(INDEX),
     "chart-impressions <details> must no longer exist in index.html");
 });
