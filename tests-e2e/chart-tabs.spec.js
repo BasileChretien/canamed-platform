@@ -155,12 +155,17 @@ test.describe("Module A workup — Dialogue / Examination / Investigations tabs"
       return {
         precondition: hidden,
         hidden: badge.hidden, txt: badge.textContent,
+        ariaLabel: badge.getAttribute("aria-label"),
         att: tab.classList.contains("has-attention")
       };
     });
     expect(away.precondition, "Dialogue panel must be hidden while on Examination").toBe(true);
     expect(away.hidden, "badge shows while away").toBe(false);
     expect(away.txt).toBe("1");
+    // The badge carries a localized aria-label so screen-reader users get the
+    // "new reply" cue (the chat transcript's aria-live is out of the a11y tree
+    // while the Dialogue panel is hidden).
+    expect((away.ariaLabel || "").trim().length, "badge must have an aria-label for SR").toBeGreaterThan(0);
     expect(away.att, "Dialogue tab carries the attention dot").toBe(true);
 
     // Returning to Dialogue clears the badge + the dot (switchChartTab).

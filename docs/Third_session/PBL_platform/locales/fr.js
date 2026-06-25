@@ -512,6 +512,7 @@
   "modA.chart.investigations.title": "Investigations",
   "modA.chart.tabs.aria": "Bilan du patient",
   "modA.chart.tabs.dialogue": "Dialogue",
+  "modA.chart.tabs.dialogue.unread": "Nouvelle réponse",
   "modA.chart.investigations.hint": "Demandez tout examen que vous jugez indiqué — ils sont à vous de choisir, comme l'examen clinique. En prescrire un non indiqué coûte tout de même des points.",
   "modA.coach.add-hypothesis": "Vous avez recueilli quelques informations — mettez-vous d'accord sur au moins une hypothèse de travail ci-dessus (qu'est-ce que vous suspectez ?) avant de vous engager dans les examens et un plan.",
   "modA.coach.read-case": "Lisez le cas, puis interrogez M. Lefebvre, examinez et investiguez pour faire le bilan.",

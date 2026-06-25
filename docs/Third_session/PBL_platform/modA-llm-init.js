@@ -350,13 +350,18 @@
     refs.awarded.on("value", _onAwardedValue);
 
     // Replay existing transcript when a teammate refreshes mid-session.
+    // init() can re-run (e.g. re-entering Module A), which re-subscribes and
+    // replays EVERY existing turn. Only flag turns created AFTER this init
+    // started as "new" — otherwise a re-init while the student is away from
+    // Dialogue would inflate the badge to the whole transcript's history.
+    var initStartedAt = Date.now();
     function _onChatChild(snap) {
       var t = snap.val();
       if (!t || !t.role || !t.content) return;
       _renderTurn(transcriptEl, t.role, t.content);
       // If the patient answered while the student is on the Examination /
       // Investigations tab, dot the Dialogue tab so the reply isn't missed.
-      if (t.role === "assistant") _flagDialogueUnread();
+      if (t.role === "assistant" && Number(t.at || 0) >= initStartedAt) _flagDialogueUnread();
       // Seed the local context ring lazily — bridge has its own copy.
     }
     refs.chat.on("child_added", _onChatChild);
