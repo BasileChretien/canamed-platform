@@ -38,9 +38,8 @@ test("generateItemDifficulty aggregates by decision id, hardest-first, with a re
   assert.match(TOOLS, /window\.generateItemDifficulty = generateItemDifficulty/, "must be exposed");
 });
 
-test("the item-difficulty button is wired + localised", () => {
-  assert.match(HTML, /id="admin-itemdiff-btn"/, "the button must exist");
-  assert.match(SCRIPT, /runAdminTool\("generateItemDifficulty"\)/, "the button must be wired");
+test("the item-difficulty generator is localised (button removed from the lean menu 2026-06-25)", () => {
+  assert.doesNotMatch(HTML, /id="admin-itemdiff-btn"/, "the item-difficulty button is gone from the lean menu");
   const n = (I18N.match(/"impact\.itemdiff":/g) || []).length;
   assert.ok(n >= 3, "impact.itemdiff must be defined in en, fr and ja (got " + n + ")");
 });

@@ -2719,8 +2719,21 @@
              its id, so all existing wiring is untouched. Toggle wired by
              initAdminToolsMenu(). -->
         <div class="stage-controls">
-          <button id="admin-download-btn"
-                  data-i18n="admin.download-all">Download all group answers</button>
+          <!-- Download archive (2026-06-25, user request): replaces the old
+               plain-text "Download all group answers" button. A full, structured
+               snapshot of the live session (rooms → participants, hypotheses, the
+               two Module A answers, scores, votes) in the facilitator's choice of
+               CSV or JSON. Honours the "Pseudonymise names" toggle below. Wired by
+               downloadSessionArchive() — no lazy chunk, always available. -->
+          <span class="admin-archive" role="group" aria-label="Download session archive">
+            <span class="admin-archive-label" data-i18n="admin.archive.label">Download archive:</span>
+            <button id="admin-archive-csv-btn" type="button"
+                    data-i18n="admin.archive.csv"
+                    title="Download a structured CSV snapshot of the whole session">CSV</button>
+            <button id="admin-archive-json-btn" type="button"
+                    data-i18n="admin.archive.json"
+                    title="Download a structured JSON snapshot of the whole session">JSON</button>
+          </span>
           <button id="admin-debrief-btn" type="button"
                   data-i18n="debrief.toggle"
                   aria-controls="admin-debrief" aria-expanded="false">Open debrief</button>
@@ -2735,32 +2748,22 @@
             </button>
             <div class="admin-overflow-menu" id="admin-overflow-menu" role="menu"
                  aria-label="More facilitator tools">
-              <!-- Markdown variant — sim 2026-05-19 (Hiroshi, Antoine, Hugo,
-                   Lucas): same payload as the .txt download, formatted as
-                   markdown for easy paste into notes / revision tools. -->
-              <button id="admin-download-md-btn" role="menuitem"
-                      data-i18n="admin.download-md">Download as Markdown</button>
-              <!-- Impact report (2026-05-22): one-click, dean-ready summary —
-                   participation/equity, decision quality, engagement,
-                   satisfaction — opened as a printable page. Pseudonymous. -->
-              <button id="admin-impact-btn" type="button" role="menuitem"
-                      data-i18n="impact.button"
-                      title="Open a printable, dean-ready impact summary of this session">📊 Impact report</button>
-              <!-- Accreditation evidence (2026-05-22): competencies mapped to
-                   outcomes for an accreditation dossier (HCERES / JACME). -->
-              <button id="admin-accred-btn" type="button" role="menuitem"
-                      data-i18n="impact.accred"
-                      title="Competency evidence mapped to your framework (for accreditation)">📋 Accreditation evidence</button>
-              <!-- Research export (2026-05-22): analysis-ready, pseudonymous
-                   JSON aligned to the study protocol/SAP, for the R pipeline. -->
+              <!-- Lean "More tools" set (2026-06-25, user request: "refund the
+                   more tools button to keep only the most needed tools"). The
+                   rarely-used post-hoc analytics reports (Markdown answers dump,
+                   Impact report, Accreditation evidence, Program overview, Item
+                   difficulty, Cohort comparison) were removed from the menu. The
+                   underlying generators remain in admin-tools.js (still unit-
+                   tested) should they ever need re-surfacing. -->
+              <!-- Research export (2026-05-22): analysis-ready, pseudonymous data
+                   aligned to the study protocol/SAP. Two formats (the JSON/CSV
+                   toggle) for the R pipeline / Excel. -->
               <button id="admin-research-btn" type="button" role="menuitem"
                       data-i18n="impact.research"
-                      title="Download an analysis-ready, pseudonymous JSON for the research pipeline">🔬 Research export</button>
-              <!-- Research export CSV (2026-05-22): same pseudonymous data as
-                   the JSON button, as flat CSV that opens in Excel. -->
+                      title="Download an analysis-ready, pseudonymous JSON for the research pipeline">🔬 Research export (JSON)</button>
               <button id="admin-research-csv-btn" type="button" role="menuitem"
                       data-i18n="impact.research-csv"
-                      title="Download analysis-ready CSV (participant pre/post scores + feedback survey + room decisions) — opens in Excel">📊 Research export (CSV)</button>
+                      title="Download analysis-ready CSV (participant pre/post scores + feedback survey + room decisions) — opens in Excel">🔬 Research export (CSV)</button>
               <!-- Email roster (2026-05-27): facilitator-only export of
                    participant emails. Identifiable; readable only by the creator. -->
               <button id="admin-roster-btn" type="button" role="menuitem"
@@ -2776,19 +2779,6 @@
               <button id="admin-revoke-cert-btn" type="button" role="menuitem"
                       data-i18n="impact.revoke-cert"
                       title="Remove a participant's certificate-verification entry (GDPR/APPI erasure for /credentials)">🗑️ Remove a verification entry</button>
-              <!-- Program overview (2026-05-22): cross-session rollup for a
-                   program-level (dean) view. -->
-              <button id="admin-program-btn" type="button" role="menuitem"
-                      data-i18n="impact.program"
-                      title="Cross-session program overview (cumulative reach + trend)">📈 Program overview</button>
-              <!-- Item difficulty (2026-05-22): which decisions trip rooms up. -->
-              <button id="admin-itemdiff-btn" type="button" role="menuitem"
-                      data-i18n="impact.itemdiff"
-                      title="Which decisions trip rooms up — curriculum feedback">🧭 Item difficulty</button>
-              <!-- Cohort comparison (2026-05-22): Caen × Nagoya split. -->
-              <button id="admin-cohort-btn" type="button" role="menuitem"
-                      data-i18n="impact.cohort"
-                      title="Compare cohorts (Caen × Nagoya) — participation + learning gain">🌍 Cohort comparison</button>
               <!-- Telemetry export — the in-page error/CSP-violation buffer,
                    useful for postmortems. -->
               <button type="button" id="admin-error-log-btn" role="menuitem"

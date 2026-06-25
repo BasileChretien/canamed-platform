@@ -54,9 +54,8 @@ test("generateProgramDashboard aggregates the local rollup", () => {
   assert.match(fn, /No closed sessions/, "must handle the empty state");
 });
 
-test("the program button is wired + exposed + localised", () => {
-  assert.match(HTML, /id="admin-program-btn"/, "the program button must exist");
-  assert.match(SCRIPT, /runAdminTool\("generateProgramDashboard"\)/, "the button must be wired");
+test("the program dashboard generator is exposed + localised (button removed from the lean menu 2026-06-25)", () => {
+  assert.doesNotMatch(HTML, /id="admin-program-btn"/, "the program button is gone from the lean menu");
   assert.match(TOOLS, /window\.generateProgramDashboard = generateProgramDashboard/, "must be exposed");
   const n = (I18N.match(/"impact\.program":/g) || []).length;
   assert.ok(n >= 3, "impact.program must be defined in en, fr and ja (got " + n + ")");
