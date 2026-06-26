@@ -270,6 +270,20 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
 });
 
+test("rules: /moduleB/phase accepts the six synced phases (0..5) and rejects 6", async ({ page }) => {
+  await page.goto("/");
+  await waitForUid(page);
+  const code = "mbphase-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const path = `sessions/${code}/rooms/Room 1/moduleB/phase`;
+  // Any authed participant can advance the synced phase (no membership gate, like
+  // the exchange cursor). Phase 5 (the sixth phase) became valid with the
+  // 2026-06-26 swap → replay → reflect extension; 6 is out of range.
+  expect(await tryWrite(page, path, 0)).toBe("ALLOWED");
+  expect(await tryWrite(page, path, 5)).toBe("ALLOWED");
+  expect(await tryWrite(page, path, 6)).not.toBe("ALLOWED");
+  expect(await tryWrite(page, path, null)).toBe("ALLOWED");
+});
+
 test("rules: per-room write gating — a Room 1 member cannot write into Room 2 (cross-room tampering denied)", async ({ page }) => {
   await page.goto("/");
   const uid = await waitForUid(page);

@@ -24,8 +24,11 @@ test("Module B is wrapped in a two-column layout with a sticky answers column", 
   // The columns wrap exists with the modB-columns class + col-left/col-right.
   assert.match(INDEX, /<div class="columns modB-columns">\s*<div class="col-left">/,
     "Module B must open .columns.modB-columns > .col-left after the coach");
-  assert.match(INDEX, /<div class="col-right">\s*<section class="card answers-card answers-card-bulleted">/,
-    "the Module B group-answers card must sit in the sticky .col-right");
+  // 2026-06-26: col-right now carries TWO answer cards — the Phase-3 exchange
+  // (two questions) and the Phase-6 reflect (what improved). The first is the
+  // exchange card.
+  assert.match(INDEX, /<div class="col-right">[\s\S]{0,300}?<section class="card answers-card answers-card-bulleted answers-card-modB-exchange">/,
+    "the Module B Phase-3 exchange answers card must sit in the sticky .col-right");
   // Module-B-specific column ratio (col-left wider than the answers sidebar).
   assert.match(CSS, /\.columns\.modB-columns\s*\{[^}]*grid-template-columns/,
     "a .columns.modB-columns grid-template-columns override must exist");

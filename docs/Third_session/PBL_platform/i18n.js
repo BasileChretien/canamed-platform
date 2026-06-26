@@ -479,7 +479,7 @@
 
       "stage.modB.intro.hint": "This module is a roleplay your group runs together. Work through the four phases in order — an observer keeps time.",
 
-      "stage.modB.phase1.title": "Phase 1 — Set up (6 min)",
+      "stage.modB.phase1.title": "Phase 1 — Set up (5 min)",
       "stage.modB.phase1.intro": "Assign one volunteer to each role; everyone else is an observer. Read your own short brief, then begin.",
       "stage.modB.phase1.role.physician": "<strong>Physician</strong> — you have the test results. Deliver the news honestly and with empathy, and handle whatever happens in the room. Keep SPIKES in mind (see the strip below) but do not recite it. You do not have to \"win\" or fix everything — a good consultation can end with the patient still upset.",
       "stage.modB.phase1.role.patient": "<strong>Patient</strong> — you are 60. You suspected something was wrong but hoped it was nothing. Choose privately how you react, and you may change as the scene goes on. <strong>Decide one thing in advance: deep down, do you want to know everything, or not?</strong> Don't announce it — let the physician discover it.",
@@ -504,7 +504,7 @@
       "modB.obs.hard-label": "One moment that was hard or could improve:",
       "modB.obs.hard-ph": "e.g. gave the prognosis number before the patient asked for it",
 
-      "stage.modB.phase2.title": "Phase 2 — Play it out (12 min scene + 3 min swap)",
+      "stage.modB.phase2.title": "Phase 2 — Play it out (15 min)",
       "stage.modB.phase2.intro": "The observer says \"start\": the patient is already seated, the physician begins. The physician delivers the news and handles the family member's request in the moment. Observers stay silent; the observer calls \"time\" at the end. <strong>Then swap and run it again</strong> with a different physician — over the two runs, at least one Caen and one Nagoya student must take the physician role. The second run is almost always better, and that improvement is worth discussing.",
 
       "stage.modB.framework.label": "<strong>When the family asks you to withhold information — \"Pause · Explore · Explain · Realign\":</strong>",
@@ -513,34 +513,27 @@
       "stage.modB.framework.explain": "<strong>Explain your position</strong> — you cannot deceive a patient who wants to know, but you do not have to force information on someone who does not.",
       "stage.modB.framework.realign": "<strong>Realign</strong> — ask the <em>patient</em> how much they want to know and who they want involved (this is SPIKES' \"Invitation\"). The family's worry becomes part of the conversation, not a secret kept from the patient.",
 
-      "stage.modB.phase3.title": "Phase 3 — The exchange (15 min)",
-      "stage.modB.phase3.ground-rule": "<strong>Ground rule for this discussion (Phase 3):</strong> we are comparing <em>practices and how they are changing</em>, not ranking countries. Neither model is \"the advanced one\". Speak about what you have actually seen or been taught — and it is completely fine to say \"I'm not sure, this is changing.\"",
-      "stage.modB.phase3.intro": "Take the prompts one at a time — for each, make sure both a Caen and a Nagoya voice answers:",
-      "stage.modB.phase3.q1": "<strong>Who is the information for?</strong> When there is serious news, who is told <em>first</em> — the patient or the family? Is that what the law says, the textbook says, or what actually happens on the ward? Name one way France and Japan are the <strong>same</strong> and one way they <strong>differ</strong>.",
-      "stage.modB.phase3.q2": "<strong>Has it changed?</strong> Was disclosure done differently 20–30 years ago? (Japan: cancer-diagnosis disclosure rose from under ~30% in the early 1990s to ~94% by 2016. France: the 2002 <em>loi Kouchner</em> changed patients' information rights.) Why do norms change — law, generations, expectations?",
-      "stage.modB.phase3.q3": "<strong>The family's quiet request — what did you actually do, and why?</strong> Would a typical doctor in France respond the same way as one in Japan? What is each most worried about — lying to the patient, or harming the patient? Is \"protecting someone from bad news\" love, or taking away their choice — or both?",
-      "stage.modB.phase3.q4": "<strong>Autonomy vs. family — is it really either/or?</strong> France is described as \"autonomy first\", Japan as \"family-centred\" — but French law also protects the right <em>not</em> to know, and many Japanese patients today want full information. Where does your country actually sit? What would a <em>both</em> model look like?",
-      "stage.modB.phase3.q5": "<strong>Empathy across a language barrier.</strong> You broke bad news in English. Did Caen and Nagoya students lean on different things — words, silence, tone, body language? What survives the language barrier, and what gets lost?",
-      "stage.modB.phase3.q6": "<strong>What was hard — and was it hard in the same way?</strong> Did Caen and Nagoya students find <em>different</em> parts hard (the silence? the family member? saying the diagnosis out loud? not fixing the distress?)? What does that difference tell you?",
+      // Six-phase Module B (2026-06-26): the 6-prompt stepped exchange + the
+      // 3-bullet write-up fused into Phase 3 (two questions + the vote), then a
+      // swap → replay → reflect loop (Phases 4–6).
+      "stage.modB.phase3.title": "Phase 3 — The exchange (10 min)",
+      "stage.modB.phase3.ground-rule": "<strong>Ground rule:</strong> we are comparing <em>practices and how they are changing</em>, not ranking countries. Neither model is \"the advanced one\". Speak about what you have actually seen or been taught — and it is completely fine to say \"I'm not sure, this is changing.\"",
+      "stage.modB.exchange.title": "Phase 3 — Talk it through & vote",
+      "stage.modB.phase4.title": "Phase 4 — Swap & replay (2 min)",
+      "stage.modB.swap.title": "Phase 4 — Swap roles & replay",
+      "stage.modB.swap.body": "You've played it once and talked it through. Now <strong>swap</strong>: everyone rotates to the next role and replays the same scene from the other side — that's where the empathy really lands. Tap <strong>Swap</strong>; your role chip and your \"Your role\" tab update automatically.",
+      "stage.modB.phase5.title": "Phase 5 — Play it out (8 min)",
+      "stage.modB.replay.title": "Phase 5 — Play it out (round 2)",
+      "stage.modB.replay.body": "Play the <strong>same scene</strong> again from your <strong>new role</strong>. Don't aim for a perfect run — notice what you do <em>differently</em> now that you've seen it from another side. Your role and a private brief are in the <strong>\"Your role\"</strong> tab.",
+      "stage.modB.phase6.title": "Phase 6 — What improved (6 min)",
+      "stage.modB.reflect.title": "Phase 6 — What improved",
+      "stage.modB.reflect.intro": "You played it twice, from two sides. Reflect together on what changed — then each note one thing you'll take home.",
 
-      "stage.modB.phase4.title": "Phase 4 — Write your bullets (5 min)",
-      "stage.modB.phase4.intro": "In the Group answers box below (the facilitators collect these at the end):",
-      "stage.modB.phase4.b1": "One concrete sentence your group would use to answer the family's request to withhold information.",
-      "stage.modB.phase4.b2": "One way disclosure practice <strong>differs</strong> between France and Japan — and one way it is <strong>converging</strong>.",
-      "stage.modB.phase4.b3": "One thing each of you will do differently, in your own country, because of this discussion.",
-
-      "stage.modB.answers.title": "Group answers — Module B",
-
-      // Module B — synced phase navigation + Phase-3 one-at-a-time (2026-05-27)
+      // Module B — synced phase navigation
       "modB.phase.prev": "← Previous",
       "modB.phase.next": "Next →",
-      "modB.phase.indicator": "Phase {n} / 4",
+      "modB.phase.indicator": "Phase {n} / 6",
       "modB.phase.nav-hint": "Everyone moves together — tap <strong>Next →</strong> when your group has finished this phase.",
-      "modB.exchange.prev": "← Previous",
-      "modB.exchange.next": "Next →",
-      "modB.exchange.counter": "Prompt {n} / {total}",
-      "modB.exchange.done": "✓ You've worked through all six prompts. Move to Phase 4 to write your team's bullets.",
-      "modB.exchange.reply.placeholder": "Type a short note from your group's discussion — anyone in the room can edit and it autosaves.",
 
       // ────────────────────────────────────────────────────────────────
       // Natural-flow refactor (2026-05-18): the Module A "instructions"
@@ -595,10 +588,12 @@
 
       // Module B — phase stepper time chips (titles re-use existing
       // stage.modB.phaseN.title keys for cross-version stability)
-      "modB.phase.setup.time": "6 min",
-      "modB.phase.play.time": "12 + 3 min",
-      "modB.phase.exchange.time": "15 min",
-      "modB.phase.bullets.time": "5 min",
+      "modB.phase.setup.time": "5 min",
+      "modB.phase.play.time": "15 min",
+      "modB.phase.exchange.time": "10 min",
+      "modB.phase.swap.time": "2 min",
+      "modB.phase.replay.time": "8 min",
+      "modB.phase.reflect.time": "6 min",
 
       // Module B — role picker
       "modB.roles.prompt": "<strong>Pick your role</strong> for this roleplay. Everyone not in a named role is an observer (timekeeper + Phase 3 facilitator).",
@@ -638,15 +633,17 @@
       "modB.guide.family.p4": "Let the physician explore your worry; don't back down the instant they push back.",
 
       // Module B — structured Group-answers form
-      "modB.answers.bullet.family-sentence.label": "1. One concrete sentence your group would use to answer the family's request to withhold information",
+      "modB.answers.bullet.family-sentence.label": "1. When the family asked you to <strong>withhold</strong> — what did you do, and would a doctor in <strong>France</strong> respond the same way as one in <strong>Japan</strong>?",
       "modB.answers.bullet.family-sentence.placeholder": "e.g. \"Let me first ask your parent how much they want to know...\"",
       "modB.answers.bullet.differ-converge.label": "2. One way disclosure practice <strong>differs</strong> between France and Japan — and one way it is <strong>converging</strong>",
       "modB.answers.bullet.differ-converge.placeholder": "e.g. differs on family-first vs patient-first; converges toward shared decision-making",
-      "modB.answers.bullet.practice-change.label": "3. One thing each of you will do differently, in your own country, because of this discussion",
+      "modB.answers.bullet.reflect-improved.label": "1. What did you do <strong>differently</strong> the second time — and what did playing the other side teach you?",
+      "modB.answers.bullet.reflect-improved.placeholder": "e.g. as the patient I realised how fast the doctor moved — so the second time I paused more",
+      "modB.answers.bullet.practice-change.label": "2. One thing each of you will do differently, in your own country, because of this",
       "modB.answers.bullet.practice-change.placeholder": "one sentence per person",
       "modB.answers.bullet.unsorted.label": "Other points (not yet attached to a bullet)",
       // Completion CTA — appears once all three Module B bullets have an entry.
-      "modB.answers.complete.msg": "✓ All three answers are in. Ready to wrap up?",
+      "modB.answers.complete.msg": "✓ All your answers are in. Ready to wrap up?",
       "modB.answers.complete.cta": "Call a facilitator to go to the final section →",
       // facilitator-facing message sent on the help-call (shown on the dashboard)
       "modB.answers.complete.callMsg": "Module B done — ready for the final wrap-up section.",
@@ -725,9 +722,9 @@
       "modA.coach.btn.open-answers": "Open Group answers →",
       "modA.coach.synthesis-unlocked": "✓ <strong>Hypotheses in — Phase 3 (Debate) is open.</strong> The discussion prompts are below; both a Caen and a Nagoya voice must speak on each comparison prompt.",
       "modB.coach.pick-role": "Read the situation together, then take a seat below — there's no wrong choice, and you'll swap roles and replay.",
-      "modB.coach.roleplay": "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion with the prompts below.",
-      "modB.coach.bullets-partial": "Capturing bullets — {n} still to add to cover all 3.",
-      "modB.coach.bullets-complete": "✓ All 3 bullets covered. Add more refinements or wait for your facilitator.",
+      "modB.coach.roleplay": "Roles set! Play the scene, then talk it through and vote — and you'll swap roles and replay.",
+      "modB.coach.bullets-partial": "Capturing your answers — {n} still to add.",
+      "modB.coach.bullets-complete": "✓ All your answers are in. Add more refinements or wait for your facilitator.",
 
       // wrap-up stage (stage-3) — the last thing students see in the room
       "stage.wrap.title": "Wrap-up & Next Steps",

@@ -61,19 +61,22 @@ test.describe("Stage bar redundancy + observer button removal", () => {
 });
 
 test.describe("Module B right-column collapse", () => {
-  test("collapses except in the 'bullets' phase", async ({ page }) => {
+  test("collapses except in the answer phases (exchange + reflect)", async ({ page }) => {
     await surfaceApp(page);
     await showStage(page, "stage-2");
     const cols = page.locator("#stage-2 .columns.modB-columns");
     await expect(cols).toHaveCount(1);
-    // setup / play / exchange: the group-answers card is hidden → full width
-    for (const phase of ["setup", "play", "exchange"]) {
+    // setup / play / swap / replay: the answer cards are hidden → full width
+    for (const phase of ["setup", "play", "swap", "replay"]) {
       await page.evaluate((p) => window.applyModBPhaseVisibility(p), phase);
       await expect(cols).toHaveClass(/rcol-collapsed/);
     }
-    // bullets: the group-answers card shows → the two-column layout returns
-    await page.evaluate(() => window.applyModBPhaseVisibility("bullets"));
-    await expect(cols).not.toHaveClass(/rcol-collapsed/);
+    // 2026-06-26: the answer cards now show in P3 "exchange" (two questions) and
+    // P6 "reflect" (what improved) → the two-column layout returns in both.
+    for (const phase of ["exchange", "reflect"]) {
+      await page.evaluate((p) => window.applyModBPhaseVisibility(p), phase);
+      await expect(cols).not.toHaveClass(/rcol-collapsed/);
+    }
   });
 });
 

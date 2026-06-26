@@ -25,6 +25,10 @@ async function revealModuleBPicker(page) {
     document.body.classList.remove("locked");
     // Wire the role picker + swap button (normally wired on room entry).
     if (typeof window.initRolePicker === "function") window.initRolePicker();
+    if (typeof window.initModBPhaseNav === "function") window.initModBPhaseNav();
+    // The swap button lives in the Phase-4 "swap & replay" card now (2026-06-26),
+    // so move the synced phase there — the card (and the role picker) are visible.
+    if (typeof window.setModBPhase === "function") window.setModBPhase(3);
   });
 }
 

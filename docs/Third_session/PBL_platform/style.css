@@ -1022,6 +1022,15 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   font-variant-numeric: tabular-nums;
   font-weight: 500;
 }
+/* Six-phase Module B stepper (2026-06-26): tighten the chips a touch so six fit
+   in fewer rows without truncating the "Phase N — …" labels. */
+.phase-stepper[data-steps="6"] .phase-step { flex-basis: 116px; }
+.phase-stepper[data-steps="6"] .phase-step-btn { padding: 5px 8px; font-size: 0.81rem; gap: 6px; }
+.phase-stepper[data-steps="6"] .phase-step-num { width: 19px; height: 19px; font-size: 0.72rem; }
+.phase-stepper[data-steps="6"] .phase-step-time { font-size: 0.72rem; }
+@media (max-width: 520px) {
+  .phase-stepper[data-steps="6"] .phase-step { flex-basis: 47%; }
+}
 /* Generic per-phase visibility toggle (Module B): a section/prompt not in the
    current phase is removed from the flow entirely. */
 .is-phase-hidden { display: none !important; }
