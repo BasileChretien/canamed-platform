@@ -434,7 +434,7 @@
       "room.answer-input-placeholder": "Add a point — it appears with your name and colour",
       // dynamic hint under each answers box (set from script.js)
       "room.answers.hint.moduleA": "Anyone in the room can add a point — it saves automatically. Aim for the four bullets above; both France and Japan should write.",
-      "room.answers.hint.moduleB": "Anyone in the room can add a point — it saves automatically. Cover the three bullets above; both France and Japan should write.",
+      "room.answers.hint.moduleB": "Anyone in the room can add a point — it saves automatically. Cover the points above; both France and Japan should write.",
       "room.answers.hint.count-one": "{n} answer so far",
       "room.answers.hint.count-many": "{n} answers so far",
       "room.answers.hint.both-wrote": "✓ both France and Japan have written here",
@@ -477,7 +477,7 @@
       "stage.modB.safety.simulation": "<em>This is a simulation.</em> The feelings can still feel real. If anything hits too close to home, you can move into the observer role at any time, no explanation needed. When you debrief, talk about <strong>the physician's choices</strong> — never criticise the person.",
       "stage.modB.safety.language": "<em>English is everyone's second or third language here</em> — that is part of the point. If you cannot find a word, slow down, use a simpler one, or pause. Silence is allowed in this conversation and often helps. Empathy is in your tone, your pace and your face, not in advanced vocabulary.",
 
-      "stage.modB.intro.hint": "This module is a roleplay your group runs together. Work through the four phases in order — an observer keeps time.",
+      "stage.modB.intro.hint": "This module is a roleplay your group runs together. Work through the six phases in order — an observer keeps time.",
 
       "stage.modB.phase1.title": "Phase 1 — Set up (5 min)",
       "stage.modB.phase1.intro": "Assign one volunteer to each role; everyone else is an observer. Read your own short brief, then begin.",
@@ -505,7 +505,7 @@
       "modB.obs.hard-ph": "e.g. gave the prognosis number before the patient asked for it",
 
       "stage.modB.phase2.title": "Phase 2 — Play it out (15 min)",
-      "stage.modB.phase2.intro": "The observer says \"start\": the patient is already seated, the physician begins. The physician delivers the news and handles the family member's request in the moment. Observers stay silent; the observer calls \"time\" at the end. <strong>Then swap and run it again</strong> with a different physician — over the two runs, at least one Caen and one Nagoya student must take the physician role. The second run is almost always better, and that improvement is worth discussing.",
+      "stage.modB.phase2.intro": "The observer says \"start\": the patient is already seated, the physician begins. The physician delivers the news and handles the family member's request in the moment. Observers stay silent; the observer calls \"time\" at the end. You'll swap roles and replay this scene in the later phases.",
 
       "stage.modB.framework.label": "<strong>When the family asks you to withhold information — \"Pause · Explore · Explain · Realign\":</strong>",
       "stage.modB.framework.pause": "<strong>Pause</strong> — don't refuse or agree on the spot. Thank them; their worry is real and usually loving.",

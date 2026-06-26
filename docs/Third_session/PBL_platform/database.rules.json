@@ -342,7 +342,7 @@
             "moduleB": {
               "phase": {
                 ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
-                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 5)"
+                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 5 && newData.val() % 1 == 0)"
               },
               "exchangeCursor": {
                 ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists()",
@@ -790,7 +790,7 @@
                 "moduleB": {
                   "phase": {
                     ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
-                    ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 5)"
+                    ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 5 && newData.val() % 1 == 0)"
                   },
                   "exchangeCursor": {
                     ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",

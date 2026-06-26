@@ -282,6 +282,9 @@ test("rules: /moduleB/phase accepts the six synced phases (0..5) and rejects 6",
   expect(await tryWrite(page, path, 5)).toBe("ALLOWED");
   expect(await tryWrite(page, path, 6)).not.toBe("ALLOWED");
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
+  // Integer-only: the client floors phase on read, so a fractional value would
+  // persist shared state the UI never shows — the rule rejects it.
+  expect(await tryWrite(page, path, 2.5)).not.toBe("ALLOWED");
 });
 
 test("rules: per-room write gating — a Room 1 member cannot write into Room 2 (cross-room tampering denied)", async ({ page }) => {
