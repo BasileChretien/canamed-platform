@@ -355,11 +355,12 @@ test.describe("mobile splash usability", () => {
     expect(cleared.resume,  "switch must clear canamed_resume").toBeNull();
   });
 
-  // Module A progressive disclosure (2026-05-20): on a phone the stacked
-  // Module A previously rendered ~30 buttons / ~5x viewport. With History
-  // open and Examination/Hypotheses/Investigations collapsed, the page
-  // opens compact. Verify the collapsed groups are not visible on mobile.
-  test("Module A: collapsed sections keep the mobile stage compact", async ({ page }) => {
+  // Module A workup tabs (2026-06-25): on a phone the stacked Module A
+  // previously rendered ~30 buttons / ~5x viewport. Dialogue / Examination /
+  // Investigations are now a tab strip showing ONE panel at a time, so the
+  // stage opens compact. Verify the Dialogue panel is the active one and the
+  // other two panels' button groups are not visible.
+  test("Module A: the workup tab strip keeps the mobile stage compact", async ({ page }) => {
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });
     await page.evaluate(() => {
@@ -372,7 +373,8 @@ test.describe("mobile splash usability", () => {
       if (s1) s1.classList.remove("hidden");
       document.body.classList.remove("locked");
     });
-    await expect(page.locator("#chart-section-history")).toHaveAttribute("open", "");
+    await expect(page.locator("#chart-section-history")).not.toHaveAttribute("hidden", /.*/);
+    await expect(page.locator('.chart-tab[data-chart-tab="dialogue"]')).toHaveAttribute("aria-selected", "true");
     await expect(page.locator("#group-exam")).toBeHidden();
     await expect(page.locator("#group-labs")).toBeHidden();
   });

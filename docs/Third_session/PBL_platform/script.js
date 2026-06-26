@@ -3159,6 +3159,7 @@ function wireRoomUI() {
   // paths (renderFindings / renderPrompts / renderAnswers / switchRcolTab).
   if (typeof updateModANextStep === "function") updateModANextStep();
   if (typeof updateModBNextStep === "function") updateModBNextStep();
+  initChartTabs();
   initRightColumnTabs();
   initMobileTabbar();
 }
@@ -3193,6 +3194,53 @@ function initRightColumnTabs() {
     });
   });
 }
+/* ===================== STAGE 1: left-column workup tab bar =================
+   The Module A "chart" carries three data-gathering modes — Dialogue (the LLM
+   patient chat), Examination and Investigations — that used to stack as three
+   <details>. A student had to scroll past a long chat transcript to reach the
+   exam/labs buttons. This tab bar shows ONE at a time. Panel ids and group ids
+   are unchanged, so buildButtons()/renderButtons(), the chat mount and the
+   is-locked toggle keep working. Mirrors initRightColumnTabs() above (click +
+   ArrowLeft/Right roving focus, role=tab/tabpanel set in the markup). */
+function initChartTabs() {
+  const bar = document.querySelector(".chart-tabs");
+  if (!bar || bar.dataset.wired) return;
+  bar.dataset.wired = "1";
+  bar.querySelectorAll(".chart-tab").forEach(btn => {
+    btn.addEventListener("click", () => switchChartTab(btn.dataset.chartTab));
+    btn.addEventListener("keydown", e => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const tabs = [...bar.querySelectorAll(".chart-tab")];
+      const i = tabs.indexOf(btn);
+      const next = e.key === "ArrowRight"
+        ? tabs[(i + 1) % tabs.length] : tabs[(i - 1 + tabs.length) % tabs.length];
+      next.focus(); switchChartTab(next.dataset.chartTab);
+    });
+  });
+}
+function switchChartTab(tab) {
+  if (!tab) return;
+  document.querySelectorAll(".chart-tab").forEach(b => {
+    const on = b.dataset.chartTab === tab;
+    b.classList.toggle("is-active", on);
+    b.setAttribute("aria-selected", String(on));
+    b.tabIndex = on ? 0 : -1;
+    if (on) b.classList.remove("has-attention");
+  });
+  document.querySelectorAll(".chart-tab-panel").forEach(p => {
+    const on = p.dataset.chartPanel === tab;
+    p.classList.toggle("is-active", on);
+    p.hidden = !on;
+  });
+  // Returning to Dialogue clears the "Mr Lefebvre answered while you were on
+  // another tab" badge (set by modA-llm-init.js _flagDialogueUnread()).
+  if (tab === "dialogue") {
+    const badge = document.getElementById("chart-tab-badge-dialogue");
+    if (badge) { badge.hidden = true; badge.textContent = ""; delete badge.dataset.count; }
+  }
+}
+
 function switchRcolTab(tab) {
   if (!tab) return;
   activeRcolTab = tab;

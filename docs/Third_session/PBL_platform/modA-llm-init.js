@@ -194,6 +194,28 @@
     el.dataset.kind = kind || "";
   }
 
+  /* ------------- Dialogue tab "new reply" badge (2026-06-25) ------------- *
+   * The chat now lives in the "Dialogue" tab alongside Examination and
+   * Investigations (the workup tab strip — script.js initChartTabs). When the
+   * student switches to another tab while Mr Lefebvre is "thinking", his reply
+   * lands in a hidden panel. Dot the Dialogue tab + bump a count so they know
+   * to switch back; switchChartTab() clears it on return. No-op when the
+   * Dialogue panel is the visible tab (incl. the initial transcript replay,
+   * since Dialogue is active on entry). */
+  function _flagDialogueUnread() {
+    var panel = _$("chart-section-history");
+    if (!panel || !panel.hasAttribute("hidden")) return;   // Dialogue is visible — nothing to flag
+    var badge = _$("chart-tab-badge-dialogue");
+    if (badge) {
+      var n = (parseInt(badge.dataset.count || "0", 10) || 0) + 1;
+      badge.dataset.count = String(n);
+      badge.textContent = String(n);
+      badge.hidden = false;
+    }
+    var tab = _$("chart-tab-dialogue");
+    if (tab) tab.classList.add("has-attention");
+  }
+
   /* ------------- points-scored feedback (2026-06-02) ------------- *
    * The scoring engine already AWARDS/penalises a typed question (the bridge
    * calls onAward/onPenalty synchronously at submit time, and the right-column
@@ -328,10 +350,18 @@
     refs.awarded.on("value", _onAwardedValue);
 
     // Replay existing transcript when a teammate refreshes mid-session.
+    // init() can re-run (e.g. re-entering Module A), which re-subscribes and
+    // replays EVERY existing turn. Only flag turns created AFTER this init
+    // started as "new" — otherwise a re-init while the student is away from
+    // Dialogue would inflate the badge to the whole transcript's history.
+    var initStartedAt = Date.now();
     function _onChatChild(snap) {
       var t = snap.val();
       if (!t || !t.role || !t.content) return;
       _renderTurn(transcriptEl, t.role, t.content);
+      // If the patient answered while the student is on the Examination /
+      // Investigations tab, dot the Dialogue tab so the reply isn't missed.
+      if (t.role === "assistant" && Number(t.at || 0) >= initStartedAt) _flagDialogueUnread();
       // Seed the local context ring lazily — bridge has its own copy.
     }
     refs.chat.on("child_added", _onChatChild);
