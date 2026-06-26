@@ -2205,6 +2205,43 @@ body[data-observer="1"] #modB-next-step {
   box-shadow: inset 0 0 0 1px var(--primary);
 }
 .reference-btn-emoji { font-size: 1.05em; line-height: 1; }
+/* "Your role" tab — highlighted once a role is held/assigned (showRoleObjective
+   toggles .has-role). A warm amber ring + dot says "this is yours" without
+   colliding with the blue open-state ring (the dot always shows when a role is
+   held; the amber ring only when the tab is closed, so an open tab keeps its
+   blue accent). Amber is hardcoded (theme-independent) like the attention dot. */
+.reference-btn--role.has-role::after {
+  content: "";
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: #e0a86b;
+  box-shadow: 0 0 0 2px var(--card);
+  flex: 0 0 auto;
+}
+.reference-btn--role.has-role:not([aria-expanded="true"]) {
+  border-color: #e0a86b;
+  box-shadow: inset 0 0 0 1px #e0a86b;
+}
+/* Your-role panel — a transparent container (no .card) so the moved role cards
+   keep their own boxes; stack them with a consistent gap. */
+.role-panel { display: flex; flex-direction: column; gap: var(--s-3); }
+.role-card-prompt { color: var(--muted); font-size: 0.95rem; margin: 0; }
+/* "Randomly assign roles" button — a calm full-width secondary action under the
+   role chips. */
+.role-assign-row { margin: var(--s-2) 0; }
+.role-assign-btn {
+  width: 100%;
+  padding: 9px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface-sunk);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.role-assign-btn:hover { background: var(--n-100); border-color: var(--primary); }
 .reference-panel { margin-top: var(--s-3); }
 .reference-panel[hidden] { display: none; }
 /* Beautiful line-breaking for the reference prose (user request 2026-06-02).

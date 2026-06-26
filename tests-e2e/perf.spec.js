@@ -228,7 +228,18 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     drops back well under the 325 cap, restoring headroom for the remaining
 //     UX Phase-2/3 items without a bump. Cap LEFT at 325 (not re-tightened) so
 //     those items have runway; revisit tightening once they land.
-const FIRST_PARTY_BYTES_LIMIT_KB = 325;
+//
+//   2026-06-26: Module B improvements (PR #180) — "randomly assign roles" + the
+//     bandeau restructure (Your role / Useful sentences tabs + role-section
+//     consolidation). NET ~+1.6 KB gz, all in the eager script.js + style.css
+//     (the in-room role-assignment logic + reference-tab CSS; index.html markup
+//     moved but isn't on this budget). The Phase-2 reclaim headroom was spent —
+//     main was sitting right at the 325 edge — so this small, reviewed feature
+//     tips it over. Bumped to 328. The designated reclaim is now a lazy-split of
+//     the Module B in-room logic out of the eager script.js (the modA-llm #48
+//     precedent): the move the next time the budget is threatened, not another
+//     bump.
+const FIRST_PARTY_BYTES_LIMIT_KB = 328;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

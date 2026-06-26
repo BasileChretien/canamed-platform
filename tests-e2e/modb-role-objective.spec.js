@@ -66,6 +66,9 @@ test.describe("Module B — private per-role objective", () => {
     await openModuleBPicker(page);
 
     await page.locator('.role-chip[data-role="patient"]').click();
+    // The brief now lives in the "Your role" reference tab (2026-06-26) — picking
+    // a role highlights that tab; open it to read the (private) brief.
+    await page.locator("#refB-btn-role").click();
 
     const panel = page.locator("#modB-role-objective");
     await expect(panel).toBeVisible();
@@ -81,25 +84,34 @@ test.describe("Module B — private per-role objective", () => {
 
   test("switching roles swaps the brief — never two at once", async ({ page }) => {
     await openModuleBPicker(page);
+    const roleTab = page.locator("#refB-btn-role");
 
     await page.locator('.role-chip[data-role="patient"]').click();
+    await roleTab.click();   // open the Your-role tab to read the brief
     const panel = page.locator("#modB-role-objective");
     await expect(panel).toContainText(PATIENT_SECRET);
 
-    // Pick the physician instead.
+    // Close the tab before re-picking — the sticky reference panel would
+    // otherwise overlay the role chips on a phone (see flashRoleSections).
+    await roleTab.click();
     await page.locator('.role-chip[data-role="physician"]').click();
+    await roleTab.click();
     await expect(panel).toContainText(PHYSICIAN_BRIEF);
     await expect(panel).not.toContainText(PATIENT_SECRET);
   });
 
   test("un-picking the held role hides the objective panel", async ({ page }) => {
     await openModuleBPicker(page);
-
     const patient = page.locator('.role-chip[data-role="patient"]');
+    const roleTab = page.locator("#refB-btn-role");
+
     await patient.click();
+    await roleTab.click();   // open the Your-role tab
     await expect(page.locator("#modB-role-objective")).toBeVisible();
 
-    // Re-tap to clear the role (deselect toggle).
+    // Close the tab, then re-tap the chip to clear the role (deselect toggle);
+    // the brief panel hides (its .hidden class) regardless of the tab state.
+    await roleTab.click();
     await patient.click();
     await expect(page.locator("#modB-role-objective")).toBeHidden();
   });

@@ -486,13 +486,8 @@
       "stage.modB.phase1.role.family": "<strong>Family member (adult child)</strong> — you love your parent and you are frightened. Partway through — not at the start — find a natural moment to <strong>lower your voice and speak to the physician aside</strong>: ask them not to tell your parent everything. Have a reason ready in your head. Keep it quiet and well-meant, not a demand.",
       "stage.modB.phase1.role.observer": "<strong>Observer(s)</strong> — you are the timekeeper and you run Phase 3. Stay silent during the scene. Watch <em>for the SPIKES steps</em>: what built trust, what created distance, and what the physician did at the moment the family member spoke to them. Note one thing the physician <em>said</em> that worked, and one moment that was hard.",
 
-      "stage.modB.spikes.label": "SPIKES",
-      "stage.modB.spikes.s": "<strong>S</strong>etting",
-      "stage.modB.spikes.p": "<strong>P</strong>erception (what do they already understand?)",
-      "stage.modB.spikes.i": "<strong>I</strong>nvitation (how much do they want to know?)",
-      "stage.modB.spikes.k": "<strong>K</strong>nowledge (news in small, plain pieces)",
-      "stage.modB.spikes.e": "<strong>E</strong>motions (name and acknowledge the feeling)",
-      "stage.modB.spikes.s2": "<strong>S</strong>trategy (agree the next step; you won't abandon them)",
+      // stage.modB.spikes.* mnemonic-strip keys DELETED 2026-06-26 (the SPIKES
+      // strip was removed — the Recap-table tab carries the full SPIKES).
 
       "stage.modB.spikes.useful.label": "Useful sentences (English is everyone's second language):",
       "stage.modB.spikes.useful.examples": "\"I'm afraid I have some serious news.\" · \"Would you like me to explain everything, or focus on what we do next?\" · \"I can see this is hard to hear.\" · \"Take your time.\" · \"What questions do you have for me?\"",
@@ -607,6 +602,8 @@
 
       // Module B — role picker
       "modB.roles.prompt": "<strong>Pick your role</strong> for this roleplay. Everyone not in a named role is an observer (timekeeper + Phase 3 facilitator).",
+      "modB.roles.assign": "🎲 Randomly assign roles",
+      "modB.role.card.prompt": "<strong>Pick your role</strong> above (or tap \"Randomly assign roles\") to see your part and a private brief here.",
       "modB.role.physician.name": "Physician",
       "modB.role.physician.brief": "Deliver the news with empathy. Keep SPIKES in mind but don't recite it. A good consultation can end with the patient still upset.",
       "modB.role.patient.name": "Patient (60)",
@@ -662,6 +659,8 @@
       // the deleted instruction walls with state-aware, single-line
       // guidance. State machine in updateModANextStep / updateModBNextStep.
       "coach.dismiss": "Hide this guidance for the rest of the session",
+      "reference.btn.yourrole": "Your role",
+      "reference.btn.useful": "Useful sentences",
       "reference.btn.history": "Historical context",
       "reference.btn.guidelines": "Guidelines",
       "reference.btn.recap": "Recap table",

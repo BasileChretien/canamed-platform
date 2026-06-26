@@ -1294,7 +1294,7 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
     refObservers = null, refAnswerReplies = null, refPoll = null,
     refRoleChoices = null,
-    refReplayRound = null,
+    refReplayRound = null, refRoleAssign = null,
     refModBPhase = null, refModBExchangeCursor = null, refModBExchangeReplies = null,
     refClosed = null;
 
@@ -3538,6 +3538,7 @@ function teardownRoom() {
     if (refObservers) refObservers.off();
     if (refRoleChoices) refRoleChoices.off();
     if (refReplayRound) refReplayRound.off();
+    if (refRoleAssign) refRoleAssign.off();
     if (refModBPhase) refModBPhase.off();
     if (refModBExchangeCursor) refModBExchangeCursor.off();
     if (refModBExchangeReplies) refModBExchangeReplies.off();
@@ -3618,6 +3619,17 @@ function startRoom() {
   refReplayRound = db.ref(base + "/roleplayRound");
   refReplayRound.on("value", snap => {
     try { handleReplayRound(snap.val(), true); } catch (_) {}
+  });
+
+  // Randomly assign roles (2026-06-26): a member taps the button, which computes
+  // a distinct-role draw over the present roster and writes a {clientId: role}
+  // mapping here; each client then claims its OWN assigned role. handleRoleAssign
+  // guards on `at` so a refresh / late snapshot doesn't re-apply an old draw.
+  refRoleAssign = db.ref(base + "/moduleB/roleAssign");
+  _lastRoleAssignAt = 0;   // room-scoped: a fresh room's draw must not be skipped
+                           // just because the previous room's draw had a later `at`
+  refRoleAssign.on("value", snap => {
+    try { handleRoleAssign(snap.val()); } catch (_) {}
   });
 
   // Module B synced phase + Phase-3 exchange cursor (2026-05-27): the whole
@@ -10060,25 +10072,12 @@ const MODB_PHASES = ["setup", "play", "exchange", "bullets"];
 // selector (scoped to #stage-2) → the phases in which that action section shows
 const MODB_PHASE_SECTIONS = [
   { sel: ".vignette",              phases: ["setup"] },
-  { sel: ".safety-note",           phases: ["setup"] },
   { sel: "#modB-role-picker",      phases: ["setup", "play"] },
-  // Scene-prep reference strips: useful while setting up and playing, but pure
-  // noise once the room moves to the cross-country discussion (Phase 3) and the
-  // bullet write-up (Phase 4) — hidden there (2026-06-03 user request).
-  { sel: ".spikes-strip",          phases: ["setup", "play"] },
-  { sel: ".phrases-box",           phases: ["setup", "play"] },
-  // Per-role guidance — phase-gated to setup+play AND role-gated (see
-  // MODB_ROLE_SECTIONS): each shows only for the role that holds it. All four
-  // appear from Phase 1 (setup) so the student can READ their role brief before
-  // the scene starts (2026-06-03 user report: the role section wasn't visible in
-  // Phase 1 for physician/observer, which were play-only).
-  { sel: "#observer-checklist",    phases: ["setup", "play"] },
-  { sel: ".micro-framework-card",  phases: ["setup", "play"] },
-  { sel: "#modB-patient-guide",    phases: ["setup", "play"] },
-  { sel: "#modB-family-guide",     phases: ["setup", "play"] },
-  // The private brief now sits below the role guides (relocated out of the
-  // picker 2026-06-03), so it needs its own phase gate to hide in Phase 3/4.
-  { sel: "#modB-role-objective",   phases: ["setup", "play"] },
+  // The per-role guides, observer checklist, private brief, useful-sentences and
+  // the safety note MOVED 2026-06-26 into the always-available reference tabs
+  // ("Your role" / "Useful sentences"), so they are no longer phase-gated;
+  // role-gating (MODB_ROLE_SECTIONS) still narrows "Your role" to the holder.
+  // The SPIKES strip was deleted (redundant with the Recap-table tab).
   { sel: ".prompts-card-modB",     phases: ["exchange"] },
   // Team decisions ("vote together") only appear in the discussion phase — they
   // used to sit visible from the very start (user request 2026-06-02). Once the
@@ -10145,25 +10144,15 @@ function _flashEl(node) {
   });
 }
 
-/* When a student PICKS a Module B role, flash the role-specific section(s) that
-   appear so they understand to read (and, for the collapsible guides, click)
-   them. Always flashes the private-brief panel; also flashes the role's guide
-   card when it is currently visible (not phase/role-hidden). */
+/* On a Module B role PICK, pulse the "Your role" reference tab so the student
+   notices it lit up — the guides + private brief live inside it now. We do NOT
+   auto-open it: the reference section is sticky, and on a phone an auto-opened
+   tall panel would overlay the role picker mid-selection. The amber .has-role
+   highlight (set by showRoleObjective) is the persistent "your part is here". */
 function flashRoleSections(role) {
   if (typeof document === "undefined" || !role) return;
+  _flashEl(el("refB-btn-role"));
   _flashEl(el("modB-role-objective"));
-  const map = MODB_ROLE_SECTIONS.find(s => s.roles.indexOf(role) !== -1);
-  if (!map) return;
-  const stage = document.getElementById("stage-2");
-  const card = stage && stage.querySelector(map.sel);
-  if (card && !card.classList.contains("is-phase-hidden") &&
-      !card.classList.contains("is-role-hidden")) {
-    // The role's guide card sits below the picker (often below the fold), so the
-    // student didn't notice it appear. Bring it into view, then blink it.
-    try { card.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "center" }); }
-    catch (_) { try { card.scrollIntoView(); } catch (__) {} }
-    _flashEl(card);
-  }
 }
 
 function _modBT(key, fallback, vars) {
@@ -10415,6 +10404,14 @@ function showRoleObjective(role) {
   // is the single choke-point every pick / deselect / restore / swap flows
   // through, so role-gating never drifts from the private brief.
   applyModBRoleVisibility(role);
+  // Highlight the "Your role" reference tab and hide its "pick a role" prompt
+  // once a role is held (both cleared on deselect). showRoleObjective is the
+  // single choke-point for pick / deselect / restore / swap / random-assign, so
+  // the tab + prompt never drift from the actual role.
+  const roleTabBtn = el("refB-btn-role");
+  if (roleTabBtn) roleTabBtn.classList.toggle("has-role", !!role);
+  const cardPrompt = el("modB-role-card-prompt");
+  if (cardPrompt) cardPrompt.classList.toggle("hidden", !!role);
   const panel = el("modB-role-objective");
   if (!panel) return;
   const textEl = el("modB-role-objective-text");
@@ -10516,6 +10513,8 @@ function initRolePicker() {
   wireSwapReplay();
   // "I'd rather observe" panic affordance — a calm one-tap escape hatch.
   wireObserveEscape();
+  // "Randomly assign roles" — distribute distinct roles across the room.
+  wireAssignRoles();
 }
 
 /* "I'd rather observe" panic affordance: one calm tap moves the student into
@@ -10538,6 +10537,94 @@ function wireObserveEscape() {
       note.classList.remove("hidden");
     }
   });
+}
+
+/* Randomly assign roles (Module B, 2026-06-26): one tap distributes DISTINCT
+   roles across everyone present (physician/patient/family first, observers for
+   the rest). The presser draws over the live `presence` roster and writes a
+   {clientId: role} mapping to <base>/moduleB/roleAssign; each client then claims
+   its OWN slot (no cross-writes). Re-tapping reshuffles; solo mode gives this
+   device one of the four at random. Grief surface (a skewed mapping) is the
+   accepted room-griefing class — each client only writes its own roleChoices. */
+const ASSIGN_ROLE_DECK = ["physician", "patient", "family", "observer"];
+
+function _fisherYates(arr) {
+  // Browser Math.random (client code, not the deterministic workflow sandbox).
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+/* Roles for a roster of `count`, in priority order (physician, patient, family,
+   then observers) — the named parts are always distinct + physician always
+   filled; the shuffle above randomises only WHO gets which. Pure + global so the
+   distinctness property is testable. */
+function _roleDeckFor(count) {
+  const deck = [];
+  for (let i = 0; i < count; i++) {
+    deck.push(i < ASSIGN_ROLE_DECK.length ? ASSIGN_ROLE_DECK[i] : "observer");
+  }
+  return deck;
+}
+
+function assignRolesRandomly() {
+  // Solo / LOCAL: no shared roster — give THIS device a random role.
+  if (MODE !== "shared" || !refRoleAssign) {
+    _applyAssignedRole(ASSIGN_ROLE_DECK[Math.floor(Math.random() * ASSIGN_ROLE_DECK.length)]);
+    return;
+  }
+  const roster = Object.keys(presence || {});
+  if (clientId && roster.indexOf(clientId) === -1) roster.push(clientId);
+  if (!roster.length) return;
+  const deck = _roleDeckFor(roster.length);
+  const order = _fisherYates(roster);
+  const assignments = {};
+  order.forEach((cid, i) => { assignments[cid] = deck[i]; });
+  refRoleAssign.set({ assignments: assignments, by: clientId, at: Date.now() })
+    .catch(() => { /* offline — apply my own slot locally as a fallback */
+      if (assignments[clientId]) _applyAssignedRole(assignments[clientId]);
+    });
+}
+
+let _lastRoleAssignAt = 0;
+function handleRoleAssign(val) {
+  if (!val || typeof val !== "object" || !val.assignments) return;
+  const at = (typeof val.at === "number") ? val.at : 0;
+  if (at && at <= _lastRoleAssignAt) return;   // already applied this draw
+  _lastRoleAssignAt = at;
+  const mine = val.assignments[clientId];
+  if (typeof mine === "string" && ASSIGN_ROLE_DECK.indexOf(mine) !== -1) {
+    _applyAssignedRole(mine);
+  }
+}
+
+/* Apply an assigned role to THIS device: tick the chip, reveal the brief, sync
+   my own pick, update the coach — exactly like a manual selection. */
+function _applyAssignedRole(role) {
+  const picker = el("modB-role-picker");
+  if (!picker) return;
+  picker.querySelectorAll(".role-chip").forEach(c =>
+    c.setAttribute("aria-checked", c.dataset.role === role ? "true" : "false"));
+  showRoleObjective(role);
+  if (typeof flashRoleSections === "function") flashRoleSections(role);
+  try { localStorage.setItem("canamed_modB_role", role); } catch (e) {}
+  try {
+    if (MODE === "shared" && refRoleChoices && clientId && !isRoomAdmin) {
+      refRoleChoices.child(clientId).set({ role: role, name: myName || "", at: Date.now() });
+    }
+  } catch (e) { /* offline — local pick stands */ }
+  if (typeof updateModBNextStep === "function") updateModBNextStep();
+}
+
+/* Wire the "Randomly assign roles" button (idempotent). */
+function wireAssignRoles() {
+  const btn = el("modB-assign-roles-btn");
+  if (!btn || btn._wired) return;
+  btn._wired = true;
+  btn.addEventListener("click", assignRolesRandomly);
 }
 
 /* Render the room's live role picks onto the chips. `map` is

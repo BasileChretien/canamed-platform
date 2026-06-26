@@ -51,9 +51,12 @@ test.describe("Module B — synced phase flow", () => {
     // hidden in setup:
     expect(await shown(page, ".prompts-card-modB"), "prompts hidden in setup").toBe(false);
     expect(await shown(page, ".answers-card-bulleted"), "answers form hidden in setup").toBe(false);
-    // Scene-prep reference strips show during setup + play.
-    expect(await shown(page, ".spikes-strip"), "SPIKES strip shows in setup").toBe(true);
-    expect(await shown(page, ".phrases-box"), "useful sentences show in setup").toBe(true);
+    // The inline SPIKES strip was DELETED and "Useful sentences" moved to a
+    // reference tab (2026-06-26); both are now always-available reference, not
+    // phase-gated. Verify the new tabs exist (and the old strips are gone).
+    await expect(page.locator("#refB-btn-useful"), "Useful-sentences tab exists").toHaveCount(1);
+    await expect(page.locator("#refB-btn-role"), "Your-role tab exists").toHaveCount(1);
+    await expect(page.locator("#stage-2 .spikes-strip"), "old SPIKES strip removed").toHaveCount(0);
   });
 
   test("Phase 3 (exchange) shows the prompts, hides setup + scene-prep strips", async ({ page }) => {
@@ -62,17 +65,9 @@ test.describe("Module B — synced phase flow", () => {
     expect(await shown(page, ".prompts-card-modB"), "prompts show in exchange").toBe(true);
     expect(await shown(page, ".vignette"), "vignette hidden in exchange").toBe(false);
     expect(await shown(page, "#modB-role-picker"), "role picker hidden in exchange").toBe(false);
-    // SPIKES + useful sentences are scene-prep noise during the discussion —
-    // hidden in Phase 3/4 (2026-06-03 user request).
-    expect(await shown(page, ".spikes-strip"), "SPIKES strip hidden in exchange").toBe(false);
-    expect(await shown(page, ".phrases-box"), "useful sentences hidden in exchange").toBe(false);
-  });
-
-  test("Phase 4 (bullets) also hides the SPIKES + useful-sentences strips", async ({ page }) => {
-    await setupModB(page);
-    await page.evaluate(() => window.setModBPhase(3));
-    expect(await shown(page, ".spikes-strip"), "SPIKES strip hidden in bullets").toBe(false);
-    expect(await shown(page, ".phrases-box"), "useful sentences hidden in bullets").toBe(false);
+    // (The SPIKES strip was deleted and Useful sentences / Your role moved to
+    // always-available reference tabs 2026-06-26, so there are no scene-prep
+    // strips to hide in Phase 3/4 any more.)
   });
 
   test("Phase 4 (bullets) shows the group-answers form", async ({ page }) => {

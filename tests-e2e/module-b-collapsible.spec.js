@@ -54,6 +54,12 @@ test.describe("Module B safety-note — collapsible <details>", () => {
       const stage2 = document.getElementById("stage-2");
       if (stage2) stage2.classList.remove("hidden");
       document.body.classList.remove("locked");
+      // The safety note now lives in the "Your role" reference tab (2026-06-26)
+      // — open that panel so the card paints and can be measured.
+      const roleBtn = document.getElementById("refB-btn-role");
+      if (roleBtn) roleBtn.setAttribute("aria-expanded", "true");
+      const rolePanel = document.getElementById("refB-panel-role");
+      if (rolePanel) rolePanel.hidden = false;
     });
 
     const noteOpen = await page.evaluate(() => {
