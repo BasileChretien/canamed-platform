@@ -60,7 +60,7 @@ test("a showRoleObjective helper reuses the brief i18n keys", () => {
   assert.match(SCRIPT, /function showRoleObjective\s*\(/,
     "a showRoleObjective(role) helper must exist");
   const start = SCRIPT.indexOf("function showRoleObjective");
-  const fn = SCRIPT.slice(start, start + 1200);
+  const fn = SCRIPT.slice(start, start + 1800);
   // Reuse the existing brief keys rather than inventing new copy.
   assert.match(fn, /"modB\.role\." \+ role \+ "\.brief"/,
     "the helper must bind the panel to the role's existing .brief key");

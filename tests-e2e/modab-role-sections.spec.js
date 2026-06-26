@@ -125,20 +125,26 @@ test.describe("Module B — per-role guidance visibility", () => {
     expect(await visible(page, ROLE_SECTION.physician), "physician card now hidden").toBe(false);
   });
 
-  test("a role block is hidden in Phase 3 even for the role-holder", async ({ page }) => {
+  test("a role block stays available across phases (now in the always-on 'Your role' tab)", async ({ page }) => {
     await openModuleBPlay(page);
     await pickRole(page, "patient");
     expect(await visible(page, ROLE_SECTION.patient), "patient guide shows in play").toBe(true);
+    // 2026-06-26: the per-role guides moved into the always-available "Your role"
+    // reference tab, so they are NO LONGER phase-gated — the holder can re-open
+    // their part in any phase, including the Phase-3 exchange / debrief. Only the
+    // role gating (is-role-hidden) still narrows it to the holder.
     await page.evaluate(() => window.setModBPhase(2));   // exchange
-    expect(await visible(page, ROLE_SECTION.patient), "patient guide hidden in exchange").toBe(false);
+    expect(await visible(page, ROLE_SECTION.patient), "patient guide still available in exchange").toBe(true);
   });
 
-  test("picking a role blinks the role section so the student notices + reads it", async ({ page }) => {
+  test("picking a role pulses the 'Your role' tab so the student notices + opens it", async ({ page }) => {
     await openModuleBPlay(page);
     await pickRole(page, "patient");
-    // The private-brief panel flashes, and so does the now-visible patient guide.
+    // 2026-06-26: the role guides + brief moved into the "Your role" reference
+    // tab, so a pick pulses the tab BUTTON (+ the brief panel inside it) rather
+    // than the now-tabbed guide card, so the student notices it lit up + opens it.
+    await expect(page.locator("#refB-btn-role")).toHaveClass(/attention-flash/);
     await expect(page.locator("#modB-role-objective")).toHaveClass(/attention-flash/);
-    await expect(page.locator("#stage-2 #modB-patient-guide")).toHaveClass(/attention-flash/);
   });
 
   test("Phase 1 (setup): each role's section shows once picked — including physician/observer", async ({ page }) => {
@@ -157,20 +163,21 @@ test.describe("Module B — per-role guidance visibility", () => {
     }
   });
 
-  test("the private brief renders directly BELOW the picked role's guide (Phase 1)", async ({ page }) => {
+  test("the private brief renders directly BELOW the picked role's guide (inside the Your-role tab)", async ({ page }) => {
     await openModuleBPlay(page);
     await page.evaluate(() => window.setModBPhase(0));   // Phase 1 (setup)
     await pickRole(page, "physician");
+    const roleTab = page.locator("#refB-btn-role");
+    await roleTab.click();   // open the "Your role" tab to read the brief
 
     const brief = page.locator("#modB-role-objective");
     await expect(brief).toBeVisible();
     await expect(brief).toContainText("Your private brief");
     await expect(brief).toContainText("Deliver the news with empathy");
 
-    // It FOLLOWS the role's guide card in the DOM — and since the three other
-    // guides are display:none, the single brief panel renders right under the
-    // one visible guide. (DOM order, not pixel boxes, to avoid racing the
-    // smooth scroll-into-view.)
+    // It FOLLOWS the role's guide card in the DOM (both inside #refB-panel-role)
+    // — and since the three other guides are display:none, the single brief panel
+    // renders right under the one visible guide. (DOM order, not pixel boxes.)
     const briefFollowsGuide = await page.evaluate(guideSel => {
       const guide = document.querySelector("#stage-2 " + guideSel);
       const briefEl = document.getElementById("modB-role-objective");
@@ -179,7 +186,9 @@ test.describe("Module B — per-role guidance visibility", () => {
     }, ROLE_SECTION.physician);
     expect(briefFollowsGuide, "brief panel comes right after the guide card").toBe(true);
 
-    // Switching role swaps the brief content (still one panel, below the new guide).
+    // Switching role swaps the brief content (still one panel, below the new
+    // guide). Close the tab first so the sticky panel doesn't overlay the chips.
+    await roleTab.click();
     await pickRole(page, "patient");
     await expect(brief).toContainText("You suspected something was wrong");
     await expect(brief).not.toContainText("Deliver the news with empathy");

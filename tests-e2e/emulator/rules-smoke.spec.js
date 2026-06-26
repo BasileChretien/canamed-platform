@@ -239,6 +239,32 @@ test("rules: a participant can save a Module B Phase-3 exchange reply, with vali
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
 });
 
+test("rules: roleAssign (random role assignment) is member-gated and validates role values", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "rassign-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const path = `sessions/${code}/rooms/Room 1/moduleB/roleAssign`;
+
+  // A non-member cannot write the draw (the .write rule requires uidMembers).
+  expect(await tryWrite(page, path, { assignments: { [uid]: "physician" }, by: uid, at: Date.now() }))
+    .not.toBe("ALLOWED");
+
+  // Claim Room 1 membership (as a participant entering the room does), then a
+  // well-formed distinct-role draw is allowed.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  expect(await tryWrite(page, path, {
+    assignments: { c1: "physician", c2: "patient", c3: "family", c4: "observer" },
+    by: uid, at: Date.now()
+  })).toBe("ALLOWED");
+
+  // A bogus role value is rejected by the per-assignment validator.
+  expect(await tryWrite(page, path, { assignments: { c1: "wizard" }, by: uid, at: Date.now() }))
+    .not.toBe("ALLOWED");
+
+  // Clearing the draw (null) is allowed.
+  expect(await tryWrite(page, path, null)).toBe("ALLOWED");
+});
+
 test("rules: per-room write gating — a Room 1 member cannot write into Room 2 (cross-room tampering denied)", async ({ page }) => {
   await page.goto("/");
   const uid = await waitForUid(page);

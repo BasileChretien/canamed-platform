@@ -20,6 +20,12 @@ async function revealModuleB(page) {
     const s2 = document.getElementById("stage-2");
     if (s2) s2.classList.remove("hidden");
     document.body.classList.remove("locked");
+    // The observer checklist now lives in the "Your role" reference tab — open
+    // that panel (2026-06-26) before opening the (default-collapsed) checklist.
+    const roleBtn = document.getElementById("refB-btn-role");
+    if (roleBtn) roleBtn.setAttribute("aria-expanded", "true");
+    const rolePanel = document.getElementById("refB-panel-role");
+    if (rolePanel) rolePanel.hidden = false;
     // open the (default-collapsed) observer checklist
     const d = document.getElementById("observer-checklist");
     if (d) d.setAttribute("open", "");

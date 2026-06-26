@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v64" below to the matching new string.
+         2. Update every "?v=v65" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v64"></script>
-  <link rel="stylesheet" href="style.css?v=v64" />
+  <script src="theme-init.js?v=v65"></script>
+  <link rel="stylesheet" href="style.css?v=v65" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v64" defer></script>
+  <script src="sw-register.js?v=v65" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -1864,7 +1864,23 @@
              panel below (one open at a time, wired by wireReferenceToolbars()).
              Replaces the three stacked cards that used to live in .col-left. -->
         <section class="reference-section" aria-label="Background &amp; guidelines">
-          <div class="reference-toolbar" role="group" aria-label="Background &amp; guidelines">
+          <div class="reference-toolbar" role="group" aria-label="Your role &amp; reference">
+            <!-- "Your role" (2026-06-26): the participant's own guidance —
+                 patient/family/physician/observer guide + private brief +
+                 the safety note — consolidated here from the old scattered
+                 cards. Highlighted (.has-role) once a role is held/assigned.
+                 Role-gated content inside the panel shows only the holder's
+                 part (applyModBRoleVisibility). -->
+            <button type="button" class="reference-btn reference-btn--role" id="refB-btn-role"
+                    aria-expanded="false" aria-controls="refB-panel-role">
+              <span class="reference-btn-emoji" aria-hidden="true">&#127917;</span>
+              <span data-i18n="reference.btn.yourrole">Your role</span>
+            </button>
+            <button type="button" class="reference-btn" id="refB-btn-useful"
+                    aria-expanded="false" aria-controls="refB-panel-useful">
+              <span class="reference-btn-emoji" aria-hidden="true">&#128172;</span>
+              <span data-i18n="reference.btn.useful">Useful sentences</span>
+            </button>
             <button type="button" class="reference-btn" id="refB-btn-history"
                     aria-expanded="false" aria-controls="refB-panel-history">
               <span class="reference-btn-emoji" aria-hidden="true">&#128220;</span>
@@ -2026,6 +2042,135 @@
               &mdash; respecting the individual vs. protecting them through the family &mdash;
               and both are still changing.</p>
           </div>
+
+          <!-- Useful sentences (moved here 2026-06-26 from the inline
+               .phrases-box strip): plain-language phrases, available
+               throughout the scene without taking column-inches. -->
+          <div class="reference-panel card useful-card" id="refB-panel-useful"
+               role="region" aria-labelledby="refB-btn-useful" hidden>
+            <p><strong data-i18n="stage.modB.spikes.useful.label">Useful sentences (English is everyone's second language):</strong></p>
+            <p data-i18n="stage.modB.spikes.useful.examples">"I'm afraid I have some serious news." &middot; "Would you like me to explain
+            everything, or focus on what we do next?" &middot; "I can see this is hard to hear."
+            &middot; "Take your time." &middot; "What questions do you have for me?"</p>
+          </div>
+
+          <!-- Your role (consolidated here 2026-06-26): the participant's own
+               part — the role guide that matches their pick, the private brief,
+               and the "Before you start" safety note. Only the holder's guide +
+               brief show (applyModBRoleVisibility / showRoleObjective); the
+               prompt invites picking a role when none is held; the safety note
+               is universal (shown regardless of role). These blocks keep their
+               original ids/classes so the role/phase gating + observer-checklist
+               wiring keep working. Available in ALL phases (reference-style). -->
+          <div class="reference-panel role-panel" id="refB-panel-role"
+               role="region" aria-labelledby="refB-btn-role" hidden>
+            <p class="role-card-prompt" id="modB-role-card-prompt"
+               data-i18n="modB.role.card.prompt" data-i18n-html><strong>Pick your role</strong> above (or tap &ldquo;Randomly assign roles&rdquo;) to see your part and a private brief here.</p>
+
+            <!-- Physician — Pause/Explore/Explain/Realign (was .micro-framework-card) -->
+            <details class="card micro-framework-card">
+              <summary>
+                <span data-i18n="stage.modB.framework.label" data-i18n-html><strong>When the family asks you to withhold information &mdash; "Pause &middot;
+                  Explore &middot; Explain &middot; Realign"</strong></span>
+              </summary>
+              <ol class="info-list">
+                <li data-i18n="stage.modB.framework.pause" data-i18n-html><strong>Pause</strong> &mdash; don't refuse or agree on the spot. Thank them;
+                  their worry is real and usually loving.</li>
+                <li data-i18n="stage.modB.framework.explore" data-i18n-html><strong>Explore the <em>why</em></strong> &mdash; "Help me understand what
+                  worries you most about your parent knowing."</li>
+                <li data-i18n="stage.modB.framework.explain" data-i18n-html><strong>Explain your position</strong> &mdash; you cannot deceive a patient
+                  who wants to know, but you do not have to force information on someone who
+                  does not.</li>
+                <li data-i18n="stage.modB.framework.realign" data-i18n-html><strong>Realign</strong> &mdash; ask the <em>patient</em> how much they want
+                  to know and who they want involved (this is SPIKES' "Invitation"). The family's
+                  worry becomes part of the conversation, not a secret kept from the patient.</li>
+              </ol>
+            </details>
+
+            <!-- Patient guide -->
+            <details class="card role-guide-card" id="modB-patient-guide" open>
+              <summary>
+                <span data-i18n="modB.guide.patient.summary" data-i18n-html><strong>Playing the patient &mdash; make it real</strong></span>
+              </summary>
+              <ol class="info-list">
+                <li data-i18n="modB.guide.patient.p1" data-i18n-html><strong>Decide privately now</strong> &mdash; deep down, do you want to
+                  know everything, or would you rather not? Don't announce it; let the physician
+                  discover it through their questions.</li>
+                <li data-i18n="modB.guide.patient.p2" data-i18n-html><strong>React like a person, not a textbook.</strong> You can go quiet,
+                  ask "is it cancer?", well up, or freeze. There is no script.</li>
+                <li data-i18n="modB.guide.patient.p3" data-i18n-html><strong>Answer honestly</strong> if the physician asks how much you want
+                  to know &mdash; from the stance you chose.</li>
+                <li data-i18n="modB.guide.patient.p4" data-i18n-html>It is okay to still be upset at the end. A good consultation does
+                  not always end calmly.</li>
+              </ol>
+            </details>
+
+            <!-- Family guide -->
+            <details class="card role-guide-card" id="modB-family-guide" open>
+              <summary>
+                <span data-i18n="modB.guide.family.summary" data-i18n-html><strong>Playing the family member (adult child)</strong></span>
+              </summary>
+              <ol class="info-list">
+                <li data-i18n="modB.guide.family.p1" data-i18n-html><strong>Partway through &mdash; not at the start</strong> &mdash; quietly
+                  take the physician aside and ask them not to tell your parent everything.</li>
+                <li data-i18n="modB.guide.family.p2" data-i18n-html><strong>Your worry comes from love.</strong> Press gently if they
+                  hesitate: "It would crush them," "In our family we don't say the word."</li>
+                <li data-i18n="modB.guide.family.p3" data-i18n-html><strong>You are not the villain</strong> &mdash; you hand the physician
+                  the real cross-cultural dilemma to navigate.</li>
+                <li data-i18n="modB.guide.family.p4" data-i18n-html>Let the physician explore your worry; don't back down the instant
+                  they push back.</li>
+              </ol>
+            </details>
+
+            <!-- Observer's structured SPIKES observation pad (interactive,
+                 local-only via initObserverChecklist). -->
+            <details class="card observer-checklist-card" id="observer-checklist">
+              <summary class="observer-checklist-summary">
+                <span aria-hidden="true">📝</span>
+                <span data-i18n="modB.obs.title">Observer's SPIKES checklist — tick what you see, note one win + one hard moment</span>
+              </summary>
+              <p class="hint" data-i18n="modB.obs.hint">Just for you — tick a step when the physician does it, and jot the moments you'll raise in the debrief. Saved on this device only.</p>
+              <ul class="observer-spikes-list" id="observer-spikes-list">
+                <li><label><input type="checkbox" data-obs="s" /> <span data-i18n="modB.obs.s">Setting — set up privately, sat down, no interruptions</span></label></li>
+                <li><label><input type="checkbox" data-obs="p" /> <span data-i18n="modB.obs.p">Perception — asked what the patient already understands</span></label></li>
+                <li><label><input type="checkbox" data-obs="i" /> <span data-i18n="modB.obs.i">Invitation — asked how much they want to know</span></label></li>
+                <li><label><input type="checkbox" data-obs="k" /> <span data-i18n="modB.obs.k">Knowledge — gave a warning shot, then news in small plain pieces</span></label></li>
+                <li><label><input type="checkbox" data-obs="e" /> <span data-i18n="modB.obs.e">Emotions — named and acknowledged the feeling, allowed silence</span></label></li>
+                <li><label><input type="checkbox" data-obs="s2" /> <span data-i18n="modB.obs.s2">Strategy — agreed a next step; signalled they won't be abandoned</span></label></li>
+              </ul>
+              <label class="observer-note-label" for="observer-note-win"
+                     data-i18n="modB.obs.win-label">One thing the physician SAID that worked:</label>
+              <textarea id="observer-note-win" class="observer-note" rows="2" maxlength="400"
+                        data-i18n-attr="placeholder" data-i18n="modB.obs.win-ph"
+                        placeholder="e.g. &quot;I can see this is hard to hear&quot; — she paused and let them react"></textarea>
+              <label class="observer-note-label" for="observer-note-hard"
+                     data-i18n="modB.obs.hard-label">One moment that was hard or could improve:</label>
+              <textarea id="observer-note-hard" class="observer-note" rows="2" maxlength="400"
+                        data-i18n-attr="placeholder" data-i18n="modB.obs.hard-ph"
+                        placeholder="e.g. gave the prognosis number before the patient asked for it"></textarea>
+            </details>
+
+            <!-- Private per-role brief — showRoleObjective() fills it with the
+                 picked role's brief; only the holder sees it. -->
+            <div class="role-objective hidden" id="modB-role-objective" role="status" aria-live="polite">
+              <p class="role-objective-label" data-i18n="modB.role.objective-label">Your private brief — only you see this:</p>
+              <p class="role-objective-text" id="modB-role-objective-text" data-i18n-html></p>
+            </div>
+
+            <!-- Before you start — two things (moved here 2026-06-26 from the
+                 standalone .safety-note card; universal, shown to everyone). -->
+            <details class="card safety-note collapsible-card" open>
+              <summary data-i18n="stage.modB.safety.heading" data-i18n-html><strong>Before you start &mdash; two things.</strong></summary>
+              <p data-i18n="stage.modB.safety.simulation" data-i18n-html><em>This is a simulation.</em> The feelings can still feel real. If anything hits
+                too close to home, you can move into the observer role at any time, no explanation
+                needed. When you debrief, talk about <strong>the physician's choices</strong> &mdash;
+                never criticise the person.</p>
+              <p data-i18n="stage.modB.safety.language" data-i18n-html><em>English is everyone's second or third language here</em> &mdash; that is part of
+                the point. If you cannot find a word, slow down, use a simpler one, or pause. Silence
+                is allowed in this conversation and often helps. Empathy is in your tone, your pace
+                and your face, not in advanced vocabulary.</p>
+            </details>
+          </div>
         </section>
 
         <!-- Round-4 UX (sim: 16 personas asked for a sticky working panel —
@@ -2062,28 +2207,15 @@
             with them and is in the room &mdash; and at some point will quietly ask you something.</p>
         </section>
 
-        <!-- Safety note: read once at the start, then collapsible so it
-             doesn't crowd the role-picker / SPIKES reference for the rest
-             of the scene. Sim 2026-05-18 finding: Module B was 4.5×
-             viewport tall — anxious / low-English students reported
-             "Do I have to read all of this?". Default-open keeps the
-             first-read affordance; a single click later moves it out of
-             the way. -->
-        <details class="card safety-note collapsible-card" open>
-          <summary data-i18n="stage.modB.safety.heading" data-i18n-html><strong>Before you start &mdash; two things.</strong></summary>
-          <p data-i18n="stage.modB.safety.simulation" data-i18n-html><em>This is a simulation.</em> The feelings can still feel real. If anything hits
-            too close to home, you can move into the observer role at any time, no explanation
-            needed. When you debrief, talk about <strong>the physician's choices</strong> &mdash;
-            never criticise the person.</p>
-          <p data-i18n="stage.modB.safety.language" data-i18n-html><em>English is everyone's second or third language here</em> &mdash; that is part of
-            the point. If you cannot find a word, slow down, use a simpler one, or pause. Silence
-            is allowed in this conversation and often helps. Empathy is in your tone, your pace
-            and your face, not in advanced vocabulary.</p>
-        </details>
+        <!-- The "Before you start — two things" safety note was MOVED 2026-06-26
+             to the end of the "Your role" reference tab (#refB-panel-role). The
+             always-visible "I'd rather just observe" escape button below keeps
+             the safety exit one tap away. -->
 
         <!-- Roles: small interactive picker (one volunteer per role, others
              become observers). Tapping a role chip "claims" it for this
-             student locally; future PRs may sync via Firebase. -->
+             student locally; a "Randomly assign roles" button distributes
+             distinct roles across the room. Synced via refRoleChoices. -->
         <div class="card role-picker" id="modB-role-picker">
           <p class="role-picker-prompt" data-i18n="modB.roles.prompt" data-i18n-html>
             <strong>Pick your role</strong> for this roleplay. Everyone not in a named role
@@ -2106,6 +2238,16 @@
                     role="radio" aria-checked="false">
               <span class="role-chip-name" data-i18n="modB.role.observer.name">Observer</span>
             </button>
+          </div>
+          <!-- Randomly assign roles (2026-06-26): one tap distributes DISTINCT
+               roles across everyone present — physician/patient/family first,
+               extras become observers — from a shared seed so every device
+               computes the same draw and writes only its own pick (assignRolesRandomly
+               → handleRoleAssign). Re-tapping reshuffles. Solo mode picks one of
+               the four at random for this device. -->
+          <div class="role-assign-row">
+            <button class="role-assign-btn" type="button" id="modB-assign-roles-btn"
+                    data-i18n="modB.roles.assign">🎲 Randomly assign roles</button>
           </div>
           <p class="role-deselect-hint" data-i18n="modB.role.deselect-hint">Picked the wrong role? Tap it again to clear your choice.</p>
 
@@ -2208,132 +2350,24 @@
            data-i18n="modB.phase.nav-hint" data-i18n-html>Everyone moves together — tap
           <strong>Next →</strong> when your group has finished this phase.</p>
 
-        <!-- SPIKES + useful sentences: compact reference strips, available
-             throughout the scene without taking column-inches.  -->
-        <div class="spikes-strip">
-          <strong data-i18n="stage.modB.spikes.label">SPIKES</strong> &mdash;
-          <span data-i18n="stage.modB.spikes.s" data-i18n-html><strong>S</strong>etting</span> &middot;
-          <span data-i18n="stage.modB.spikes.p" data-i18n-html><strong>P</strong>erception (what do they already understand?)</span> &middot;
-          <span data-i18n="stage.modB.spikes.i" data-i18n-html><strong>I</strong>nvitation (how much do they want to know?)</span> &middot;
-          <span data-i18n="stage.modB.spikes.k" data-i18n-html><strong>K</strong>nowledge (news in small, plain pieces)</span> &middot;
-          <span data-i18n="stage.modB.spikes.e" data-i18n-html><strong>E</strong>motions (name and acknowledge the feeling)</span> &middot;
-          <span data-i18n="stage.modB.spikes.s2" data-i18n-html><strong>S</strong>trategy (agree the next step; you won't abandon them)</span>
-        </div>
+        <!-- SPIKES strip DELETED 2026-06-26 (redundant with the Recap-table
+             tab's full SPIKES). The "Useful sentences" strip MOVED to its own
+             reference tab (#refB-panel-useful). -->
 
-        <div class="phrases-box">
-          <strong data-i18n="stage.modB.spikes.useful.label">Useful sentences (English is everyone's second language):</strong>
-          <span data-i18n="stage.modB.spikes.useful.examples">"I'm afraid I have some serious news." &middot; "Would you like me to explain
-          everything, or focus on what we do next?" &middot; "I can see this is hard to hear."
-          &middot; "Take your time." &middot; "What questions do you have for me?"</span>
-        </div>
-
-        <!-- Per-role "how to play your part" guides (2026-06-03, user request:
+        <!-- Per-role "how to play your part" guides MOVED 2026-06-26 into the
+             "Your role" reference tab (#refB-panel-role). Original note kept:
              each role gets its own explanatory section, shown ONLY to the
              participant holding that role — mirrors the physician's
              Pause/Explore/Explain/Realign card and the observer's checklist).
              Role-gated by applyModBRoleVisibility() (is-role-hidden) and
              phase-gated to setup+play by MODB_PHASE_SECTIONS, so they vanish
              in Phase 3/4 like the rest of the scene-prep material. -->
-        <details class="card role-guide-card" id="modB-patient-guide" open>
-          <summary>
-            <span data-i18n="modB.guide.patient.summary" data-i18n-html><strong>Playing the patient &mdash; make it real</strong></span>
-          </summary>
-          <ol class="info-list">
-            <li data-i18n="modB.guide.patient.p1" data-i18n-html><strong>Decide privately now</strong> &mdash; deep down, do you want to
-              know everything, or would you rather not? Don't announce it; let the physician
-              discover it through their questions.</li>
-            <li data-i18n="modB.guide.patient.p2" data-i18n-html><strong>React like a person, not a textbook.</strong> You can go quiet,
-              ask "is it cancer?", well up, or freeze. There is no script.</li>
-            <li data-i18n="modB.guide.patient.p3" data-i18n-html><strong>Answer honestly</strong> if the physician asks how much you want
-              to know &mdash; from the stance you chose.</li>
-            <li data-i18n="modB.guide.patient.p4" data-i18n-html>It is okay to still be upset at the end. A good consultation does
-              not always end calmly.</li>
-          </ol>
-        </details>
+        <!-- (patient + family role guides now live in the "Your role" tab) -->
 
-        <details class="card role-guide-card" id="modB-family-guide" open>
-          <summary>
-            <span data-i18n="modB.guide.family.summary" data-i18n-html><strong>Playing the family member (adult child)</strong></span>
-          </summary>
-          <ol class="info-list">
-            <li data-i18n="modB.guide.family.p1" data-i18n-html><strong>Partway through &mdash; not at the start</strong> &mdash; quietly
-              take the physician aside and ask them not to tell your parent everything.</li>
-            <li data-i18n="modB.guide.family.p2" data-i18n-html><strong>Your worry comes from love.</strong> Press gently if they
-              hesitate: "It would crush them," "In our family we don't say the word."</li>
-            <li data-i18n="modB.guide.family.p3" data-i18n-html><strong>You are not the villain</strong> &mdash; you hand the physician
-              the real cross-cultural dilemma to navigate.</li>
-            <li data-i18n="modB.guide.family.p4" data-i18n-html>Let the physician explore your worry; don't back down the instant
-              they push back.</li>
-          </ol>
-        </details>
+        <!-- (observer SPIKES checklist now lives in the "Your role" tab) -->
 
-        <!-- Observer's structured SPIKES observation pad (roleplay review
-             2026-05-20: "the observer had no structured tool — give them a
-             SPIKES tick-list + note field to anchor the Phase-3 debrief").
-             Local-only (per-tab sessionStorage via initObserverChecklist in
-             script.js) so it needs no Firebase write path or rules change;
-             it's a private scratchpad the observer fills during the scene
-             and reads back when they run the discussion. Collapsed by
-             default so it doesn't crowd the role-picker. -->
-        <details class="card observer-checklist-card" id="observer-checklist">
-          <summary class="observer-checklist-summary">
-            <span aria-hidden="true">📝</span>
-            <span data-i18n="modB.obs.title">Observer's SPIKES checklist — tick what you see, note one win + one hard moment</span>
-          </summary>
-          <p class="hint" data-i18n="modB.obs.hint">Just for you — tick a step when the physician does it, and jot the moments you'll raise in the debrief. Saved on this device only.</p>
-          <ul class="observer-spikes-list" id="observer-spikes-list">
-            <li><label><input type="checkbox" data-obs="s" /> <span data-i18n="modB.obs.s">Setting — set up privately, sat down, no interruptions</span></label></li>
-            <li><label><input type="checkbox" data-obs="p" /> <span data-i18n="modB.obs.p">Perception — asked what the patient already understands</span></label></li>
-            <li><label><input type="checkbox" data-obs="i" /> <span data-i18n="modB.obs.i">Invitation — asked how much they want to know</span></label></li>
-            <li><label><input type="checkbox" data-obs="k" /> <span data-i18n="modB.obs.k">Knowledge — gave a warning shot, then news in small plain pieces</span></label></li>
-            <li><label><input type="checkbox" data-obs="e" /> <span data-i18n="modB.obs.e">Emotions — named and acknowledged the feeling, allowed silence</span></label></li>
-            <li><label><input type="checkbox" data-obs="s2" /> <span data-i18n="modB.obs.s2">Strategy — agreed a next step; signalled they won't be abandoned</span></label></li>
-          </ul>
-          <label class="observer-note-label" for="observer-note-win"
-                 data-i18n="modB.obs.win-label">One thing the physician SAID that worked:</label>
-          <textarea id="observer-note-win" class="observer-note" rows="2" maxlength="400"
-                    data-i18n-attr="placeholder" data-i18n="modB.obs.win-ph"
-                    placeholder="e.g. &quot;I can see this is hard to hear&quot; — she paused and let them react"></textarea>
-          <label class="observer-note-label" for="observer-note-hard"
-                 data-i18n="modB.obs.hard-label">One moment that was hard or could improve:</label>
-          <textarea id="observer-note-hard" class="observer-note" rows="2" maxlength="400"
-                    data-i18n-attr="placeholder" data-i18n="modB.obs.hard-ph"
-                    placeholder="e.g. gave the prognosis number before the patient asked for it"></textarea>
-        </details>
-
-        <!-- Pause/Explore/Explain/Realign — collapsed by default. Opens
-             when the family raises their quiet aside (Physician + Observer
-             can flip it open as a checklist). -->
-        <details class="card micro-framework-card">
-          <summary>
-            <span data-i18n="stage.modB.framework.label" data-i18n-html><strong>When the family asks you to withhold information &mdash; "Pause &middot;
-              Explore &middot; Explain &middot; Realign"</strong></span>
-          </summary>
-          <ol class="info-list">
-            <li data-i18n="stage.modB.framework.pause" data-i18n-html><strong>Pause</strong> &mdash; don't refuse or agree on the spot. Thank them;
-              their worry is real and usually loving.</li>
-            <li data-i18n="stage.modB.framework.explore" data-i18n-html><strong>Explore the <em>why</em></strong> &mdash; "Help me understand what
-              worries you most about your parent knowing."</li>
-            <li data-i18n="stage.modB.framework.explain" data-i18n-html><strong>Explain your position</strong> &mdash; you cannot deceive a patient
-              who wants to know, but you do not have to force information on someone who
-              does not.</li>
-            <li data-i18n="stage.modB.framework.realign" data-i18n-html><strong>Realign</strong> &mdash; ask the <em>patient</em> how much they want
-              to know and who they want involved (this is SPIKES' "Invitation"). The family's
-              worry becomes part of the conversation, not a secret kept from the patient.</li>
-          </ol>
-        </details>
-
-        <!-- Private per-role brief — RELOCATED here 2026-06-03 (user request) so
-             it renders directly below the selected role's guidance card. Only one
-             role guide is visible at a time (the other three are display:none via
-             role/phase gating), so this single panel always sits right under it.
-             showRoleObjective() fills it with the picked role's brief; phase-gated
-             to setup+play (MODB_PHASE_SECTIONS) so it hides in Phase 3/4 like the
-             guides. role=status + aria-live=polite announces it on a screen reader. -->
-        <div class="role-objective hidden" id="modB-role-objective" role="status" aria-live="polite">
-          <p class="role-objective-label" data-i18n="modB.role.objective-label">Your private brief — only you see this:</p>
-          <p class="role-objective-text" id="modB-role-objective-text" data-i18n-html></p>
-        </div>
+        <!-- (physician Pause/Explore/Explain/Realign framework + the private
+             per-role brief now live in the "Your role" reference tab) -->
 
         <!-- Phase 3 discussion: pinned ground rule + the 6 questions as
              discrete prompt cards. -->
@@ -3031,46 +3065,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v64" defer></script>
+  <script src="firebase-config.js?v=v65" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v64" defer></script>
+  <script src="orgs.js?v=v65" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v64" defer></script>
+  <script src="platform-config.js?v=v65" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v64" defer></script>
+  <script src="telemetry.js?v=v65" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v64" defer></script>
+  <script src="purify.min.js?v=v65" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v64" defer></script>
+  <script src="i18n.js?v=v65" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v64" defer></script>
+  <script src="localdb.js?v=v65" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v64" defer></script>
+  <script src="lib.js?v=v65" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v64" defer></script>
+  <script src="pure-utils.js?v=v65" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3081,7 +3115,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v64" defer></script>
+  <script src="script-loader.js?v=v65" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3091,7 +3125,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v64" defer></script>
+  <script src="script.js?v=v65" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
