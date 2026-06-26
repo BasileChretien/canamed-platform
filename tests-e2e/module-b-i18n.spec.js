@@ -1,8 +1,8 @@
 /* tests-e2e/module-b-i18n.spec.js
  *
- * Module B's instruction body (the vignette, safety note, SPIKES strip,
- * "useful sentences" box, and the four phase blocks) was English-only
- * until fix/module-b-i18n. This test pins the gap shut: loading the
+ * Module B's instruction body (the vignette, safety note, "useful sentences"
+ * box, and the phase blocks) was English-only until fix/module-b-i18n. This
+ * test pins the gap shut: loading the
  * platform with canamed_lang=ja must render the Module B body in
  * Japanese, not English.
  *
@@ -65,8 +65,12 @@ test.describe("Module B body i18n", () => {
       .toContainText(/Phase 1/i);
     await expect(page.locator("[data-i18n='stage.modB.phase1.title']"))
       .not.toContainText("フェーズ");
-    await expect(page.locator("[data-i18n='stage.modB.answers.title']"))
-      .not.toContainText("グループ回答");
+    // The group-answer chrome is now two cards (Phase 3 "exchange" + Phase 6
+    // "reflect"); the exchange card's heading renders its English title under ja.
+    await expect(page.locator("[data-i18n='stage.modB.exchange.title']"))
+      .toContainText(/Talk it through/i);
+    await expect(page.locator("[data-i18n='stage.modB.exchange.title']"))
+      .not.toContainText("フェーズ");
 
     // The shared free-text language hint is English-canonical too.
     const hints = page.locator(".answer-input-language-hint");
@@ -98,12 +102,14 @@ test.describe("Module B body i18n", () => {
     });
 
     const hints = page.locator(".answer-input-language-hint");
-    // The shared language hint sits at every free-text contribution point
-    // (Module A + Module B group-answer cards + the working-hypotheses input)
-    // — 3 in all. Under the English-canonical UI all three render English,
-    // even with fr selected (the hint says you MAY write in any language).
+    // The shared language hint sits at every free-text contribution point in
+    // the un-hidden stage-1 + stage-2: Module A's group-answers card + its
+    // working-hypotheses input, plus Module B's TWO group-answer cards (Phase 3
+    // "exchange" and Phase 6 "reflect") — 4 in all. Under the English-canonical
+    // UI all render English even with fr selected (the hint says you MAY write
+    // in any language).
     const count = await hints.count();
-    expect(count).toBe(3);
+    expect(count).toBe(4);
     for (let i = 0; i < count; i++) {
       await expect(hints.nth(i)).not.toContainText("Écrivez dans la langue");
       await expect(hints.nth(i)).toContainText(/any language/i);
