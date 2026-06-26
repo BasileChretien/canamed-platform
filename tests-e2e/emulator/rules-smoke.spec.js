@@ -261,6 +261,11 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
   expect(await tryWrite(page, path, { assignments: { c1: "wizard" }, by: uid, at: Date.now() }))
     .not.toBe("ALLOWED");
 
+  // An unknown sibling field is rejected ($other sentinel).
+  expect(await tryWrite(page, path, {
+    assignments: { c1: "physician" }, by: uid, at: Date.now(), evil: "x"
+  })).not.toBe("ALLOWED");
+
   // Clearing the draw (null) is allowed.
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
 });

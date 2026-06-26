@@ -3626,6 +3626,8 @@ function startRoom() {
   // mapping here; each client then claims its OWN assigned role. handleRoleAssign
   // guards on `at` so a refresh / late snapshot doesn't re-apply an old draw.
   refRoleAssign = db.ref(base + "/moduleB/roleAssign");
+  _lastRoleAssignAt = 0;   // room-scoped: a fresh room's draw must not be skipped
+                           // just because the previous room's draw had a later `at`
   refRoleAssign.on("value", snap => {
     try { handleRoleAssign(snap.val()); } catch (_) {}
   });
@@ -10071,12 +10073,10 @@ const MODB_PHASES = ["setup", "play", "exchange", "bullets"];
 const MODB_PHASE_SECTIONS = [
   { sel: ".vignette",              phases: ["setup"] },
   { sel: "#modB-role-picker",      phases: ["setup", "play"] },
-  // The per-role guides, the observer checklist, the private brief, the
-  // useful-sentences strip and the "Before you start" safety note all MOVED
-  // 2026-06-26 into the ALWAYS-AVAILABLE reference tabs ("Your role" /
-  // "Useful sentences"), so they are no longer phase-gated here — a player can
-  // re-open their role or the phrases in any phase. Role-gating
-  // (MODB_ROLE_SECTIONS) still shows only the holder's content inside the panel.
+  // The per-role guides, observer checklist, private brief, useful-sentences and
+  // the safety note MOVED 2026-06-26 into the always-available reference tabs
+  // ("Your role" / "Useful sentences"), so they are no longer phase-gated;
+  // role-gating (MODB_ROLE_SECTIONS) still narrows "Your role" to the holder.
   // The SPIKES strip was deleted (redundant with the Recap-table tab).
   { sel: ".prompts-card-modB",     phases: ["exchange"] },
   // Team decisions ("vote together") only appear in the discussion phase — they
@@ -10144,15 +10144,11 @@ function _flashEl(node) {
   });
 }
 
-/* When a student PICKS a Module B role, pulse the "Your role" reference tab so
-   they notice it lit up — the role guides + private brief live inside it now, so
-   they tap it to read their part. Also flashes the brief panel itself, which is
-   visible if the tab is already open. We deliberately do NOT auto-open the tab:
-   the reference section is a STICKY panel (style.css .reference-section), and on
-   a phone an auto-opened tall panel would overlay the role picker the student is
-   still using (and intercept their next tap). The amber .has-role highlight on
-   the tab (set by showRoleObjective) is the persistent "your part is in here"
-   signal. */
+/* On a Module B role PICK, pulse the "Your role" reference tab so the student
+   notices it lit up — the guides + private brief live inside it now. We do NOT
+   auto-open it: the reference section is sticky, and on a phone an auto-opened
+   tall panel would overlay the role picker mid-selection. The amber .has-role
+   highlight (set by showRoleObjective) is the persistent "your part is here". */
 function flashRoleSections(role) {
   if (typeof document === "undefined" || !role) return;
   _flashEl(el("refB-btn-role"));
@@ -10543,26 +10539,17 @@ function wireObserveEscape() {
   });
 }
 
-/* ── Randomly assign roles (Module B, 2026-06-26) ─────────────────────────
-   One tap distributes DISTINCT roles across everyone present: physician,
-   patient and family first (the named parts the scene needs — physician is
-   always filled when ≥1 present), then observers for the rest. The presser
-   computes the draw over the live `presence` roster and writes a
-   {clientId: role} mapping to <base>/moduleB/roleAssign; every client then
-   claims its OWN assigned role (writing only its own roleChoices node, via the
-   same path a manual pick takes — no cross-writes). Re-tapping reshuffles. In
-   LOCAL/solo mode there is no shared roster, so it just gives THIS device one
-   of the four roles at random.
-
-   Grief note: a member could write a skewed mapping (everyone observer). Same
-   accepted class as the existing room-griefing residual (supervised classroom);
-   each client still only ever writes its own roleChoices, and any participant
-   can re-pick or re-assign. */
+/* Randomly assign roles (Module B, 2026-06-26): one tap distributes DISTINCT
+   roles across everyone present (physician/patient/family first, observers for
+   the rest). The presser draws over the live `presence` roster and writes a
+   {clientId: role} mapping to <base>/moduleB/roleAssign; each client then claims
+   its OWN slot (no cross-writes). Re-tapping reshuffles; solo mode gives this
+   device one of the four at random. Grief surface (a skewed mapping) is the
+   accepted room-griefing class — each client only writes its own roleChoices. */
 const ASSIGN_ROLE_DECK = ["physician", "patient", "family", "observer"];
 
 function _fisherYates(arr) {
-  // Browser Math.random (this is client code, not the deterministic workflow
-  // sandbox); the draw only needs to be unpredictable, not reproducible.
+  // Browser Math.random (client code, not the deterministic workflow sandbox).
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -10571,11 +10558,9 @@ function _fisherYates(arr) {
   return a;
 }
 
-/* The roles to hand out for a roster of `count` people, in priority order:
-   physician, patient, family, then observers for everyone else. The SET of
-   roles is fixed by this deck (so the named parts are always distinct and a
-   physician is always filled when count >= 1); only WHO gets which is randomised
-   by the Fisher–Yates shuffle of the roster above. Pure + global so the
+/* Roles for a roster of `count`, in priority order (physician, patient, family,
+   then observers) — the named parts are always distinct + physician always
+   filled; the shuffle above randomises only WHO gets which. Pure + global so the
    distinctness property is testable. */
 function _roleDeckFor(count) {
   const deck = [];
