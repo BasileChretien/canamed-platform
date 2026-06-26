@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v65" below to the matching new string.
+         2. Update every "?v=v66" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v65"></script>
-  <link rel="stylesheet" href="style.css?v=v65" />
+  <script src="theme-init.js?v=v66"></script>
+  <link rel="stylesheet" href="style.css?v=v66" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
   <link rel="manifest" href="manifest.webmanifest" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v65" defer></script>
+  <script src="sw-register.js?v=v66" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -2286,14 +2286,10 @@
                ITS OWN pick (writing only its own roleChoices node, so no
                cross-writing / privilege is needed). Synced via
                <base>/roleplayRound; works in LOCAL/solo mode too. -->
-          <div class="role-replay" id="modB-role-replay">
-            <span class="role-replay-round" id="modB-replay-round"
-                  data-i18n="modB.replay.round1">Round 1 — first run</span>
-            <button class="role-replay-btn" type="button" id="modB-swap-replay-btn"
-                    data-i18n="modB.replay.swap">🔄 Swap roles &amp; replay</button>
-          </div>
-          <p class="role-replay-banner hidden" id="modB-replay-banner"
-             role="status" aria-live="polite"></p>
+          <!-- Swap-and-replay (round indicator + button + banner) MOVED 2026-06-26
+               into the dedicated Phase-4 "#modB-swap-card" below, so the swap is a
+               structured phase the whole synced room moves through (not a button
+               buried in the picker). -->
         </div>
 
         <!-- Phase stepper + synced phase navigation (RELOCATED here 2026-06-02,
@@ -2303,13 +2299,13 @@
              move it with Prev/Next or by tapping a phase chip. Only the current
              phase's action sections show (applyModBPhaseVisibility); reference
              material stays available throughout. -->
-        <nav class="phase-stepper" aria-label="Module B phases">
+        <nav class="phase-stepper" aria-label="Module B phases" data-steps="6">
           <ol class="phase-stepper-list">
             <li class="phase-step is-current" data-phase="setup">
               <button type="button" class="phase-step-btn">
                 <span class="phase-step-num">1</span>
                 <span class="phase-step-label" data-i18n="stage.modB.phase1.title">Phase 1 — Set up</span>
-                <span class="phase-step-time" data-i18n="modB.phase.setup.time">6 min</span>
+                <span class="phase-step-time" data-i18n="modB.phase.setup.time">5 min</span>
               </button>
             </li>
             <li class="phase-step" data-phase="play">
@@ -2323,14 +2319,28 @@
               <button type="button" class="phase-step-btn">
                 <span class="phase-step-num">3</span>
                 <span class="phase-step-label" data-i18n="stage.modB.phase3.title">Phase 3 — The exchange</span>
-                <span class="phase-step-time" data-i18n="modB.phase.exchange.time">15 min</span>
+                <span class="phase-step-time" data-i18n="modB.phase.exchange.time">10 min</span>
               </button>
             </li>
-            <li class="phase-step" data-phase="bullets">
+            <li class="phase-step" data-phase="swap">
               <button type="button" class="phase-step-btn">
                 <span class="phase-step-num">4</span>
-                <span class="phase-step-label" data-i18n="stage.modB.phase4.title">Phase 4 — Write bullets</span>
-                <span class="phase-step-time" data-i18n="modB.phase.bullets.time">5 min</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase4.title">Phase 4 — Swap &amp; replay</span>
+                <span class="phase-step-time" data-i18n="modB.phase.swap.time">2 min</span>
+              </button>
+            </li>
+            <li class="phase-step" data-phase="replay">
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">5</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase5.title">Phase 5 — Play it out</span>
+                <span class="phase-step-time" data-i18n="modB.phase.replay.time">8 min</span>
+              </button>
+            </li>
+            <li class="phase-step" data-phase="reflect">
+              <button type="button" class="phase-step-btn">
+                <span class="phase-step-num">6</span>
+                <span class="phase-step-label" data-i18n="stage.modB.phase6.title">Phase 6 — What improved</span>
+                <span class="phase-step-time" data-i18n="modB.phase.reflect.time">6 min</span>
               </button>
             </li>
           </ol>
@@ -2369,67 +2379,42 @@
         <!-- (physician Pause/Explore/Explain/Realign framework + the private
              per-role brief now live in the "Your role" reference tab) -->
 
-        <!-- Phase 3 discussion: pinned ground rule + the 6 questions as
-             discrete prompt cards. -->
-        <section class="card prompts-card prompts-card-modB">
-          <p class="banner-rule banner-compare"
-             data-i18n="stage.modB.phase3.ground-rule" data-i18n-html><strong>Ground rule for
-            this discussion (Phase 3):</strong> we are comparing <em>practices and how
-            they are changing</em>, not ranking countries. Neither model is "the advanced one".
-            Speak about what you have actually seen or been taught &mdash; and it is completely
-            fine to say "I'm not sure, this is changing."</p>
-          <p class="hint" data-i18n="stage.modB.phase3.intro">Take the prompts one
-            at a time &mdash; for each, make sure both a Caen and a Nagoya voice answers:</p>
-          <ol class="discussion-q-list" id="modB-exchange-list">
-            <li data-i18n="stage.modB.phase3.q1" data-i18n-html><strong>Who is the information for?</strong> When there is serious news, who is
-              told <em>first</em> &mdash; the patient or the family? Is that what the law says,
-              the textbook says, or what actually happens on the ward? Name one way France and
-              Japan are the <strong>same</strong> and one way they <strong>differ</strong>.</li>
-            <li data-i18n="stage.modB.phase3.q2" data-i18n-html><strong>Has it changed?</strong> Was disclosure done differently 20&ndash;30
-              years ago? (Japan: cancer-diagnosis disclosure rose from under ~30% in the early
-              1990s to ~94% by 2016. France: the 2002 <em lang="fr">loi Kouchner</em> changed patients'
-              information rights.) Why do norms change &mdash; law, generations, expectations?</li>
-            <li data-i18n="stage.modB.phase3.q3" data-i18n-html><strong>The family's quiet request &mdash; what did you actually do, and why?</strong>
-              Would a typical doctor in France respond the same way as one in Japan? What is each
-              most worried about &mdash; lying to the patient, or harming the patient? Is
-              "protecting someone from bad news" love, or taking away their choice &mdash; or both?</li>
-            <li data-i18n="stage.modB.phase3.q4" data-i18n-html><strong>Autonomy vs. family &mdash; is it really either/or?</strong> France is
-              described as "autonomy first", Japan as "family-centred" &mdash; but French law
-              also protects the right <em>not</em> to know, and many Japanese patients today
-              want full information. Where does your country actually sit? What would a
-              <em>both</em> model look like?</li>
-            <li data-i18n="stage.modB.phase3.q5" data-i18n-html><strong>Empathy across a language barrier.</strong> You broke bad news in English.
-              Did Caen and Nagoya students lean on different things &mdash; words, silence, tone,
-              body language? What survives the language barrier, and what gets lost?</li>
-            <li data-i18n="stage.modB.phase3.q6" data-i18n-html><strong>What was hard &mdash; and was it hard in the same way?</strong> Did Caen
-              and Nagoya students find <em>different</em> parts hard (the silence? the family
-              member? saying the diagnosis out loud? not fixing the distress?)? What does that
-              difference tell you?</li>
-          </ol>
-          <!-- Phase-3 one-at-a-time (2026-05-27): the 6 prompts above are shown
-               one at a time, synced across the room via rooms/$room/moduleB/
-               exchangeCursor. Any participant can move Prev/Next; renderModBExchange()
-               toggles which <li> is visible + this counter / done state. -->
-          <!-- Phase-3 answer entry (2026-05-27): students record a short note
-               from their discussion for the CURRENT prompt. Synced across the
-               room via rooms/$room/moduleB/exchangeReplies/$cursor/$cid, mirroring
-               Module A's prompt-reply (anyone in the room can edit, autosaves). -->
-          <div class="prompt-reply-area" id="modB-exchange-reply-area">
-            <textarea id="modB-exchange-reply" maxlength="600"
-                      data-i18n="modB.exchange.reply.placeholder"
-                      data-i18n-attr="placeholder"
-                      placeholder="Type a short note from your group's discussion — anyone in the room can edit and it autosaves."></textarea>
+        <!-- The 6-prompt stepped "exchange" (modB-exchange-list + exchangeCursor)
+             was REPLACED 2026-06-26: Phase 3 is now TWO questions + the vote
+             (col-right .answers-card-modB-exchange + #decisions-B). The
+             renderModBExchange / exchangeCursor / exchangeReplies wiring stays in
+             script.js but no-ops without #modB-exchange-list (dormant, like the
+             Module A prompt subsystem). -->
+
+        <!-- Phase 4 — Swap & replay: the whole synced room rotates roles
+             (physician → patient → family → observer) and replays the scene from
+             the other side — where the cross-perspective empathy learning lands.
+             Any member taps Swap; each client rotates ITS OWN pick (writes only
+             its own roleChoices, synced via <base>/roleplayRound), and the role
+             chips + "Your role" tab update to the new role. -->
+        <section class="card modB-swap-card" id="modB-swap-card">
+          <h3 data-i18n="stage.modB.swap.title">Phase 4 — Swap roles &amp; replay</h3>
+          <p data-i18n="stage.modB.swap.body" data-i18n-html>You've played it once and talked it
+            through. Now <strong>swap</strong>: everyone rotates to the next role and replays the
+            same scene from the other side — that's where the empathy really lands. Tap
+            <strong>Swap</strong>; your role chip and your "Your role" tab update automatically.</p>
+          <div class="role-replay" id="modB-role-replay">
+            <span class="role-replay-round" id="modB-replay-round"
+                  data-i18n="modB.replay.round1">Round 1 — first run</span>
+            <button class="role-replay-btn" type="button" id="modB-swap-replay-btn"
+                    data-i18n="modB.replay.swap">🔄 Swap roles &amp; replay</button>
           </div>
-          <div class="exchange-nav" id="modB-exchange-nav">
-            <button class="exchange-nav-btn" id="modB-exchange-prev" type="button"
-                    data-i18n="modB.exchange.prev">← Previous</button>
-            <span class="exchange-nav-counter" id="modB-exchange-counter"
-                  role="status" aria-live="polite"></span>
-            <button class="exchange-nav-btn" id="modB-exchange-next" type="button"
-                    data-i18n="modB.exchange.next">Next →</button>
-          </div>
-          <p class="exchange-done hidden" id="modB-exchange-done"
-             data-i18n="modB.exchange.done">✓ You've worked through all six prompts. Move to Phase 4 to write your team's bullets.</p>
+          <p class="role-replay-banner hidden" id="modB-replay-banner"
+             role="status" aria-live="polite"></p>
+        </section>
+
+        <!-- Phase 5 — Play it out (round 2): same scene, new role. -->
+        <section class="card modB-replay-card" id="modB-replay-card">
+          <h3 data-i18n="stage.modB.replay.title">Phase 5 — Play it out (round 2)</h3>
+          <p data-i18n="stage.modB.replay.body" data-i18n-html>Play the <strong>same scene</strong>
+            again from your <strong>new role</strong>. Don't aim for a perfect run &mdash; notice
+            what you do <em>differently</em> now that you've seen it from another side. Your role and
+            a private brief are in the <strong>"Your role"</strong> tab.</p>
         </section>
 
         <!-- Reference materials relocated 2026-06-02 to a button toolbar at the
@@ -2438,16 +2423,23 @@
 
           </div><!-- /.col-left -->
           <div class="col-right">
-        <section class="card answers-card answers-card-bulleted">
-          <h3 data-i18n="stage.modB.answers.title">Group answers &mdash; Module B</h3>
+        <!-- Phase 3 — the exchange: TWO questions + the vote (#decisions-B, in
+             .col-left). Replaced the 6-prompt stepper 2026-06-26. -->
+        <section class="card answers-card answers-card-bulleted answers-card-modB-exchange">
+          <h3 data-i18n="stage.modB.exchange.title">Phase 3 — Talk it through &amp; vote</h3>
+          <p class="banner-rule banner-compare"
+             data-i18n="stage.modB.phase3.ground-rule" data-i18n-html><strong>Ground rule:</strong>
+            we are comparing <em>practices and how they are changing</em>, not ranking countries.
+            Neither model is "the advanced one". Speak about what you have actually seen or been
+            taught &mdash; and it is completely fine to say "I'm not sure, this is changing."</p>
           <p class="hint" id="answersB-hint"></p>
           <p class="hint answer-input-language-hint"
              data-i18n="room.answer-input-language-hint">Write in any language &mdash; your facilitator and teammates can read English, French and Japanese.</p>
 
           <div class="answer-bullet" data-bullet-key="family-sentence">
             <label class="answer-bullet-label" for="answer-input-moduleB-family-sentence"
-                   data-i18n="modB.answers.bullet.family-sentence.label">
-              1. One concrete sentence your group would use to answer the family's request to withhold information
+                   data-i18n="modB.answers.bullet.family-sentence.label" data-i18n-html>
+              1. When the family asked you to <strong>withhold</strong> &mdash; what did you do, and would a doctor in <strong>France</strong> respond the same way as one in <strong>Japan</strong>?
             </label>
             <ul class="answers-list" id="answers-list-moduleB-family-sentence"></ul>
             <div class="answer-add">
@@ -2463,7 +2455,7 @@
           <div class="answer-bullet" data-bullet-key="differ-converge">
             <label class="answer-bullet-label" for="answer-input-moduleB-differ-converge"
                    data-i18n="modB.answers.bullet.differ-converge.label" data-i18n-html>
-              2. One way disclosure practice <strong>differs</strong> between France and Japan — and one way it is <strong>converging</strong>
+              2. One way disclosure practice <strong>differs</strong> between France and Japan &mdash; and one way it is <strong>converging</strong>
             </label>
             <ul class="answers-list" id="answers-list-moduleB-differ-converge"></ul>
             <div class="answer-add">
@@ -2476,10 +2468,39 @@
             </div>
           </div>
 
+          <p class="typing-line hidden" id="typing-moduleB"></p>
+        </section>
+
+        <!-- Phase 6 — what improved: reflect on the two plays + a personal
+             take-home. The completion CTA + the _unsorted bucket live here (the
+             final phase). Added 2026-06-26. -->
+        <section class="card answers-card answers-card-bulleted answers-card-modB-reflect">
+          <h3 data-i18n="stage.modB.reflect.title">Phase 6 — What improved</h3>
+          <p class="hint" data-i18n="stage.modB.reflect.intro">You played it twice, from two sides.
+            Reflect together on what changed &mdash; then each note one thing you'll take home.</p>
+          <p class="hint answer-input-language-hint"
+             data-i18n="room.answer-input-language-hint">Write in any language &mdash; your facilitator and teammates can read English, French and Japanese.</p>
+
+          <div class="answer-bullet" data-bullet-key="reflect-improved">
+            <label class="answer-bullet-label" for="answer-input-moduleB-reflect-improved"
+                   data-i18n="modB.answers.bullet.reflect-improved.label" data-i18n-html>
+              1. What did you do <strong>differently</strong> the second time &mdash; and what did playing the other side teach you?
+            </label>
+            <ul class="answers-list" id="answers-list-moduleB-reflect-improved"></ul>
+            <div class="answer-add">
+              <input type="text" id="answer-input-moduleB-reflect-improved" maxlength="500"
+                     data-bullet-key="reflect-improved"
+                     data-i18n="modB.answers.bullet.reflect-improved.placeholder" data-i18n-attr="placeholder"
+                     placeholder="e.g. as the patient I realised how fast the doctor moved — so the second time I paused more" />
+              <button class="answer-add-btn" data-mod="moduleB" data-bullet-key="reflect-improved"
+                      data-i18n="room.answer.add" title="Add">Add</button>
+            </div>
+          </div>
+
           <div class="answer-bullet" data-bullet-key="practice-change">
             <label class="answer-bullet-label" for="answer-input-moduleB-practice-change"
                    data-i18n="modB.answers.bullet.practice-change.label">
-              3. One thing each of you will do differently, in your own country, because of this discussion
+              2. One thing each of you will do differently, in your own country, because of this
             </label>
             <ul class="answers-list" id="answers-list-moduleB-practice-change"></ul>
             <div class="answer-add">
@@ -2492,16 +2513,16 @@
             </div>
           </div>
 
-          <p class="typing-line hidden" id="typing-moduleB"></p>
+          <p class="typing-line hidden" id="typing-moduleB-reflect"></p>
 
-          <!-- Completion CTA (2026-06-02): appears once all three bullets above
-               have at least one entry (toggled by updateModBNextStep). Pings the
-               facilitator (callForHelp) that the room is ready for the final
-               (wrap-up) section. -->
+          <!-- Completion CTA: appears once all four answer bullets (the two in
+               Phase 3 + the two here) have at least one entry (updateModBNextStep).
+               Pings the facilitator (callForHelp) that the room is ready for the
+               wrap-up section. -->
           <div class="answers-complete-cta hidden" id="modB-answers-complete">
             <p class="answers-complete-msg"
                data-i18n="modB.answers.complete.msg">
-              ✓ All three answers are in. Ready to wrap up?
+              ✓ All your answers are in. Ready to wrap up?
             </p>
             <button type="button" class="call-next-btn" id="modB-call-next-btn"
                     data-i18n="modB.answers.complete.cta">
@@ -3065,46 +3086,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v65" defer></script>
+  <script src="firebase-config.js?v=v66" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v65" defer></script>
+  <script src="orgs.js?v=v66" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v65" defer></script>
+  <script src="platform-config.js?v=v66" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v65" defer></script>
+  <script src="telemetry.js?v=v66" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v65" defer></script>
+  <script src="purify.min.js?v=v66" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v65" defer></script>
+  <script src="i18n.js?v=v66" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v65" defer></script>
+  <script src="localdb.js?v=v66" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v65" defer></script>
+  <script src="lib.js?v=v66" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v65" defer></script>
+  <script src="pure-utils.js?v=v66" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3115,7 +3136,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v65" defer></script>
+  <script src="script-loader.js?v=v66" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3125,7 +3146,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v65" defer></script>
+  <script src="script.js?v=v66" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the

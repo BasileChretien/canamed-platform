@@ -395,6 +395,9 @@ test.describe("mobile splash usability", () => {
       if (s2) s2.classList.remove("hidden");
       document.body.classList.remove("locked");
       if (typeof window.initRolePicker === "function") window.initRolePicker();
+      if (typeof window.initModBPhaseNav === "function") window.initModBPhaseNav();
+      // The swap button lives in the Phase-4 "swap & replay" card now (2026-06-26).
+      if (typeof window.setModBPhase === "function") window.setModBPhase(3);
     });
 
     const swap = page.locator("#modB-swap-replay-btn");

@@ -112,7 +112,7 @@ test.describe("2026-06-02 Module A/B fixes", () => {
     expect(order, "the phase stepper must follow the role picker").toBe("after");
   });
 
-  test("#6 Module B 'final section' CTA appears when all three bullets are filled", async ({ page }) => {
+  test("#6 Module B 'final section' CTA appears when all four answer bullets are filled", async ({ page }) => {
     await showStage(page, "stage-2");
     const before = await page.evaluate(() => {
       const box = document.getElementById("modB-answers-complete");
@@ -120,16 +120,30 @@ test.describe("2026-06-02 Module A/B fixes", () => {
     });
     expect(before, "CTA must start hidden").toBe(true);
 
-    const after = await page.evaluate(() => {
+    // Only three of the four bullets → still hidden (P6 reflect-improved missing).
+    const partial = await page.evaluate(() => {
       window._test_setAnswers({ moduleB: {
         a: { id: "a", bulletKey: "family-sentence", text: "x", by: "T" },
         b: { id: "b", bulletKey: "differ-converge", text: "x", by: "T" },
-        c: { id: "c", bulletKey: "practice-change", text: "x", by: "T" }
+        d: { id: "d", bulletKey: "practice-change", text: "x", by: "T" }
       } });
       window.updateModBNextStep();
       return document.getElementById("modB-answers-complete").classList.contains("hidden");
     });
-    expect(after, "CTA must show once all three bullets are covered").toBe(false);
+    expect(partial, "CTA stays hidden until ALL four bullets are covered").toBe(true);
+
+    // All four (the two Phase-3 questions + the two Phase-6 reflection answers).
+    const after = await page.evaluate(() => {
+      window._test_setAnswers({ moduleB: {
+        a: { id: "a", bulletKey: "family-sentence", text: "x", by: "T" },
+        b: { id: "b", bulletKey: "differ-converge", text: "x", by: "T" },
+        c: { id: "c", bulletKey: "reflect-improved", text: "x", by: "T" },
+        d: { id: "d", bulletKey: "practice-change", text: "x", by: "T" }
+      } });
+      window.updateModBNextStep();
+      return document.getElementById("modB-answers-complete").classList.contains("hidden");
+    });
+    expect(after, "CTA must show once all four answer bullets are covered").toBe(false);
     await expect(page.locator("#modB-call-next-btn")).toHaveCount(1);
   });
 });

@@ -1,13 +1,12 @@
 /* tests-e2e/modb-phase-flow.spec.js
  *
- * Module B synced-phase redesign (2026-05-27): the room moves through the four
- * phases together (any participant can advance), only the current phase's
- * action sections show, and the six Phase-3 prompts appear one at a time.
+ * Module B SIX-phase synced flow (2026-06-26): setup → play → exchange (two
+ * questions + vote) → swap → replay → reflect (what improved). The room moves
+ * through together (any participant can advance); only the current phase's
+ * action sections show.
  *
- * Driven via the global render/setter functions with the LOCAL fallback (no
- * room / Firebase needed): setModBPhase / setModBExchangeCursor mutate the
- * module state and re-render synchronously when no ref is wired. Listed in the
- * mobile testMatch in playwright.config.js so it runs per-device.
+ * Driven via window.setModBPhase / initModBPhaseNav with the LOCAL fallback (no
+ * room / Firebase needed). Listed in the mobile testMatch so it runs per-device.
  */
 
 // @ts-check
@@ -27,7 +26,6 @@ async function setupModB(page) {
     });
     const s2 = document.getElementById("stage-2");
     if (s2) s2.classList.remove("hidden");
-    // Wire the phase nav + paint the initial (setup) phase.
     if (window.initModBPhaseNav) window.initModBPhaseNav();
   });
 }
@@ -40,81 +38,71 @@ function shown(page, sel) {
   }, sel);
 }
 
-test.describe("Module B — synced phase flow", () => {
-  test("Phase 1 (setup) shows the situation + role picker, hides later-phase sections", async ({ page }) => {
+test.describe("Module B — six-phase synced flow", () => {
+  test("Phase 1 (setup) shows the situation + role picker; later phases hidden", async ({ page }) => {
     await setupModB(page);
     expect(await shown(page, ".vignette"), "vignette shows in setup").toBe(true);
     expect(await shown(page, "#modB-role-picker"), "role picker shows in setup").toBe(true);
-    // The role-specific guides are PHASE-visible from setup now (so a student can
-    // read their role before the scene) — their per-role gating is covered in
-    // modab-role-sections.spec.js. The genuinely later-phase action sections stay
-    // hidden in setup:
-    expect(await shown(page, ".prompts-card-modB"), "prompts hidden in setup").toBe(false);
-    expect(await shown(page, ".answers-card-bulleted"), "answers form hidden in setup").toBe(false);
-    // The inline SPIKES strip was DELETED and "Useful sentences" moved to a
-    // reference tab (2026-06-26); both are now always-available reference, not
-    // phase-gated. Verify the new tabs exist (and the old strips are gone).
+    expect(await shown(page, ".answers-card-modB-exchange"), "P3 exchange hidden in setup").toBe(false);
+    expect(await shown(page, "#modB-swap-card"), "P4 swap hidden in setup").toBe(false);
+    expect(await shown(page, "#modB-replay-card"), "P5 replay hidden in setup").toBe(false);
+    expect(await shown(page, ".answers-card-modB-reflect"), "P6 reflect hidden in setup").toBe(false);
+    // Reference tabs exist; the old SPIKES strip + 6-prompt exchange stepper are gone.
     await expect(page.locator("#refB-btn-useful"), "Useful-sentences tab exists").toHaveCount(1);
     await expect(page.locator("#refB-btn-role"), "Your-role tab exists").toHaveCount(1);
     await expect(page.locator("#stage-2 .spikes-strip"), "old SPIKES strip removed").toHaveCount(0);
+    await expect(page.locator("#modB-exchange-list"), "old 6-prompt exchange stepper removed").toHaveCount(0);
   });
 
-  test("Phase 3 (exchange) shows the prompts, hides setup + scene-prep strips", async ({ page }) => {
+  test("Phase 3 (exchange) shows the TWO questions + the vote; hides setup", async ({ page }) => {
     await setupModB(page);
     await page.evaluate(() => window.setModBPhase(2));
-    expect(await shown(page, ".prompts-card-modB"), "prompts show in exchange").toBe(true);
+    expect(await shown(page, ".answers-card-modB-exchange"), "exchange answers show").toBe(true);
+    expect(await shown(page, "#decisions-B"), "vote shows in exchange").toBe(true);
     expect(await shown(page, ".vignette"), "vignette hidden in exchange").toBe(false);
     expect(await shown(page, "#modB-role-picker"), "role picker hidden in exchange").toBe(false);
-    // (The SPIKES strip was deleted and Useful sentences / Your role moved to
-    // always-available reference tabs 2026-06-26, so there are no scene-prep
-    // strips to hide in Phase 3/4 any more.)
+    // Two questions — not the old six prompts, not three bullets.
+    expect(await page.locator(".answers-card-modB-exchange .answer-bullet").count(),
+      "exactly two exchange questions").toBe(2);
   });
 
-  test("Phase 4 (bullets) shows the group-answers form", async ({ page }) => {
+  test("Phase 4 (swap) shows the swap card with the swap button", async ({ page }) => {
     await setupModB(page);
     await page.evaluate(() => window.setModBPhase(3));
-    expect(await shown(page, ".answers-card-bulleted"), "answers form shows in bullets").toBe(true);
-    expect(await shown(page, ".prompts-card-modB"), "prompts hidden in bullets").toBe(false);
+    expect(await shown(page, "#modB-swap-card"), "swap card shows in swap phase").toBe(true);
+    await expect(page.locator("#modB-swap-card #modB-swap-replay-btn"), "swap button lives in the swap card")
+      .toBeVisible();
+    expect(await shown(page, ".answers-card-modB-exchange"), "exchange hidden in swap").toBe(false);
   });
 
-  test("prev/next buttons and chip jumps move the synced phase", async ({ page }) => {
+  test("Phase 5 (replay) shows the replay card + the role picker", async ({ page }) => {
     await setupModB(page);
-    // Next → phase 2 (play): the observer checklist becomes visible.
-    await page.click("#modB-phase-next");
-    await expect(page.locator("#stage-2 #observer-checklist").first(), "observer checklist shows in play")
-      .not.toHaveClass(/is-phase-hidden/);
+    await page.evaluate(() => window.setModBPhase(4));
+    expect(await shown(page, "#modB-replay-card"), "replay card shows").toBe(true);
+    expect(await shown(page, "#modB-role-picker"), "role picker shows for round 2").toBe(true);
+    expect(await shown(page, "#modB-swap-card"), "swap card hidden in replay").toBe(false);
+  });
+
+  test("Phase 6 (reflect) shows the 'what improved' card", async ({ page }) => {
+    await setupModB(page);
+    await page.evaluate(() => window.setModBPhase(5));
+    expect(await shown(page, ".answers-card-modB-reflect"), "reflect card shows").toBe(true);
+    expect(await shown(page, "#modB-replay-card"), "replay hidden in reflect").toBe(false);
+    expect(await page.locator(".answers-card-modB-reflect .answer-bullet:not(.answer-bullet-unsorted)").count(),
+      "two reflection questions").toBe(2);
+  });
+
+  test("prev/next + chip jumps move the synced phase (six phases)", async ({ page }) => {
+    await setupModB(page);
+    await page.click("#modB-phase-next");   // setup → play
     const playCurrent = await page.evaluate(() =>
       document.querySelector('#stage-2 .phase-step[data-phase="play"]').classList.contains("is-current"));
-    expect(playCurrent).toBe(true);
-    // Jump straight to Phase 4. The chip's click listener is on the inner
-    // <button.phase-step-btn>, but a geometric page.click() on it FAILED only
-    // on mobile-ipad (834px): the current chip expands and occludes the click
-    // point, so the synthetic click hit-tests onto the wrong element and the
-    // handler never fired (CI screenshot showed the phase stuck at 2). Desktop
-    // + mobile-iphone (393px, no overlap) pass. dispatchEvent fires the click
-    // straight on the button, exercising the nav wiring without the layout-
-    // occlusion artifact — same pattern used elsewhere for chip hit-testing.
-    await page.locator('#stage-2 .phase-step[data-phase="bullets"] .phase-step-btn')
-      .dispatchEvent("click");
-    await expect(page.locator("#stage-2 .answers-card-bulleted").first(), "chip jump lands on bullets")
+    expect(playCurrent, "Next advances to the play phase").toBe(true);
+    // Jump straight to the last phase (reflect) via its chip — dispatchEvent fires
+    // the handler directly (avoids the mobile chip-occlusion hit-test artifact).
+    await page.locator('#stage-2 .phase-step[data-phase="reflect"] .phase-step-btn').dispatchEvent("click");
+    await expect(page.locator("#stage-2 .answers-card-modB-reflect").first(), "chip jump lands on reflect")
       .not.toHaveClass(/is-phase-hidden/);
-  });
-
-  test("Phase 3 prompts appear one at a time and reach a done state", async ({ page }) => {
-    await setupModB(page);
-    await page.evaluate(() => window.setModBPhase(2));   // exchange
-    const visibleCount = () =>
-      page.locator("#modB-exchange-list > li:not(.is-phase-hidden)").count();
-    expect(await visibleCount(), "exactly one prompt visible at the start").toBe(1);
-    // The first visible prompt is q1.
-    await expect(page.locator("#modB-exchange-list > li:not(.is-phase-hidden)"))
-      .toContainText(/Who is the information for/i);
-    // Advance to the last prompt (index 5) — still exactly one visible.
-    await page.evaluate(() => window.setModBExchangeCursor(5));
-    expect(await visibleCount(), "still one prompt visible near the end").toBe(1);
-    // Past the last prompt → done state, list hidden.
-    await page.evaluate(() => window.setModBExchangeCursor(6));
-    expect(await visibleCount(), "no prompts visible once done").toBe(0);
-    await expect(page.locator("#modB-exchange-done")).toBeVisible();
+    await expect(page.locator("#modB-phase-indicator"), "indicator counts out of six").toContainText("/ 6");
   });
 });

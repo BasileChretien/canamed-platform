@@ -1242,7 +1242,7 @@ let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees 
 let promptCursor = 0;
 let promptReplies = {};
 let _promptReplyTimer = null;
-let modBPhase = 0;          // Module B synced phase index (0..3) — room-shared
+let modBPhase = 0;          // Module B synced phase index (0..5) — room-shared
 let modBExchangeCursor = 0; // Module B Phase-3 prompt index (0..5, 6 = done) — room-shared
 let modBExchangeReplies = {}; // Module B Phase-3: prompt index → cid → {text,by,cid,at} — room-shared
 let _modBExchangeReplyTimer = null;
@@ -3639,7 +3639,7 @@ function startRoom() {
   refModBPhase = db.ref(base + "/moduleB/phase");
   refModBPhase.on("value", snap => {
     const v = snap.val();
-    modBPhase = (typeof v === "number" && v >= 0 && v <= 3) ? Math.floor(v) : 0;
+    modBPhase = (typeof v === "number" && v >= 0 && v <= 5) ? Math.floor(v) : 0;
     if (typeof renderModBPhase === "function") renderModBPhase();
   });
   refModBExchangeCursor = db.ref(base + "/moduleB/exchangeCursor");
@@ -10024,10 +10024,14 @@ function updateModBNextStep() {
   const bulletsCovered = new Set(
     modBAnswerEntries.map(e => e.bulletKey).filter(Boolean)
   );
-  const allBulletsCovered = ["family-sentence", "differ-converge", "practice-change"]
-    .every(k => bulletsCovered.has(k));
+  // The answer bullets now span Phase 3 (family-sentence + differ-converge) and
+  // Phase 6 (reflect-improved + practice-change) — derive from ANSWER_BULLETS so
+  // the count can't drift (2026-06-26).
+  const modBBullets = (typeof ANSWER_BULLETS !== "undefined" && ANSWER_BULLETS.moduleB) ||
+    ["family-sentence", "differ-converge", "reflect-improved", "practice-change"];
+  const allBulletsCovered = modBBullets.every(k => bulletsCovered.has(k));
 
-  // When all three bullets are captured, reveal the "call a facilitator to go to
+  // When EVERY answer bullet is captured, reveal the "call a facilitator to go to
   // the final section" button in the Group-answers card (user request 2026-06-02).
   _updateAnswersCompleteCta("modB-answers-complete", "modB-call-next-btn",
     allBulletsCovered, "modB.answers.complete.callMsg",
@@ -10045,18 +10049,17 @@ function updateModBNextStep() {
     _coachSetAction(actionsEl, null);
   } else if (modBAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modB.coach.roleplay",
-      "Roles set! Run the scene — Phase 2 is the roleplay, Phase 3 is the discussion " +
-      "with the prompts below.");
+      "Roles set! Play the scene, then talk it through and vote — and you'll swap roles and replay.");
     _coachSetAction(actionsEl, null);
   } else if (!allBulletsCovered) {
-    const remaining = 3 - bulletsCovered.size;
+    const remaining = modBBullets.filter(k => !bulletsCovered.has(k)).length;
     const tpl = _coachT("modB.coach.bullets-partial",
-      "Capturing bullets — {n} still to add to cover all 3.");
+      "Capturing your answers — {n} still to add.");
     textEl.textContent = tpl.replace("{n}", String(remaining));
     _coachSetAction(actionsEl, null);
   } else {
     textEl.textContent = _coachT("modB.coach.bullets-complete",
-      "✓ All 3 bullets covered. Add more refinements or wait for your facilitator.");
+      "✓ All your answers are in. Add more refinements or wait for your facilitator.");
     _coachSetAction(actionsEl, null);
   }
 }
@@ -10068,23 +10071,33 @@ function updateModBNextStep() {
  * Only the CURRENT phase's action sections are shown; reference material
  * (SPIKES strip, useful sentences, history, guidelines, recap) stays visible
  * throughout (those sections carry no entry in MODB_PHASE_SECTIONS). */
-const MODB_PHASES = ["setup", "play", "exchange", "bullets"];
-// selector (scoped to #stage-2) → the phases in which that action section shows
+// Six-phase Module B (2026-06-26): a play → reflect → SWAP → replay → reflect
+// loop. P3 fuses the old 6-prompt exchange + 3-bullet write-up into TWO
+// questions + the vote; P4 swaps roles; P5 replays the scene from the new role;
+// P6 reflects on what improved between the two plays.
+const MODB_PHASES = ["setup", "play", "exchange", "swap", "replay", "reflect"];
+// selector (scoped to #stage-2) → the phases in which that action section shows.
 const MODB_PHASE_SECTIONS = [
-  { sel: ".vignette",              phases: ["setup"] },
-  { sel: "#modB-role-picker",      phases: ["setup", "play"] },
+  { sel: ".vignette",                   phases: ["setup"] },
+  // The role picker is live through both plays + the swap (so the swapped role
+  // shows on the chips in round 2).
+  { sel: "#modB-role-picker",           phases: ["setup", "play", "swap", "replay"] },
   // The per-role guides, observer checklist, private brief, useful-sentences and
-  // the safety note MOVED 2026-06-26 into the always-available reference tabs
-  // ("Your role" / "Useful sentences"), so they are no longer phase-gated;
-  // role-gating (MODB_ROLE_SECTIONS) still narrows "Your role" to the holder.
-  // The SPIKES strip was deleted (redundant with the Recap-table tab).
-  { sel: ".prompts-card-modB",     phases: ["exchange"] },
-  // Team decisions ("vote together") only appear in the discussion phase — they
-  // used to sit visible from the very start (user request 2026-06-02). Once the
-  // team has committed them all, renderDecisions() hides the card (see
-  // `decisions-locked`), so they also disappear when filled.
-  { sel: "#decisions-B",           phases: ["exchange"] },
-  { sel: ".answers-card-bulleted", phases: ["bullets"] }
+  // the safety note live in the always-available reference tabs ("Your role" /
+  // "Useful sentences"), so they are NOT phase-gated; role-gating
+  // (MODB_ROLE_SECTIONS) still narrows "Your role" to the holder.
+  //
+  // P3 "exchange": two questions (col-right) + the vote-together (col-left).
+  { sel: ".answers-card-modB-exchange", phases: ["exchange"] },
+  // Team decisions ("vote together") appear only in the discussion phase. Once
+  // the team has committed them all, renderDecisions() hides the card.
+  { sel: "#decisions-B",                phases: ["exchange"] },
+  // P4 "swap": rotate roles for round 2.
+  { sel: "#modB-swap-card",             phases: ["swap"] },
+  // P5 "replay": play the same scene from the new role.
+  { sel: "#modB-replay-card",           phases: ["replay"] },
+  // P6 "reflect": what changed between the two plays + a personal takeaway.
+  { sel: ".answers-card-modB-reflect",  phases: ["reflect"] }
 ];
 
 function applyModBPhaseVisibility(phaseKey) {
@@ -10095,12 +10108,12 @@ function applyModBPhaseVisibility(phaseKey) {
       node.classList.toggle("is-phase-hidden", phases.indexOf(phaseKey) === -1);
     });
   });
-  // The right column only carries the group-answers card, which shows in the
-  // "bullets" phase only. In every other phase that track is empty, so collapse
-  // the two-column grid to full width (mirrors Module A's rcol-collapsed) rather
-  // than leaving a blank band on the right (user report 2026-06-02).
+  // The right column carries the answer cards, which show in the discussion
+  // phases only: P3 "exchange" (the two questions) and P6 "reflect" (what
+  // improved + the takeaway). Everywhere else that track is empty, so collapse
+  // the two-column grid to full width (mirrors Module A's rcol-collapsed).
   const cols = stage.querySelector(".columns.modB-columns");
-  if (cols) cols.classList.toggle("rcol-collapsed", phaseKey !== "bullets");
+  if (cols) cols.classList.toggle("rcol-collapsed", phaseKey !== "exchange" && phaseKey !== "reflect");
 }
 
 /* ── Module B — per-role section visibility (2026-06-03) ───────────────────
@@ -10173,7 +10186,7 @@ function renderModBPhase() {
   if (prev) prev.disabled = modBPhase <= 0;
   if (next) next.disabled = modBPhase >= MODB_PHASES.length - 1;
   const ind = el("modB-phase-indicator");
-  if (ind) ind.textContent = _modBT("modB.phase.indicator", "Phase {n} / 4", { n: modBPhase + 1 });
+  if (ind) ind.textContent = _modBT("modB.phase.indicator", "Phase {n} / 6", { n: modBPhase + 1 });
 }
 
 function setModBPhase(idx) {
@@ -10910,7 +10923,9 @@ const ANSWER_BULLETS = {
   // Module A merged Debate + answers into TWO questions (2026-06-25):
   // diagnosis & plan, and pain across cultures.
   moduleA: ["diagnosis", "culture"],
-  moduleB: ["family-sentence", "differ-converge", "practice-change"]
+  // Phase 3 (exchange) = family-sentence + differ-converge; Phase 6 (reflect) =
+  // reflect-improved + practice-change. All share moduleB answer storage.
+  moduleB: ["family-sentence", "differ-converge", "reflect-improved", "practice-change"]
 };
 
 function renderAnswers(moduleKey) {

@@ -597,13 +597,13 @@ test("rules: per-room /observers/$clientId requires auth + closed-session guard"
   assert.match(node[".write"], /closed/);
 });
 
-test("rules: per-room /moduleB/phase is an auth-guarded number 0..3 (synced phase)", () => {
+test("rules: per-room /moduleB/phase is an auth-guarded number 0..5 (synced phase)", () => {
   assert.ok(ROOM.moduleB && ROOM.moduleB.phase, "rules must declare /rooms/$roomId/moduleB/phase");
   const node = ROOM.moduleB.phase;
   assert.match(node[".write"], /auth != null/);
   assert.match(node[".write"], /closed/);
   assert.match(node[".validate"], /isNumber/, "phase must validate as a number");
-  assert.match(node[".validate"], /<= 3/, "phase must be capped at 3 (four phases, 0..3)");
+  assert.match(node[".validate"], /<= 5/, "phase must be capped at 5 (six phases, 0..5)");
 });
 
 test("rules: per-room /moduleB/exchangeCursor is an auth-guarded number (Phase-3 cursor)", () => {

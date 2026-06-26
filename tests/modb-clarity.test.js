@@ -23,11 +23,12 @@ test("the 'observer reads aloud' script is gone from the ground rule + coach cop
     "the inline Module B coach fallback must drop the read-aloud script");
 });
 
-test("the ground rule now states which step it applies to (purpose/timing)", () => {
-  // EN key still present and now scoped to the Phase 3 discussion.
-  assert.match(I18N, /Ground rule for this discussion \(Phase 3\)/,
-    "the EN ground rule must say it is for the Phase 3 discussion");
-  // key still defined in all three languages
+test("the Phase-3 ground rule is present (it lives in the exchange card now)", () => {
+  // 2026-06-26: the ground rule moved into the Phase-3 "exchange" card, so it no
+  // longer needs the "(Phase 3)" scoping in its text. Just assert it's there.
+  assert.match(I18N, /<strong>Ground rule:<\/strong> we are comparing/,
+    "the EN ground rule must be present");
+  // key still defined in all three languages (en + fr + ja).
   const n = I18N.split('"stage.modB.phase3.ground-rule"').length - 1;
   assert.strictEqual(n, 3, "stage.modB.phase3.ground-rule must stay in en/fr/ja (got " + n + ")");
 });
