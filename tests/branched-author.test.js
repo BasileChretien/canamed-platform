@@ -131,6 +131,16 @@ test("cross-parent convergence is flagged as a warning (single-gate model limit)
   );
 });
 
+test("a dangling next target is warned, not silently dropped", () => {
+  const ns = nodes();
+  ns[0].options[0].next = "ghost"; // points at a node that does not exist
+  const { warnings } = buildBranchedScenario({ id: "x" }, ns);
+  assert.ok(
+    warnings.some((w) => /ghost/.test(w) && /not a node/.test(w)),
+    "must warn that the choice points at a non-node",
+  );
+});
+
 test("content is English-only (no fr/ja keys emitted)", () => {
   const { scenario } = buildBranchedScenario({ id: "x", title: "T" }, nodes());
   assert.deepStrictEqual(Object.keys(scenario.name), ["en"]);

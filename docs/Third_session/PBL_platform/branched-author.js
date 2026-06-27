@@ -51,6 +51,22 @@
       });
     });
 
+    // A `next` that matches no node id can't become a gate (gateFor only runs
+    // for real nodes), so the edge would vanish and the choice quietly become an
+    // ending. Warn rather than swallow it — the author almost certainly meant to
+    // point somewhere real (e.g. a node they renamed or have not added yet).
+    const nodeIds = new Set(nodes.map((n) => n && n.id).filter(Boolean));
+    nodes.forEach((n) => {
+      (Array.isArray(n.options) ? n.options : []).forEach((o, oi) => {
+        if (o && o.next && !nodeIds.has(o.next)) {
+          warnings.push(
+            'Node "' + n.id + '" choice ' + oi + ' points to "' + o.next +
+              '", which is not a node — that choice will silently end the case.'
+          );
+        }
+      });
+    });
+
     function gateFor(nodeId) {
       const edges = incoming[nodeId] || [];
       if (!edges.length) return null; // entry node

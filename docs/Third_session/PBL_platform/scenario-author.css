@@ -415,7 +415,6 @@ input:focus, textarea:focus, select:focus {
 .author-form[data-format="branched"] #preview-section { display: none; }
 .author-form:not([data-format="branched"]) .branched-only { display: none; }
 
-#branched-editor legend { font: inherit; font-weight: 700; padding: 0; margin-bottom: .4rem; }
 .bn-opt { border-left: 3px solid var(--accent, #2a6); padding-left: .7rem; margin: .6rem 0; }
 .bn-opt textarea, .bn-opt input[type="text"] { width: 100%; box-sizing: border-box; }
 .bn-then { display: flex; gap: .5rem; align-items: center; margin-top: .4rem; }

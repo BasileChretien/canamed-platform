@@ -112,10 +112,14 @@
         "No entry node: every node is gated behind another, so the case can never start.",
       );
     } else if (entries.length > 1) {
-      warnings.push(
+      // More than one ungated node is a hard error, not a warning: the runtime
+      // (branchedPath) starts at the FIRST available node and silently ignores
+      // the rest, so a multi-entry graph is nondeterministic. Reject it up front.
+      errors.push(
         "Multiple entry nodes (" +
           entries.map((n) => n.id).join(", ") +
-          "); a branched scenario usually has exactly one start.",
+          "); a branched scenario must have exactly one start. Gate the extras " +
+          "behind a choice, or merge them.",
       );
     }
 

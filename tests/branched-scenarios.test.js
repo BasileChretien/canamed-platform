@@ -181,6 +181,22 @@ test("no entry node (every node gated) is an error", () => {
   assert.ok(r.errors.some((e) => /entry node/.test(e)));
 });
 
+test("more than one entry node is a hard error (nondeterministic start)", () => {
+  const g = goodGraph();
+  // A second ungated node — branchedPath would start at one and ignore it.
+  g.decisions.push({
+    id: "m0",
+    prompt: { en: "another start" },
+    options: [
+      { text: { en: "a" }, branch: { reveal: { en: "end a" } } },
+      { text: { en: "b" }, branch: { reveal: { en: "end b" } } },
+    ],
+  });
+  const r = validateBranchedGraph(g);
+  assert.strictEqual(r.ok, false);
+  assert.ok(r.errors.some((e) => /Multiple entry/.test(e)));
+});
+
 test("a node with fewer than 2 options is an error", () => {
   const g = goodGraph();
   g.decisions[0].options = [g.decisions[0].options[0]];
