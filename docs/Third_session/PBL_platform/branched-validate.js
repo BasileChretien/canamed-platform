@@ -45,18 +45,13 @@
     return { id: null, option: null }; // malformed; caught as a dangling ref
   }
 
-  /* True when a localisable field carries a non-empty English string. fr/ja
-   * absence is a warning, handled separately; en absence is an error. */
+  /* Branched scenarios are English-canonical: their content is authored in
+   * English only, and the in-product hovering reader (lang-reader.js) supplies
+   * FR/JA at read-time. So the validator requires a non-empty English string
+   * and does NOT flag missing FR/JA — that would be noise on every node and
+   * would bury the real errors in the editor's live panel. */
   function hasEn(field) {
     return !!(field && typeof field.en === "string" && field.en.trim());
-  }
-  function missingLangs(field) {
-    const out = [];
-    ["en", "fr", "ja"].forEach((l) => {
-      if (!field || typeof field[l] !== "string" || !field[l].trim())
-        out.push(l);
-    });
-    return out;
   }
 
   function validateBranchedGraph(scenario) {
@@ -102,34 +97,11 @@
       }
       if (!hasEn(n.prompt))
         errors.push('Node "' + n.id + '" has no English prompt.');
-      else {
-        const miss = missingLangs(n.prompt).filter((l) => l !== "en");
-        if (miss.length)
-          warnings.push(
-            'Node "' + n.id + '" prompt missing: ' + miss.join("/") + ".",
-          );
-      }
       opts.forEach((o, oi) => {
         if (!hasEn(o && o.text))
           errors.push(
             'Node "' + n.id + '" option ' + oi + " has no English text.",
           );
-        if (
-          o &&
-          o.branch &&
-          o.branch.reveal &&
-          missingLangs(o.branch.reveal).length
-        ) {
-          warnings.push(
-            'Node "' +
-              n.id +
-              '" option ' +
-              oi +
-              " consequence missing: " +
-              missingLangs(o.branch.reveal).join("/") +
-              ".",
-          );
-        }
       });
     });
 

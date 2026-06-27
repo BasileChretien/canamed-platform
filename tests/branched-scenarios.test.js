@@ -201,12 +201,20 @@ test("a dead choice (no follow-up, no consequence) is a warning, not an error", 
   assert.ok(r.warnings.some((w) => /dead choice/.test(w)));
 });
 
-test("missing fr/ja on a prompt is a warning; missing en is an error", () => {
+test("English-canonical: missing fr/ja is NOT flagged; missing en IS an error", () => {
+  // Branched content is English-only (the hovering reader supplies fr/ja at
+  // read-time), so absent fr/ja must produce neither error nor warning —
+  // otherwise the editor's panel drowns in noise.
   const g = goodGraph();
   delete g.decisions[0].prompt.fr;
+  delete g.decisions[0].prompt.ja;
   let r = validateBranchedGraph(g);
   assert.strictEqual(r.ok, true);
-  assert.ok(r.warnings.some((w) => /missing: fr/.test(w)));
+  assert.strictEqual(
+    r.warnings.filter((w) => /missing|fr|ja/i.test(w)).length,
+    0,
+    "no language-coverage warnings for English-canonical content",
+  );
 
   const g2 = goodGraph();
   delete g2.decisions[0].prompt.en;
