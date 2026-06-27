@@ -7,12 +7,14 @@
  * narrates the consequence. Scoring rides the existing engine too: the option
  * marked `correct` awards `points`; any other committed option costs `penalty`.
  *
- * It spans the session's two acts so the natural stage flow is the act break:
- *   Act I  (module "A", stage 1) — recognise & escalate the deterioration;
- *   Act II (module "B", stage 2) — the frightened daughter at the bedside.
- * Branches CONVERGE (both Act-I choices reach the next node) to keep the tree
- * bounded; only the consequence narrative differs, so a poor early call colours
- * what the team walks into next without exploding the content.
+ * The whole tree runs in ONE épuré stage (every node is module "A", so it
+ * renders in stage-1's decision column): recognise the deterioration →
+ * escalate → the frightened daughter at the bedside. Keeping it single-stage
+ * sidesteps Module B's roleplay phase/role machinery, which a pure decision
+ * flow has no use for. Branches CONVERGE (both early choices reach the next
+ * node) to keep the tree bounded; only the consequence narrative differs, so a
+ * poor early call colours what the team walks into next without exploding the
+ * content.
  *
  * Content is ENGLISH-ONLY by design: the in-product hovering reader supplies
  * FR/JA at read-time (the platform's English-canonical strategy), so prompts/
@@ -38,8 +40,8 @@
         "the deterioration; Act II is the conversation with his frightened " +
         "daughter at the bedside.",
     },
-    moduleAName: { en: "Act I — Recognise & escalate" },
-    moduleBName: { en: "Act II — The family at the bedside" },
+    moduleAName: { en: "The breathless patient" },
+    moduleBName: { en: "Reflection" },
     // No clinical workup, pre/post-test or synthesis: a branched scenario is
     // pure decision flow. Empty stand-ins keep case-derived code from choking.
     case: { history: [], exam: [], labs: [] },
@@ -152,7 +154,7 @@
       },
       {
         id: "b_family",
-        module: "B",
+        module: "A",
         points: 20,
         penalty: 15,
         unlockWhen: { afterDecision: "b_escalate" },

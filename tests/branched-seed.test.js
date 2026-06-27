@@ -28,11 +28,14 @@ test("the seed declares the branched format and an entry node", () => {
   assert.strictEqual(entries[0].id, "b_assess");
 });
 
-test("the seed spans both acts (module A then module B)", () => {
+test("the whole tree is single-stage (every node module A → stage-1)", () => {
+  // A pure decision flow has no use for Module B's roleplay phase/role
+  // machinery, so the branch runs entirely in stage-1's decision column.
   const mods = new Set(SEED.decisions.map((d) => d.module));
-  assert.ok(
-    mods.has("A") && mods.has("B"),
-    "uses both stage-1 (A) and stage-2 (B)",
+  assert.deepStrictEqual(
+    [...mods],
+    ["A"],
+    "every node renders in #decisions-A",
   );
 });
 

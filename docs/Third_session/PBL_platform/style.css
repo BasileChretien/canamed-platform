@@ -341,6 +341,18 @@ body[data-format="branched"] .stage .columns > .col-right {
   max-width: 760px;
   margin-inline: auto;
 }
+/* revealModARightCol()/applyModBPhaseVisibility() add .rcol-collapsed to hide
+   the right column until Module-A/B findings make it "actionable" (rules ~308
+   / ~318 above). A branched scenario has no clinical workup to reveal, so that
+   gate would hide the decisions FOREVER — the decisions ARE the activity here,
+   so force the right column open in branched mode regardless of the collapse. */
+body[data-format="branched"] .stage .columns.rcol-collapsed { grid-template-columns: 1fr !important; }
+body[data-format="branched"] .stage .columns.rcol-collapsed > .col-right { display: block !important; }
+/* switchRcolTab()/revealModARightCol() also set the `hidden` attribute on the
+   decisions panel whenever it isn't the active/revealed tab — but in branched
+   mode the tab bar is hidden and decisions are the only panel, so force it open
+   regardless of that attribute (overrides .rcol-panel[hidden]{display:none}). */
+body[data-format="branched"] #stage-1 #rcol-p-decisions { display: block !important; }
 /* The mobile bottom tab bar mirrors Module A's rcol tabs, which we've hidden —
    suppress it so branched mode reads the same on phones as on desktop. */
 body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
