@@ -61,8 +61,18 @@
     <form id="author-form" class="author-form" autocomplete="off">
 
       <!-- ============= Scenario meta ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section" id="meta-section">
         <legend>1. Scenario metadata</legend>
+        <div class="field-row">
+          <label class="field-label" for="meta-format">Scenario format</label>
+          <select id="meta-format" name="meta.format">
+            <option value="standard">Standard &mdash; PBL workup + roleplay</option>
+            <option value="branched">Branched &mdash; &eacute;pur&eacute; decision tree (English-only)</option>
+          </select>
+          <p class="field-hint">A <strong>branched</strong> scenario is a clean, one-decision-at-a-time fork:
+            the team votes, locks in, sees what happens, then the case moves on. English-only &mdash;
+            the in-app reader supplies French / Japanese at read-time.</p>
+        </div>
         <div class="field-row">
           <label class="field-label" for="meta-id">Scenario id <span class="required">*</span></label>
           <input type="text" id="meta-id" name="meta.id"
@@ -76,6 +86,18 @@
         <div class="trio-block" data-trio="meta.moduleAName" data-label="Module A name"></div>
         <div class="trio-block" data-trio="meta.moduleBName" data-label="Module B name"></div>
       </fieldset>
+
+      <!-- ============= Branch tree (branched format only) ============= -->
+      <section class="author-section branched-only" id="branched-editor">
+        <h2>Branch tree</h2>
+        <p class="field-hint">Each <strong>node</strong> is one decision shown on its own. For every choice,
+          write what happens next (the consequence) and where the case goes &mdash; pick another node under
+          <em>Then&nbsp;&rarr;</em>, or leave it as <em>ends the case</em>. Add the nodes first, then wire
+          the <em>Then&nbsp;&rarr;</em> targets. The first node nothing points to is the start. English only.</p>
+        <div id="list-branched" class="dyn-list"></div>
+        <button type="button" class="add-btn" id="btn-add-branched-node">+ Add node</button>
+        <div id="branched-validation" class="validation-output" aria-live="polite"></div>
+      </section>
 
       <!-- ============= CASE.history ============= -->
       <fieldset class="author-section">
@@ -221,6 +243,11 @@
 
   </main>
 
+  <!-- Branched-format cores: the graph validator + the forward-edge → gate emit
+       core. Loaded BEFORE scenario-author.js so its branched paths can call
+       window.CanamedBranched / window.CanamedBranchedAuthor synchronously. -->
+  <script src="branched-validate.js"></script>
+  <script src="branched-author.js"></script>
   <script src="scenario-author.js"></script>
 
   <!-- Cloud save / load (Firebase). Loads after the offline editor so the

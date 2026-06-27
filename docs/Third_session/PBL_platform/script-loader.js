@@ -102,9 +102,15 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v66";
+  var SHELL_VERSION = "v67";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
-  function ensureCaseContent() { return loadScript(v("case-content.js")); }
+  // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
+  // merges the branched-format scenario into it. Chained (not parallel) so the
+  // merge always runs after the registry exists.
+  function ensureCaseContent() {
+    return loadScript(v("case-content.js"))
+      .then(function () { return loadScript(v("branched-seed.js")); });
+  }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
   function ensureTour()        { return loadScript(v("tour.js")); }
   function ensureScenarioAuthor() { return loadScript(v("scenario-author.js")); }
