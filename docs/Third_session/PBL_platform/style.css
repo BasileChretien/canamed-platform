@@ -329,8 +329,12 @@ main {
    consequence, the one active node shows the vote — so the trail + the single
    live choice are exactly what remains on screen. Scoped to body[data-format]
    so the standard PBL/roleplay layout is completely untouched. */
-body[data-format="branched"] #stage-1 > *:not(.columns),
-body[data-format="branched"] #stage-2 > *:not(.columns) { display: none !important; }
+body[data-format="branched"] #stage-1 > *:not(.columns) { display: none !important; }
+/* Stage 2 is the branched Reflection debrief (the whole tree finishes in Stage
+   1), so drop the empty Module-B decision columns + all roleplay chrome and
+   keep only the reflection card. */
+body[data-format="branched"] #stage-2 > *:not(#branched-reflection) { display: none !important; }
+body[data-format="branched"] #branched-reflection { max-width: 760px; margin-inline: auto; }
 body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
 body[data-format="branched"] .stage .columns > .col-left { display: none !important; }
 /* Stage-1's decisions live behind the rcol tab bar + an answers panel — both
@@ -356,6 +360,12 @@ body[data-format="branched"] #stage-1 #rcol-p-decisions { display: block !import
 /* The mobile bottom tab bar mirrors Module A's rcol tabs, which we've hidden —
    suppress it so branched mode reads the same on phones as on desktop. */
 body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
+/* The branched Reflection card is hidden in standard (non-branched) sessions.
+   Scoped to its id, NOT a shared .branched-only class — scenario-author.html
+   also loads style.css and uses .branched-only toggled by the FORM's
+   data-format, so a body-level .branched-only rule would wrongly hide its
+   branch editor. */
+body:not([data-format="branched"]) #branched-reflection { display: none !important; }
 
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }

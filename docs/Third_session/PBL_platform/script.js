@@ -12350,11 +12350,47 @@ function lobbyShowLockedSession() {
   } else if (line) {
     line.hidden = true;
   }
+  // The "Today's structure" agenda must match the chosen scenario — it used to
+  // be hardcoded to chronic-pain / breaking-bad-news, which read as the wrong
+  // session for every other scenario (and especially for branched ones).
+  renderLobbyStructure();
   // Reveal the "← Use a different session" escape hatch. The lobby is the
   // ONLY view a returning user with stored canamed_session sees before the
   // (silent) auto-rejoin, so without this they have no visible way back to
   // the splash. User-reported regression 2026-05-18.
   paintLobbySwitchSession();
+}
+
+/* Populate the lobby "Today's structure" list from the ACTIVE scenario's
+ * module names (set by applyScenario), so the agenda always matches what the
+ * room will actually run. Opening presentation + Wrap-up are fixed real-world
+ * steps; only the two middle items are scenario-specific. Branched scenarios
+ * run the whole case in Stage 1 and use Stage 2 as a reflection/debrief, so
+ * their wording differs. Built with textContent (never innerHTML) because the
+ * names can be facilitator-authored. */
+function renderLobbyStructure() {
+  const liA = el("lobby-struct-modA");
+  const liB = el("lobby-struct-modB");
+  if (!liA || !liB) return;
+  const lang = _curLang();
+  const branched = (window.CURRENT_SCENARIO_FORMAT === "branched");
+  const aName = tc(window.CURRENT_SCENARIO_MODULE_A_NAME, lang)
+    || (branched ? "The case" : "Module A — Chronic Pain & the Clinical Case");
+  const bName = tc(window.CURRENT_SCENARIO_MODULE_B_NAME, lang)
+    || (branched ? "Reflection" : "Module B — Breaking Bad News");
+  const fill = (li, name, tail) => {
+    li.textContent = "";
+    const s = document.createElement("strong");
+    s.textContent = name;
+    li.appendChild(s);
+    li.appendChild(document.createTextNode(tail));
+  };
+  fill(liA, aName, branched
+    ? " — a guided clinical decision case: your team works through it together, one decision at a time."
+    : ", worked through here on the platform.");
+  fill(liB, bName, branched
+    ? " — look back at the path your choices took and discuss it together."
+    : ", a cross-cultural roleplay.");
 }
 
 /* Reveal + wire the lobby "switch session" button whenever the lobby is
