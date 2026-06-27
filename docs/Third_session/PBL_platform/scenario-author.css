@@ -405,3 +405,20 @@ input:focus, textarea:focus, select:focus {
 .scenario-cloud-list li { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
 .scenario-cloud-list li button { flex: 0 0 auto; }
 .scenario-cloud-list li button.secondary-btn:first-child { flex: 1 1 auto; text-align: left; }
+
+/* ── Branched-format authoring ─────────────────────────────────────────────
+   The format toggle (#meta-format) decides which sections show. In branched
+   mode only the metadata + the branch-tree editor are relevant, so hide the
+   standard PBL fieldsets and the (PBL-shaped) human preview; in standard mode
+   hide the branch editor. */
+.author-form[data-format="branched"] fieldset.author-section:not(#meta-section),
+.author-form[data-format="branched"] #preview-section { display: none; }
+.author-form:not([data-format="branched"]) .branched-only { display: none; }
+
+#branched-editor legend { font: inherit; font-weight: 700; padding: 0; margin-bottom: .4rem; }
+.bn-opt { border-left: 3px solid var(--accent, #2a6); padding-left: .7rem; margin: .6rem 0; }
+.bn-opt textarea, .bn-opt input[type="text"] { width: 100%; box-sizing: border-box; }
+.bn-then { display: flex; gap: .5rem; align-items: center; margin-top: .4rem; }
+.bn-then select { flex: 1 1 auto; }
+#branched-validation { white-space: pre-line; margin-top: .8rem; }
+#branched-validation:empty { display: none; }

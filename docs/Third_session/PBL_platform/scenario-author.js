@@ -84,8 +84,20 @@
       options: [emptyOption(), emptyOption()]
     };
   }
+  // Branched-format editor state: English-only, FORWARD edges (option.next is a
+  // target node id; "" = ends the case). buildBranchedScenario translates these
+  // to the runtime's reverse unlockWhen.afterDecision gates.
+  function emptyBranchedOption() {
+    return { text: "", consequence: "", correct: false, next: "" };
+  }
+  function emptyBranchedNode() {
+    return { id: "", stem: "", points: 20, penalty: 15,
+      options: [emptyBranchedOption(), emptyBranchedOption()] };
+  }
   function defaultState() {
     return {
+      format: "standard",
+      branchedNodes: [emptyBranchedNode()],
       meta: {
         id: "",
         name: emptyTrio(),
@@ -404,6 +416,197 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* branched-format editor (English-only node graph)                   */
+  /* ------------------------------------------------------------------ */
+
+  function isBranched() { return (STATE.format || "standard") === "branched"; }
+
+  // small single-input field (English) — label + input/textarea, live onInput.
+  function enField(label, value, multiline, onInput) {
+    var wrap = el("div", { class: "field-row" });
+    wrap.appendChild(el("label", { class: "field-label", text: label }));
+    var inp = multiline
+      ? el("textarea", { value: value || "" })
+      : el("input", { type: "text", value: value || "" });
+    inp.addEventListener("input", function () { onInput(inp.value); });
+    wrap.appendChild(inp);
+    return wrap;
+  }
+  function numField(label, value, onInput) {
+    var cell = el("div", { class: "field-row narrow" });
+    cell.appendChild(el("label", { class: "field-label", text: label }));
+    var inp = el("input", { type: "number", value: value });
+    inp.addEventListener("input", function () { onInput(parseInt(inp.value, 10) || 0); });
+    cell.appendChild(inp);
+    return cell;
+  }
+
+  function renderBranchedNodes() {
+    var container = document.getElementById("list-branched");
+    if (!container) return;
+    container.innerHTML = "";
+    var nodes = STATE.branchedNodes;
+    nodes.forEach(function (node, i) {
+      var shell = rowShell("node[" + i + "]" + (node.id ? " — " + node.id : ""),
+        function () { nodes.splice(i, 1); renderAll(); });
+
+      var top = el("div", { class: "row-flex" });
+      var idCell = el("div", { class: "field-row" });
+      idCell.appendChild(el("label", { class: "field-label", text: "node id" }));
+      var idIn = el("input", { type: "text", value: node.id });
+      idIn.addEventListener("input", function () { node.id = idIn.value; refreshOutput(); });
+      // Re-render on blur so the "Then →" target dropdowns pick up a node id
+      // the moment it is named (input alone would not refresh the other rows).
+      idIn.addEventListener("change", function () { renderAll(); });
+      idCell.appendChild(idIn);
+      top.appendChild(idCell);
+      top.appendChild(numField("points (best)", node.points, function (v) { node.points = v; refreshOutput(); }));
+      top.appendChild(numField("penalty (other)", node.penalty, function (v) { node.penalty = v; refreshOutput(); }));
+      shell.appendChild(top);
+
+      shell.appendChild(enField("The situation / question (English)", node.stem, true,
+        function (v) { node.stem = v; refreshOutput(); }));
+
+      var optsWrap = el("div", { class: "decision-options" });
+      node.options.forEach(function (opt, j) {
+        var optRow = el("div", { class: "opt-row bn-opt" });
+        var oh = el("div", { class: "row-header" });
+        oh.appendChild(el("span", { class: "row-title", text: "choice[" + j + "]" }));
+        var rm = el("button", { type: "button", class: "remove-btn", text: "× remove" });
+        rm.addEventListener("click", function () { node.options.splice(j, 1); renderAll(); });
+        oh.appendChild(rm);
+        optRow.appendChild(oh);
+
+        var cc = el("div", { class: "check-cell" });
+        var cb = el("input", { type: "checkbox", id: "bn-corr-" + i + "-" + j, checked: !!opt.correct });
+        cb.addEventListener("change", function () { opt.correct = cb.checked; refreshOutput(); });
+        cc.appendChild(cb);
+        cc.appendChild(el("label", { htmlFor: "bn-corr-" + i + "-" + j,
+          text: "best choice (scores the points)" }));
+        optRow.appendChild(cc);
+
+        optRow.appendChild(enField("Choice text (English)", opt.text, false,
+          function (v) { opt.text = v; refreshOutput(); }));
+        optRow.appendChild(enField("What happens next — consequence (English)", opt.consequence, true,
+          function (v) { opt.consequence = v; refreshOutput(); }));
+
+        var thenWrap = el("div", { class: "bn-then" });
+        thenWrap.appendChild(el("label", { class: "field-label", text: "Then →" }));
+        var sel = el("select");
+        sel.appendChild(el("option", { value: "", text: "— ends the case —" }));
+        var matched = false;
+        nodes.forEach(function (other, oi) {
+          if (oi === i || !other.id) return;
+          var o = el("option", { value: other.id, text: other.id });
+          if (opt.next === other.id) { o.selected = true; matched = true; }
+          sel.appendChild(o);
+        });
+        // A target that no longer resolves (renamed/removed) stays selectable so
+        // the author sees the break (the validator also flags it).
+        if (opt.next && !matched) {
+          var dang = el("option", { value: opt.next, text: opt.next + " (missing!)" });
+          dang.selected = true;
+          sel.appendChild(dang);
+        }
+        sel.addEventListener("change", function () { opt.next = sel.value; refreshOutput(); });
+        thenWrap.appendChild(sel);
+        optRow.appendChild(thenWrap);
+
+        optsWrap.appendChild(optRow);
+      });
+      var addOpt = el("button", { type: "button", class: "add-btn", text: "+ Add choice" });
+      addOpt.addEventListener("click", function () { node.options.push(emptyBranchedOption()); renderAll(); });
+      optsWrap.appendChild(addOpt);
+      shell.appendChild(optsWrap);
+
+      container.appendChild(shell);
+    });
+  }
+
+  // meta → buildBranchedScenario input (English strings, not trios).
+  function branchedMeta() {
+    var m = STATE.meta;
+    return {
+      id: m.id,
+      name: (m.name && m.name.en) || "",
+      summary: (m.summary && m.summary.en) || "",
+      title: (m.moduleAName && m.moduleAName.en) || (m.name && m.name.en) || ""
+    };
+  }
+  function buildBranched() {
+    if (!window.CanamedBranchedAuthor || !window.CanamedBranchedAuthor.buildBranchedScenario) {
+      return { scenario: { id: STATE.meta.id, format: "branched", decisions: [] }, warnings: [] };
+    }
+    return window.CanamedBranchedAuthor.buildBranchedScenario(branchedMeta(), STATE.branchedNodes);
+  }
+  function toBranchedJson() { return buildBranched().scenario; }
+
+  // Live validation panel under the branch editor (errors + warnings).
+  function refreshBranchedValidation() {
+    var box = document.getElementById("branched-validation");
+    if (!box) return;
+    var built = buildBranched();
+    var msgs = [];
+    var m = STATE.meta;
+    if (!m.id) msgs.push("✗ Scenario id is required.");
+    else if (!/^[a-z0-9][a-z0-9-]*$/.test(m.id)) msgs.push("✗ Scenario id must be lowercase kebab-case.");
+    if (!(m.name && m.name.en)) msgs.push("✗ Scenario name (English) is required.");
+    if (window.CanamedBranched && window.CanamedBranched.validateBranchedGraph) {
+      var r = window.CanamedBranched.validateBranchedGraph(built.scenario);
+      r.errors.forEach(function (e) { msgs.push("✗ " + e); });
+      r.warnings.forEach(function (w) { msgs.push("⚠ " + w); });
+    }
+    built.warnings.forEach(function (w) { msgs.push("⚠ " + w); });
+    var hasErr = msgs.some(function (s) { return s.charAt(0) === "✗"; });
+    box.className = "validation-output" + (hasErr ? " error" : " success");
+    box.textContent = msgs.length ? msgs.join("\n") : "✓ Valid branch tree — ready to copy.";
+  }
+
+  // Reverse buildBranchedScenario (afterDecision gates → forward next) so a
+  // branched scenario round-trips back into the editor via Load JSON.
+  function branchedJsonToState(json) {
+    var st = defaultState();
+    st.format = "branched";
+    st.meta.id = json.id || "";
+    st.meta.name = asTrio(json.name);
+    st.meta.summary = asTrio(json.summary);
+    st.meta.moduleAName = asTrio(json.moduleAName);
+    st.meta.moduleBName = asTrio(json.moduleBName);
+    var decisions = Array.isArray(json.decisions) ? json.decisions : [];
+    st.branchedNodes = decisions.map(function (d) {
+      return {
+        id: d.id || "",
+        stem: (d.prompt && d.prompt.en) || "",
+        points: typeof d.points === "number" ? d.points : 20,
+        penalty: typeof d.penalty === "number" ? d.penalty : 15,
+        options: (Array.isArray(d.options) ? d.options : []).map(function (o) {
+          return {
+            text: (o.text && o.text.en) || "",
+            consequence: (o.branch && o.branch.reveal && o.branch.reveal.en) || "",
+            correct: !!o.correct,
+            next: ""
+          };
+        })
+      };
+    });
+    var byId = {};
+    st.branchedNodes.forEach(function (n) { byId[n.id] = n; });
+    decisions.forEach(function (d) {
+      var w = d.unlockWhen && d.unlockWhen.afterDecision;
+      if (!w) return;
+      if (typeof w === "string") {
+        var any = byId[w];
+        if (any) any.options.forEach(function (o) { if (!o.next) o.next = d.id; });
+      } else if (w && w.id) {
+        var p = byId[w.id];
+        if (p && p.options[w.option]) p.options[w.option].next = d.id;
+      }
+    });
+    if (!st.branchedNodes.length) st.branchedNodes = [emptyBranchedNode()];
+    return st;
+  }
+
+  /* ------------------------------------------------------------------ */
   /* meta-section binding (top form fields + synth gate)                */
   /* ------------------------------------------------------------------ */
 
@@ -437,6 +640,14 @@
     prereqIn.addEventListener("input", function () {
       STATE.synthPrereqs = prereqIn.value; refreshOutput();
     });
+
+    // Format toggle. onchange (assignment, not addEventListener) so re-binding
+    // on every renderAll never stacks duplicate handlers.
+    var fmtSel = document.getElementById("meta-format");
+    if (fmtSel) {
+      fmtSel.value = STATE.format || "standard";
+      fmtSel.onchange = function () { STATE.format = fmtSel.value; renderAll(); };
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -455,6 +666,7 @@
   }
 
   function toScenarioJson() {
+    if (isBranched()) return toBranchedJson();
     var m = STATE.meta;
     var caseObj = {
       history: STATE.history.map(function (r) { return { q: r.q, a: r.a }; }),
@@ -516,13 +728,32 @@
     var json = toScenarioJson();
     var pretty = JSON.stringify(json, null, 2);
     document.getElementById("json-preview").value = pretty;
+    if (isBranched()) refreshBranchedValidation();
   }
 
   /* ------------------------------------------------------------------ */
   /* validation                                                         */
   /* ------------------------------------------------------------------ */
 
+  // Branched: the graph validator is the source of truth (hard errors only;
+  // warnings live in the always-on #branched-validation panel).
+  function validateBranchedForm() {
+    var errs = [];
+    var m = STATE.meta;
+    if (!m.id) errs.push("Scenario id is required.");
+    else if (!/^[a-z0-9][a-z0-9-]*$/.test(m.id))
+      errs.push("Scenario id must be lowercase kebab-case (e.g. acute-asthma).");
+    if (!(m.name && m.name.en)) errs.push("Scenario name (English) is required.");
+    var built = buildBranched();
+    if (window.CanamedBranched && window.CanamedBranched.validateBranchedGraph) {
+      window.CanamedBranched.validateBranchedGraph(built.scenario)
+        .errors.forEach(function (e) { errs.push(e); });
+    }
+    return errs;
+  }
+
   function validate() {
+    if (isBranched()) return validateBranchedForm();
     var errs = [];
     var json = toScenarioJson();
 
@@ -747,6 +978,7 @@
   }
 
   function scenarioJsonToState(obj) {
+    if (obj && obj.format === "branched") return branchedJsonToState(obj);
     var s = defaultState();
     s.meta.id = obj.id || "";
     s.meta.name        = asTrio(obj.name);
@@ -824,15 +1056,21 @@
   /* ------------------------------------------------------------------ */
 
   function renderAll() {
+    var form = document.getElementById("author-form");
+    if (form) form.dataset.format = STATE.format || "standard";
     bindMeta();
-    renderHistoryLike("list-history", STATE.history, "history");
-    renderHistoryLike("list-exam",    STATE.exam,    "exam");
-    renderLabs();
-    renderPrompts();
-    renderScoring("list-scoringA", STATE.scoringA);
-    renderScoring("list-scoringB", STATE.scoringB);
-    renderPenalties();
-    renderDecisions();
+    if (isBranched()) {
+      renderBranchedNodes();
+    } else {
+      renderHistoryLike("list-history", STATE.history, "history");
+      renderHistoryLike("list-exam",    STATE.exam,    "exam");
+      renderLabs();
+      renderPrompts();
+      renderScoring("list-scoringA", STATE.scoringA);
+      renderScoring("list-scoringB", STATE.scoringB);
+      renderPenalties();
+      renderDecisions();
+    }
     refreshOutput();
   }
 
@@ -882,6 +1120,12 @@
         }
         renderAll();
       });
+    });
+
+    var addNodeBtn = document.getElementById("btn-add-branched-node");
+    if (addNodeBtn) addNodeBtn.addEventListener("click", function () {
+      STATE.branchedNodes.push(emptyBranchedNode());
+      renderAll();
     });
 
     document.getElementById("btn-validate").addEventListener("click", function () {
