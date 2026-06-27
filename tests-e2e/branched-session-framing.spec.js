@@ -26,11 +26,11 @@ async function applyAndFrame(page, scenarioId) {
   }, scenarioId);
 }
 
-const disp = (page, sel) =>
-  page.evaluate((s) => {
-    const n = document.querySelector(s);
-    return n ? getComputedStyle(n).display : "absent";
-  }, sel);
+// Own computed display via the LOCATOR — locator.evaluate waits for and resolves
+// the node, throwing if it is absent, so a missing element can never silently
+// pass a `.not.toBe("none")` check (unlike a querySelector that returns "absent").
+const ownDisplay = (page, sel) =>
+  page.locator(sel).evaluate((n) => getComputedStyle(n).display);
 
 test.describe("branched session framing", () => {
   test("branched: lobby agenda + reflection stage match the scenario, not chronic-pain", async ({
@@ -52,9 +52,11 @@ test.describe("branched session framing", () => {
       /Breaking Bad News/i,
     );
 
-    // Stage 2 shows the Reflection card; the empty Module-B decision columns are gone.
-    expect(await disp(page, "#branched-reflection")).not.toBe("none");
-    expect(await disp(page, "#stage-2 .columns")).toBe("none");
+    // Stage 2 shows the Reflection card (display != none) and drops the empty
+    // Module-B decision columns (display: none). ownDisplay throws if either
+    // node is missing, so neither can pass by being absent.
+    expect(await ownDisplay(page, "#branched-reflection")).not.toBe("none");
+    expect(await ownDisplay(page, "#stage-2 .columns")).toBe("none");
     expect(await page.evaluate(() => document.body.dataset.format)).toBe(
       "branched",
     );
@@ -72,7 +74,7 @@ test.describe("branched session framing", () => {
       /Breaking Bad News/i,
     );
     // The Reflection card stays hidden in a standard session.
-    expect(await disp(page, "#branched-reflection")).toBe("none");
+    expect(await ownDisplay(page, "#branched-reflection")).toBe("none");
     expect(await page.evaluate(() => document.body.dataset.format)).toBe(
       "standard",
     );
