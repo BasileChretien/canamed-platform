@@ -11,9 +11,9 @@
  *   - on stage-1 the épuré layout is live (case chrome hidden, decisions shown);
  *   - committing node b_assess reveals its consequence (.dec-branch) AND unlocks
  *     the follow-up node b_escalate (the fork advances);
- *   - committing b_escalate advances again;
- *   - after the act break (stage-2), the Act-II node b_family appears and its
- *     ending consequence renders.
+ *   - committing b_escalate advances again, unlocking the final node b_family;
+ *   - committing b_family renders its ending consequence.
+ * The whole tree is one stage (every node module A → #decisions-A).
  *
  * Single-participant quorum: need = min(2, max(1, present)) = 1, so one voter
  * can lock in (script.js ~9706). Desktop matrix (the multi-tab admin/participant
