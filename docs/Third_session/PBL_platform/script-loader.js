@@ -63,9 +63,9 @@
       // If a script tag for this src already exists (e.g. HTML wrote it
       // synchronously), assume it loaded. The lazy path is then a no-op.
       const existing = document.querySelector(
-        'script[src="' + src.replace(/"/g, '\\"') + '"]'
+        'script[src="' + src.replace(/"/g, '\\"') + '"]',
       );
-      if (existing && (/** @type {any} */ (existing)).dataset.loaded === "1") {
+      if (existing && /** @type {any} */ (existing).dataset.loaded === "1") {
         return resolve();
       }
       const tag = document.createElement("script");
@@ -84,7 +84,9 @@
           if (window.CanamedTelemetry && window.CanamedTelemetry.record) {
             window.CanamedTelemetry.record("lazy-script-error", { src });
           }
-        } catch (_) { /* telemetry might not be loaded yet */ }
+        } catch (_) {
+          /* telemetry might not be loaded yet */
+        }
         reject(new Error("Failed to load script: " + src));
       });
       document.head.appendChild(tag);
@@ -102,17 +104,34 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v66";
-  function v(src) { return src + "?v=" + SHELL_VERSION; }
-  function ensureCaseContent() { return loadScript(v("case-content.js")); }
-  function ensureQrcode()      { return loadScript(v("qrcode.js")); }
-  function ensureTour()        { return loadScript(v("tour.js")); }
-  function ensureScenarioAuthor() { return loadScript(v("scenario-author.js")); }
+  var SHELL_VERSION = "v67";
+  function v(src) {
+    return src + "?v=" + SHELL_VERSION;
+  }
+  // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
+  // merges the branched-format scenario into it. Chained (not parallel) so the
+  // merge always runs after the registry exists.
+  function ensureCaseContent() {
+    return loadScript(v("case-content.js")).then(function () {
+      return loadScript(v("branched-seed.js"));
+    });
+  }
+  function ensureQrcode() {
+    return loadScript(v("qrcode.js"));
+  }
+  function ensureTour() {
+    return loadScript(v("tour.js"));
+  }
+  function ensureScenarioAuthor() {
+    return loadScript(v("scenario-author.js"));
+  }
   // glossary.js (clinical term tooltips) — only used in Module A/B, never on
   // the splash, so it is lazy. Idempotent; the consumer
   // (_annotateButtonWithGlossary) no-ops gracefully until window.CANAMED_GLOSSARY
   // exists and re-annotates on the next button render.
-  function ensureGlossary()    { return loadScript(v("glossary.js")); }
+  function ensureGlossary() {
+    return loadScript(v("glossary.js"));
+  }
   // lang-reader.js + reader-core.js — the in-page reading aid (hover/tap a word
   // → a short native-language gloss, fully client-side). Lazy + idle-prefetched
   // like glossary; pulled in immediately if "Word help" was left on from a prior
@@ -123,24 +142,34 @@
   // the whole chain is lazy, long after this IIFE runs).
   function ensureLangReader() {
     return loadScript(v("reader-core.js"))
-      .then(function () { return loadScript(v("reader-dict.js")); })
-      .then(function () { return loadScript(v("lang-reader.js")); });
+      .then(function () {
+        return loadScript(v("reader-dict.js"));
+      })
+      .then(function () {
+        return loadScript(v("lang-reader.js"));
+      });
   }
   // admin-tools.js — facilitator/decision-maker reports (accreditation
   // evidence, research export, attestations, program rollup). Lazy: only an
   // admin who opens the dashboard needs it, never the student splash.
-  function ensureAdminTools() { return loadScript(v("admin-tools.js")); }
+  function ensureAdminTools() {
+    return loadScript(v("admin-tools.js"));
+  }
   // pdfmake — client-side PDF, ~2.2 MB, only needed when a participant
   // downloads a PDF at wrap-up. Lazy, and deliberately NOT version-suffixed:
   // the vendored bundle is immutable, so the browser caches it across deploys
   // (a ?v= bump would force a pointless 2 MB re-download). vfs_fonts.js MUST
   // load after pdfmake.min.js (it assigns window.pdfMake.vfs).
   function ensurePdfmake() {
-    return loadScript("pdfmake.min.js").then(function () { return loadScript("vfs_fonts.js"); });
+    return loadScript("pdfmake.min.js").then(function () {
+      return loadScript("vfs_fonts.js");
+    });
   }
   // student-pdf.js — our certificate + study-booklet generators. Version-
   // suffixed (it changes with deploys). Caller must ensurePdfmake() first.
-  function ensureStudentPdf() { return loadScript(v("student-pdf.js")); }
+  function ensureStudentPdf() {
+    return loadScript(v("student-pdf.js"));
+  }
 
   // Module A LLM-patient pilot scripts (2026-05-28). LAZY-SPLIT out of the
   // eager splash bundle (2026-06-01) to reclaim critical-path JS: the four
@@ -162,27 +191,40 @@
   try {
     var _llmParams = new URLSearchParams(location.search);
     if (window.localStorage) {
-      if (_llmParams.get("llm") === "0") localStorage.setItem("canamedModALLM", "0");
-      else if (_llmParams.get("llm") === "1") localStorage.removeItem("canamedModALLM");
+      if (_llmParams.get("llm") === "0")
+        localStorage.setItem("canamedModALLM", "0");
+      else if (_llmParams.get("llm") === "1")
+        localStorage.removeItem("canamedModALLM");
     }
-  } catch (_) { /* private mode — the URL-only check in modALLMFlagOn still works */ }
+  } catch (_) {
+    /* private mode — the URL-only check in modALLMFlagOn still works */
+  }
   function modALLMFlagOn() {
     try {
       var q = new URLSearchParams(location.search).get("llm");
-      if (q === "0") return false;                                          // explicit opt-out
-      if (q === "1") return true;                                           // explicit opt-in
-      if (window.localStorage && localStorage.getItem("canamedModALLM") === "0") return false; // sticky opt-out
-    } catch (_) { /* locked-down env — fall through to the default */ }
-    return true;   // default ON
+      if (q === "0") return false; // explicit opt-out
+      if (q === "1") return true; // explicit opt-in
+      if (window.localStorage && localStorage.getItem("canamedModALLM") === "0")
+        return false; // sticky opt-out
+    } catch (_) {
+      /* locked-down env — fall through to the default */
+    }
+    return true; // default ON
   }
   // The four scripts must run in document order — init wires the others:
   // scoring → prompts → bridge → init. loadScript de-dupes, so re-calls are
   // cheap; chain to preserve ordering.
   function ensureModALlm() {
     return loadScript(v("modA-question-scoring.js"))
-      .then(function () { return loadScript(v("modA-llm-prompts.js")); })
-      .then(function () { return loadScript(v("modA-llm-bridge.js")); })
-      .then(function () { return loadScript(v("modA-llm-init.js")); });
+      .then(function () {
+        return loadScript(v("modA-llm-prompts.js"));
+      })
+      .then(function () {
+        return loadScript(v("modA-llm-bridge.js"));
+      })
+      .then(function () {
+        return loadScript(v("modA-llm-init.js"));
+      });
   }
 
   // Public namespace. Single object so the rest of script.js can do
@@ -201,7 +243,7 @@
     ensurePdfmake,
     ensureStudentPdf,
     modALLMFlagOn,
-    ensureModALlm
+    ensureModALlm,
   };
 
   // After the splash is interactive, prefetch tour.js + case-content.js in
@@ -210,10 +252,18 @@
   // before joining (browser cancels in-flight requests).
   function prefetchAfterIdle() {
     const fire = () => {
-      ensureCaseContent().catch(() => { /* will retry on actual join */ });
-      ensureTour().catch(() => { /* tour is optional */ });
-      ensureGlossary().catch(() => { /* tooltips are optional, degrade gracefully */ });
-      ensureLangReader().catch(() => { /* reading aid is optional, degrade gracefully */ });
+      ensureCaseContent().catch(() => {
+        /* will retry on actual join */
+      });
+      ensureTour().catch(() => {
+        /* tour is optional */
+      });
+      ensureGlossary().catch(() => {
+        /* tooltips are optional, degrade gracefully */
+      });
+      ensureLangReader().catch(() => {
+        /* reading aid is optional, degrade gracefully */
+      });
     };
     if (typeof window.requestIdleCallback === "function") {
       window.requestIdleCallback(fire, { timeout: 2000 });
@@ -224,9 +274,14 @@
   }
   // Don't start prefetching until the page has actually rendered the splash;
   // otherwise we're competing with critical render-blocking work.
-  if (document.readyState === "complete" || document.readyState === "interactive") {
+  if (
+    document.readyState === "complete" ||
+    document.readyState === "interactive"
+  ) {
     prefetchAfterIdle();
   } else {
-    document.addEventListener("DOMContentLoaded", prefetchAfterIdle, { once: true });
+    document.addEventListener("DOMContentLoaded", prefetchAfterIdle, {
+      once: true,
+    });
   }
 })();

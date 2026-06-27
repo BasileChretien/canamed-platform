@@ -201,6 +201,17 @@ function applyScenario(id, customContent) {
   window.CURRENT_SCENARIO_MODULE_A_NAME = sc.moduleAName || null;
   window.CURRENT_SCENARIO_MODULE_B_NAME = sc.moduleBName || null;
   window.CURRENT_SCENARIO_ID = (sc && (sc.id || (sc.meta && sc.meta.id))) || id || "";
+  // Activity format: "branched" runs the épuré one-decision-at-a-time branch
+  // flow (the existing decision engine, with the clinical/roleplay chrome
+  // hidden via the body[data-format] CSS hook); anything else is the standard
+  // PBL/roleplay layout. Defaults to "standard" so untagged scenarios are
+  // unaffected.
+  window.CURRENT_SCENARIO_FORMAT = (sc && sc.format) || "standard";
+  try {
+    if (typeof document !== "undefined" && document.body) {
+      document.body.dataset.format = window.CURRENT_SCENARIO_FORMAT;
+    }
+  } catch (_) { /* no document (Node/tests) — the format flag is a UI-only hook */ }
   rebuildCaseDerived();
   return true;
 }

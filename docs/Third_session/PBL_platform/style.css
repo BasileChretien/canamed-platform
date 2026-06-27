@@ -318,6 +318,33 @@ main {
 #stage-2 .columns.rcol-collapsed { grid-template-columns: 1fr; }
 #stage-2 .columns.rcol-collapsed > .col-right { display: none; }
 
+/* ── Branched-scenario format (épuré, one decision at a time) ───────────────
+   A branched scenario reuses the existing decision engine but is presented as
+   a pure, sequential decision flow — none of the Module-A clinical workup or
+   Module-B roleplay chrome. applyScenario() sets body[data-format="branched"];
+   here we hide everything in each stage EXCEPT the two-column grid, drop the
+   left (case/role) column, and centre the decisions column to one comfortable
+   reading width. The decisions cards (#decisions-A / #decisions-B) already
+   render each unlocked node in document order — committed nodes show their
+   consequence, the one active node shows the vote — so the trail + the single
+   live choice are exactly what remains on screen. Scoped to body[data-format]
+   so the standard PBL/roleplay layout is completely untouched. */
+body[data-format="branched"] #stage-1 > *:not(.columns),
+body[data-format="branched"] #stage-2 > *:not(.columns) { display: none !important; }
+body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
+body[data-format="branched"] .stage .columns > .col-left { display: none !important; }
+/* Stage-1's decisions live behind the rcol tab bar + an answers panel — both
+   irrelevant when decisions ARE the activity. */
+body[data-format="branched"] #stage-1 .rcol-tabs,
+body[data-format="branched"] #stage-1 #rcol-p-answers { display: none !important; }
+body[data-format="branched"] .stage .columns > .col-right {
+  max-width: 760px;
+  margin-inline: auto;
+}
+/* The mobile bottom tab bar mirrors Module A's rcol tabs, which we've hidden —
+   suppress it so branched mode reads the same on phones as on desktop. */
+body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
+
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }
 .wrapup-download-btn.hidden { display: none; }

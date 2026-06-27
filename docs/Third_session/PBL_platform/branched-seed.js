@@ -225,5 +225,13 @@
   };
 
   if (typeof module !== "undefined" && module.exports) module.exports = SEED;
-  if (typeof root !== "undefined") root.CANAMED_BRANCHED_SEED = SEED;
+  if (typeof root !== "undefined") {
+    root.CANAMED_BRANCHED_SEED = SEED;
+    // Augment the scenario registry. This module is loaded by script-loader's
+    // ensureCaseContent() AFTER case-content.js (which assigns
+    // window.CANAMED_SCENARIOS = {…}), so merging here adds the branched
+    // scenario without being clobbered by that assignment.
+    root.CANAMED_SCENARIOS = root.CANAMED_SCENARIOS || {};
+    root.CANAMED_SCENARIOS[SEED.id] = SEED;
+  }
 })(typeof window !== "undefined" ? window : this);
