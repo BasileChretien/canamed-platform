@@ -115,13 +115,16 @@ test("nodes carry documents (case material), including a safe same-origin image"
   );
   allDocs.forEach((doc) => {
     if (doc.image) {
+      // Mirror the runtime _safeScenarioImage guard EXACTLY: extension-
+      // whitelisted, scheme-free, traversal-free, not absolute.
       assert.ok(
-        !/^[a-z]+:/i.test(doc.image) &&
+        /^[\w][\w./-]*\.(png|jpe?g|webp|svg|gif)$/i.test(doc.image) &&
+          !/^[a-z]+:/i.test(doc.image) &&
           doc.image.indexOf("..") === -1 &&
           doc.image[0] !== "/",
         "image path '" +
           doc.image +
-          "' must be a safe same-origin relative path",
+          "' must pass the runtime _safeScenarioImage guard",
       );
     }
   });
