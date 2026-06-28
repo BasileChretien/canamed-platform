@@ -139,6 +139,22 @@ test.describe("branched scenario — full playthrough", () => {
     ).toBe("none");
     await expect(stu.locator("#decisions-A")).toBeVisible({ timeout: 10_000 });
 
+    // The leaderboard must start at ZERO — no Module-A workup milestone may
+    // auto-award for a branched scenario. Regression: redFlagFirst (25 pts)
+    // fired the instant the session opened because an empty SYNTH_PREREQS made
+    // `[].every()` vacuously true.
+    await expect
+      .poll(
+        () =>
+          stu.evaluate(() =>
+            typeof scoreTotal === "function"
+              ? scoreTotal({ score: roomScore })
+              : -1,
+          ),
+        { timeout: 8000 },
+      )
+      .toBe(0);
+
     // ── Act I: commit b_assess → consequence + b_escalate unlocks ───────────
     await voteAndLock(stu, "#decisions-A", "b_assess", 0);
     await expect(stu.locator("#decisions-A .dec-branch")).toBeVisible({

@@ -8830,7 +8830,12 @@ function checkScoreEvents() {
   // 2026-06-02); the "reached the synthesis / Exchange opens" milestone now
   // keys off the real phase gate — ≥1 committed working hypothesis.
   const reachedSynthesis = (typeof phaseGateOpen === "function") && phaseGateOpen();
-  if (prereqsDone && !imaging) setWant("redFlagFirst");  // ORDER: screen before scan
+  // SYNTH_PREREQS.length>0 guard: `[].every()` is vacuously TRUE, so a scenario
+  // with no clinical workup (e.g. a branched scenario, SYNTH_PREREQS = []) would
+  // otherwise auto-award this 25-pt milestone the instant the session starts —
+  // the leaderboard opened at 25 with nothing done. Branched cases score only
+  // through their decisions, never the Module-A workup milestones.
+  if (SYNTH_PREREQS.length > 0 && prereqsDone && !imaging) setWant("redFlagFirst");  // ORDER: screen before scan
   if (reachedSynthesis) setWant("synthesis");
   if (reachedSynthesis && !imaging) setWant("restraint");
 
