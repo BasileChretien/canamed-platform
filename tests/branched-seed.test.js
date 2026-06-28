@@ -73,12 +73,57 @@ test("the seed is English-canonical: no fr/ja keys leak into content", () => {
   enOnly(SEED.summary, "summary");
   SEED.decisions.forEach((d) => {
     enOnly(d.prompt, d.id + ".prompt");
+    (d.documents || []).forEach((doc, di) => {
+      if (doc.title) enOnly(doc.title, d.id + ".doc" + di + ".title");
+      if (doc.text) enOnly(doc.text, d.id + ".doc" + di + ".text");
+      if (doc.alt) enOnly(doc.alt, d.id + ".doc" + di + ".alt");
+    });
     d.options.forEach((o, i) => {
       enOnly(o.text, d.id + ".opt" + i + ".text");
       if (o.branch && o.branch.reveal)
         enOnly(o.branch.reveal, d.id + ".opt" + i + ".reveal");
       if (o.why) enOnly(o.why, d.id + ".opt" + i + ".why");
     });
+  });
+});
+
+test("the tree genuinely diverges: b_assess options 0 and 1 lead to different nodes", () => {
+  const { branchedPath } = require(path.join(P, "branched-runtime.js"));
+  const good = branchedPath(SEED.decisions, { b_assess: 0 });
+  const bad = branchedPath(SEED.decisions, { b_assess: 1 });
+  assert.strictEqual(
+    good.active && good.active.id,
+    "b_escalate",
+    "option 0 → escalate path",
+  );
+  assert.strictEqual(
+    bad.active && bad.active.id,
+    "b_deteriorate",
+    "option 1 → deterioration path",
+  );
+});
+
+test("nodes carry documents (case material), including a safe same-origin image", () => {
+  const withDocs = SEED.decisions.filter(
+    (d) => Array.isArray(d.documents) && d.documents.length,
+  );
+  assert.ok(withDocs.length >= 2, "several nodes reveal documents");
+  const allDocs = SEED.decisions.flatMap((d) => d.documents || []);
+  assert.ok(
+    allDocs.some((doc) => typeof doc.image === "string"),
+    "at least one document references an image",
+  );
+  allDocs.forEach((doc) => {
+    if (doc.image) {
+      assert.ok(
+        !/^[a-z]+:/i.test(doc.image) &&
+          doc.image.indexOf("..") === -1 &&
+          doc.image[0] !== "/",
+        "image path '" +
+          doc.image +
+          "' must be a safe same-origin relative path",
+      );
+    }
   });
 });
 

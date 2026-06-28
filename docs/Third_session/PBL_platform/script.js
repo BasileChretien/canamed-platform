@@ -9567,6 +9567,59 @@ function buildLockedDecision(d, unmet) {
 
 /* one decision block: the prompt, the option bars with a live tally, who voted,
    and either a "lock in" button or the committed result with its explanation */
+/* Only allow a same-origin, extension-whitelisted, traversal-free image path.
+ * Document images come from facilitator-authored scenario content, so guard
+ * against javascript:/external/absolute/.. srcs. Bundled images live under a
+ * same-origin folder (e.g. scenario-images/…) and need no CSP change (img-src
+ * 'self'). Returns an <img> or null. */
+function _safeScenarioImage(path) {
+  if (typeof path !== "string" || !path) return null;
+  if (path.indexOf("..") !== -1) return null;
+  if (/^[a-z]+:/i.test(path) || path.charAt(0) === "/") return null; // no scheme, no absolute
+  if (!/^[\w][\w./-]*\.(png|jpe?g|webp|svg|gif)$/i.test(path)) return null;
+  const img = document.createElement("img");
+  img.className = "dec-doc-img";
+  img.loading = "lazy";
+  img.src = path;
+  return img;
+}
+
+/* Build the documents block for a branched node (vitals/labs/ECG/CXR/CT
+ * revealed with the decision). Each doc: { title, text, image, alt } — all
+ * optional, all localisable. DOM-built with textContent (never innerHTML).
+ * Returns the block element or null when the node carries no documents. */
+function buildDecisionDocs(d, lang) {
+  if (!d || !Array.isArray(d.documents) || !d.documents.length) return null;
+  const box = document.createElement("div");
+  box.className = "dec-documents";
+  d.documents.forEach(doc => {
+    if (!doc) return;
+    const card = document.createElement("div");
+    card.className = "dec-doc";
+    const title = tc(doc.title, lang);
+    if (title) {
+      const h = document.createElement("h4");
+      h.className = "dec-doc-title";
+      h.textContent = title;
+      card.appendChild(h);
+    }
+    const img = _safeScenarioImage(doc.image);
+    if (img) {
+      img.alt = tc(doc.alt, lang) || title || "Clinical document";
+      card.appendChild(img);
+    }
+    const text = tc(doc.text, lang);
+    if (text) {
+      const p = document.createElement("p");
+      p.className = "dec-doc-text";
+      p.textContent = text;
+      card.appendChild(p);
+    }
+    box.appendChild(card);
+  });
+  return box;
+}
+
 function buildDecision(d, srSink) {
   const v = roomVotes[d.id] || {};
   const ballots = v.ballots || {};
@@ -9602,6 +9655,12 @@ function buildDecision(d, srSink) {
   q.className = "dec-prompt";
   q.textContent = tc(d.prompt, lang);
   wrap.appendChild(q);
+
+  // Branched-format DOCUMENTS — a node may carry `documents:[{title,text,image}]`
+  // (vitals, labs, ECG/CXR/CT) shown WITH the decision so the team reads the
+  // evidence, then discusses and decides. Rendered above the options.
+  const docs = buildDecisionDocs(d, lang);
+  if (docs) wrap.appendChild(docs);
 
   const opts = document.createElement("div");
   opts.className = "dec-options";

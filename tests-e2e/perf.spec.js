@@ -260,7 +260,16 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     index.html, which this budget does NOT count). Measured 330.19, just over
 //     330, so bumped to 331. The reclaim debt above is now larger and still
 //     owed — the in-room/branched logic + room-only CSS lazy-split is overdue.
-const FIRST_PARTY_BYTES_LIMIT_KB = 331;
+//
+//   2026-06-28: Branched OSCE foundation — per-stage DOCUMENTS (vitals/labs/
+//     ECG/CXR text + same-origin images) revealed with a decision node:
+//     buildDecisionDocs() + _safeScenarioImage() in script.js + .dec-doc* CSS.
+//     Measured 331.53, so bumped to 333. ⚠️ RECLAIM NOW MANDATORY: the next
+//     branched increment (authoring editor + final-diagnosis step) must
+//     lazy-split the in-room/branched render logic out of the eager script.js
+//     BEFORE adding more — no further bump without it. (The doc helpers are
+//     in-room only; they belong in a lazily-loaded room module.)
+const FIRST_PARTY_BYTES_LIMIT_KB = 333;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

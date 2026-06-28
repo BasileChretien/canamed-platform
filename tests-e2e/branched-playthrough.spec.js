@@ -139,6 +139,12 @@ test.describe("branched scenario — full playthrough", () => {
     ).toBe("none");
     await expect(stu.locator("#decisions-A")).toBeVisible({ timeout: 10_000 });
 
+    // Per-stage DOCUMENTS render with the node: the entry node shows the obs.
+    await expect(stu.locator("#decisions-A .dec-doc").first()).toContainText(
+      /Bedside observations/i,
+      { timeout: 10_000 },
+    );
+
     // The leaderboard must start at ZERO — no Module-A workup milestone may
     // auto-award for a branched scenario. Regression: redFlagFirst (25 pts)
     // fired the instant the session opened because an empty SYNTH_PREREQS made
@@ -168,6 +174,15 @@ test.describe("branched scenario — full playthrough", () => {
     await expect(
       stu.locator('#decisions-A .dec-opt[data-dec="b_escalate"]').first(),
     ).toBeVisible({ timeout: 10_000 });
+    // …and it reveals richer documents: a blood-gas result + a referenced image.
+    await expect(stu.locator("#decisions-A")).toContainText(/blood gas/i, {
+      timeout: 10_000,
+    });
+    const imgSrc = await stu
+      .locator("#decisions-A .dec-doc-img")
+      .first()
+      .getAttribute("src");
+    expect(imgSrc).toContain("scenario-images/");
 
     // Commit b_escalate → its consequence + the final node b_family unlocks
     // (still in #decisions-A — the whole tree is one stage).
