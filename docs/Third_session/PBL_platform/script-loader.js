@@ -108,12 +108,19 @@
   // merges the branched-format scenario into it. Chained (not parallel) so the
   // merge always runs after the registry exists.
   function ensureCaseContent() {
-    return loadScript(v("case-content.js"))
-      .then(function () { return loadScript(v("branched-seed.js")); })
-      // branched-render.js — the lazy in-room render helpers (documents now,
-      // final-diagnosis next). Chained here so it is present before any
-      // decision renders, while staying off the splash eager bundle.
-      .then(function () { return loadScript(v("branched-render.js")); });
+    return loadScript(v("case-content.js")).then(function () {
+      // branched-seed.js (registers the built-in branched scenario) and
+      // branched-render.js (the lazy documents/in-room renderer) are OPTIONAL
+      // augmentations that BOTH degrade gracefully when absent — the registry
+      // simply lacks the branched scenario, and buildDecision renders no docs.
+      // So load them in parallel AFTER case-content and SWALLOW their failures:
+      // a hiccup fetching either must never reject ensureCaseContent and break
+      // the room load (case-content is the only critical chunk here).
+      return Promise.all([
+        loadScript(v("branched-seed.js")).catch(function () {}),
+        loadScript(v("branched-render.js")).catch(function () {})
+      ]);
+    });
   }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
   function ensureTour()        { return loadScript(v("tour.js")); }
