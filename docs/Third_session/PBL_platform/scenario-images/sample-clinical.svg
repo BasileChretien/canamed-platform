@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 300" role="img"
+     aria-label="Placeholder clinical image">
+  <rect width="480" height="300" fill="#0b1f2d"/>
+  <rect x="12" y="12" width="456" height="276" fill="none" stroke="#2b5066" stroke-width="2" stroke-dasharray="6 6"/>
+  <text x="240" y="130" fill="#9fb6c9" font-family="Segoe UI, Arial, sans-serif" font-size="22"
+        text-anchor="middle">Sample clinical image</text>
+  <text x="240" y="162" fill="#5d7b90" font-family="Segoe UI, Arial, sans-serif" font-size="14"
+        text-anchor="middle">replace with a real CXR / ECG / CT in this document</text>
+</svg>

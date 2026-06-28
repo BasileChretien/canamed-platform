@@ -54,11 +54,20 @@
         module: "A",
         points: 20,
         penalty: 15,
+        documents: [
+          {
+            title: { en: "Bedside observations" },
+            text: {
+              en:
+                "RR 28 · SpO₂ 88% on air · BP 95/60 · HR 118 · T 37.4°C. Clammy and " +
+                "anxious, speaking only in short phrases.",
+            },
+          },
+        ],
         prompt: {
           en:
             "You are called to Mr Okada, 68, two days after bowel surgery. He is " +
-            "suddenly breathless and clammy: RR 28, SpO₂ 88% on air, BP 95/60, " +
-            "HR 118. Your team's FIRST move is…",
+            "suddenly breathless and clammy. Your team's FIRST move is…",
         },
         options: [
           {
@@ -105,9 +114,29 @@
         module: "A",
         points: 20,
         penalty: 15,
-        // Converges from EITHER first choice — the case responds, but stays bounded.
-        unlockWhen: { afterDecision: "b_assess" },
+        // The GOOD path: only opens when the team treated FIRST (b_assess option 0).
+        unlockWhen: { afterDecision: { id: "b_assess", option: 0 } },
         hideWhenLocked: true,
+        documents: [
+          {
+            title: { en: "After oxygen — repeat observations" },
+            text: { en: "SpO₂ 94% on 15 L · RR 24 · BP 100/64 · HR 110. Warmer peripherally." },
+          },
+          {
+            title: { en: "Arterial blood gas (on O₂)" },
+            text: { en: "pH 7.31 · PaCO₂ 4.0 kPa · PaO₂ 9.8 kPa · lactate 4.2 · HCO₃⁻ 17." },
+          },
+          {
+            title: { en: "Portable chest X-ray" },
+            image: "scenario-images/sample-clinical.svg",
+            alt: { en: "Portable chest X-ray (placeholder)" },
+            text: {
+              en:
+                "Placeholder — replace with the real film. Author's note: the X-ray " +
+                "appearance is what should steer the team's reasoning at this step.",
+            },
+          },
+        ],
         prompt: {
           en:
             "He is a little steadier but clearly unwell, and you are not sure why. " +
@@ -218,6 +247,66 @@
                 en:
                   "Technically correct, coldly delivered. She feels shut out at the worst " +
                   "possible moment and withdraws to the corridor in tears.",
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: "b_deteriorate",
+        module: "A",
+        points: 20,
+        penalty: 15,
+        // The BAD path: the team delayed treatment for the film (b_assess option 1).
+        unlockWhen: { afterDecision: { id: "b_assess", option: 1 } },
+        hideWhenLocked: true,
+        documents: [
+          {
+            title: { en: "Twenty minutes later — observations" },
+            text: {
+              en:
+                "SpO₂ 82% on air · RR 32 · BP 84/50 · HR 130 · now drowsy. The X-ray " +
+                "has still not been taken.",
+            },
+          },
+        ],
+        prompt: {
+          en: "Mr Okada is now peri-arrest and you still have no film. Your team…",
+        },
+        options: [
+          {
+            text: {
+              en: "Put out a medical emergency call, give high-flow oxygen, and work through ABCDE",
+            },
+            correct: true,
+            why: {
+              en:
+                "Recognise-and-rescue: escalate loudly and resuscitate. The film was " +
+                "never worth waiting for while he decompensated.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "The team arrives fast. He is stabilised and moved to HDU — shaken but " +
+                  "alive. A hard lesson in treating before imaging.",
+              },
+            },
+          },
+          {
+            text: {
+              en: "Keep waiting for the X-ray so you can make the right diagnosis first",
+            },
+            correct: false,
+            why: {
+              en:
+                "Diagnosis never precedes resuscitation in a crashing patient. Waiting " +
+                "for certainty here costs him.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "He arrests before the film is taken; the arrest call goes out late and " +
+                  "the outcome is poor. The case ends here — debrief what went wrong.",
               },
             },
           },
