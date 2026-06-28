@@ -102,14 +102,18 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v69";
+  var SHELL_VERSION = "v70";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
   // merge always runs after the registry exists.
   function ensureCaseContent() {
     return loadScript(v("case-content.js"))
-      .then(function () { return loadScript(v("branched-seed.js")); });
+      .then(function () { return loadScript(v("branched-seed.js")); })
+      // branched-render.js — the lazy in-room render helpers (documents now,
+      // final-diagnosis next). Chained here so it is present before any
+      // decision renders, while staying off the splash eager bundle.
+      .then(function () { return loadScript(v("branched-render.js")); });
   }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
   function ensureTour()        { return loadScript(v("tour.js")); }

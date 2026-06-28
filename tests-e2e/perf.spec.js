@@ -269,7 +269,16 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     lazy-split the in-room/branched render logic out of the eager script.js
 //     BEFORE adding more — no further bump without it. (The doc helpers are
 //     in-room only; they belong in a lazily-loaded room module.)
-const FIRST_PARTY_BYTES_LIMIT_KB = 333;
+//
+//   2026-06-29: RECLAIM. buildDecisionDocs() + _safeScenarioImage() moved out
+//     of the eager script.js into the LAZY branched-render.js
+//     (window.CanamedBranchedRender), chained after branched-seed.js in
+//     ensureCaseContent() and added to LAZY_CHUNKS. That reclaimed ~0.4 KB gz
+//     (the JS gzips small); the residual #184 eager cost is the .dec-doc* CSS in
+//     style.css + the scoring-fix lines. Measured 331.1, so the cap comes back
+//     DOWN 333 → 332. branched-render.js is now the home for branched in-room
+//     render code — the final-diagnosis step lands there next, NO eager growth.
+const FIRST_PARTY_BYTES_LIMIT_KB = 332;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -363,6 +372,10 @@ test.describe("Perf budget — splash", () => {
       // the built-in branched scenario into CANAMED_SCENARIOS). Same class as
       // case-content.js — off the splash critical path.
       "branched-seed.js",
+      // branched-render.js (2026-06-29): the lazy in-room branched render
+      // helpers (documents → final-diagnosis), chained after branched-seed.js
+      // in ensureCaseContent(). Room-only, off the splash critical path.
+      "branched-render.js",
       "glossary.js",
       // Reading aid (2026-06-24): idle-prefetched + opt-in via the "Word help"
       // toggle, only actually used in Module A/B — never on the splash critical
