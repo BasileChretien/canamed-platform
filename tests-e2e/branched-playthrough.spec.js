@@ -161,28 +161,31 @@ test.describe("branched scenario — full playthrough", () => {
       )
       .toBe(0);
 
-    // ── "Before you vote": the active decision's group-reasoning capture is
-    //    shown, and a contribution persists for the team to see.
-    const rationale = stu.locator("#branched-rationale-host");
-    await expect(rationale).toBeVisible({ timeout: 10_000 });
-    await expect(rationale).toContainText(/before you vote/i);
-    await rationale
-      .locator("#answer-input-moduleA-rat_b_assess")
-      .fill("We treat first — oxygen before imaging; one of us wanted the film.");
-    await rationale.locator(".branched-rationale-add").click();
+    // ── "Before you vote": the reasoning capture sits at the BOTTOM of the
+    //    active decision card, and a contribution persists for the team to see.
+    const ratInput = stu.locator(
+      "#decisions-A .branched-rationale-input[data-dec='b_assess']",
+    );
+    await expect(ratInput).toBeVisible({ timeout: 10_000 });
+    await expect(stu.locator("#decisions-A")).toContainText(/before you lock in/i);
+    await ratInput.fill(
+      "We treat first — oxygen before imaging; one of us wanted the film.",
+    );
+    await stu
+      .locator(
+        "#decisions-A .branched-rationale:has(.branched-rationale-input[data-dec='b_assess']) .branched-rationale-add",
+      )
+      .click();
     await expect(
-      rationale.locator('.branched-rationale-list[data-field="rat_b_assess"]'),
+      stu.locator('#decisions-A .branched-rationale-list[data-field="rat_b_assess"]'),
     ).toContainText(/oxygen before imaging/i, { timeout: 10_000 });
 
     // ── Act I: commit b_assess → consequence + b_escalate unlocks ───────────
     await voteAndLock(stu, "#decisions-A", "b_assess", 0);
-    // The rationale host re-binds to the NEW active decision (b_escalate).
-    await expect
-      .poll(
-        () => rationale.getAttribute("data-dec"),
-        { timeout: 10_000 },
-      )
-      .toBe("b_escalate");
+    // The reasoning capture now appears at the bottom of the NEW active card.
+    await expect(
+      stu.locator("#decisions-A .branched-rationale-input[data-dec='b_escalate']"),
+    ).toBeVisible({ timeout: 10_000 });
 
     // ── Admin dashboard: this room's choice tree shows the committed path —
     //    a green (correct) step for b_assess + the node it is deciding now.
@@ -237,10 +240,11 @@ test.describe("branched scenario — full playthrough", () => {
     const host = stu.locator("#branched-final-host");
     await expect(host).toBeVisible({ timeout: 10_000 });
     await expect(host).toContainText(/Final diagnosis/i);
-    // …and the "before you vote" rationale host hides (no open decision left).
-    await expect(stu.locator("#branched-rationale-host")).toBeHidden({
-      timeout: 10_000,
-    });
+    // …and no reasoning INPUT remains (every decision is committed — the cards
+    // show only the reasoning the team recorded, with no open textarea).
+    await expect(
+      stu.locator("#decisions-A .branched-rationale-input"),
+    ).toHaveCount(0, { timeout: 10_000 });
     await host
       .locator("#answer-input-moduleA-finalDx")
       .fill("Pulmonary embolism");

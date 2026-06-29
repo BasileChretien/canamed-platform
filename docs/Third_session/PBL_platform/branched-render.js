@@ -40,6 +40,12 @@
     if (!d || !Array.isArray(d.documents) || !d.documents.length) return null;
     const box = document.createElement("div");
     box.className = "dec-documents";
+    // A caption so the panel reads unmistakably as READ-ONLY case data, not as
+    // a set of clickable choices (the white .dec-opt buttons below it).
+    const head = document.createElement("p");
+    head.className = "dec-documents-head";
+    head.textContent = "📋 What the team can see";
+    box.appendChild(head);
     d.documents.forEach(doc => {
       if (!doc) return;
       const card = document.createElement("div");
@@ -235,105 +241,93 @@
     host.classList.remove("hidden");
   }
 
-  /* ── "Before you vote" group reasoning ────────────────────────────────────
-     For the CURRENT (active, uncommitted) branched decision, capture why the
-     group is leaning the way it is — and any disagreement — BEFORE they lock
-     in. Reuses the Module-A answers mechanism: each contribution is pushed via
-     addAnswer("moduleA", "rat_<decisionId>") → rooms/<room>/answers/moduleA, so
-     storage, sync, the wrap-up and the research export all work with no new
-     schema. Lives in the STABLE #branched-rationale-host (NOT rebuilt by
-     renderDecisions on churn, so the textarea keeps focus); rebuilt only when
-     the active decision changes, with entry lists refreshed live. */
-  function _branchedCommitted() {
-    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
-    var committed = {};
-    list.forEach(function (d) {
-      var v = (typeof roomVotes !== "undefined" && roomVotes[d.id]) || {};
-      if (v.committed && typeof v.committed.choice === "number") committed[d.id] = v.committed.choice;
-    });
-    return committed;
-  }
-  function _activeBranchedDecision() {
-    if ((root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched") return null;
-    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
-    if (!list.length) return null;
-    var rt = root.CanamedBranchedRuntime;
-    if (!rt || !rt.branchedPath) return null;
-    return rt.branchedPath(list, _branchedCommitted()).active || null;
-  }
-
-  function buildBranchedRationale(decision, lang) {
+  /* ── "Before you vote" group reasoning (in-card) ──────────────────────────
+     The group-reasoning capture shown at the BOTTOM of each decision card (by
+     buildDecision in script.js): why the team is leaning the way it is, and any
+     disagreement. The input is offered only while the vote is OPEN; a committed
+     decision shows just the reasoning the team recorded (and nothing at all if
+     they recorded none, to stay épuré). The textarea carries data-dec so
+     renderDecisions can preserve its in-progress value + caret across the
+     room-wide rebuild. Each contribution reuses addAnswer("moduleA","rat_<id>")
+     → rooms/<room>/answers/moduleA (no new schema; flows to wrap-up + export). */
+  function buildBranchedRationale(decision, lang, committed) {
+    if (!decision || !decision.id) return null;
     var key = "rat_" + decision.id;
-    var card = document.createElement("section");
-    card.className = "card branched-rationale";
-    card.id = "branched-rationale";
+    // Committed decision with no recorded reasoning → render nothing.
+    if (committed && !_finalEntries(key).length) return null;
 
-    var h = document.createElement("h3");
-    h.textContent = "Before you vote — your group's reasoning";
-    card.appendChild(h);
+    var box = document.createElement("div");
+    box.className = "branched-rationale";
+
     var lead = document.createElement("p");
     lead.className = "branched-rationale-lead";
-    lead.textContent =
-      "Discuss as a team: why are you leaning toward your choice — and note any disagreement — before you lock it in.";
-    card.appendChild(lead);
-    var recap = document.createElement("p");
-    recap.className = "branched-rationale-prompt";
-    recap.textContent = tc(decision.prompt, lang);
-    card.appendChild(recap);
+    lead.textContent = committed
+      ? "Your group's reasoning for this decision:"
+      : "Before you lock in: as a team, say why you're leaning this way — and note any disagreement.";
+    box.appendChild(lead);
 
-    var lab = document.createElement("label");
-    lab.className = "branched-rationale-label";
-    lab.setAttribute("for", "answer-input-moduleA-" + key);
-    lab.textContent = "Your group's reasoning (and any disagreement)";
-    card.appendChild(lab);
-    var ta = document.createElement("textarea");
-    ta.id = "answer-input-moduleA-" + key;
-    ta.className = "branched-rationale-input";
-    ta.setAttribute("maxlength", "1000");
-    ta.setAttribute("placeholder", "e.g. We chose this because… One of us disagreed because…");
-    card.appendChild(ta);
-    var add = document.createElement("button");
-    add.type = "button";
-    add.className = "add-btn branched-rationale-add";
-    add.textContent = "Add to the group's reasoning";
-    add.addEventListener("click", function () {
-      if (typeof addAnswer === "function") addAnswer("moduleA", key);
-    });
-    card.appendChild(add);
+    if (!committed) {
+      var lab = document.createElement("label");
+      lab.className = "branched-rationale-label";
+      lab.setAttribute("for", "answer-input-moduleA-" + key);
+      lab.textContent = "Your group's reasoning (and any disagreement)";
+      box.appendChild(lab);
+      var ta = document.createElement("textarea");
+      ta.id = "answer-input-moduleA-" + key;
+      ta.className = "branched-rationale-input";
+      ta.setAttribute("data-dec", decision.id);
+      ta.setAttribute("maxlength", "1000");
+      ta.setAttribute("placeholder", "e.g. We chose this because… One of us disagreed because…");
+      box.appendChild(ta);
+      var add = document.createElement("button");
+      add.type = "button";
+      add.className = "add-btn branched-rationale-add";
+      add.textContent = "Add to the group's reasoning";
+      add.addEventListener("click", function () {
+        if (typeof addAnswer === "function") addAnswer("moduleA", key);
+      });
+      box.appendChild(add);
+    }
 
     var list = document.createElement("ul");
     list.className = "answers-list branched-rationale-list";
     list.setAttribute("data-field", key);
     _populateFinalList(list, key);
-    card.appendChild(list);
-    return card;
+    box.appendChild(list);
+    return box;
   }
 
-  /* Populate the stable rationale host for the active decision; rebuild only on
-     a change of active decision (keeps the textarea focused); hide when there
-     is no open decision (the tree is done, or not a branched session). */
-  function renderBranchedRationale() {
-    var host = document.getElementById("branched-rationale-host");
-    if (!host) return;
-    var active = _activeBranchedDecision();
-    if (!active || !active.id) {
-      if (host.firstChild) host.textContent = "";
-      host.classList.add("hidden");
-      host.removeAttribute("data-dec");
-      return;
-    }
-    var lang = (typeof _curLang === "function") ? _curLang() : "en";
-    if (host.getAttribute("data-dec") !== active.id) {
-      host.textContent = "";
-      var card = buildBranchedRationale(active, lang);
-      if (card) host.appendChild(card);
-      host.setAttribute("data-dec", active.id);
-    } else {
-      host.querySelectorAll(".branched-rationale-list[data-field]").forEach(function (ul) {
-        _populateFinalList(ul, ul.getAttribute("data-field"));
-      });
-    }
-    host.classList.remove("hidden");
+  /* Snapshot / restore the in-progress text of the in-card reasoning textareas
+     across renderDecisions' innerHTML rebuild — so a teammate's vote arriving
+     mid-sentence never wipes what someone is typing. Lives here (lazy, branched-
+     only) to keep the eager bundle small; renderDecisions calls them when
+     present, and they no-op for standard sessions (no such textareas). */
+  function captureRationaleInputs() {
+    var state = {};
+    var ae = (typeof document !== "undefined") ? document.activeElement : null;
+    document.querySelectorAll(".branched-rationale-input[data-dec]").forEach(function (ta) {
+      var id = ta.getAttribute("data-dec");
+      if (!id) return;
+      state[id] = {
+        value: ta.value,
+        focused: ta === ae,
+        caret: (ta === ae && typeof ta.selectionStart === "number") ? ta.selectionStart : null
+      };
+    });
+    return state;
+  }
+  function restoreRationaleInputs(state) {
+    if (!state) return;
+    Object.keys(state).forEach(function (id) {
+      var ta = document.querySelector('.branched-rationale-input[data-dec="' + id + '"]');
+      if (!ta) return;
+      var s = state[id];
+      if (s.value && !ta.value) ta.value = s.value;
+      if (s.focused && typeof ta.focus === "function") {
+        try { ta.focus({ preventScroll: true }); } catch (_) { ta.focus(); }
+        if (s.caret != null) { try { ta.setSelectionRange(s.caret, s.caret); } catch (_) {} }
+      }
+    });
   }
 
   /* ── Admin choice-tree ─────────────────────────────────────────────────────
@@ -462,7 +456,7 @@
   root.CanamedBranchedRender = {
     buildDecisionDocs, _safeScenarioImage, buildBranchedFinal,
     refreshBranchedFinal, renderBranchedFinal, branchedTreeDone,
-    buildBranchedRationale, renderBranchedRationale,
+    buildBranchedRationale, captureRationaleInputs, restoreRationaleInputs,
     buildRoomChoiceTree,
     stageFlow, snapStageToFlow, adjacentStage
   };

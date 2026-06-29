@@ -87,6 +87,33 @@ test("the seed is English-canonical: no fr/ja keys leak into content", () => {
   });
 });
 
+test("every vote offers exactly 4 choices", () => {
+  SEED.decisions.forEach((d) => {
+    assert.strictEqual(
+      Array.isArray(d.options) ? d.options.length : 0,
+      4,
+      d.id + " must offer exactly 4 choices",
+    );
+  });
+});
+
+test("array gate: all three poor first moves converge on the deterioration node", () => {
+  const { branchedPath } = require(path.join(P, "branched-runtime.js"));
+  [1, 2, 3].forEach((opt) => {
+    const r = branchedPath(SEED.decisions, { b_assess: opt });
+    assert.strictEqual(
+      r.active && r.active.id,
+      "b_deteriorate",
+      "b_assess option " + opt + " → deterioration path",
+    );
+  });
+  // …and the correct first move still diverges to the good path.
+  assert.strictEqual(
+    branchedPath(SEED.decisions, { b_assess: 0 }).active.id,
+    "b_escalate",
+  );
+});
+
 test("the tree genuinely diverges: b_assess options 0 and 1 lead to different nodes", () => {
   const { branchedPath } = require(path.join(P, "branched-runtime.js"));
   const good = branchedPath(SEED.decisions, { b_assess: 0 });

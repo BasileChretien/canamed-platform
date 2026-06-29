@@ -27,22 +27,42 @@
 (function (root) {
   "use strict";
 
-  /* Read an afterDecision gate off a node, normalised to { id, option|null }
-   * or null when the node is an entry node. Accepts the two documented forms:
-   *   afterDecision: "dec_x"            → any committed option of dec_x
-   *   afterDecision: { id, option: N }  → only committed option N of dec_x */
+  /* Read an afterDecision gate off a node, normalised to { id, option } where
+   * option is a number, a non-empty array of numbers, or null. null = entry
+   * node. Accepts the documented forms:
+   *   afterDecision: "dec_x"               → any committed option of dec_x
+   *   afterDecision: { id, option: N }     → only committed option N
+   *   afterDecision: { id, option: [N,…] } → any of these committed options
+   * The array form lets several wrong options of a 4-choice node converge onto
+   * one consequence node (e.g. every poor first move → the deterioration path)
+   * without duplicating that node per option. */
   function afterSpec(node) {
     const w = node && node.unlockWhen;
     if (!w || w.afterDecision == null) return null;
     const a = w.afterDecision;
     if (typeof a === "string") return { id: a, option: null };
     if (a && typeof a === "object" && a.id) {
-      return {
-        id: a.id,
-        option: typeof a.option === "number" ? a.option : null,
-      };
+      let opt = null;
+      if (typeof a.option === "number") opt = a.option;
+      else if (Array.isArray(a.option)) {
+        // An array with no valid option index is MALFORMED — do NOT widen it to
+        // null ("any option"), or a typo would silently unlock the branch on
+        // every choice. Return a dangling spec so the validator flags it.
+        const nums = a.option.filter((n) => Number.isInteger(n));
+        if (!nums.length) return { id: null, option: null };
+        opt = nums;
+      }
+      return { id: a.id, option: opt };
     }
     return { id: null, option: null }; // malformed; caught as a dangling ref
+  }
+
+  /* Does a committed option index satisfy a gate's option spec?
+   *   null  → any option        N → exactly N        [N,…] → any listed */
+  function optionMatches(specOption, choice) {
+    if (specOption == null) return true;
+    if (Array.isArray(specOption)) return specOption.indexOf(choice) !== -1;
+    return specOption === choice;
   }
 
   /* Branched scenarios are English-canonical: their content is authored in
@@ -140,19 +160,22 @@
       if (spec.option != null) {
         const dep = byId[spec.id];
         const count = Array.isArray(dep.options) ? dep.options.length : 0;
-        if (spec.option < 0 || spec.option >= count) {
-          errors.push(
-            'Node "' +
-              n.id +
-              '" unlocks after "' +
-              spec.id +
-              '" option ' +
-              spec.option +
-              ", but that option does not exist (has " +
-              count +
-              ").",
-          );
-        }
+        const wanted = Array.isArray(spec.option) ? spec.option : [spec.option];
+        wanted.forEach((o) => {
+          if (o < 0 || o >= count) {
+            errors.push(
+              'Node "' +
+                n.id +
+                '" unlocks after "' +
+                spec.id +
+                '" option ' +
+                o +
+                ", but that option does not exist (has " +
+                count +
+                ").",
+            );
+          }
+        });
       }
     });
 
@@ -162,9 +185,7 @@
     const childrenOf = (parentId, optIdx) =>
       nodes.filter((c) => {
         const s = afterSpec(c);
-        return (
-          s && s.id === parentId && (s.option == null || s.option === optIdx)
-        );
+        return s && s.id === parentId && optionMatches(s.option, optIdx);
       });
     const reachable = new Set();
     const queue = entries.map((n) => n.id);
@@ -232,7 +253,11 @@
     };
   }
 
-  const api = { validateBranchedGraph, _afterSpec: afterSpec };
+  const api = {
+    validateBranchedGraph,
+    _afterSpec: afterSpec,
+    _optionMatches: optionMatches,
+  };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   if (typeof root !== "undefined") root.CanamedBranched = api;
 })(typeof window !== "undefined" ? window : this);

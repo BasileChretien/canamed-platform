@@ -329,7 +329,7 @@ main {
    consequence, the one active node shows the vote — so the trail + the single
    live choice are exactly what remains on screen. Scoped to body[data-format]
    so the standard PBL/roleplay layout is completely untouched. */
-body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host):not(#branched-rationale-host) { display: none !important; }
+body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host) { display: none !important; }
 /* A branched scenario has NO Module-B / Reflection stage — stageFlow() skips
    stage 2 entirely (Welcome → the case → Wrap-up), so #stage-2 never shows. */
 body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
@@ -358,35 +358,41 @@ body[data-format="branched"] #stage-1 #rcol-p-decisions { display: block !import
    suppress it so branched mode reads the same on phones as on desktop. */
 body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
 
-/* Branched-format DOCUMENTS — the case material (vitals/labs/ECG/CXR/CT)
-   revealed with a decision node, between the prompt and the options. */
-.dec-documents { margin: .55rem 0 .2rem; display: flex; flex-direction: column; gap: .55rem; }
-.dec-doc {
+/* Branched-format DOCUMENTS (vitals/labs/ECG/CXR) — a distinct READ-ONLY
+   evidence panel (tinted surface + left accent + caption) so it never reads as
+   a clickable choice like the white .dec-opt buttons below (colour-confusion fix). */
+.dec-documents {
+  margin: .55rem 0 .9rem;
+  padding: .5rem .8rem .65rem;
+  display: flex; flex-direction: column; gap: .5rem;
+  background: #eaf0f7;
   border: 1px solid var(--line, #d9e2ec);
-  border-radius: 8px;
-  padding: .65rem .85rem;
-  background: var(--surface-2, #f7fafc);
-  color: var(--ink, #102a43); /* theme ink, not page colour (see dark overrides) */
+  border-left: 4px solid #3f6088;
+  border-radius: 0 8px 8px 0;
+  color: var(--ink, #102a43);
 }
+.dec-documents-head {
+  margin: 0; font-size: .72rem; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase; color: #3f6088;
+  display: flex; align-items: center; gap: .35rem;
+}
+.dec-doc { background: transparent; border: 0; padding: 0; color: inherit; }
+.dec-doc + .dec-doc { border-top: 1px solid var(--line, #d9e2ec); padding-top: .5rem; }
 .dec-doc-title { margin: 0 0 .3rem; font-size: .95rem; font-weight: 700; }
 .dec-doc-img { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: .35rem auto; }
 .dec-doc-text { margin: .2rem 0 0; white-space: pre-line; }
 .dec-doc-credit { margin: .35rem 0 0; font-size: .8em; color: var(--muted, #627d98); font-style: italic; }
-/* Dark mode: --surface-2 is undefined, so .dec-doc / .dec-branch keep a LIGHT
-   fallback bg under near-white ink (unreadable). Give them a dark surface.
-   (Light + high-contrast are fine: light bg + the --ink text above.) */
+/* Dark mode: the evidence panel + the .dec-branch consequence get a dark surface
+   (the light tints above would be unreadable under near-white ink). Light +
+   high-contrast are fine: light bg + the theme --ink text. */
 @media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-doc {
-    background: #1b2733;
-  }
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch {
-    background: #15212c;
-  }
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch p {
-    color: var(--ink, #f1eee6);
-  }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-documents { background: #14222e; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-doc + .dec-doc { border-top-color: #2a3a48; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch { background: #15212c; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch p { color: var(--ink, #f1eee6); }
 }
-html[data-theme="dark"] .dec-doc { background: #1b2733; }
+html[data-theme="dark"] .dec-documents { background: #14222e; }
+html[data-theme="dark"] .dec-doc + .dec-doc { border-top-color: #2a3a48; }
 html[data-theme="dark"] .dec-branch { background: #15212c; }
 html[data-theme="dark"] .dec-branch p { color: var(--ink, #f1eee6); }
 
@@ -410,14 +416,16 @@ body[data-format="branched"] #branched-final-host {
 /* Branched "before you vote" group-reasoning capture. The .card class carries
    the theme-aware surface (readable in dark/high-contrast); a left accent marks
    it as the discussion step. Hidden in standard sessions + via .hidden. */
-body:not([data-format="branched"]) #branched-rationale-host { display: none !important; }
-#branched-rationale-host.hidden { display: none; }
-body[data-format="branched"] #branched-rationale-host { max-width: 760px; margin-inline: auto; }
-.branched-rationale { border-left: 4px solid var(--primary); }
-.branched-rationale-lead { margin: 0 0 .5rem; color: var(--muted, #486581); }
-.branched-rationale-prompt { margin: 0 0 .6rem; font-weight: 600; }
-.branched-rationale-label { display: block; font-weight: 700; margin-bottom: .2rem; font-size: .95rem; }
-.branched-rationale-input { width: 100%; box-sizing: border-box; min-height: 3.2em; }
+/* The "before you vote" reasoning capture at the BOTTOM of each decision card;
+   a top divider separates it from the options/result above. */
+.branched-rationale {
+  margin-top: .7rem;
+  padding-top: .6rem;
+  border-top: 1px dashed var(--line, #d9e2ec);
+}
+.branched-rationale-lead { margin: 0 0 .45rem; color: var(--muted, #486581); font-size: .9rem; }
+.branched-rationale-label { display: block; font-weight: 700; margin-bottom: .2rem; font-size: .92rem; }
+.branched-rationale-input { width: 100%; box-sizing: border-box; min-height: 3em; }
 .branched-rationale-add { margin-top: .35rem; }
 .branched-rationale-list { margin: .5rem 0 0; padding-left: 1.1rem; }
 
