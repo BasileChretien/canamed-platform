@@ -97,4 +97,47 @@ test.describe("branched-scenarios format", () => {
     });
     expect(leftDisp).not.toBe("none"); // chart column visible in standard mode
   });
+
+  test("branched documents render via the lazy branched-render.js (per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      // ensureCaseContent() chains branched-render.js — the lazy documents
+      // renderer that buildDecision delegates to.
+      await window.CanamedLoader.ensureCaseContent();
+      const br = window.CanamedBranchedRender;
+      if (!br || !br.buildDecisionDocs) return { loaded: false };
+      const node = {
+        documents: [
+          {
+            title: { en: "Bedside observations" },
+            text: { en: "RR 28 · SpO2 88%" },
+          },
+          {
+            title: { en: "Chest X-ray" },
+            image: "scenario-images/sample-clinical.svg",
+          },
+        ],
+      };
+      const block = br.buildDecisionDocs(node, "en");
+      if (!block) return { loaded: true, built: false };
+      document.body.appendChild(block);
+      const img = block.querySelector(".dec-doc-img");
+      return {
+        loaded: true,
+        built: true,
+        docCount: block.querySelectorAll(".dec-doc").length,
+        text: block.textContent,
+        imgSrc: img ? img.getAttribute("src") : null,
+      };
+    });
+    expect(r.loaded, "branched-render.js must load via ensureCaseContent").toBe(
+      true,
+    );
+    expect(r.built).toBe(true);
+    expect(r.docCount).toBe(2);
+    expect(r.text).toMatch(/Bedside observations/);
+    expect(r.imgSrc).toBe("scenario-images/sample-clinical.svg");
+  });
 });
