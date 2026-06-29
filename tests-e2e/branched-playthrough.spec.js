@@ -202,6 +202,23 @@ test.describe("branched scenario — full playthrough", () => {
       { timeout: 10_000 },
     );
 
+    // ── OSCE final deliverable: the tree is done → the final-diagnosis form
+    //    appears, and a committed diagnosis persists in the team's answer list.
+    const host = stu.locator("#branched-final-host");
+    await expect(host).toBeVisible({ timeout: 10_000 });
+    await expect(host).toContainText(/Final diagnosis/i);
+    await host
+      .locator("#answer-input-moduleA-finalDx")
+      .fill("Pulmonary embolism");
+    await host
+      .locator(
+        ".branched-final-field:has(#answer-input-moduleA-finalDx) .branched-final-add",
+      )
+      .click();
+    await expect(
+      host.locator('.branched-final-list[data-field="finalDx"]'),
+    ).toContainText(/Pulmonary embolism/i, { timeout: 10_000 });
+
     await stu.close();
   });
 });

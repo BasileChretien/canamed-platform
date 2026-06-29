@@ -140,4 +140,34 @@ test.describe("branched-scenarios format", () => {
     expect(r.text).toMatch(/Bedside observations/);
     expect(r.imgSrc).toBe("scenario-images/sample-clinical.svg");
   });
+
+  test("branched final-diagnosis deliverable renders via the lazy module (per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      const br = window.CanamedBranchedRender;
+      if (!br || !br.buildBranchedFinal) return { loaded: false };
+      const card = br.buildBranchedFinal({}, "en");
+      if (!card) return { loaded: true, built: false };
+      document.body.appendChild(card);
+      return {
+        loaded: true,
+        built: true,
+        hasDx: !!card.querySelector("#answer-input-moduleA-finalDx"),
+        hasMgmt: !!card.querySelector("#answer-input-moduleA-finalMgmt"),
+        hasAddBtn: !!card.querySelector(".branched-final-add"),
+        text: card.textContent,
+      };
+    });
+    expect(r.loaded, "branched-render.js must load via ensureCaseContent").toBe(
+      true,
+    );
+    expect(r.built).toBe(true);
+    expect(r.hasDx).toBe(true);
+    expect(r.hasMgmt).toBe(true);
+    expect(r.hasAddBtn).toBe(true);
+    expect(r.text).toMatch(/Final diagnosis/);
+  });
 });
