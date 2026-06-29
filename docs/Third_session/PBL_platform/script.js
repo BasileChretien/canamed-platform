@@ -460,6 +460,20 @@ function stageLabel(i) {
   }
   return STAGE_LABELS[i] || ("Stage " + (i + 1));
 }
+/* Stage-flow wrappers — the logic (branched skips stage 2) lives in the LAZY
+   branched-render.js; these delegate once it has loaded, else the standard flow. */
+function stageFlow() {
+  const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
+  return (b && b.stageFlow) ? b.stageFlow() : [0, 1, 2, STAGE_COUNT - 1];
+}
+function snapStageToFlow(to, from) {
+  const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
+  return (b && b.snapStageToFlow) ? b.snapStageToFlow(to, from) : Math.max(0, Math.min(STAGE_COUNT - 1, to));
+}
+function adjacentStage(cur, dir) {
+  const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
+  return (b && b.adjacentStage) ? b.adjacentStage(cur, dir) : Math.max(0, Math.min(STAGE_COUNT - 1, cur + dir));
+}
 // Generic i18n lookup with English-string fallback. Use for hardcoded
 // strings being migrated to i18n: pass the new key and the existing English
 // text — when the key is missing from the table (or window.t is unavailable
@@ -3734,8 +3748,9 @@ function startRoom() {
     answers.moduleA = snap.val() || {};
     renderAnswers("moduleA");
     renderObjectives();
-    // Branched final-diagnosis entries also live under answers/moduleA — refresh
-    // the deliverable's lists so teammates' contributions appear live.
+    // Branched rationale + final-diagnosis entries also live under answers/moduleA
+    // — refresh their lists so teammates' contributions appear live.
+    if (typeof renderBranchedRationale === "function") renderBranchedRationale();
     if (typeof renderBranchedFinal === "function") renderBranchedFinal();
   });
   refAnswers.moduleB.on("value", snap => {
@@ -5041,6 +5056,9 @@ function startSession() {
 
 function setRoomStage(r, from, to) {
   to = Math.max(0, Math.min(STAGE_COUNT - 1, to));
+  // Honour the scenario's stage flow (branched skips stage 2). Every advance
+  // call site passes to = from ± 1, so this one guard covers them all.
+  to = snapStageToFlow(to, from);
   let changed = false;
   db.ref(sPath("rooms/" + r + "/stage")).transaction(cur => {
     const c = typeof cur === "number" ? cur : 0;
@@ -5515,7 +5533,11 @@ function renderDashboard() {
     }
     const stg = document.createElement("div");
     stg.className = "dash-stage";
-    stg.textContent = "Stage " + (st + 1) + "/" + STAGE_COUNT + " · " + stageLabel(st);
+    // Count by position in the active stage flow (branched skips stage 2).
+    const _dflow = stageFlow();
+    const _dpos = _dflow.indexOf(st);
+    stg.textContent = "Stage " + ((_dpos === -1 ? st : _dpos) + 1) + "/" + _dflow.length +
+      " · " + stageLabel(st);
     // time-in-stage + work-progress, so the lead prof can pace without opening rooms
     const timer = document.createElement("div");
     const mins = minsSince(data.stageAt);
@@ -5603,6 +5625,15 @@ function renderDashboard() {
     info.appendChild(timer); info.appendChild(prog);
     info.appendChild(partic); info.appendChild(quietLine); info.appendChild(ppl);
     info.appendChild(score);
+    // Branched scenarios: this room's path through the decision tree — each
+    // committed choice marked green (correct) / red (incorrect), plus where the
+    // room is deciding now. Built by the lazy branched-render.js (room-only;
+    // null for non-branched sessions or before it loads).
+    const _cbr = window.CanamedBranchedRender;
+    if (_cbr && _cbr.buildRoomChoiceTree) {
+      const tree = _cbr.buildRoomChoiceTree(data, _curLang ? _curLang() : "en");
+      if (tree) info.appendChild(tree);
+    }
 
     const ctrl = document.createElement("div");
     ctrl.className = "dash-ctrl";
@@ -7559,8 +7590,12 @@ function renderStage() {
   // "Module A — …" string twice, stacked. The stepper now owns the visible name
   // (its current segment renders stageLabel() + carries it in aria-label /
   // aria-current); this line is just the compact position counter.
+  // Count by POSITION in the active flow, not by raw stage index, so a branched
+  // scenario (which skips stage 2) reads "Stage 2 of 3", not "Stage 2 of 4".
+  const _flow = stageFlow();
+  const _pos = _flow.indexOf(viewStage);
   el("stage-indicator").textContent =
-    "Stage " + (viewStage + 1) + " of " + STAGE_COUNT;
+    "Stage " + ((_pos === -1 ? viewStage : _pos) + 1) + " of " + _flow.length;
   // Global "you are here" stepper — a compact visual map of the whole session
   // arc so the Module A LOCAL phase-stepper reads as sub-progress, not session
   // position (UX-overload fix 2026-06-01). Built with createElement +
@@ -7571,7 +7606,9 @@ function renderStage() {
   const gsp = el("global-stage-progress");
   if (gsp) {
     gsp.textContent = "";
-    for (let i = 0; i < STAGE_COUNT; i++) {
+    // Iterate the active stage flow (branched skips stage 2) and number by
+    // POSITION so the segments read 1·2·3 with no gap.
+    stageFlow().forEach((i, pos) => {
       const li = document.createElement("li");
       li.className = "gsp-step" +
         (i < viewStage ? " is-done" : "") +
@@ -7583,14 +7620,14 @@ function renderStage() {
       const num = document.createElement("span");
       num.className = "gsp-num";
       num.setAttribute("aria-hidden", "true");
-      num.textContent = String(i + 1);
+      num.textContent = String(pos + 1);
       li.appendChild(num);
       const name = document.createElement("span");
       name.className = "gsp-name";
       name.textContent = label;
       li.appendChild(name);
       gsp.appendChild(li);
-    }
+    });
   }
   // The leaderboard is never auto-opened (user request 2026-06-02): it stays
   // closed on every stage — including Wrap-up — and opens ONLY when the student
@@ -7664,11 +7701,11 @@ function renderStage() {
 function initStageNav() {
   el("prev-btn").addEventListener("click", () => {
     if (isRoomAdmin) setRoomStage(myRoom, roomStage, roomStage - 1);
-    else { viewStage = Math.max(0, viewStage - 1); renderStage(); }
+    else { viewStage = adjacentStage(viewStage, -1); renderStage(); }
   });
   el("next-btn").addEventListener("click", () => {
     if (isRoomAdmin) setRoomStage(myRoom, roomStage, roomStage + 1);
-    else { viewStage = Math.min(roomStage, viewStage + 1); renderStage(); }
+    else { viewStage = Math.min(roomStage, adjacentStage(viewStage, +1)); renderStage(); }
   });
 }
 
@@ -9535,9 +9572,17 @@ function renderDecisions() {
   // Keep the progressive tab reveal in sync with decision-unlock transitions
   // (the Decide-together tab appears when the plan decisions become live).
   if (typeof revealModARightCol === "function") revealModARightCol();
-  // Branched OSCE: once the tree is finished, surface the team's final
-  // diagnosis / management deliverable below the decisions.
+  // Branched OSCE: the "before you vote" group-reasoning capture for the active
+  // decision, and — once the tree is finished — the final diagnosis deliverable.
+  renderBranchedRationale();
   renderBranchedFinal();
+}
+
+/* Branched "before you vote" rationale — render lives in the LAZY
+ * branched-render.js; thin delegating wrapper (see renderBranchedFinal). */
+function renderBranchedRationale() {
+  const br = window.CanamedBranchedRender;
+  if (br && br.renderBranchedRationale) br.renderBranchedRationale();
 }
 
 /* Branched OSCE final deliverable — the done-detection + the render live in the
@@ -12411,10 +12456,11 @@ function renderLobbyStructure() {
   if (!liA || !liB) return;
   const lang = _curLang();
   const branched = (window.CURRENT_SCENARIO_FORMAT === "branched");
+  // Branched scenarios have no Module-B / Reflection step — the agenda lists
+  // only the case (between the Welcome and Wrap-up rows). Hide the second item.
+  liB.hidden = branched;
   const aName = tc(window.CURRENT_SCENARIO_MODULE_A_NAME, lang)
     || (branched ? "The case" : "Module A — Chronic Pain & the Clinical Case");
-  const bName = tc(window.CURRENT_SCENARIO_MODULE_B_NAME, lang)
-    || (branched ? "Reflection" : "Module B — Breaking Bad News");
   const fill = (li, name, tail) => {
     li.textContent = "";
     const s = document.createElement("strong");
@@ -12423,11 +12469,13 @@ function renderLobbyStructure() {
     li.appendChild(document.createTextNode(tail));
   };
   fill(liA, aName, branched
-    ? " — a guided clinical decision case: your team works through it together, one decision at a time."
+    ? " — a guided decision case: your team works through it together, one decision at a time, then commits a final diagnosis and plan."
     : ", worked through here on the platform.");
-  fill(liB, bName, branched
-    ? " — look back at the path your choices took and discuss it together."
-    : ", a cross-cultural roleplay.");
+  if (!branched) {
+    const bName = tc(window.CURRENT_SCENARIO_MODULE_B_NAME, lang)
+      || "Module B — Breaking Bad News";
+    fill(liB, bName, ", a cross-cultural roleplay.");
+  }
 }
 
 /* Reveal + wire the lobby "switch session" button whenever the lobby is

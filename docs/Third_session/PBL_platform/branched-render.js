@@ -63,6 +63,15 @@
         p.textContent = text;
         card.appendChild(p);
       }
+      // Optional image/source credit (e.g. a CC0 attribution line). Rendered as
+      // a small, muted caption so licence credits travel with the asset.
+      const credit = tc(doc.credit, lang);
+      if (credit) {
+        const cr = document.createElement("p");
+        cr.className = "dec-doc-credit";
+        cr.textContent = credit;
+        card.appendChild(cr);
+      }
       box.appendChild(card);
     });
     return box;
@@ -226,8 +235,235 @@
     host.classList.remove("hidden");
   }
 
+  /* ── "Before you vote" group reasoning ────────────────────────────────────
+     For the CURRENT (active, uncommitted) branched decision, capture why the
+     group is leaning the way it is — and any disagreement — BEFORE they lock
+     in. Reuses the Module-A answers mechanism: each contribution is pushed via
+     addAnswer("moduleA", "rat_<decisionId>") → rooms/<room>/answers/moduleA, so
+     storage, sync, the wrap-up and the research export all work with no new
+     schema. Lives in the STABLE #branched-rationale-host (NOT rebuilt by
+     renderDecisions on churn, so the textarea keeps focus); rebuilt only when
+     the active decision changes, with entry lists refreshed live. */
+  function _branchedCommitted() {
+    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
+    var committed = {};
+    list.forEach(function (d) {
+      var v = (typeof roomVotes !== "undefined" && roomVotes[d.id]) || {};
+      if (v.committed && typeof v.committed.choice === "number") committed[d.id] = v.committed.choice;
+    });
+    return committed;
+  }
+  function _activeBranchedDecision() {
+    if ((root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched") return null;
+    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
+    if (!list.length) return null;
+    var rt = root.CanamedBranchedRuntime;
+    if (!rt || !rt.branchedPath) return null;
+    return rt.branchedPath(list, _branchedCommitted()).active || null;
+  }
+
+  function buildBranchedRationale(decision, lang) {
+    var key = "rat_" + decision.id;
+    var card = document.createElement("section");
+    card.className = "card branched-rationale";
+    card.id = "branched-rationale";
+
+    var h = document.createElement("h3");
+    h.textContent = "Before you vote — your group's reasoning";
+    card.appendChild(h);
+    var lead = document.createElement("p");
+    lead.className = "branched-rationale-lead";
+    lead.textContent =
+      "Discuss as a team: why are you leaning toward your choice — and note any disagreement — before you lock it in.";
+    card.appendChild(lead);
+    var recap = document.createElement("p");
+    recap.className = "branched-rationale-prompt";
+    recap.textContent = tc(decision.prompt, lang);
+    card.appendChild(recap);
+
+    var lab = document.createElement("label");
+    lab.className = "branched-rationale-label";
+    lab.setAttribute("for", "answer-input-moduleA-" + key);
+    lab.textContent = "Your group's reasoning (and any disagreement)";
+    card.appendChild(lab);
+    var ta = document.createElement("textarea");
+    ta.id = "answer-input-moduleA-" + key;
+    ta.className = "branched-rationale-input";
+    ta.setAttribute("maxlength", "1000");
+    ta.setAttribute("placeholder", "e.g. We chose this because… One of us disagreed because…");
+    card.appendChild(ta);
+    var add = document.createElement("button");
+    add.type = "button";
+    add.className = "add-btn branched-rationale-add";
+    add.textContent = "Add to the group's reasoning";
+    add.addEventListener("click", function () {
+      if (typeof addAnswer === "function") addAnswer("moduleA", key);
+    });
+    card.appendChild(add);
+
+    var list = document.createElement("ul");
+    list.className = "answers-list branched-rationale-list";
+    list.setAttribute("data-field", key);
+    _populateFinalList(list, key);
+    card.appendChild(list);
+    return card;
+  }
+
+  /* Populate the stable rationale host for the active decision; rebuild only on
+     a change of active decision (keeps the textarea focused); hide when there
+     is no open decision (the tree is done, or not a branched session). */
+  function renderBranchedRationale() {
+    var host = document.getElementById("branched-rationale-host");
+    if (!host) return;
+    var active = _activeBranchedDecision();
+    if (!active || !active.id) {
+      if (host.firstChild) host.textContent = "";
+      host.classList.add("hidden");
+      host.removeAttribute("data-dec");
+      return;
+    }
+    var lang = (typeof _curLang === "function") ? _curLang() : "en";
+    if (host.getAttribute("data-dec") !== active.id) {
+      host.textContent = "";
+      var card = buildBranchedRationale(active, lang);
+      if (card) host.appendChild(card);
+      host.setAttribute("data-dec", active.id);
+    } else {
+      host.querySelectorAll(".branched-rationale-list[data-field]").forEach(function (ul) {
+        _populateFinalList(ul, ul.getAttribute("data-field"));
+      });
+    }
+    host.classList.remove("hidden");
+  }
+
+  /* ── Admin choice-tree ─────────────────────────────────────────────────────
+     For the facilitator dashboard: a compact per-room view of the path a room
+     took through the branch tree — each committed choice marked correct (green
+     ✓) or incorrect (red ✗), plus the node the room is deciding on NOW (▶). Pure
+     read of the room's synced votes (rooms/<room>/votes/<id>/committed/choice),
+     resolved through the same branchedPath() the student renderer uses, so the
+     admin sees exactly the path the room walked. Returns a DOM element, or null
+     when this isn't a branched scenario / the tree isn't loaded. */
+  function _shortText(s, n) {
+    s = (s == null) ? "" : String(s);
+    return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, "").trim() + "…" : s;
+  }
+  function buildRoomChoiceTree(roomData, lang) {
+    if ((root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched") return null;
+    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
+    if (!list.length) return null;
+    var rt = root.CanamedBranchedRuntime;
+    if (!rt || !rt.branchedPath) return null;
+    lang = lang || ((typeof _curLang === "function") ? _curLang() : "en");
+
+    var byId = Object.create(null);
+    list.forEach(function (d) { if (d && d.id) byId[d.id] = d; });
+
+    var votes = (roomData && roomData.votes) || {};
+    var committed = {};
+    list.forEach(function (d) {
+      var v = votes[d.id];
+      if (v && v.committed && typeof v.committed.choice === "number") committed[d.id] = v.committed.choice;
+    });
+
+    var res = rt.branchedPath(list, committed);
+    var box = document.createElement("div");
+    box.className = "room-choice-tree";
+    var ol = document.createElement("ol");
+    ol.className = "ct-trail";
+
+    res.trail.forEach(function (step) {
+      var d = byId[step.id];
+      var opt = d && d.options && d.options[step.optionIndex];
+      var correct = !!(opt && opt.correct);
+      var li = document.createElement("li");
+      li.className = "ct-step " + (correct ? "correct" : "wrong");
+      var mark = document.createElement("span");
+      mark.className = "ct-mark";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = correct ? "✓" : "✗";
+      li.appendChild(mark);
+      var choice = document.createElement("span");
+      choice.className = "ct-choice";
+      choice.textContent = _shortText(tc(opt && opt.text, lang), 64);
+      if (d) choice.title = tc(d.prompt, lang);
+      li.appendChild(choice);
+      var sr = document.createElement("span");
+      sr.className = "sr-only";
+      sr.textContent = correct ? " — correct" : " — incorrect";
+      li.appendChild(sr);
+      ol.appendChild(li);
+    });
+
+    if (res.active && res.active.id) {
+      var li2 = document.createElement("li");
+      li2.className = "ct-step ct-active";
+      var m2 = document.createElement("span");
+      m2.className = "ct-mark";
+      m2.setAttribute("aria-hidden", "true");
+      m2.textContent = "▶";
+      li2.appendChild(m2);
+      var now = document.createElement("span");
+      now.className = "ct-choice ct-now";
+      now.textContent = _shortText(tc(res.active.prompt, lang), 64);
+      li2.appendChild(now);
+      var sr2 = document.createElement("span");
+      sr2.className = "sr-only";
+      sr2.textContent = " — deciding now";
+      li2.appendChild(sr2);
+      ol.appendChild(li2);
+    } else if (res.done && res.trail.length) {
+      var li3 = document.createElement("li");
+      li3.className = "ct-step ct-done";
+      li3.textContent = "✓ Reached an ending";
+      ol.appendChild(li3);
+    }
+
+    box.appendChild(ol);
+    return box;
+  }
+
+  /* ── Stage flow (lazy: kept out of the eager splash bundle per the perf
+     budget). A branched scenario is a pure decision flow with NO Module-B /
+     Reflection phase, so it skips stage 2 — Welcome(0) → case(1) → Wrap-up(3);
+     standard PBL/roleplay uses all four. STAGE_COUNT is fixed at 4, so the last
+     stage index is 3. The eager script.js keeps thin wrappers that delegate
+     here once this room module has loaded (and fall back to the standard
+     all-stages flow in the brief pre-load window, before any stage is
+     navigable). The shared endpoints (0, 3) leave the first/last button-disable
+     logic untouched. */
+  var LAST_STAGE = 3;
+  function stageFlow() {
+    return (root.CURRENT_SCENARIO_FORMAT === "branched")
+      ? [0, 1, LAST_STAGE] : [0, 1, 2, LAST_STAGE];
+  }
+  /* Snap a requested stage to the nearest stage IN the flow, in the travel
+     direction — an advance onto a skipped stage (1→2 branched) rolls on to the
+     next real stage (3); a step-back snaps the other way. */
+  function snapStageToFlow(to, from) {
+    var flow = stageFlow();
+    if (flow.indexOf(to) !== -1) return to;
+    if (from != null && to < from) {
+      for (var k = flow.length - 1; k >= 0; k--) if (flow[k] <= to) return flow[k];
+      return flow[0];
+    }
+    for (var j = 0; j < flow.length; j++) if (flow[j] >= to) return flow[j];
+    return flow[flow.length - 1];
+  }
+  /* The stage one step forward (+1) or back (-1) of `cur` within the flow — for
+     the participant's local Back/Next (which moves viewStage, not the room). */
+  function adjacentStage(cur, dir) {
+    var flow = stageFlow();
+    var i = flow.indexOf(cur);
+    if (i === -1) return snapStageToFlow(cur + dir, dir < 0 ? cur + 1 : null);
+    return flow[Math.max(0, Math.min(flow.length - 1, i + dir))];
+  }
+
   root.CanamedBranchedRender = {
     buildDecisionDocs, _safeScenarioImage, buildBranchedFinal,
-    refreshBranchedFinal, renderBranchedFinal, branchedTreeDone
+    refreshBranchedFinal, renderBranchedFinal, branchedTreeDone,
+    buildBranchedRationale, renderBranchedRationale,
+    buildRoomChoiceTree,
+    stageFlow, snapStageToFlow, adjacentStage
   };
 })(typeof window !== "undefined" ? window : this);

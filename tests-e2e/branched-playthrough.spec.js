@@ -161,8 +161,38 @@ test.describe("branched scenario — full playthrough", () => {
       )
       .toBe(0);
 
+    // ── "Before you vote": the active decision's group-reasoning capture is
+    //    shown, and a contribution persists for the team to see.
+    const rationale = stu.locator("#branched-rationale-host");
+    await expect(rationale).toBeVisible({ timeout: 10_000 });
+    await expect(rationale).toContainText(/before you vote/i);
+    await rationale
+      .locator("#answer-input-moduleA-rat_b_assess")
+      .fill("We treat first — oxygen before imaging; one of us wanted the film.");
+    await rationale.locator(".branched-rationale-add").click();
+    await expect(
+      rationale.locator('.branched-rationale-list[data-field="rat_b_assess"]'),
+    ).toContainText(/oxygen before imaging/i, { timeout: 10_000 });
+
     // ── Act I: commit b_assess → consequence + b_escalate unlocks ───────────
     await voteAndLock(stu, "#decisions-A", "b_assess", 0);
+    // The rationale host re-binds to the NEW active decision (b_escalate).
+    await expect
+      .poll(
+        () => rationale.getAttribute("data-dec"),
+        { timeout: 10_000 },
+      )
+      .toBe("b_escalate");
+
+    // ── Admin dashboard: this room's choice tree shows the committed path —
+    //    a green (correct) step for b_assess + the node it is deciding now.
+    await expect(
+      page.locator(".room-choice-tree .ct-step.correct").first(),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.locator(".room-choice-tree .ct-step.ct-active").first(),
+    ).toBeVisible({ timeout: 10_000 });
+
     await expect(stu.locator("#decisions-A .dec-branch")).toBeVisible({
       timeout: 10_000,
     });
@@ -207,6 +237,10 @@ test.describe("branched scenario — full playthrough", () => {
     const host = stu.locator("#branched-final-host");
     await expect(host).toBeVisible({ timeout: 10_000 });
     await expect(host).toContainText(/Final diagnosis/i);
+    // …and the "before you vote" rationale host hides (no open decision left).
+    await expect(stu.locator("#branched-rationale-host")).toBeHidden({
+      timeout: 10_000,
+    });
     await host
       .locator("#answer-input-moduleA-finalDx")
       .fill("Pulmonary embolism");
@@ -218,6 +252,22 @@ test.describe("branched scenario — full playthrough", () => {
     await expect(
       host.locator('.branched-final-list[data-field="finalDx"]'),
     ).toContainText(/Pulmonary embolism/i, { timeout: 10_000 });
+
+    // ── Stage-2 skip: advancing from the case jumps straight to Wrap-up ──────
+    // A branched session has no Module-B / Reflection stage. Advancing the room
+    // off the case (stage 1) must land on Wrap-up (the 3rd of 3 stages), never
+    // the empty stage 2 — proving stageFlow()'s skip end to end.
+    await page.locator("#advance-all-btn").click();
+    await expect(stu.locator("#stage-indicator")).toContainText("Stage 3 of 3", {
+      timeout: 20_000,
+    });
+    expect(
+      await stu.evaluate(() => {
+        const s2 = document.getElementById("stage-2");
+        return s2 ? getComputedStyle(s2).display : "absent";
+      }),
+    ).toBe("none");
+    await expect(stu.locator("#stage-3")).toBeVisible({ timeout: 10_000 });
 
     await stu.close();
   });

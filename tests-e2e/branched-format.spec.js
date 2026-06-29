@@ -141,6 +141,65 @@ test.describe("branched-scenarios format", () => {
     expect(r.imgSrc).toBe("scenario-images/sample-clinical.svg");
   });
 
+  test("branched documents stay readable in dark mode (contrast, per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      // Force the dark theme regardless of the OS preference.
+      document.documentElement.setAttribute("data-theme", "dark");
+      const br = window.CanamedBranchedRender;
+      const block = br.buildDecisionDocs(
+        {
+          documents: [
+            {
+              title: { en: "Chest X-ray (PA)" },
+              text: { en: "The film is essentially clear — no consolidation." },
+              credit: { en: "Image: Mikael Häggström, CC0 1.0, via Wikimedia Commons." },
+            },
+          ],
+        },
+        "en",
+      );
+      document.body.appendChild(block);
+      const doc = block.querySelector(".dec-doc");
+      const txt = block.querySelector(".dec-doc-text");
+      const cr = block.querySelector(".dec-doc-credit");
+      const csd = getComputedStyle(doc);
+      const cst = getComputedStyle(txt);
+      function lum(rgb) {
+        const m = rgb
+          .match(/[\d.]+/g)
+          .map(Number)
+          .slice(0, 3)
+          .map((v) => {
+            v /= 255;
+            return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+          });
+        return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+      }
+      const bgL = lum(csd.backgroundColor);
+      const fgL = lum(cst.color);
+      const contrast =
+        (Math.max(bgL, fgL) + 0.05) / (Math.min(bgL, fgL) + 0.05);
+      return {
+        bgLum: bgL,
+        contrast,
+        hasCredit: !!cr,
+        creditText: cr ? cr.textContent : null,
+      };
+    });
+    // The card background must be a DARK surface (the regression was the
+    // undefined --surface-2 falling back to a LIGHT colour under light text).
+    expect(r.bgLum, "the .dec-doc background must be dark in dark mode").toBeLessThan(0.1);
+    // And the text on it must clear the WCAG AA body-text bar.
+    expect(r.contrast).toBeGreaterThan(4.5);
+    // The optional image credit renders.
+    expect(r.hasCredit).toBe(true);
+    expect(r.creditText).toMatch(/CC0/);
+  });
+
   test("branched final-diagnosis deliverable renders via the lazy module (per-device)", async ({
     page,
   }) => {
@@ -169,5 +228,87 @@ test.describe("branched-scenarios format", () => {
     expect(r.hasMgmt).toBe(true);
     expect(r.hasAddBtn).toBe(true);
     expect(r.text).toMatch(/Final diagnosis/);
+  });
+
+  test("branched 'before you vote' rationale card builds for a decision (per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      const br = window.CanamedBranchedRender;
+      if (!br || !br.buildBranchedRationale) return { loaded: false };
+      const decision = {
+        id: "b_assess",
+        prompt: { en: "Your team's FIRST move is…" },
+      };
+      const card = br.buildBranchedRationale(decision, "en");
+      if (!card) return { loaded: true, built: false };
+      document.body.appendChild(card);
+      return {
+        loaded: true,
+        built: true,
+        hasInput: !!card.querySelector("#answer-input-moduleA-rat_b_assess"),
+        hasAddBtn: !!card.querySelector(".branched-rationale-add"),
+        hasList: !!card.querySelector(
+          '.branched-rationale-list[data-field="rat_b_assess"]',
+        ),
+        text: card.textContent,
+      };
+    });
+    expect(r.loaded, "branched-render.js must load via ensureCaseContent").toBe(
+      true,
+    );
+    expect(r.built).toBe(true);
+    expect(r.hasInput).toBe(true);
+    expect(r.hasAddBtn).toBe(true);
+    expect(r.hasList).toBe(true);
+    expect(r.text).toMatch(/before you vote/i);
+    expect(r.text).toMatch(/disagreement/i);
+  });
+
+  test("admin choice-tree shows a room's path: green/red + active (per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      window.applyScenario("ward-escalation-branched");
+      const br = window.CanamedBranchedRender;
+      if (!br || !br.buildRoomChoiceTree) return { loaded: false };
+      const classesOf = (el) =>
+        Array.from(el.querySelectorAll(".ct-step")).map((s) => s.className);
+      // Good partial path: correct first move → still deciding the next node.
+      const t1 = br.buildRoomChoiceTree(
+        { votes: { b_assess: { committed: { choice: 0 } } } },
+        "en",
+      );
+      // Wrong-then-correct ending path.
+      const t2 = br.buildRoomChoiceTree(
+        {
+          votes: {
+            b_assess: { committed: { choice: 1 } },
+            b_deteriorate: { committed: { choice: 0 } },
+          },
+        },
+        "en",
+      );
+      return {
+        loaded: true,
+        t1: t1 ? classesOf(t1) : null,
+        t2: t2 ? classesOf(t2) : null,
+        t2text: t2 ? t2.textContent : null,
+      };
+    });
+    expect(r.loaded, "branched-render.js must load").toBe(true);
+    // Good partial path → a green (correct) step + an active "deciding now" marker.
+    expect(r.t1.some((c) => c.includes("correct"))).toBe(true);
+    expect(r.t1.some((c) => c.includes("ct-active"))).toBe(true);
+    expect(r.t1.some((c) => c.includes("wrong"))).toBe(false);
+    // Wrong→correct ending path → a red (wrong) + a green (correct) + an ending.
+    expect(r.t2.some((c) => c.includes("wrong"))).toBe(true);
+    expect(r.t2.some((c) => c.includes("correct"))).toBe(true);
+    expect(r.t2.some((c) => c.includes("ct-done"))).toBe(true);
+    expect(r.t2text).toMatch(/Reached an ending/i);
   });
 });
