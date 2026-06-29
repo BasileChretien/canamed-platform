@@ -266,4 +266,49 @@ test.describe("branched-scenarios format", () => {
     expect(r.text).toMatch(/before you vote/i);
     expect(r.text).toMatch(/disagreement/i);
   });
+
+  test("admin choice-tree shows a room's path: green/red + active (per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      window.applyScenario("ward-escalation-branched");
+      const br = window.CanamedBranchedRender;
+      if (!br || !br.buildRoomChoiceTree) return { loaded: false };
+      const classesOf = (el) =>
+        Array.from(el.querySelectorAll(".ct-step")).map((s) => s.className);
+      // Good partial path: correct first move → still deciding the next node.
+      const t1 = br.buildRoomChoiceTree(
+        { votes: { b_assess: { committed: { choice: 0 } } } },
+        "en",
+      );
+      // Wrong-then-correct ending path.
+      const t2 = br.buildRoomChoiceTree(
+        {
+          votes: {
+            b_assess: { committed: { choice: 1 } },
+            b_deteriorate: { committed: { choice: 0 } },
+          },
+        },
+        "en",
+      );
+      return {
+        loaded: true,
+        t1: t1 ? classesOf(t1) : null,
+        t2: t2 ? classesOf(t2) : null,
+        t2text: t2 ? t2.textContent : null,
+      };
+    });
+    expect(r.loaded, "branched-render.js must load").toBe(true);
+    // Good partial path → a green (correct) step + an active "deciding now" marker.
+    expect(r.t1.some((c) => c.includes("correct"))).toBe(true);
+    expect(r.t1.some((c) => c.includes("ct-active"))).toBe(true);
+    expect(r.t1.some((c) => c.includes("wrong"))).toBe(false);
+    // Wrong→correct ending path → a red (wrong) + a green (correct) + an ending.
+    expect(r.t2.some((c) => c.includes("wrong"))).toBe(true);
+    expect(r.t2.some((c) => c.includes("correct"))).toBe(true);
+    expect(r.t2.some((c) => c.includes("ct-done"))).toBe(true);
+    expect(r.t2text).toMatch(/Reached an ending/i);
+  });
 });

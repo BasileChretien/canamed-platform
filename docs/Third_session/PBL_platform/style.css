@@ -421,6 +421,37 @@ body[data-format="branched"] #branched-rationale-host { max-width: 760px; margin
 .branched-rationale-add { margin-top: .35rem; }
 .branched-rationale-list { margin: .5rem 0 0; padding-left: 1.1rem; }
 
+/* Admin dashboard — per-room branched CHOICE TREE: the path a room walked,
+   each committed choice green (correct) / red (incorrect), plus ▶ where it is
+   deciding now. Green uses the theme-aware --ok; red gets a dark override. */
+.room-choice-tree { margin: .45rem 0 0; }
+.ct-trail { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ct-step {
+  display: flex; align-items: baseline; gap: .4rem;
+  padding: .15rem .45rem; border-left: 3px solid transparent;
+  font-size: .86rem; line-height: 1.35;
+}
+.ct-mark { font-weight: 800; flex: none; }
+.ct-choice { min-width: 0; }
+.ct-step.correct { border-left-color: var(--ok, #1e8449); }
+.ct-step.correct .ct-mark, .ct-step.correct .ct-choice { color: var(--ok, #1e8449); }
+.ct-step.wrong { border-left-color: #c0392b; }
+.ct-step.wrong .ct-mark, .ct-step.wrong .ct-choice { color: #c0392b; }
+.ct-step.ct-active { border-left-color: var(--primary); background: var(--nagoya-50, #eaf4fb); border-radius: 0 4px 4px 0; }
+.ct-step.ct-active .ct-mark { color: var(--primary); }
+.ct-step.ct-active .ct-now { color: var(--ink, #102a43); font-weight: 600; }
+.ct-step.ct-done { color: var(--ok, #1e8449); font-weight: 600; padding-left: .45rem; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.wrong { border-left-color: #f0857a; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.wrong .ct-mark,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.wrong .ct-choice { color: #f0857a; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.ct-active { background: #14202b; }
+}
+html[data-theme="dark"] .ct-step.wrong { border-left-color: #f0857a; }
+html[data-theme="dark"] .ct-step.wrong .ct-mark,
+html[data-theme="dark"] .ct-step.wrong .ct-choice { color: #f0857a; }
+html[data-theme="dark"] .ct-step.ct-active { background: #14202b; }
+
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }
 .wrapup-download-btn.hidden { display: none; }

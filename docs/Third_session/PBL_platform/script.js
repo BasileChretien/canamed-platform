@@ -5533,7 +5533,11 @@ function renderDashboard() {
     }
     const stg = document.createElement("div");
     stg.className = "dash-stage";
-    stg.textContent = "Stage " + (st + 1) + "/" + STAGE_COUNT + " · " + stageLabel(st);
+    // Count by position in the active stage flow (branched skips stage 2).
+    const _dflow = stageFlow();
+    const _dpos = _dflow.indexOf(st);
+    stg.textContent = "Stage " + ((_dpos === -1 ? st : _dpos) + 1) + "/" + _dflow.length +
+      " · " + stageLabel(st);
     // time-in-stage + work-progress, so the lead prof can pace without opening rooms
     const timer = document.createElement("div");
     const mins = minsSince(data.stageAt);
@@ -5621,6 +5625,15 @@ function renderDashboard() {
     info.appendChild(timer); info.appendChild(prog);
     info.appendChild(partic); info.appendChild(quietLine); info.appendChild(ppl);
     info.appendChild(score);
+    // Branched scenarios: this room's path through the decision tree — each
+    // committed choice marked green (correct) / red (incorrect), plus where the
+    // room is deciding now. Built by the lazy branched-render.js (room-only;
+    // null for non-branched sessions or before it loads).
+    const _cbr = window.CanamedBranchedRender;
+    if (_cbr && _cbr.buildRoomChoiceTree) {
+      const tree = _cbr.buildRoomChoiceTree(data, _curLang ? _curLang() : "en");
+      if (tree) info.appendChild(tree);
+    }
 
     const ctrl = document.createElement("div");
     ctrl.className = "dash-ctrl";

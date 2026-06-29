@@ -336,6 +336,93 @@
     host.classList.remove("hidden");
   }
 
+  /* ── Admin choice-tree ─────────────────────────────────────────────────────
+     For the facilitator dashboard: a compact per-room view of the path a room
+     took through the branch tree — each committed choice marked correct (green
+     ✓) or incorrect (red ✗), plus the node the room is deciding on NOW (▶). Pure
+     read of the room's synced votes (rooms/<room>/votes/<id>/committed/choice),
+     resolved through the same branchedPath() the student renderer uses, so the
+     admin sees exactly the path the room walked. Returns a DOM element, or null
+     when this isn't a branched scenario / the tree isn't loaded. */
+  function _shortText(s, n) {
+    s = (s == null) ? "" : String(s);
+    return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, "").trim() + "…" : s;
+  }
+  function buildRoomChoiceTree(roomData, lang) {
+    if ((root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched") return null;
+    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
+    if (!list.length) return null;
+    var rt = root.CanamedBranchedRuntime;
+    if (!rt || !rt.branchedPath) return null;
+    lang = lang || ((typeof _curLang === "function") ? _curLang() : "en");
+
+    var byId = Object.create(null);
+    list.forEach(function (d) { if (d && d.id) byId[d.id] = d; });
+
+    var votes = (roomData && roomData.votes) || {};
+    var committed = {};
+    list.forEach(function (d) {
+      var v = votes[d.id];
+      if (v && v.committed && typeof v.committed.choice === "number") committed[d.id] = v.committed.choice;
+    });
+
+    var res = rt.branchedPath(list, committed);
+    var box = document.createElement("div");
+    box.className = "room-choice-tree";
+    var ol = document.createElement("ol");
+    ol.className = "ct-trail";
+
+    res.trail.forEach(function (step) {
+      var d = byId[step.id];
+      var opt = d && d.options && d.options[step.optionIndex];
+      var correct = !!(opt && opt.correct);
+      var li = document.createElement("li");
+      li.className = "ct-step " + (correct ? "correct" : "wrong");
+      var mark = document.createElement("span");
+      mark.className = "ct-mark";
+      mark.setAttribute("aria-hidden", "true");
+      mark.textContent = correct ? "✓" : "✗";
+      li.appendChild(mark);
+      var choice = document.createElement("span");
+      choice.className = "ct-choice";
+      choice.textContent = _shortText(tc(opt && opt.text, lang), 64);
+      if (d) choice.title = tc(d.prompt, lang);
+      li.appendChild(choice);
+      var sr = document.createElement("span");
+      sr.className = "sr-only";
+      sr.textContent = correct ? " — correct" : " — incorrect";
+      li.appendChild(sr);
+      ol.appendChild(li);
+    });
+
+    if (res.active && res.active.id) {
+      var li2 = document.createElement("li");
+      li2.className = "ct-step ct-active";
+      var m2 = document.createElement("span");
+      m2.className = "ct-mark";
+      m2.setAttribute("aria-hidden", "true");
+      m2.textContent = "▶";
+      li2.appendChild(m2);
+      var now = document.createElement("span");
+      now.className = "ct-choice ct-now";
+      now.textContent = _shortText(tc(res.active.prompt, lang), 64);
+      li2.appendChild(now);
+      var sr2 = document.createElement("span");
+      sr2.className = "sr-only";
+      sr2.textContent = " — deciding now";
+      li2.appendChild(sr2);
+      ol.appendChild(li2);
+    } else if (res.done && res.trail.length) {
+      var li3 = document.createElement("li");
+      li3.className = "ct-step ct-done";
+      li3.textContent = "✓ Reached an ending";
+      ol.appendChild(li3);
+    }
+
+    box.appendChild(ol);
+    return box;
+  }
+
   /* ── Stage flow (lazy: kept out of the eager splash bundle per the perf
      budget). A branched scenario is a pure decision flow with NO Module-B /
      Reflection phase, so it skips stage 2 — Welcome(0) → case(1) → Wrap-up(3);
@@ -376,6 +463,7 @@
     buildDecisionDocs, _safeScenarioImage, buildBranchedFinal,
     refreshBranchedFinal, renderBranchedFinal, branchedTreeDone,
     buildBranchedRationale, renderBranchedRationale,
+    buildRoomChoiceTree,
     stageFlow, snapStageToFlow, adjacentStage
   };
 })(typeof window !== "undefined" ? window : this);

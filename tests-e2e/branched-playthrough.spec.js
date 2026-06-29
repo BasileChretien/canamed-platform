@@ -183,6 +183,16 @@ test.describe("branched scenario — full playthrough", () => {
         { timeout: 10_000 },
       )
       .toBe("b_escalate");
+
+    // ── Admin dashboard: this room's choice tree shows the committed path —
+    //    a green (correct) step for b_assess + the node it is deciding now.
+    await expect(
+      page.locator(".room-choice-tree .ct-step.correct").first(),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.locator(".room-choice-tree .ct-step.ct-active").first(),
+    ).toBeVisible({ timeout: 10_000 });
+
     await expect(stu.locator("#decisions-A .dec-branch")).toBeVisible({
       timeout: 10_000,
     });
