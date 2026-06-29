@@ -177,23 +177,30 @@
     return card;
   }
 
-  /* True when a branched scenario's tree is finished — no decision is both
-   * unlocked (votable now) AND still uncommitted, with ≥1 committed (so it is
-   * not "done" before the first vote). Reads the in-room globals (DECISIONS,
-   * roomVotes, decisionUnlocked) from the shared script scope. */
+  /* True when a branched scenario's tree is FINISHED. We follow the committed
+   * branch PATH (via branchedPath in branched-runtime.js) rather than asking
+   * "is any vote open right now": a node gated behind a future committed choice
+   * is not yet unlocked, so a "no open vote" heuristic would surface the final
+   * card too early and then clear it (losing the team's draft) once that node
+   * unlocked. branchedPath walks from the entry along committed choices and is
+   * "done" only when the path reaches a node with no follow-up — an ending —
+   * which never reverts. Needs ≥1 committed (an empty committed map leaves the
+   * entry node active → not done). Returns false until the runtime has loaded. */
   function branchedTreeDone() {
     if ((root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched") return false;
     var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
     if (!list.length) return false;
-    var anyCommitted = false, anyOpen = false;
+    var rt = root.CanamedBranchedRuntime;
+    if (!rt || !rt.branchedPath) return false;
+    var committed = {};
     list.forEach(function (d) {
       var v = (typeof roomVotes !== "undefined" && roomVotes[d.id]) || {};
-      var committed = v.committed && typeof v.committed.choice === "number";
-      if (committed) anyCommitted = true;
-      var gate = (typeof decisionUnlocked === "function") ? decisionUnlocked(d) : { unlocked: true };
-      if (gate.unlocked && !committed) anyOpen = true;
+      if (v.committed && typeof v.committed.choice === "number") {
+        committed[d.id] = v.committed.choice;
+      }
     });
-    return anyCommitted && !anyOpen;
+    if (!Object.keys(committed).length) return false;
+    return rt.branchedPath(list, committed).done;
   }
 
   /* Populate the STABLE #branched-final-host with the deliverable when the tree

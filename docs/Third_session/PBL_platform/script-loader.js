@@ -118,7 +118,11 @@
       // the room load (case-content is the only critical chunk here).
       return Promise.all([
         loadScript(v("branched-seed.js")).catch(function () {}),
-        loadScript(v("branched-render.js")).catch(function () {})
+        loadScript(v("branched-render.js")).catch(function () {}),
+        // branched-runtime.js — branchedPath(): used in-room to decide when the
+        // branch tree is FINISHED (the committed path reached an ending), so the
+        // final-diagnosis card never appears early. Optional + non-fatal.
+        loadScript(v("branched-runtime.js")).catch(function () {})
       ]);
     });
   }

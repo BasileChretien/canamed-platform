@@ -54,6 +54,7 @@ const SHELL_ASSETS = [
   "/case-content.js",
   "/branched-seed.js",
   "/branched-render.js",
+  "/branched-runtime.js",
   "/modA-question-scoring.js",
   "/modA-llm-prompts.js",
   "/modA-llm-bridge.js",
