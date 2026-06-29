@@ -278,7 +278,21 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     style.css + the scoring-fix lines. Measured 331.1, so the cap comes back
 //     DOWN 333 → 332. branched-render.js is now the home for branched in-room
 //     render code — the final-diagnosis step lands there next, NO eager growth.
-const FIRST_PARTY_BYTES_LIMIT_KB = 332;
+//
+//   2026-06-29: Branched OSCE polish — dark-mode contrast fix for .dec-doc/
+//     .dec-branch (the undefined --surface-2 fell back LIGHT under near-white
+//     ink), a real CC0 chest X-ray + a .dec-doc-credit caption, removal of the
+//     Reflection stage, and a stage-flow skip (branched runs Welcome→case→
+//     Wrap-up, no stage 2). Per the lazy-split gate above, the NEW JS render
+//     logic (stageFlow/snapStageToFlow/adjacentStage) was placed in the LAZY
+//     branched-render.js — eager script.js keeps only thin delegating wrappers.
+//     The residual eager growth is (a) the dark-mode CSS accessibility fix,
+//     which is inherently eager (style.css is not split), and (b) unavoidable
+//     edits to the SHARED stage engine (renderStage stepper, #stage-indicator,
+//     setRoomStage, renderLobbyStructure). Measured ~332.6 → cap 332 → 333.
+//     Reclaim debt persists: the next increment (rationale-before-vote + the
+//     admin choice-tree) must lazy-split more room-only logic, not bump again.
+const FIRST_PARTY_BYTES_LIMIT_KB = 333;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

@@ -330,11 +330,8 @@ main {
    live choice are exactly what remains on screen. Scoped to body[data-format]
    so the standard PBL/roleplay layout is completely untouched. */
 body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host) { display: none !important; }
-/* Stage 2 is the branched Reflection debrief (the whole tree finishes in Stage
-   1), so drop the empty Module-B decision columns + all roleplay chrome and
-   keep only the reflection card. */
-body[data-format="branched"] #stage-2 > *:not(#branched-reflection) { display: none !important; }
-body[data-format="branched"] #branched-reflection { max-width: 760px; margin-inline: auto; }
+/* A branched scenario has NO Module-B / Reflection stage — stageFlow() skips
+   stage 2 entirely (Welcome → the case → Wrap-up), so #stage-2 never shows. */
 body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
 body[data-format="branched"] .stage .columns > .col-left { display: none !important; }
 /* Stage-1's decisions live behind the rcol tab bar + an answers panel — both
@@ -360,12 +357,6 @@ body[data-format="branched"] #stage-1 #rcol-p-decisions { display: block !import
 /* The mobile bottom tab bar mirrors Module A's rcol tabs, which we've hidden —
    suppress it so branched mode reads the same on phones as on desktop. */
 body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
-/* The branched Reflection card is hidden in standard (non-branched) sessions.
-   Scoped to its id, NOT a shared .branched-only class — scenario-author.html
-   also loads style.css and uses .branched-only toggled by the FORM's
-   data-format, so a body-level .branched-only rule would wrongly hide its
-   branch editor. */
-body:not([data-format="branched"]) #branched-reflection { display: none !important; }
 
 /* Branched-format DOCUMENTS — the case material (vitals/labs/ECG/CXR/CT)
    revealed with a decision node, between the prompt and the options. */
@@ -375,10 +366,29 @@ body:not([data-format="branched"]) #branched-reflection { display: none !importa
   border-radius: 8px;
   padding: .65rem .85rem;
   background: var(--surface-2, #f7fafc);
+  color: var(--ink, #102a43); /* theme ink, not page colour (see dark overrides) */
 }
 .dec-doc-title { margin: 0 0 .3rem; font-size: .95rem; font-weight: 700; }
 .dec-doc-img { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: .35rem auto; }
 .dec-doc-text { margin: .2rem 0 0; white-space: pre-line; }
+.dec-doc-credit { margin: .35rem 0 0; font-size: .8em; color: var(--muted, #627d98); font-style: italic; }
+/* Dark mode: --surface-2 is undefined, so .dec-doc / .dec-branch keep a LIGHT
+   fallback bg under near-white ink (unreadable). Give them a dark surface.
+   (Light + high-contrast are fine: light bg + the --ink text above.) */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-doc {
+    background: #1b2733;
+  }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch {
+    background: #15212c;
+  }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch p {
+    color: var(--ink, #f1eee6);
+  }
+}
+html[data-theme="dark"] .dec-doc { background: #1b2733; }
+html[data-theme="dark"] .dec-branch { background: #15212c; }
+html[data-theme="dark"] .dec-branch p { color: var(--ink, #f1eee6); }
 
 /* Branched OSCE final deliverable — the team's diagnosis + management, shown
    when the tree is finished. Lives in #branched-final-host (a stable host).

@@ -141,6 +141,65 @@ test.describe("branched-scenarios format", () => {
     expect(r.imgSrc).toBe("scenario-images/sample-clinical.svg");
   });
 
+  test("branched documents stay readable in dark mode (contrast, per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      // Force the dark theme regardless of the OS preference.
+      document.documentElement.setAttribute("data-theme", "dark");
+      const br = window.CanamedBranchedRender;
+      const block = br.buildDecisionDocs(
+        {
+          documents: [
+            {
+              title: { en: "Chest X-ray (PA)" },
+              text: { en: "The film is essentially clear — no consolidation." },
+              credit: { en: "Image: Mikael Häggström, CC0 1.0, via Wikimedia Commons." },
+            },
+          ],
+        },
+        "en",
+      );
+      document.body.appendChild(block);
+      const doc = block.querySelector(".dec-doc");
+      const txt = block.querySelector(".dec-doc-text");
+      const cr = block.querySelector(".dec-doc-credit");
+      const csd = getComputedStyle(doc);
+      const cst = getComputedStyle(txt);
+      function lum(rgb) {
+        const m = rgb
+          .match(/[\d.]+/g)
+          .map(Number)
+          .slice(0, 3)
+          .map((v) => {
+            v /= 255;
+            return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+          });
+        return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+      }
+      const bgL = lum(csd.backgroundColor);
+      const fgL = lum(cst.color);
+      const contrast =
+        (Math.max(bgL, fgL) + 0.05) / (Math.min(bgL, fgL) + 0.05);
+      return {
+        bgLum: bgL,
+        contrast,
+        hasCredit: !!cr,
+        creditText: cr ? cr.textContent : null,
+      };
+    });
+    // The card background must be a DARK surface (the regression was the
+    // undefined --surface-2 falling back to a LIGHT colour under light text).
+    expect(r.bgLum, "the .dec-doc background must be dark in dark mode").toBeLessThan(0.1);
+    // And the text on it must clear the WCAG AA body-text bar.
+    expect(r.contrast).toBeGreaterThan(4.5);
+    // The optional image credit renders.
+    expect(r.hasCredit).toBe(true);
+    expect(r.creditText).toMatch(/CC0/);
+  });
+
   test("branched final-diagnosis deliverable renders via the lazy module (per-device)", async ({
     page,
   }) => {

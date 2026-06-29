@@ -63,6 +63,15 @@
         p.textContent = text;
         card.appendChild(p);
       }
+      // Optional image/source credit (e.g. a CC0 attribution line). Rendered as
+      // a small, muted caption so licence credits travel with the asset.
+      const credit = tc(doc.credit, lang);
+      if (credit) {
+        const cr = document.createElement("p");
+        cr.className = "dec-doc-credit";
+        cr.textContent = credit;
+        card.appendChild(cr);
+      }
       box.appendChild(card);
     });
     return box;
@@ -226,8 +235,45 @@
     host.classList.remove("hidden");
   }
 
+  /* ── Stage flow (lazy: kept out of the eager splash bundle per the perf
+     budget). A branched scenario is a pure decision flow with NO Module-B /
+     Reflection phase, so it skips stage 2 — Welcome(0) → case(1) → Wrap-up(3);
+     standard PBL/roleplay uses all four. STAGE_COUNT is fixed at 4, so the last
+     stage index is 3. The eager script.js keeps thin wrappers that delegate
+     here once this room module has loaded (and fall back to the standard
+     all-stages flow in the brief pre-load window, before any stage is
+     navigable). The shared endpoints (0, 3) leave the first/last button-disable
+     logic untouched. */
+  var LAST_STAGE = 3;
+  function stageFlow() {
+    return (root.CURRENT_SCENARIO_FORMAT === "branched")
+      ? [0, 1, LAST_STAGE] : [0, 1, 2, LAST_STAGE];
+  }
+  /* Snap a requested stage to the nearest stage IN the flow, in the travel
+     direction — an advance onto a skipped stage (1→2 branched) rolls on to the
+     next real stage (3); a step-back snaps the other way. */
+  function snapStageToFlow(to, from) {
+    var flow = stageFlow();
+    if (flow.indexOf(to) !== -1) return to;
+    if (from != null && to < from) {
+      for (var k = flow.length - 1; k >= 0; k--) if (flow[k] <= to) return flow[k];
+      return flow[0];
+    }
+    for (var j = 0; j < flow.length; j++) if (flow[j] >= to) return flow[j];
+    return flow[flow.length - 1];
+  }
+  /* The stage one step forward (+1) or back (-1) of `cur` within the flow — for
+     the participant's local Back/Next (which moves viewStage, not the room). */
+  function adjacentStage(cur, dir) {
+    var flow = stageFlow();
+    var i = flow.indexOf(cur);
+    if (i === -1) return snapStageToFlow(cur + dir, dir < 0 ? cur + 1 : null);
+    return flow[Math.max(0, Math.min(flow.length - 1, i + dir))];
+  }
+
   root.CanamedBranchedRender = {
     buildDecisionDocs, _safeScenarioImage, buildBranchedFinal,
-    refreshBranchedFinal, renderBranchedFinal, branchedTreeDone
+    refreshBranchedFinal, renderBranchedFinal, branchedTreeDone,
+    stageFlow, snapStageToFlow, adjacentStage
   };
 })(typeof window !== "undefined" ? window : this);

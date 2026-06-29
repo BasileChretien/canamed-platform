@@ -219,6 +219,22 @@ test.describe("branched scenario — full playthrough", () => {
       host.locator('.branched-final-list[data-field="finalDx"]'),
     ).toContainText(/Pulmonary embolism/i, { timeout: 10_000 });
 
+    // ── Stage-2 skip: advancing from the case jumps straight to Wrap-up ──────
+    // A branched session has no Module-B / Reflection stage. Advancing the room
+    // off the case (stage 1) must land on Wrap-up (the 3rd of 3 stages), never
+    // the empty stage 2 — proving stageFlow()'s skip end to end.
+    await page.locator("#advance-all-btn").click();
+    await expect(stu.locator("#stage-indicator")).toContainText("Stage 3 of 3", {
+      timeout: 20_000,
+    });
+    expect(
+      await stu.evaluate(() => {
+        const s2 = document.getElementById("stage-2");
+        return s2 ? getComputedStyle(s2).display : "absent";
+      }),
+    ).toBe("none");
+    await expect(stu.locator("#stage-3")).toBeVisible({ timeout: 10_000 });
+
     await stu.close();
   });
 });

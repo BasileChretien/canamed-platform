@@ -41,7 +41,8 @@
         "daughter at the bedside.",
     },
     moduleAName: { en: "The breathless patient" },
-    moduleBName: { en: "Reflection" },
+    // No Module B: a branched scenario is a single-stage decision flow
+    // (Welcome → the case → Wrap-up). There is no roleplay/reflection phase.
     // No clinical workup, pre/post-test or synthesis: a branched scenario is
     // pure decision flow. Empty stand-ins keep case-derived code from choking.
     case: { history: [], exam: [], labs: [] },
@@ -127,14 +128,22 @@
             text: { en: "pH 7.31 · PaCO₂ 4.0 kPa · PaO₂ 9.8 kPa · lactate 4.2 · HCO₃⁻ 17." },
           },
           {
-            title: { en: "Portable chest X-ray" },
-            image: "scenario-images/sample-clinical.svg",
-            alt: { en: "Portable chest X-ray (placeholder)" },
+            title: { en: "Chest X-ray (PA)" },
+            image: "scenario-images/chest-xray-pa-normal.jpg",
+            alt: {
+              en:
+                "Posteroanterior chest radiograph: clear lung fields, no focal " +
+                "consolidation, effusion or pneumothorax; normal cardiac silhouette.",
+            },
             text: {
               en:
-                "Placeholder — replace with the real film. Author's note: the X-ray " +
-                "appearance is what should steer the team's reasoning at this step.",
+                "The film is essentially clear — no consolidation, effusion or " +
+                "pneumothorax to explain the hypoxia. With a rising lactate two days " +
+                "after bowel surgery, let the X-ray steer you AWAY from anchoring on " +
+                "the lungs: think extrapulmonary sepsis (an intra-abdominal source) " +
+                "or pulmonary embolism. What is your team's reading?",
             },
+            credit: { en: "Image: Mikael Häggström, CC0 1.0, via Wikimedia Commons." },
           },
         ],
         prompt: {

@@ -70,7 +70,8 @@ test("the collapse CSS is scoped to #stage-1 (no global layout change)", () => {
 
 test("the stage header no longer repeats the module name", () => {
   // #stage-indicator is just the position counter; the stepper owns the name.
-  assert.match(SCRIPT, /el\("stage-indicator"\)\.textContent =\s*"Stage " \+ \(viewStage \+ 1\) \+ " of " \+ STAGE_COUNT;/,
+  // Counts by position in the active stageFlow() (branched scenarios skip a stage).
+  assert.match(SCRIPT, /el\("stage-indicator"\)\.textContent =\s*\n?\s*"Stage " \+ \(\(_pos === -1 \? viewStage : _pos\) \+ 1\) \+ " of " \+ _flow\.length;/,
     "#stage-indicator must be 'Stage N of M' only");
   assert.doesNotMatch(SCRIPT, /STAGE_COUNT \+ " · " \+ stageLabel\(viewStage\)/,
     "the duplicated '· <module name>' suffix must be gone");
