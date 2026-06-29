@@ -310,7 +310,20 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     blocks injected <style>). cap 334 → 335. ⚠️ NEXT BRANCHED INCREMENT MUST
 //     do the room-only-stylesheet split (a `<link>`-loaded branched.css pulled
 //     in by ensureCaseContent) BEFORE adding more — the JS lever is spent.
-const FIRST_PARTY_BYTES_LIMIT_KB = 335;
+//
+//   2026-06-29 (c): The room-only-stylesheet split is DONE. All branched-only
+//     CSS (the body[data-format="branched"] épuré layout, the .dec-documents
+//     evidence panel, the .branched-* rationale/final and the admin .ct-* choice
+//     tree) moved OUT of the eager style.css into a new branched.css, injected
+//     by a <link> only when a branched scenario is applied (applyScenario →
+//     CanamedLoader.ensureBranchedStyles) — so it never loads on the splash and
+//     is uncounted here. Only the SHARED .dec-branch dark overrides stayed (used
+//     by standard Module-B chains). Measured ~333.x → cap 335 → 334. The bigger
+//     win is structural: ALL future branched CSS lands in branched.css (lazy),
+//     so branched work no longer threatens this splash budget. (A bare
+//     "/branched.css" precache entry mirrors the existing branched JS chunks;
+//     the cache-on-fetch path handles the ?v= versioned request offline.)
+const FIRST_PARTY_BYTES_LIMIT_KB = 334;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

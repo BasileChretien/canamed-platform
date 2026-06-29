@@ -48,6 +48,9 @@ test.describe("branched-scenarios format", () => {
     await page.evaluate(async () => {
       await window.CanamedLoader.ensureCaseContent();
       window.applyScenario("ward-escalation-branched");
+      // The branched layout/components live in the lazily-injected branched.css
+      // (applyScenario triggers it); await it so computed styles are applied.
+      await window.CanamedLoader.ensureBranchedStyles();
       // Force the room + stage-1 visible so computed styles reflect the live
       // layout (no session needed for a pure CSS assertion).
       const rm = document.getElementById("room-main");
@@ -147,6 +150,7 @@ test.describe("branched-scenarios format", () => {
     await page.goto("/");
     const r = await page.evaluate(async () => {
       await window.CanamedLoader.ensureCaseContent();
+      await window.CanamedLoader.ensureBranchedStyles(); // evidence-panel CSS is lazy
       // Force the dark theme regardless of the OS preference.
       document.documentElement.setAttribute("data-theme", "dark");
       const br = window.CanamedBranchedRender;
@@ -163,10 +167,10 @@ test.describe("branched-scenarios format", () => {
         "en",
       );
       document.body.appendChild(block);
-      const doc = block.querySelector(".dec-doc");
       const txt = block.querySelector(".dec-doc-text");
       const cr = block.querySelector(".dec-doc-credit");
-      const csd = getComputedStyle(doc);
+      // The panel (.dec-documents) carries the dark surface; .dec-doc is transparent.
+      const csd = getComputedStyle(block);
       const cst = getComputedStyle(txt);
       function lum(rgb) {
         const m = rgb
@@ -281,6 +285,7 @@ test.describe("branched-scenarios format", () => {
     await page.goto("/");
     const r = await page.evaluate(async () => {
       await window.CanamedLoader.ensureCaseContent();
+      await window.CanamedLoader.ensureBranchedStyles(); // evidence-panel CSS is lazy
       document.documentElement.setAttribute("data-theme", "light");
       const br = window.CanamedBranchedRender;
       const docs = br.buildDecisionDocs(

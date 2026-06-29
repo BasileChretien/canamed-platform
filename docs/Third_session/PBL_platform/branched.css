@@ -1,0 +1,149 @@
+/* branched.css — room-only stylesheet for the BRANCHED scenarios format.
+ *
+ * Loaded LAZILY: a <link> injected by applyScenario() (via
+ * CanamedLoader.ensureBranchedStyles) the moment a branched scenario is applied
+ * — in a participant room OR the admin dashboard. It is NOT in the eager splash
+ * bundle, so none of this counts against the splash first-party CSS perf budget
+ * (perf.spec.js). Standard PBL/roleplay sessions never request it.
+ *
+ * Contains ONLY branched-only selectors: the body[data-format="branched"] épuré
+ * layout, the .dec-documents evidence panel, the .branched-* rationale + final
+ * deliverable, and the admin .ct-* choice tree. The SHARED decision UI
+ * (.dec-opt / .dec-bar / .dec-result / .dec-branch …) stays in style.css
+ * because standard Module-A/B votes use it too.
+ *
+ * Cache-busted with the same ?v=SHELL_VERSION as the other shell assets and
+ * precached by sw.js (see the PWA shell-version lockstep: index.html ?v=,
+ * script-loader SHELL_VERSION, sw.js SHELL_VERSION + precache).
+ */
+
+/* ── épuré layout ─────────────────────────────────────────────────────────────
+   A branched scenario reuses the existing decision engine but is presented as a
+   pure, sequential decision flow — none of the Module-A clinical workup or
+   Module-B roleplay chrome. Hide everything in each stage EXCEPT the two-column
+   grid, drop the left (case/role) column, and centre the decisions column to one
+   comfortable reading width. Scoped to body[data-format="branched"] so the
+   standard PBL/roleplay layout is completely untouched. */
+body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host) { display: none !important; }
+/* A branched scenario has NO Module-B / Reflection stage — stageFlow() skips
+   stage 2 entirely (Welcome → the case → Wrap-up), so #stage-2 never shows. */
+body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
+body[data-format="branched"] .stage .columns > .col-left { display: none !important; }
+/* Stage-1's decisions live behind the rcol tab bar + an answers panel — both
+   irrelevant when decisions ARE the activity. */
+body[data-format="branched"] #stage-1 .rcol-tabs,
+body[data-format="branched"] #stage-1 #rcol-p-answers { display: none !important; }
+body[data-format="branched"] .stage .columns > .col-right {
+  max-width: 760px;
+  margin-inline: auto;
+}
+/* revealModARightCol()/applyModBPhaseVisibility() add .rcol-collapsed to hide the
+   right column until Module-A/B findings make it "actionable". A branched
+   scenario has no clinical workup to reveal, so that gate would hide the
+   decisions FOREVER — force the right column open regardless of the collapse. */
+body[data-format="branched"] .stage .columns.rcol-collapsed { grid-template-columns: 1fr !important; }
+body[data-format="branched"] .stage .columns.rcol-collapsed > .col-right { display: block !important; }
+/* switchRcolTab()/revealModARightCol() also set the `hidden` attribute on the
+   decisions panel when it isn't the active tab — but in branched mode decisions
+   are the only panel, so force it open (overrides .rcol-panel[hidden]). */
+body[data-format="branched"] #stage-1 #rcol-p-decisions { display: block !important; }
+/* The mobile bottom tab bar mirrors Module A's rcol tabs, which we've hidden —
+   suppress it so branched mode reads the same on phones as on desktop. */
+body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
+
+/* ── DOCUMENTS evidence panel ─────────────────────────────────────────────────
+   The case material (vitals/labs/ECG/CXR) revealed with a decision node, as a
+   distinct READ-ONLY evidence panel (tinted surface + left accent + caption) so
+   it never reads as a clickable choice like the white .dec-opt buttons below. */
+.dec-documents {
+  margin: .55rem 0 .9rem;
+  padding: .5rem .8rem .65rem;
+  display: flex; flex-direction: column; gap: .5rem;
+  background: #eaf0f7;
+  border: 1px solid var(--line, #d9e2ec);
+  border-left: 4px solid #3f6088;
+  border-radius: 0 8px 8px 0;
+  color: var(--ink, #102a43);
+}
+.dec-documents-head {
+  margin: 0; font-size: .72rem; font-weight: 800;
+  letter-spacing: .05em; text-transform: uppercase; color: #3f6088;
+  display: flex; align-items: center; gap: .35rem;
+}
+.dec-doc { background: transparent; border: 0; padding: 0; color: inherit; }
+.dec-doc + .dec-doc { border-top: 1px solid var(--line, #d9e2ec); padding-top: .5rem; }
+.dec-doc-title { margin: 0 0 .3rem; font-size: .95rem; font-weight: 700; }
+.dec-doc-img { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: .35rem auto; }
+.dec-doc-text { margin: .2rem 0 0; white-space: pre-line; }
+.dec-doc-credit { margin: .35rem 0 0; font-size: .8em; color: var(--muted, #627d98); font-style: italic; }
+/* Dark mode: the evidence panel gets a dark surface (the light tint above would
+   be unreadable under near-white ink). Light + high-contrast are fine. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-documents { background: #14222e; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-doc + .dec-doc { border-top-color: #2a3a48; }
+}
+html[data-theme="dark"] .dec-documents { background: #14222e; }
+html[data-theme="dark"] .dec-doc + .dec-doc { border-top-color: #2a3a48; }
+
+/* ── FINAL deliverable ────────────────────────────────────────────────────────
+   The team's diagnosis + management, shown when the tree is finished. Lives in
+   the stable #branched-final-host. Hidden in standard sessions + via .hidden. */
+body:not([data-format="branched"]) #branched-final-host { display: none !important; }
+#branched-final-host.hidden { display: none; }
+body[data-format="branched"] #branched-final-host {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.branched-final-lead { margin: 0 0 .8rem; color: var(--muted, #486581); }
+.branched-final-field { margin: .9rem 0; }
+.branched-final-label { display: block; font-weight: 700; margin-bottom: .15rem; }
+.branched-final-hint { margin: 0 0 .35rem; font-size: .9em; color: var(--muted, #627d98); }
+.branched-final-input { width: 100%; box-sizing: border-box; min-height: 3.2em; }
+.branched-final-add { margin-top: .35rem; }
+.branched-final-list { margin: .5rem 0 0; padding-left: 1.1rem; }
+
+/* ── "before you vote" reasoning ─────────────────────────────────────────────
+   The group-reasoning capture at the BOTTOM of each decision card; a top divider
+   separates it from the options/result above. */
+.branched-rationale {
+  margin-top: .7rem;
+  padding-top: .6rem;
+  border-top: 1px dashed var(--line, #d9e2ec);
+}
+.branched-rationale-lead { margin: 0 0 .45rem; color: var(--muted, #486581); font-size: .9rem; }
+.branched-rationale-label { display: block; font-weight: 700; margin-bottom: .2rem; font-size: .92rem; }
+.branched-rationale-input { width: 100%; box-sizing: border-box; min-height: 3em; }
+.branched-rationale-add { margin-top: .35rem; }
+.branched-rationale-list { margin: .5rem 0 0; padding-left: 1.1rem; }
+
+/* ── admin CHOICE TREE ────────────────────────────────────────────────────────
+   The facilitator dashboard's per-room path: each committed choice green
+   (correct) / red (incorrect), plus ▶ where the room is deciding now. Green uses
+   the theme-aware --ok; red gets a dark override. */
+.room-choice-tree { margin: .45rem 0 0; }
+.ct-trail { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ct-step {
+  display: flex; align-items: baseline; gap: .4rem;
+  padding: .15rem .45rem; border-left: 3px solid transparent;
+  font-size: .86rem; line-height: 1.35;
+}
+.ct-mark { font-weight: 800; flex: none; }
+.ct-choice { min-width: 0; }
+.ct-step.correct { border-left-color: var(--ok, #1e8449); }
+.ct-step.correct .ct-mark, .ct-step.correct .ct-choice { color: var(--ok, #1e8449); }
+.ct-step.wrong { border-left-color: #c0392b; }
+.ct-step.wrong .ct-mark, .ct-step.wrong .ct-choice { color: #c0392b; }
+.ct-step.ct-active { border-left-color: var(--primary); background: var(--nagoya-50, #eaf4fb); border-radius: 0 4px 4px 0; }
+.ct-step.ct-active .ct-mark { color: var(--primary); }
+.ct-step.ct-active .ct-now { color: var(--ink, #102a43); font-weight: 600; }
+.ct-step.ct-done { color: var(--ok, #1e8449); font-weight: 600; padding-left: .45rem; }
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.wrong { border-left-color: #f0857a; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.wrong .ct-mark,
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.wrong .ct-choice { color: #f0857a; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .ct-step.ct-active { background: #14202b; }
+}
+html[data-theme="dark"] .ct-step.wrong { border-left-color: #f0857a; }
+html[data-theme="dark"] .ct-step.wrong .ct-mark,
+html[data-theme="dark"] .ct-step.wrong .ct-choice { color: #f0857a; }
+html[data-theme="dark"] .ct-step.ct-active { background: #14202b; }
