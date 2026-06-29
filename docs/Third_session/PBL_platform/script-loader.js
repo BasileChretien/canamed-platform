@@ -102,14 +102,25 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v69";
+  var SHELL_VERSION = "v70";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
   // merge always runs after the registry exists.
   function ensureCaseContent() {
-    return loadScript(v("case-content.js"))
-      .then(function () { return loadScript(v("branched-seed.js")); });
+    return loadScript(v("case-content.js")).then(function () {
+      // branched-seed.js (registers the built-in branched scenario) and
+      // branched-render.js (the lazy documents/in-room renderer) are OPTIONAL
+      // augmentations that BOTH degrade gracefully when absent — the registry
+      // simply lacks the branched scenario, and buildDecision renders no docs.
+      // So load them in parallel AFTER case-content and SWALLOW their failures:
+      // a hiccup fetching either must never reject ensureCaseContent and break
+      // the room load (case-content is the only critical chunk here).
+      return Promise.all([
+        loadScript(v("branched-seed.js")).catch(function () {}),
+        loadScript(v("branched-render.js")).catch(function () {})
+      ]);
+    });
   }
   function ensureQrcode()      { return loadScript(v("qrcode.js")); }
   function ensureTour()        { return loadScript(v("tour.js")); }
