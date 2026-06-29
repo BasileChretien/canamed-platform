@@ -216,6 +216,14 @@ function applyScenario(id, customContent) {
       document.body.dataset.format = window.CURRENT_SCENARIO_FORMAT;
     }
   } catch (_) { /* no document (Node/tests) — the format flag is a UI-only hook */ }
+  // Branched scenarios pull in their room-only stylesheet (branched.css) HERE —
+  // the earliest point the format is known — so the épuré layout + components
+  // are styled before the room paints. Loaded lazily (kept off the splash CSS
+  // budget); standard sessions never request it.
+  if (window.CURRENT_SCENARIO_FORMAT === "branched" &&
+      window.CanamedLoader && typeof window.CanamedLoader.ensureBranchedStyles === "function") {
+    window.CanamedLoader.ensureBranchedStyles();
+  }
   rebuildCaseDerived();
   return true;
 }

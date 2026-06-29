@@ -131,6 +131,13 @@ test.describe("branched scenario — full playthrough", () => {
     expect(await stu.evaluate(() => document.body.dataset.format)).toBe(
       "branched",
     );
+    // The épuré layout lives in the lazily-injected branched.css — wait for it
+    // to be applied before asserting computed display (it loads during the join
+    // flow, but make the assertion deterministic).
+    await stu.waitForFunction(() => {
+      const l = document.getElementById("branched-css");
+      return !!(l && l.sheet);
+    }, { timeout: 10_000 });
     expect(
       await stu.evaluate(() => {
         const n = document.querySelector("#stage-1 .columns > .col-left");
