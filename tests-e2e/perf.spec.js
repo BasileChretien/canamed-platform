@@ -295,7 +295,22 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     tree styles — plus small edits to the SHARED stage engine. cap 332 → 334.
 //     Reclaim debt for the future: the only lever left is a real CSS split (a
 //     room-only stylesheet loaded with the room), not more JS lazy-splitting.
-const FIRST_PARTY_BYTES_LIMIT_KB = 334;
+//
+//   2026-06-29 (b): Branched OSCE follow-up (one PR) — 4 choices per vote (the
+//     seed grew each node to 4 options via a new ARRAY option gate, all in the
+//     LAZY branched-seed.js), the "before you vote" reasoning moved INSIDE each
+//     decision card (its value/caret preserved across renderDecisions' rebuild
+//     by capture/restore helpers ALSO moved to the lazy branched-render.js), and
+//     a distinct READ-ONLY "evidence panel" so observations no longer look like
+//     the choice buttons. The JS lazy-split lever is now EXHAUSTED: every new
+//     render/preserve path is in the lazy module; eager keeps only thin wrappers
+//     + the in-room array-gate in decisionUnlocked (must be eager). The residual
+//     ~+0.7 KB is the evidence-panel + in-card-reasoning CSS (a user-requested
+//     visual fix; style.css can't lazy-split under `style-src 'self'`, which
+//     blocks injected <style>). cap 334 → 335. ⚠️ NEXT BRANCHED INCREMENT MUST
+//     do the room-only-stylesheet split (a `<link>`-loaded branched.css pulled
+//     in by ensureCaseContent) BEFORE adding more — the JS lever is spent.
+const FIRST_PARTY_BYTES_LIMIT_KB = 335;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

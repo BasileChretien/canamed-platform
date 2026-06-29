@@ -3748,9 +3748,12 @@ function startRoom() {
     answers.moduleA = snap.val() || {};
     renderAnswers("moduleA");
     renderObjectives();
-    // Branched rationale + final-diagnosis entries also live under answers/moduleA
-    // — refresh their lists so teammates' contributions appear live.
-    if (typeof renderBranchedRationale === "function") renderBranchedRationale();
+    // Branched: the "before you vote" reasoning lists live INSIDE the decision
+    // cards, so a teammate's new contribution must re-render the decisions to
+    // show it (renderDecisions preserves the in-progress textarea + focus).
+    // The final-diagnosis entries refresh via renderBranchedFinal.
+    if ((window.CURRENT_SCENARIO_FORMAT || "standard") === "branched" &&
+        typeof renderDecisions === "function") renderDecisions();
     if (typeof renderBranchedFinal === "function") renderBranchedFinal();
   });
   refAnswers.moduleB.on("value", snap => {
@@ -9301,11 +9304,19 @@ function decisionUnlocked(d) {
     if (key === "afterDecision") {
       const spec = w[key];
       const depId = (typeof spec === "string") ? spec : (spec && spec.id);
-      const needOpt = (spec && typeof spec.option === "number") ? spec.option : null;
+      // option may be a number (exact), an array (any listed) or absent (any).
+      let needOpt = null;
+      if (spec && typeof spec === "object") {
+        if (typeof spec.option === "number") needOpt = spec.option;
+        else if (Array.isArray(spec.option)) needOpt = spec.option;
+      }
       const dv = (typeof roomVotes !== "undefined" && depId) ? roomVotes[depId] : null;
       const committedChoice = (dv && dv.committed && typeof dv.committed.choice === "number")
         ? dv.committed.choice : null;
-      const ok = (committedChoice != null) && (needOpt == null || committedChoice === needOpt);
+      const matches = (needOpt == null)
+        ? true
+        : (Array.isArray(needOpt) ? needOpt.indexOf(committedChoice) !== -1 : committedChoice === needOpt);
+      const ok = (committedChoice != null) && matches;
       if (!ok) unmet.push({ key: "afterDecision", depId: depId, needOption: needOpt });
       return;
     }
@@ -9415,6 +9426,16 @@ function _restoreDecisionFocus(key) {
     try { node.focus({ preventScroll: true }); } catch (_) { node.focus(); }
   }
 }
+/* Preserve the in-card reasoning textareas across renderDecisions' rebuild. The
+ * logic is in the LAZY branched-render.js; these wrappers delegate / no-op. */
+function _captureRationaleInputs() {
+  const br = window.CanamedBranchedRender;
+  return (br && br.captureRationaleInputs) ? br.captureRationaleInputs() : null;
+}
+function _restoreRationaleInputs(state) {
+  const br = window.CanamedBranchedRender;
+  if (br && br.restoreRationaleInputs) br.restoreRationaleInputs(state);
+}
 /* Persistent polite live region per module, updated only on CHANGE. The first
    population per region lifetime is SEEDED silently (region left empty) so a
    page load / room entry never announces the initial tally — only subsequent
@@ -9441,8 +9462,10 @@ function _announceDecisions(mod, text) {
 
 function renderDecisions() {
   // Preserve keyboard focus + collect the per-module SR tally across the full
-  // innerHTML rebuild below (see the _decLive* helpers above).
+  // innerHTML rebuild below (see the _decLive* helpers above). Also snapshot the
+  // branched in-card reasoning textareas so a rebuild never wipes typed text.
   const _focusKey = _captureDecisionFocus();
+  const _ratState = _captureRationaleInputs();
   const srLines = { A: [], B: [] };
   // Combined across modules: which decisions are unlocked right now. Chained
   // branches live in Module B (a committed decision unlocks a follow-up), so
@@ -9512,7 +9535,9 @@ function renderDecisions() {
     // Announce the module's running tally / lock-in state to SR users.
     _announceDecisions(mod, srLines[mod].join(" · "));
   });
-  // Put keyboard focus back on the control the user was on before the rebuild.
+  // Put keyboard focus back on the control the user was on before the rebuild,
+  // and restore any in-progress reasoning text (value + caret).
+  _restoreRationaleInputs(_ratState);
   _restoreDecisionFocus(_focusKey);
   // Coach nudge on unlock transitions (locked → unlocked), across both modules.
   // Surfaces a one-liner via toast() so the team sees a new decision opened
@@ -9572,17 +9597,10 @@ function renderDecisions() {
   // Keep the progressive tab reveal in sync with decision-unlock transitions
   // (the Decide-together tab appears when the plan decisions become live).
   if (typeof revealModARightCol === "function") revealModARightCol();
-  // Branched OSCE: the "before you vote" group-reasoning capture for the active
-  // decision, and — once the tree is finished — the final diagnosis deliverable.
-  renderBranchedRationale();
+  // Branched OSCE: once the tree is finished, surface the team's final-diagnosis
+  // deliverable. (The "before you vote" reasoning capture is now built INSIDE
+  // each decision card by buildDecision, so it needs no separate render here.)
   renderBranchedFinal();
-}
-
-/* Branched "before you vote" rationale — render lives in the LAZY
- * branched-render.js; thin delegating wrapper (see renderBranchedFinal). */
-function renderBranchedRationale() {
-  const br = window.CanamedBranchedRender;
-  if (br && br.renderBranchedRationale) br.renderBranchedRationale();
 }
 
 /* Branched OSCE final deliverable — the done-detection + the render live in the
@@ -9808,6 +9826,13 @@ function buildDecision(d, srSink) {
     foot.appendChild(lock);
     wrap.appendChild(foot);
     if (isRoomAdmin) status.textContent += " · you are observing";
+  }
+  // Branched: the "before you vote" reasoning capture at the BOTTOM of the card
+  // (input while open; just the recorded reasoning once committed). Lazy module.
+  if ((window.CURRENT_SCENARIO_FORMAT || "standard") === "branched" &&
+      _br && _br.buildBranchedRationale) {
+    const rat = _br.buildBranchedRationale(d, lang, committed != null);
+    if (rat) wrap.appendChild(rat);
   }
   // Feed the per-module SR live region (reuses the same English tally strings
   // the visible card shows — the vote component is English-only by design).

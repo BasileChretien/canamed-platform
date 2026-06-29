@@ -112,3 +112,52 @@ test("an empty tree resolves to no active node, done", () => {
   assert.strictEqual(r.done, true);
   assert.strictEqual(r.trail.length, 0);
 });
+
+/* Array option gate: a node may unlock after ANY of several options of its
+ * parent (afterDecision: { id, option: [1, 2] }) — so multiple wrong choices of
+ * a 4-option node converge onto one consequence node without duplicating it. */
+function arrayGateTree() {
+  return [
+    {
+      id: "m0",
+      prompt: { en: "first move" },
+      options: [
+        { text: { en: "right" }, branch: { reveal: { en: "good" } } },
+        { text: { en: "wrong a" }, branch: { reveal: { en: "bad a" } } },
+        { text: { en: "wrong b" }, branch: { reveal: { en: "bad b" } } },
+        { text: { en: "wrong c" }, branch: { reveal: { en: "bad c" } } },
+      ],
+    },
+    {
+      id: "m_good",
+      unlockWhen: { afterDecision: { id: "m0", option: 0 } },
+      prompt: { en: "good path" },
+      options: [{ text: { en: "x" }, branch: { reveal: { en: "ok" } } }],
+    },
+    {
+      id: "m_bad",
+      unlockWhen: { afterDecision: { id: "m0", option: [1, 2, 3] } },
+      prompt: { en: "recover" },
+      options: [{ text: { en: "y" }, branch: { reveal: { en: "rescued" } } }],
+    },
+  ];
+}
+
+test("array gate: every listed wrong option converges to the same node", () => {
+  [1, 2, 3].forEach((opt) => {
+    const r = branchedPath(arrayGateTree(), { m0: opt });
+    assert.strictEqual(r.active.id, "m_bad", "m0 option " + opt + " → m_bad");
+    assert.strictEqual(r.trail[0].id, "m0");
+  });
+});
+
+test("array gate: the correct option still diverges to its own node", () => {
+  const r = branchedPath(arrayGateTree(), { m0: 0 });
+  assert.strictEqual(r.active.id, "m_good");
+});
+
+test("array gate: an option NOT in the list unlocks neither branch", () => {
+  // m0 has no option 4; a value outside both gates leaves nothing active.
+  const r = branchedPath(arrayGateTree(), { m0: 9 });
+  assert.strictEqual(r.active, null);
+});

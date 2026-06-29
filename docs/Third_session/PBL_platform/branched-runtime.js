@@ -35,22 +35,35 @@
       if (!w || w.afterDecision == null) return null;
       const a = w.afterDecision;
       if (typeof a === "string") return { id: a, option: null };
-      if (a && typeof a === "object" && a.id)
-        return {
-          id: a.id,
-          option: typeof a.option === "number" ? a.option : null,
-        };
+      if (a && typeof a === "object" && a.id) {
+        let opt = null;
+        if (typeof a.option === "number") opt = a.option;
+        else if (Array.isArray(a.option)) {
+          const nums = a.option.filter((n) => typeof n === "number");
+          opt = nums.length ? nums : null;
+        }
+        return { id: a.id, option: opt };
+      }
       return { id: null, option: null };
+    };
+  // Shared option matcher (null=any, N=exact, [N,…]=any listed). Prefer the
+  // validator's copy so the edge model can't drift; fall back to a local one.
+  const optionMatches =
+    V._optionMatches ||
+    function (specOption, choice) {
+      if (specOption == null) return true;
+      if (Array.isArray(specOption)) return specOption.indexOf(choice) !== -1;
+      return specOption === choice;
     };
 
   /* True when node N's unlock gate is satisfied by the committed choices. An
    * entry node (no gate) is always available; a gated node is available once
-   * its dependency is committed to the required option (or any option). */
+   * its dependency is committed to the required option (or any listed option). */
   function isAvailable(node, committed) {
     const spec = afterSpec(node);
     if (!spec) return true;
     if (!(spec.id in committed)) return false;
-    return spec.option == null || committed[spec.id] === spec.option;
+    return optionMatches(spec.option, committed[spec.id]);
   }
 
   function branchedPath(decisions, committed) {
@@ -82,10 +95,7 @@
       const next = nodes.find((c) => {
         const s = afterSpec(c);
         return (
-          s &&
-          s.id === cur.id &&
-          (s.option == null || s.option === optionIndex) &&
-          c.id in committed
+          s && s.id === cur.id && optionMatches(s.option, optionIndex) && c.id in committed
         );
       });
       cur = next || null;

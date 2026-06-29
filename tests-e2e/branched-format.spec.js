@@ -230,7 +230,7 @@ test.describe("branched-scenarios format", () => {
     expect(r.text).toMatch(/Final diagnosis/);
   });
 
-  test("branched 'before you vote' rationale card builds for a decision (per-device)", async ({
+  test("branched in-card reasoning block builds for an open decision (per-device)", async ({
     page,
   }) => {
     await page.goto("/");
@@ -242,18 +242,24 @@ test.describe("branched-scenarios format", () => {
         id: "b_assess",
         prompt: { en: "Your team's FIRST move is…" },
       };
-      const card = br.buildBranchedRationale(decision, "en");
-      if (!card) return { loaded: true, built: false };
-      document.body.appendChild(card);
+      // OPEN decision (committed=false) → the input block is offered…
+      const open = br.buildBranchedRationale(decision, "en", false);
+      // …and the textarea carries data-dec so renderDecisions can preserve it.
+      const ta = open && open.querySelector("#answer-input-moduleA-rat_b_assess");
+      // A committed decision with no recorded reasoning renders nothing (épuré).
+      const committedEmpty = br.buildBranchedRationale(decision, "en", true);
       return {
         loaded: true,
-        built: true,
-        hasInput: !!card.querySelector("#answer-input-moduleA-rat_b_assess"),
-        hasAddBtn: !!card.querySelector(".branched-rationale-add"),
-        hasList: !!card.querySelector(
-          '.branched-rationale-list[data-field="rat_b_assess"]',
+        built: !!open,
+        hasInput: !!ta,
+        dataDec: ta ? ta.getAttribute("data-dec") : null,
+        hasAddBtn: !!(open && open.querySelector(".branched-rationale-add")),
+        hasList: !!(
+          open &&
+          open.querySelector('.branched-rationale-list[data-field="rat_b_assess"]')
         ),
-        text: card.textContent,
+        text: open ? open.textContent : "",
+        committedEmptyIsNull: committedEmpty === null,
       };
     });
     expect(r.loaded, "branched-render.js must load via ensureCaseContent").toBe(
@@ -261,10 +267,51 @@ test.describe("branched-scenarios format", () => {
     );
     expect(r.built).toBe(true);
     expect(r.hasInput).toBe(true);
+    expect(r.dataDec).toBe("b_assess");
     expect(r.hasAddBtn).toBe(true);
     expect(r.hasList).toBe(true);
-    expect(r.text).toMatch(/before you vote/i);
+    expect(r.text).toMatch(/before you lock in/i);
     expect(r.text).toMatch(/disagreement/i);
+    expect(r.committedEmptyIsNull).toBe(true);
+  });
+
+  test("documents read as a distinct evidence panel, not a choice (per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      document.documentElement.setAttribute("data-theme", "light");
+      const br = window.CanamedBranchedRender;
+      const docs = br.buildDecisionDocs(
+        { documents: [{ title: { en: "Bedside observations" }, text: { en: "RR 28 · SpO₂ 88%" } }] },
+        "en",
+      );
+      // A choice button as buildDecision renders it.
+      const opt = document.createElement("button");
+      opt.className = "dec-opt";
+      const host = document.createElement("div");
+      host.className = "decision";
+      host.appendChild(docs);
+      host.appendChild(opt);
+      document.body.appendChild(host);
+      const docPanel = host.querySelector(".dec-documents");
+      return {
+        hasCaption: !!host.querySelector(".dec-documents-head"),
+        captionText: (host.querySelector(".dec-documents-head") || {}).textContent || "",
+        panelBg: getComputedStyle(docPanel).backgroundColor,
+        panelAccent: getComputedStyle(docPanel).borderLeftColor,
+        optBg: getComputedStyle(opt).backgroundColor,
+      };
+    });
+    // The panel announces itself as read-only case data…
+    expect(r.hasCaption).toBe(true);
+    expect(r.captionText).toMatch(/what the team can see/i);
+    // …carries a coloured left accent…
+    expect(r.panelAccent).not.toBe("rgba(0, 0, 0, 0)");
+    // …and its background is visibly DIFFERENT from a choice button's (the fix:
+    // the two were near-identical light surfaces and read as the same thing).
+    expect(r.panelBg).not.toBe(r.optBg);
   });
 
   test("admin choice-tree shows a room's path: green/red + active (per-device)", async ({

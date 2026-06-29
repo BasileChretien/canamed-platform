@@ -108,6 +108,44 @@
               },
             },
           },
+          {
+            text: {
+              en: "Give a 500 mL fluid bolus and recheck the observations in 30 minutes",
+            },
+            correct: false,
+            why: {
+              en:
+                "A bolus may have a place later, but it is not the first move for a " +
+                "hypoxic patient who needs oxygen and a hands-on assessment NOW — and " +
+                "30 minutes is far too long to look away from someone deteriorating.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "You move on to other jobs. By the time you come back he is mottled and " +
+                  "barely rousable — half an hour lost to a patient who needed minutes.",
+              },
+            },
+          },
+          {
+            text: {
+              en: "Prescribe a salbutamol nebuliser and review him on the next ward round",
+            },
+            correct: false,
+            why: {
+              en:
+                "Reaching for a nebuliser anchors on asthma/COPD without evidence and " +
+                "defers hands-on review. A breathless, clammy post-op patient needs to " +
+                "be seen and resuscitated now, not parked until later.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "The nebuliser hisses away while nobody reassesses him. He quietly tires, " +
+                  "and the next person to lay hands on him finds a peri-arrest patient.",
+              },
+            },
+          },
         ],
       },
       {
@@ -188,6 +226,44 @@
               },
             },
           },
+          {
+            text: {
+              en: "Treat it as a PE: start therapeutic anticoagulation now, before any imaging",
+            },
+            correct: false,
+            why: {
+              en:
+                "PE is on the list, but empirically anticoagulating a hypotensive post-op " +
+                "patient on a hunch — before confirming and before treating the more likely " +
+                "sepsis — risks serious bleeding and misses the real diagnosis.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "Anticoagulant runs in. The lactate keeps climbing — this was sepsis, not " +
+                  "a clot — and now the surgeons are worried about the fresh anastomosis.",
+              },
+            },
+          },
+          {
+            text: {
+              en: "Put it down to post-op pain and atelectasis; prescribe analgesia and physio",
+            },
+            correct: false,
+            why: {
+              en:
+                "Atelectasis does not drop the pressure or push the lactate to 4.2. " +
+                "Anchoring on a benign explanation for a shocked patient is exactly how " +
+                "post-operative sepsis is missed.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "Analgesia is charted and the team relaxes. An hour later he is more " +
+                  "confused and more hypotensive — the sepsis went untreated.",
+              },
+            },
+          },
         ],
       },
       {
@@ -259,6 +335,25 @@
               },
             },
           },
+          {
+            text: {
+              en: "Sit her down and lay out every worst-case scenario in full clinical detail",
+            },
+            correct: false,
+            why: {
+              en:
+                "Honesty does not mean a flood of jargon and worst cases. Information has " +
+                "to be paced to what she can take in and to the patient's own wishes — a " +
+                "wall of grim detail frightens rather than informs.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "Overwhelmed by talk of ICU and mortality, she panics in the corridor — " +
+                  "and you have pre-empted what her father might have wanted told, and how.",
+              },
+            },
+          },
         ],
       },
       {
@@ -266,8 +361,10 @@
         module: "A",
         points: 20,
         penalty: 15,
-        // The BAD path: the team delayed treatment for the film (b_assess option 1).
-        unlockWhen: { afterDecision: { id: "b_assess", option: 1 } },
+        // The BAD path: ANY poor first move (wait for the film / fluid bolus /
+        // nebuliser — b_assess options 1, 2 or 3) lands the team here, peri-arrest.
+        // The array gate lets all three converge without duplicating this node.
+        unlockWhen: { afterDecision: { id: "b_assess", option: [1, 2, 3] } },
         hideWhenLocked: true,
         documents: [
           {
@@ -316,6 +413,44 @@
                 en:
                   "He arrests before the film is taken; the arrest call goes out late and " +
                   "the outcome is poor. The case ends here — debrief what went wrong.",
+              },
+            },
+          },
+          {
+            text: {
+              en: "Give another fluid bolus and reassess again in 15 minutes",
+            },
+            correct: false,
+            why: {
+              en:
+                "More fluid is not the answer to a peri-arrest patient who needs a " +
+                "resuscitation team and ABCDE. Another timed wait simply hands away the " +
+                "minutes he no longer has.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "The second bolus tips him into frank pulmonary oedema. Still no senior " +
+                  "help has been summoned, and he is now far harder to rescue.",
+              },
+            },
+          },
+          {
+            text: {
+              en: "Hand over your concern to the next shift and document it carefully",
+            },
+            correct: false,
+            why: {
+              en:
+                "Documenting a crashing patient instead of calling for help is a deferral, " +
+                "not a plan. A peri-arrest patient needs an emergency call NOW, not a " +
+                "handover note for later.",
+            },
+            branch: {
+              reveal: {
+                en:
+                  "The note is immaculate. He arrests unattended before the next shift even " +
+                  "reads it — the clearest possible lesson in escalating in real time.",
               },
             },
           },
