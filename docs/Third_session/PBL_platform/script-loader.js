@@ -227,9 +227,15 @@
       (document.head || document.documentElement).appendChild(link);
     }
     if (link.sheet) return Promise.resolve(); // already parsed + applied
-    return new Promise(function (resolve) {
+    return new Promise(function (resolve, reject) {
+      // REJECT on error so an awaiting caller (and the e2e) gets a real signal
+      // rather than proceeding with an unstyled branched UI. The production
+      // call site (applyScenario) is fire-and-forget with a .catch(), so a
+      // 404/CSP/offline miss degrades gracefully there instead of throwing.
       link.addEventListener("load", function () { resolve(); }, { once: true });
-      link.addEventListener("error", function () { resolve(); }, { once: true });
+      link.addEventListener("error", function () {
+        reject(new Error("Failed to load stylesheet: " + link.href));
+      }, { once: true });
     });
   }
 

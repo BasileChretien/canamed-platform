@@ -222,7 +222,10 @@ function applyScenario(id, customContent) {
   // budget); standard sessions never request it.
   if (window.CURRENT_SCENARIO_FORMAT === "branched" &&
       window.CanamedLoader && typeof window.CanamedLoader.ensureBranchedStyles === "function") {
-    window.CanamedLoader.ensureBranchedStyles();
+    // Fire-and-forget: the stylesheet load is async (the room paints after the
+    // lobby, so it has time). Swallow a load failure — the branched UI degrades
+    // to the unstyled-but-functional layout rather than throwing here.
+    window.CanamedLoader.ensureBranchedStyles().catch(function () {});
   }
   rebuildCaseDerived();
   return true;
