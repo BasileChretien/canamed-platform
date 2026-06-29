@@ -161,3 +161,28 @@ test("array gate: an option NOT in the list unlocks neither branch", () => {
   const r = branchedPath(arrayGateTree(), { m0: 9 });
   assert.strictEqual(r.active, null);
 });
+
+test("array gate: an EMPTY/invalid option array never widens to 'any option'", () => {
+  // A malformed empty array must NOT behave like null (any option) — otherwise a
+  // typo would silently unlock the branch on every choice. The gated node simply
+  // never unlocks (it is treated as a dangling/malformed reference).
+  const tree = [
+    {
+      id: "p",
+      prompt: { en: "pick" },
+      options: [
+        { text: { en: "a" }, branch: { reveal: { en: "ra" } } },
+        { text: { en: "b" }, branch: { reveal: { en: "rb" } } },
+      ],
+    },
+    {
+      id: "child",
+      unlockWhen: { afterDecision: { id: "p", option: [] } },
+      prompt: { en: "should never open" },
+      options: [{ text: { en: "x" }, branch: { reveal: { en: "rx" } } }],
+    },
+  ];
+  // Committing p to either option must NOT activate the empty-array child.
+  assert.notStrictEqual(branchedPath(tree, { p: 0 }).active && branchedPath(tree, { p: 0 }).active.id, "child");
+  assert.notStrictEqual(branchedPath(tree, { p: 1 }).active && branchedPath(tree, { p: 1 }).active.id, "child");
+});

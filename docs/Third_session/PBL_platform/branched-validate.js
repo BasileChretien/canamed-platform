@@ -45,8 +45,12 @@
       let opt = null;
       if (typeof a.option === "number") opt = a.option;
       else if (Array.isArray(a.option)) {
-        const nums = a.option.filter((n) => typeof n === "number");
-        opt = nums.length ? nums : null;
+        // An array with no valid option index is MALFORMED — do NOT widen it to
+        // null ("any option"), or a typo would silently unlock the branch on
+        // every choice. Return a dangling spec so the validator flags it.
+        const nums = a.option.filter((n) => Number.isInteger(n));
+        if (!nums.length) return { id: null, option: null };
+        opt = nums;
       }
       return { id: a.id, option: opt };
     }
