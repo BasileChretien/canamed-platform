@@ -207,6 +207,10 @@ function applyScenario(id, customContent) {
   // PBL/roleplay layout. Defaults to "standard" so untagged scenarios are
   // unaffected.
   window.CURRENT_SCENARIO_FORMAT = (sc && sc.format) || "standard";
+  // Optional branched FINAL step (the OSCE diagnosis/management deliverable):
+  // { title, prompt, fields:[{key,label,hint}] }. Null falls back to the
+  // default diagnosis + management fields in branched-render.js.
+  window.CURRENT_SCENARIO_FINAL_STEP = (sc && sc.finalStep) || null;
   try {
     if (typeof document !== "undefined" && document.body) {
       document.body.dataset.format = window.CURRENT_SCENARIO_FORMAT;
@@ -3730,6 +3734,9 @@ function startRoom() {
     answers.moduleA = snap.val() || {};
     renderAnswers("moduleA");
     renderObjectives();
+    // Branched final-diagnosis entries also live under answers/moduleA — refresh
+    // the deliverable's lists so teammates' contributions appear live.
+    if (typeof renderBranchedFinal === "function") renderBranchedFinal();
   });
   refAnswers.moduleB.on("value", snap => {
     answers.moduleB = snap.val() || {};
@@ -9528,6 +9535,19 @@ function renderDecisions() {
   // Keep the progressive tab reveal in sync with decision-unlock transitions
   // (the Decide-together tab appears when the plan decisions become live).
   if (typeof revealModARightCol === "function") revealModARightCol();
+  // Branched OSCE: once the tree is finished, surface the team's final
+  // diagnosis / management deliverable below the decisions.
+  renderBranchedFinal();
+}
+
+/* Branched OSCE final deliverable — the done-detection + the render live in the
+ * LAZY branched-render.js (window.CanamedBranchedRender.renderBranchedFinal) to
+ * stay off the eager splash bundle. This thin wrapper, called from
+ * renderDecisions + the answers listener, delegates once the module has loaded
+ * and no-ops before that (the form just appears on the next render). */
+function renderBranchedFinal() {
+  const br = window.CanamedBranchedRender;
+  if (br && br.renderBranchedFinal) br.renderBranchedFinal();
 }
 
 /* Slim locked-state placeholder for a decision that hasn't yet met its

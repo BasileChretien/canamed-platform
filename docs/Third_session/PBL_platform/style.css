@@ -329,7 +329,7 @@ main {
    consequence, the one active node shows the vote — so the trail + the single
    live choice are exactly what remains on screen. Scoped to body[data-format]
    so the standard PBL/roleplay layout is completely untouched. */
-body[data-format="branched"] #stage-1 > *:not(.columns) { display: none !important; }
+body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host) { display: none !important; }
 /* Stage 2 is the branched Reflection debrief (the whole tree finishes in Stage
    1), so drop the empty Module-B decision columns + all roleplay chrome and
    keep only the reflection card. */
@@ -379,6 +379,23 @@ body:not([data-format="branched"]) #branched-reflection { display: none !importa
 .dec-doc-title { margin: 0 0 .3rem; font-size: .95rem; font-weight: 700; }
 .dec-doc-img { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: .35rem auto; }
 .dec-doc-text { margin: .2rem 0 0; white-space: pre-line; }
+
+/* Branched OSCE final deliverable — the team's diagnosis + management, shown
+   when the tree is finished. Lives in #branched-final-host (a stable host).
+   Hidden in standard sessions + via .hidden until the branch is done. */
+body:not([data-format="branched"]) #branched-final-host { display: none !important; }
+#branched-final-host.hidden { display: none; }
+body[data-format="branched"] #branched-final-host {
+  max-width: 760px;
+  margin-inline: auto;
+}
+.branched-final-lead { margin: 0 0 .8rem; color: var(--muted, #486581); }
+.branched-final-field { margin: .9rem 0; }
+.branched-final-label { display: block; font-weight: 700; margin-bottom: .15rem; }
+.branched-final-hint { margin: 0 0 .35rem; font-size: .9em; color: var(--muted, #627d98); }
+.branched-final-input { width: 100%; box-sizing: border-box; min-height: 3.2em; }
+.branched-final-add { margin-top: .35rem; }
+.branched-final-list { margin: .5rem 0 0; padding-left: 1.1rem; }
 
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }

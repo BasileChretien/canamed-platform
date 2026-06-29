@@ -376,6 +376,9 @@ test.describe("Perf budget — splash", () => {
       // helpers (documents → final-diagnosis), chained after branched-seed.js
       // in ensureCaseContent(). Room-only, off the splash critical path.
       "branched-render.js",
+      // branched-runtime.js (2026-06-29): branchedPath() — used in-room to decide
+      // when the branch tree is finished. Chained in ensureCaseContent, room-only.
+      "branched-runtime.js",
       "glossary.js",
       // Reading aid (2026-06-24): idle-prefetched + opt-in via the "Word help"
       // toggle, only actually used in Module A/B — never on the splash critical

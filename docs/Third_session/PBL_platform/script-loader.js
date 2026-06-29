@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v70";
+  var SHELL_VERSION = "v71";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
@@ -118,7 +118,11 @@
       // the room load (case-content is the only critical chunk here).
       return Promise.all([
         loadScript(v("branched-seed.js")).catch(function () {}),
-        loadScript(v("branched-render.js")).catch(function () {})
+        loadScript(v("branched-render.js")).catch(function () {}),
+        // branched-runtime.js — branchedPath(): used in-room to decide when the
+        // branch tree is FINISHED (the committed path reached an ending), so the
+        // final-diagnosis card never appears early. Optional + non-fatal.
+        loadScript(v("branched-runtime.js")).catch(function () {})
       ]);
     });
   }
