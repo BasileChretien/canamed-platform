@@ -3748,8 +3748,9 @@ function startRoom() {
     answers.moduleA = snap.val() || {};
     renderAnswers("moduleA");
     renderObjectives();
-    // Branched final-diagnosis entries also live under answers/moduleA — refresh
-    // the deliverable's lists so teammates' contributions appear live.
+    // Branched rationale + final-diagnosis entries also live under answers/moduleA
+    // — refresh their lists so teammates' contributions appear live.
+    if (typeof renderBranchedRationale === "function") renderBranchedRationale();
     if (typeof renderBranchedFinal === "function") renderBranchedFinal();
   });
   refAnswers.moduleB.on("value", snap => {
@@ -9558,9 +9559,17 @@ function renderDecisions() {
   // Keep the progressive tab reveal in sync with decision-unlock transitions
   // (the Decide-together tab appears when the plan decisions become live).
   if (typeof revealModARightCol === "function") revealModARightCol();
-  // Branched OSCE: once the tree is finished, surface the team's final
-  // diagnosis / management deliverable below the decisions.
+  // Branched OSCE: the "before you vote" group-reasoning capture for the active
+  // decision, and — once the tree is finished — the final diagnosis deliverable.
+  renderBranchedRationale();
   renderBranchedFinal();
+}
+
+/* Branched "before you vote" rationale — render lives in the LAZY
+ * branched-render.js; thin delegating wrapper (see renderBranchedFinal). */
+function renderBranchedRationale() {
+  const br = window.CanamedBranchedRender;
+  if (br && br.renderBranchedRationale) br.renderBranchedRationale();
 }
 
 /* Branched OSCE final deliverable — the done-detection + the render live in the

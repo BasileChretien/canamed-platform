@@ -329,7 +329,7 @@ main {
    consequence, the one active node shows the vote — so the trail + the single
    live choice are exactly what remains on screen. Scoped to body[data-format]
    so the standard PBL/roleplay layout is completely untouched. */
-body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host) { display: none !important; }
+body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host):not(#branched-rationale-host) { display: none !important; }
 /* A branched scenario has NO Module-B / Reflection stage — stageFlow() skips
    stage 2 entirely (Welcome → the case → Wrap-up), so #stage-2 never shows. */
 body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
@@ -406,6 +406,20 @@ body[data-format="branched"] #branched-final-host {
 .branched-final-input { width: 100%; box-sizing: border-box; min-height: 3.2em; }
 .branched-final-add { margin-top: .35rem; }
 .branched-final-list { margin: .5rem 0 0; padding-left: 1.1rem; }
+
+/* Branched "before you vote" group-reasoning capture. The .card class carries
+   the theme-aware surface (readable in dark/high-contrast); a left accent marks
+   it as the discussion step. Hidden in standard sessions + via .hidden. */
+body:not([data-format="branched"]) #branched-rationale-host { display: none !important; }
+#branched-rationale-host.hidden { display: none; }
+body[data-format="branched"] #branched-rationale-host { max-width: 760px; margin-inline: auto; }
+.branched-rationale { border-left: 4px solid var(--primary); }
+.branched-rationale-lead { margin: 0 0 .5rem; color: var(--muted, #486581); }
+.branched-rationale-prompt { margin: 0 0 .6rem; font-weight: 600; }
+.branched-rationale-label { display: block; font-weight: 700; margin-bottom: .2rem; font-size: .95rem; }
+.branched-rationale-input { width: 100%; box-sizing: border-box; min-height: 3.2em; }
+.branched-rationale-add { margin-top: .35rem; }
+.branched-rationale-list { margin: .5rem 0 0; padding-left: 1.1rem; }
 
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }

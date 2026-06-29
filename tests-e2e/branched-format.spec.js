@@ -229,4 +229,41 @@ test.describe("branched-scenarios format", () => {
     expect(r.hasAddBtn).toBe(true);
     expect(r.text).toMatch(/Final diagnosis/);
   });
+
+  test("branched 'before you vote' rationale card builds for a decision (per-device)", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const r = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      const br = window.CanamedBranchedRender;
+      if (!br || !br.buildBranchedRationale) return { loaded: false };
+      const decision = {
+        id: "b_assess",
+        prompt: { en: "Your team's FIRST move is…" },
+      };
+      const card = br.buildBranchedRationale(decision, "en");
+      if (!card) return { loaded: true, built: false };
+      document.body.appendChild(card);
+      return {
+        loaded: true,
+        built: true,
+        hasInput: !!card.querySelector("#answer-input-moduleA-rat_b_assess"),
+        hasAddBtn: !!card.querySelector(".branched-rationale-add"),
+        hasList: !!card.querySelector(
+          '.branched-rationale-list[data-field="rat_b_assess"]',
+        ),
+        text: card.textContent,
+      };
+    });
+    expect(r.loaded, "branched-render.js must load via ensureCaseContent").toBe(
+      true,
+    );
+    expect(r.built).toBe(true);
+    expect(r.hasInput).toBe(true);
+    expect(r.hasAddBtn).toBe(true);
+    expect(r.hasList).toBe(true);
+    expect(r.text).toMatch(/before you vote/i);
+    expect(r.text).toMatch(/disagreement/i);
+  });
 });
