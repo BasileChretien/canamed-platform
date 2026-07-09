@@ -31,9 +31,11 @@ function fnBody(name) {
 test("Item 1 — the room #stage-indicator is sr-only (visually hidden, still announced)", () => {
   assert.match(INDEX, /id="stage-indicator"[^>]*class="stage-indicator sr-only"[^>]*aria-live="polite"/,
     "the participant #stage-indicator must carry sr-only + keep aria-live");
-  // JS still writes the position string (sr announcement) — unchanged.
-  assert.match(JS, /el\("stage-indicator"\)\.textContent =\s*"Stage " \+ \(viewStage \+ 1\) \+ " of " \+ STAGE_COUNT;/,
-    "the position string must still be written for screen readers");
+  // JS still writes a "Stage X of Y" position string (sr announcement). It now
+  // counts by position in the active stageFlow() — branched scenarios skip
+  // stage 2, so the total is the flow length, not the raw STAGE_COUNT.
+  assert.match(JS, /el\("stage-indicator"\)\.textContent =\s*\n?\s*"Stage " \+ \(\(_pos === -1 \? viewStage : _pos\) \+ 1\) \+ " of " \+ _flow\.length;/,
+    "the position string must still be written for screen readers (flow-aware)");
   // controls stay right-aligned now the indicator no longer holds the left.
   assert.match(CSS, /\.stage-controls--participant\s*\{\s*margin-left:\s*auto/,
     "participant controls must keep an auto left margin");

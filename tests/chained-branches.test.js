@@ -67,7 +67,7 @@ test("decisionUnlocked() evaluates the afterDecision gate off synced committed v
 test("renderDecisions() gates ALL modules and hides hideWhenLocked follow-ups", () => {
   const i = SCRIPT.indexOf("function renderDecisions");
   assert.ok(i > -1, "renderDecisions must exist");
-  const blk = SCRIPT.slice(i, i + 2600);
+  const blk = SCRIPT.slice(i, i + 2900);
   // The old code only gated Module A: `(mod === "A") ? decisionUnlocked(d) : ...`.
   // Gating must now apply to every module so Module B chains can lock.
   assert.doesNotMatch(blk, /mod === "A"\s*\)\s*\?\s*decisionUnlocked/,

@@ -278,7 +278,52 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     style.css + the scoring-fix lines. Measured 331.1, so the cap comes back
 //     DOWN 333 → 332. branched-render.js is now the home for branched in-room
 //     render code — the final-diagnosis step lands there next, NO eager growth.
-const FIRST_PARTY_BYTES_LIMIT_KB = 332;
+//
+//   2026-06-29: Branched OSCE polish (one PR) — dark-mode contrast fix for
+//     .dec-doc/.dec-branch (the undefined --surface-2 fell back LIGHT under
+//     near-white ink), a real CC0 chest X-ray + a .dec-doc-credit caption,
+//     removal of the Reflection stage + a stage-flow skip (branched runs
+//     Welcome→case→Wrap-up, no stage 2), a "before you vote" group-reasoning
+//     capture, and the admin per-room CHOICE TREE (green=correct/red=wrong +
+//     where the room is now). Per the lazy-split gate, ALL the new JS render
+//     logic — buildBranchedRationale/renderBranchedRationale, buildRoomChoiceTree,
+//     stageFlow/snapStageToFlow/adjacentStage — lives in the LAZY
+//     branched-render.js; eager keeps only thin delegating wrappers + a couple
+//     of guards. So the residual eager growth (~+3.0 KB gz → ~333.5) is now
+//     almost entirely CSS that style.css CANNOT lazy-split: the dark-mode
+//     accessibility fix, the .branched-rationale-* styles and the .ct-* choice-
+//     tree styles — plus small edits to the SHARED stage engine. cap 332 → 334.
+//     Reclaim debt for the future: the only lever left is a real CSS split (a
+//     room-only stylesheet loaded with the room), not more JS lazy-splitting.
+//
+//   2026-06-29 (b): Branched OSCE follow-up (one PR) — 4 choices per vote (the
+//     seed grew each node to 4 options via a new ARRAY option gate, all in the
+//     LAZY branched-seed.js), the "before you vote" reasoning moved INSIDE each
+//     decision card (its value/caret preserved across renderDecisions' rebuild
+//     by capture/restore helpers ALSO moved to the lazy branched-render.js), and
+//     a distinct READ-ONLY "evidence panel" so observations no longer look like
+//     the choice buttons. The JS lazy-split lever is now EXHAUSTED: every new
+//     render/preserve path is in the lazy module; eager keeps only thin wrappers
+//     + the in-room array-gate in decisionUnlocked (must be eager). The residual
+//     ~+0.7 KB is the evidence-panel + in-card-reasoning CSS (a user-requested
+//     visual fix; style.css can't lazy-split under `style-src 'self'`, which
+//     blocks injected <style>). cap 334 → 335. ⚠️ NEXT BRANCHED INCREMENT MUST
+//     do the room-only-stylesheet split (a `<link>`-loaded branched.css pulled
+//     in by ensureCaseContent) BEFORE adding more — the JS lever is spent.
+//
+//   2026-06-29 (c): The room-only-stylesheet split is DONE. All branched-only
+//     CSS (the body[data-format="branched"] épuré layout, the .dec-documents
+//     evidence panel, the .branched-* rationale/final and the admin .ct-* choice
+//     tree) moved OUT of the eager style.css into a new branched.css, injected
+//     by a <link> only when a branched scenario is applied (applyScenario →
+//     CanamedLoader.ensureBranchedStyles) — so it never loads on the splash and
+//     is uncounted here. Only the SHARED .dec-branch dark overrides stayed (used
+//     by standard Module-B chains). Measured ~333.x → cap 335 → 334. The bigger
+//     win is structural: ALL future branched CSS lands in branched.css (lazy),
+//     so branched work no longer threatens this splash budget. (A bare
+//     "/branched.css" precache entry mirrors the existing branched JS chunks;
+//     the cache-on-fetch path handles the ?v= versioned request offline.)
+const FIRST_PARTY_BYTES_LIMIT_KB = 334;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -376,6 +421,9 @@ test.describe("Perf budget — splash", () => {
       // helpers (documents → final-diagnosis), chained after branched-seed.js
       // in ensureCaseContent(). Room-only, off the splash critical path.
       "branched-render.js",
+      // branched-runtime.js (2026-06-29): branchedPath() — used in-room to decide
+      // when the branch tree is finished. Chained in ensureCaseContent, room-only.
+      "branched-runtime.js",
       "glossary.js",
       // Reading aid (2026-06-24): idle-prefetched + opt-in via the "Word help"
       // toggle, only actually used in Module A/B — never on the splash critical
