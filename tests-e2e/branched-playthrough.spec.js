@@ -131,6 +131,13 @@ test.describe("branched scenario — full playthrough", () => {
     expect(await stu.evaluate(() => document.body.dataset.format)).toBe(
       "branched",
     );
+    // The épuré layout lives in the lazily-injected branched.css — wait for it
+    // to be applied before asserting computed display (it loads during the join
+    // flow, but make the assertion deterministic).
+    await stu.waitForFunction(() => {
+      const l = document.getElementById("branched-css");
+      return !!(l && l.sheet);
+    }, { timeout: 10_000 });
     expect(
       await stu.evaluate(() => {
         const n = document.querySelector("#stage-1 .columns > .col-left");
@@ -161,8 +168,41 @@ test.describe("branched scenario — full playthrough", () => {
       )
       .toBe(0);
 
+    // ── "Before you vote": the reasoning capture sits at the BOTTOM of the
+    //    active decision card, and a contribution persists for the team to see.
+    const ratInput = stu.locator(
+      "#decisions-A .branched-rationale-input[data-dec='b_assess']",
+    );
+    await expect(ratInput).toBeVisible({ timeout: 10_000 });
+    await expect(stu.locator("#decisions-A")).toContainText(/before you lock in/i);
+    await ratInput.fill(
+      "We treat first — oxygen before imaging; one of us wanted the film.",
+    );
+    await stu
+      .locator(
+        "#decisions-A .branched-rationale:has(.branched-rationale-input[data-dec='b_assess']) .branched-rationale-add",
+      )
+      .click();
+    await expect(
+      stu.locator('#decisions-A .branched-rationale-list[data-field="rat_b_assess"]'),
+    ).toContainText(/oxygen before imaging/i, { timeout: 10_000 });
+
     // ── Act I: commit b_assess → consequence + b_escalate unlocks ───────────
     await voteAndLock(stu, "#decisions-A", "b_assess", 0);
+    // The reasoning capture now appears at the bottom of the NEW active card.
+    await expect(
+      stu.locator("#decisions-A .branched-rationale-input[data-dec='b_escalate']"),
+    ).toBeVisible({ timeout: 10_000 });
+
+    // ── Admin dashboard: this room's choice tree shows the committed path —
+    //    a green (correct) step for b_assess + the node it is deciding now.
+    await expect(
+      page.locator(".room-choice-tree .ct-step.correct").first(),
+    ).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.locator(".room-choice-tree .ct-step.ct-active").first(),
+    ).toBeVisible({ timeout: 10_000 });
+
     await expect(stu.locator("#decisions-A .dec-branch")).toBeVisible({
       timeout: 10_000,
     });
@@ -201,6 +241,44 @@ test.describe("branched scenario — full playthrough", () => {
       /straight with me/i,
       { timeout: 10_000 },
     );
+
+    // ── OSCE final deliverable: the tree is done → the final-diagnosis form
+    //    appears, and a committed diagnosis persists in the team's answer list.
+    const host = stu.locator("#branched-final-host");
+    await expect(host).toBeVisible({ timeout: 10_000 });
+    await expect(host).toContainText(/Final diagnosis/i);
+    // …and no reasoning INPUT remains (every decision is committed — the cards
+    // show only the reasoning the team recorded, with no open textarea).
+    await expect(
+      stu.locator("#decisions-A .branched-rationale-input"),
+    ).toHaveCount(0, { timeout: 10_000 });
+    await host
+      .locator("#answer-input-moduleA-finalDx")
+      .fill("Pulmonary embolism");
+    await host
+      .locator(
+        ".branched-final-field:has(#answer-input-moduleA-finalDx) .branched-final-add",
+      )
+      .click();
+    await expect(
+      host.locator('.branched-final-list[data-field="finalDx"]'),
+    ).toContainText(/Pulmonary embolism/i, { timeout: 10_000 });
+
+    // ── Stage-2 skip: advancing from the case jumps straight to Wrap-up ──────
+    // A branched session has no Module-B / Reflection stage. Advancing the room
+    // off the case (stage 1) must land on Wrap-up (the 3rd of 3 stages), never
+    // the empty stage 2 — proving stageFlow()'s skip end to end.
+    await page.locator("#advance-all-btn").click();
+    await expect(stu.locator("#stage-indicator")).toContainText("Stage 3 of 3", {
+      timeout: 20_000,
+    });
+    expect(
+      await stu.evaluate(() => {
+        const s2 = document.getElementById("stage-2");
+        return s2 ? getComputedStyle(s2).display : "absent";
+      }),
+    ).toBe("none");
+    await expect(stu.locator("#stage-3")).toBeVisible({ timeout: 10_000 });
 
     await stu.close();
   });

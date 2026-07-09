@@ -318,67 +318,21 @@ main {
 #stage-2 .columns.rcol-collapsed { grid-template-columns: 1fr; }
 #stage-2 .columns.rcol-collapsed > .col-right { display: none; }
 
-/* ── Branched-scenario format (épuré, one decision at a time) ───────────────
-   A branched scenario reuses the existing decision engine but is presented as
-   a pure, sequential decision flow — none of the Module-A clinical workup or
-   Module-B roleplay chrome. applyScenario() sets body[data-format="branched"];
-   here we hide everything in each stage EXCEPT the two-column grid, drop the
-   left (case/role) column, and centre the decisions column to one comfortable
-   reading width. The decisions cards (#decisions-A / #decisions-B) already
-   render each unlocked node in document order — committed nodes show their
-   consequence, the one active node shows the vote — so the trail + the single
-   live choice are exactly what remains on screen. Scoped to body[data-format]
-   so the standard PBL/roleplay layout is completely untouched. */
-body[data-format="branched"] #stage-1 > *:not(.columns) { display: none !important; }
-/* Stage 2 is the branched Reflection debrief (the whole tree finishes in Stage
-   1), so drop the empty Module-B decision columns + all roleplay chrome and
-   keep only the reflection card. */
-body[data-format="branched"] #stage-2 > *:not(#branched-reflection) { display: none !important; }
-body[data-format="branched"] #branched-reflection { max-width: 760px; margin-inline: auto; }
-body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
-body[data-format="branched"] .stage .columns > .col-left { display: none !important; }
-/* Stage-1's decisions live behind the rcol tab bar + an answers panel — both
-   irrelevant when decisions ARE the activity. */
-body[data-format="branched"] #stage-1 .rcol-tabs,
-body[data-format="branched"] #stage-1 #rcol-p-answers { display: none !important; }
-body[data-format="branched"] .stage .columns > .col-right {
-  max-width: 760px;
-  margin-inline: auto;
+/* ── Branched-scenario format ──────────────────────────────────────────────
+   The branched-format layout + components — the épuré body[data-format] rules,
+   the .dec-documents evidence panel, the .branched-* rationale/final deliverable
+   and the admin .ct-* choice tree — live in the LAZILY-loaded branched.css
+   (injected in-room by applyScenario → CanamedLoader.ensureBranchedStyles), so
+   they stay out of the eager splash CSS budget. Standard PBL/roleplay sessions
+   never request it. Only the SHARED .dec-branch dark overrides remain here,
+   because standard Module-B chained branches show .dec-branch too (its base
+   style lives further down in this file). */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch { background: #15212c; }
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch p { color: var(--ink, #f1eee6); }
 }
-/* revealModARightCol()/applyModBPhaseVisibility() add .rcol-collapsed to hide
-   the right column until Module-A/B findings make it "actionable" (rules ~308
-   / ~318 above). A branched scenario has no clinical workup to reveal, so that
-   gate would hide the decisions FOREVER — the decisions ARE the activity here,
-   so force the right column open in branched mode regardless of the collapse. */
-body[data-format="branched"] .stage .columns.rcol-collapsed { grid-template-columns: 1fr !important; }
-body[data-format="branched"] .stage .columns.rcol-collapsed > .col-right { display: block !important; }
-/* switchRcolTab()/revealModARightCol() also set the `hidden` attribute on the
-   decisions panel whenever it isn't the active/revealed tab — but in branched
-   mode the tab bar is hidden and decisions are the only panel, so force it open
-   regardless of that attribute (overrides .rcol-panel[hidden]{display:none}). */
-body[data-format="branched"] #stage-1 #rcol-p-decisions { display: block !important; }
-/* The mobile bottom tab bar mirrors Module A's rcol tabs, which we've hidden —
-   suppress it so branched mode reads the same on phones as on desktop. */
-body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
-/* The branched Reflection card is hidden in standard (non-branched) sessions.
-   Scoped to its id, NOT a shared .branched-only class — scenario-author.html
-   also loads style.css and uses .branched-only toggled by the FORM's
-   data-format, so a body-level .branched-only rule would wrongly hide its
-   branch editor. */
-body:not([data-format="branched"]) #branched-reflection { display: none !important; }
-
-/* Branched-format DOCUMENTS — the case material (vitals/labs/ECG/CXR/CT)
-   revealed with a decision node, between the prompt and the options. */
-.dec-documents { margin: .55rem 0 .2rem; display: flex; flex-direction: column; gap: .55rem; }
-.dec-doc {
-  border: 1px solid var(--line, #d9e2ec);
-  border-radius: 8px;
-  padding: .65rem .85rem;
-  background: var(--surface-2, #f7fafc);
-}
-.dec-doc-title { margin: 0 0 .3rem; font-size: .95rem; font-weight: 700; }
-.dec-doc-img { display: block; max-width: 100%; height: auto; border-radius: 6px; margin: .35rem auto; }
-.dec-doc-text { margin: .2rem 0 0; white-space: pre-line; }
+html[data-theme="dark"] .dec-branch { background: #15212c; }
+html[data-theme="dark"] .dec-branch p { color: var(--ink, #f1eee6); }
 
 /* Student wrap-up export button. */
 .wrapup-download-btn { margin-top: var(--s-2); }

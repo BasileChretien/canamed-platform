@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v70";
+  var SHELL_VERSION = "v74";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
@@ -118,7 +118,11 @@
       // the room load (case-content is the only critical chunk here).
       return Promise.all([
         loadScript(v("branched-seed.js")).catch(function () {}),
-        loadScript(v("branched-render.js")).catch(function () {})
+        loadScript(v("branched-render.js")).catch(function () {}),
+        // branched-runtime.js — branchedPath(): used in-room to decide when the
+        // branch tree is FINISHED (the committed path reached an ending), so the
+        // final-diagnosis card never appears early. Optional + non-fatal.
+        loadScript(v("branched-runtime.js")).catch(function () {})
       ]);
     });
   }
@@ -202,12 +206,46 @@
       .then(function () { return loadScript(v("modA-llm-init.js")); });
   }
 
+  // Branched-format stylesheet. The room-only branched CSS (the épuré layout,
+  // the .dec-documents evidence panel, .branched-* rationale/final and the
+  // admin .ct-* choice tree) lives in branched.css and is injected ONLY when a
+  // branched scenario is applied (see applyScenario) — so it never loads on the
+  // splash and stays out of the eager first-party CSS budget. Same ?v= cache-
+  // bust as the other shell assets; precached by sw.js. Idempotent.
+  // Returns a Promise that resolves once the stylesheet is applied (or
+  // immediately if already loaded). Production calls it fire-and-forget from
+  // applyScenario (the room paints later, after the lobby), so the async load
+  // has time; tests can `await` it before asserting computed branched styles.
+  function ensureBranchedStyles() {
+    if (typeof document === "undefined") return Promise.resolve();
+    var link = document.getElementById("branched-css");
+    if (!link) {
+      link = document.createElement("link");
+      link.id = "branched-css";
+      link.rel = "stylesheet";
+      link.href = v("branched.css");
+      (document.head || document.documentElement).appendChild(link);
+    }
+    if (link.sheet) return Promise.resolve(); // already parsed + applied
+    return new Promise(function (resolve, reject) {
+      // REJECT on error so an awaiting caller (and the e2e) gets a real signal
+      // rather than proceeding with an unstyled branched UI. The production
+      // call site (applyScenario) is fire-and-forget with a .catch(), so a
+      // 404/CSP/offline miss degrades gracefully there instead of throwing.
+      link.addEventListener("load", function () { resolve(); }, { once: true });
+      link.addEventListener("error", function () {
+        reject(new Error("Failed to load stylesheet: " + link.href));
+      }, { once: true });
+    });
+  }
+
   // Public namespace. Single object so the rest of script.js can do
   // `window.CanamedLoader.ensureX()` without polluting the global namespace
   // with several free functions.
   window.CanamedLoader = {
     SHELL_VERSION: SHELL_VERSION,
     loadScript,
+    ensureBranchedStyles,
     ensureCaseContent,
     ensureQrcode,
     ensureTour,
