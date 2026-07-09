@@ -57,7 +57,7 @@ jobs:
 
       - name: Cache Playwright browsers
         id: pw-cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: pw-${{ runner.os }}-chromium-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -72,7 +72,7 @@ jobs:
 
       # Cache the emulator jar so it isn't re-downloaded every run.
       - name: Cache Firebase emulators
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ runner.os }}
