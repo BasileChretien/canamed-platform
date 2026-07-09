@@ -60,16 +60,32 @@ function wordCenter(page) {
   }, { sentence: SENTENCE, word: WORD });
 }
 
+// Resolve the gloss text under a viewport point via the reader's own pipeline.
+// Returns the localized gloss string, or null when nothing resolves there yet.
+// Used with expect.poll so a lookup auto-retries while the reader's locale +
+// bundled dictionary finish settling (they load async) instead of flaking on a
+// single cold probe.
+function lookupTextAt(page, x, y) {
+  return page.evaluate(({ x, y }) => {
+    const res = window.CanamedReader.lookupAt(x, y);
+    return res && res.hit ? res.hit.text : null;
+  }, { x, y });
+}
+
 test.describe("Word help — in-page reading aid", () => {
   test("resolves the word under the cursor to its French gloss (full pipeline)", async ({ page }) => {
     await setup(page, "fr");
     await enable(page, true);
     const { x, y } = await wordCenter(page);
+    // The reader's locale + bundled dictionary settle asynchronously, so a
+    // one-shot lookup can fire before French is applied and read the English
+    // fallback. Auto-retry the lookup (like the popover assertions below) so it
+    // waits for the gloss to resolve instead of flaking on a cold/slow run.
+    await expect.poll(() => lookupTextAt(page, x, y), { timeout: 15_000 }).toContain(FR_NEEDLE);
     const hit = await page.evaluate(({ x, y }) => {
       const res = window.CanamedReader.lookupAt(x, y);
       return res ? { term: res.hit.term, text: res.hit.text, en: res.hit.en } : null;
     }, { x, y });
-    expect(hit, "a gloss was found under the cursor").not.toBeNull();
     expect(hit.term).toBe(WORD);
     expect(hit.text).toContain(FR_NEEDLE);
     expect(hit.text).not.toBe(hit.en); // really the French, not the English fallback
@@ -115,12 +131,10 @@ test.describe("Word help — in-page reading aid", () => {
       const b = r.getBoundingClientRect();
       return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
     }, { sentence: SENTENCE, word: WORD });
-    const hit = await page.evaluate(({ x, y }) => {
-      const res = window.CanamedReader.lookupAt(x, y);
-      return res ? res.hit.text : null;
-    }, { x, y });
-    expect(hit, "gloss found over admin-view text").not.toBeNull();
-    expect(hit).toContain(FR_NEEDLE);
+    // Auto-retry: the reader may still be applying French when we first probe.
+    await expect
+      .poll(() => lookupTextAt(page, x, y), { timeout: 15_000 })
+      .toContain(FR_NEEDLE);
   });
 
   test("hover (desktop) / tap (touch) opens the popover with the gloss", async ({ page }, testInfo) => {
@@ -139,11 +153,9 @@ test.describe("Word help — in-page reading aid", () => {
     await setup(page, "ja");
     await enable(page, true);
     const { x, y } = await wordCenter(page);
-    const text = await page.evaluate(({ x, y }) => {
-      const res = window.CanamedReader.lookupAt(x, y);
-      return res ? res.hit.text : null;
-    }, { x, y });
-    expect(text).toContain(JA_NEEDLE);
+    await expect
+      .poll(() => lookupTextAt(page, x, y), { timeout: 15_000 })
+      .toContain(JA_NEEDLE);
   });
 
   test("no popover when Word help is OFF", async ({ page }, testInfo) => {
