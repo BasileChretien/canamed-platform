@@ -16,7 +16,7 @@ patient, a relative, a nurse) that students interview separately.
 |---|---|---|
 | 1 | **Switchboard** topology: one chat thread per character | One persona per LLM call. The 8B models on the HF free tier hold a single character reliably and several unreliably. Keeps the 12,000-char payload budget comfortable. |
 | 2 | **English-only** authored content | The platform is already English-canonical (`t()` returns English unconditionally); the offline Word-help reader supplies FR/JA glosses. Removes two thirds of the authoring burden and the FR/JA keyword-stem burden. |
-| 3 | Characters **reply in English** | Same reason. The `_hfModel('ja')` → Qwen routing stays for the three legacy built-ins, whose personas keep their `{en,fr,ja}` trios. |
+| 3 | Characters **reply in English** | Same reason. `_patientLang()` already pins replies to English; a cohort can override with `window.CANAMED_MODA_LLM_LANG`, and only Mr Lefebvre's persona carries an `{en,fr,ja}` trio for that case. |
 | 4 | **Keyword-stem** scoring (`moduleA_questions`), plus `askOf` | Deterministic, offline-testable, zero extra LLM cost. `askOf` is what makes collateral history worth points. |
 | 5 | Sharing tiers: **private / unlisted / public** | See "Sharing tree". |
 | 6 | Anyone authors; **`facilitator` custom claim** to publish publicly | Keeps the tool open to a curious student; keeps the public list from becoming a spam surface. |
@@ -116,10 +116,11 @@ coach line name him too.
 - Reply language is already pinned to English by `_patientLang()` in
   [modA-llm-init.js](../modA-llm-init.js), overridable per cohort with
   `window.CANAMED_MODA_LLM_LANG`. The `_hfModel('ja')` → Qwen route therefore
-  only fires under that override, where the three built-ins' `{en,fr,ja}`
-  persona trios still apply. Authored personas are English-only, so an override
-  would give them an English persona answering in Japanese — acceptable, but
-  slice 4 should refuse the pairing at save time.
+  only fires under that override. Only Mr Lefebvre's persona carries an
+  `{en,fr,ja}` trio; Mrs Tanaka, Mme Moreau and every authored persona are
+  English-only, so under the override they would answer in the chosen language
+  from an English persona — acceptable, but slice 4 should warn on the pairing
+  at save time.
 - Slice 0 sends `characterName` to `hfPatient` so the server can strip a
   `"<Name>:"` prefix it cannot otherwise know. A client cached by `sw.js` from
   before the shell bump sends none; the generic role words ("Patient:") still

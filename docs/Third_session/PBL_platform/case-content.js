@@ -3796,9 +3796,14 @@ var POSTTEST_RESPIRATORY_STEWARDSHIP = [
  * modA-llm-prompts.js _collectFacts), so editing the case automatically
  * updates what a character knows.
  *
- * `persona` and `example` accept a plain English string (authored scenarios,
- * which are English-canonical) or an { en, fr, ja } trio. The three built-ins
- * below keep their trios because their sessions may still run in FR/JA.
+ * `persona` and `example` accept a plain English string or an { en, fr, ja }
+ * trio; _tc() falls back to `en`. English is the default and the only form
+ * authored scenarios use: the UI is English-canonical and _patientLang()
+ * (modA-llm-init.js) pins every character's replies to English. Mr Lefebvre
+ * keeps a trio only because a cohort may set window.CANAMED_MODA_LLM_LANG to
+ * run his consultation in FR or JA. Mrs Tanaka and Mme Moreau are English-only,
+ * so under that override they would answer in the chosen language from an
+ * English persona. Translate a persona only when a cohort needs the override.
  *
  * Exactly one character per scenario carries role:"patient" — the phase gate,
  * the synthesis and the take-home PDF all assume a single index patient.
