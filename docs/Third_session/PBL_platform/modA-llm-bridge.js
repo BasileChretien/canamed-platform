@@ -64,16 +64,44 @@ if (typeof window === "undefined") { var window = globalThis; }
    * review.) */
   // Role-prefix matcher. Tolerates markdown wrappers (**Patient**:) by allowing
   // up to ~40 chars of stuff between the role keyword and the colon — covers
-  // ", age 45**" and similar emit patterns.
-  var _ROLE_PREFIX_RE = /^\s*[*_"'`>「『]*\s*(\[[^\]]+\]\s*)?(patient|mr\.?\s*lefebvre|le\s+patient|réponse|response|回答|患者(?:さん)?|彼)[^:：\-—\n]{0,40}\s*[:：\-—]\s*/i;
-  function _sanitiseReply(raw, maxLen) {
+  // ", age 45**" and similar emit patterns. The character's own name is added
+  // per-scenario; it is validated and escaped before reaching the RegExp, the
+  // same way functions/lib/hf-helpers.js does it.
+  var _GENERIC_ROLES = "patient|le\\s+patient|réponse|response|回答|患者(?:さん)?|彼";
+
+  function _characterName(lang) {
+    try {
+      if (W.modALLMPrompts && typeof W.modALLMPrompts.characterName === "function") {
+        return W.modALLMPrompts.characterName(lang || "en");
+      }
+    } catch (_) { /* prompts module absent — generic roles only */ }
+    return "";
+  }
+
+  function _rolePrefixRe(name) {
+    // Every metacharacter is escaped, so an authored name cannot alter the
+    // pattern. Each token also gets an optional trailing dot, so a scenario's
+    // "Mr Lefebvre" still matches the model's "Mr. Lefebvre:".
+    var n = String(name == null ? "" : name).trim().slice(0, 40);
+    var alts = _GENERIC_ROLES;
+    var pat = n.split(/\s+/).map(function (tok) {
+      return tok.replace(/\.+$/, "").replace(/[.*+?^${}()|[\]\\\-]/g, "\\$&");
+    }).filter(Boolean).join("\\.?\\s*");
+    if (pat) alts += "|" + pat;
+    return new RegExp(
+      "^\\s*[*_\"'`>「『]*\\s*(\\[[^\\]]+\\]\\s*)?(" + alts + ")[^:：\\-—\\n]{0,40}\\s*[:：\\-—]\\s*",
+      "i");
+  }
+
+  function _sanitiseReply(raw, maxLen, characterName) {
     if (raw == null) return "";
     var s = String(raw).trim();
     // Strip wrapper-style leading brackets first ("[Patient response]" /
     // "[Mr. Lefebvre says]") — these are NOT JSON arrays, they're model
     // formatting. The JSON-rejection check below must come AFTER this.
     s = s.replace(/^\s*\[[A-Za-z0-9 .,'!_'-]{1,60}\]\s*/, "");
-    s = s.replace(_ROLE_PREFIX_RE, "").replace(_ROLE_PREFIX_RE, "");
+    var re = _rolePrefixRe(characterName == null ? _characterName() : characterName);
+    s = s.replace(re, "").replace(re, "");
     s = s.replace(/^\s*[-•*]\s+/, "");
     s = s.replace(/^["'「『]+/, "").replace(/["'」』]+$/, "");
     if (/^\s*[{[]/.test(s)) return "";
@@ -243,13 +271,15 @@ if (typeof window === "undefined") { var window = globalThis; }
       var msgs = (W.modALLMPrompts && W.modALLMPrompts.buildChatMessages)
         ? W.modALLMPrompts.buildChatMessages(cfg.lang, transcript, userText)
         : [{ role: "user", content: userText }];
+      // Sent so the server strips "<Name>:" prefixes it cannot otherwise know.
+      var charName = _characterName(cfg.lang);
 
       if (callable) {
         // Firebase HTTPS callable path. The SDK injects the App Check token,
         // and the Function enforces it server-side. Replies arrive as
         // { data: { reply, state, error? } }; we accept both that shape and
         // a bare { reply } for portability.
-        return Promise.resolve(callable({ messages: msgs, lang: cfg.lang }))
+        return Promise.resolve(callable({ messages: msgs, lang: cfg.lang, characterName: charName }))
           .then(function (result) {
             var payload = (result && result.data) ? result.data : result;
             if (!payload || typeof payload.reply !== "string") {
@@ -262,7 +292,7 @@ if (typeof window === "undefined") { var window = globalThis; }
             }
             return payload.reply;
           })
-          .then(function (raw) { return _sanitiseReply(raw, cfg.maxReplyLen); })
+          .then(function (raw) { return _sanitiseReply(raw, cfg.maxReplyLen, charName); })
           .then(function (clean) {
             if (!clean) {
               if (typeof hooks.logError === "function") hooks.logError(new Error("empty reply"));
@@ -276,9 +306,9 @@ if (typeof window === "undefined") { var window = globalThis; }
         return Promise.resolve(_stubReply(userText, W.CASE, cfg.lang));
       }
       return _callEndpoint(cfg.endpointUrl, cfg.endpointHeaders,
-                           { messages: msgs, lang: cfg.lang },
+                           { messages: msgs, lang: cfg.lang, characterName: charName },
                            cfg.timeoutMs)
-        .then(function (raw) { return _sanitiseReply(raw, cfg.maxReplyLen); })
+        .then(function (raw) { return _sanitiseReply(raw, cfg.maxReplyLen, charName); })
         .then(function (clean) {
           // Empty/JSON-shaped reply → fall back to stub so the lesson can
           // continue. Host logs the error.

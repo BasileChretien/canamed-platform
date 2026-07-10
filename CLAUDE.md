@@ -160,8 +160,8 @@ DB). Until that Console toggle is flipped, clients still hit "Checking…" →
      the live splash and confirm no `auth/operation-not-allowed` error.
 
 4. **Module A LLM-patient pilot (2026-05-28) — ✅ ACTIVATED 2026-05-30.**
-   The free-text chat with Mr Lefebvre (via HF Inference Providers, proxied
-   by the `hfPatient` Firebase Cloud Function) is live. All activation steps
+   The free-text chat with the scenario's patient (via HF Inference Providers,
+   proxied by the `hfPatient` Firebase Cloud Function) is live. All activation steps
    are complete: **(a)** privacy notice updated (HF disclosed as sub-processor;
    in-product `modA.chat.disclosure` banner shown); **(b)** Blaze enabled with
    a $1 budget alert (volumes stay inside the Cloud Functions free tier);
@@ -226,6 +226,29 @@ DB). Until that Console toggle is flipped, clients still hit "Checking…" →
      (handler reached → App Check NOT enforcing). If instead it were rejected by
      the App-Check layer, Enforce would still be on. `.env` is git-ignored, so
      this label cannot be auto-checked from the repo alone.
+
+## Scenario characters (facilitator-authored scenarios)
+
+Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/PBL_platform/ARCHITECTURE/scenario-characters-design.md).
+
+- **Personas live in the scenario, not in code.** Each scenario declares
+  `characters: [{ id, role, name, persona, … }]` (case-content.js `CHARACTERS*`).
+  `applyScenario()` publishes them at `window.CURRENT_SCENARIO_CHARACTERS`;
+  `modA-llm-prompts.js` builds the system prompt from whichever character is
+  being interviewed. Exactly one character per scenario carries `role:"patient"`.
+  A scenario declaring none falls back to a generic patient — it must never
+  inherit the previous scenario's cast.
+- **⚠ `hfPatient` needs `firebase deploy --only functions` to pick this up.**
+  `SERVER_GUARD` was generalised from "simulated patient" to "simulated
+  character", and the reply-prefix stripper is now driven by the character's
+  name. `PROMPT_VERSION` is `modA-llm@2.4`.
+  `Verify:` `grep PROMPT_VERSION docs/.../functions/index.js` and compare with
+  the `promptVersion` field on recent `metrics/hfPatient/events` entries.
+- Six i18n strings interpolate `{patientName}` (`modA.chart.title`,
+  `modA.chart.team-click-warning`, `modA.chat.disclosure`,
+  `modA.chat.placeholder`, `modA.chat.thinking`, `modA.coach.read-case`).
+  `modA.chat.disclosure` reaches an `innerHTML` sink, so it is DOMPurify-
+  sanitised in `modA-llm-init.js` — the name is scenario-authored, i.e. untrusted.
 
 ## Known security follow-ups (code, tracked)
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping

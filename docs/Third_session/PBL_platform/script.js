@@ -177,6 +177,10 @@ function applyScenario(id, customContent) {
   }
   if (!sc) return false;
   if (sc.case) window.CASE = sc.case;
+  // Unconditional: a scenario declaring no characters must NOT inherit the
+  // previous scenario's cast. null → modA-llm-prompts falls back to a generic
+  // patient built from this scenario's own facts.
+  window.CURRENT_SCENARIO_CHARACTERS = Array.isArray(sc.characters) ? sc.characters : null;
   if (sc.scoring) window.SCORING = sc.scoring;
   if (sc.penalties) window.PENALTIES = sc.penalties;
   if (sc.decisions) window.DECISIONS = sc.decisions;
@@ -10089,7 +10093,7 @@ function updateModANextStep() {
   // State machine (highest-priority match wins).
   if (revealedCount === 0) {
     textEl.textContent = _coachT("modA.coach.read-case",
-      "Read the case, then ask Mr Lefebvre, examine and investigate to work it up.");
+      "Read the case, then ask the patient, examine and investigate to work it up.");
     _coachSetAction(actionsEl, null);
     setPhaseStepperState("stage-1", "setup", []);
   } else if (!gateOpen) {

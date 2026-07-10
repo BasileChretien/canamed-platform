@@ -664,11 +664,11 @@
       "backToTop.label": "Back to top",
 
       // Chart-metaphor framing (2026-05-18 pedagogist's strongest claim)
-      "modA.chart.title": "Your consultation note — <em>M. Lefebvre</em>, today",
+      "modA.chart.title": "Your consultation note — <em>{patientName}</em>, today",
       // Merged 2026-06-01: now carries both the "shared chart" framing (was
       // modA.chart.subtitle, retired) and the "every click is a team decision"
       // rule — they repeated the same verb-list and idea.
-      "modA.chart.team-click-warning": "👥 <strong>Your shared chart for M. Lefebvre.</strong> Everything the team asks, examines, investigates or decides is recorded for <em>everyone</em> in the room and counts as the team's choice. <strong>Discuss first, then click together.</strong>",
+      "modA.chart.team-click-warning": "👥 <strong>Your shared chart for {patientName}.</strong> Everything the team asks, examines, investigates or decides is recorded for <em>everyone</em> in the room and counts as the team's choice. <strong>Discuss first, then click together.</strong>",
       // Locked-decision UI (per 2026-05-18 PBL specialist panel)
       "modA.decision.ready-when": "Ready when:",
       "modA.decision.unlocked": "A new team decision just opened",
@@ -691,12 +691,12 @@
       "modA.chart.history.title": "History — ask the patient",
       "modA.history.sub.primary": "First questions to ask",
       "modA.history.sub.more": "More questions to ask",
-      "modA.chat.disclosure": "Beta. A language model voices Mr. Lefebvre. Your typed questions are sent to our server and to Hugging Face (US/EU) as a third-party sub-processor. <strong>Do not type names, contact details, or anything personal.</strong> Type only what you would ask in a real consultation. See the <a href=\"privacy.html\" data-i18n-href=\"privacy\" target=\"_blank\" rel=\"noopener\">privacy policy</a>.",
+      "modA.chat.disclosure": "Beta. A language model voices {patientName}. Your typed questions are sent to our server and to Hugging Face (US/EU) as a third-party sub-processor. <strong>Do not type names, contact details, or anything personal.</strong> Type only what you would ask in a real consultation. See the <a href=\"privacy.html\" data-i18n-href=\"privacy\" target=\"_blank\" rel=\"noopener\">privacy policy</a>.",
       "modA.chat.consentCta": "I understand — start the consultation",
       "modA.chat.consentRequired": "Please confirm the notice above before sending your first question.",
-      "modA.chat.placeholder": "Ask Mr. Lefebvre a question…",
+      "modA.chat.placeholder": "Ask {patientName} a question…",
       "modA.chat.send": "Send",
-      "modA.chat.thinking": "Mr. Lefebvre is thinking…",
+      "modA.chat.thinking": "{patientName} is thinking…",
       "modA.chat.fallbackNotice": "Patient endpoint unavailable — using a stub reply so the team can keep going.",
       "modA.chat.error": "Something went wrong — try a different question.",
       // Points-scored feedback shown when a typed question earns (or costs) points.
@@ -712,7 +712,7 @@
       "modA.chart.tabs.dialogue.unread": "New reply",
       "modA.chart.investigations.hint": "Order any investigation you think is indicated — these are yours to choose, like the examination. Ordering one that isn't indicated still costs points.",
       "modA.coach.add-hypothesis": "You've gathered some info — now agree on at least one working hypothesis above (what do you suspect?) before you commit to investigations and a plan.",
-      "modA.coach.read-case": "Read the case, then ask Mr Lefebvre, examine and investigate to work it up.",
+      "modA.coach.read-case": "Read the case, then ask {patientName}, examine and investigate to work it up.",
       "modA.coach.gather": "Work the case up — ask, examine, investigate. When you're ready, write a working hypothesis to unlock the discussion.",
       "modA.coach.open-discussion": "✓ Hypotheses in — open Debate & answers and tackle the two questions together: your diagnosis & plan, and pain across cultures.",
       "modA.coach.in-discussion": "In Debate & answers — debate the two questions with your group and capture your answers.",
@@ -1086,7 +1086,32 @@
         return tplFn(raw, { cohortPair: pairFn(cohorts, useLang) });
       }
     }
+    // {patientName} names the index patient of the scenario in play, so a
+    // facilitator-authored case does not address the student's patient as
+    // "Mr Lefebvre". Same opt-in shape as {cohortPair}: the raw template is
+    // what tests/i18n.test.js pins.
+    if (typeof raw === "string" && raw.indexOf("{patientName}") >= 0) {
+      return raw.split("{patientName}").join(_patientName(useLang));
+    }
     return raw;
+  }
+
+  /* Resolved without depending on modA-llm-prompts.js, which is lazy-loaded:
+     read the live cast directly. Falls back to a neutral noun so a scenario
+     with no characters never renders a raw "{patientName}". */
+  function _patientName(lang) {
+    const list = (typeof window !== "undefined" && window.CURRENT_SCENARIO_CHARACTERS) ||
+      (typeof global !== "undefined" && global.CURRENT_SCENARIO_CHARACTERS) || null;
+    if (Array.isArray(list)) {
+      for (let i = 0; i < list.length; i++) {
+        const c = list[i];
+        if (!c || c.role !== "patient") continue;
+        const n = c.name;
+        if (typeof n === "string" && n) return n;
+        if (n && typeof n === "object" && (n[lang] || n.en)) return n[lang] || n.en;
+      }
+    }
+    return "the patient";
   }
 
   function getLang() {

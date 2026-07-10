@@ -113,12 +113,20 @@
 
     var panel  = _ce("div", { id: "modA-chat-panel", "class": "moda-chat-panel" });
     var notice = _ce("div", { "class": "moda-chat-disclosure", role: "note" });
-    // i18n string is operator-controlled and contains <strong> / <a>. Setting
-    // innerHTML here is acceptable because the source is a static translation
-    // file, NOT a runtime-modifiable input. If translations ever become
-    // user-editable, replace with explicit createElement nodes.
-    notice.innerHTML = _t("modA.chat.disclosure",
+    // The string carries <strong> / <a> from the translation table, but now also
+    // interpolates {patientName} from the scenario — which a facilitator authors.
+    // Sanitise before innerHTML, mirroring i18n.js _setHTML; without DOMPurify,
+    // degrade to textContent rather than trust the name.
+    var disclosure = _t("modA.chat.disclosure",
       "Beta: a language model voices the patient. Your typed questions are sent to our server and to Hugging Face as a third-party sub-processor. Do not type names, contact details, or anything personal.");
+    if (window.DOMPurify && typeof window.DOMPurify.sanitize === "function") {
+      notice.innerHTML = window.DOMPurify.sanitize(disclosure, {
+        ALLOWED_TAGS: ["strong", "em", "b", "i", "a", "br", "span"],
+        ALLOWED_ATTR: ["href", "target", "rel", "data-i18n-href"]
+      });
+    } else {
+      notice.textContent = disclosure.replace(/<[^>]*>/g, "");
+    }
 
     var consentRow = _ce("div", { "class": "moda-chat-consent", id: "modA-chat-consent" });
     var consentBtn = _ce("button", { type: "button", "class": "moda-chat-consent-btn", id: "modA-chat-consent-btn" },
@@ -132,7 +140,7 @@
     var form  = _ce("form", { "class": "moda-chat-form", id: "modA-chat-form", autocomplete: "off" });
     var input = _ce("textarea", {
       id: "modA-chat-input", rows: "2", maxlength: "500",
-      placeholder: _t("modA.chat.placeholder", "Ask Mr. Lefebvre a question…")
+      placeholder: _t("modA.chat.placeholder", "Ask the patient a question…")
     });
     var send  = _ce("button", { type: "submit", id: "modA-chat-send" },
                     _t("modA.chat.send", "Send"));
@@ -171,7 +179,7 @@
     consentBtn.addEventListener("click", function () {
       _setConsent();
       _applyConsentState();
-      input.setAttribute("placeholder", _t("modA.chat.placeholder", "Ask Mr. Lefebvre a question…"));
+      input.setAttribute("placeholder", _t("modA.chat.placeholder", "Ask the patient a question…"));
       input.focus();
     });
     _applyConsentState();
@@ -499,7 +507,7 @@
       inputEl.value = "";
       inputEl.disabled = true;
       sendEl.disabled = true;
-      _setStatus(statusEl, _t("modA.chat.thinking", "Mr. Lefebvre is thinking…"), "pending");
+      _setStatus(statusEl, _t("modA.chat.thinking", "The patient is thinking…"), "pending");
       transcriptEl.setAttribute("aria-busy", "true");
 
       bridge.submit(text).then(function (res) {
