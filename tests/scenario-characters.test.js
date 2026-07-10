@@ -256,16 +256,18 @@ test("the chat chrome names the scenario's patient, not Mr Lefebvre", () => {
   }
 });
 
-test("no i18n string hardcodes a built-in patient's name", () => {
+test("no i18n string in ANY locale hardcodes a built-in patient's name", () => {
   /* modA.answers.bullet.diagnosis.hint escaped the first sweep because a
-     truncated grep hid its tail ("…propose for Mr Lefebvre."). Scan the whole
-     table so the next one cannot. */
+     truncated grep hid its tail ("…propose for Mr Lefebvre."), and the FR/JA
+     tables carried all seven strings unnoticed. t() only ever reads T.en, so
+     those were inert — but "inert today" is how the English one shipped. Scan
+     every table, in every name form. */
   const ALLOWED = {
     // The Module B roleplay vignette invents its OWN composite patient; it is
     // not the Module A index patient and is not driven by {patientName}.
     "stage.modB.vignette.body": /Tanaka-Martin/g
   };
-  const NAMES = /\b(Lefebvre|Tanaka|Moreau)\b/;
+  const NAMES = /Lefebvre|ルフェーブル|Tanaka|田中|Moreau|モロー/;
 
   const saved = { window: global.window, self: global.self };
   global.window = undefined;
@@ -274,12 +276,18 @@ test("no i18n string hardcodes a built-in patient's name", () => {
   const i18n = require("../docs/Third_session/PBL_platform/i18n.js");
 
   try {
+    const tables = Object.keys(i18n._T);
+    assert.ok(tables.includes("en") && tables.includes("fr") && tables.includes("ja"),
+      "the sweep must see the locale tables, not just English");
+
     const offenders = [];
-    for (const [key, value] of Object.entries(i18n._T.en)) {
-      if (typeof value !== "string") continue;
-      const allow = ALLOWED[key];
-      const scanned = allow ? value.replace(allow, "") : value;
-      if (NAMES.test(scanned)) offenders.push(key);
+    for (const lang of tables) {
+      for (const [key, value] of Object.entries(i18n._T[lang])) {
+        if (typeof value !== "string") continue;
+        const allow = ALLOWED[key];
+        const scanned = allow ? value.replace(allow, "") : value;
+        if (NAMES.test(scanned)) offenders.push(lang + "/" + key);
+      }
     }
     assert.deepEqual(offenders, [],
       "these strings name a patient directly; use {patientName}: " + offenders.join(", "));

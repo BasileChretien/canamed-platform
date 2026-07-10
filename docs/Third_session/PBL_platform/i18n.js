@@ -980,10 +980,10 @@
   // script-src 'self' CSP), and under Node via require() (see the eager block
   // near the bottom) so the unit tests still see a complete _T table.
   //
-  // LOCALE_VERSION must track the ?v= cache-buster used by the eager scripts
-  // in index.html / script-loader.js (SHELL_VERSION) and sw.js so a deploy
-  // that bumps the shell version also re-fetches the locale chunks.
-  const LOCALE_VERSION = "v5";
+  // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
+  // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
+  // returning browser keeps serving the cached chunk.
+  const LOCALE_VERSION = "v6";
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
