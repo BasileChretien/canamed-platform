@@ -58,7 +58,8 @@ test.describe("Module A persona follows the scenario", () => {
         placeholder: window.t("modA.chat.placeholder"),
         thinking: window.t("modA.chat.thinking"),
         chartTitle: window.t("modA.chart.title"),
-        coach: window.t("modA.coach.read-case")
+        coach: window.t("modA.coach.read-case"),
+        diagnosisHint: window.t("modA.answers.bullet.diagnosis.hint")
       }));
 
       expect(out.name).toBe(sc.patient);

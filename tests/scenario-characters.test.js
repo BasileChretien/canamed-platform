@@ -226,7 +226,8 @@ test("an unsafe name degrades to the generic stripper, it does not throw", () =>
 test("the chat chrome names the scenario's patient, not Mr Lefebvre", () => {
   const KEYS = ["modA.chart.title", "modA.chart.team-click-warning",
                 "modA.chat.disclosure", "modA.chat.placeholder",
-                "modA.chat.thinking", "modA.coach.read-case"];
+                "modA.chat.thinking", "modA.coach.read-case",
+                "modA.answers.bullet.diagnosis.hint"];
 
   const saved = { window: global.window, self: global.self };
   global.window = undefined;
@@ -250,6 +251,39 @@ test("the chat chrome names the scenario's patient, not Mr Lefebvre", () => {
       "no cast → a neutral noun, never a raw {patientName}");
   } finally {
     delete global.CURRENT_SCENARIO_CHARACTERS;
+    global.window = saved.window;
+    global.self = saved.self;
+  }
+});
+
+test("no i18n string hardcodes a built-in patient's name", () => {
+  /* modA.answers.bullet.diagnosis.hint escaped the first sweep because a
+     truncated grep hid its tail ("…propose for Mr Lefebvre."). Scan the whole
+     table so the next one cannot. */
+  const ALLOWED = {
+    // The Module B roleplay vignette invents its OWN composite patient; it is
+    // not the Module A index patient and is not driven by {patientName}.
+    "stage.modB.vignette.body": /Tanaka-Martin/g
+  };
+  const NAMES = /\b(Lefebvre|Tanaka|Moreau)\b/;
+
+  const saved = { window: global.window, self: global.self };
+  global.window = undefined;
+  global.self = undefined;
+  delete require.cache[require.resolve("../docs/Third_session/PBL_platform/i18n.js")];
+  const i18n = require("../docs/Third_session/PBL_platform/i18n.js");
+
+  try {
+    const offenders = [];
+    for (const [key, value] of Object.entries(i18n._T.en)) {
+      if (typeof value !== "string") continue;
+      const allow = ALLOWED[key];
+      const scanned = allow ? value.replace(allow, "") : value;
+      if (NAMES.test(scanned)) offenders.push(key);
+    }
+    assert.deepEqual(offenders, [],
+      "these strings name a patient directly; use {patientName}: " + offenders.join(", "));
+  } finally {
     global.window = saved.window;
     global.self = saved.self;
   }
