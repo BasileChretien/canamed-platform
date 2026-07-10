@@ -165,12 +165,13 @@ const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 // the server guard (FINDING-01), HF_URL allowlist (FINDING-02), message
 // validation + collapse, and lang normalisation (FINDING-06). The 12000-char
 // body cap lives there (system prompt ~3800 chars + ~6 transcript turns).
-const { SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang } = require("./lib/hf-helpers");
+const { SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang,
+        safeCharacterName, buildRolePrefixRe } = require("./lib/hf-helpers");
 const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
-const PROMPT_VERSION = "modA-llm@2.3";   // bumped to force redeploy: chattier patient (2–4 sentences, max_tokens 320, temp 0.55, natural elaboration without volunteering clinical facts) — prev 2.2: server-authoritative system guard (FINDING-01), HF_URL allowlist, lang allowlist
+const PROMPT_VERSION = "modA-llm@2.4";   // bumped to force redeploy: per-scenario personas — guard generalised from "patient" to "character", reply prefix stripped by the scenario's character name — prev 2.3: chattier patient (2–4 sentences, max_tokens 320, temp 0.55)
 
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
@@ -188,12 +189,15 @@ function _hfModel(lang) {
   return lang === "ja" ? HF_MODEL_JA.value() : HF_MODEL.value();
 }
 
-function _sanitiseReply(s) {
+function _sanitiseReply(s, characterName) {
   if (s == null) return "";
   let t = String(s).trim();
   // Strip wrapper brackets BEFORE the JSON-shape check.
   t = t.replace(/^\s*\[[A-Za-z0-9 .,'!_'-]{1,60}\]\s*/, "");
-  const ROLE_PREFIX = /^\s*[*_"'`>「『]*\s*(\[[^\]]+\]\s*)?(patient|mr\.?\s*lefebvre|le\s+patient|réponse|response|回答|患者(?:さん)?|彼)[^:：\-—\n]{0,40}\s*[:：\-—]\s*/i;
+  // The name is scenario-authored, so hf-helpers validates and escapes it before
+  // it reaches a RegExp. An old cached client sends none; the generic role words
+  // ("Patient:", "患者さん:") still apply.
+  const ROLE_PREFIX = buildRolePrefixRe(characterName);
   t = t.replace(ROLE_PREFIX, "");
   t = t.replace(ROLE_PREFIX, "");
   t = t.replace(/^\s*[-•*]\s+/, "");
@@ -448,7 +452,7 @@ exports.hfPatient = onCall({
       "internal", "hf error: " + String((e && e.message) || e).slice(0, 200));
   }
 
-  const reply = _sanitiseReply(raw);
+  const reply = _sanitiseReply(raw, safeCharacterName(body.characterName));
   // 8) Counters only — never user text, never patient reply.
   try {
     await admin.database().ref("metrics/hfPatient/events").push({
