@@ -573,7 +573,7 @@
       "modA.answers.bullet.takehome.label": "4. One thing you each take home",
       "modA.answers.bullet.takehome.placeholder": "one sentence per person",
       "modA.answers.bullet.diagnosis.label": "1. Your diagnosis and plan",
-      "modA.answers.bullet.diagnosis.hint": "How did your team reach its working diagnosis — what in the history, examination and tests pointed you there, and what did you rule out? Then give the first-line treatment plan you'd propose for Mr Lefebvre.",
+      "modA.answers.bullet.diagnosis.hint": "How did your team reach its working diagnosis — what in the history, examination and tests pointed you there, and what did you rule out? Then give the first-line treatment plan you'd propose for {patientName}.",
       "modA.answers.bullet.diagnosis.placeholder": "e.g. mechanical low-back pain; first-line = stay active + NSAID + reassurance, no opioids",
       "modA.answers.bullet.culture.label": "2. Pain across cultures",
       "modA.answers.bullet.culture.hint": "Compare how different countries (e.g. France and Japan) approach pain — cultural attitudes to pain, how freely opioids are prescribed and by whom, and the usual drugs and doses at each step of the WHO analgesic ladder (<em>Palier 1 → 3</em>). Where do they genuinely differ?",
@@ -980,10 +980,10 @@
   // script-src 'self' CSP), and under Node via require() (see the eager block
   // near the bottom) so the unit tests still see a complete _T table.
   //
-  // LOCALE_VERSION must track the ?v= cache-buster used by the eager scripts
-  // in index.html / script-loader.js (SHELL_VERSION) and sw.js so a deploy
-  // that bumps the shell version also re-fetches the locale chunks.
-  const LOCALE_VERSION = "v5";
+  // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
+  // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
+  // returning browser keeps serving the cached chunk.
+  const LOCALE_VERSION = "v6";
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
