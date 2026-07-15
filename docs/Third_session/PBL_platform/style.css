@@ -3133,13 +3133,13 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 .stage-details[hidden] { display: none; }
 .stage-details { margin-top: var(--s-3); }
 
-/* The inline Live-leaderboard disclosure owns the right edge of the header row. */
+/* Closed: the Live-leaderboard disclosure is a compact chip on the right edge of
+   the header row. */
 .stage-row > .leaderboard-inline { margin-left: auto; }
 
-/* Compact, card-less disclosure: override the standalone-card look
+/* Card-less disclosure: override the standalone-card look
    (.leaderboard-card background/border/shadow) now that it lives in the row. */
 .leaderboard-card.leaderboard-inline {
-  position: relative;
   background: transparent;
   border: none;
   box-shadow: none;
@@ -3161,23 +3161,20 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 }
 .leaderboard-card.leaderboard-inline[open] > summary { border-color: var(--muted); }
 
-/* the ranking drops below the summary as a right-aligned popover, so it never
-   reflows the header row or becomes its own full-width section. */
+/* Opened: the disclosure takes the FULL row width so its ranking expands IN-FLOW
+   below the header — full-width and readable, exactly like #stage-details —
+   instead of the cramped right-anchored popover it used to be (the popover was
+   unreadable on phones/tablets, where an 80vw box scrolled and squeezed the team
+   names). order:9 drops it below the score chip + controls + Details toggle. */
+.stage-row > .leaderboard-inline[open] {
+  flex: 1 1 100%;
+  margin-left: 0;
+  order: 9;
+}
 .leaderboard-card.leaderboard-inline > .lb-panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  z-index: 30;
-  /* 360px on desktop; 80vw cap keeps this right-anchored panel from overshooting
-     the left viewport edge on narrow screens (see room-header-collapse.spec.js). */
-  width: min(360px, 80vw);
-  max-height: min(60vh, 460px);
-  overflow: auto;
-  padding: var(--s-3) var(--s-4);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-lg);
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
 }
 .leaderboard-card.leaderboard-inline > .lb-panel .lb-hint { margin: 0 0 var(--s-2); }
 .leaderboard-card.leaderboard-inline > .lb-panel #leaderboard { margin-top: 0; }
