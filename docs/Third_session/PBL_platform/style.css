@@ -1488,11 +1488,28 @@ html[data-theme="dark"] .next-step-coach {
   background: var(--note-margin-line);
   pointer-events: none;
 }
-.consultation-note-head {
-  margin-bottom: var(--s-3);
-  padding-bottom: var(--s-2);
-  border-bottom: 1px solid var(--note-line);
+/* The chart header now holds only the contribution tally (the title + team-note
+   moved to the vignette, 2026-07-15). No title → no separating border; and an
+   empty tally (before anyone contributes) collapses to nothing. */
+.consultation-note-head { margin-bottom: var(--s-2); }
+.consultation-note-head:empty { margin: 0; }
+
+/* Fused patient-intro "shared chart" note (2026-07-15). Lives on the
+   high-contrast vignette card now, not the muted cream paper. Themed surface +
+   --ink text read cleanly in light, dark AND high-contrast; a team-teal accent
+   marks it as the how-you-work-together line, distinct from the patient prose. */
+.vignette-shared-note {
+  margin: var(--s-3) 0 0;
+  padding: 10px 14px;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--ink);
+  background: var(--surface-sunk);
+  border-left: 3px solid var(--meeting);
+  border-radius: var(--r-sm);
 }
+.vignette-shared-note strong { color: var(--ink); }
+.vignette-shared-note em { font-style: italic; }
 .consultation-note-title {
   margin: 0 0 4px;
   font-size: 1.1rem;
@@ -1734,7 +1751,10 @@ details.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   padding-left: 2px;
 }
 #stage-1 .modA-bullet-progress li::before { font-size: 1em; }
-#stage-1 .consultation-note-title { font-size: 1.18rem; }
+/* The patient vignette is now the single focal heading on Stage 1 (the
+   consultation-note title was fused into it, 2026-07-15). Scoped to #stage-1 so
+   the shared .vignette h2 on other stages is untouched. */
+#stage-1 .vignette h2 { font-size: 1.18rem; }
 
 /* Glossed buttons get a tiny dotted underline as a "hover for more"
    cue — sim 2026-05-19 feature for low-English students. Title

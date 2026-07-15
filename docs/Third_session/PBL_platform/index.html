@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v79" below to the matching new string.
+         2. Update every "?v=v80" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v79"></script>
-  <link rel="stylesheet" href="style.css?v=v79" />
+  <script src="theme-init.js?v=v80"></script>
+  <link rel="stylesheet" href="style.css?v=v80" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
-  <link rel="manifest" href="manifest.webmanifest?v=v79" />
+  <link rel="manifest" href="manifest.webmanifest?v=v80" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v79" defer></script>
+  <script src="sw-register.js?v=v80" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -1326,13 +1326,18 @@
             given oxycodone and "it fixed everything", and he wants the same. Your group must
             work up the case and agree a management plan.
           </p>
-          <!-- De-dup (2026-06-01): the "Decide what to ask/examine/investigate …
-               unlocks the discussion prompts" hint and the "Work as equals —
-               every voice" line used to sit here. The first duplicated the
-               state-aware next-step coach + the investigations-locked hint; the
-               second duplicated modA.discussion.compare-rule, which is pinned in
-               the Discussion panel exactly when the compare prompts are live. Both
-               removed so the patient vignette stays focused on the patient. -->
+          <!-- Fused 2026-07-15 (user request): the "shared chart — discuss first,
+               click together" team framing was a separate cream-paper header on the
+               consultation note below (📋 title + 👥 line), where the muted text on
+               the textured "paper" read washed-out. It now lives HERE, on the
+               high-contrast vignette card, so the patient intro + how-to-work-together
+               framing is ONE readable section. Keeps its i18n key + {patientName}. -->
+          <p class="vignette-shared-note" data-i18n="modA.chart.team-click-warning" data-i18n-html>
+            👥 <strong>Your shared chart for M. Lefebvre.</strong>
+            Everything the team asks, examines, investigates or decides is
+            recorded for <em>everyone</em> in the room and counts as the
+            team's choice. <strong>Discuss first, then click together.</strong>
+          </p>
         </section>
 
         <!-- Reference toolbar (2026-06-02): the three reference lookups
@@ -1516,40 +1521,21 @@
                  sections in a single chart container with a header
                  changes the activity identity from "click things" to
                  "write the patient's chart together". -->
+            <!-- The visible "📋 Your consultation note — {patient}, today" title and
+                 the "👥 shared chart" line were fused into the patient vignette above
+                 (2026-07-15, user request) — the vignette is now the single readable
+                 intro. This article keeps its "shared chart" identity via an
+                 aria-label (its accessible name; the old aria-labelledby pointed at
+                 the now-removed h3), and still opens with the contribution tally. -->
             <article class="consultation-note"
-                     aria-labelledby="consultation-note-title">
+                     aria-label="The team's shared patient chart">
               <header class="consultation-note-head">
-                <h3 class="consultation-note-title" id="consultation-note-title">
-                  <span class="consultation-note-icon" aria-hidden="true">📋</span>
-                  <span data-i18n="modA.chart.title" data-i18n-html>Your consultation note —
-                    <em>M. Lefebvre</em>, today</span>
-                </h3>
                 <!-- Per-person contribution tally (relocated 2026-05-18 from
                      the now-removed Findings tab). Colored dots show "who
                      in the room has done anything" — the 'everyone takes
                      part' social signal stays visible at the top of the
-                     chart, where it has more presence than buried inside
-                     a tab. Populated by renderContrib(). -->
+                     chart. Populated by renderContrib(). -->
                 <div id="contrib-tally" class="contrib-tally contrib-tally-header"></div>
-
-                <!-- "Every click is a team decision" banner (user feedback
-                     2026-05-18): students were treating case buttons as
-                     solo actions, but every reveal is written to the
-                     shared room state and seen by everyone. This banner
-                     makes the team-wide consequence unambiguous BEFORE
-                     the first click. Pinned at the top of the chart so
-                     it's visible for the entire case-work phase. -->
-                <!-- Merged 2026-06-01: this single line now carries both the
-                     "shared chart" framing (was modA.chart.subtitle) and the
-                     "every click is a team decision" rule (user feedback
-                     2026-05-18) — they repeated the same verb-list and idea. -->
-                <p class="chart-team-warning"
-                   data-i18n="modA.chart.team-click-warning" data-i18n-html>
-                  👥 <strong>Your shared chart for M. Lefebvre.</strong>
-                  Everything the team asks, examines, investigates or decides is
-                  recorded for <em>everyone</em> in the room and counts as the
-                  team's choice. <strong>Discuss first, then click together.</strong>
-                </p>
               </header>
 
               <!-- ── Patient workup — three data-gathering modes as TABS
@@ -3111,46 +3097,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v79" defer></script>
+  <script src="firebase-config.js?v=v80" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v79" defer></script>
+  <script src="orgs.js?v=v80" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v79" defer></script>
+  <script src="platform-config.js?v=v80" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v79" defer></script>
+  <script src="telemetry.js?v=v80" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v79" defer></script>
+  <script src="purify.min.js?v=v80" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v79" defer></script>
+  <script src="i18n.js?v=v80" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v79" defer></script>
+  <script src="localdb.js?v=v80" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v79" defer></script>
+  <script src="lib.js?v=v80" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v79" defer></script>
+  <script src="pure-utils.js?v=v80" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3161,7 +3147,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v79" defer></script>
+  <script src="script-loader.js?v=v80" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3171,7 +3157,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v79" defer></script>
+  <script src="script.js?v=v80" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
