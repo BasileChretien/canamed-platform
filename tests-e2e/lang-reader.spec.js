@@ -42,8 +42,23 @@ async function setup(page, lang) {
   if (lang) await page.evaluate((l) => window.setLang(l), lang);
 }
 
-function enable(page, on) {
-  return page.evaluate((v) => window.CanamedReader.setEnabled(v), on);
+async function enable(page, on) {
+  await page.evaluate((v) => window.CanamedReader.setEnabled(v), on);
+  // Deterministically wait for the ACTIVE language's offline dictionary to
+  // finish loading (fetch + DecompressionStream, ~1.5 MB) before any lookup.
+  // The gloss pipeline (lookupAt → getDict) otherwise races the dict download
+  // and reads the English fallback — the flake the 15s expect.poll only papered
+  // over (recurred 2026-07-15 at :94 chromium / :137 mobile-android, blocking
+  // the #198 + #199 deploys). ensureDict resolves to the loaded Map (or null for
+  // en / unsupported), and targetLang() === window.getLang(), so awaiting
+  // ensureDict(getLang()) matches exactly what the reader itself loads.
+  if (on) {
+    await page.evaluate(async () => {
+      const d = window.CanamedReaderDict;
+      const lang = (typeof window.getLang === "function") ? window.getLang() : "en";
+      if (d && d.ensureDict) await d.ensureDict(lang);
+    });
+  }
 }
 
 // Viewport centre of the word "opioid" within the fixture sentence.
