@@ -79,6 +79,40 @@ test.describe("Module A persona follows the scenario", () => {
     });
   }
 
+  test("a leaked prior-session cast is cleared when the default scenario re-applies", async ({ page }) => {
+    // Production report: a chronic-pain Module A voiced "Mrs Tanaka" for a student
+    // whose tab had earlier run the breaking-bad-news case, then joined a session
+    // whose scenario read fell through — CURRENT_SCENARIO_CHARACTERS (a global)
+    // was never re-applied. loadSessionScenario now ends every path on a
+    // deterministic scenario via applyDefaultScenario(). Exercise the REAL
+    // functions: seed the Tanaka cast, then re-apply the default, and confirm the
+    // patient is fully back to Mr Lefebvre with no Tanaka bleed-through.
+    await loadWithScenario(page, "breaking-bad-news-disclosure");
+    expect(await page.evaluate(() => window.modALLMPrompts.characterName("en")))
+      .toBe("Mrs Tanaka");
+
+    const after = await page.evaluate(() => {
+      // the deterministic fallback loadSessionScenario now uses on every
+      // no-usable-scenario / error path.
+      const applied = window.applyDefaultScenario();
+      return {
+        applied,
+        name: window.modALLMPrompts.characterName("en"),
+        thinking: window.t("modA.chat.thinking"),
+        placeholder: window.t("modA.chat.placeholder"),
+        prompt: window.modALLMPrompts.buildPatientPrompt("en")
+      };
+    });
+
+    expect(after.applied, "applyDefaultScenario applied the default").toBe(true);
+    expect(after.name).toBe("Mr Lefebvre");
+    expect(after.thinking).toContain("Mr Lefebvre");
+    expect(after.placeholder).toContain("Mr Lefebvre");
+    expect(after.thinking).not.toContain("Tanaka");
+    expect(after.prompt).toContain("Lefebvre");
+    expect(after.prompt).not.toContain("Tanaka");
+  });
+
   test("the opioid stance does not bleed into the jaundice case", async ({ page }) => {
     await loadWithScenario(page, "breaking-bad-news-disclosure");
     const prompt = await page.evaluate(() => window.modALLMPrompts.buildPatientPrompt("en"));
