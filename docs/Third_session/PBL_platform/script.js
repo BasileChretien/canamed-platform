@@ -235,6 +235,20 @@ function applyScenario(id, customContent) {
   return true;
 }
 
+/* Apply the platform DEFAULT scenario (window.CANAMED_DEFAULT_SCENARIO_ID).
+   Used as the deterministic fallback whenever a session pins no usable scenario
+   or the scenario read fails — so a client can NEVER keep the cast that a PRIOR
+   session left in this tab. That stale-global leak was reported live: a
+   chronic-pain Module A voiced "Mrs Tanaka" for a student whose tab had earlier
+   run the breaking-bad-news case and whose scenario read then fell through, so
+   CURRENT_SCENARIO_CHARACTERS (and CASE) were never re-applied. Re-applying the
+   default is identical to a fresh page-load and is the correct content for a
+   session that genuinely pinned no scenario. */
+function applyDefaultScenario() {
+  const defId = (typeof window !== "undefined" && window.CANAMED_DEFAULT_SCENARIO_ID) || null;
+  return defId ? applyScenario(defId) : false;
+}
+
 /* read the scenario from the session record (set at creation) and apply it.
    Resolves once the content is in place - callers should await before any
    case-dependent UI is built.
@@ -273,18 +287,30 @@ function loadSessionScenario(code) {
         console.error("Custom scenario JSON parse failed", e);
       }
     }
-    if (custom) return applyScenario(null, custom);
+    // Whatever the resolution path, END on a DETERMINISTIC scenario so a client
+    // never keeps the cast a PRIOR session left in this tab (the stale-global
+    // leak — see applyDefaultScenario). A character-less custom scenario is fine:
+    // applyScenario sets CURRENT_SCENARIO_CHARACTERS = null → "the patient", not
+    // a stale name. We only fall back to the default when NO usable scenario
+    // applied (missing / unknown id, failed ref, absent field).
+    if (custom && applyScenario(null, custom)) return true;
     if (ref) {
       return loadScenarioByRef(ref).then(body => {
-        if (body) return applyScenario(null, body);
-        if (id) return applyScenario(id);
-        return false;
+        if (body && applyScenario(null, body)) return true;
+        if (id && applyScenario(id)) return true;
+        return applyDefaultScenario();
       });
     }
-    if (id) return applyScenario(id);
-    // session has no scenario set - keep whatever default case-content loaded
-    return false;
-  }).catch(e => { console.error("loadSessionScenario failed", e); return false; });
+    if (id && applyScenario(id)) return true;
+    // session pinned no scenario (or an unknown id) — apply the platform default
+    // EXPLICITLY rather than leaving a prior session's cast in place.
+    return applyDefaultScenario();
+  }).catch(e => {
+    console.error("loadSessionScenario failed", e);
+    // Even on a hard read failure, re-establish a deterministic cast instead of
+    // leaving whatever a prior session loaded into this tab.
+    return applyDefaultScenario();
+  });
 }
 
 /* Resolve a scenarioRef ({ ownerUid, scenarioId, source }) to a parsed
