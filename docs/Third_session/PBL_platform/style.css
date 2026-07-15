@@ -2413,10 +2413,12 @@ footer {
 .stage-wait { color: var(--muted); font-size: 0.9rem; }
 .stage-controls { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; row-gap: 6px; }
 /* The "Stage X of 4" indicator is now sr-only (hidden visually, 2026-06-02), so
-   it no longer occupies the left of the row to push the controls right via
-   space-between. Keep the participant controls right-aligned with an auto left
-   margin; the (usually hidden) score chip still sits at the left when shown. */
-.stage-controls--participant { margin-left: auto; }
+   it no longer occupies the left of the row. The participant controls used to
+   grab the right edge with `margin-left:auto`, but since 2026-07-15 the inline
+   Live-leaderboard disclosure owns the right edge (see .leaderboard-inline
+   below), so the score chip + controls + Details toggle now cluster together on
+   the left of the single-line header. */
+.stage-controls--participant { margin-left: 0; }
 
 /* ── Control-row clarity (UX-overload #5) ──────────────────────────────────
    Scoped to the PARTICIPANT row (.stage-controls--participant); the admin
@@ -3097,6 +3099,88 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 .leaderboard-card[open] > summary::before { content: "\25BE  "; }
 .lb-hint { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
 #leaderboard { margin-top: var(--s-3); display: flex; flex-direction: column; gap: 6px; }
+
+/* ── Collapsible room-header detail + inline leaderboard (2026-07-15) ──────────
+   The stage-card header is one line: score chip + controls + a "Details" toggle
+   on the left, a compact Live-leaderboard disclosure on the right. The stepper,
+   the waiting line and the room presence collapse into #stage-details. */
+
+/* the "Details" toggle: a small pill just after the controls. */
+.stage-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface-sunk);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.stage-details-toggle:hover { color: var(--ink); border-color: var(--muted); }
+.stage-details-toggle:focus-visible { outline: 2px solid var(--focus, var(--primary)); outline-offset: 2px; }
+.stage-details-toggle .sdt-caret {
+  display: inline-block;
+  font-size: 0.7em;
+  transition: transform var(--dur-base) var(--ease-soft);
+}
+.stage-details-toggle[aria-expanded="true"] .sdt-caret { transform: rotate(90deg); }
+
+.stage-details[hidden] { display: none; }
+.stage-details { margin-top: var(--s-3); }
+
+/* The inline Live-leaderboard disclosure owns the right edge of the header row. */
+.stage-row > .leaderboard-inline { margin-left: auto; }
+
+/* Compact, card-less disclosure: override the standalone-card look
+   (.leaderboard-card background/border/shadow) now that it lives in the row. */
+.leaderboard-card.leaderboard-inline {
+  position: relative;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  flex: 0 0 auto;
+}
+.leaderboard-card.leaderboard-inline > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  background: var(--surface-sunk);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.leaderboard-card.leaderboard-inline[open] > summary { border-color: var(--muted); }
+
+/* the ranking drops below the summary as a right-aligned popover, so it never
+   reflows the header row or becomes its own full-width section. */
+.leaderboard-card.leaderboard-inline > .lb-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 30;
+  /* 360px on desktop; 80vw cap keeps this right-anchored panel from overshooting
+     the left viewport edge on narrow screens (see room-header-collapse.spec.js). */
+  width: min(360px, 80vw);
+  max-height: min(60vh, 460px);
+  overflow: auto;
+  padding: var(--s-3) var(--s-4);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-lg);
+}
+.leaderboard-card.leaderboard-inline > .lb-panel .lb-hint { margin: 0 0 var(--s-2); }
+.leaderboard-card.leaderboard-inline > .lb-panel #leaderboard { margin-top: 0; }
 .lb-row {
   display: flex;
   align-items: center;

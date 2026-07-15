@@ -410,6 +410,9 @@
       // room chrome
       "room.call-facilitator": "Call a facilitator",
       "room.more": "More",
+      // toggle that expands the collapsed room header (stepper + waiting line +
+      // presence) — see #stage-details-toggle / initStageDetailsToggle
+      "room.details": "Details",
       // accessible labels for inputs that otherwise rely on placeholder text
       // only (insufficient for screen readers — placeholders are not labels)
       "room.team-name-label": "Team name",

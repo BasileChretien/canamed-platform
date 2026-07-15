@@ -36,9 +36,13 @@ test("Item 1 — the room #stage-indicator is sr-only (visually hidden, still an
   // stage 2, so the total is the flow length, not the raw STAGE_COUNT.
   assert.match(JS, /el\("stage-indicator"\)\.textContent =\s*\n?\s*"Stage " \+ \(\(_pos === -1 \? viewStage : _pos\) \+ 1\) \+ " of " \+ _flow\.length;/,
     "the position string must still be written for screen readers (flow-aware)");
-  // controls stay right-aligned now the indicator no longer holds the left.
-  assert.match(CSS, /\.stage-controls--participant\s*\{\s*margin-left:\s*auto/,
-    "participant controls must keep an auto left margin");
+  // 2026-07-15: the header is now a single line — score chip + controls + the
+  // Details toggle cluster on the LEFT (margin-left:0), and the inline Live-
+  // leaderboard disclosure owns the right edge with the auto margin instead.
+  assert.match(CSS, /\.stage-controls--participant\s*\{\s*margin-left:\s*0/,
+    "participant controls no longer grab the right edge (leaderboard does)");
+  assert.match(CSS, /\.stage-row\s*>\s*\.leaderboard-inline\s*\{\s*margin-left:\s*auto/,
+    "the inline leaderboard must own the right edge of the header row");
 });
 
 test("Item 2 — the 'I'm just observing' button and its wiring are gone", () => {

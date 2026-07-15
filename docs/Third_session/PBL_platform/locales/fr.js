@@ -286,6 +286,7 @@
   "stage.welcome.grade-note": "Votre note et votre statut ne sont pas affectés par cet atelier. Les points attribués par la plateforme sont uniquement pédagogiques — ils ne contribuent pas à votre note universitaire. Si vous êtes en désaccord avec un point ou une pénalité, parlez-en à votre encadrant·e ; la notation est révisable.",
   "room.call-facilitator": "Appeler un·e encadrant·e",
   "room.more": "Plus",
+  "room.details": "Détails",
   "room.team-name-label": "Nom de l'équipe",
   "room.team-name.empty": "Saisissez d'abord un nom d'équipe.",
   "room.team-name.not-ready": "Pas encore prêt — réessayez dans une seconde.",
