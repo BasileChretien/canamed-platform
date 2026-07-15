@@ -3217,6 +3217,7 @@ function wireRoomUI() {
   initCallProf();
   initLeave();
   initStageOverflow();
+  initStageDetailsToggle();
   initEndPoll();
   initRetentionReminder();
   initTeamName();
@@ -11578,6 +11579,36 @@ function initStageOverflow() {
   });
   document.addEventListener("keydown", e => {
     if (e.key === "Escape" && wrap.classList.contains("is-open")) { setOpen(false); toggle.focus(); }
+  });
+}
+
+/* Room-header collapse (2026-07-15, user request). The session stepper, the
+   "waiting for a facilitator" line and the room presence now live in
+   #stage-details, collapsed by default so the header is a single line. This
+   toggle shows/hides them and remembers the choice across rooms + reloads via
+   localStorage ("for all sessions"). #stage-indicator stays in the always-
+   visible row, so the screen-reader position announcement still fires while
+   this is collapsed. */
+function initStageDetailsToggle() {
+  const LS_KEY = "canamedStageDetailsOpen";
+  const toggle = el("stage-details-toggle");
+  const panel = el("stage-details");
+  if (!toggle || !panel || toggle.dataset.wired === "1") return;
+  toggle.dataset.wired = "1";
+  const reflect = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute("aria-expanded", String(open));
+  };
+  // Restore the remembered choice (default collapsed). Reading only — the
+  // initial state is NOT written back, so a fresh browser stays at the default
+  // without a spurious storage write.
+  let start = false;
+  try { start = localStorage.getItem(LS_KEY) === "1"; } catch (e) { /* private mode — default collapsed */ }
+  reflect(start);
+  toggle.addEventListener("click", () => {
+    const open = toggle.getAttribute("aria-expanded") !== "true";
+    reflect(open);
+    try { localStorage.setItem(LS_KEY, open ? "1" : "0"); } catch (e) { /* private mode — ignore */ }
   });
 }
 

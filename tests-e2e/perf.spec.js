@@ -323,7 +323,23 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     so branched work no longer threatens this splash budget. (A bare
 //     "/branched.css" precache entry mirrors the existing branched JS chunks;
 //     the cache-on-fetch path handles the ?v= versioned request offline.)
-const FIRST_PARTY_BYTES_LIMIT_KB = 334;
+//
+//   2026-07-15: Collapsible room header + inline leaderboard (user request) — the
+//     stage-card header collapses to one line (score + controls + a "Details"
+//     toggle), the stepper/waiting-line/presence move into a hidden #stage-details,
+//     and the live leaderboard becomes a compact right-aligned disclosure instead
+//     of a full-width card. NET ~+2.6 KB gz, all eager: the .stage-details-toggle
+//     + .leaderboard-inline popover CSS in style.css (this is STANDARD-room chrome,
+//     styled by the eager style.css alongside .stage-card/.score-chip — NOT the
+//     branched room-only sheet, so the branched.css lever doesn't apply) + the tiny
+//     initStageDetailsToggle() in script.js. Markup is in index.html (uncounted).
+//     Main was at 332.1 when authored (measured 334.74 → bumped 334 → 335). On
+//     rebase after #198 (applyDefaultScenario in the eager script.js, ~+0.3 KB)
+//     and the #199 shell bump, the baseline rose, so the same feature now
+//     measures 335.27 → cap 335 → 336. The standing reclaim debt (a <link>-loaded
+//     standard-room stylesheet, mirroring branched.css) is the lever the next
+//     time this budget is threatened, not another bump.
+const FIRST_PARTY_BYTES_LIMIT_KB = 336;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

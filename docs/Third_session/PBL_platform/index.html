@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v77" below to the matching new string.
+         2. Update every "?v=v78" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v77"></script>
-  <link rel="stylesheet" href="style.css?v=v77" />
+  <script src="theme-init.js?v=v78"></script>
+  <link rel="stylesheet" href="style.css?v=v78" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
-  <link rel="manifest" href="manifest.webmanifest?v=v77" />
+  <link rel="manifest" href="manifest.webmanifest?v=v78" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v77" defer></script>
+  <script src="sw-register.js?v=v78" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -1112,7 +1112,45 @@
               </div>
             </div>
           </div>
+          <!-- Collapse toggle (2026-07-15, user request): the room header used to
+               spread the session stepper, the "waiting for a facilitator" line and
+               the room presence across several lines. They now live in the
+               collapsible #stage-details below and this toggle shows/hides them.
+               The choice is remembered across rooms and reloads
+               (initStageDetailsToggle → localStorage "canamedStageDetailsOpen"),
+               so a facilitator who wants the full detail keeps it in every room.
+               Collapsed by default so the header is a single line. -->
+          <button type="button" id="stage-details-toggle" class="stage-details-toggle"
+                  aria-expanded="false" aria-controls="stage-details">
+            <span class="sdt-caret" aria-hidden="true">&#9656;</span>
+            <span class="sdt-label" data-i18n="room.details">Details</span>
+          </button>
+          <!-- Live leaderboard moved INTO the header row (2026-07-15, user request:
+               "on the right of Room 1, not its own full section"). It stays a
+               details element with the leaderboard-card id (global-stage-stepper
+               test asserts that tag ships without the open attribute) but is styled
+               as a compact right-aligned disclosure whose panel drops below the
+               summary as a popover, instead of a standalone full-width card. -->
+          <details id="leaderboard-card" class="leaderboard-card leaderboard-inline">
+            <summary><strong>&#127919; Live leaderboard</strong></summary>
+            <div class="lb-panel">
+              <p class="lb-hint">all rooms add to a shared cohort goal &mdash;
+                every contribution counts</p>
+              <!-- the cooperative shared goal + the gentle ranking - renderLeaderboard().
+                   aria-live="off" is deliberate: this board can re-render every second
+                   during an active stage, which would otherwise spam screen readers
+                   with repeated rank announcements. The score-chip in the stage header
+                   still announces YOUR team's score politely. -->
+              <div id="leaderboard" aria-live="off"></div>
+            </div>
+          </details>
         </div>
+        <!-- Collapsible room detail: the numbered session stepper, the "do this
+             now" / "waiting for a facilitator" line, and the room presence.
+             Hidden by default (see #stage-details-toggle); #stage-indicator stays
+             in the always-visible row above so the screen-reader position
+             announcement still fires while this is collapsed. -->
+        <div id="stage-details" class="stage-details" hidden>
         <!-- Global "you are here" stepper (UX-overload fix 2026-06-01). The
              only VISUAL numbered stepper used to be Module A's LOCAL phase
              stepper, so students mistook module sub-progress for their
@@ -1132,6 +1170,7 @@
           <span class="presence-label">In your room (<span id="room-name"></span>):</span>
           <span id="presence-bar" class="presence-bar"></span>
         </div>
+        </div>
       </section>
 
       <div id="late-banner" class="late-banner hidden" role="status" aria-live="polite"></div>
@@ -1145,33 +1184,10 @@
       <div id="facilitator-presence-banner" class="late-banner hidden"
            role="status" aria-live="polite"></div>
 
-      <!-- LIVE SCOREBOARD - cooperative leaderboard only (the rubric
-           breakdown "Module X — how your team earns points" was removed
-           per user request 2026-05-18 — it was a wall of point-values
-           that the user judged unnecessary and distracting). The
-           scoring engine still runs and the leaderboard still reflects
-           it; renderObjectives() now early-returns harmlessly because
-           its target #objectives element is gone. The score-chip in
-           the stage header continues to announce the user's team
-           score politely. -->
-      <!-- UX-overload fix (2026-06-01): the leaderboard is engagement chrome,
-           not the task. It is now CLOSED by default (no `open` attribute) so an
-           empty/zeroed board doesn't dominate Welcome and a re-rendering
-           competitive widget doesn't sit at the top of the Module A/B work
-           scroll. renderStage() auto-opens it only at Wrap-up, where cohort
-           progress is the point; students can still expand it any time, and the
-           persistent score-chip covers the at-a-glance need. -->
-      <details id="leaderboard-card" class="card leaderboard-card">
-        <summary><strong>&#127919; Live leaderboard</strong>
-          <span class="lb-hint">all rooms add to a shared cohort goal &mdash;
-            every contribution counts</span></summary>
-        <!-- the cooperative shared goal + the gentle ranking - renderLeaderboard().
-             aria-live="off" is deliberate: this board can re-render every second
-             during an active stage, which would otherwise spam screen readers
-             with repeated rank announcements. The score-chip in the stage header
-             still announces YOUR team's score politely. -->
-        <div id="leaderboard" aria-live="off"></div>
-      </details>
+      <!-- The live leaderboard now lives INSIDE the stage-card header row as a
+           compact right-aligned disclosure (see #leaderboard-card above), instead
+           of the standalone full-width card it used to be here (moved
+           2026-07-15). -->
 
       <!-- STAGE 0: WELCOME -->
       <section id="stage-0" class="stage">
@@ -3095,46 +3111,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v77" defer></script>
+  <script src="firebase-config.js?v=v78" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v77" defer></script>
+  <script src="orgs.js?v=v78" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v77" defer></script>
+  <script src="platform-config.js?v=v78" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v77" defer></script>
+  <script src="telemetry.js?v=v78" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v77" defer></script>
+  <script src="purify.min.js?v=v78" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v77" defer></script>
+  <script src="i18n.js?v=v78" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v77" defer></script>
+  <script src="localdb.js?v=v78" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v77" defer></script>
+  <script src="lib.js?v=v78" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v77" defer></script>
+  <script src="pure-utils.js?v=v78" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3145,7 +3161,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v77" defer></script>
+  <script src="script-loader.js?v=v78" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3155,7 +3171,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v77" defer></script>
+  <script src="script.js?v=v78" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
