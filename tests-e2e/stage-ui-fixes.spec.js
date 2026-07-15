@@ -58,6 +58,38 @@ test.describe("Stage bar redundancy + observer button removal", () => {
     await showStage(page, "stage-1");
     await expect(page.locator("#observer-btn")).toHaveCount(0);
   });
+
+  test("the patient intro is fused into one readable section; the chart title is gone", async ({ page }) => {
+    // 2026-07-15 (user request): the separate "📋 consultation note" + "👥 shared
+    // chart" header on the cream chart (muted text, ~6.6:1) was fused into the
+    // high-contrast patient vignette. One intro section, readable colours.
+    await surfaceApp(page);
+    await showStage(page, "stage-1");
+
+    // the "shared chart / discuss first" framing now lives in the vignette…
+    const note = page.locator(".vignette .vignette-shared-note");
+    await expect(note).toHaveCount(1);
+    await expect(note).toBeVisible();
+
+    // …and is gone from the chart, along with the redundant consultation-note title
+    await expect(page.locator(".consultation-note .chart-team-warning")).toHaveCount(0);
+    await expect(page.locator(".consultation-note-title")).toHaveCount(0);
+    // the chart still has an accessible name via aria-label
+    await expect(page.locator(".consultation-note")).toHaveAttribute("aria-label", /.+/);
+
+    // the fused note reads at high contrast (not the old washed-out muted text):
+    // ink text on a themed surface, well above the WCAG-AA 4.5:1 floor.
+    const ratio = await note.evaluate((el) => {
+      const lum = (rgb) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); };
+      const parse = (s) => (s.match(/\d+(\.\d+)?/g) || [0, 0, 0]).map(Number);
+      const effBg = (n) => { while (n) { const c = getComputedStyle(n).backgroundColor; if (c && c !== "rgba(0, 0, 0, 0)" && c !== "transparent") return c; n = n.parentElement; } return "rgb(255,255,255)"; };
+      const fg = lum(parse(getComputedStyle(el).color));
+      const bg = lum(parse(effBg(el)));
+      const a = Math.max(fg, bg), b = Math.min(fg, bg);
+      return (a + 0.05) / (b + 0.05);
+    });
+    expect(ratio).toBeGreaterThan(4.5);
+  });
 });
 
 test.describe("Module B right-column collapse", () => {

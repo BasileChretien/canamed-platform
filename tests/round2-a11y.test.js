@@ -126,13 +126,13 @@ test("Round2-A5: tour.dismiss() restores focus to the opener", () => {
 // ------------------------------------------------------------------
 // A7 — consultation-note accessible name
 // ------------------------------------------------------------------
-test("Round2-A7: .consultation-note carries aria-labelledby tying it to its h3", () => {
+test("Round2-A7: .consultation-note carries an accessible name", () => {
+  // 2026-07-15: the visible "consultation note" h3 was fused into the patient
+  // vignette; the article now names itself with a concise aria-label (the old
+  // aria-labelledby pointed at the removed h3).
   assert.match(INDEX_HTML,
-    /<article\s+class="consultation-note"[\s\S]{0,80}?aria-labelledby="consultation-note-title"/,
-    ".consultation-note <article> must reference its title via aria-labelledby");
-  assert.match(INDEX_HTML,
-    /<h3[^>]*id="consultation-note-title"/,
-    "the consultation-note title must have id='consultation-note-title'");
+    /<article\s+class="consultation-note"[\s\S]{0,120}?aria-label="[^"]+"/,
+    ".consultation-note <article> must carry an aria-label accessible name");
 });
 
 // ------------------------------------------------------------------

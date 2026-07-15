@@ -25,9 +25,11 @@ test("the per-bullet checklist is de-emphasised under #stage-1 (secondary to the
     "the Stage-1 bullet-progress strip should be visually secondary");
 });
 
-test("the consultation note carries the single focal heading under #stage-1", () => {
-  assert.match(CSS, /#stage-1 \.consultation-note-title\s*\{[^}]*font-size/,
-    "the consultation-note title should be the focal heading on Stage 1");
+test("the patient vignette carries the single focal heading under #stage-1", () => {
+  // 2026-07-15: the consultation-note title was fused into the patient vignette,
+  // so the vignette h2 is now the single focal Stage-1 heading.
+  assert.match(CSS, /#stage-1 \.vignette h2\s*\{[^}]*font-size/,
+    "the patient vignette h2 should be the focal heading on Stage 1");
 });
 
 test("the progress + heading hierarchy tweaks are SCOPED to #stage-1 (no global restyle)", () => {
@@ -36,9 +38,11 @@ test("the progress + heading hierarchy tweaks are SCOPED to #stage-1 (no global 
   // consultation-note title everywhere (incl. the scenario-author surface).
   assert.match(CSS, /#stage-1 \.phase-stepper\s*\{\s*margin-bottom:\s*6px/,
     "the phase-stepper margin tweak must be scoped to #stage-1");
-  assert.match(CSS, /#stage-1 \.consultation-note-title\s*\{\s*font-size:\s*1\.18rem/,
+  assert.match(CSS, /#stage-1 \.vignette h2\s*\{\s*font-size:\s*1\.18rem/,
     "the focal-heading bump must be scoped to #stage-1");
   // and we must NOT have introduced a bare global .card h3 / .vignette h2 resize
   assert.doesNotMatch(CSS, /\n\.card h3\s*\{\s*font-size:\s*1\.18rem/,
     "must not globally resize .card h3");
+  assert.doesNotMatch(CSS, /\n\.vignette h2\s*\{\s*font-size:\s*1\.18rem/,
+    "must not globally resize .vignette h2 (Stage-1 scoped only)");
 });
