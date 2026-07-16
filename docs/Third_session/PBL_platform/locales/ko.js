@@ -146,7 +146,6 @@
   "stage.wrap.title": "마무리 및 다음 단계",
   "stage.wrap.thanks": "참여해 주셔서 감사합니다! 떠나시기 전에:",
   "stage.wrap.do-questionnaire": "세션 종료 설문지를 작성해 주세요 — 몇 분이면 완료되며, 3주 후에 짧은 사후 테스트가 있습니다.",
-  "stage.wrap.answers-saved": "그룹의 답변은 아래에 저장되어 있습니다 — 진행자가 수집할 예정입니다.",
   "stage.wrap.open-questionnaire": "세션 종료 설문지 열기",
   "stage.wrap.questionnaire-fallback": "진행자가 설문지 링크를 공유해 드립니다.",
   "stage.wrap.bye": "설문지를 마치시면 이 탭을 닫으셔도 됩니다. 세션 4에서 뵙겠습니다!",

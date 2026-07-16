@@ -146,7 +146,6 @@
   "stage.wrap.title": "总结与后续步骤",
   "stage.wrap.thanks": "感谢您的参与!离开前请:",
   "stage.wrap.do-questionnaire": "完成会话结束问卷——仅需几分钟,3 周后会有一次简短的后测。",
-  "stage.wrap.answers-saved": "您小组的回答已保存在下方——主持人将进行收集。",
   "stage.wrap.open-questionnaire": "打开会话结束问卷",
   "stage.wrap.questionnaire-fallback": "主持人会分享问卷链接。",
   "stage.wrap.bye": "完成问卷后可关闭此标签页。期待在第 4 次会话与您再见!",

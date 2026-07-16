@@ -5917,6 +5917,24 @@ body.session-ended-shown { overflow: hidden; }
   background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
   border: 1px solid var(--line);
 }
+/* Consolidated wrap-up (2026-07-16): the team recap and the take-home
+   downloads now live INSIDE the single wrap-up card as delineated sub-panels
+   rather than as their own cards. The recap keeps its tinted gradient (as an
+   inner panel); the take-home block is set off by a top rule. */
+.wrapup-card .team-recap-panel {
+  margin-top: var(--s-3);
+  padding: var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
+}
+.wrapup-card .team-recap-panel #team-recap h3 { margin-top: 0; }
+.wrapup-card .take-home-block {
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--line);
+}
+.wrapup-card .take-home-block h3 { margin: 0 0 var(--s-1); font-size: 1.2rem; }
 #team-recap h3 { margin: 0 0 var(--s-2); font-size: 1.2rem; }
 .recap-total { font-size: 1rem; margin: 0 0 var(--s-2); }
 .recap-wins {

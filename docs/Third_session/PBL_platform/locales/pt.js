@@ -146,7 +146,6 @@
   "stage.wrap.title": "Encerramento e próximos passos",
   "stage.wrap.thanks": "Obrigado por participar! Antes de sair:",
   "stage.wrap.do-questionnaire": "Preencha o questionário de fim de sessão — leva apenas alguns minutos, e há um pós-teste curto daqui a 3 semanas.",
-  "stage.wrap.answers-saved": "As respostas do seu grupo estão salvas abaixo — os(as) facilitadores(as) vão coletá-las.",
   "stage.wrap.open-questionnaire": "Abrir o questionário de fim de sessão",
   "stage.wrap.questionnaire-fallback": "Seu(sua) facilitador(a) compartilhará o link do questionário.",
   "stage.wrap.bye": "Quando terminar o questionário, você pode fechar esta aba. Até a Sessão 4!",
