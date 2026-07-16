@@ -10684,33 +10684,12 @@ function initRolePicker() {
   // Swap-and-replay: wire the round button + seed local round state so
   // LOCAL/solo mode can advance rounds without a Firebase listener.
   wireSwapReplay();
-  // "I'd rather observe" panic affordance — a calm one-tap escape hatch.
-  wireObserveEscape();
   // "Randomly assign roles" — distribute distinct roles across the room.
   wireAssignRoles();
 }
-
-/* "I'd rather observe" panic affordance: one calm tap moves the student into
-   the observer role (reusing the role-pick sync so the change propagates and
-   the coach updates) and shows a reassuring, no-judgment note. Always
-   available — the safety-note promises this exit, this makes it one tap. */
-function wireObserveEscape() {
-  const btn = el("modB-observe-instead-btn");
-  if (!btn || btn._wired) return;
-  btn._wired = true;
-  btn.addEventListener("click", () => {
-    const picker = el("modB-role-picker");
-    const observerChip = picker && picker.querySelector('.role-chip[data-role="observer"]');
-    // Reuse the chip-select path so the pick syncs + coach hooks fire.
-    if (observerChip) observerChip.click();
-    const note = el("modB-observe-reassure");
-    if (note) {
-      note.textContent = _swapT("modB.observe.reassure",
-        "That's completely fine — you're observing now. Watch the SPIKES steps, and step back in whenever you're ready.");
-      note.classList.remove("hidden");
-    }
-  });
-}
+// The "I'd rather observe" panic affordance (wireObserveEscape) was removed
+// 2026-07-16 (user request): it duplicated the Observer role chip, which already
+// moves the student into the observer role via the same synced chip-select path.
 
 /* Randomly assign roles (Module B, 2026-06-26): one tap distributes DISTINCT
    roles across everyone present (physician/patient/family first, observers for

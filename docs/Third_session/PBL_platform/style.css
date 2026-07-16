@@ -1278,37 +1278,9 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   color: var(--ink);
 }
 
-/* "I'd rather observe" panic affordance — a calm, low-key, full-width escape
-   hatch. Deliberately understated (not alarm-coloured) so taking it never
-   feels like a failure. */
-.role-observer-escape {
-  display: block;
-  width: 100%;
-  margin-top: var(--s-2);
-  padding: 9px 12px;
-  font-size: 0.9rem;
-  border-radius: var(--r-md);
-  border: 1px dashed var(--n-300, #c7d0d9);
-  background: transparent;
-  color: var(--n-600, #415061);
-  cursor: pointer;
-  text-align: center;
-}
-.role-observer-escape:hover { background: var(--n-50, #f3f6f9); }
-.role-observer-escape:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.role-observe-reassure {
-  margin: var(--s-2) 0 0;
-  padding: 9px 12px;
-  font-size: 0.9rem;
-  border-radius: var(--r-md);
-  /* Themed tokens (not hardcoded light hex) so the "you're observing now"
-     message stays legible in dark + high-contrast — the light hex #e8f5ec
-     with color:var(--ink) was near-white-on-light-green in dark mode
-     (dry-run #5, the observer-message gap the --n-* remap didn't cover). */
-  background: var(--ok-50);
-  border-left: 3px solid var(--ok-strong);
-  color: var(--ink);
-}
+/* The "I'd rather observe" panic-affordance styles (.role-observer-escape /
+   .role-observe-reassure) were removed 2026-07-16 (user request): the button
+   duplicated the Observer role chip, so it and its reassurance note are gone. */
 
 /* Discussion-question list inside Module B's prompts-card. */
 .discussion-q-list {

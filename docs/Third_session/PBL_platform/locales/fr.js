@@ -431,8 +431,6 @@
   "modB.replay.swapped": "Vous avez changé de place — observez comment la conversation se ressent d'ici.",
   "modB.replay.fromto": "Vous étiez {old} — vous êtes maintenant {new}.",
   "modB.replay.full": "Chacun·e a maintenant joué tous les rôles — bravo.",
-  "modB.observe.escape": "Je préfère simplement observer — c'est tout à fait correct",
-  "modB.observe.reassure": "C'est tout à fait correct — vous observez maintenant. Suivez les étapes SPIKES, et revenez dans le jeu quand vous vous sentez prêt·e.",
   "modB.role.observer.brief": "Vous chronométrez la scène et animez la phase 3. Surveillez les étapes SPIKES — notez une chose que le·la médecin <em>a dite</em> qui a fonctionné et un moment difficile.",
   "modB.guide.patient.summary": "<strong>Jouer le·la patient·e — rendez-le réel</strong>",
   "modB.guide.patient.p1": "<strong>Décidez maintenant, en privé</strong> — au fond, voulez-vous tout savoir ou non ? Ne l'annoncez pas ; laissez le·la médecin le découvrir à travers ses questions.",

@@ -618,8 +618,6 @@
       "modB.replay.swapped": "You've swapped seats — notice how the conversation feels from here.",
       "modB.replay.fromto": "You were the {old} — now you're the {new}.",
       "modB.replay.full": "Everyone has now played every role — nicely done.",
-      "modB.observe.escape": "I'd rather just observe — that's completely okay",
-      "modB.observe.reassure": "That's completely fine — you're observing now. Watch the SPIKES steps, and step back in whenever you're ready.",
       "modB.role.observer.brief": "You time the scene and run Phase 3. Watch the SPIKES steps — note one thing the physician <em>said</em> that worked and one moment that was hard.",
 
       // Module B — per-role "how to play your part" guides (2026-06-03). Each

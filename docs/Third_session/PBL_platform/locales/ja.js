@@ -431,8 +431,6 @@
   "modB.replay.swapped": "席が入れ替わりました — ここから会話がどう感じられるかに注目しましょう。",
   "modB.replay.fromto": "あなたは{old}でした — 今は{new}です。",
   "modB.replay.full": "全員がすべての役を演じました — お見事です。",
-  "modB.observe.escape": "見学する側にまわりたいです — それでまったく構いません",
-  "modB.observe.reassure": "まったく問題ありません — 今はあなたは見学者です。SPIKESのステップを見守り、準備ができたらいつでも戻ってきてください。",
   "modB.role.observer.brief": "場面のタイムキーパーとフェーズ3の司会を務めます。SPIKESの各ステップを観察し、医師が <em>言って</em> うまくいったこと一つと、難しかった瞬間一つを記録してください。",
   "modB.guide.patient.summary": "<strong>患者を演じる — リアルに</strong>",
   "modB.guide.patient.p1": "<strong>今、心の中で決めてください</strong> — 本当のところ、すべてを知りたいですか、それとも知りたくないですか？ それを口に出さず、医師が質問を通して気づくようにしましょう。",
