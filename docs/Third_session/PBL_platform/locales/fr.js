@@ -524,7 +524,6 @@
   "stage.wrap.title": "Bilan & Étapes suivantes",
   "stage.wrap.thanks": "Merci d'avoir participé ! Avant de partir :",
   "stage.wrap.do-questionnaire": "Remplissez le questionnaire de fin de séance — il ne prend que quelques minutes, et un court post-test aura lieu dans 3 semaines.",
-  "stage.wrap.answers-saved": "Les réponses de votre groupe sont sauvegardées ci-dessous — vos encadrant·e·s les récupéreront.",
   "stage.wrap.open-questionnaire": "Ouvrir le questionnaire de fin de séance",
   "stage.wrap.questionnaire-fallback": "Votre encadrant·e partagera le lien du questionnaire.",
   "stage.wrap.bye": "Une fois le questionnaire rempli vous pouvez fermer cet onglet. Rendez-vous à la séance 4 !",

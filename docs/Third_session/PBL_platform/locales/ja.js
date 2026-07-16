@@ -523,7 +523,6 @@
   "stage.wrap.title": "まとめと次のステップ",
   "stage.wrap.thanks": "ご参加ありがとうございました。退室する前に以下をお願いします:",
   "stage.wrap.do-questionnaire": "セッション終了アンケートにご回答ください — 数分で完了します。また、3週間後に短いポストテストを実施します。",
-  "stage.wrap.answers-saved": "グループの回答は下記に保存されています — ファシリテーターが回収します。",
   "stage.wrap.open-questionnaire": "セッション終了アンケートを開く",
   "stage.wrap.questionnaire-fallback": "ファシリテーターからアンケートのリンクが共有されます。",
   "stage.wrap.bye": "アンケートにご回答いただけましたら、このタブを閉じてお戻りください。セッション4でお会いしましょう!",

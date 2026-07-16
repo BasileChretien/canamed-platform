@@ -36,19 +36,19 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v82" below to the matching new string.
+         2. Update every "?v=v83" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v82"></script>
-  <link rel="stylesheet" href="style.css?v=v82" />
+  <script src="theme-init.js?v=v83"></script>
+  <link rel="stylesheet" href="style.css?v=v83" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
-  <link rel="manifest" href="manifest.webmanifest?v=v82" />
+  <link rel="manifest" href="manifest.webmanifest?v=v83" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v82" defer></script>
+  <script src="sw-register.js?v=v83" defer></script>
 </head>
 <body class="locked">
   <!-- WCAG 2.4.1 (Bypass Blocks, Level A): a keyboard-only user lands on
@@ -2551,7 +2551,15 @@
 
       <!-- STAGE 3: WRAP-UP -->
       <section id="stage-3" class="stage hidden">
-        <div class="card vignette">
+        <!-- Consolidated wrap-up (2026-07-16, user request): the "Wrap-up &
+             Next Steps" copy, the team recap (#team-recap) and the take-home
+             downloads used to be three separate cards separated by the optional
+             post-test / survey cards. They are now ONE card at the top of the
+             wrap-up. The old standalone "Download my room's answers" button (a
+             lone-button card after its on-screen summary was removed 2026-07-16)
+             folds in with the take-home downloads. The optional post-test and
+             feedback-survey cards stay as their own cards BELOW this one. -->
+        <div class="card vignette wrapup-card">
           <svg class="wrap-art" viewBox="0 0 120 70" aria-hidden="true">
             <path d="M30 60L20 20l28 22z" fill="#2e9fdf" />
             <path d="M90 60l10-40-28 22z" fill="#0f4e85" />
@@ -2564,7 +2572,6 @@
           <ol class="info-list">
             <li data-i18n="stage.wrap.do-questionnaire">Complete the end-of-session questionnaire — it only
               takes a few minutes, and there is a short post-test in 3 weeks.</li>
-            <li data-i18n="stage.wrap.answers-saved">Your group's answers are saved below — your facilitators will collect them.</li>
           </ol>
           <a id="quiz-btn" class="teams-btn hidden" target="_blank" rel="noopener"
              data-i18n="stage.wrap.open-questionnaire">
@@ -2573,6 +2580,24 @@
              data-i18n="stage.wrap.questionnaire-fallback">Your facilitator will share the questionnaire link.</p>
           <p class="hint" data-i18n="stage.wrap.bye">Once you've done the questionnaire you can close this tab. See you
             at Session 4!</p>
+
+          <!-- team recap (rendered by renderTeamRecap into #team-recap) -->
+          <div class="team-recap-panel">
+            <div id="team-recap"></div>
+          </div>
+
+          <!-- take-home downloads: two PDFs (booklet + certificate) plus this
+               room's answers as Markdown (student-only; wired in initEndPoll). -->
+          <div class="take-home-block">
+            <h3 data-i18n="stage.wrap.takehome.title">🎓 Take it with you</h3>
+            <p class="hint" data-i18n="stage.wrap.takehome.hint">Two PDFs to keep: a study booklet to revise from, and your certificate of attendance.</p>
+            <button id="wrapup-booklet-btn" class="wrapup-download-btn" type="button"
+                    data-i18n="stage.wrap.booklet">📘 Download the study booklet (PDF)</button>
+            <button id="wrapup-cert-btn" class="wrapup-download-btn" type="button"
+                    data-i18n="stage.wrap.cert">🎓 Download your certificate of attendance (PDF)</button>
+            <button id="wrapup-download-btn" class="wrapup-download-btn" type="button"
+                    data-i18n="stage.wrap.download">⤓ Download my room's answers (Markdown)</button>
+          </div>
         </div>
         <!-- in-platform post-test card: appears only when the scenario defines
              a postTest bank AND the participant has not already taken it.
@@ -2607,44 +2632,13 @@
           <div id="survey-body" class="survey-body hidden" aria-live="polite"></div>
         </div>
 
-        <div class="card team-recap-card">
-          <div id="team-recap"></div>
-        </div>
-
-        <!-- The 2-question "Quick reflection" end-poll was removed 2026-06-16
-             (PI request): the full subjective questionnaire (#survey-card above,
-             24 items) is the reflection surface now. The /poll/$cid DB rule is
-             left in place for back-compat with any archived data. -->
-
-        <div class="card">
-          <!-- The on-screen "Your room's answers" summary + the "✓ Official
-               answer — the case diagnosis" reveal (#wrapup-summary) were removed
-               2026-07-16 (user request): the empty "No answers recorded." list
-               read as broken, and the answers + the synthesis/diagnosis still ship
-               in the Markdown export below (downloadMyRoomAnswers includes the
-               synthesis aParts), which the facilitator collects. renderWrapupSummary
-               keeps rendering the team-recap card and no-ops its summary render now
-               that #wrapup-summary is gone (same pattern as renderObjectives). -->
-          <!-- Round-4 (sim: Hiroshi, Antoine, Hugo asked to take their team's
-               answers away). Students can now export their OWN room's answers
-               as Markdown at wrap-up — previously only the facilitator could
-               export (all rooms). Wired student-only in initEndPoll(). -->
-          <button id="wrapup-download-btn" class="wrapup-download-btn" type="button"
-                  data-i18n="stage.wrap.download">⤓ Download my room's answers (Markdown)</button>
-        </div>
-
-        <!-- Take-home PDFs (2026-05-27). Two client-side PDFs via pdfmake
-             (lazy-loaded on click): a designed study booklet to revise from
-             and a certificate of attendance. Student-only; wired in
-             initEndPoll(). -->
-        <div class="card take-home-card">
-          <h3 data-i18n="stage.wrap.takehome.title">🎓 Take it with you</h3>
-          <p class="hint" data-i18n="stage.wrap.takehome.hint">Two PDFs to keep: a study booklet to revise from, and your certificate of attendance.</p>
-          <button id="wrapup-booklet-btn" class="wrapup-download-btn" type="button"
-                  data-i18n="stage.wrap.booklet">📘 Download the study booklet (PDF)</button>
-          <button id="wrapup-cert-btn" class="wrapup-download-btn" type="button"
-                  data-i18n="stage.wrap.cert">🎓 Download your certificate of attendance (PDF)</button>
-        </div>
+        <!-- (The team recap, the "Download my room's answers" button and the
+             take-home PDFs moved INTO the consolidated wrap-up card above,
+             2026-07-16. The 2-question "Quick reflection" end-poll was removed
+             2026-06-16 — the #survey-card feedback questionnaire is the
+             reflection surface now; the /poll/$cid DB rule is kept for
+             back-compat with archived data. Wiring is unchanged: renderTeamRecap,
+             initEndPoll and the PDF builders all select by id.) -->
 
         <!-- The facilitator "📅 Schedule the retention reminder" card (calendar
              .ics / Google-Calendar links to send students the revisit self-check)
@@ -3084,46 +3078,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v82" defer></script>
+  <script src="firebase-config.js?v=v83" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v82" defer></script>
+  <script src="orgs.js?v=v83" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v82" defer></script>
+  <script src="platform-config.js?v=v83" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v82" defer></script>
+  <script src="telemetry.js?v=v83" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v82" defer></script>
+  <script src="purify.min.js?v=v83" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v82" defer></script>
+  <script src="i18n.js?v=v83" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v82" defer></script>
+  <script src="localdb.js?v=v83" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v82" defer></script>
+  <script src="lib.js?v=v83" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v82" defer></script>
+  <script src="pure-utils.js?v=v83" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3134,7 +3128,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v82" defer></script>
+  <script src="script-loader.js?v=v83" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3144,7 +3138,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v82" defer></script>
+  <script src="script.js?v=v83" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the

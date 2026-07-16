@@ -731,7 +731,6 @@
       "stage.wrap.title": "Wrap-up & Next Steps",
       "stage.wrap.thanks": "Thank you for taking part! Before you go:",
       "stage.wrap.do-questionnaire": "Complete the end-of-session questionnaire — it only takes a few minutes, and there is a short post-test in 3 weeks.",
-      "stage.wrap.answers-saved": "Your group's answers are saved below — your facilitators will collect them.",
       "stage.wrap.open-questionnaire": "Open the end-of-session questionnaire",
       "stage.wrap.questionnaire-fallback": "Your facilitator will share the questionnaire link.",
       "stage.wrap.bye": "Once you've done the questionnaire you can close this tab. See you at Session 4!",

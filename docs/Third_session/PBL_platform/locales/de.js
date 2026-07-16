@@ -146,7 +146,6 @@
   "stage.wrap.title": "Abschluss & nächste Schritte",
   "stage.wrap.thanks": "Danke für Ihre Teilnahme! Vor dem Verlassen:",
   "stage.wrap.do-questionnaire": "Füllen Sie den Abschlussfragebogen aus — er dauert nur wenige Minuten, und in 3 Wochen folgt ein kurzer Nachtest.",
-  "stage.wrap.answers-saved": "Die Antworten Ihrer Gruppe sind unten gespeichert — Ihre Lehrpersonen werden sie einsammeln.",
   "stage.wrap.open-questionnaire": "Abschlussfragebogen öffnen",
   "stage.wrap.questionnaire-fallback": "Ihre Lehrperson wird den Link zum Fragebogen teilen.",
   "stage.wrap.bye": "Nach dem Ausfüllen des Fragebogens können Sie diesen Tab schließen. Bis zur Sitzung 4!",
