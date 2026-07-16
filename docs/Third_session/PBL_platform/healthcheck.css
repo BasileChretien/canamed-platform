@@ -7,12 +7,18 @@
 body {
   background: var(--bg, #faf7f1);
   color: var(--n-900, #1f262d);
-  font-family: var(--font-body, system-ui, -apple-system, "Segoe UI",
+  font-family: var(--font-sans, system-ui, -apple-system, "Segoe UI",
     Roboto, sans-serif);
   margin: 0;
   padding: 0;
   min-height: 100vh;
 }
+
+/* healthcheck.html also loads style.css, so its <header> carries the deep
+   masthead gradient — the lead text and runbook link must use masthead ink,
+   not the page's muted grey (grey-on-navy failed contrast). */
+.hc-header { color: var(--masthead-ink, #fff); }
+.hc-header a { color: var(--masthead-ink, #fff); }
 
 .hc-header {
   max-width: 760px;
@@ -40,13 +46,14 @@ body {
 
 .hc-brand-tag {
   font-size: 13px;
-  color: var(--n-600, #5a6772);
+  color: color-mix(in srgb, var(--masthead-ink, #fff) 80%, transparent);
 }
 
 .hc-lead {
   font-size: 14px;
   line-height: 1.5;
-  color: var(--n-700, #38434f);
+  /* sits on the masthead gradient (style.css <header>), not the page bg */
+  color: color-mix(in srgb, var(--masthead-ink, #fff) 88%, transparent);
   margin: 8px 0 0;
 }
 

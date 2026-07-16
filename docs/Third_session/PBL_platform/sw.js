@@ -36,12 +36,17 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v83";
+const SHELL_VERSION = "canamed-shell-v84";
 
 const SHELL_ASSETS = [
   "/",
   "/index.html",
+  "/tokens.css",
   "/style.css",
+  "/fonts/source-sans-3-latin-wght-normal.woff2",
+  "/fonts/source-sans-3-latin-ext-wght-normal.woff2",
+  "/fonts/source-serif-4-latin-wght-normal.woff2",
+  "/fonts/source-serif-4-latin-ext-wght-normal.woff2",
   "/privacy.css",
   "/theme-init.js",
   "/qrcode.js",

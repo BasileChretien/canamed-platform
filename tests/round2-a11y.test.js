@@ -34,7 +34,10 @@ const path = require("node:path");
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX_HTML = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
 const TOUR_JS    = fs.readFileSync(path.join(PLATFORM, "tour.js"),    "utf8");
-const STYLE_CSS  = fs.readFileSync(path.join(PLATFORM, "style.css"),  "utf8");
+const STYLE_CSS  = fs.readFileSync(path.join(PLATFORM, "style.css"),  "utf8") +
+  // design tokens were extracted to tokens.css (Clinical Editorial restyle);
+  // token-value assertions below apply to the pair as one cascade
+  fs.readFileSync(path.join(PLATFORM, "tokens.css"), "utf8");
 
 // ------------------------------------------------------------------
 // A1 — missing live region restored

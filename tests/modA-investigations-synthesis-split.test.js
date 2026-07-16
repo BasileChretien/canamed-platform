@@ -71,13 +71,20 @@ test("the chat no longer auto-reveals the synthesis", () => {
 
 test("the chat consent button has a dark-mode contrast override (white-on-cyan fails AA)", () => {
   // The consent button fills with var(--primary). In light/high-contrast that's
-  // a dark blue (white text passes); in DARK, --primary is the lighter cyan
-  // (--nagoya-500), where white text fails 4.5:1 — so dark mode must force dark
-  // text, like the splash primaries.
+  // a dark blue; in DARK, --primary is the lighter cyan (--nagoya-500), where
+  // white text fails 4.5:1. Since the Clinical Editorial restyle the dark-text
+  // flip is delivered by the --on-primary token (tokens.css) instead of
+  // per-theme colour overrides: the button must reference var(--on-primary),
+  // and tokens.css must remap --on-primary to dark ink in BOTH dark blocks
+  // (forced [data-theme="dark"] and the prefers-color-scheme auto block).
   const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
-  assert.match(CSS, /html\[data-theme="dark"\] \.moda-chat-consent-btn\s*\{[^}]*color:\s*#0e1620/,
-    "dark theme must override the consent button text to dark");
-  assert.match(CSS,
-    /prefers-color-scheme: dark[\s\S]{0,200}\.moda-chat-consent-btn\s*\{[^}]*color:\s*#0e1620/,
-    "auto (prefers-color-scheme: dark) must also override the consent button text");
+  assert.match(CSS, /\.moda-chat-consent-btn\s*\{[^}]*color:\s*var\(--on-primary\)/,
+    "the consent button text must use the theme-aware --on-primary token");
+  const TOKENS = fs.readFileSync(path.join(PLATFORM, "tokens.css"), "utf8");
+  assert.match(TOKENS,
+    /html\[data-theme="dark"\]\s*\{[^}]*--on-primary:\s*#0e1620/s,
+    "forced dark theme must remap --on-primary to dark ink");
+  assert.match(TOKENS,
+    /prefers-color-scheme: dark[\s\S]*?--on-primary:\s*#0e1620/,
+    "auto (prefers-color-scheme: dark) must also remap --on-primary to dark ink");
 });

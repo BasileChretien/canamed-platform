@@ -8,105 +8,12 @@
    cap, and prefers-reduced-motion / prefers-contrast support.
    ========================================================================== */
 
-:root {
-  /* ========================================================================
-     DESIGN v3 - "Two arcs, one circle"
-     Warm paper ground, confident ink, two saturated brand accents used as
-     fields (not hairlines), a third "meeting" accent for everything shared,
-     layered blue-tinted depth. Refactored: this is the single source of truth
-     - the old base values and the "WOW" overrides are reconciled here.
-     ======================================================================== */
-  /* --- Nagoya (Japan) blue --- */
-  --nagoya-700: #0c3f6e;
-  --nagoya-600: #1763a6;
-  --nagoya-500: #2e9fdf;
-  --nagoya-50:  #e9f4fb;
-  /* --- Caen (France) warm ochre - softened from a caution-yellow --- */
-  --caen-500:   #e08a1e;   /* decorative only (dots, art) */
-  --caen-ink:   #7a5d12;   /* amber as TEXT - passes AA on white */
-  --caen-line:  #b45309;   /* amber as a BORDER / strong accent - AA */
-  --caen-50:    #fbf3df;
-  /* --- the "meeting" accent: the blend of the two, for everything SHARED
-         (the cooperative goal bar, the mark's heart, cross-cultural UI) --- */
-  --meeting:    #4f7d8c;
-  --meeting-50: #eaf1f3;
-
-  /* --- warm neutral ramp --- */
-  --n-0:   #ffffff;
-  --n-25:  #fbf9f4;
-  --n-50:  #f1eee6;
-  --n-100: #e6e2d8;
-  --n-200: #d4cfc2;
-  --n-300: #b3ab99;
-  /* Round-2 a11y: bumped from #5b6b7a (≈4.72:1 on --bg) to #4d5b6a
-     (≈5.6:1) for more comfortable scanning by B1/B2 EFL readers at
-     the smaller font sizes (.lobby-hint 0.86rem, .role-chip-brief
-     0.84rem). No layout impact. */
-  --n-500: #4d5b6a;
-  --n-700: #38434f;
-  --n-900: #16202b;
-
-  /* --- semantic --- */
-  --bg: #f6f4ef;             /* warm paper - instantly less clinical */
-  --card: var(--n-0);
-  --surface-sunk: #f3f0e8;
-  --line: var(--n-100);
-  --line-strong: var(--n-200);
-  --ink: var(--n-900);
-  --muted: var(--n-500);
-  --primary: var(--nagoya-600);
-  --primary-hover: var(--nagoya-700);
-  --key: #c0392b;
-  --key-50: #fdecea;
-  --ok: #1e8449;
-  --ok-strong: #176b3a;        /* WCAG-AA-conformant on --ok-50 (text use) */
-  --ok-50: #e7f4ec;
-  --focus: #11161b;
-
-  /* --- consultation-note "paper chart" surface tokens (themed) ---
-   * The chart container used to hard-code #fbf9f3 + #d8cdb4 which left
-   * dark / high-contrast themes with cream paper underneath theme-aware
-   * white text → unreadable. Defining themed tokens here + overriding
-   * them in the dark / high-contrast blocks keeps the warm-paper look
-   * in light mode while making the surface follow the theme everywhere
-   * else. */
-  --note-bg:    #fbf9f3;
-  --note-line:  #d8cdb4;
-  --note-stripe: rgba(206, 184, 138, 0.18);
-  --note-margin-line: rgba(220, 120, 90, 0.30);
-  --note-ink:   var(--ink);
-  --note-accent-ink: #5a3b14;  /* caen-paper headline ink — overridden in dark */
-
-  /* --- radius / shadow / spacing --- */
-  --r-sm: 9px;
-  --r-md: 13px;
-  --r-lg: 18px;
-  --r-xl: 24px;
-  --r-pill: 999px;
-  /* layered, blue-tinted shadows - the single biggest "modern" lever */
-  --sh-sm: 0 1px 2px rgba(12,63,110,.07), 0 2px 6px rgba(12,63,110,.06);
-  --sh-md: 0 2px 4px rgba(12,63,110,.06), 0 10px 26px rgba(12,63,110,.11);
-  --sh-lg: 0 4px 10px rgba(12,63,110,.07), 0 26px 60px rgba(12,63,110,.17);
-  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px;
-  --s-5: 24px; --s-6: 32px; --s-7: 48px;
-
-  /* --- motion: one unified vocabulary ---
-     enters use --ease-out (translate <=14px); state changes use --ease-soft;
-     --ease-spring is reserved for EARNED-points moments so a bounce means
-     something. No infinite loops outside prefers-reduced-motion: no-preference. */
-  --dur-micro: 90ms;
-  --dur-fast:  160ms;
-  --dur-base:  260ms;
-  --dur-view:  380ms;
-  --dur-event: 1100ms;
-  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-soft:   cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
-
-  /* per-stage accent - set live on #room-main[data-stage]; default = Welcome */
-  --stage-accent: var(--nagoya-600);
-  --stage-accent-50: var(--nagoya-50);
-}
+/* ==========================================================================
+   DESIGN TOKENS moved to tokens.css (loaded before this file) — the single
+   source of truth for colour, type, space, radius, shadow, motion and
+   z-index. Do not redefine tokens here; do not write raw hex/px values in
+   this file — reference a token. (Clinical Editorial restyle, 2026-07.)
+   ========================================================================== */
 /* the four workshop "chapters" each get their own accent colour */
 #room-main[data-stage="0"] { --stage-accent: var(--meeting);     --stage-accent-50: var(--meeting-50); }
 #room-main[data-stage="1"] { --stage-accent: var(--nagoya-600);  --stage-accent-50: var(--nagoya-50); }
@@ -150,7 +57,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--font-sans);
   /* a near-invisible blue+amber wash so the page never reads as flat grey */
   background:
     radial-gradient(900px 620px at 88% -12%, var(--nagoya-50) 0%, transparent 55%),
@@ -165,9 +72,26 @@ body {
 
 .hidden { display: none !important; }
 
-/* ---------- typography base ---------- */
-h1, h2, h3, h4 { letter-spacing: -0.015em; }
+/* ---------- typography base ----------
+   Clinical Editorial: headings h1-h3 carry the serif display voice
+   (Source Serif 4); h4+ and all UI chrome stay in the humanist sans.
+   Serif at display sizes wants tighter default tracking than the sans. */
+h1, h2, h3 {
+  font-family: var(--font-serif);
+  line-height: var(--lh-tight);
+  letter-spacing: -0.01em;
+}
+h4 { letter-spacing: -0.015em; }
 p { margin: 0.6em 0; }
+/* the letterspaced small-caps "kicker" — the editorial signature used for
+   section/form labels (e.g. the splash "Session code" label) */
+.kicker {
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  color: var(--muted);
+}
 /* cap prose width for second-language readers - long lines are hard to track */
 .vignette p, .instructions p, .instructions-open p, .info-list,
 .safety-note p, .privacy-note p, .micro-framework p {
@@ -188,8 +112,8 @@ p { margin: 0.6em 0; }
 
 /* ---------- header ---------- */
 header {
-  background: linear-gradient(105deg, var(--nagoya-600), var(--nagoya-700));
-  color: #fff;
+  background: linear-gradient(105deg, var(--masthead-a), var(--masthead-b));
+  color: var(--masthead-ink);
   box-shadow: inset 0 -3px 0 var(--caen-500), var(--sh-md);
 }
 .header-inner {
@@ -350,9 +274,9 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
 #join-btn, #start-session-btn, #prev-btn, #next-btn, .answer-add-btn,
 #save-teams-btn, #save-quiz-btn, #advance-all-btn, #admin-download-btn,
 #change-pass-btn, .dash-ctrl button, .sidebar-room-ctrl button,
-.admin-controls button, #wrapup-download-btn {
+.admin-controls button, #wrapup-download-btn, #save-prequiz-btn {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   font: inherit;
@@ -369,7 +293,7 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
 .answer-add-btn:hover, #save-teams-btn:hover, #save-quiz-btn:hover,
 #advance-all-btn:hover, #admin-download-btn:hover, #change-pass-btn:hover,
 .dash-ctrl button:hover, .sidebar-room-ctrl button:hover,
-.admin-controls button:hover {
+.admin-controls button:hover, #save-prequiz-btn:hover {
   background: var(--primary-hover);
 }
 #prev-btn:disabled, #next-btn:disabled, .dash-ctrl button:disabled,
@@ -1771,8 +1695,12 @@ details.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   z-index: 60;
   max-width: min(280px, 90vw);
   padding: 8px 10px;
+  /* the ONLY surface that renders FR + JA glosses: Latin face first so
+     EN/FR glyphs match the UI, then the system JP stack so 日本語 renders
+     cleanly (Hiragino / Yu Gothic / Noto Sans JP) — zero font download */
+  font-family: var(--font-cjk);
   font-size: 0.8rem;
-  line-height: 1.35;
+  line-height: var(--lh-snug);
   white-space: pre-line;
   color: var(--ink);
   background: var(--card);
@@ -2674,11 +2602,11 @@ footer {
   font-size: 0.82rem;
 }
 .sidebar-room-ctrl button { min-width: 40px; }
-.view-btn { background: var(--ink) !important; }
-.view-btn:hover { background: #000 !important; }
+.view-btn { background: var(--ink) !important; color: var(--bg) !important; }
+.view-btn:hover { filter: brightness(1.12); } /* theme-proof (no #000) */
 .call-badge {
   background: var(--key);
-  color: #fff;
+  color: var(--key-50);
   font-size: 0.74rem;
   font-weight: 700;
   border-radius: var(--r-pill);
@@ -3367,7 +3295,7 @@ body {
 header {
   background:
     radial-gradient(620px 220px at 85% -70%, rgba(231,184,0,.24), transparent),
-    linear-gradient(135deg, #0f4e85, #08243f);
+    linear-gradient(135deg, var(--masthead-a), var(--masthead-b));
   box-shadow:
     inset 0 -1px 0 rgba(255,255,255,.08),
     inset 0 -4px 0 var(--caen-500),
@@ -3425,11 +3353,13 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
   color: var(--caen-500);
   margin: 0;
 }
+/* serif display voice (a <p> — outside the global h1-h3 serif rule) */
 .hero-title {
-  font-size: 2.6rem;
-  line-height: 1.04;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-family: var(--font-serif);
+  font-size: var(--fs-7);
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
   margin: 0.1em 0;
 }
 .hero-tag { font-size: 0.88rem; opacity: 0.82; margin: 0; }
@@ -3442,7 +3372,7 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 @media (max-width: 760px) {
   #lobby { grid-template-columns: 1fr; max-width: 460px; }
   .hero-aside { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--s-6); }
-  .hero-title { font-size: 2rem; }
+  .hero-title { font-size: var(--fs-6); }
   .lobby-card { border-radius: 0 0 var(--r-lg) var(--r-lg); }
 }
 
@@ -3472,14 +3402,13 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 .stage-indicator { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 h2, h3 { text-wrap: balance; }
 
-/* --- gradient primary buttons + hover glow --- */
+/* --- primary CTA hover glow (fill comes from the primary button role:
+   solid --primary/--on-primary — a gradient's light end broke AA in light) --- */
 #join-btn, #start-session-btn {
-  background: linear-gradient(135deg, #2e9fdf, #1763a6);
-  box-shadow: 0 4px 14px rgba(23,99,166,.32);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--nagoya-600) 32%, transparent);
 }
 #join-btn:hover, #start-session-btn:hover {
-  background: linear-gradient(135deg, #3aa9e6, #1763a6);
-  box-shadow: 0 6px 20px rgba(23,99,166,.46);
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--nagoya-600) 46%, transparent);
 }
 .req-btn:hover {
   box-shadow: 0 0 0 3px var(--nagoya-50), 0 4px 12px rgba(46,159,223,.18);
@@ -3599,11 +3528,6 @@ h2, h3 { text-wrap: balance; }
 }
 @keyframes rm-fade { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-contrast: more) {
-  :root {
-    --line: #8a93a0;
-    --line-strong: #6b7682;
-    --muted: #3d4651;
-  }
   .card, .req-btn, .recap-table th, .recap-table td { border-width: 2px; }
 }
 
@@ -4319,7 +4243,7 @@ body.locked > footer { display: none !important; }
   max-width: min(520px, 100%);
 }
 @media (max-width: 360px) {
-  .splash-card { padding: 28px 16px 22px; border-radius: 16px; }
+  .splash-card { padding: 28px 16px 22px; border-radius: var(--r-lg); }
 }
 @keyframes splash-in {
   from { opacity: 0; transform: translateY(14px) scale(0.985); }
@@ -4333,19 +4257,21 @@ body.locked > footer { display: none !important; }
 .splash-mark .arc-n { stroke: var(--nagoya-500, #2e9fdf); }
 .splash-mark .arc-c { stroke: var(--caen-500, #e08a1e); }
 .splash-mark .heart { fill: var(--n-700, #38434f); }
+/* the wordmark: letterspaced all-caps SERIF — a university-press signature,
+   not a tech logo. Weight/tracking tuned for Source Serif 4 at display size. */
 .splash-title {
   margin: 0 0 8px;
-  font-size: clamp(2.4rem, 6vw, 3.2rem);
-  font-weight: 800;
-  letter-spacing: 0.18em;
+  font-size: clamp(var(--fs-7), 6vw, calc(var(--fs-7) * 1.28));
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0.12em;
   color: var(--ink);
 }
 .splash-tag {
   margin: 0 auto 26px;
   max-width: 38ch;
   color: var(--muted);
-  font-size: 0.98rem;
-  line-height: 1.5;
+  font-size: var(--fs-2);
+  line-height: var(--lh-body);
 }
 /* Compact language switcher under the splash tagline. R2-42 promoted
    the EN/FR/JA pill buttons to a native <select> covering all 8 supported
@@ -4408,16 +4334,19 @@ body.locked > footer { display: none !important; }
   color: var(--ink, #2a2a2a);
 }
 .splash-lang-switcher button.active {
-  background: var(--ink, #2a2a2a);
-  border-color: var(--ink, #2a2a2a);
-  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--card);
 }
+/* form label as an editorial kicker (letterspaced caps) */
 .splash-label {
   display: block;
   margin: 0 0 8px;
-  color: var(--ink);
-  font-weight: 600;
-  font-size: 0.92rem;
+  color: var(--muted);
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-1);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
 }
 .splash-row {
   display: flex;
@@ -4443,8 +4372,8 @@ body.locked > footer { display: none !important; }
   transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
               box-shadow var(--dur-base, .18s) var(--ease-out, ease);
 }
-#splash-code:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(46,159,223,0.18); }
-#splash-code.err { border-color: #b91c1c; box-shadow: 0 0 0 3px rgba(185,28,28,0.14); }
+#splash-code:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+#splash-code.err { border-color: var(--key); box-shadow: 0 0 0 3px color-mix(in srgb, var(--key) 14%, transparent); }
 #splash-code.shake { animation: splash-shake .35s var(--ease-out, ease); }
 @keyframes splash-shake {
   10%,90% { transform: translateX(-2px); }
@@ -4454,9 +4383,9 @@ body.locked > footer { display: none !important; }
 }
 #splash-enter {
   font: inherit;
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: #fff;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-2);
+  color: var(--on-primary);
   background: var(--primary);
   border: none;
   padding: 12px 22px;
@@ -4473,7 +4402,7 @@ body.locked > footer { display: none !important; }
   font-size: 0.88rem;
   color: var(--muted);
 }
-.splash-hint.err { color: #b91c1c; }
+.splash-hint.err { color: var(--key); }
 .splash-hint.ok { color: var(--ok); }
 .splash-foot {
   margin: 22px 0 0;
@@ -4502,9 +4431,11 @@ body.locked > footer { display: none !important; }
 
 /* --- the bigger "label" used by Create / Created views --- */
 .splash-label-big {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-family: var(--font-serif);
+  font-size: var(--fs-4);
+  font-weight: var(--fw-semibold);
   letter-spacing: -0.008em;
+  line-height: var(--lh-snug);
   margin-bottom: 6px;
 }
 .splash-sublabel {
@@ -4609,7 +4540,7 @@ body.locked > footer { display: none !important; }
   border-radius: var(--r-md);
 }
 #splash-shown-code {
-  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font-family: var(--font-mono);
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -4684,7 +4615,7 @@ body.locked > footer { display: none !important; }
   margin: 4px 0 8px;
 }
 #splash-recovery-code {
-  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font-family: var(--font-mono);
   font-size: clamp(1.2rem, 3.4vw, 1.7rem);
   font-weight: 800;
   letter-spacing: 0.10em;
@@ -4729,7 +4660,7 @@ body.locked > footer { display: none !important; }
   margin: 0 0 12px;
 }
 .session-badge #session-badge-code {
-  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ok-strong, #176b3a);
@@ -4783,7 +4714,7 @@ body.locked > footer { display: none !important; }
 }
 .splash-field textarea {
   padding: 10px 12px;
-  font: 0.86rem ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font: 0.86rem var(--font-mono);
   color: var(--ink);
   background: var(--card);
   border: 1.5px solid var(--line-strong);
@@ -4799,7 +4730,7 @@ body.locked > footer { display: none !important; }
   box-shadow: 0 0 0 3px rgba(46,159,223,0.18);
 }
 .splash-field code {
-  font: 0.85rem ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font: 0.85rem var(--font-mono);
   background: var(--surface-sunk, #f3f0e8);
   padding: 1px 5px;
   border-radius: 4px;
@@ -4826,7 +4757,7 @@ body.locked > footer { display: none !important; }
   font-size: 0.9rem;
 }
 .admin-session-chip-code {
-  font-family: ui-monospace, "JetBrains Mono", "Consolas", "SFMono-Regular", monospace;
+  font-family: var(--font-mono);
   font-size: clamp(1.2rem, 2.4vw, 1.6rem);
   font-weight: 800;
   letter-spacing: 0.14em;
@@ -4848,12 +4779,12 @@ body.locked > footer { display: none !important; }
   transition: background var(--dur-base, .18s) var(--ease-out, ease),
               color var(--dur-base, .18s) var(--ease-out, ease);
 }
-.admin-session-chip-copy:hover { background: var(--primary); color: #fff; }
+.admin-session-chip-copy:hover { background: var(--primary); color: var(--on-primary); }
 .admin-session-chip .copy-ok { color: var(--ok); font-weight: 700; font-size: 0.86rem; }
 
 /* --- "End session & download archive" admin button - calm, not alarming --- */
 #admin-close-btn {
-  background: #fff;
+  background: var(--card); /* theme-aware: #fff broke dark (ivory-on-white) */
   color: var(--ink);
   border: 1.5px solid var(--line-strong);
   box-shadow: none;
@@ -5410,7 +5341,7 @@ body.session-ended-shown { overflow: hidden; }
 }
 .account-email-row strong {
   color: var(--ink);
-  font-family: ui-monospace, "JetBrains Mono", "Consolas", monospace;
+  font-family: var(--font-mono);
   font-size: 0.86rem;
 }
 .account-fieldset {
@@ -5483,7 +5414,7 @@ body.session-ended-shown { overflow: hidden; }
 }
 .account-history-row:last-child { border-bottom: none; }
 .account-history-code {
-  font-family: ui-monospace, "JetBrains Mono", "Consolas", monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--primary);
@@ -5566,7 +5497,9 @@ body.session-ended-shown { overflow: hidden; }
   margin-left: 2px;
 }
 #join-btn:disabled {
-  background: var(--n-300);
+  background: var(--n-100);
+  color: var(--muted);
+  border-color: var(--line-strong);
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -5966,7 +5899,13 @@ header h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; }
 .card h2 { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.025em; line-height: 1.16; }
 .card h3 { font-size: 1.1rem; font-weight: 700; }
 .card h4 { font-weight: 700; }
-.stage-indicator { font-size: 1.18rem; font-weight: 800; letter-spacing: -0.02em; }
+/* editorial kicker: letterspaced caps in the current stage accent */
+.stage-indicator {
+  font-size: var(--fs-1);
+  font-weight: var(--fw-bold);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-caps);
+}
 /* numbers as a graphic device - tabular, heavier */
 .score-num, .obj-tally, .lb-pts, .lb-rank, .count, .findings-count,
 .lb-shared-head span { font-variant-numeric: tabular-nums; }
@@ -5997,7 +5936,7 @@ header .brand-mark .heart, .hero-aside .brand-mark .heart { fill: #fff; }
 /* --- header: a crossing blue->meeting->amber underline --- */
 header {
   background: radial-gradient(620px 220px at 85% -70%, rgba(224,138,30,.22), transparent),
-              linear-gradient(135deg, var(--nagoya-700), #08243f);
+              linear-gradient(135deg, var(--masthead-a), var(--masthead-b));
   border-bottom: 3px solid transparent;
   border-image: linear-gradient(90deg, var(--nagoya-500), var(--meeting), var(--caen-500)) 1;
   box-shadow: 0 8px 26px rgba(8,36,63,.28);
@@ -6261,132 +6200,10 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
 }
 
 /* ==========================================================================
-   DARK THEME — palette and overrides
-   ==========================================================================
-   Activates in three ways:
-   1. <html data-theme="dark"> forced by user pref in localStorage canamed_theme
-   2. <html data-theme="auto"> (or no attribute) → @media (prefers-color-scheme: dark)
-   3. <html data-theme="light"> forces light regardless of OS
-   The dark palette is a deeper, blue-tinted ink-on-graphite reinterpretation
-   of the warm-paper light palette — same brand accents (Nagoya blue, Caen
-   amber, meeting teal) tuned for dark backgrounds, same WCAG-AA contrast
-   floor on body text and interactive controls. Surfaces are kept distinct
-   (bg < surface-sunk < card) so the layered-shadow system still reads.
+   DARK THEME — the token palette lives in tokens.css (forced
+   [data-theme="dark"] block + the prefers-color-scheme auto block). Only
+   component-level dark rules remain in this file.
    ========================================================================== */
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) {
-    /* warm paper -> warm graphite */
-    --bg: #0e1620;
-    --surface-sunk: #0a1119;
-    --card: #16202b;
-    --line: #243245;
-    --line-strong: #324760;
-    --ink: #f1eee6;
-    --muted: #b3ab99;
-    /* warm-neutral surface tints -> dark elevations. Without this the panels
-       that paint with them (.spikes-strip, .recap-table th + even rows,
-       dashboard hovers) kept a LIGHT background while ink flipped to near-white
-       — ~1.1:1, the "SPIKES/recap unreadable in dark mode" dry-run report. */
-    --n-25:  #131c26;
-    --n-50:  #18222e;
-    --n-100: #1d2937;
-    /* See html[data-theme="dark"] for note-token rationale. */
-    --note-bg:    #161e2a;
-    --note-line:  #2c3a52;
-    --note-stripe: rgba(206, 184, 138, 0.06);
-    --note-margin-line: rgba(220, 120, 90, 0.40);
-    --note-ink:   var(--ink);
-    --note-accent-ink: #e2b86b;
-    /* brand: a touch brighter so they pop against dark surfaces */
-    --nagoya-700: #1e6fb6;
-    --nagoya-600: #2e9fdf;
-    --nagoya-500: #5cb8e8;
-    --nagoya-50:  #102a3f;
-    --caen-500:   #f0a040;
-    --caen-ink:   #d5a55c;
-    --caen-line:  #ef9a3a;
-    --caen-50:    #2a2114;
-    --meeting:    #74a2b3;
-    --meeting-50: #1a2830;
-    /* semantic */
-    --primary: var(--nagoya-500);
-    /* Bug 4 follow-up (user-feedback-2): the previous
-       --primary-hover: var(--nagoya-700) was #1e6fb6 which only hits
-       ~2.95:1 on the #16202b card surface — well under the 4.5:1 AA
-       floor anywhere it is used as text (e.g. .scenario-line strong
-       falls through to --primary-hover via certain hover/focus states,
-       and `var(--primary-hover, #0c3f6e)` literal fallbacks). Flip to
-       --nagoya-500 (#5cb8e8) so the hover/active text variant keeps
-       ~6.5:1 contrast against the dark card. */
-    --primary-hover: var(--nagoya-500);
-    --key: #ff6b5a;
-    --key-50: #2a1612;
-    --ok: #4ec57f;
-    --ok-50: #102a1d;
-    /* Bug 4 follow-up (user-feedback-2): the light-mode --ok-strong
-       (#176b3a) is tuned for AA contrast on the LIGHT --ok-50 (#e7f4ec).
-       In dark mode --ok-50 flips to #102a1d, and #176b3a on it is only
-       2.33:1 — well below the 4.5:1 floor (seen on .session-badge,
-       #session-badge-code, .lobby-mode.shared, .obj-tally under the
-       dark theme axe sweep). Brighten --ok-strong to a pale mint so
-       it has ~9.5:1 contrast on #102a1d while still reading as the
-       "stronger" success-text variant relative to --ok (#4ec57f). */
-    --ok-strong: #7be0a4;
-    --focus: #f6d973;
-    /* shadows lose strength on dark backgrounds; use slightly darker
-       blue-blacks so cards still float visibly */
-    --sh-sm: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.20);
-    --sh-md: 0 2px 4px rgba(0,0,0,.32), 0 10px 26px rgba(0,0,0,.30);
-    --sh-lg: 0 4px 10px rgba(0,0,0,.36), 0 26px 60px rgba(0,0,0,.42);
-  }
-}
-/* Forced dark — same overrides as the media query, but unconditional. */
-html[data-theme="dark"] {
-  --bg: #0e1620;
-  --surface-sunk: #0a1119;
-  --card: #16202b;
-  --line: #243245;
-  --line-strong: #324760;
-  --ink: #f1eee6;
-  --muted: #b3ab99;
-  /* warm-neutral surface tints -> dark elevations (keeps light ink readable on
-     .spikes-strip, .recap-table th + even rows; see media-query block above). */
-  --n-25:  #131c26;
-  --n-50:  #18222e;
-  --n-100: #1d2937;
-  /* Consultation-note "paper chart" tokens override — see :root for
-     rationale. The warm-paper colour collapses to a deeper card so the
-     theme-aware text stays readable. */
-  --note-bg:    #161e2a;
-  --note-line:  #2c3a52;
-  --note-stripe: rgba(206, 184, 138, 0.06);
-  --note-margin-line: rgba(220, 120, 90, 0.40);
-  --note-ink:   var(--ink);
-  --note-accent-ink: #e2b86b;     /* warm headline ink that reads on dark */
-  --nagoya-700: #1e6fb6;
-  --nagoya-600: #2e9fdf;
-  --nagoya-500: #5cb8e8;
-  --nagoya-50:  #102a3f;
-  --caen-500:   #f0a040;
-  --caen-ink:   #d5a55c;
-  --caen-line:  #ef9a3a;
-  --caen-50:    #2a2114;
-  --meeting:    #74a2b3;
-  --meeting-50: #1a2830;
-  --primary: var(--nagoya-500);
-  /* See @media (prefers-color-scheme: dark) block above for contrast rationale. */
-  --primary-hover: var(--nagoya-500);
-  --key: #ff6b5a;
-  --key-50: #2a1612;
-  --ok: #4ec57f;
-  --ok-50: #102a1d;
-  /* See dark @media block above for the contrast rationale. */
-  --ok-strong: #7be0a4;
-  --focus: #f6d973;
-  --sh-sm: 0 1px 2px rgba(0,0,0,.30), 0 2px 6px rgba(0,0,0,.20);
-  --sh-md: 0 2px 4px rgba(0,0,0,.32), 0 10px 26px rgba(0,0,0,.30);
-  --sh-lg: 0 4px 10px rgba(0,0,0,.36), 0 26px 60px rgba(0,0,0,.42);
-}
 /* Bug 4 follow-up (user-feedback-2): the splash footer links
    `#splash-go-create` / `#splash-go-account` resolved to `var(--primary)`
    which axe-core under the dark theme saw as #1763a6 on the #16202b
@@ -7308,7 +7125,7 @@ html[data-theme="high-contrast"] :focus-visible {
   background: var(--card-alt, #f1f5f9);
   border: 1px solid var(--line, #e2e8f0);
   border-radius: var(--r-sm, 4px);
-  font-family: ui-monospace, "JetBrains Mono", "Consolas", monospace;
+  font-family: var(--font-mono);
   font-size: 0.82rem;
   line-height: 1.5;
   max-height: 220px;
@@ -7568,20 +7385,20 @@ body.locked .global-settings { display: none; }
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px 12px;
-  border: 1px solid var(--card-border, #d6e4f0);
-  border-radius: 10px;
-  background: var(--card-bg, #fafdff);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--card);
   margin-top: 6px;
 }
 .moda-chat-disclosure {
   font-size: 12px;
-  color: var(--muted-fg, #4d5b6c);
-  background: var(--accent-bg-subtle, #eef5fb);
-  border-left: 3px solid var(--accent, #1763a6);
+  color: var(--muted);
+  background: var(--nagoya-50);
+  border-left: 3px solid var(--primary);
   padding: 6px 8px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
 }
-.moda-chat-disclosure a { color: var(--accent, #1763a6); }
+.moda-chat-disclosure a { color: var(--primary); }
 .moda-chat-consent {
   display: flex;
   justify-content: center;
@@ -7598,20 +7415,14 @@ body.locked .global-settings { display: none; }
 .moda-chat-consent-btn {
   padding: 8px 14px;
   border-radius: 6px;
-  border: 1px solid var(--primary, #1763a6);
-  background: var(--primary, #1763a6);
-  color: #fff;
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
   cursor: pointer;
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--fw-semibold);
 }
 .moda-chat-consent-btn:hover { filter: brightness(0.94); }
-@media (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]):not([data-theme="high-contrast"]) .moda-chat-consent-btn {
-    color: #0e1620;
-  }
-}
-html[data-theme="dark"] .moda-chat-consent-btn { color: #0e1620; }
 .moda-chat-transcript {
   display: flex;
   flex-direction: column;
@@ -7620,9 +7431,9 @@ html[data-theme="dark"] .moda-chat-consent-btn { color: #0e1620; }
   max-height: 360px;
   overflow-y: auto;
   padding: 6px;
-  background: var(--card-bg-inset, #ffffff);
-  border: 1px solid var(--card-border, #e4ecf3);
-  border-radius: 6px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
 }
 .moda-chat-bub {
   max-width: 86%;
@@ -7635,15 +7446,16 @@ html[data-theme="dark"] .moda-chat-consent-btn { color: #0e1620; }
 }
 .moda-chat-bub-user {
   align-self: flex-end;
-  background: var(--accent, #1763a6);
-  color: #fff;
-  border-bottom-right-radius: 4px;
+  /* NOT var(--accent): that resolves to org amber → white-on-amber fails AA */
+  background: var(--primary);
+  color: var(--on-primary);
+  border-bottom-right-radius: var(--r-sm);
 }
 .moda-chat-bub-assistant {
   align-self: flex-start;
-  background: var(--bub-bg, #eef2f6);
-  color: var(--fg, #1a2330);
-  border-bottom-left-radius: 4px;
+  background: var(--n-50);
+  color: var(--ink);
+  border-bottom-left-radius: var(--r-sm);
 }
 .moda-chat-form {
   display: flex;
@@ -7656,20 +7468,20 @@ html[data-theme="dark"] .moda-chat-consent-btn { color: #0e1620; }
   min-height: 38px;
   font: inherit;
   padding: 6px 8px;
-  border: 1px solid var(--card-border, #d6e4f0);
-  border-radius: 6px;
-  background: var(--card-bg-inset, #fff);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--card);
 }
 .moda-chat-form textarea:disabled {
-  background: var(--card-bg, #f3f6f9);
+  background: var(--surface-sunk);
   opacity: 0.7;
 }
 .moda-chat-form button {
   padding: 8px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--accent, #1763a6);
-  background: var(--accent, #1763a6);
-  color: #fff;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
   cursor: pointer;
   font: inherit;
 }
@@ -7677,10 +7489,10 @@ html[data-theme="dark"] .moda-chat-consent-btn { color: #0e1620; }
 .moda-chat-status {
   min-height: 18px;
   font-size: 12px;
-  color: var(--muted-fg, #4d5b6c);
+  color: var(--muted);
 }
-.moda-chat-status[data-kind="warn"]  { color: #a05a00; }
-.moda-chat-status[data-kind="error"] { color: var(--danger, #b00020); }
+.moda-chat-status[data-kind="warn"]  { color: var(--caen-ink); }
+.moda-chat-status[data-kind="error"] { color: var(--key); }
 
 /* Mobile: tighten paddings + collapse the textarea + button to a column
    so the send button stays reachable above the fold. */
@@ -7701,13 +7513,13 @@ html[data-theme="dark"] .moda-chat-consent-btn { color: #0e1620; }
 /* High-contrast theme: trade subtle accents for the on-token. */
 body.theme-high-contrast .moda-chat-panel,
 body[data-theme="high-contrast"] .moda-chat-panel {
-  border-color: var(--fg, #000);
-  background: var(--card-bg, #fff);
+  border-color: var(--ink);
+  background: var(--card);
 }
 body.theme-high-contrast .moda-chat-bub-assistant,
 body[data-theme="high-contrast"] .moda-chat-bub-assistant {
-  background: var(--card-bg-inset, #fff);
-  border: 1px solid var(--fg, #000);
+  background: var(--surface-sunk);
+  border: 1px solid var(--ink);
 }
 
 /* === Chat-only mode for HISTORY (2026-05-28) ==============================
