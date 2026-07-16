@@ -274,7 +274,7 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
 #join-btn, #start-session-btn, #prev-btn, #next-btn, .answer-add-btn,
 #save-teams-btn, #save-quiz-btn, #advance-all-btn, #admin-download-btn,
 #change-pass-btn, .dash-ctrl button, .sidebar-room-ctrl button,
-.admin-controls button, #wrapup-download-btn {
+.admin-controls button, #wrapup-download-btn, #save-prequiz-btn {
   background: var(--primary);
   color: var(--on-primary);
   border: 1px solid transparent;
@@ -293,7 +293,7 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
 .answer-add-btn:hover, #save-teams-btn:hover, #save-quiz-btn:hover,
 #advance-all-btn:hover, #admin-download-btn:hover, #change-pass-btn:hover,
 .dash-ctrl button:hover, .sidebar-room-ctrl button:hover,
-.admin-controls button:hover {
+.admin-controls button:hover, #save-prequiz-btn:hover {
   background: var(--primary-hover);
 }
 #prev-btn:disabled, #next-btn:disabled, .dash-ctrl button:disabled,
@@ -2602,11 +2602,11 @@ footer {
   font-size: 0.82rem;
 }
 .sidebar-room-ctrl button { min-width: 40px; }
-.view-btn { background: var(--ink) !important; }
-.view-btn:hover { background: #000 !important; }
+.view-btn { background: var(--ink) !important; color: var(--bg) !important; }
+.view-btn:hover { filter: brightness(1.12); } /* theme-proof (no #000) */
 .call-badge {
   background: var(--key);
-  color: #fff;
+  color: var(--key-50);
   font-size: 0.74rem;
   font-weight: 700;
   border-radius: var(--r-pill);
@@ -3353,8 +3353,7 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
   color: var(--caen-500);
   margin: 0;
 }
-/* serif display voice on the hero (it's a <p>, so the global h1-h3 serif
-   rule doesn't reach it) — the lobby's editorial statement piece */
+/* serif display voice (a <p> — outside the global h1-h3 serif rule) */
 .hero-title {
   font-family: var(--font-serif);
   font-size: var(--fs-7);
@@ -3403,8 +3402,7 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 .stage-indicator { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 h2, h3 { text-wrap: balance; }
 
-/* --- gradient primary buttons + hover glow (tokenised: follows the theme's
-   brand ramp, so dark mode gets the lighter pair + --on-primary ink) --- */
+/* --- gradient primary buttons + hover glow (theme-aware ramp) --- */
 #join-btn, #start-session-btn {
   background: linear-gradient(135deg, var(--nagoya-500), var(--nagoya-600));
   box-shadow: 0 4px 14px color-mix(in srgb, var(--nagoya-600) 32%, transparent);
@@ -4782,12 +4780,12 @@ body.locked > footer { display: none !important; }
   transition: background var(--dur-base, .18s) var(--ease-out, ease),
               color var(--dur-base, .18s) var(--ease-out, ease);
 }
-.admin-session-chip-copy:hover { background: var(--primary); color: #fff; }
+.admin-session-chip-copy:hover { background: var(--primary); color: var(--on-primary); }
 .admin-session-chip .copy-ok { color: var(--ok); font-weight: 700; font-size: 0.86rem; }
 
 /* --- "End session & download archive" admin button - calm, not alarming --- */
 #admin-close-btn {
-  background: #fff;
+  background: var(--card); /* theme-aware: #fff broke dark (ivory-on-white) */
   color: var(--ink);
   border: 1.5px solid var(--line-strong);
   box-shadow: none;
@@ -5500,8 +5498,6 @@ body.session-ended-shown { overflow: hidden; }
   margin-left: 2px;
 }
 #join-btn:disabled {
-  /* align with the other primary-role disabled states: clearly inert
-     (sunken neutral + muted ink) instead of a tan fill with light text */
   background: var(--n-100);
   color: var(--muted);
   border-color: var(--line-strong);
@@ -7422,8 +7418,6 @@ body.locked .global-settings { display: none; }
   border-radius: 6px;
   border: 1px solid var(--primary);
   background: var(--primary);
-  /* --on-primary supersedes the two per-theme colour overrides this rule
-     used to need (it flips to dark ink in dark mode by itself) */
   color: var(--on-primary);
   cursor: pointer;
   font: inherit;
@@ -7453,9 +7447,7 @@ body.locked .global-settings { display: none; }
 }
 .moda-chat-bub-user {
   align-self: flex-end;
-  /* was var(--accent) — which resolves to the org AMBER at runtime (the
-     same 2.68:1 trap the consent CTA escaped); the primary/on-primary
-     pair is AA in every theme */
+  /* NOT var(--accent): that resolves to org amber → white-on-amber fails AA */
   background: var(--primary);
   color: var(--on-primary);
   border-bottom-right-radius: var(--r-sm);
