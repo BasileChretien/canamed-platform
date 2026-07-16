@@ -150,7 +150,6 @@
   "stage.wrap.open-questionnaire": "Abrir el cuestionario de fin de sesión",
   "stage.wrap.questionnaire-fallback": "Su facilitador/a compartirá el enlace del cuestionario.",
   "stage.wrap.bye": "Una vez completado el cuestionario puede cerrar esta pestaña. ¡Nos vemos en la Sesión 4!",
-  "stage.wrap.room-answers": "Las respuestas de su sala",
   "closed.title": "Sesión cerrada por el/la facilitador/a.",
   "closed.subtitle": "Gracias por participar — el trabajo de su equipo ha sido guardado.",
   "ended.title": "Gracias por participar",

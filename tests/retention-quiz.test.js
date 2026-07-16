@@ -49,29 +49,22 @@ test("the existing doc pages were made CSP-compliant (no inline style)", () => {
   assert.match(DOCCSS, /\.q-opt/, "docs-page.css carries the quiz styles");
 });
 
-test("the wrap-up offers a facilitator one-click retention reminder (calendar), scenario-aware", () => {
-  // 2026-06-16 (PI request): the student "test your retention" card was replaced
-  // by a facilitator-only calendar reminder (≈3 weeks out) to send the link.
+test("the facilitator retention-reminder card was removed from the wrap-up", () => {
+  // 2026-07-16 (user request): the "📅 Schedule the retention reminder" card
+  // (calendar .ics / Google-Calendar links to send students the revisit link) was
+  // removed from the wrap-up, along with its initRetentionReminder wiring and the
+  // .ics/gcal builders. The student revisit.html self-check page is unchanged.
   assert.doesNotMatch(INDEX, /id="wrapup-revisit-qr"/, "the student revisit QR card is gone");
-  assert.match(INDEX, /id="retention-reminder-card"/, "wrap-up must have the facilitator reminder card");
-  assert.match(INDEX, /id="retention-ics-btn"/, "an .ics (Apple/Outlook) download button");
-  assert.match(INDEX, /id="retention-gcal-link"/, "a Google Calendar link");
-  const rr = SCRIPT.slice(SCRIPT.indexOf("function initRetentionReminder"),
-                          SCRIPT.indexOf("function initRetentionReminder") + 1600);
-  assert.match(rr, /isRoomAdmin/, "the reminder is shown only to room admins");
-  assert.match(rr, /revisit\.html/, "builds the scenario-specific revisit URL to send");
-  assert.match(rr, /CURRENT_SCENARIO_ID/, "uses the session's scenario id");
-  // Pure builders: a valid .ics (VCALENDAR/VEVENT) + a Google Calendar template URL.
-  const ics = SCRIPT.slice(SCRIPT.indexOf("function _buildIcs"), SCRIPT.indexOf("function _buildIcs") + 900);
-  assert.match(ics, /BEGIN:VCALENDAR[\s\S]*BEGIN:VEVENT/, "emits a VCALENDAR with a VEVENT");
-  const g = SCRIPT.slice(SCRIPT.indexOf("function _gcalUrl"), SCRIPT.indexOf("function _gcalUrl") + 400);
-  assert.match(g, /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/, "Google Calendar template URL");
+  assert.doesNotMatch(INDEX, /id="retention-reminder-card"/, "the reminder card must be removed");
+  assert.doesNotMatch(INDEX, /id="retention-ics-btn"/, "the .ics button must be gone");
+  assert.doesNotMatch(INDEX, /id="retention-gcal-link"/, "the Google Calendar link must be gone");
+  assert.doesNotMatch(SCRIPT, /function initRetentionReminder/, "initRetentionReminder must be removed");
+  assert.doesNotMatch(SCRIPT, /function _buildIcs/, "the .ics builder must be removed");
+  assert.doesNotMatch(SCRIPT, /function _gcalUrl/, "the gcal builder must be removed");
 });
 
-test("retention assets are precached + the copy ships in en/fr/ja", () => {
+test("the revisit self-check assets are still precached (revisit.html unchanged)", () => {
   for (const a of ["/revisit.html", "/revisit.js", "/docs-page.css", "/docs-page.js"]) {
     assert.match(SW, new RegExp('"' + a.replace(/[/.]/g, "\\$&") + '"'), "sw must precache " + a);
   }
-  const n = (I18N.match(/"stage\.wrap\.reminder\.title":/g) || []).length;
-  assert.ok(n >= 3, "facilitator reminder copy must be in en, fr and ja (got " + n + ")");
 });

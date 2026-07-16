@@ -150,7 +150,6 @@
   "stage.wrap.open-questionnaire": "세션 종료 설문지 열기",
   "stage.wrap.questionnaire-fallback": "진행자가 설문지 링크를 공유해 드립니다.",
   "stage.wrap.bye": "설문지를 마치시면 이 탭을 닫으셔도 됩니다. 세션 4에서 뵙겠습니다!",
-  "stage.wrap.room-answers": "룸의 답변",
   "closed.title": "진행자가 세션을 종료했습니다.",
   "closed.subtitle": "참여해 주셔서 감사합니다 — 팀의 작업은 저장되었습니다.",
   "ended.title": "참여해 주셔서 감사합니다",

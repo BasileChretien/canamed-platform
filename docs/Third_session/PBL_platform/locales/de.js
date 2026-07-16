@@ -150,7 +150,6 @@
   "stage.wrap.open-questionnaire": "Abschlussfragebogen öffnen",
   "stage.wrap.questionnaire-fallback": "Ihre Lehrperson wird den Link zum Fragebogen teilen.",
   "stage.wrap.bye": "Nach dem Ausfüllen des Fragebogens können Sie diesen Tab schließen. Bis zur Sitzung 4!",
-  "stage.wrap.room-answers": "Antworten Ihres Raums",
   "closed.title": "Sitzung von der Lehrperson beendet.",
   "closed.subtitle": "Danke für Ihre Teilnahme — die Arbeit Ihres Teams wurde gespeichert.",
   "ended.title": "Danke für Ihre Teilnahme",
