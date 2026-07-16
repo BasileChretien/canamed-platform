@@ -21,25 +21,10 @@ const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
 const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8");
 
-test("the role-picker exposes an 'I'd rather observe' escape + reassurance region", () => {
-  assert.match(HTML, /id="modB-observe-instead-btn"/, "the observe-escape button must exist");
-  const i = HTML.indexOf('id="modB-observe-reassure"');
-  assert.ok(i > -1, "the reassurance region must exist");
-  const blk = HTML.slice(i - 120, i + 80);
-  assert.match(blk, /aria-live="polite"/, "the reassurance must be a polite live region");
-});
-
-test("the observe escape selects the observer role (reuses the synced pick)", () => {
-  assert.match(SCRIPT, /function wireObserveEscape\(\)/, "wireObserveEscape must exist");
-  const i = SCRIPT.indexOf("function wireObserveEscape");
-  const blk = SCRIPT.slice(i, i + 900);
-  assert.match(blk, /role-chip\[data-role="observer"\]/, "must target the observer chip");
-  assert.match(blk, /observerChip\.click\(\)/,
-    "must reuse the chip-select path so the role syncs + coach hooks fire");
-  assert.match(blk, /modB\.observe\.reassure/, "must show the localised reassurance");
-  // It must be wired from initRolePicker.
-  assert.match(SCRIPT, /wireObserveEscape\(\);/, "wireObserveEscape must be wired in initRolePicker");
-});
+// The "I'd rather observe" escape button + wireObserveEscape() were removed
+// 2026-07-16 (user request) as a duplicate of the Observer role chip; their
+// existence/wiring assertions moved to stage-ui-fixes.test.js (Item 2), which
+// now pins that the button is GONE and the Observer chip remains.
 
 test("the counter-bullet now supports an agree/support stance", () => {
   // Both buttons render on a teammate's answer.
@@ -55,14 +40,12 @@ test("the counter-bullet now supports an agree/support stance", () => {
 });
 
 test("the new student copy ships in en / fr / ja", () => {
-  for (const key of ["modB.observe.escape", "modB.observe.reassure",
-                     "answer.support.send", "answer.support.placeholder"]) {
+  for (const key of ["answer.support.send", "answer.support.placeholder"]) {
     const n = (I18N.match(new RegExp('"' + key.replace(/\./g, "\\.") + '":', "g")) || []).length;
     assert.ok(n >= 3, key + " must be defined in en, fr and ja (got " + n + ")");
   }
 });
 
 test("the new affordances are styled", () => {
-  assert.match(CSS, /\.role-observer-escape\b/, "the observe-escape must be styled");
   assert.match(CSS, /\.entry-agree\b/, "the agree button must be styled");
 });

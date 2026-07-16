@@ -49,9 +49,15 @@ test("Item 2 — the 'I'm just observing' button and its wiring are gone", () =>
   assert.ok(!INDEX.includes('id="observer-btn"'), "#observer-btn must be removed from index.html");
   assert.ok(!/\binitObserver\s*\(\s*\)\s*;/.test(JS), "initObserver() must no longer be called");
   assert.ok(!/function\s+initObserver\s*\(/.test(JS), "the initObserver function must be removed");
-  // The Module B roleplay observer ROLE is a different feature — keep it.
-  assert.ok(INDEX.includes('id="modB-observe-instead-btn"'),
-    "the Module B observer-role affordance must be untouched");
+  // The separate Module B "I'd rather just observe" escape button was removed
+  // 2026-07-16 (user request) as a duplicate of the Observer role chip.
+  assert.ok(!INDEX.includes('id="modB-observe-instead-btn"'),
+    "the duplicate Module B observe-escape button must be removed");
+  assert.ok(!INDEX.includes('id="modB-observe-reassure"'),
+    "its reassurance region must be removed too");
+  // …and the Observer role chip remains the single observe path.
+  assert.ok(INDEX.includes('data-role="observer"'),
+    "the Observer role chip must remain in the picker");
 });
 
 test("Item 3 — renderStage scrolls to the top of the window on a stage change", () => {

@@ -415,36 +415,10 @@ test.describe("mobile splash usability", () => {
     await expect(page.locator("#modB-replay-banner")).toBeVisible();
   });
 
-  // "I'd rather observe" panic affordance (2026-05-22): the calm escape hatch
-  // must be a comfortable tap-target on a phone and one tap must move the
-  // student into the observer role with the reassurance shown.
-  test("observe-escape: one tap selects observer on mobile", async ({ page }) => {
-    await page.goto("/");
-    await page.waitForSelector(".splash", { state: "visible" });
-    await page.evaluate(() => {
-      ["splash", "lobby", "waiting", "admin-app", "session-ended"].forEach(id => {
-        const e = document.getElementById(id);
-        if (e) e.classList.add("hidden");
-      });
-      document.getElementById("app").classList.remove("hidden");
-      const s2 = document.getElementById("stage-2");
-      if (s2) s2.classList.remove("hidden");
-      document.body.classList.remove("locked");
-      if (typeof window.initRolePicker === "function") window.initRolePicker();
-    });
-
-    const escape = page.locator("#modB-observe-instead-btn");
-    await expect(escape).toBeVisible();
-    const box = await escape.boundingBox();
-    expect(box, "escape button must render").not.toBeNull();
-    if (box) {
-      expect(box.height, "escape tap-target >= 36px on mobile").toBeGreaterThanOrEqual(36);
-    }
-    await escape.tap();
-    await expect(page.locator('#modB-role-picker .role-chip[data-role="observer"]'))
-      .toHaveAttribute("aria-checked", "true");
-    await expect(page.locator("#modB-observe-reassure")).toBeVisible();
-  });
+  // The "I'd rather observe" panic-affordance test was removed 2026-07-16: the
+  // escape button was deleted as a duplicate of the Observer role chip (user
+  // request). Tapping the Observer chip on mobile is exercised by the role-picker
+  // coverage; there is no separate escape button to tap.
 
   // Chained branching (2026-05-22): the follow-up dec_prognosis_next is gated
   // + hideWhenLocked, so before the room commits dec_prognosis it must not
