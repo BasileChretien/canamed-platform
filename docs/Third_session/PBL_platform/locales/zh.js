@@ -150,7 +150,6 @@
   "stage.wrap.open-questionnaire": "打开会话结束问卷",
   "stage.wrap.questionnaire-fallback": "主持人会分享问卷链接。",
   "stage.wrap.bye": "完成问卷后可关闭此标签页。期待在第 4 次会话与您再见!",
-  "stage.wrap.room-answers": "房间回答",
   "closed.title": "主持人已结束会话。",
   "closed.subtitle": "感谢您的参与——您小组的成果已保存。",
   "ended.title": "感谢您的参与",

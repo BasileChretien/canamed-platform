@@ -3219,7 +3219,6 @@ function wireRoomUI() {
   initStageOverflow();
   initStageDetailsToggle();
   initEndPoll();
-  initRetentionReminder();
   initTeamName();
   initRolePicker();
   initModBPhaseNav();
@@ -11630,8 +11629,8 @@ function initEndPoll() {
   // The quick-reflection end-poll was removed 2026-06-16 (PI request); the full
   // subjective questionnaire (#survey-card, renderSurvey) is the reflection
   // surface now. This function now only wires the student wrap-up downloads
-  // (room answers / certificate / booklet). The facilitator retention reminder
-  // is wired separately in initRetentionReminder().
+  // (room answers / certificate / booklet). (The facilitator retention-reminder
+  // card was removed 2026-07-16 — user request.)
   if (isRoomAdmin) {
     // Admins have their own all-rooms export; hide the student per-room one.
     const d = el("wrapup-download-btn"); if (d) d.classList.add("hidden");
@@ -11656,89 +11655,11 @@ function initEndPoll() {
   }
 }
 
-/* Facilitator retention reminder (2026-06-16, PI request) — replaces the old
-   student "test your retention" card. Shows a facilitator-only card with a
-   one-click calendar event (≈3 weeks out) reminding them to send students the
-   revisit self-check link. Two routes: an .ics download (Apple/Outlook) and a
-   Google Calendar template deep-link. The student revisit.html page is unchanged.
-   Pure-ish: _retentionReminderEvent() builds the event data and is unit-tested. */
-function _retentionReminderEvent(nowMs, revisitUrl) {
-  // Fire ~3 weeks (21 days) after the session, at 09:00 local, 30 min long.
-  const start = new Date(nowMs + 21 * 24 * 60 * 60 * 1000);
-  start.setHours(9, 0, 0, 0);
-  const end = new Date(start.getTime() + 30 * 60 * 1000);
-  return {
-    title: "CaNaMED — send the retention quiz link to students",
-    details: "Spaced revisiting is what makes the learning stick. Send your students "
-      + "this short self-check link (it scores on their device; nothing is sent):\n\n"
-      + revisitUrl,
-    start: start,
-    end: end
-  };
-}
-function _icsStamp(d) {
-  // UTC basic format YYYYMMDDTHHMMSSZ
-  const p = n => String(n).padStart(2, "0");
-  return d.getUTCFullYear() + p(d.getUTCMonth() + 1) + p(d.getUTCDate()) + "T"
-    + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds()) + "Z";
-}
-function _buildIcs(ev, stampNowMs) {
-  const esc = s => String(s).replace(/\\/g, "\\\\").replace(/;/g, "\\;")
-    .replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
-  return [
-    "BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//CaNaMED//retention-reminder//EN",
-    "CALSCALE:GREGORIAN", "METHOD:PUBLISH", "BEGIN:VEVENT",
-    "UID:canamed-retention-" + stampNowMs + "@canamed",
-    "DTSTAMP:" + _icsStamp(new Date(stampNowMs)),
-    "DTSTART:" + _icsStamp(ev.start), "DTEND:" + _icsStamp(ev.end),
-    "SUMMARY:" + esc(ev.title), "DESCRIPTION:" + esc(ev.details),
-    "BEGIN:VALARM", "TRIGGER:-PT0M", "ACTION:DISPLAY",
-    "DESCRIPTION:" + esc(ev.title), "END:VALARM",
-    "END:VEVENT", "END:VCALENDAR"
-  ].join("\r\n");
-}
-function _gcalUrl(ev) {
-  const dates = _icsStamp(ev.start) + "/" + _icsStamp(ev.end);
-  return "https://calendar.google.com/calendar/render?action=TEMPLATE"
-    + "&text=" + encodeURIComponent(ev.title)
-    + "&dates=" + dates
-    + "&details=" + encodeURIComponent(ev.details);
-}
-function initRetentionReminder() {
-  const card = el("retention-reminder-card");
-  if (!card) return;
-  if (!isRoomAdmin) { card.classList.add("hidden"); return; }
-  card.classList.remove("hidden");
-  if (card.dataset.wired === "1") return;
-  card.dataset.wired = "1";
-  const sid = (typeof window.CURRENT_SCENARIO_ID === "string") ? window.CURRENT_SCENARIO_ID : "";
-  const revisitUrl = new URL("revisit.html" + (sid ? "?s=" + encodeURIComponent(sid) : ""),
-    location.href).href;
-  const ev = _retentionReminderEvent(Date.now(), revisitUrl);
-  // Show the exact link the facilitator will send.
-  const urlEl = el("retention-reminder-url");
-  if (urlEl) { urlEl.href = revisitUrl; urlEl.textContent = revisitUrl; }
-  // Google Calendar deep-link.
-  const gcal = el("retention-gcal-link");
-  if (gcal) gcal.href = _gcalUrl(ev);
-  // .ics download (Apple / Outlook).
-  const icsBtn = el("retention-ics-btn");
-  if (icsBtn) icsBtn.addEventListener("click", () => {
-    const ics = _buildIcs(ev, Date.now());
-    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "canamed-retention-reminder.ics";
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
-  });
-}
-if (typeof window !== "undefined") {
-  // Exposed for unit/E2E tests (pure event/.ics/gcal builders).
-  window._retentionReminderEvent = _retentionReminderEvent;
-  window._buildIcs = _buildIcs;
-  window._gcalUrl = _gcalUrl;
-}
+/* The facilitator retention-reminder feature (2026-06-16) — the wrap-up
+   "📅 Schedule the retention reminder" card + its .ics / Google-Calendar
+   builders (initRetentionReminder, _retentionReminderEvent, _icsStamp,
+   _buildIcs, _gcalUrl) — was removed 2026-07-16 (user request). The student
+   revisit.html self-check page is unchanged. */
 
 /* ===================== CANAMED SPLASH / SESSION-CODE GATE ===================
    The "main page" is the generic CANAMED splash. The code typed there IS the
