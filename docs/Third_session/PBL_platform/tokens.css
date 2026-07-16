@@ -247,12 +247,26 @@ html[data-theme="dark"] {
   }
 }
 
-/* prefers-contrast hooks stay as today (line/muted hardening) */
+/* prefers-contrast hardening. The :root values are light-tuned and lose to
+   the dark selectors' specificity, so dark palettes get their own LIGHTER
+   hardening values (brighter lines/muted on the ink-dark surfaces). */
 @media (prefers-contrast: more) {
   :root {
     --line: #8a93a0;
     --line-strong: #6b7682;
     --muted: #3d4651;
+  }
+  html[data-theme="dark"] {
+    --line: #566c88;
+    --line-strong: #7189a3;
+    --muted: #c6bfb0;
+  }
+}
+@media (prefers-contrast: more) and (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]):not([data-theme="high-contrast"]) {
+    --line: #566c88;
+    --line-strong: #7189a3;
+    --muted: #c6bfb0;
   }
 }
 

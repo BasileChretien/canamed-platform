@@ -56,7 +56,7 @@ ol.steps > li::before { counter-increment: s; content: counter(s); position: abs
 .q-opt:disabled { cursor: default; }
 .q-opt.correct { border-color: var(--ok); background: var(--ok-50); }
 .q-opt.wrong { border-color: var(--key); background: var(--key-50); }
-.q-exp { font-size: var(--fs-1); color: var(--n-700); margin: var(--s-2) 0 0; }
+.q-exp { font-size: var(--fs-1); color: var(--muted); margin: var(--s-2) 0 0; }
 .q-score { font-family: var(--font-serif); font-size: var(--fs-4); font-weight: var(--fw-bold); color: var(--ink); margin: var(--s-3) 0; }
 
 @media print { .noprint { display: none; } body { padding: 0; } }

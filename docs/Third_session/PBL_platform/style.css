@@ -3402,13 +3402,12 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 .stage-indicator { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 h2, h3 { text-wrap: balance; }
 
-/* --- gradient primary buttons + hover glow (theme-aware ramp) --- */
+/* --- primary CTA hover glow (fill comes from the primary button role:
+   solid --primary/--on-primary — a gradient's light end broke AA in light) --- */
 #join-btn, #start-session-btn {
-  background: linear-gradient(135deg, var(--nagoya-500), var(--nagoya-600));
   box-shadow: 0 4px 14px color-mix(in srgb, var(--nagoya-600) 32%, transparent);
 }
 #join-btn:hover, #start-session-btn:hover {
-  background: linear-gradient(135deg, color-mix(in srgb, var(--nagoya-500) 88%, white), var(--nagoya-600));
   box-shadow: 0 6px 20px color-mix(in srgb, var(--nagoya-600) 46%, transparent);
 }
 .req-btn:hover {
