@@ -20,7 +20,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8");
+const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8") +
+  // token palette (incl. the dark remaps under test) moved to tokens.css
+  fs.readFileSync(path.join(P, "tokens.css"), "utf8");
 
 const NEUTRALS = ["--n-25", "--n-50", "--n-100"];
 const LIGHT_VALUES = { "--n-25": "#fbf9f4", "--n-50": "#f1eee6", "--n-100": "#e6e2d8" };

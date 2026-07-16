@@ -102,7 +102,15 @@ function applyOrgTheme(orgCfg) {
   if (!orgCfg || typeof document === "undefined" || !document.documentElement) return;
   const root = document.documentElement;
   const theme = root.getAttribute("data-theme");
-  const skipPrimary = (theme === "dark" || theme === "high-contrast");
+  /* data-theme="auto" (or unset) + a dark OS resolves to the dark palette
+     via the prefers-color-scheme media query, so the light-tuned org
+     primary must be skipped there too — otherwise this inline override
+     beats the stylesheet's dark --primary/--on-primary pair and text on
+     primary fills drops below AA. */
+  const prefersDark = typeof window !== "undefined" && window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const skipPrimary = (theme === "dark" || theme === "high-contrast" ||
+    ((theme === null || theme === "auto") && prefersDark));
   if (orgCfg.primary && !skipPrimary) {
     root.style.setProperty("--primary", orgCfg.primary);
     root.style.setProperty("--primary-hover", orgCfg.primary);
@@ -115,6 +123,15 @@ function applyOrgTheme(orgCfg) {
   root.setAttribute("data-org", currentOrg);
 }
 applyOrgTheme(currentOrgConfig);
+/* Re-resolve the org primary when the OS flips light/dark mid-session while
+   the user is on data-theme="auto" (same reason as the prefersDark check
+   inside applyOrgTheme). */
+try {
+  if (typeof window !== "undefined" && window.matchMedia) {
+    window.matchMedia("(prefers-color-scheme: dark)")
+      .addEventListener("change", function () { applyOrgTheme(currentOrgConfig); });
+  }
+} catch (_) {}
 const COHORT_IDS = COHORTS.map(c => c.id);
 /* per-cohort lowercase token sets, so the "named a cross-cohort difference"
    answer-scoring family works for ANY partnership, not only France/Japan */

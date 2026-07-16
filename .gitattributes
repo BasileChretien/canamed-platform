@@ -7,3 +7,6 @@
 *.min.js binary
 docs/Third_session/PBL_platform/firebase-*-compat.js binary
 docs/Third_session/PBL_platform/pdfmake/*.js binary
+
+# Vendored variable webfonts (Clinical Editorial restyle) — binary, never EOL-converted
+docs/Third_session/PBL_platform/fonts/*.woff2 binary
