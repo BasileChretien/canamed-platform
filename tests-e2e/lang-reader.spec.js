@@ -35,7 +35,13 @@ async function setup(page, lang) {
     p.id = "reader-fixture";
     p.textContent = "Consider an opioid taper now.";
     p.style.cssText =
-      "position:fixed;top:120px;left:20px;margin:0;font-size:28px;" +
+      // white-space:nowrap is load-bearing: on a narrow (mobile-android) viewport
+      // this 28px sentence WRAPS, and the Range boundingBox centre computed for
+      // "opioid" then lands on a different word — the reader returns THAT word's
+      // (correct) French gloss, not "antalgique". That was the real flake at
+      // lang-reader.spec.js:109 that the dict-readiness fixes (#194/#200) never
+      // touched. Keeping it on one line pins each word's coordinates.
+      "position:fixed;top:120px;left:20px;margin:0;font-size:28px;white-space:nowrap;" +
       "z-index:9999;background:#fff;color:#000";
     document.body.appendChild(p);
   });
@@ -44,14 +50,10 @@ async function setup(page, lang) {
 
 async function enable(page, on) {
   await page.evaluate((v) => window.CanamedReader.setEnabled(v), on);
-  // Deterministically wait for the ACTIVE language's offline dictionary to
-  // finish loading (fetch + DecompressionStream, ~1.5 MB) before any lookup.
-  // The gloss pipeline (lookupAt → getDict) otherwise races the dict download
-  // and reads the English fallback — the flake the 15s expect.poll only papered
-  // over (recurred 2026-07-15 at :94 chromium / :137 mobile-android, blocking
-  // the #198 + #199 deploys). ensureDict resolves to the loaded Map (or null for
-  // en / unsupported), and targetLang() === window.getLang(), so awaiting
-  // ensureDict(getLang()) matches exactly what the reader itself loads.
+  // Wait for the active language's offline dictionary to finish loading before a
+  // lookup, so the gloss pipeline (lookupAt → getDict) doesn't read the English
+  // fallback. setLang() sets _currentLang synchronously, so getLang() is reliable
+  // here, and targetLang() === getLang().
   if (on) {
     await page.evaluate(async () => {
       const d = window.CanamedReaderDict;
