@@ -147,6 +147,16 @@
   /* per-stage accent (set live on #room-main[data-stage]) */
   --stage-accent: var(--nagoya-600);
   --stage-accent-50: var(--nagoya-50);
+
+  /* masthead (global header): pinned to the deep-navy pair in EVERY theme —
+     deliberately NOT theme-remapped. Before this token existed the header
+     painted with var(--nagoya-700), which dark mode brightens for text use,
+     turning the masthead into a loud light-blue band on an ink-dark page.
+     A constant deep masthead + the tricolour underline is the editorial
+     treatment; white ink on it is ~10:1 in both themes. */
+  --masthead-a: #0c3f6e;
+  --masthead-b: #08243f;
+  --masthead-ink: #ffffff;
 }
 
 /* ==========================================================================
