@@ -276,7 +276,7 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
 #change-pass-btn, .dash-ctrl button, .sidebar-room-ctrl button,
 .admin-controls button, #wrapup-download-btn {
   background: var(--primary);
-  color: #fff;
+  color: var(--on-primary);
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   font: inherit;
@@ -3353,11 +3353,14 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
   color: var(--caen-500);
   margin: 0;
 }
+/* serif display voice on the hero (it's a <p>, so the global h1-h3 serif
+   rule doesn't reach it) — the lobby's editorial statement piece */
 .hero-title {
-  font-size: 2.6rem;
-  line-height: 1.04;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-family: var(--font-serif);
+  font-size: var(--fs-7);
+  line-height: var(--lh-tight);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.01em;
   margin: 0.1em 0;
 }
 .hero-tag { font-size: 0.88rem; opacity: 0.82; margin: 0; }
@@ -3370,7 +3373,7 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 @media (max-width: 760px) {
   #lobby { grid-template-columns: 1fr; max-width: 460px; }
   .hero-aside { border-radius: var(--r-lg) var(--r-lg) 0 0; padding: var(--s-6); }
-  .hero-title { font-size: 2rem; }
+  .hero-title { font-size: var(--fs-6); }
   .lobby-card { border-radius: 0 0 var(--r-lg) var(--r-lg); }
 }
 
@@ -3400,14 +3403,15 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 .stage-indicator { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 h2, h3 { text-wrap: balance; }
 
-/* --- gradient primary buttons + hover glow --- */
+/* --- gradient primary buttons + hover glow (tokenised: follows the theme's
+   brand ramp, so dark mode gets the lighter pair + --on-primary ink) --- */
 #join-btn, #start-session-btn {
-  background: linear-gradient(135deg, #2e9fdf, #1763a6);
-  box-shadow: 0 4px 14px rgba(23,99,166,.32);
+  background: linear-gradient(135deg, var(--nagoya-500), var(--nagoya-600));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--nagoya-600) 32%, transparent);
 }
 #join-btn:hover, #start-session-btn:hover {
-  background: linear-gradient(135deg, #3aa9e6, #1763a6);
-  box-shadow: 0 6px 20px rgba(23,99,166,.46);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--nagoya-500) 88%, white), var(--nagoya-600));
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--nagoya-600) 46%, transparent);
 }
 .req-btn:hover {
   box-shadow: 0 0 0 3px var(--nagoya-50), 0 4px 12px rgba(46,159,223,.18);
@@ -5496,7 +5500,11 @@ body.session-ended-shown { overflow: hidden; }
   margin-left: 2px;
 }
 #join-btn:disabled {
-  background: var(--n-300);
+  /* align with the other primary-role disabled states: clearly inert
+     (sunken neutral + muted ink) instead of a tan fill with light text */
+  background: var(--n-100);
+  color: var(--muted);
+  border-color: var(--line-strong);
   cursor: not-allowed;
   box-shadow: none;
 }
