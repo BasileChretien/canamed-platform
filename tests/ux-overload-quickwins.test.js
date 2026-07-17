@@ -55,17 +55,16 @@ test("renderStage never auto-opens the leaderboard (manual disclosure only)", ()
 
 /* ---------------------- Stage-1 callouts demoted ---------------------- */
 
-test(".everyone-talks is demoted to muted hint (no fill, no border-left)", () => {
-  const body = ruleBody(".everyone-talks");
-  assert.doesNotMatch(body, /border-left/, ".everyone-talks must not be a border-left callout");
-  assert.doesNotMatch(body, /background/, ".everyone-talks must not have a fill");
+test(".everyone-talks stays fully demoted (class retired — no CSS at all)", () => {
+  // 2026-07-17 (editorial-illustrations slice): the markup node was removed in
+  // a later UX pass and the leftover CSS was dead weight against the perf
+  // budget. Full absence is the strongest form of the original demotion —
+  // guard that the loud callout never comes back.
+  assert.doesNotMatch(CSS, /\.everyone-talks\b/, ".everyone-talks must stay retired");
 });
 
-test(".chart-team-warning is demoted to muted hint (no fill, no border-left)", () => {
-  const body = ruleBody(".chart-team-warning");
-  assert.doesNotMatch(body, /border-left/, ".chart-team-warning must not be a border-left banner");
-  assert.doesNotMatch(body, /background/, ".chart-team-warning must not have an amber fill");
-  assert.match(body, /var\(--muted\)/, ".chart-team-warning should read as muted hint text");
+test(".chart-team-warning stays fully demoted (class retired — no CSS at all)", () => {
+  assert.doesNotMatch(CSS, /\.chart-team-warning\b/, ".chart-team-warning must stay retired");
 });
 
 test("the next-step coach is preserved as the single focal callout", () => {
