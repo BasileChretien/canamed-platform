@@ -155,7 +155,7 @@
         },
         "closed": {
           ".read": "auth != null",
-          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
+          ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).exists())",
           ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
         },
         "summary": {
@@ -597,7 +597,7 @@
             },
             "closed": {
               ".read": "auth != null",
-              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists()",
+              ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists() && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).exists())",
               ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
             },
             "summary": {
