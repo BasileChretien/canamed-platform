@@ -12296,7 +12296,8 @@ function closeMySession(code, btn, statusEl) {
   const ask = countJoined.then(n => {
     const live = (n > 0)
       ? tFallback("splash.my-sessions.close-live-warning",
-          "⚠ " + n + " participant(s) have joined this session — closing ends it for everyone.") + "\n\n"
+          "⚠ " + n + " participant(s) have joined this session — closing ends it for everyone.")
+          .replace("{n}", String(n)) + "\n\n"
       : "";
     const message = live + baseMessage;
     return (typeof canamedConfirm === "function")

@@ -83,6 +83,7 @@
   "splash.my-sessions.close-confirm": "Terminer cette session ? Les participants verront l'écran de conclusion et ne pourront plus interagir. Les données restent en base — vous pourrez rouvrir le tableau de bord pour télécharger l'archive.",
   "splash.my-sessions.closing": "Fermeture…",
   "splash.my-sessions.closed-ok": "Fermée ✓",
+  "splash.my-sessions.close-live-warning": "⚠ {n} participant(s) ont rejoint cette session — la fermer y met fin pour tout le monde.",
   "splash.my-sessions.closed-btn": "Fermée",
   "splash.my-sessions.close-failed": "Impossible de fermer — vérifiez votre connexion et réessayez.",
   "privacy.title": "CaNaMED — Politique de confidentialité",
