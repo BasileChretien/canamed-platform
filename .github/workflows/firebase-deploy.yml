@@ -1,25 +1,77 @@
-# Auto-deploy the CANAMED platform to Firebase on every push to main.
-# Uses the service-account JSON the Firebase init wizard already put into
+# Auto-deploy the CANAMED platform to Firebase for every commit that lands on
+# main. Uses the service-account JSON the Firebase init wizard already put into
 # the repo as a GitHub Actions secret.
 #
 # Manual `firebase deploy` from a developer machine continues to work; this
 # workflow just keeps the live site in sync with `main` automatically.
 #
-# Triggers on EVERY push to main (no path filter): dependency bumps and
-# CI-only changes will redeploy byte-identical hosting content (a harmless
-# no-op), but the live site is guaranteed to always match main. The
-# concurrency group below collapses bursts so only the latest push deploys.
+# No path filter: dependency bumps and CI-only changes will redeploy
+# byte-identical hosting content (a harmless no-op), but the live site is
+# guaranteed to always match main. The concurrency group below collapses
+# bursts so only the latest commit deploys.
 #
-# SAFETY GATE: the deploy job first waits for this commit's required CI
-# checks to all pass, and aborts if any fail — so an untested commit (e.g.
-# an admin direct-push that bypassed branch protection) never reaches the
-# live site. Manual `workflow_dispatch` runs skip the gate (escape hatch).
+# WHY workflow_run AND NOT push (changed 2026-07-17): this used to trigger on
+# push and then poll for the required checks with a 15-min budget. That raced
+# the post-merge "E2E tests" matrix and lost — routinely. On the #210 merge
+# (39539be) the push was at 03:58:07, the wait step gave up at 15m02s, and the
+# E2E long pole ("Playwright (webkit)") went green at 04:13:12 — 15m05s. It
+# lost by 3 seconds, and every merge was a coin flip that cost a manual
+# `gh run rerun <deployRunId> --failed`. Widening the budget could not fix this
+# properly: the webkit job's own timeout-minutes is 20, so any budget under
+# ~25 min still races on a slow/queued runner. Starting the deploy only once
+# E2E has CONCLUDED removes the race by construction rather than by margin.
+# Bonus: re-running a flaked E2E fires the deploy automatically (as long as that
+# commit is still main's tip — see FRESHNESS), which is the manual step this
+# used to cost.
+#
+# TWO JOBS, and the split is load-bearing: `gate` decides, `deploy` acts. Every
+# reason not to ship lives in `gate`, so a step added to `deploy` later cannot
+# forget to check it, and a run that must not ship never even materialises the
+# service-account credentials on disk.
+#
+# SAFETY GATE (unchanged, and still the real boundary): `gate` verifies that ALL
+# of this commit's required CI checks concluded success, and aborts if any
+# failed — so an untested commit (e.g. an admin direct-push that bypassed branch
+# protection) never reaches the live site. The workflow_run trigger only decides
+# WHEN to look; it never decides whether it is safe to deploy. Manual
+# `workflow_dispatch` runs skip the gate (escape hatch).
+#
+# FRESHNESS (why `gate` also checks main's tip): workflow_run fires in COMPLETION
+# order, not commit order, and ANY old E2E run can be re-run by hand at any time.
+# Both produce a legitimate "success on main" event for a commit main has since
+# moved past — and deploying it would silently ROLL PRODUCTION BACK over a newer
+# commit. The concurrency group cannot catch this: it only cancels runs still in
+# flight, and the superseding deploy has typically long finished. So `gate` also
+# requires the commit to still BE main's tip. Skipping on that basis is normal
+# and green, not a failure — the tip's own E2E fires its own deploy.
+#
+# ⚠ COUPLING: `workflows:` below matches the "E2E tests" workflow by NAME (the
+# `name:` in .github/workflows/e2e.yml). Renaming that workflow silently stops
+# every auto-deploy — nothing fails, deploys just never fire. Keep the two in
+# sync, and see the note on REQUIRED below for the same hazard on check names.
+#
+# ⚠ ACCEPTED RISK — no E2E run means no deploy AND no signal. Auto-deploy is now
+# downstream of E2E, so if the E2E workflow never RUNS for a commit on main (the
+# workflow disabled, an e2e.yml syntax error, an Actions outage, or the
+# billing/spending-limit lockout that already hit this project's private repo for
+# ~11 days — see CLAUDE.md), no workflow_run event ever fires and no deploy run
+# appears at all. Nothing turns red; main just silently stops reaching the live
+# site. The old push trigger would at least have produced a red timeout here.
+# Detect it the same way you verify any deploy:
+#   curl -s https://canamed-69785.web.app/sw.js | grep SHELL_VERSION
+# and compare against main. Accepted because the failure is loud at the E2E level
+# (main goes visibly red / Actions visibly stops) and this repo's Actions are
+# healthy; revisit if auto-deploy ever needs to be unattended.
 
 name: Deploy CANAMED to Firebase
 
 on:
-  push:
-    branches: [main]
+  # Fire once the slowest required suite has concluded on main. E2E is the long
+  # pole (~15 min); every other required check (Unit tests ~45 s, Functions CI
+  # ~20 s) is long done by then, so the gate below clears in seconds.
+  workflow_run:
+    workflows: ["E2E tests"]
+    types: [completed]
   # let us trigger a deploy by hand from the Actions tab when needed
   workflow_dispatch:
 
@@ -28,28 +80,88 @@ permissions:
   contents: read
   checks: read
 
-# only one deploy at a time - cancel any in-flight run if a new push lands
+# only one deploy at a time - cancel any in-flight run when a newer one starts
 concurrency:
   group: firebase-deploy
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Deploy hosting + database rules
+  # Decide whether this commit may ship, and which commit that is. Holds no
+  # secrets: nothing here can deploy, so a wrong answer costs a skipped run.
+  gate:
+    name: Verify required CI + freshness
     runs-on: ubuntu-latest
+    # Only consider commits that actually landed on main in THIS repo. Each
+    # clause is load-bearing:
+    #   conclusion == success  — a red/cancelled E2E must not deploy. (The CI
+    #                            check below re-verifies; this just avoids noise.)
+    #   head_branch == 'main'  — ignore E2E runs for PR/feature branches.
+    #   event == 'push'        — workflow_run fires for PR-triggered E2E runs
+    #                            too, where head_branch is the PR's SOURCE
+    #                            branch. A fork PR from a branch literally named
+    #                            "main" would otherwise satisfy the clause above
+    #                            and deploy UNREVIEWED FORK CODE. This clause is
+    #                            what stops that; do not drop it.
+    #   head_repository        — defence in depth on the same fork hazard.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository)
+    outputs:
+      sha: ${{ steps.target.outputs.sha }}
+      ship: ${{ steps.freshness.outputs.ship }}
     steps:
-      # Gate: never ship an untested commit. Wait for this commit's required
-      # status checks (the same set branch protection enforces for merges) to
-      # all conclude SUCCESS before deploying; abort if any fails. Skipped for
+      # Resolve the commit under deploy. For workflow_run, `github.sha` is NOT
+      # the commit whose CI we are gating on — it is main's head at event time,
+      # which may already have moved on. `workflow_run.head_sha` is the commit
+      # the E2E run actually tested, so it is the only correct value here. It is
+      # published as a job output so the deploy job checks out exactly the commit
+      # verified here — gate one commit and ship another, otherwise.
+      - name: Resolve the commit under deploy
+        id: target
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          DISPATCH_SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            sha="$RUN_SHA"
+          else
+            sha="$DISPATCH_SHA"
+          fi
+          if [ -z "$sha" ]; then
+            printf '%s%s%s\n' '::' 'error::' "Could not resolve the commit to deploy (event: $EVENT_NAME)."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Commit under deploy: $sha"
+
+      # Gate: never ship an untested commit. Verify this commit's required
+      # status checks (the same set branch protection enforces for merges) all
+      # concluded SUCCESS before deploying; abort if any failed. Skipped for
       # manual workflow_dispatch runs. Self-contained (GitHub API via gh) — no
-      # third-party actions in the deploy path. Keep REQUIRED in sync with the
-      # branch-protection required status checks.
+      # third-party actions in the deploy path.
+      #
+      # ⚠ Keep REQUIRED in sync with the branch-protection required status
+      # checks (`gh api repos/$REPO/branches/main/protection/required_status_checks`).
+      # A check missing here is a check that CANNOT block a bad deploy —
+      # "functions (load + require)" was required by branch protection but
+      # absent from this list until 2026-07-17, so a broken Functions CI would
+      # have shipped. Intentionally NOT required (informational only, matching
+      # branch protection): "Playwright (mobile-android)", "Rules E2E (emulator)".
+      #
+      # Since the workflow_run trigger fires only after E2E concludes, this
+      # normally passes on the first poll. The budget is generous insurance for
+      # a straggler (e.g. a re-queued Unit tests run), not a race to win.
       - name: Wait for required CI to pass on this commit
-        if: github.event_name == 'push'
+        if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          SHA: ${{ github.sha }}
+          SHA: ${{ steps.target.outputs.sha }}
         run: |
           set -uo pipefail
           REQUIRED=(
@@ -61,9 +173,10 @@ jobs:
             "Playwright (mobile-iphone)"
             "Playwright (perf)"
             "Playwright (webkit)"
+            "functions (load + require)"
           )
           echo "Gating deploy on ${#REQUIRED[@]} required checks for $SHA"
-          deadline=$(( SECONDS + 900 ))
+          deadline=$(( SECONDS + 1800 ))
           while true; do
             runs="$(gh api "repos/$REPO/commits/$SHA/check-runs" --paginate \
               --jq '.check_runs[] | [.name, .status, (.conclusion // "")] | @tsv')"
@@ -89,15 +202,65 @@ jobs:
               break
             fi
             if [ "$SECONDS" -ge "$deadline" ]; then
-              printf '%s%s%s\n' '::' 'error::' "Timed out (15 min) waiting for required checks."
+              printf '%s%s%s\n' '::' 'error::' "Timed out (30 min) waiting for required checks."
               exit 1
             fi
-            echo "Required checks still pending; re-checking in 20s..."
-            sleep 20
+            echo "Required checks still pending; re-checking in 30s..."
+            sleep 30
           done
 
+      # Refuse to roll production back. See FRESHNESS in the header: a stale or
+      # out-of-order workflow_run completion is a perfectly valid green event for
+      # a commit main has moved past, and shipping it would silently revert the
+      # live site. Only main's tip ships. A `workflow_dispatch` is an operator
+      # deliberately choosing a ref, so it bypasses this (as it does the CI gate).
+      #
+      # Residual race, accepted: a commit can land between this check and the
+      # deploy step, so we may ship a just-superseded tip. That is self-healing —
+      # the newer commit's own E2E fires its own deploy — and bounded by the
+      # concurrency group, which cancels this run if that deploy starts first.
+      - name: Check the commit is still main's tip
+        id: freshness
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT_NAME" != "workflow_run" ]; then
+            echo "Manual dispatch — operator chose this ref; freshness check skipped."
+            echo "ship=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          tip="$(gh api "repos/$REPO/commits/main" --jq '.sha')"
+          if [ -z "$tip" ]; then
+            printf '%s%s%s\n' '::' 'error::' "Could not read main's tip to check freshness — refusing to deploy."
+            exit 1
+          fi
+          if [ "$tip" != "$SHA" ]; then
+            echo "::warning title=Deploy skipped (superseded)::$SHA is no longer main's tip ($tip). That newer commit deploys via its own E2E run; not rolling production back."
+            echo "ship=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$SHA is main's tip — clear to deploy."
+          echo "ship=true" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    name: Deploy hosting + database rules
+    runs-on: ubuntu-latest
+    needs: gate
+    # Every reason NOT to ship was decided in `gate`; this is the single place
+    # that consumes the verdict. Note `needs.gate.outputs.ship` is a STRING.
+    if: needs.gate.outputs.ship == 'true'
+    steps:
       - name: Check out the repository
         uses: actions/checkout@v7
+        with:
+          # Pin to the gated commit. Without this, a workflow_run build checks
+          # out main's head — which can be a NEWER, ungated commit — so we would
+          # verify one commit's CI and ship another's code.
+          ref: ${{ needs.gate.outputs.sha }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v6

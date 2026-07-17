@@ -111,7 +111,9 @@ http://localhost:8080.
 
 Push to `main` and the firebase-deploy GitHub Action ships hosting +
 database rules (requires `FIREBASE_SERVICE_ACCOUNT_CANAMED_69785`
-secret configured for your fork).
+secret configured for your fork). It deploys once the **E2E tests**
+workflow concludes green on that commit — roughly 15 minutes after the
+merge — and refuses to ship if any required check failed.
 
 ---
 
