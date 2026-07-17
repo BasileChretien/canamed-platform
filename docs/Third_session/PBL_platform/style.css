@@ -629,18 +629,6 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
 }
 .prompt-prev:disabled { opacity: 0.45; cursor: not-allowed; }
 .prompt-prev:not(:disabled):hover { border-color: var(--ink); color: var(--ink); }
-.prompt-skip {
-  margin-left: auto;
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.86rem;
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 6px 4px;
-}
-.prompt-skip:hover { color: var(--ink); }
 .prompt-next {
   background: var(--primary);
   color: #fff;
@@ -1052,18 +1040,6 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   margin-top: 12px;
   flex-wrap: wrap;
 }
-.exchange-nav-btn {
-  min-height: 40px;
-  padding: 6px 14px;
-  border-radius: var(--r-sm, 8px);
-  border: 1px solid var(--line-strong, #c9bd9c);
-  background: var(--card, #fff);
-  color: var(--ink);
-  font-weight: 600;
-  cursor: pointer;
-}
-.exchange-nav-btn:hover:not(:disabled) { background: var(--surface-sunk, #f3f0e8); }
-.exchange-nav-btn:disabled { opacity: 0.45; cursor: default; }
 .exchange-nav-counter {
   font-size: 0.85rem;
   font-weight: 700;
@@ -1219,21 +1195,6 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   color: var(--ink);
 }
 
-/* The "I'd rather observe" panic-affordance styles (.role-observer-escape /
-   .role-observe-reassure) were removed 2026-07-16 (user request): the button
-   duplicated the Observer role chip, so it and its reassurance note are gone. */
-
-/* Discussion-question list inside Module B's prompts-card. */
-.discussion-q-list {
-  margin: var(--s-2) 0 0;
-  padding-left: 1.4em;
-}
-.discussion-q-list li {
-  margin-bottom: var(--s-2);
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-
 /* Pause/Explore/Explain/Realign — collapsed-by-default reference card.
    The per-role "how to play your part" guides (patient + family, 2026-06-03)
    share the same collapsible-card chrome; only the left-accent colour differs
@@ -1358,13 +1319,6 @@ html[data-theme="dark"] .next-step-coach {
   opacity: 0.65;
 }
 .rcol-tab.is-locked .rcol-tab-icon { filter: grayscale(0.4); }
-.rcol-tab-locked-hint {
-  display: block;
-  font-size: 0.72rem;
-  color: var(--muted);
-  font-weight: 500;
-  margin-top: 1px;
-}
 .rcol-tab:not(.is-locked) .rcol-tab-locked-hint { display: none; }
 .rcol-tab.is-locked.is-active {
   opacity: 0.85;
@@ -1423,19 +1377,6 @@ html[data-theme="dark"] .next-step-coach {
 }
 .vignette-shared-note strong { color: var(--ink); }
 .vignette-shared-note em { font-style: italic; }
-.consultation-note-title {
-  margin: 0 0 4px;
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: var(--note-accent-ink);
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-.consultation-note-title em {
-  font-style: italic;
-  color: var(--note-ink);
-}
 .consultation-note-icon {
   font-size: 1.3rem;
   line-height: 1;
@@ -1892,7 +1833,6 @@ details.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   font-weight: 600;
 }
 body[data-observer="1"] .decisions-card,
-body[data-observer="1"] .hypotheses-card,
 body[data-observer="1"] #modA-bullet-progress {
   /* soften participation prompts but keep them readable */
   opacity: 0.65;
@@ -1908,24 +1848,6 @@ body[data-observer="1"] #modB-next-step {
   border-left: 4px solid var(--accent, #e08a1e);
 }
 .endpoll-card h3 { margin-top: 0; }
-.endpoll-field {
-  display: block;
-  margin: 10px 0;
-  font-weight: 500;
-}
-.endpoll-field span {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--ink);
-}
-.endpoll-field textarea,
-.endpoll-field input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid var(--line-strong, #c9bd9c);
-  border-radius: var(--r-sm, 8px);
-  font-size: 1rem;
-}
 #endpoll-submit { min-height: 44px; }
 .endpoll-thanks {
   color: var(--success, #2e7d32);
@@ -2013,16 +1935,6 @@ body[data-observer="1"] #modB-next-step {
   font-size: 0.88rem;
   color: var(--muted);
   line-height: 1.5;
-}
-.chart-section-locked-hint {
-  margin: 0 0 8px;
-  padding: 8px 12px;
-  background: rgba(220, 120, 90, 0.10);
-  border-left: 3px solid var(--key, #c47a5a);
-  border-radius: var(--r-sm);
-  font-size: 0.88rem;
-  color: var(--ink);
-  font-weight: 500;
 }
 
 /* ── Working hypotheses panel (PBL 7-jump scaffold step) ── */
@@ -3352,16 +3264,6 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
   animation: drift 16s var(--ease-soft) infinite alternate;
 }
 .hero-aside > * { position: relative; }
-.fj-mark {
-  width: 96px;
-  height: 96px;
-  margin-bottom: var(--s-3);
-  filter: drop-shadow(0 6px 18px rgba(0,0,0,.4));
-  animation: mark-in 900ms var(--ease-out) both;
-}
-.fj-mark path:nth-of-type(1) { stroke-dasharray: 145; animation: draw 1100ms var(--ease-out) 200ms both; }
-.fj-mark path:nth-of-type(2) { stroke-dasharray: 145; animation: draw 1100ms var(--ease-out) 360ms both; }
-.fj-mark circle:nth-of-type(3) { transform-origin: center; animation: pop-disc 600ms var(--ease-out) 900ms both; }
 .hero-eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.16em;
@@ -3402,16 +3304,10 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 .card { transition: box-shadow var(--dur-base) var(--ease-soft),
                     transform var(--dur-base) var(--ease-soft); }
 .card:hover { box-shadow: var(--sh-lg); }
-/* gradient accent bar on vignette cards (replaces the flat left border) */
+/* vignettes are plain editorial cards — the stage card above carries the
+   stage accent and the serif heading carries the hierarchy (the old 4px
+   gradient side-stripe + corner watermark were decoration, removed) */
 .vignette { border-left: none; position: relative; }
-.vignette::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 10px; bottom: 10px;
-  width: 4px;
-  border-radius: 4px;
-  background: linear-gradient(var(--nagoya-500), var(--caen-500));
-}
 
 /* --- typography with more presence --- */
 .card h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.025em; line-height: 1.18; }
@@ -3445,33 +3341,6 @@ h2, h3 { text-wrap: balance; }
 .empty-art { width: 72px; height: 54px; display: block; margin: 0 auto 6px; }
 #findings-empty { text-align: center; }
 .wrap-art { width: 120px; height: 70px; display: block; margin: 0 0 var(--s-2); }
-
-/* --- "how points work" rubric inside the leaderboard card --- */
-.lb-rubric {
-  margin-top: var(--s-3);
-  padding: var(--s-3) var(--s-4);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  font-size: 0.9rem;
-}
-.lb-rubric p { margin: 0 0 var(--s-2); }
-.lb-rubric h4 {
-  margin: var(--s-3) 0 4px;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
-}
-.rubric-list { list-style: none; margin: 0; padding: 0; }
-.rubric-list li {
-  display: flex;
-  gap: var(--s-2);
-  align-items: baseline;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--line);
-}
-.rubric-list li:last-child { border-bottom: none; }
 .rubric-list .pts {
   flex-shrink: 0;
   font-weight: 800;
@@ -4415,29 +4284,37 @@ body.locked > footer { display: none !important; }
 }
 .splash-hint.err { color: var(--key); }
 .splash-hint.ok { color: var(--ok); }
+/* quiet editorial action rows under the join form: hairline rule (not the
+   dashed AI default), roomy line-height, no underline soup — links read as
+   calm actions and earn their underline on hover */
 .splash-foot {
-  margin: 22px 0 0;
-  padding-top: 18px;
-  border-top: 1px dashed var(--line-strong);
+  margin: var(--s-6) 0 0;
+  padding-top: var(--s-4);
+  border-top: 1px solid var(--line);
   color: var(--muted);
-  font-size: 0.84rem;
+  font-size: var(--fs-1);
+  line-height: 2.1;
 }
 .splash-view[hidden] { display: none; }
 
 /* --- the inline "link" button used as a low-emphasis text action (toggles) --- */
 .splash-link {
   font: inherit;
-  font-size: 0.86rem;
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
   background: none;
   border: none;
-  padding: 4px 6px;
+  padding: var(--s-1) var(--s-2);
   color: var(--primary);
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration: none;
   border-radius: var(--r-sm);
 }
-.splash-link:hover { color: var(--primary-hover); }
+.splash-link:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .splash-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* --- the bigger "label" used by Create / Created views --- */
@@ -5845,16 +5722,12 @@ body.session-ended-shown { overflow: hidden; }
    muted hint text (no fill, no border) so it no longer competes with the
    next-step coach as a second "alarm" in the Stage-1 first viewport. The
    message is preserved verbatim — just calmer. Muted text reads fine in
-   light/dark/high-contrast, so the former dark-mode amber overrides are no
-   longer needed. */
-.chart-team-warning {
+   light/dark/high-contrast{
   margin: 10px 0 0;
   font-size: 0.9rem;
   line-height: 1.5;
   color: var(--muted);
 }
-.chart-team-warning strong { color: var(--ink); }
-.chart-team-warning em { font-style: italic; }
 @keyframes req-reveal-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }
@@ -5964,7 +5837,6 @@ header {
   box-shadow: var(--sh-sm);
 }
 /* the vignette accent bar now carries the CURRENT STAGE's colour */
-.vignette::before { background: linear-gradient(var(--stage-accent), var(--caen-500)); }
 
 /* --- per-stage "chapter" identity --- */
 /* No longer pinned (2026-06-02): the stage card used to stick to the top of the
@@ -5992,6 +5864,25 @@ header {
 .stage > .vignette h2 { color: var(--ink); }
 
 /* --- inline-SVG spot illustrations (the answer to "should we add images?") --- */
+/* geometric spot illustrations — the icon set's stroke language at figure
+   scale; colours are tokens, so both themes come for free */
+.spot-illustration .spot-arc-a,
+.spot-illustration .spot-arc-b,
+.spot-illustration .spot-base,
+.spot-illustration .spot-trace { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.spot-illustration .spot-arc-a { stroke: var(--nagoya-500); stroke-width: 9; opacity: .45; }
+.spot-illustration .spot-arc-b { stroke: var(--caen-500); stroke-width: 9; opacity: .45; }
+.spot-illustration .spot-trace { stroke: var(--primary); stroke-width: 3; }
+.spot-illustration .spot-base { stroke: var(--line-strong); stroke-width: 2; }
+.spot-illustration .spot-dot { fill: var(--caen-500); }
+.spot-illustration .spot-meet { fill: var(--meeting); }
+.wrap-art .wrap-arc-a,
+.wrap-art .wrap-arc-b { fill: none; stroke-linecap: round; }
+.wrap-art .wrap-arc-a { stroke: var(--nagoya-500); stroke-width: 8; }
+.wrap-art .wrap-arc-b { stroke: var(--caen-500); stroke-width: 8; }
+.wrap-art .wrap-apex { fill: var(--meeting); }
+.session-ended-mark .ended-ring { fill: var(--ok-50); stroke: var(--ok); stroke-width: 3; }
+.session-ended-mark .ended-check { fill: none; stroke: var(--ok-strong); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
 .spot-illustration {
   display: block;
   width: 100%;
@@ -6005,30 +5896,6 @@ header {
   .spot-illustration { float: none; margin: 0 auto var(--s-3); }
 }
 
-/* --- the "meeting arc" motif: a quiet divider derived from the mark --- */
-.motif-divider {
-  display: block;
-  width: 100%;
-  max-width: 180px;
-  height: 16px;
-  margin: var(--s-4) auto;
-  opacity: 0.55;
-}
-/* a faint corner watermark on key surfaces */
-.vignette, .team-recap-card {
-  position: relative;
-  overflow: hidden;
-}
-.vignette::after, .team-recap-card::after {
-  content: "";
-  position: absolute;
-  right: -36px; bottom: -36px;
-  width: 150px; height: 150px;
-  background:
-    radial-gradient(closest-side, transparent 64%, var(--stage-accent) 65%, var(--stage-accent) 70%, transparent 71%);
-  opacity: 0.07;
-  pointer-events: none;
-}
 
 /* --- reference cards read as a quiet library, not as task steps --- */
 .history-card, .guidelines-card, .recap-card {

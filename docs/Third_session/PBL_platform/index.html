@@ -36,12 +36,12 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v87" below to the matching new string.
+         2. Update every "?v=v88" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v87"></script>
+  <script src="theme-init.js?v=v88"></script>
   <!-- Design tokens + self-hosted variable fonts (Clinical Editorial).
        tokens.css MUST precede style.css: it is the single source of truth
        for every custom property style.css consumes. Fonts are same-origin
@@ -49,14 +49,14 @@
        first — crossorigin is required for font preloads even same-origin. -->
   <link rel="preload" href="fonts/source-sans-3-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/source-serif-4-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="tokens.css?v=v87" />
-  <link rel="stylesheet" href="style.css?v=v87" />
+  <link rel="stylesheet" href="tokens.css?v=v88" />
+  <link rel="stylesheet" href="style.css?v=v88" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
-  <link rel="manifest" href="manifest.webmanifest?v=v87" />
+  <link rel="manifest" href="manifest.webmanifest?v=v88" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v87" defer></script>
+  <script src="sw-register.js?v=v88" defer></script>
 </head>
 <body class="locked">
   <!-- ============ INLINE SVG ICON SPRITE (2026-07-17) ============
@@ -820,9 +820,8 @@
   <main id="session-ended" class="session-ended hidden" aria-labelledby="session-ended-title">
     <div class="session-ended-card">
       <svg class="session-ended-mark" viewBox="0 0 100 100" aria-hidden="true">
-        <circle cx="50" cy="50" r="44" fill="#e7f4ec" stroke="#1e8449" stroke-width="3"/>
-        <path d="M30 52 l14 14 l28 -32" fill="none" stroke="#1e8449" stroke-width="6"
-              stroke-linecap="round" stroke-linejoin="round"/>
+        <circle class="ended-ring" cx="50" cy="50" r="44" />
+        <path class="ended-check" d="M30 52 l14 14 l28 -32" />
       </svg>
       <h1 class="session-ended-title" id="session-ended-title"
           data-i18n="ended.title">Thank you for taking part</h1>
@@ -1436,19 +1435,15 @@
         </div>
 
         <section class="card vignette">
+          <!-- Editorial spot: geometric, brand-native (the Nagoya arc over a
+               clinical trace) — diagrammatic like a journal figure, not clip-art.
+               Colours come from tokens via .spot-* classes in style.css. -->
           <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
-               aria-label="A patient sitting in a clinic consultation">
-            <rect width="200" height="140" rx="16" fill="#e9f4fb" />
-            <circle cx="166" cy="34" r="22" fill="#fbf3df" />
-            <rect x="0" y="112" width="200" height="28" fill="#d8e8f3" />
-            <ellipse cx="74" cy="116" rx="36" ry="8" fill="#bcd9ee" />
-            <path d="M50 112 q-4 -40 24 -44 q28 4 24 44z" fill="#2e9fdf" />
-            <circle cx="74" cy="56" r="15" fill="#1763a6" />
-            <path d="M120 70 a16 16 0 0 1 28 0" fill="none" stroke="#1763a6"
-                  stroke-width="3.6" stroke-linecap="round" />
-            <path d="M120 78 a16 16 0 0 0 28 0" fill="none" stroke="#e08a1e"
-                  stroke-width="3.6" stroke-linecap="round" />
-            <circle cx="134" cy="62" r="3.6" fill="#4f7d8c" />
+               aria-label="A clinical pulse trace — the case in front of you">
+            <path class="spot-arc-a" d="M58 26 A62 62 0 0 1 168 54" />
+            <polyline class="spot-trace"
+                      points="14,86 62,86 74,86 84,58 96,110 108,74 116,86 186,86" />
+            <circle class="spot-dot" cx="96" cy="110" r="4.5" />
           </svg>
           <h2>The patient in front of you</h2>
           <p>
@@ -2325,18 +2320,14 @@
         <div class="columns modB-columns">
           <div class="col-left">
         <section class="card vignette">
+          <!-- Editorial spot: the brand's two arcs facing each other — two
+               voices in one conversation; the meeting dot sits in the overlap. -->
           <svg class="spot-illustration" viewBox="0 0 200 140" role="img"
-               aria-label="A doctor speaking with a patient and a family member">
-            <rect width="200" height="140" rx="16" fill="#fbf3df" />
-            <rect x="0" y="112" width="200" height="28" fill="#efe2c4" />
-            <path d="M22 112 q-3 -34 20 -38 q23 4 20 38z" fill="#2e9fdf" />
-            <circle cx="42" cy="56" r="13" fill="#1763a6" />
-            <path d="M78 112 q-3 -36 22 -40 q25 4 22 40z" fill="#d8b06a" />
-            <circle cx="100" cy="52" r="14" fill="#b45309" />
-            <path d="M140 112 q-2 -30 18 -34 q20 4 18 34z" fill="#9ab9c6" />
-            <circle cx="158" cy="62" r="11" fill="#4f7d8c" />
-            <path d="M58 58 q14 -10 28 -6" fill="none" stroke="#1763a6"
-                  stroke-width="2.6" stroke-linecap="round" stroke-dasharray="1 6" />
+               aria-label="Two voices meeting in one conversation">
+            <path class="spot-arc-a" d="M36 100 A44 44 0 0 1 116 78" />
+            <path class="spot-arc-b" d="M164 44 A44 44 0 0 1 84 66" />
+            <circle class="spot-meet" cx="100" cy="72" r="5" />
+            <path class="spot-base" d="M24 120 H176" />
           </svg>
           <h2 data-i18n="stage.modB.title">Module B — Breaking Bad News: A Cross-Cultural Roleplay</h2>
           <p data-i18n="stage.modB.vignette.body" data-i18n-html><strong>The situation (read once, together).</strong> Mr / Mrs Tanaka-Martin,
@@ -2690,12 +2681,12 @@
              folds in with the take-home downloads. The optional post-test and
              feedback-survey cards stay as their own cards BELOW this one. -->
         <div class="card vignette wrapup-card">
-          <svg class="wrap-art" viewBox="0 0 120 70" aria-hidden="true">
-            <path d="M30 60L20 20l28 22z" fill="#2e9fdf" />
-            <path d="M90 60l10-40-28 22z" fill="#0f4e85" />
-            <path d="M60 8l4 9 10 1-7 7 2 10-9-5-9 5 2-10-7-7 10-1z" fill="#e7b800" />
-            <circle cx="14" cy="14" r="3" fill="#e7b800" />
-            <circle cx="108" cy="40" r="3" fill="#2e9fdf" />
+          <!-- Editorial wrap art: the brand's two arcs closed into a full
+               circle — the session complete; the meeting dot at the apex. -->
+          <svg class="wrap-art" viewBox="0 0 120 82" aria-hidden="true">
+            <path class="wrap-arc-a" d="M60 13 A28 28 0 0 0 60 69" />
+            <path class="wrap-arc-b" d="M60 13 A28 28 0 0 1 60 69" />
+            <circle class="wrap-apex" cx="60" cy="13" r="5.5" />
           </svg>
           <h2 data-i18n="stage.wrap.title">Wrap-up &amp; Next Steps</h2>
           <p data-i18n="stage.wrap.thanks">Thank you for taking part! Before you go:</p>
@@ -3203,46 +3194,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v87" defer></script>
+  <script src="firebase-config.js?v=v88" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v87" defer></script>
+  <script src="orgs.js?v=v88" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v87" defer></script>
+  <script src="platform-config.js?v=v88" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v87" defer></script>
+  <script src="telemetry.js?v=v88" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v87" defer></script>
+  <script src="purify.min.js?v=v88" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v87" defer></script>
+  <script src="i18n.js?v=v88" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v87" defer></script>
+  <script src="localdb.js?v=v88" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v87" defer></script>
+  <script src="lib.js?v=v88" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v87" defer></script>
+  <script src="pure-utils.js?v=v88" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3253,7 +3244,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v87" defer></script>
+  <script src="script-loader.js?v=v88" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3263,7 +3254,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v87" defer></script>
+  <script src="script.js?v=v88" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
