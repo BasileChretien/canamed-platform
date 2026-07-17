@@ -208,19 +208,48 @@ The archive is a faithful copy of the live data so it can be re-loaded into
 any analysis pipeline. The `adminPasswordHash` is stripped from the archive
 (it has no research value).
 
-## Auto-deploy on push to main
+## Auto-deploy on main
 
-`.github/workflows/firebase-deploy.yml` runs `firebase deploy --only hosting`
-on every push to `main` that touches `docs/Third_session/PBL_platform/`. The
-service account credentials live as a GitHub secret
+`.github/workflows/firebase-deploy.yml` ships hosting (and, best-effort,
+database rules) for a commit on `main` once it passes the gate below — in
+practice, most merges. It is not an unconditional guarantee that the live site
+matches `main`: a red or never-run E2E deploys nothing, and a commit that main
+has already moved past is skipped rather than shipped (see below). There is no
+path filter, so a commit touching nothing under `docs/Third_session/PBL_platform/`
+still redeploys byte-identical content — a harmless no-op that keeps the live
+site in step with `main`. The service account credentials live as a GitHub secret
 (`FIREBASE_SERVICE_ACCOUNT_CANAMED_69785`); the workflow is concurrency-guarded
 so a flurry of pushes coalesces into one deploy.
 
-Manual `firebase deploy` from a developer machine continues to work — this
-just keeps the live site in sync with `main` automatically. **Database rules**
-still get pushed manually with `firebase deploy --only database` because the
-service account only carries Hosting Admin permissions (intentional — rules
-changes are rare and benefit from a human review before they ship).
+**It does not trigger on `push`.** It triggers on `workflow_run` — when the
+**E2E tests** workflow *concludes* on `main` — and then verifies that every
+required check on that commit passed before deploying. E2E is the slowest
+required suite (~15 min), so waiting for it to finish is what makes the
+verification cheap; the older push-triggered design polled for those checks on a
+15-min budget and lost the race on essentially every merge. Two consequences
+worth knowing:
+
+- **Deploys start ~15 min after a merge**, not immediately. That is the E2E
+  runtime, and was already the true wait before — the deploy just used to spend
+  it burning a runner.
+- **If E2E is red, the deploy run is created but skips** (grey, not red). Fix
+  the failure or re-run the E2E jobs; a green E2E re-run fires the deploy
+  automatically, with no manual re-run of the deploy needed.
+- **Only main's tip ships.** The workflow refuses to deploy a commit that main
+  has moved past, so re-running an *old* E2E run cannot roll the live site back
+  — it skips with a "Deploy skipped (superseded)" warning. That is expected, not
+  a failure.
+- **If E2E never *runs* at all** (workflow disabled, Actions outage/billing
+  lockout), no deploy run appears and nothing goes red — main silently stops
+  reaching the live site. Verify with
+  `curl -s https://canamed-69785.web.app/sw.js | grep SHELL_VERSION`.
+
+Manual `firebase deploy` from a developer machine continues to work — this just
+keeps the live site in sync with `main` automatically. **Database rules** are
+deployed on a best-effort basis: the step is `continue-on-error`, so if the
+service account lacks the Firebase Realtime Database Admin role the rules step
+warns and hosting still ships. Push rules manually with
+`firebase deploy --only database` if that warning appears.
 
 ## Scenarios — the content of each session
 
