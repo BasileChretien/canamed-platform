@@ -80,10 +80,10 @@ permissions:
   contents: read
   checks: read
 
-# only one deploy at a time - cancel any in-flight run when a newer one starts
-concurrency:
-  group: firebase-deploy
-  cancel-in-progress: true
+# NB: serialisation lives on the `deploy` job, NOT here at workflow level — see
+# the comment on that job. A workflow-level group would be entered before `gate`
+# runs, so a run that is about to decide "don't ship" would still cancel a valid
+# in-flight deployment.
 
 jobs:
   # Decide whether this commit may ship, and which commit that is. Holds no
@@ -253,6 +253,15 @@ jobs:
     # Every reason NOT to ship was decided in `gate`; this is the single place
     # that consumes the verdict. Note `needs.gate.outputs.ship` is a STRING.
     if: needs.gate.outputs.ship == 'true'
+    # One deploy at a time; a newer deploy cancels an older in-flight one, so the
+    # newest commit wins. This MUST stay on the job rather than the workflow: at
+    # workflow level the group is entered before `gate` runs, so a stale E2E
+    # re-run — which `gate` is about to reject — would cancel a valid in-flight
+    # deployment and then ship nothing, leaving the live site behind main. Gated
+    # here, a run that must not ship never enters the group at all.
+    concurrency:
+      group: firebase-deploy
+      cancel-in-progress: true
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
@@ -261,6 +270,9 @@ jobs:
           # out main's head — which can be a NEWER, ungated commit — so we would
           # verify one commit's CI and ship another's code.
           ref: ${{ needs.gate.outputs.sha }}
+          # Nothing here talks to git after checkout (we deploy with the Firebase
+          # CLI), so don't leave the job token in .git/config.
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v6

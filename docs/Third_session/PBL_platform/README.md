@@ -211,10 +211,13 @@ any analysis pipeline. The `adminPasswordHash` is stripped from the archive
 ## Auto-deploy on main
 
 `.github/workflows/firebase-deploy.yml` ships hosting (and, best-effort,
-database rules) for every commit that lands on `main`. There is no path filter:
-a commit touching nothing under `docs/Third_session/PBL_platform/` redeploys
-byte-identical content, which is a harmless no-op that guarantees the live site
-always matches `main`. The service account credentials live as a GitHub secret
+database rules) for a commit on `main` once it passes the gate below — in
+practice, most merges. It is not an unconditional guarantee that the live site
+matches `main`: a red or never-run E2E deploys nothing, and a commit that main
+has already moved past is skipped rather than shipped (see below). There is no
+path filter, so a commit touching nothing under `docs/Third_session/PBL_platform/`
+still redeploys byte-identical content — a harmless no-op that keeps the live
+site in step with `main`. The service account credentials live as a GitHub secret
 (`FIREBASE_SERVICE_ACCOUNT_CANAMED_69785`); the workflow is concurrency-guarded
 so a flurry of pushes coalesces into one deploy.
 
