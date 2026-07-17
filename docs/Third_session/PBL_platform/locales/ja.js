@@ -83,6 +83,7 @@
   "splash.my-sessions.close-confirm": "このセッションを終了しますか？ 参加者にはまとめ画面が表示され、操作できなくなります。データはデータベースに残ります — 管理ダッシュボードを再度開いてアーカイブをダウンロードできます。",
   "splash.my-sessions.closing": "閉じています…",
   "splash.my-sessions.closed-ok": "閉じました ✓",
+  "splash.my-sessions.close-live-warning": "⚠ {n}名の参加者がこのセッションに参加しています — 閉じると全員のセッションが終了します。",
   "splash.my-sessions.closed-btn": "閉じました",
   "splash.my-sessions.close-failed": "閉じることができませんでした — 接続を確認してもう一度お試しください。",
   "privacy.title": "CaNaMED — プライバシーポリシー",

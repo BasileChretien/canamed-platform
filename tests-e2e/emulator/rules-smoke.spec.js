@@ -523,3 +523,54 @@ test("rules: a write to a denied path is rejected (rules ARE enforced)", async (
   expect(result).not.toBe("ALLOWED");
   expect(String(result)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
 });
+
+test("rules: closing a session is creator/proof-bound — a student who knows the code cannot end it", async ({ page, browser }) => {
+  // Before this rule, ANY authenticated user could write the (write-once,
+  // unrecoverable) closed marker for any session whose code they knew — i.e.
+  // any student could end the whole session for everyone. The rule now
+  // requires the writer to be the session's creator (creatorUid == auth.uid)
+  // or to hold a fresh admin password-proof at adminSecrets/<code>/proof/<uid>.
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const REAL_HASH = "b".repeat(64);
+
+  // --- scenario 1: creator closes; a student cannot -----------------------
+  const code = "close-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+  expect(await tryWrite(page, `adminSecrets/${code}/hash`, REAL_HASH)).toBe("ALLOWED");
+
+  // Student B (distinct anonymous uid) knows the code but is neither creator
+  // nor proof-holder — the close write must be denied.
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+  const grief = await tryWrite(tabB, `sessions/${code}/closed`, { by: "Student B", at: Date.now() });
+  expect(grief, "a non-creator/non-proof-holder must not close the session").not.toBe("ALLOWED");
+  expect(String(grief)).toMatch(/permission_denied|denied/i);
+
+  // The creator CAN close it…
+  expect(await tryWrite(page, `sessions/${code}/closed`, { by: "Facilitator", at: Date.now() })).toBe("ALLOWED");
+  // …and the marker stays write-once even for the creator.
+  const again = await tryWrite(page, `sessions/${code}/closed`, { by: "Facilitator", at: Date.now() });
+  expect(again).not.toBe("ALLOWED");
+
+  // --- scenario 2: a different-browser facilitator closes via password proof
+  const code2 = "close2-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  expect(await tryWrite(page, `sessions/${code2}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code2}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+  expect(await tryWrite(page, `adminSecrets/${code2}/hash`, REAL_HASH)).toBe("ALLOWED");
+
+  // B still cannot close code2 (no proof yet)…
+  const grief2 = await tryWrite(tabB, `sessions/${code2}/closed`, { by: "B", at: Date.now() });
+  expect(grief2).not.toBe("ALLOWED");
+  // …but after a successful password proof-write (FINDING-07 scheme: the
+  // candidate must equal the stored hash, verified server-side), B is a
+  // legitimate facilitator on another browser and CAN close.
+  expect(await tryWrite(tabB, `adminSecrets/${code2}/proof/${uidB}`, REAL_HASH)).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code2}/closed`, { by: "Co-facilitator", at: Date.now() })).toBe("ALLOWED");
+  await ctxB.close();
+});

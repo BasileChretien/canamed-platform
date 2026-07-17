@@ -12281,19 +12281,35 @@ function closeMySession(code, btn, statusEl) {
   // browsers.) canamedConfirm is the same modal the rest of the platform uses;
   // it falls back to native confirm() internally only when the <dialog>
   // element is missing, so we never deadlock on a missing modal.
-  const message = tFallback("splash.my-sessions.close-confirm",
+  const baseMessage = tFallback("splash.my-sessions.close-confirm",
     "End this session? Participants will see the wrap-up screen and " +
     "cannot interact further. The data stays in the database — you can " +
     "re-open the admin dashboard later to download the archive.");
-  const ask = (typeof canamedConfirm === "function")
-    ? canamedConfirm({
-        title: tFallback("splash.my-sessions.close-btn", "Close session"),
-        message: message,
-        detail: c.toUpperCase(),                     // session code, monospace (display upper)
-        okLabel: tFallback("splash.my-sessions.close-btn", "Close session"),
-        danger: true
-      })
-    : Promise.resolve(window.confirm(message));
+  // Best-effort head-count (pool = everyone who joined) so accidentally
+  // closing a session with students in it requires noticing that fact.
+  // Any failure degrades to the plain confirm — never blocks the close.
+  const countJoined = (db)
+    ? db.ref(oPath(c, "pool")).once("value")
+        .then(sn => { const v = sn && sn.val(); return v ? Object.keys(v).length : 0; })
+        .catch(() => 0)
+    : Promise.resolve(0);
+  const ask = countJoined.then(n => {
+    const live = (n > 0)
+      ? tFallback("splash.my-sessions.close-live-warning",
+          "⚠ " + n + " participant(s) have joined this session — closing ends it for everyone.")
+          .replace("{n}", String(n)) + "\n\n"
+      : "";
+    const message = live + baseMessage;
+    return (typeof canamedConfirm === "function")
+      ? canamedConfirm({
+          title: tFallback("splash.my-sessions.close-btn", "Close session"),
+          message: message,
+          detail: c.toUpperCase(),                     // session code, monospace (display upper)
+          okLabel: tFallback("splash.my-sessions.close-btn", "Close session"),
+          danger: true
+        })
+      : Promise.resolve(window.confirm(message));
+  });
 
   ask.then(ok => {
     if (!ok) return;
@@ -12304,10 +12320,12 @@ function closeMySession(code, btn, statusEl) {
       at: Date.now()
     });
 
-    // ensureSignedIn() is the platform's standard pre-write gate — the
-    // closed-write rule requires auth != null even though it doesn't
-    // require admin password verification (we trust the local UX gate
-    // since we only show sessions THIS browser created).
+    // ensureSignedIn() is the platform's standard pre-write gate. The
+    // closed-write rule now enforces what this list only implied: the
+    // writer must BE the session's creator (creatorUid == auth.uid — this
+    // browser's persisted anonymous/linked uid) or hold a fresh admin
+    // password-proof at adminSecrets/<code>/proof/<uid>. A student who
+    // merely knows the code can no longer end the session for everyone.
     const auth = (typeof ensureSignedIn === "function") ? ensureSignedIn() : Promise.resolve();
     return auth.then(write).then(() => {
       if (statusEl) statusEl.textContent = tFallback("splash.my-sessions.closed-ok", "Closed ✓");

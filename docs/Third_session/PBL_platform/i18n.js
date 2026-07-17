@@ -153,6 +153,7 @@
       "splash.my-sessions.close-confirm": "End this session? Participants will see the wrap-up screen and cannot interact further. The data stays in the database — you can re-open the admin dashboard later to download the archive.",
       "splash.my-sessions.closing": "Closing…",
       "splash.my-sessions.closed-ok": "Closed ✓",
+      "splash.my-sessions.close-live-warning": "⚠ {n} participant(s) have joined this session — closing ends it for everyone.",
       "splash.my-sessions.closed-btn": "Closed",
       "splash.my-sessions.close-failed": "Could not close — check your connection and try again.",
 

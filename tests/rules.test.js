@@ -122,6 +122,26 @@ test("rules: closed-marker itself is write-once (no re-opening)", () => {
     "The closed marker must be write-once; got: " + closedRule);
 });
 
+test("rules: closing a session is creator/proof-bound (not any authed user)", () => {
+  // The closed marker is write-once and ends the session for everyone, so
+  // it must NOT be writable by any authenticated user who knows the code
+  // (i.e. any student). Both trees require creatorUid == auth.uid OR a
+  // fresh admin password-proof at adminSecrets .../proof/<uid> (FINDING-07
+  // scheme). Functional coverage: rules-smoke.spec.js (emulator).
+  const sess = rules.rules.sessions["$sessionId"].closed[".write"];
+  assert.ok(sess.includes("'creatorUid'") && sess.includes("== auth.uid"),
+    "sessions closed-write must bind to creatorUid; got: " + sess);
+  assert.ok(sess.includes("'adminSecrets'") && sess.includes("'proof'") &&
+            sess.includes("child(auth.uid).exists()"),
+    "sessions closed-write must accept a password-proof holder; got: " + sess);
+  const org = rules.rules.orgs["$orgSlug"].sessions["$sessionId"].closed[".write"];
+  assert.ok(org.includes("'creatorUid'") && org.includes("== auth.uid"),
+    "org closed-write must bind to creatorUid; got: " + org);
+  assert.ok(org.includes("'adminSecrets'") && org.includes("'proof'") &&
+            org.includes("child(auth.uid).exists()"),
+    "org closed-write must accept a password-proof holder; got: " + org);
+});
+
 test("rules: link fields validate https:// (no plaintext / javascript:)", () => {
   const session = rules.rules.sessions["$sessionId"];
   for (const field of ["teamsLink", "questionnaireLink", "preQuestionnaireLink"]) {
