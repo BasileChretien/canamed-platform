@@ -343,7 +343,9 @@ gainBlock +
       participants: participants, decisions: decisions, tests: tests, survey: survey, rooms: roomsOut
     };
     download(JSON.stringify(bundle, null, 2), "research_export.json", "application/json");
-    if (typeof toast === "function") toast("Research export downloaded (pseudonymous JSON).");
+    // The JSON bundle is IDENTIFIABLE (pseudonymous:false — names + university
+    // per the research consent); the toast must say so, not "pseudonymous".
+    if (typeof toast === "function") toast("Research export downloaded — IDENTIFIABLE data (names). Store securely.");
   }
 
   /* ── CSV research export ───────────────────────────────────────────────── */
