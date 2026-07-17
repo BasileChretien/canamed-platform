@@ -72,6 +72,23 @@ body {
 
 .hidden { display: none !important; }
 
+/* ---------- inline SVG icon system (2026-07-17) ----------
+   Replaces the pictographic UI emojis (inconsistent across OSes; fought the
+   Clinical Editorial voice). Symbols live in the inline sprite at the top of
+   index.html; referenced as <svg class="ic"><use href="#ic-name"/></svg>.
+   Em-sized so icons track the surrounding text size; the slight negative
+   vertical-align seats the 24-grid glyph on the text baseline. */
+.ic {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  flex: none;
+}
+/* The sprite itself never renders (symbols only draw via <use>). A class,
+   not an inline style attribute: the production CSP is style-src 'self'. */
+.ic-sprite { display: none; }
+
 /* ---------- typography base ----------
    Clinical Editorial: headings h1-h3 carry the serif display voice
    (Source Serif 4); h4+ and all UI chrome stay in the humanist sans.

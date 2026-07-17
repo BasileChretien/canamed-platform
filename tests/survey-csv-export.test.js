@@ -141,8 +141,10 @@ test("the feedback survey is also added to the JSON research bundle", () => {
 });
 
 test("CSV export is wired to a facilitator button + exposed", () => {
-  assert.match(INDEX, /id="admin-research-csv-btn"[\s\S]{0,80}?data-i18n="impact\.research-csv"/,
-    "the dashboard must include the CSV export button");
+  // Icon system 2026-07-17: the localised label now lives on an inner <span>
+  // (sibling of the sprite icon), so allow the key anywhere inside the button.
+  assert.match(INDEX, /id="admin-research-csv-btn"(?:(?!<\/button>)[\s\S]){0,400}?data-i18n="impact\.research-csv"/,
+    "the dashboard must include the CSV export button (key INSIDE the button)");
   const n = I18N.split('"impact.research-csv"').length - 1;
   assert.strictEqual(n, 3, "impact.research-csv must be in en/fr/ja (got " + n + ")");
   assert.match(SCRIPT, /admin-research-csv-btn[\s\S]{0,160}?runAdminTool\("generateResearchExportCSV"\)/,

@@ -133,6 +133,16 @@ var CANAMED_COMPETENCY_MAP = {
     }
   }
 
+  // Printer glyph for the generated standalone reports — full inline literal,
+  // because these documents open in their own window where the index.html
+  // icon sprite is out of reach (same design language: 24-grid, 1.8 stroke).
+  const PRINT_ICON =
+"<svg width='1em' height='1em' viewBox='0 0 24 24' fill='none' stroke='currentColor'" +
+" stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'" +
+" class='pic' aria-hidden='true'>" +
+"<path d='M7 8V4h10v4'/><rect x='4' y='8' width='16' height='8' rx='1.6'/>" +
+"<path d='M7 13h10v7H7Z'/></svg>";
+
   // Shared print-ready stylesheet for all admin-tools reports.
   const REPORT_CSS =
 "*{box-sizing:border-box}body{font:15px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;color:#1d2733;max-width:920px;margin:0 auto;padding:32px 24px;background:#fff}" +
@@ -142,6 +152,7 @@ var CANAMED_COMPETENCY_MAP = {
 "td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}.tag{display:inline-block;font-size:.72rem;background:#eef3f9;color:#16335c;border-radius:4px;padding:1px 6px;margin-left:4px}" +
 ".note{font-size:.85rem;color:#5b6b7b;background:#f7f9fb;border-left:3px solid #2563eb;padding:10px 12px;border-radius:6px;margin:10px 0}" +
 ".foot{margin-top:26px;font-size:.8rem;color:#7a8694;border-top:1px solid #e8edf2;padding-top:12px}" +
+".pic{vertical-align:-0.125em}" +
 "@media print{.noprint{display:none}body{padding:0}}" +
 ".pbtn{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:.95rem;cursor:pointer}";
 
@@ -178,7 +189,7 @@ var CANAMED_COMPETENCY_MAP = {
 "<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
 "<meta name='viewport' content='width=device-width, initial-scale=1'>" +
 "<title>CANAMED — Accreditation Evidence</title><style>" + REPORT_CSS + "</style></head><body>" +
-"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<button class='pbtn noprint' onclick='window.print()'>" + PRINT_ICON + " Print / Save as PDF</button>" +
 "<h1>CANAMED — Competency Evidence (accreditation)</h1>" +
 "<p class='sub'>Session <strong>" + esc(typeof sessionNum !== "undefined" ? sessionNum : "—") +
 "</strong> · generated " + esc(when.toLocaleString()) + "</p>" +
@@ -197,7 +208,7 @@ gainBlock +
 "(pre/post) and satisfaction are captured separately via the session instruments.</div>" +
 "</body></html>";
     openReport(html, "accreditation_evidence");
-    if (typeof toast === "function") toast("📋 Accreditation evidence generated.");
+    if (typeof toast === "function") toast("Accreditation evidence generated.");
   }
 
   /* Download a text blob (research export uses this; reports use openReport). */
@@ -332,7 +343,9 @@ gainBlock +
       participants: participants, decisions: decisions, tests: tests, survey: survey, rooms: roomsOut
     };
     download(JSON.stringify(bundle, null, 2), "research_export.json", "application/json");
-    if (typeof toast === "function") toast("🔬 Research export downloaded (pseudonymous JSON).");
+    // The JSON bundle is IDENTIFIABLE (pseudonymous:false — names + university
+    // per the research consent); the toast must say so, not "pseudonymous".
+    if (typeof toast === "function") toast("Research export downloaded — IDENTIFIABLE data (names). Store securely.");
   }
 
   /* ── CSV research export ───────────────────────────────────────────────── */
@@ -605,7 +618,7 @@ gainBlock +
     download(_toCSV(["table", "field", "code", "meaning", "extra", "module"], _codebookRows()),
       "research_codebook.csv", "text/csv");
     if (typeof toast === "function") {
-      toast("📊 CSV export downloaded (participants, reveals, votes, free-text, decisions, codebook).");
+      toast("CSV export downloaded (participants, reveals, votes, free-text, decisions, codebook).");
     }
   }
 
@@ -648,13 +661,13 @@ gainBlock +
 ".cert-comps{max-width:520px;margin:10px auto}.cert-foot{margin-top:18px;font-size:.82rem;color:#5b6b7b;text-align:center}" +
 ".cert-vid{margin-top:6px;font-size:.8rem;color:#16335c;text-align:center;letter-spacing:.04em}" +
 "</style></head><body>" +
-"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF (one per participant)</button>" +
+"<button class='pbtn noprint' onclick='window.print()'>" + PRINT_ICON + " Print / Save as PDF (one per participant)</button>" +
 cards +
 "<div class='foot noprint'>One certificate per present participant. Attestations are named records — " +
 "distribute each to its student. Generated client-side; no data leaves this device.</div>" +
 "</body></html>";
     openReport(html, "attestations");
-    if (typeof toast === "function") toast("🎓 Attestations generated (" + rows.length + ").");
+    if (typeof toast === "function") toast("Attestations generated (" + rows.length + ").");
   }
 
   /* ── Withdraw a public-verification entry ──────────────────────────────── */
@@ -741,7 +754,7 @@ cards +
 ".kpi{flex:1 1 150px;border:1px solid #e1e7ed;border-radius:10px;padding:12px 14px;background:#f7f9fb}" +
 ".kpi .v{font-size:1.7rem;font-weight:700;color:#16335c}.kpi .l{font-size:.8rem;color:#5b6b7b}" +
 "</style></head><body>" +
-"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<button class='pbtn noprint' onclick='window.print()'>" + PRINT_ICON + " Print / Save as PDF</button>" +
 "<h1>CANAMED — Program Overview</h1>" +
 "<p class='sub'>Across all closed sessions on this device · generated " + esc(when.toLocaleString()) + "</p>" +
 (empty
@@ -768,7 +781,7 @@ cards +
 "this as program-level evidence of reach and trend for leadership / accreditation.</div>" +
 "</body></html>";
     openReport(html, "program_overview");
-    if (typeof toast === "function") toast("📈 Program overview generated (" + list.length + " sessions).");
+    if (typeof toast === "function") toast("Program overview generated (" + list.length + " sessions).");
   }
 
   /* ── Item difficulty (curriculum feedback) ─────────────────────────────── */
@@ -820,7 +833,7 @@ cards +
 "<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
 "<meta name='viewport' content='width=device-width, initial-scale=1'>" +
 "<title>CANAMED — Item Difficulty</title><style>" + REPORT_CSS + "</style></head><body>" +
-"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<button class='pbtn noprint' onclick='window.print()'>" + PRINT_ICON + " Print / Save as PDF</button>" +
 "<h1>CANAMED — Item Difficulty (curriculum feedback)</h1>" +
 "<p class='sub'>Decisions ranked hardest-first · across the live session + your closed-session rollup · " +
 esc(when.toLocaleString()) + "</p>" +
@@ -836,7 +849,7 @@ esc(when.toLocaleString()) + "</p>" +
 "team decision matched the clinically-safest option. Use this to target curriculum revision.</div>" +
 "</body></html>";
     openReport(html, "item_difficulty");
-    if (typeof toast === "function") toast("🧭 Item-difficulty report generated.");
+    if (typeof toast === "function") toast("Item-difficulty report generated.");
   }
 
   /* ── Cohort comparison (Caen × Nagoya quasi-experiment) ────────────────── */
@@ -907,7 +920,7 @@ esc(when.toLocaleString()) + "</p>" +
 "<!doctype html><html lang='en'><head><meta charset='utf-8'>" +
 "<meta name='viewport' content='width=device-width, initial-scale=1'>" +
 "<title>CANAMED — Cohort Comparison</title><style>" + REPORT_CSS + "</style></head><body>" +
-"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<button class='pbtn noprint' onclick='window.print()'>" + PRINT_ICON + " Print / Save as PDF</button>" +
 "<h1>CANAMED — Cohort Comparison</h1>" +
 "<p class='sub'>By university · the same intervention across cohorts (a built-in natural experiment) · " +
 esc(when.toLocaleString()) + "</p>" +
@@ -923,7 +936,7 @@ esc(when.toLocaleString()) + "</p>" +
 "university could not be determined from their contributions appear under 'unknown'.</div>" +
 "</body></html>";
     openReport(html, "cohort_comparison");
-    if (typeof toast === "function") toast("🌍 Cohort comparison generated.");
+    if (typeof toast === "function") toast("Cohort comparison generated.");
   }
 
   /* ── Transactional email (consent-gated) ──────────────────────────────── */
@@ -987,7 +1000,7 @@ esc(when.toLocaleString()) + "</p>" +
       });
       download(lines.join("\n"), "research_email_roster.csv", "text/csv");
       if (typeof toast === "function") {
-        toast("📧 Email roster downloaded (" + uids.length + " participant" +
+        toast("Email roster downloaded (" + uids.length + " participant" +
               (uids.length === 1 ? "" : "s") + "). Identifiable — store securely.");
       }
     }).catch(function (e) {

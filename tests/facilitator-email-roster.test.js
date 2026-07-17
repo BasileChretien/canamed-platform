@@ -89,8 +89,11 @@ test("the facilitator can export the roster (creator-only read) as an identifiab
 });
 
 test("an admin button is wired to the roster export and localised", () => {
-  assert.match(INDEX, /id="admin-roster-btn"[^>]*data-i18n="impact\.roster"/s,
-    "the admin dashboard must have a roster button bound to i18n");
+  // Icon system 2026-07-17: the localised label now lives on an inner <span>
+  // (sibling of the sprite icon, so applyI18n can't wipe the icon) — the key
+  // must still be bound INSIDE the roster button.
+  assert.match(INDEX, /id="admin-roster-btn"(?:(?!<\/button>)[\s\S]){0,400}?data-i18n="impact\.roster"/,
+    "the admin dashboard must have a roster button bound to i18n (key INSIDE the button)");
   assert.match(SCRIPT, /admin-roster-btn[\s\S]{0,160}generateEmailRoster/,
     "the roster button must dispatch generateEmailRoster");
   const n = I18N.split('"impact.roster"').length - 1;

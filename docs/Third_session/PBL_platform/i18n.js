@@ -564,7 +564,7 @@
       // are live. Both keys retired — fr/ja copies removed too.
 
       // Module A — Discussion-panel banner
-      "modA.discussion.compare-rule": "🗣️ <strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice must speak before you move on. The point is to compare and debate, not to agree quickly.",
+      "modA.discussion.compare-rule": "<strong>Compare prompts:</strong> both a Caen <em>and</em> a Nagoya voice must speak before you move on. The point is to compare and debate, not to agree quickly.",
 
       // Module A — structured Group-answers form
       "modA.answers.title": "Debate & answers — Module A",
@@ -601,7 +601,7 @@
 
       // Module B — role picker
       "modB.roles.prompt": "<strong>Pick your role</strong> for this roleplay. Everyone not in a named role is an observer (timekeeper + Phase 3 facilitator).",
-      "modB.roles.assign": "🎲 Randomly assign roles",
+      "modB.roles.assign": "Randomly assign roles",
       "modB.role.card.prompt": "<strong>Pick your role</strong> above (or tap \"Randomly assign roles\") to see your part and a private brief here.",
       "modB.role.physician.name": "Physician",
       "modB.role.physician.brief": "Deliver the news with empathy. Keep SPIKES in mind but don't recite it. A good consultation can end with the patient still upset.",
@@ -615,7 +615,7 @@
       "modB.role.objective-label": "Your private brief — only you see this:",
       "modB.replay.round1": "Round 1 — first run",
       "modB.replay.roundN": "Round {n}",
-      "modB.replay.swap": "🔄 Swap roles & replay",
+      "modB.replay.swap": "Swap roles & replay",
       "modB.replay.swapped": "You've swapped seats — notice how the conversation feels from here.",
       "modB.replay.fromto": "You were the {old} — now you're the {new}.",
       "modB.replay.full": "Everyone has now played every role — nicely done.",
@@ -670,7 +670,7 @@
       // Merged 2026-06-01: now carries both the "shared chart" framing (was
       // modA.chart.subtitle, retired) and the "every click is a team decision"
       // rule — they repeated the same verb-list and idea.
-      "modA.chart.team-click-warning": "👥 <strong>Your shared chart for {patientName}.</strong> Everything the team asks, examines, investigates or decides is recorded for <em>everyone</em> in the room and counts as the team's choice. <strong>Discuss first, then click together.</strong>",
+      "modA.chart.team-click-warning": "<strong>Your shared chart for {patientName}.</strong> Everything the team asks, examines, investigates or decides is recorded for <em>everyone</em> in the room and counts as the team's choice. <strong>Discuss first, then click together.</strong>",
       // Locked-decision UI (per 2026-05-18 PBL specialist panel)
       "modA.decision.ready-when": "Ready when:",
       "modA.decision.unlocked": "A new team decision just opened",
@@ -736,11 +736,11 @@
       "stage.wrap.questionnaire-fallback": "Your facilitator will share the questionnaire link.",
       "stage.wrap.bye": "Once you've done the questionnaire you can close this tab. See you at Session 4!",
       "stage.wrap.download": "⤓ Download my session takeaway (Markdown)",
-      "stage.wrap.takehome.title": "🎓 Take it with you",
+      "stage.wrap.takehome.title": "Take it with you",
       "stage.wrap.takehome.hint": "Two PDFs to keep: a study booklet to revise from, and your certificate of attendance.",
-      "stage.wrap.booklet": "📘 Download the study booklet (PDF)",
-      "stage.wrap.cert": "🎓 Download your certificate of attendance (PDF)",
-      "stage.wrap.retention.title": "🔁 Test your retention in a few days",
+      "stage.wrap.booklet": "Download the study booklet (PDF)",
+      "stage.wrap.cert": "Download your certificate of attendance (PDF)",
+      "stage.wrap.retention.title": "Test your retention in a few days",
       "stage.wrap.retention.hint": "Save this link and come back in 2–3 days for a short self-check — revisiting is what makes it stick. It scores on your device; nothing is sent.",
       "stage.wrap.retention.link": "Open my retention check →",
 
@@ -807,18 +807,18 @@
 
       // post-session debrief — facilitator dashboard panel
       "debrief.toggle": "Open debrief",
-      "impact.button": "📊 Impact report",
-      "impact.accred": "📋 Accreditation evidence",
-      "impact.research": "🔬 Research export (JSON)",
-      "impact.research-csv": "🔬 Research export (CSV)",
-      "impact.roster": "📧 Email roster (CSV)",
-      "impact.attest": "🎓 Attestations",
-      "impact.revoke-cert": "🗑️ Remove a verification entry",
-      "impact.program": "📈 Program overview",
-      "impact.guide": "📖 Facilitator guide",
-      "impact.compliance": "🛡 Compliance & accessibility",
-      "impact.itemdiff": "🧭 Item difficulty",
-      "impact.cohort": "🌍 Cohort comparison",
+      "impact.button": "Impact report",
+      "impact.accred": "Accreditation evidence",
+      "impact.research": "Research export (JSON)",
+      "impact.research-csv": "Research export (CSV)",
+      "impact.roster": "Email roster (CSV)",
+      "impact.attest": "Attestations",
+      "impact.revoke-cert": "Remove a verification entry",
+      "impact.program": "Program overview",
+      "impact.guide": "Facilitator guide",
+      "impact.compliance": "Compliance & accessibility",
+      "impact.itemdiff": "Item difficulty",
+      "impact.cohort": "Cohort comparison",
       "debrief.toggle-close": "Close debrief",
       "debrief.title": "Session debrief",
       "debrief.subtitle": "Aggregate stats across all rooms — useful for the wrap-up conversation.",
@@ -897,7 +897,7 @@
       "settings.title": "Settings",
       "settings.restart-tour": "Show introduction tour again",
       "settings.close": "Close",
-      "settings.reader-help": "📖 Word help",
+      "settings.reader-help": "Word help",
       "settings.reader-help-hint": "Hover or tap any word for a short explanation in the language chosen above.",
       "tour.student.1.title": "Welcome to the room",
       "tour.student.1.body": "This is your team's space for the whole session. A quick tour to show the controls you'll use most.",
@@ -942,7 +942,7 @@
       // unlock condition is named so students know exactly what to do
       // (specialist panel: "Discussion lies about being available" —
       // explicit lock + unlock condition fixes that).
-      "rcol.tab.discussion.locked": "🔒 write 1 hypothesis to unlock",
+      "rcol.tab.discussion.locked": "write 1 hypothesis to unlock",
 
       // Findings + discussion panel chrome (in-room, high-visibility).
       "findings.title": "Findings log",

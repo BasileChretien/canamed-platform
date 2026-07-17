@@ -123,7 +123,7 @@ test("JS: the mirror is wired and synced from the canonical tabs", () => {
   assert.match(fnBody("switchRcolTab"), /updateMobileTabbar\(\)/,
     "switchRcolTab must sync the mirror");
   assert.match(fnBody("setTabBadge"), /updateMobileTabbar\(\)/,
-    "setTabBadge must sync the mirror (counts / ✓ / 🔓)");
+    "setTabBadge must sync the mirror (counts / ✓ / ●)");
   assert.match(fnBody("updateDiscussionTabLock"), /updateMobileTabbar\(\)/,
     "the discussion-lock toggle must sync the mirror");
   assert.match(fnBody("renderStage"), /updateMobileTabbar\(\)/,
