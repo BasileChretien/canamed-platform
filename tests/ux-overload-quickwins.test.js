@@ -60,11 +60,11 @@ test(".everyone-talks stays fully demoted (class retired — no CSS at all)", ()
   // a later UX pass and the leftover CSS was dead weight against the perf
   // budget. Full absence is the strongest form of the original demotion —
   // guard that the loud callout never comes back.
-  assert.doesNotMatch(CSS, /\.everyone-talks/, ".everyone-talks must stay retired");
+  assert.doesNotMatch(CSS, /\.everyone-talks\b/, ".everyone-talks must stay retired");
 });
 
 test(".chart-team-warning stays fully demoted (class retired — no CSS at all)", () => {
-  assert.doesNotMatch(CSS, /\.chart-team-warning/, ".chart-team-warning must stay retired");
+  assert.doesNotMatch(CSS, /\.chart-team-warning\b/, ".chart-team-warning must stay retired");
 });
 
 test("the next-step coach is preserved as the single focal callout", () => {

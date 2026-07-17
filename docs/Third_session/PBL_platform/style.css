@@ -1055,17 +1055,6 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   font-weight: 600;
 }
 
-/* "Everyone talks" reminder under the vignette in Module A.
-   UX-overload fix (2026-06-01): demoted from a filled, border-left callout
-   to plain muted hint text. The Stage-1 first viewport carried THREE
-   competing bordered/filled callouts (this, the amber next-step coach, and
-   the amber "every click is a team decision" banner) reading as three
-   alarms. Only the next-step coach stays a callout now, so the eye lands on
-   one focal instruction. The element keeps its .hint class → muted text. */
-.everyone-talks {
-  margin-top: var(--s-2);
-}
-
 /* Pinned banners at the top of a panel — used for the Caen+Nagoya rule
    on the Discussion panel and the Module-B ground rule. */
 .banner-rule {
@@ -1229,8 +1218,7 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
    guidance under the phase stepper. Designed to be eye-catching
    without being noisy: warm caen-amber border-left + soft surface +
    ample horizontal padding so the text is easy to scan in passing.
-   Picks the same colour as the .everyone-talks reminder card so both
-   "you-the-student-please-read-this" surfaces stay visually grouped. */
+   Warm caen-amber so the single student-facing callout stays distinct. */
 .next-step-coach {
   display: flex;
   align-items: flex-start;
