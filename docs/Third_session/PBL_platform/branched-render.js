@@ -44,7 +44,7 @@
     // a set of clickable choices (the white .dec-opt buttons below it).
     const head = document.createElement("p");
     head.className = "dec-documents-head";
-    head.textContent = "📋 What the team can see";
+    head.textContent = "What the team can see";
     box.appendChild(head);
     d.documents.forEach(doc => {
       if (!doc) return;

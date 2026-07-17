@@ -748,6 +748,18 @@ function familyHits(family, text) {
    live in pure-utils.js, loaded before this file. They remain available as
    globals, so calls below are unchanged. See ARCHITECTURE/script-js-map.md. */
 function el(id) { return document.getElementById(id); }
+
+/* Inline-SVG icon system (2026-07-17) — markup + element helpers for the
+   sprite in index.html. Static markup only (never user data). */
+function icMarkup(name) {
+  return '<svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-' +
+    name + '"/></svg>';
+}
+function icNode(name) {
+  const s = document.createElement("span");
+  s.innerHTML = icMarkup(name);
+  return s.firstChild;
+}
 /* show a "Saved" confirmation element, then hide it again after ms */
 function flashSaved(elId, ms) {
   const ok = el(elId);
@@ -2005,7 +2017,7 @@ function initSoundToggle() {
   if (!btn) return;
   soundOn = localStorage.getItem("canamed_sound") === "on";
   const paint = () => {
-    btn.textContent = soundOn ? "🔊" : "🔇";
+    btn.innerHTML = icMarkup(soundOn ? "sound-on" : "sound-off");
     btn.setAttribute("aria-pressed", String(soundOn));
     const label = soundOn
       ? "Celebration sounds are on — tap to mute"
@@ -3068,7 +3080,7 @@ function renderTeamRecap() {
   const cohort = roomNames(roomCount)
     .reduce((s, r) => s + scoreTotal(allRooms[r] || {}), 0);
   const h = document.createElement("h3");
-  h.textContent = "🎉 " + (teamName || myRoom || "Your team") + " — well played";
+  h.textContent = (teamName || myRoom || "Your team") + " — well played";
   box.appendChild(h);
   const tot = document.createElement("p");
   tot.className = "recap-total";
@@ -4526,7 +4538,7 @@ function checkCallAlerts() {
   });
   prevCallRooms = calling;
   const n = Object.keys(calling).length;
-  document.title = n > 0 ? "🔔 (" + n + ") " + baseTitle : baseTitle;
+  document.title = n > 0 ? "(" + n + ") " + baseTitle : baseTitle;
 }
 
 function startAdmin() {
@@ -5370,7 +5382,7 @@ if (typeof window !== "undefined") {
 }
 
 /* Facilitator preference: mute the audible chime + the desktop
-   notification. Title-bar 🔔 counter is unaffected (always shows so
+   notification. Title-bar (n) counter is unaffected (always shows so
    the count of waiting calls is always visible). Persisted to
    localStorage so a refresh / new tab keeps the preference. */
 const HELP_MUTE_KEY = "canamed_help_alerts_muted";
@@ -5499,8 +5511,9 @@ function renderSessionSignal(dash) {
   if (s.calling.length) {
     const call = document.createElement("div");
     call.className = "dash-signal-line dash-signal-call";
-    call.textContent = "🔔 " + s.calling.length + " room" + (s.calling.length === 1 ? "" : "s") +
+    call.textContent = " " + s.calling.length + " room" + (s.calling.length === 1 ? "" : "s") +
       " need a facilitator now: " + s.calling.join(", ");
+    call.prepend(icNode("bell"));
     wrap.appendChild(call);
   }
 
@@ -5508,25 +5521,27 @@ function renderSessionSignal(dash) {
   const pace = document.createElement("div");
   pace.className = "dash-signal-line dash-signal-pace" + (s.over > 0 ? " behind" : " ontrack");
   if (!s.active) {
-    pace.textContent = "⏱ Pacing — waiting for rooms to start.";
+    pace.textContent = " Pacing — waiting for rooms to start.";
   } else if (s.over === 0) {
-    pace.textContent = "⏱ Pacing — all " + s.active + " active room" +
+    pace.textContent = " Pacing — all " + s.active + " active room" +
       (s.active === 1 ? "" : "s") + " on track.";
   } else {
-    pace.textContent = "⏱ Pacing — " + s.over + "/" + s.active +
+    pace.textContent = " Pacing — " + s.over + "/" + s.active +
       " over planned stage time" +
       (s.slowest ? " (slowest: " + s.slowest + ", " + s.slowestMin + " min)" : "") +
       (s.maxStage > s.minStage
         ? " · rooms span stages " + (s.minStage + 1) + "–" + (s.maxStage + 1) : "") + ".";
   }
+  pace.prepend(icNode("clock"));
   wrap.appendChild(pace);
 
   // 3) Quiet rooms (gentle nudge; per-room names are still on each card).
   if (s.quietRooms > 0) {
     const q = document.createElement("div");
     q.className = "dash-signal-line dash-signal-quiet";
-    q.textContent = "💤 " + s.quietRooms + " room" + (s.quietRooms === 1 ? "" : "s") +
+    q.textContent = " " + s.quietRooms + " room" + (s.quietRooms === 1 ? "" : "s") +
       " with a student not yet contributing.";
+    q.prepend(icNode("moon"));
     wrap.appendChild(q);
   }
   dash.appendChild(wrap);
@@ -5588,8 +5603,9 @@ function renderDashboard() {
       const badge = document.createElement("span");
       badge.className = "call-badge";
       const age = minsSince(data.callForHelp.at);
-      badge.textContent = "🔔 calling for a facilitator" +
+      badge.textContent = " calling for a facilitator" +
         (age != null && age > 0 ? " · " + age + " min" : "");
+      badge.prepend(icNode("bell"));
       title.appendChild(badge);
     }
     const stg = document.createElement("div");
@@ -5635,7 +5651,7 @@ function renderDashboard() {
     const partic = document.createElement("div");
     partic.className = "dash-participation" + (quiet ? " quiet" : "");
     if (interactive && part.present >= 1) {
-      let line = "👥 " + part.contributing + "/" + part.present + " contributing";
+      let line = " " + part.contributing + "/" + part.present + " contributing";
       // A balance read is only meaningful with 2+ actual contributors among
       // 3+ present (Gini on tiny / single-contributor sets is noise).
       if (part.contributing >= 2 && part.present >= 3) {
@@ -5647,6 +5663,7 @@ function renderDashboard() {
           " — 0 is perfectly even, 1 is one person doing everything";
       }
       partic.textContent = line;
+      partic.prepend(icNode("users"));
     } else {
       partic.textContent = "";
     }
@@ -5657,7 +5674,8 @@ function renderDashboard() {
     quietLine.className = "dash-quiet-names";
     if (interactive && part.present >= 2 && part.quietNames.length &&
         part.quietNames.length < part.present) {
-      quietLine.textContent = "💤 not yet contributing: " + part.quietNames.join(", ");
+      quietLine.textContent = " not yet contributing: " + part.quietNames.join(", ");
+      quietLine.prepend(icNode("moon"));
     } else {
       quietLine.textContent = "";
     }
@@ -6150,8 +6168,12 @@ function renderSidebar() {
       (calling ? " calling" : "");
     const nameBtn = document.createElement("button");
     nameBtn.className = "sidebar-room-name";
-    nameBtn.textContent = r + (calling ? "  🔔" : "") + "  ·  " + count +
+    nameBtn.textContent = r + "  ·  " + count +
       (count === 1 ? " person" : " people");
+    if (calling) {
+      nameBtn.appendChild(document.createTextNode("  "));
+      nameBtn.appendChild(icNode("bell"));
+    }
     nameBtn.addEventListener("click", () => { if (r !== myRoom) openRoomAsAdmin(r); });
 
     const meta = document.createElement("div");
@@ -6801,7 +6823,7 @@ function runAdminTool(fnName) {
   };
   const loader = window.CanamedLoader;
   if (loader && loader.ensureAdminTools) {
-    if (typeof toast === "function") toast("⏳ Preparing…");
+    if (typeof toast === "function") toast("Preparing…");
     loader.ensureAdminTools().then(call).catch(() => {
       if (typeof toast === "function") toast("Could not load the report tools — check your connection.");
     });
@@ -6850,6 +6872,16 @@ function _knowledgeGain() {
     meanNormGain: nGain ? Math.round((sumGain / nGain) * 100) / 100 : null
   };
 }
+
+/* Printer glyph for GENERATED standalone report documents (opened in their
+   own window, where the index.html sprite is out of reach — so this is the
+   one full inline literal; in-page icons all go through the sprite). */
+var PRINT_ICON_SVG =
+  "<svg width='1em' height='1em' viewBox='0 0 24 24' fill='none' stroke='currentColor'" +
+  " stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'" +
+  " class='pic' aria-hidden='true'>" +
+  "<path d='M7 8V4h10v4'/><rect x='4' y='8' width='16' height='8' rx='1.6'/>" +
+  "<path d='M7 13h10v7H7Z'/></svg>";
 
 /* ── Impact report ────────────────────────────────────────────────────────
    A one-click, dean-ready summary of the session, assembled CLIENT-SIDE from
@@ -6981,10 +7013,11 @@ function generateImpactReport() {
 "th{background:#f0f4f8;color:#16335c}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}" +
 ".note{font-size:.85rem;color:#5b6b7b;background:#f7f9fb;border-left:3px solid #2563eb;padding:10px 12px;border-radius:6px;margin:10px 0}" +
 ".foot{margin-top:28px;font-size:.8rem;color:#7a8694;border-top:1px solid #e8edf2;padding-top:12px}" +
+".pic{vertical-align:-0.125em}" +
 "@media print{.noprint{display:none}body{padding:0}}" +
 ".pbtn{background:#2563eb;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:.95rem;cursor:pointer}" +
 "</style></head><body>" +
-"<button class='pbtn noprint' onclick='window.print()'>🖨 Print / Save as PDF</button>" +
+"<button class='pbtn noprint' onclick='window.print()'>" + PRINT_ICON_SVG + " Print / Save as PDF</button>" +
 "<h1>CANAMED — Session Impact Report</h1>" +
 "<p class='sub'>Session <strong>" + _impactEsc(typeof sessionNum !== "undefined" ? sessionNum : "—") +
 "</strong> · generated " + _impactEsc(when.toLocaleString()) + "</p>" +
@@ -7059,7 +7092,7 @@ m.unevenRooms + " room(s) flagged as uneven for facilitator follow-up.</p>" +
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     URL.revokeObjectURL(a.href);
   }
-  if (typeof toast === "function") toast("📊 Impact report generated.");
+  if (typeof toast === "function") toast("Impact report generated.");
 }
 
 /* Download archive (2026-06-25, user request) — replaces the old plain-text /
@@ -7243,7 +7276,7 @@ function downloadCertificatePdf() {
     }, function () { return fallback; });
   }
 
-  if (typeof toast === "function") toast("⏳ Preparing your certificate…");
+  if (typeof toast === "function") toast("Preparing your certificate…");
   Promise.resolve()
     .then(() => loader.ensurePdfmake ? loader.ensurePdfmake() : Promise.reject(new Error("loader")))
     .then(() => loader.ensureStudentPdf())
@@ -7391,7 +7424,7 @@ function downloadStudyBookletPdf() {
     sections: _collectBookletSections(),
     team: _bookletTeamData()
   };
-  if (typeof toast === "function") toast("⏳ Preparing your study booklet…");
+  if (typeof toast === "function") toast("Preparing your study booklet…");
   Promise.resolve()
     .then(() => loader.ensurePdfmake ? loader.ensurePdfmake() : Promise.reject(new Error("loader")))
     .then(() => loader.ensureStudentPdf())
@@ -7698,7 +7731,7 @@ function renderStage() {
   if (!wrapCelebrated && roomStage === STAGE_COUNT - 1 && viewStage === STAGE_COUNT - 1) {
     wrapCelebrated = true;
     burst();
-    toast("Great work today — thank you for taking part! 🎌");
+    toast("Great work today — thank you for taking part!");
   }
   // Sim 2026-05-19 (Camille, first-timer): 3-step Module A walkthrough
   // the first time a participant lands on stage 1. Skip-able via the
@@ -8178,7 +8211,7 @@ function _annotateButtonWithGlossary(btn) {
     if (!btn.querySelector(".glossary-marker")) {
       const mark = document.createElement("span");
       mark.className = "glossary-marker";
-      mark.textContent = "📖";
+      mark.innerHTML = icMarkup("book");
       // Accessible name for the marker glyph (the gloss itself lives in
       // aria-description on the button); keep it short + translatable.
       const markLabel = (typeof window !== "undefined" && typeof window.t === "function"
@@ -8195,7 +8228,7 @@ function _annotateButtonWithGlossary(btn) {
 }
 
 /* ── Tap/keyboard-reachable glossary (2026-06-01) ──────────────────────────
-   The 📖 .glossary-marker lives INSIDE the reveal <button>, so it must NOT be
+   The book-icon .glossary-marker lives INSIDE the reveal <button>, so it must NOT be
    an interactive element (a focusable/button descendant of a <button> is
    invalid HTML and browsers flatten it). Instead the marker stays a plain
    <span> and we:
@@ -8682,7 +8715,7 @@ function renderPrompts() {
   const done = el("prompt-done");
   if (!progressive || !done) {
     // HTML hasn't been migrated yet; skip the new UI but DON'T crash.
-    setTabBadge("tab-badge-discussion", unlocked ? "🔓" : "");
+    setTabBadge("tab-badge-discussion", unlocked ? "●" : "");
     if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(unlocked);
     return;
   }
@@ -8800,7 +8833,7 @@ function renderPrompts() {
     });
   }
 
-  setTabBadge("tab-badge-discussion", unlocked ? "🔓" : "");
+  setTabBadge("tab-badge-discussion", unlocked ? "●" : "");
   // Visible lock state on the tab itself — driven by the same `unlocked`
   // computation as the panel content.
   if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(unlocked);
@@ -9556,7 +9589,8 @@ function renderDecisions() {
     const head = document.createElement("div");
     head.className = "dec-head";
     const h = document.createElement("h3");
-    h.textContent = "🗳️ Team decisions — vote together";
+    h.textContent = " Team decisions — vote together";
+    h.prepend(icNode("ballot"));
     const hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent = "The big calls of this module. Everyone taps their choice, " +
@@ -9606,7 +9640,7 @@ function renderDecisions() {
     if (!d) return;
     const lang = _curLang();
     if (typeof toast === "function") {
-      toast("🗳️ " + (typeof window.t === "function" ?
+      toast((typeof window.t === "function" ?
             (window.t("modA.decision.unlocked") !== "modA.decision.unlocked"
               ? window.t("modA.decision.unlocked")
               : "A new team decision just opened")
@@ -9686,7 +9720,7 @@ function buildLockedDecision(d, unmet) {
   const lock = document.createElement("span");
   lock.className = "decision-locked-icon";
   lock.setAttribute("aria-hidden", "true");
-  lock.textContent = "🔒";
+  lock.innerHTML = icMarkup("lock");
   const title = document.createElement("p");
   title.className = "decision-locked-title";
   title.textContent = tc(d.prompt, lang);
@@ -10012,7 +10046,8 @@ function renderLeaderboard() {
     const rank = document.createElement("span");
     rank.className = "lb-rank";
     rank.setAttribute("aria-hidden", "true");
-    rank.textContent = ranked ? (i === 0 ? "🏆" : "#" + (i + 1)) : "•";
+    if (ranked && i === 0) rank.innerHTML = icMarkup("trophy");
+    else rank.textContent = ranked ? "#" + (i + 1) : "•";
     const name = document.createElement("span");
     name.className = "lb-name";
     name.textContent = r.name + (r.room === myRoom ? " (your team)" : "");
@@ -10938,7 +10973,7 @@ function showSwapBanner(oldRole, newRole, round) {
     line = _swapT("modB.replay.fromto", "You were the {old} — now you're the {new}.")
       .replace("{old}", roleName(oldRole)).replace("{new}", roleName(newRole)) + " " + lead;
   }
-  banner.textContent = "🔄 " + _swapRoundLabel(round) + " — " + line;
+  banner.textContent = _swapRoundLabel(round) + " — " + line;
   banner.classList.remove("hidden");
 }
 
