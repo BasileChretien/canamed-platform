@@ -12931,8 +12931,8 @@ function wireSplash() {
         cHint.textContent = "Paste your custom content, or pick a built-in scenario.";
         cHint.className = "splash-hint err"; if (ta) ta.focus(); return;
       }
-      if (text.length > 32000) {
-        cHint.textContent = "Custom content is too large (limit 32 KB).";
+      if (text.length > 262144) {
+        cHint.textContent = "Custom content is too large (limit 256 KB).";
         cHint.className = "splash-hint err"; return;
       }
       const v = validateScenarioJson(text);
@@ -13419,6 +13419,26 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
   // Round-2 rules require auth != null on every write; wait for the
   // anonymous (or identified) sign-in before any session writes.
   return ensureSignedIn().then(() => {
+  // Phase 1 (integrity): when creating from an authored-scenario reference,
+  // resolve it to a concrete snapshot now and pin the session to that exact
+  // version by storing it inline as scenarioCustomJson. Without this, a later
+  // owner edit or delete of the shared scenario would mutate or break this
+  // running session, because loadScenarioByRef() reads bodyJson LIVE at each
+  // participant load. Degrade gracefully: if the resolve fails (offline /
+  // unreadable / oversized) we fall back to storing the live ref (legacy
+  // path) so session creation never blocks. The resolve doesn't depend on the
+  // session code, so do it once here rather than inside each retry.
+  let snapshotPromise = Promise.resolve(null);
+  if (!customJson && scenarioRef && scenarioRef.ownerUid && scenarioRef.scenarioId) {
+    snapshotPromise = loadScenarioByRef(scenarioRef)
+      .then((body) => {
+        if (!body) return null;
+        const s = JSON.stringify(body);
+        return (s && s.length > 0 && s.length <= 262144) ? s : null;
+      })
+      .catch(() => null);
+  }
+  return snapshotPromise.then((snapshotJson) => {
   const tryOne = (tries) => {
     if (tries > 6) return Promise.reject(new Error("Could not allocate a unique code"));
     const code = generateSessionCode();
@@ -13458,7 +13478,26 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       }
       if (customJson) {
         writes.push(db.ref(oPath(code, "scenarioCustomJson")).set(customJson));
+      } else if (snapshotJson && scenarioRef && scenarioRef.ownerUid && scenarioRef.scenarioId) {
+        // Pinned snapshot of the authored scenario (Phase 1 integrity). Store
+        // the resolved body inline so loadSessionScenario() — which prefers
+        // scenarioCustomJson over scenarioRef — always renders this exact
+        // version. Keep scenarioRef + a stable scenarioId as provenance (both
+        // ignored by the loader once the snapshot exists; used by
+        // exports/aggregations and to show which shared scenario this came from).
+        const refSrc = scenarioRef.source === "shared" ? "shared" : "private";
+        writes.push(db.ref(oPath(code, "scenarioCustomJson")).set(snapshotJson));
+        writes.push(db.ref(oPath(code, "scenarioRef")).set({
+          ownerUid: scenarioRef.ownerUid,
+          scenarioId: scenarioRef.scenarioId,
+          source: refSrc
+        }));
+        if (/^[a-z0-9_-]{1,60}$/.test(scenarioRef.scenarioId)) {
+          writes.push(db.ref(oPath(code, "scenarioId")).set(scenarioRef.scenarioId));
+        }
       } else if (scenarioRef && scenarioRef.ownerUid && scenarioRef.scenarioId) {
+        // Fallback (snapshot resolve failed / oversized): store the live ref,
+        // as before. loadScenarioByRef() will read the current bodyJson at load.
         const refSrc = scenarioRef.source === "shared" ? "shared" : "private";
         writes.push(db.ref(oPath(code, "scenarioRef")).set({
           ownerUid: scenarioRef.ownerUid,
@@ -13494,6 +13533,7 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
     });
   };
   return tryOne(0);
+  });
   });
 }
 
