@@ -89,15 +89,24 @@ test.describe("Collapsible room header + inline leaderboard", () => {
     expect(await page.evaluate(() => localStorage.getItem("canamedStageDetailsOpen"))).toBe("0");
   });
 
-  test("the leaderboard opens in-flow full-width (like Details), not a cramped popover", async ({ page }) => {
+  test("the leaderboard opens full-width below WHILE its chip stays on the top line", async ({ page }) => {
     await surfaceRoom(page);
 
     // closed by default: the panel (and its hint) are hidden
     await expect(page.locator("#leaderboard-card .lb-panel")).toBeHidden();
 
+    // remember where the chip sits BEFORE opening
+    const chipBefore = await page.locator("#leaderboard-card > summary").boundingBox();
+
     // open via its summary
     await page.locator("#leaderboard-card > summary").click();
     await expect(page.locator("#leaderboard-card .lb-panel")).toBeVisible();
+
+    // 2026-07-18 (user request): opening must NOT reflow the chip to a new
+    // row — it stays exactly where it was in the header line.
+    const chipAfter = await page.locator("#leaderboard-card > summary").boundingBox();
+    expect(Math.abs(chipAfter.y - chipBefore.y), "summary chip stays on the top line").toBeLessThan(2);
+    expect(Math.abs(chipAfter.x - chipBefore.x), "summary chip keeps its place").toBeLessThan(2);
 
     const layout = await page.evaluate(() => {
       const panel = document.querySelector("#leaderboard-card > .lb-panel");
@@ -105,7 +114,6 @@ test.describe("Collapsible room header + inline leaderboard", () => {
       const pb = panel.getBoundingClientRect();
       const cb = card.getBoundingClientRect();
       return {
-        position: getComputedStyle(panel).position,
         panelWidth: pb.width,
         cardWidth: cb.width,
         left: pb.left,
@@ -115,10 +123,10 @@ test.describe("Collapsible room header + inline leaderboard", () => {
       };
     });
 
-    // It expands IN-FLOW (static), NOT the old right-anchored absolute popover —
-    // this is the readability fix (the popover was cramped/scrolled on phones).
-    expect(layout.position, "panel is in-flow, not an absolute popover").toBe("static");
-    // …and it spans (nearly) the full stage-card content width, not a ~360px box.
+    // The 2026-07-15 readability guarantee is about WIDTH, not flow mechanics:
+    // the panel spans (nearly) the full stage-card content width, not a ~360px
+    // right-anchored box (it is now a full-strip dropdown so the chip can stay
+    // on the top line — see the assertion above).
     expect(layout.panelWidth, "panel is full-width").toBeGreaterThan(layout.cardWidth * 0.7);
     // …never pushing the page into horizontal scroll, and fully within the viewport.
     expect(layout.docScrollW <= layout.clientW + 1, "no horizontal overflow").toBe(true);

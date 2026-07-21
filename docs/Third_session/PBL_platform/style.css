@@ -295,11 +295,11 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
   background: var(--primary);
   color: var(--on-primary);
   border: 1px solid transparent;
-  border-radius: var(--r-sm);
+  border-radius: var(--r-btn);
   font: inherit;
   font-weight: 600;
   font-size: 0.875rem;
-  padding: 9px 16px;
+  padding: 9px 18px;
   cursor: pointer;
   box-shadow: var(--sh-sm);
   transition: background var(--dur-fast) var(--ease-soft),
@@ -329,11 +329,11 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
   background: var(--card);
   color: var(--ink);
   border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-btn);
   font: inherit;
   font-weight: 600;
   font-size: 0.85rem;
-  padding: 8px 14px;
+  padding: 8px 16px;
   cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-soft),
               background var(--dur-fast) var(--ease-soft),
@@ -352,11 +352,11 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
   background: var(--card);
   border: 1px solid var(--key);
   color: var(--key);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-btn);
   font: inherit;
   font-weight: 600;
   font-size: 0.85rem;
-  padding: 9px 16px;
+  padding: 9px 18px;
   cursor: pointer;
   transition: background var(--dur-fast) var(--ease-soft);
 }
@@ -2245,6 +2245,8 @@ footer {
   justify-content: space-between;
   gap: var(--s-3);
   flex-wrap: wrap;
+  /* containing block for the leaderboard dropdown panel below */
+  position: relative;
 }
 .stage-indicator { font-weight: 700; font-size: 1.05rem; }
 .stage-wait { color: var(--muted); font-size: 0.9rem; }
@@ -2998,20 +3000,24 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 }
 .leaderboard-card.leaderboard-inline[open] > summary { border-color: var(--muted); }
 
-/* Opened: the disclosure takes the FULL row width so its ranking expands IN-FLOW
-   below the header — full-width and readable, exactly like #stage-details —
-   instead of the cramped right-anchored popover it used to be (the popover was
-   unreadable on phones/tablets, where an 80vw box scrolled and squeezed the team
-   names). order:9 drops it below the score chip + controls + Details toggle. */
-.stage-row > .leaderboard-inline[open] {
-  flex: 1 1 100%;
-  margin-left: 0;
-  order: 9;
-}
+/* Opened (2026-07-18, user request: the chip must STAY on the top line):
+   the summary keeps its place in the header row; only the PANEL drops
+   below, as a dropdown spanning the full strip width — as wide and
+   readable as the old in-flow version (the 2026-07-15 readability fix
+   rejected a cramped ~360px right-anchored popover, not width itself),
+   without reflowing the chip to a new row. Anchored to .stage-row
+   (position:relative above); sh-lg is the reserved popover shadow. */
 .leaderboard-card.leaderboard-inline > .lb-panel {
-  margin-top: var(--s-3);
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--line);
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + var(--s-2));
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-lg);
+  padding: var(--s-4);
+  z-index: var(--z-raised);
 }
 .leaderboard-card.leaderboard-inline > .lb-panel .lb-hint { margin: 0 0 var(--s-2); }
 .leaderboard-card.leaderboard-inline > .lb-panel #leaderboard { margin-top: 0; }
@@ -4235,7 +4241,7 @@ body.locked > footer { display: none !important; }
   color: var(--ink);
   background: var(--card);
   border: 1.5px solid var(--line-strong);
-  border-radius: var(--r-sm);
+  border-radius: var(--r-md);
   outline: none;
   transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
               box-shadow var(--dur-base, .18s) var(--ease-out, ease);
@@ -4256,8 +4262,8 @@ body.locked > footer { display: none !important; }
   color: var(--on-primary);
   background: var(--primary);
   border: none;
-  padding: 12px 22px;
-  border-radius: var(--r-sm);
+  padding: 12px 24px;
+  border-radius: var(--r-btn);
   cursor: pointer;
   box-shadow: var(--sh-sm);
   transition: background var(--dur-base, .18s) var(--ease-out, ease),
@@ -4281,8 +4287,38 @@ body.locked > footer { display: none !important; }
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: var(--fs-1);
-  line-height: 2.1;
+  line-height: 1.5;
 }
+/* the secondary actions under the join form read as a modern stacked action
+   list: each .splash-link becomes a full-width quiet pill row (2026-07-18,
+   user request — the underlined text rows read as dated). CSS-only: the
+   i18n strings (arrows included) are untouched. */
+.splash-foot .splash-link,
+.splash-my-sessions-row .splash-link {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  border-radius: var(--r-btn);
+  padding: 10px var(--s-4);
+  margin: var(--s-2) 0 0;
+  text-align: center;
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              background var(--dur-fast) var(--ease-soft),
+              color var(--dur-fast) var(--ease-soft);
+}
+.splash-foot .splash-link:hover,
+.splash-my-sessions-row .splash-link:hover {
+  border-color: var(--primary);
+  background: var(--nagoya-50);
+  color: var(--primary-hover);
+  text-decoration: none;
+}
+/* the <br> separator between the two buttons is obsolete in the row layout */
+.splash-foot br { display: none; }
+/* "Don't have a code yet?" becomes a quiet lead-in line above its row */
+.splash-foot > span[data-i18n] { display: block; }
 .splash-view[hidden] { display: none; }
 
 /* --- the inline "link" button used as a low-emphasis text action (toggles) --- */
@@ -7283,8 +7319,8 @@ body.locked .global-settings { display: none; }
    #2e9fdf) where white drops to ~2.4:1 — so dark mode forces dark text, exactly
    as the splash buttons (#splash-enter etc.) do. */
 .moda-chat-consent-btn {
-  padding: 8px 14px;
-  border-radius: 6px;
+  padding: 8px 18px;
+  border-radius: var(--r-btn);
   border: 1px solid var(--primary);
   background: var(--primary);
   color: var(--on-primary);
@@ -7347,8 +7383,8 @@ body.locked .global-settings { display: none; }
   opacity: 0.7;
 }
 .moda-chat-form button {
-  padding: 8px 14px;
-  border-radius: var(--r-sm);
+  padding: 8px 18px;
+  border-radius: var(--r-btn);
   border: 1px solid var(--primary);
   background: var(--primary);
   color: var(--on-primary);
