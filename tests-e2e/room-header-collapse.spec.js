@@ -95,8 +95,18 @@ test.describe("Collapsible room header + inline leaderboard", () => {
     // closed by default: the panel (and its hint) are hidden
     await expect(page.locator("#leaderboard-card .lb-panel")).toBeHidden();
 
-    // remember where the chip sits BEFORE opening
-    const chipBefore = await page.locator("#leaderboard-card > summary").boundingBox();
+    // remember where the chip sits BEFORE opening — measured RELATIVE to its
+    // own .stage-row, so the assertion is immune to the page scrolling when
+    // the panel opens (boundingBox is viewport-relative; short CI viewports
+    // scroll on open and made the first version of this assertion flaky).
+    const chipPos = () => page.evaluate(() => {
+      const el = document.querySelector("#leaderboard-card > summary");
+      const row = el.closest(".stage-row");
+      const e = el.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      return { x: e.x - r.x, y: e.y - r.y };
+    });
+    const chipBefore = await chipPos();
 
     // open via its summary
     await page.locator("#leaderboard-card > summary").click();
@@ -104,7 +114,7 @@ test.describe("Collapsible room header + inline leaderboard", () => {
 
     // 2026-07-18 (user request): opening must NOT reflow the chip to a new
     // row — it stays exactly where it was in the header line.
-    const chipAfter = await page.locator("#leaderboard-card > summary").boundingBox();
+    const chipAfter = await chipPos();
     expect(Math.abs(chipAfter.y - chipBefore.y), "summary chip stays on the top line").toBeLessThan(2);
     expect(Math.abs(chipAfter.x - chipBefore.x), "summary chip keeps its place").toBeLessThan(2);
 
