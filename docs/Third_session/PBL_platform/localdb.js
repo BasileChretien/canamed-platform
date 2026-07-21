@@ -12,6 +12,13 @@
  *   ref(path).onDisconnect().remove() / .cancel()
  *   ref(path).child(sub)
  *
+ * Snapshots handed to once()/on()/transaction() are DataSnapshot
+ * lookalikes: { key, val(), forEach(cb) }. forEach iterates children in
+ * Firebase key order as nested snapshots and stops early when the
+ * callback returns truthy — script.js's listMyScenarios /
+ * listSharedScenarios (and scenario-author-cloud.js) rely on exactly
+ * that compat contract.
+ *
  * Sync model: the storage event fires on every OTHER tab when one tab
  * writes — so opening N tabs of the same browser gives you N pseudo-
  * clients seeing the same data. Each tab's own .write() also calls
@@ -42,6 +49,45 @@
   "use strict";
 
   const LOCALDB_KEY = "canamed_localdb_v1";
+
+  /* Last path segment = the snapshot's key (null at the root), mirroring
+     Firebase DataSnapshot.key. */
+  function keyOf(path) {
+    const parts = String(path || "").split("/").filter(Boolean);
+    return parts.length ? parts[parts.length - 1] : null;
+  }
+
+  /* Firebase child ordering for default (orderByKey) queries: keys that
+     parse as non-negative integers sort first, numerically; all other
+     keys follow, lexicographically. */
+  function compareKeys(a, b) {
+    const ai = /^(0|[1-9]\d*)$/.test(a) ? parseInt(a, 10) : null;
+    const bi = /^(0|[1-9]\d*)$/.test(b) ? parseInt(b, 10) : null;
+    if (ai !== null && bi !== null) return ai - bi;
+    if (ai !== null) return -1;
+    if (bi !== null) return 1;
+    return a < b ? -1 : a > b ? 1 : 0;
+  }
+
+  /* Minimal Firebase DataSnapshot lookalike. forEach(cb) visits each
+     child as a nested snapshot in Firebase key order; a truthy return
+     from cb stops the iteration and makes forEach return true (compat
+     semantics). Leaves (scalars / null) have no children, so forEach is
+     a no-op returning false. */
+  function makeSnap(key, val) {
+    return {
+      key: key,
+      val: () => val,
+      forEach: (cb) => {
+        if (val === null || typeof val !== "object") return false;
+        const keys = Object.keys(val).sort(compareKeys);
+        for (const k of keys) {
+          if (cb(makeSnap(k, val[k]))) return true;
+        }
+        return false;
+      }
+    };
+  }
 
   class LocalDB {
     constructor() {
@@ -100,27 +146,26 @@
     // replay of the children that already exist at subscribe time. Without
     // this, chat turn bubbles never rendered in LOCAL mode (the callback got
     // the whole turn map, which has no .role, and bailed). Keys are visited
-    // in sort order — push() keys embed a base36 timestamp, so key order is
-    // chronological across different milliseconds (same-ms pushes tie-break
-    // on the random suffix; the chat's two turns per submit are separated by
-    // an async boundary, so this never bites there). NB `seen` only ever
-    // GROWS: a child removed and later re-added under the same key will NOT
-    // re-fire (this shim has no child_removed) — fine for append-only lists
-    // like the chat, a trap for mutable ones.
+    // in Firebase key order — push() keys embed a base36 timestamp, so key
+    // order is chronological across different milliseconds (same-ms pushes
+    // tie-break on the random suffix; the chat's two turns per submit are
+    // separated by an async boundary, so this never bites there). NB `seen`
+    // only ever GROWS: a child removed and later re-added under the same key
+    // will NOT re-fire (this shim has no child_removed) — fine for append-only
+    // lists like the chat, a trap for mutable ones.
     _deliver(sub) {
       if (sub.event === "child_added") {
         const node = this._getAt(this._read(), sub.path);
         if (node === null || typeof node !== "object") return;
-        Object.keys(node).sort().forEach((k) => {
+        Object.keys(node).sort(compareKeys).forEach((k) => {
           if (Object.prototype.hasOwnProperty.call(sub.seen, k)) return;
           sub.seen[k] = true;   // mark BEFORE cb: a re-entrant write must not re-fire it
-          const v = node[k];
-          sub.cb({ key: k, val: () => v });
+          sub.cb(makeSnap(k, node[k]));
         });
         return;
       }
       const tree = this._read();
-      sub.cb({ val: () => this._getAt(tree, sub.path) });
+      sub.cb(makeSnap(keyOf(sub.path), this._getAt(tree, sub.path)));
     }
     ref(path) {
       return new LocalRef(this, String(path).replace(/^\/+|\/+$/g, ""));
@@ -155,7 +200,7 @@
     }
     once() {
       const val = this._db._getAt(this._db._read(), this._path);
-      return Promise.resolve({ val: () => val });
+      return Promise.resolve(makeSnap(keyOf(this._path), val));
     }
     on(event, cb) {
       const sub = { path: this._path, cb: cb, event: event };
@@ -184,7 +229,7 @@
         committed = true; finalVal = res;
       }
       // resolve with a Firebase-shaped result so callers can read .committed
-      return Promise.resolve({ committed: committed, snapshot: { val: () => finalVal } });
+      return Promise.resolve({ committed: committed, snapshot: makeSnap(keyOf(this._path), finalVal) });
     }
     onDisconnect() {
       const self = this;
