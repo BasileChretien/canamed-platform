@@ -95,6 +95,11 @@ test.describe("Module A chat controls", () => {
     const consent = student.locator(".moda-chat-consent-btn");
     await consent.scrollIntoViewIfNeeded();
     await expect(consent).toBeVisible({ timeout: 10_000 });
+    // Touch-target floor measured BEFORE the click — the button leaves the
+    // DOM afterwards, and a null boundingBox behind an if-guard would skip
+    // the assertion silently (CodeRabbit catch).
+    const consentBox = await consent.boundingBox();
+    expect(consentBox.height, "consent button keeps a usable tap height").toBeGreaterThanOrEqual(24);
     await consent.click();
 
     // The form controls become usable.
@@ -116,11 +121,9 @@ test.describe("Module A chat controls", () => {
     await expect(student.locator(".moda-chat-score.is-award").first())
       .toBeVisible({ timeout: 10_000 });
 
-    // Both restyled controls meet the touch-target floor on every project.
-    for (const el of [consent, send]) {
-      const box = await el.boundingBox();
-      if (box) expect(box.height, "control keeps a usable tap height").toBeGreaterThanOrEqual(24);
-    }
+    // Send stays in the DOM — assert its tap height unguarded.
+    const sendBox = await send.boundingBox();
+    expect(sendBox.height, "send button keeps a usable tap height").toBeGreaterThanOrEqual(24);
     await student.close();
   });
 });
