@@ -108,18 +108,23 @@ test.describe("Collapsible room header + inline leaderboard", () => {
     });
     const chipBefore = await chipPos();
 
-    // open via its summary
+    // open via its summary — the panel REPARENTS to .stage-card while open
+    // (initLeaderboardFlow), so locate it there.
     await page.locator("#leaderboard-card > summary").click();
-    await expect(page.locator("#leaderboard-card .lb-panel")).toBeVisible();
+    await expect(page.locator(".stage-card > .lb-panel")).toBeVisible();
 
     // 2026-07-18 (user request): opening must NOT reflow the chip to a new
     // row — it stays exactly where it was in the header line.
     const chipAfter = await chipPos();
-    expect(Math.abs(chipAfter.y - chipBefore.y), "summary chip stays on the top line").toBeLessThan(2);
-    expect(Math.abs(chipAfter.x - chipBefore.x), "summary chip keeps its place").toBeLessThan(2);
+    // Tolerance 8px: opening changes the row's height, so vertical centering
+    // can settle the chip by a few px — that is not the failure mode this
+    // guards (a reflow to a NEW row shifts it by the full row height, 40px+).
+    expect(Math.abs(chipAfter.y - chipBefore.y), "summary chip stays on the top line").toBeLessThan(8);
+    expect(Math.abs(chipAfter.x - chipBefore.x), "summary chip keeps its place").toBeLessThan(8);
 
     const layout = await page.evaluate(() => {
-      const panel = document.querySelector("#leaderboard-card > .lb-panel");
+      const panel = document.querySelector(".stage-card > .lb-panel") ||
+                    document.querySelector("#leaderboard-card > .lb-panel");
       const card = document.querySelector(".stage-card");
       const pb = panel.getBoundingClientRect();
       const cb = card.getBoundingClientRect();
@@ -128,10 +133,18 @@ test.describe("Collapsible room header + inline leaderboard", () => {
         cardWidth: cb.width,
         left: pb.left,
         right: pb.right,
+        panelBottom: pb.bottom,
+        cardBottom: cb.bottom,
         docScrollW: document.documentElement.scrollWidth,
         clientW: document.documentElement.clientWidth
       };
     });
+
+    // 2026-07-21 (user request #3 on this element): the ranking expands IN
+    // FLOW — the stage card grows to contain it and the content below is
+    // pushed down, never covered by an overlay.
+    expect(layout.panelBottom <= layout.cardBottom + 1,
+      "panel expands in flow inside the stage card (no overlay)").toBe(true);
 
     // The 2026-07-15 readability guarantee is about WIDTH, not flow mechanics:
     // the panel spans (nearly) the full stage-card content width, not a ~360px

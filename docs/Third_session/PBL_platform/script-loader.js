@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v89";
+  var SHELL_VERSION = "v90";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
@@ -216,6 +216,28 @@
   // immediately if already loaded). Production calls it fire-and-forget from
   // applyScenario (the room paints later, after the lobby), so the async load
   // has time; tests can `await` it before asserting computed branched styles.
+  // Facilitator-dashboard-only stylesheet (admin.css) — same lazy pattern as
+  // branched.css, split from the eager style.css per the perf-budget
+  // changelog's standing reclaim mandate (the splash never renders admin UI).
+  function ensureAdminStyles() {
+    if (typeof document === "undefined") return Promise.resolve();
+    var link = document.getElementById("admin-css");
+    if (!link) {
+      link = document.createElement("link");
+      link.id = "admin-css";
+      link.rel = "stylesheet";
+      link.href = v("admin.css");
+      (document.head || document.documentElement).appendChild(link);
+    }
+    if (link.sheet) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      link.addEventListener("load", function () { resolve(); }, { once: true });
+      link.addEventListener("error", function () {
+        reject(new Error("admin.css failed to load"));
+      }, { once: true });
+    });
+  }
+
   function ensureBranchedStyles() {
     if (typeof document === "undefined") return Promise.resolve();
     var link = document.getElementById("branched-css");
@@ -246,6 +268,7 @@
     SHELL_VERSION: SHELL_VERSION,
     loadScript,
     ensureBranchedStyles,
+    ensureAdminStyles,
     ensureCaseContent,
     ensureQrcode,
     ensureTour,

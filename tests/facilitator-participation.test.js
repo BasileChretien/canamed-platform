@@ -14,7 +14,10 @@ const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
-const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8");
+const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8") +
+  // admin-only rules moved to the lazily-loaded admin.css (perf-budget
+  // reclaim); these assertions cover the pair as one cascade
+  fs.readFileSync(path.join(P, "admin.css"), "utf8");
 
 test("roomParticipation derives present, contributing, gini + who's-stuck names", () => {
   assert.match(SCRIPT, /function roomParticipation\(/, "roomParticipation must be defined");

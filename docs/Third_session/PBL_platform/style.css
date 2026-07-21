@@ -276,22 +276,34 @@ html[data-theme="dark"] .dec-branch { background: #15212c; }
 html[data-theme="dark"] .dec-branch p { color: var(--ink, #f1eee6); }
 
 /* Student wrap-up export button. */
-.wrapup-download-btn { margin-top: var(--s-2); }
+/* take-home downloads: secondary pills (Markdown keeps its primary id-role) */
+.wrapup-download-btn {
+  margin-top: var(--s-2);
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-1);
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-btn);
+  padding: 10px var(--s-4);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              background var(--dur-fast) var(--ease-soft),
+              color var(--dur-fast) var(--ease-soft);
+}
+.wrapup-download-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary-hover);
+  background: var(--nagoya-50);
+}
 .wrapup-download-btn.hidden { display: none; }
 /* Spaced-reinforcement retention card at wrap-up (link + scan-to-save QR). */
 a.wrapup-download-btn { display: inline-block; text-decoration: none; }
-.retention-qr { margin-top: var(--s-2); }
-.retention-qr:empty { display: none; }
-.retention-qr img, .retention-qr canvas {
-  border: 1px solid var(--n-200, #e1e7ed); border-radius: 8px; background: #fff;
-}
 
-/* ---------- buttons (3 roles: primary / secondary / danger) ---------- */
-/* primary */
-#join-btn, #start-session-btn, #prev-btn, #next-btn, .answer-add-btn,
-#save-teams-btn, #save-quiz-btn, #advance-all-btn, #admin-download-btn,
-#change-pass-btn, .dash-ctrl button, .sidebar-room-ctrl button,
-.admin-controls button, #wrapup-download-btn, #save-prequiz-btn {
+
+
+#join-btn, #start-session-btn, #prev-btn, #next-btn, .answer-add-btn, #advance-all-btn, #wrapup-download-btn{
   background: var(--primary);
   color: var(--on-primary);
   border: 1px solid transparent;
@@ -307,14 +319,11 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
               transform var(--dur-fast) var(--ease-soft);
 }
 #join-btn:hover, #start-session-btn:hover, #prev-btn:hover, #next-btn:hover,
-.answer-add-btn:hover, #save-teams-btn:hover, #save-quiz-btn:hover,
-#advance-all-btn:hover, #admin-download-btn:hover, #change-pass-btn:hover,
-.dash-ctrl button:hover, .sidebar-room-ctrl button:hover,
-.admin-controls button:hover, #save-prequiz-btn:hover {
+.answer-add-btn:hover, #wrapup-download-btn:hover,
+#advance-all-btn:hover{
   background: var(--primary-hover);
 }
-#prev-btn:disabled, #next-btn:disabled, .dash-ctrl button:disabled,
-.sidebar-room-ctrl button:disabled, .admin-controls button:disabled {
+#prev-btn:disabled, #next-btn:disabled{
   background: var(--n-100);
   color: var(--muted);
   border-color: var(--line-strong);
@@ -324,8 +333,8 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
 #join-btn { width: 100%; padding: 12px; font-size: 0.95rem; margin-top: var(--s-1); }
 #start-session-btn { padding: 11px 20px; font-size: 0.95rem; }
 
-/* secondary */
-#leave-btn, .reset-btn, #admin-leave-btn, #waiting-leave {
+
+#leave-btn, .reset-btn, #waiting-leave {
   background: var(--card);
   color: var(--ink);
   border: 1px solid var(--line-strong);
@@ -339,7 +348,7 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
               background var(--dur-fast) var(--ease-soft),
               transform var(--dur-fast) var(--ease-soft);
 }
-#leave-btn:hover, .reset-btn:hover, #admin-leave-btn:hover, #waiting-leave:hover {
+#leave-btn:hover, .reset-btn:hover, #waiting-leave:hover {
   border-color: var(--n-300);
   background: var(--n-25);
 }
@@ -366,9 +375,9 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
 button:active:not(:disabled) { transform: translateY(1px); }
 
 /* ---------- inputs ---------- */
-input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom */
+input, select, textarea { font-size: 16px; }   
 .lobby-card input, .lobby-card select,
-.answer-add input, .teams-row input, #change-pass-input,
+.answer-add input,
 .inline-label select, .answer-edit {
   border: 1px solid var(--line-strong);
   border-radius: var(--r-sm);
@@ -377,8 +386,7 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   transition: border-color var(--dur-fast) var(--ease-soft),
               box-shadow var(--dur-fast) var(--ease-soft);
 }
-.lobby-card input:focus, .lobby-card select:focus, .answer-add input:focus,
-.teams-row input:focus, #change-pass-input:focus, .inline-label select:focus,
+.lobby-card input:focus, .lobby-card select:focus, .answer-add input:focus, .inline-label select:focus,
 .answer-edit:focus {
   outline: none;
   border-color: var(--primary);
@@ -452,7 +460,6 @@ input, select, textarea { font-size: 16px; }   /* 1rem floor; prevents iOS zoom 
   min-height: 40px;
   text-decoration: underline;
 }
-#superadmin-panel { margin-top: var(--s-2); }
 
 /* ---------- presence / chips ---------- */
 .presence-bar {
@@ -1307,7 +1314,6 @@ html[data-theme="dark"] .next-step-coach {
   opacity: 0.65;
 }
 .rcol-tab.is-locked .rcol-tab-icon { filter: grayscale(0.4); }
-.rcol-tab:not(.is-locked) .rcol-tab-locked-hint { display: none; }
 .rcol-tab.is-locked.is-active {
   opacity: 0.85;
 }
@@ -1368,17 +1374,6 @@ html[data-theme="dark"] .next-step-coach {
 .consultation-note-icon {
   font-size: 1.3rem;
   line-height: 1;
-}
-.consultation-note-sub {
-  margin: 0;
-  font-size: 0.9rem;
-  color: var(--muted);
-  line-height: 1.5;
-}
-.consultation-note-sub em {
-  font-style: italic;
-  color: var(--note-accent-ink);
-  font-weight: 500;
 }
 /* Chart sections (History / Examination / Investigations) — each is a
    <details open> so a student can collapse a section they're done with,
@@ -2324,58 +2319,6 @@ footer {
   }
   .stage-controls--participant .stage-overflow.is-open .stage-overflow-menu > * { width: 100%; }
 }
-/* Self-service doc links (facilitator guide, compliance) in the admin chrome. */
-.admin-doc-link {
-  font-size: 0.85rem;
-  color: var(--primary);
-  text-decoration: none;
-  border: 1px solid var(--n-300, #c7d0d9);
-  border-radius: var(--r-md);
-  padding: 7px 11px;
-  white-space: nowrap;
-}
-.admin-doc-link:hover { background: var(--n-50, #f3f6f9); text-decoration: underline; }
-.admin-doc-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.admin-controls { display: flex; gap: 6px; }
-
-/* "More tools" dropdown for the decluttered admin toolbar (2026-06-03). Closed
-   by default; opened by initAdminToolsMenu() toggling .is-open on the wrapper.
-   The panel floats so it never re-bloats the control row. */
-.admin-overflow { position: relative; display: inline-block; }
-.admin-overflow-caret { font-size: 0.8em; margin-left: 2px; }
-.admin-overflow.is-open .admin-overflow-caret { transform: rotate(180deg); display: inline-block; }
-.admin-overflow-menu {
-  display: none;
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 0;
-  z-index: 60;
-  min-width: 250px;
-  max-width: min(92vw, 340px);
-  max-height: 72vh;
-  overflow-y: auto;
-  flex-direction: column;
-  gap: 4px;
-  padding: var(--s-2);
-  background: var(--card);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-md, 0 10px 28px rgba(0,0,0,.20));
-}
-.admin-overflow.is-open .admin-overflow-menu { display: flex; }
-.admin-overflow-menu > button,
-.admin-overflow-menu > a.admin-doc-link {
-  display: block;
-  width: 100%;
-  text-align: left;
-  white-space: normal;
-  margin: 0;
-}
-@media (max-width: 520px) {
-  /* On a narrow facilitator screen, drop the panel to the right edge so it
-     doesn't overflow the viewport. */
-  .admin-overflow-menu { left: auto; right: 0; }
-}
 
 .presence-line {
   margin-top: var(--s-3);
@@ -2462,65 +2405,6 @@ footer {
   padding: 3px 10px;
   font-size: 0.8rem;
 }
-
-/* ---------- admin dashboard ---------- */
-#admin-app { max-width: 1100px; margin: 0 auto; padding: var(--s-5); }
-.dash-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--s-3);
-}
-.dash-head h3 { margin: 0; }
-.dash-room {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--s-4);
-  padding: 14px 14px;
-  border-radius: var(--r-md);
-  margin-bottom: 6px;
-  flex-wrap: wrap;
-  transition: background var(--dur-fast) var(--ease-soft);
-}
-.dash-room:hover { background: var(--n-25); }
-.dash-room.calling { background: var(--key-50); box-shadow: inset 3px 0 0 var(--key); }
-.dash-info { flex: 1; min-width: 0; }
-.dash-title { font-weight: 600; }
-.dash-stage { font-size: 0.9rem; color: var(--nagoya-700); margin-top: 2px; }
-.dash-people { font-size: 0.84rem; color: var(--muted); margin-top: 2px; }
-.dash-timer { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
-.dash-timer.over { color: var(--key); font-weight: 600; }
-.dash-progress { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
-/* Live participation equity (facilitator dashboard). */
-.dash-participation { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
-.dash-participation:empty { display: none; }
-.dash-participation.quiet { color: var(--key); font-weight: 600; }
-/* "Who's stuck" — names of present students yet to contribute. */
-.dash-quiet-names { font-size: 0.82rem; color: var(--key); margin-top: 2px; }
-.dash-quiet-names:empty { display: none; }
-
-/* Session-wide pacing + attention roll-up at the top of the dashboard. */
-.dash-session-signal {
-  margin: 0 0 var(--s-2);
-  padding: 9px 12px;
-  border-radius: var(--r-md);
-  background: var(--n-50, #f3f6f9);
-  border: 1px solid var(--n-200, #e1e7ed);
-}
-.dash-signal-line { font-size: 0.9rem; line-height: 1.4; }
-.dash-signal-line + .dash-signal-line { margin-top: 3px; }
-.dash-signal-call { color: var(--meeting, #8a2017); font-weight: 700; }
-.dash-signal-pace.behind { color: var(--key, #b45309); font-weight: 600; }
-.dash-signal-pace.ontrack { color: var(--muted); }
-.dash-signal-quiet { color: var(--muted); }
-.dash-ctrl { display: flex; gap: 6px; flex-wrap: wrap; }
-.dash-ctrl button, .sidebar-room-ctrl button, .admin-controls button {
-  padding: 8px 13px;
-  min-height: 36px;
-  font-size: 0.82rem;
-}
-.sidebar-room-ctrl button { min-width: 40px; }
 .view-btn { background: var(--ink) !important; color: var(--bg) !important; }
 .view-btn:hover { filter: brightness(1.12); } /* theme-proof (no #000) */
 .call-badge {
@@ -2661,15 +2545,15 @@ footer {
 .teams-btn:hover { background: var(--nagoya-50); }
 #teams-btn-waiting { margin-top: var(--s-3); }
 
-.teams-row {
-  display: flex;
-  gap: var(--s-2);
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: var(--s-3);
-}
-.teams-row input { flex: 1; padding: 9px 11px; font-size: 0.9rem; }
-#change-pass-input { padding: 9px 11px; margin-right: var(--s-2); }
+/* ---------- admin "More tools" menu: functional collapse state ----------
+   The facilitator dashboard's decorative styling lives in the LAZILY-loaded
+   admin.css (CanamedLoader.ensureAdminStyles), but the overflow menu's
+   open/closed mechanics must ship with the shell: otherwise the closed menu's
+   tools flash visible until admin.css arrives (and e2e reveals #admin-app
+   without going through the loader). Panel decoration stays in admin.css. */
+.admin-overflow { position: relative; display: inline-block; }
+.admin-overflow-menu { display: none; }
+.admin-overflow.is-open .admin-overflow-menu { display: flex; }
 
 /* ---------- super-admin: purge ---------- */
 .purge-row { margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line); }
@@ -2687,21 +2571,6 @@ footer {
 }
 .privacy-note summary { cursor: pointer; font-weight: 600; color: var(--ink); }
 .privacy-note p { margin: var(--s-2) 0 0; }
-.anon-toggle {
-  display: inline-flex;
-  flex-wrap: wrap;              /* let the block hint drop to its own line */
-  align-items: center;
-  gap: 6px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  white-space: nowrap;         /* keep the short "Pseudonymise names…" label intact */
-}
-.anon-toggle input { width: auto; min-height: 0; }
-/* The explanatory hint is a full-width block under the toggle label — it must
-   wrap, not inherit the label's nowrap (otherwise the ~80-word note is forced
-   onto one ~800px line, overflowing the page width on a phone and zooming the
-   whole admin dashboard out → the Start button becomes untappable). */
-.anon-toggle .hint-block-small { flex-basis: 100%; white-space: normal; }
 
 /* ---------- late-joiner banner ---------- */
 .late-banner {
@@ -2765,54 +2634,8 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   #room-sidebar { width: 100%; position: static; }
 }
 
-.sidebar-room { padding: 10px 0; border-bottom: 1px solid var(--line); }
-.sidebar-room:last-child { border-bottom: none; }
-.sidebar-room.current { background: var(--nagoya-50); border-radius: var(--r-sm); padding: 10px 9px; }
-.sidebar-room.calling { background: var(--key-50); border-radius: var(--r-sm); padding: 10px 9px; }
-.sidebar-room-name {
-  background: none;
-  border: none;
-  font-weight: 600;
-  font-size: 0.92rem;
-  cursor: pointer;
-  color: var(--nagoya-700);
-  text-align: left;
-  padding: 0;
-}
-.sidebar-room.current .sidebar-room-name { color: var(--ink); cursor: default; }
-.sidebar-room-name:hover { text-decoration: underline; }
-.sidebar-room.current .sidebar-room-name:hover { text-decoration: none; }
-.sidebar-room-meta { font-size: 0.82rem; color: var(--muted); margin: 3px 0 6px; }
-.sidebar-room-ctrl { display: flex; gap: 6px; }
-#sidebar-dashboard-btn {
-  background: var(--ink);
-  color: #fff;
-  border: none;
-  border-radius: var(--r-sm);
-  padding: 7px 12px;
-  cursor: pointer;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-#sidebar-dashboard-btn:hover { background: #000; }
 
-/* ---------- overflow safety ----------
-   Bug 1 (user-feedback-2): a team name with an emoji prefix (e.g. "🍣
-   Sakura") rendered with each grapheme on its own line on narrow phones.
-   Root cause: `overflow-wrap: anywhere` lets the browser break INSIDE
-   grapheme clusters when the parent flex track is squeezed, because
-   `anywhere` makes soft-wrap points participate in min-content sizing.
-   Switching to `break-word` keeps long single words wrappable at the
-   end of the available width (the original goal — preventing horizontal
-   overflow from a long unsegmentable string) WITHOUT making each
-   character its own min-content. `.lb-name` (leaderboard team name)
-   and `.sidebar-room-name` (admin sidebar) are the two team-name
-   surfaces — keep them on `break-word` only. */
-.answer-text, .chip, #findings-log .a, .dash-people {
-  overflow-wrap: break-word;
-  word-break: normal;
-}
-.sidebar-room-name {
+.answer-text, .chip, #findings-log .a{
   overflow-wrap: break-word;
   word-break: normal;
 }
@@ -2833,11 +2656,9 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   font-size: 0.88rem;
 }
 
-/* ==========================================================================
-   MOTION
-   ========================================================================== */
-/* view transitions: lobby -> waiting -> room -> admin */
-#waiting:not(.hidden), #app:not(.hidden), #admin-app:not(.hidden) {
+
+
+#waiting:not(.hidden), #app:not(.hidden){
   animation: view-in var(--dur-view) var(--ease-out);
 }
 @keyframes view-in {
@@ -2883,7 +2704,7 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   border-radius: 3px;
 }
 header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
-.view-btn:focus-visible, #sidebar-dashboard-btn:focus-visible {
+.view-btn:focus-visible{
   outline-color: #fff;
 }
 
@@ -3000,24 +2821,16 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 }
 .leaderboard-card.leaderboard-inline[open] > summary { border-color: var(--muted); }
 
-/* Opened (2026-07-18, user request: the chip must STAY on the top line):
-   the summary keeps its place in the header row; only the PANEL drops
-   below, as a dropdown spanning the full strip width — as wide and
-   readable as the old in-flow version (the 2026-07-15 readability fix
-   rejected a cramped ~360px right-anchored popover, not width itself),
-   without reflowing the chip to a new row. Anchored to .stage-row
-   (position:relative above); sh-lg is the reserved popover shadow. */
+/* Leaderboard open state (2026-07-21): panel is REPARENTED to .stage-card
+   while open (initLeaderboardFlow — chip stays on the top line, ranking
+   expands IN FLOW pushing content below); both homes styled. */
+.stage-card > .lb-panel,
 .leaderboard-card.leaderboard-inline > .lb-panel {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% + var(--s-2));
   background: var(--card);
   border: 1px solid var(--line-strong);
   border-radius: var(--r-md);
-  box-shadow: var(--sh-lg);
   padding: var(--s-4);
-  z-index: var(--z-raised);
+  margin-top: var(--s-2);
 }
 .leaderboard-card.leaderboard-inline > .lb-panel .lb-hint { margin: 0 0 var(--s-2); }
 .leaderboard-card.leaderboard-inline > .lb-panel #leaderboard { margin-top: 0; }
@@ -3093,14 +2906,6 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
   padding: 8px 12px;
   font-size: 0.92rem;
 }
-
-/* --- facilitator +points control on the dashboard --- */
-.dash-score {
-  font-size: 0.82rem;
-  color: var(--nagoya-700);
-  font-weight: 600;
-  margin-top: 4px;
-}
 .pts-btn {
   background: var(--caen-50) !important;
   color: var(--caen-ink) !important;
@@ -3108,19 +2913,6 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
   box-shadow: none !important;
 }
 .pts-btn:hover { background: #fbeec4 !important; }
-.dash-points-panel {
-  flex-basis: 100%;
-  margin-top: var(--s-2);
-  padding: var(--s-3);
-  background: var(--surface-sunk);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-.dash-points-panel .hint { flex-basis: 100%; margin: 0 0 4px; }
 .pts-tag {
   background: var(--card);
   border: 1px solid var(--line-strong);
@@ -3335,17 +3127,6 @@ h2, h3 { text-wrap: balance; }
 .empty-art { width: 72px; height: 54px; display: block; margin: 0 auto 6px; }
 #findings-empty { text-align: center; }
 .wrap-art { width: 120px; height: 70px; display: block; margin: 0 0 var(--s-2); }
-.rubric-list .pts {
-  flex-shrink: 0;
-  font-weight: 800;
-  font-size: 0.82rem;
-  color: var(--ok);
-  background: var(--ok-50);
-  border-radius: var(--r-pill);
-  padding: 1px 8px;
-  min-width: 3em;
-  text-align: center;
-}
 
 /* --- "wow" motion --- */
 @keyframes mark-in {
@@ -4649,69 +4430,6 @@ body.locked > footer { display: none !important; }
 }
 .splash-field[hidden] { display: none !important; }
 
-/* --- session-code banner at the top of the admin dashboard ---
-   the facilitator can read the code aloud or copy it for late joiners without
-   having to remember it from the splash success screen --- */
-.admin-session-chip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin: 10px 0 4px;
-  padding: 10px 14px;
-  background: linear-gradient(180deg, rgba(46,159,223,0.10), rgba(46,159,223,0.04));
-  border: 1.5px solid var(--primary);
-  border-radius: var(--r-md);
-}
-.admin-session-chip-label {
-  color: var(--ink);
-  font-weight: 600;
-  font-size: 0.9rem;
-}
-.admin-session-chip-code {
-  font-family: var(--font-mono);
-  font-size: clamp(1.2rem, 2.4vw, 1.6rem);
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  color: var(--primary);
-  text-transform: uppercase;
-  user-select: all;
-  padding: 2px 4px;
-}
-.admin-session-chip-copy {
-  font: inherit;
-  font-weight: 700;
-  font-size: 0.84rem;
-  color: var(--primary);
-  background: var(--card);
-  border: 1.5px solid var(--primary);
-  padding: 6px 14px;
-  border-radius: var(--r-pill);
-  cursor: pointer;
-  transition: background var(--dur-base, .18s) var(--ease-out, ease),
-              color var(--dur-base, .18s) var(--ease-out, ease);
-}
-.admin-session-chip-copy:hover { background: var(--primary); color: var(--on-primary); }
-.admin-session-chip .copy-ok { color: var(--ok); font-weight: 700; font-size: 0.86rem; }
-
-/* --- "End session & download archive" admin button - calm, not alarming --- */
-#admin-close-btn {
-  background: var(--card); /* theme-aware: #fff broke dark (ivory-on-white) */
-  color: var(--ink);
-  border: 1.5px solid var(--line-strong);
-  box-shadow: none;
-}
-#admin-close-btn:hover:not(:disabled) {
-  border-color: var(--primary);
-  color: var(--primary);
-}
-#admin-close-btn.done {
-  background: var(--ok-50, #e7f4ec);
-  color: var(--ok);
-  border-color: var(--ok);
-}
-#admin-close-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-
 /* --- the "session closed" banner participants see when an admin ends it ---
    sticky at the top so it stays visible while students scroll through their
    work; the room interactions stay readable (the data is saved either way) */
@@ -5006,11 +4724,6 @@ body.session-ended-shown { overflow: hidden; }
   font: inherit; font-size: 0.9rem; cursor: pointer; min-height: 40px;
 }
 .ghost-btn:hover { background: rgba(0,0,0,0.04); }
-
-/* ===================== ACCOUNTS (Google sign-in) ============================ */
-
-/* --- "Continue with X" provider buttons on the splash account view --- */
-.splash-row-center { justify-content: center; }
 .splash-providers {
   display: flex;
   flex-direction: column;
@@ -5357,19 +5070,6 @@ body.session-ended-shown { overflow: hidden; }
   line-height: 1.5;
 }
 .consent-row:last-of-type { margin-bottom: 4px; }
-/* Certificate verification is on by default (privacy-preserving), so the former
-   third consent checkbox is now an informational note — not an action row.
-   Override the pointer/flex affordances and give it a quiet, divided look. */
-.consent-note {
-  display: block;
-  cursor: default;
-  margin-top: 6px;
-  padding-top: 10px;
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
 /* R2-36 / WCAG 2.5.8 (Target Size — Minimum, 24x24 CSS px): the consent
    checkboxes were 17px which fails AA on touch devices. Bumped to 24px
    with an enlarged label hit-area (padding on .consent-row below) so the
@@ -5995,8 +5695,8 @@ details.card[open] > *:not(summary) {
 }
 .sound-toggle:hover { background: rgba(255,255,255,.24); }
 
-/* --- touch targets: facilitator + scoring controls to 44px (WCAG good practice) --- */
-.pts-tag, .pts-undo, .dash-ctrl button, .sidebar-room-ctrl button { min-height: 44px; }
+
+.pts-tag, .pts-undo{ min-height: 44px; }
 
 /* --- request-finding buttons: a touch more presence --- */
 .req-btn { font-weight: 600; }
@@ -6068,41 +5768,6 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
   text-align: center;
   font-size: 0.85rem;
   color: var(--muted, #6a665d);
-}
-
-/* Admin dashboard preferences row — mute-alerts checkbox + Download
-   error log button. Small, low-visual-weight; sits just under the
-   stage-controls bar so it's discoverable without competing for
-   attention with the main admin actions. */
-.admin-prefs-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin: 6px 0 0;
-  font-size: 0.88rem;
-  color: var(--muted, #6a665d);
-}
-.admin-pref {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-}
-.admin-pref-btn {
-  appearance: none;
-  background: transparent;
-  border: 1px solid var(--line, #d6d2c9);
-  color: var(--muted, #6a665d);
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  font-family: inherit;
-}
-.admin-pref-btn:hover {
-  border-color: var(--ink, #2a2a2a);
-  color: var(--ink, #2a2a2a);
 }
 
 /* ==========================================================================
