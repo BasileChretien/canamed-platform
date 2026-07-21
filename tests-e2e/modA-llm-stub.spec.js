@@ -211,9 +211,10 @@ test.describe("Module A — LLM-patient stub (feature flag on)", () => {
  * modALLMInit() wiring (not just a bare bridge) under LocalDB, so they cover the
  * two integration bugs that the bridge-only tests above cannot: the patient
  * answering in each participant's browser language, and re-entry stacking a
- * second chat listener (every message rendered twice). LocalDB does not model
- * Firebase child_added (its .on() is whole-path "value"), so we assert the
- * listener-subscription count rather than rendered bubbles. */
+ * second chat listener (every message rendered twice). Since 2026-07-21 LocalDB
+ * models Firebase child_added (one callback per new child — rendered-bubble
+ * coverage lives in modA-chat-controls.spec.js); here we assert the
+ * listener-subscription count, which is the idempotency contract itself. */
 test.describe("Module A — LLM-patient session-1 fixes (live init wiring)", () => {
   async function setupRoom(page, sessionCode) {
     await setupLLMMode(page);

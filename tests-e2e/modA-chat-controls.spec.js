@@ -89,6 +89,11 @@ test.describe("Module A chat controls", () => {
   });
 
   test("consent gate then Send round-trips a question to the stub patient", async ({ page, context }) => {
+    // Full two-tab session bootstrap (create → join → start → advance) before
+    // the assertions even begin — under a loaded parallel run that alone can
+    // eat most of the default 30s budget (observed on mobile-ipad, 2026-07-21).
+    // Same allowance as branched-playthrough.spec.js.
+    test.setTimeout(90_000);
     const student = await reachStage1(page, context);
 
     // The consent CTA gates the chat: visible, tappable, and it reveals the form.
@@ -108,16 +113,24 @@ test.describe("Module A chat controls", () => {
     await expect(input).toBeVisible();
     await expect(send).toBeEnabled();
 
-    // Type + send; the submission is PROCESSED: the input clears and the
-    // LOCAL stub scores the history question (award chip in the transcript).
-    // NOTE deliberately NOT asserting a .moda-chat-bub-user bubble: rendering
-    // the turn bubbles is broken in LOCAL DESKTOP mode (pre-existing — the
-    // score pipeline runs but the transcript stays empty; tracked as its own
-    // bug task 2026-07-21). Mobile projects do render bubbles; this spec
-    // asserts the cross-project truth.
+    // Type + send; the submission round-trips: the input clears, BOTH turn
+    // bubbles render (user question + stub-patient reply — requires LocalDB's
+    // child_added support, added 2026-07-21 after the transcript stayed empty
+    // in LOCAL mode on every viewport), and the LOCAL stub scores the history
+    // question (award chip in the transcript).
     await input.fill("Where exactly does it hurt?");
+    // Instant pre-scroll: on the iPad viewport, Playwright's own pre-click
+    // "scrolling into view" step can hang in WebKit (the collapsing room
+    // header shifts the layout mid-scroll, so the target never settles —
+    // observed 1-in-4 on mobile-ipad, 2026-07-21). Centring the button
+    // ourselves makes that step a no-op, then the click proceeds normally.
+    await send.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
     await send.click();
     await expect(input).toHaveValue("", { timeout: 10_000 });
+    await expect(student.locator(".moda-chat-bub-user").first())
+      .toBeVisible({ timeout: 10_000 });
+    await expect(student.locator(".moda-chat-bub-assistant").first())
+      .toBeVisible({ timeout: 10_000 });
     await expect(student.locator(".moda-chat-score.is-award").first())
       .toBeVisible({ timeout: 10_000 });
 
