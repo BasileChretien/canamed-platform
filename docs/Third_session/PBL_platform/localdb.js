@@ -7,7 +7,7 @@
  * backend is wired:
  *
  *   ref(path).set(val) / .remove() / .push(val) / .once()
- *   ref(path).on(event, cb) / .off()
+ *   ref(path).on(event, cb) / .off()   — "value" and "child_added" events
  *   ref(path).transaction(fn)
  *   ref(path).onDisconnect().remove() / .cancel()
  *   ref(path).child(sub)
@@ -91,10 +91,36 @@
       // Read the tree FRESH for each subscriber: a subscriber's callback may
       // write (re-entrantly), and later subscribers must see that write rather
       // than a stale snapshot taken at the start of the notification.
-      this._subs.slice().forEach((s) => {
-        const tree = this._read();
-        s.cb({ val: () => this._getAt(tree, s.path) });
-      });
+      this._subs.slice().forEach((s) => this._deliver(s));
+    }
+    // Event-aware delivery for one subscription. "value" keeps the historic
+    // whole-path snapshot. "child_added" mirrors the Firebase compat API the
+    // Module A chat depends on (modA-llm-init.js _onChatChild): fire ONCE per
+    // child key, each with a snapshot of that single child — including a
+    // replay of the children that already exist at subscribe time. Without
+    // this, chat turn bubbles never rendered in LOCAL mode (the callback got
+    // the whole turn map, which has no .role, and bailed). Keys are visited
+    // in sort order — push() keys embed a base36 timestamp, so key order is
+    // chronological across different milliseconds (same-ms pushes tie-break
+    // on the random suffix; the chat's two turns per submit are separated by
+    // an async boundary, so this never bites there). NB `seen` only ever
+    // GROWS: a child removed and later re-added under the same key will NOT
+    // re-fire (this shim has no child_removed) — fine for append-only lists
+    // like the chat, a trap for mutable ones.
+    _deliver(sub) {
+      if (sub.event === "child_added") {
+        const node = this._getAt(this._read(), sub.path);
+        if (node === null || typeof node !== "object") return;
+        Object.keys(node).sort().forEach((k) => {
+          if (Object.prototype.hasOwnProperty.call(sub.seen, k)) return;
+          sub.seen[k] = true;   // mark BEFORE cb: a re-entrant write must not re-fire it
+          const v = node[k];
+          sub.cb({ key: k, val: () => v });
+        });
+        return;
+      }
+      const tree = this._read();
+      sub.cb({ val: () => this._getAt(tree, sub.path) });
     }
     ref(path) {
       return new LocalRef(this, String(path).replace(/^\/+|\/+$/g, ""));
@@ -132,10 +158,16 @@
       return Promise.resolve({ val: () => val });
     }
     on(event, cb) {
-      const sub = { path: this._path, cb: cb };
+      const sub = { path: this._path, cb: cb, event: event };
+      // Null-prototype so a child literally keyed "toString"/"__proto__"
+      // can't collide with Object.prototype (same hardening rule as the
+      // pseudonymiser's name maps).
+      if (event === "child_added") sub.seen = Object.create(null);
       this._db._subs.push(sub);
       this._mine.push(sub);
-      cb({ val: () => this._db._getAt(this._db._read(), this._path) });
+      // Initial delivery: "value" fires with the current whole-path value;
+      // "child_added" replays each existing child (Firebase semantics).
+      this._db._deliver(sub);
       return cb;
     }
     off() {
