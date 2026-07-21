@@ -103,6 +103,46 @@ test.describe("Splash — authored scenarios entry points", () => {
     await expect(row).toBeHidden();
   });
 
+  test("shared scenarios seeded in LocalDB populate the picker in LOCAL mode", async ({ page }) => {
+    // Regression coverage: listSharedScenarios() iterates the snapshot
+    // with snap.forEach(child => ...). LocalDB snapshots used to expose
+    // only { val() }, so LOCAL mode threw "snap.forEach is not a
+    // function" (swallowed by the .catch) and the shared list silently
+    // came back empty. Seed the LocalDB storage key before any page
+    // script runs, then assert the "Shared scenarios" optgroup renders.
+    const warnings = [];
+    page.on("console", (msg) => {
+      if (/listSharedScenarios failed/.test(msg.text())) warnings.push(msg.text());
+    });
+    await page.addInitScript(() => {
+      localStorage.setItem("canamed_localdb_v1", JSON.stringify({
+        sharedScenarios: {
+          u_demo_scn: {
+            ownerUid: "u_demo",
+            scenarioId: "scn",
+            ownerName: "Dr. Local",
+            meta: { name: "Locally Shared Scenario" }
+          }
+        }
+      }));
+    });
+
+    await page.goto("/");
+    await page.locator("#splash-go-create").click();
+
+    const picker = page.locator("#splash-create-scenario");
+    await expect(picker).toBeVisible();
+
+    // The authored optgroups are appended asynchronously after the
+    // built-ins; poll for the shared entry.
+    const sharedOption = picker.locator('option[value="__ref:shared:u_demo:scn"]');
+    await expect.poll(async () => await sharedOption.count()).toBe(1);
+    await expect(sharedOption).toHaveText(/Locally Shared Scenario — Dr\. Local/);
+    await expect(picker.locator('optgroup[data-authored="1"]')).toHaveCount(1);
+
+    expect(warnings, "listSharedScenarios must not fail in LOCAL mode").toEqual([]);
+  });
+
   test("create-session picker still works when authored scenarios are empty", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
