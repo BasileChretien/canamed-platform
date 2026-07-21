@@ -78,7 +78,7 @@ jobs:
             browser: chromium
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           # cache: npm requires a committed package-lock.json. We don't
