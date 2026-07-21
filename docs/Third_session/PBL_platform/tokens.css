@@ -118,6 +118,11 @@
   --r-lg: 12px;
   --r-xl: 16px;
   --r-pill: 999px;
+  /* ACTION buttons are pill-shaped (2026-07-17 owner request: "more modern");
+     wide option-rows (workup/quiz choices) stay on --r-md so options and
+     actions read as different affordances. One token so the shape is a
+     single decision. */
+  --r-btn: var(--r-pill);
 
   /* depth: hairline rules first, shadow second. sm = resting cards,
      md = raised/interactive, lg = RESERVED for modals & popovers. */
