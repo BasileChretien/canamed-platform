@@ -319,7 +319,7 @@ a.wrapup-download-btn { display: inline-block; text-decoration: none; }
               transform var(--dur-fast) var(--ease-soft);
 }
 #join-btn:hover, #start-session-btn:hover, #prev-btn:hover, #next-btn:hover,
-.answer-add-btn:hover,
+.answer-add-btn:hover, #wrapup-download-btn:hover,
 #advance-all-btn:hover{
   background: var(--primary-hover);
 }
@@ -2544,6 +2544,16 @@ footer {
 }
 .teams-btn:hover { background: var(--nagoya-50); }
 #teams-btn-waiting { margin-top: var(--s-3); }
+
+/* ---------- admin "More tools" menu: functional collapse state ----------
+   The facilitator dashboard's decorative styling lives in the LAZILY-loaded
+   admin.css (CanamedLoader.ensureAdminStyles), but the overflow menu's
+   open/closed mechanics must ship with the shell: otherwise the closed menu's
+   tools flash visible until admin.css arrives (and e2e reveals #admin-app
+   without going through the loader). Panel decoration stays in admin.css. */
+.admin-overflow { position: relative; display: inline-block; }
+.admin-overflow-menu { display: none; }
+.admin-overflow.is-open .admin-overflow-menu { display: flex; }
 
 /* ---------- super-admin: purge ---------- */
 .purge-row { margin-top: var(--s-4); padding-top: var(--s-3); border-top: 1px solid var(--line); }

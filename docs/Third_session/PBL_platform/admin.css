@@ -81,15 +81,15 @@
 
 /* "More tools" dropdown for the decluttered admin toolbar (2026-06-03). Closed
    by default; opened by initAdminToolsMenu() toggling .is-open on the wrapper.
-   The panel floats so it never re-bloats the control row. */
-.admin-overflow { position: relative; display: inline-block; }
-
+   The panel floats so it never re-bloats the control row.
+   NB: the functional collapse state (.admin-overflow anchoring + the menu's
+   display none/flex toggle) lives in style.css — it must ship with the shell
+   so the closed menu can't flash visible before this lazy sheet arrives. */
 .admin-overflow-caret { font-size: 0.8em; margin-left: 2px; }
 
 .admin-overflow.is-open .admin-overflow-caret { transform: rotate(180deg); display: inline-block; }
 
 .admin-overflow-menu {
-  display: none;
   position: absolute;
   top: calc(100% + 6px);
   left: 0;
@@ -106,8 +106,6 @@
   border-radius: var(--r-md);
   box-shadow: var(--sh-md, 0 10px 28px rgba(0,0,0,.20));
 }
-
-.admin-overflow.is-open .admin-overflow-menu { display: flex; }
 
 .admin-overflow-menu > button,
 .admin-overflow-menu > a.admin-doc-link {
@@ -295,9 +293,6 @@
   animation: view-in var(--dur-view) var(--ease-out);
 }
 
-#sidebar-dashboard-btn:focus-visible {
-  outline-color: #fff;
-}
 
 /* --- facilitator +points control on the dashboard --- */
 .dash-score {
