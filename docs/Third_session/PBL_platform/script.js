@@ -3247,6 +3247,7 @@ function wireRoomUI() {
   initLeave();
   initStageOverflow();
   initStageDetailsToggle();
+  initLeaderboardFlow();
   initEndPoll();
   initTeamName();
   initRolePicker();
@@ -4221,6 +4222,7 @@ function joinSuperAdmin() {
 }
 
 function enterAdminApp() {
+  try { CanamedLoader.ensureAdminStyles().catch(function(){}); } catch (e) {}
   el("lobby").classList.add("hidden");
   el("admin-app").classList.remove("hidden");
   el("admin-mode-line").textContent =
@@ -6217,6 +6219,7 @@ function backToDashboard() {
   myRoom = null;
   document.body.classList.remove("admin-room");
   el("app").classList.add("hidden");
+  try { CanamedLoader.ensureAdminStyles().catch(function(){}); } catch (e) {}
   el("room-sidebar").classList.add("hidden");
   el("admin-app").classList.remove("hidden");
   el("header-right").textContent =
@@ -11619,7 +11622,35 @@ function initStageOverflow() {
    localStorage ("for all sessions"). #stage-indicator stays in the always-
    visible row, so the screen-reader position announcement still fires while
    this is collapsed. */
+/* Leaderboard flow (2026-07-21, third iteration on this element): the chip
+   must stay on the top line AND the ranking must expand IN FLOW (pushing the
+   content below, never overlaying it). CSS alone cannot do both — the panel
+   is a child of the <details> chip, and display:contents on <details> is
+   intermittently broken in Chromium. So: while open, the panel is reparented
+   to the end of .stage-card (normal full-width flow); on close it returns
+   into the details so native toggling hides it again. */
+function initLeaderboardFlow() {
+  const card = el("leaderboard-card");
+  if (!card || card.dataset.flowWired === "1") return;
+  card.dataset.flowWired = "1";
+  card.addEventListener("toggle", () => {
+    const stageCard = card.closest(".stage-card");
+    if (!stageCard) return;
+    if (card.open) {
+      const p = card.querySelector(".lb-panel");
+      if (p) stageCard.appendChild(p);
+    } else {
+      const p = stageCard.querySelector(":scope > .lb-panel");
+      if (p) card.appendChild(p);
+    }
+  });
+}
+
 function initStageDetailsToggle() {
+  // The leaderboard flow handler is part of the same header wiring (and the
+  // e2e surfaceRoom helper invokes THIS function directly) — keep them
+  // together so every path that wires the header gets both. Idempotent.
+  initLeaderboardFlow();
   const LS_KEY = "canamedStageDetailsOpen";
   const toggle = el("stage-details-toggle");
   const panel = el("stage-details");

@@ -460,6 +460,7 @@
       "admin.advance-all": "Advance all rooms →",
       "admin.download-all": "Download all group answers",
       "admin.archive.label": "Download archive:",
+      "admin.links.summary": "Session links — Teams & questionnaires",
       "admin.archive.csv": "CSV",
       "admin.archive.json": "JSON",
       "admin.more.tools": "More tools",
@@ -730,12 +731,9 @@
 
       // wrap-up stage (stage-3) — the last thing students see in the room
       "stage.wrap.title": "Wrap-up & Next Steps",
-      "stage.wrap.thanks": "Thank you for taking part! Before you go:",
-      "stage.wrap.do-questionnaire": "Complete the end-of-session questionnaire — it only takes a few minutes, and there is a short post-test in 3 weeks.",
+      "stage.wrap.thanks": "Thank you for taking part!",
       "stage.wrap.open-questionnaire": "Open the end-of-session questionnaire",
-      "stage.wrap.questionnaire-fallback": "Your facilitator will share the questionnaire link.",
-      "stage.wrap.bye": "Once you've done the questionnaire you can close this tab. See you at Session 4!",
-      "stage.wrap.download": "⤓ Download my session takeaway (Markdown)",
+                  "stage.wrap.download": "⤓ Download my session takeaway (Markdown)",
       "stage.wrap.takehome.title": "Take it with you",
       "stage.wrap.takehome.hint": "Two PDFs to keep: a study booklet to revise from, and your certificate of attendance.",
       "stage.wrap.booklet": "Download the study booklet (PDF)",

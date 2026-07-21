@@ -29,7 +29,9 @@ const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 
 // Read once — these files are small enough that re-reads cost nothing
 // but caching keeps the test runtime predictable.
-const styleCss = readFile("style.css");
+const styleCss = readFile("style.css") +
+  // admin-only rules moved to the lazily-loaded admin.css
+  readFile("admin.css");
 const scriptJs = readFile("script.js");
 const indexHtml = readFile("index.html");
 const tourJs = readFile("tour.js");

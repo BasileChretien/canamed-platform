@@ -1,0 +1,461 @@
+
+#save-teams-btn,#save-quiz-btn,#admin-download-btn,#change-pass-btn,.dash-ctrl button,.sidebar-room-ctrl button,#save-prequiz-btn {
+  background: var(--primary);
+  color: var(--on-primary);
+  border: 1px solid transparent;
+  border-radius: var(--r-btn);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.875rem;
+  padding: 9px 18px;
+  cursor: pointer;
+  box-shadow: var(--sh-sm);
+  transition: background var(--dur-fast) var(--ease-soft),
+              box-shadow var(--dur-fast) var(--ease-soft),
+              transform var(--dur-fast) var(--ease-soft);
+}
+
+#save-teams-btn:hover,#save-quiz-btn:hover,#admin-download-btn:hover,#change-pass-btn:hover,.dash-ctrl button:hover,.sidebar-room-ctrl button:hover,#save-prequiz-btn:hover {
+  background: var(--primary-hover);
+}
+
+.dash-ctrl button:disabled,.sidebar-room-ctrl button:disabled{
+  background: var(--n-100);
+  color: var(--muted);
+  border-color: var(--line-strong);
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+#admin-leave-btn {
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-btn);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              background var(--dur-fast) var(--ease-soft),
+              transform var(--dur-fast) var(--ease-soft);
+}
+
+#admin-leave-btn:hover {
+  border-color: var(--n-300);
+  background: var(--n-25);
+}
+
+.teams-row input,#change-pass-input {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  font: inherit;
+  background: var(--card);
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              box-shadow var(--dur-fast) var(--ease-soft);
+}
+
+.teams-row input:focus,#change-pass-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--nagoya-50);
+}
+
+#superadmin-panel { margin-top: var(--s-2); }
+
+/* Self-service doc links (facilitator guide, compliance) in the admin chrome. */
+.admin-doc-link {
+  font-size: 0.85rem;
+  color: var(--primary);
+  text-decoration: none;
+  border: 1px solid var(--n-300, #c7d0d9);
+  border-radius: var(--r-md);
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.admin-doc-link:hover { background: var(--n-50, #f3f6f9); text-decoration: underline; }
+
+.admin-doc-link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* "More tools" dropdown for the decluttered admin toolbar (2026-06-03). Closed
+   by default; opened by initAdminToolsMenu() toggling .is-open on the wrapper.
+   The panel floats so it never re-bloats the control row. */
+.admin-overflow { position: relative; display: inline-block; }
+
+.admin-overflow-caret { font-size: 0.8em; margin-left: 2px; }
+
+.admin-overflow.is-open .admin-overflow-caret { transform: rotate(180deg); display: inline-block; }
+
+.admin-overflow-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 250px;
+  max-width: min(92vw, 340px);
+  max-height: 72vh;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 4px;
+  padding: var(--s-2);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  box-shadow: var(--sh-md, 0 10px 28px rgba(0,0,0,.20));
+}
+
+.admin-overflow.is-open .admin-overflow-menu { display: flex; }
+
+.admin-overflow-menu > button,
+.admin-overflow-menu > a.admin-doc-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  margin: 0;
+}
+
+@media (max-width: 520px) {
+  /* On a narrow facilitator screen, drop the panel to the right edge so it
+     doesn't overflow the viewport. */
+  .admin-overflow-menu { left: auto; right: 0; }
+}
+
+/* ---------- admin dashboard ---------- */
+#admin-app { max-width: 1100px; margin: 0 auto; padding: var(--s-5); }
+
+.dash-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--s-3);
+}
+
+.dash-head h3 { margin: 0; }
+
+.dash-room {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  padding: 14px 14px;
+  border-radius: var(--r-md);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+  transition: background var(--dur-fast) var(--ease-soft);
+}
+
+.dash-room:hover { background: var(--n-25); }
+
+.dash-room.calling { background: var(--key-50); box-shadow: inset 3px 0 0 var(--key); }
+
+.dash-info { flex: 1; min-width: 0; }
+
+.dash-title { font-weight: 600; }
+
+.dash-stage { font-size: 0.9rem; color: var(--nagoya-700); margin-top: 2px; }
+
+.dash-people { font-size: 0.84rem; color: var(--muted); margin-top: 2px; }
+
+.dash-timer { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+
+.dash-timer.over { color: var(--key); font-weight: 600; }
+
+.dash-progress { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+
+/* Live participation equity (facilitator dashboard). */
+.dash-participation { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+
+.dash-participation:empty { display: none; }
+
+.dash-participation.quiet { color: var(--key); font-weight: 600; }
+
+/* "Who's stuck" — names of present students yet to contribute. */
+.dash-quiet-names { font-size: 0.82rem; color: var(--key); margin-top: 2px; }
+
+.dash-quiet-names:empty { display: none; }
+
+/* Session-wide pacing + attention roll-up at the top of the dashboard. */
+.dash-session-signal {
+  margin: 0 0 var(--s-2);
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  background: var(--n-50, #f3f6f9);
+  border: 1px solid var(--n-200, #e1e7ed);
+}
+
+.dash-signal-line { font-size: 0.9rem; line-height: 1.4; }
+
+.dash-signal-line + .dash-signal-line { margin-top: 3px; }
+
+.dash-signal-call { color: var(--meeting, #8a2017); font-weight: 700; }
+
+.dash-signal-pace.behind { color: var(--key, #b45309); font-weight: 600; }
+
+.dash-signal-pace.ontrack { color: var(--muted); }
+
+.dash-signal-quiet { color: var(--muted); }
+
+.dash-ctrl { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.dash-ctrl button, .sidebar-room-ctrl button{
+  padding: 8px 13px;
+  min-height: 36px;
+  font-size: 0.82rem;
+}
+
+.sidebar-room-ctrl button { min-width: 40px; }
+
+.teams-row {
+  display: flex;
+  gap: var(--s-2);
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: var(--s-3);
+}
+
+.teams-row input { flex: 1; padding: 9px 11px; font-size: 0.9rem; }
+
+#change-pass-input { padding: 9px 11px; margin-right: var(--s-2); }
+
+.anon-toggle {
+  display: inline-flex;
+  flex-wrap: wrap;              /* let the block hint drop to its own line */
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;         /* keep the short "Pseudonymise names…" label intact */
+}
+
+.anon-toggle input { width: auto; min-height: 0; }
+
+/* The explanatory hint is a full-width block under the toggle label — it must
+   wrap, not inherit the label's nowrap (otherwise the ~80-word note is forced
+   onto one ~800px line, overflowing the page width on a phone and zooming the
+   whole admin dashboard out → the Start button becomes untappable). */
+.anon-toggle .hint-block-small { flex-basis: 100%; white-space: normal; }
+
+.sidebar-room { padding: 10px 0; border-bottom: 1px solid var(--line); }
+
+.sidebar-room:last-child { border-bottom: none; }
+
+.sidebar-room.current { background: var(--nagoya-50); border-radius: var(--r-sm); padding: 10px 9px; }
+
+.sidebar-room.calling { background: var(--key-50); border-radius: var(--r-sm); padding: 10px 9px; }
+
+.sidebar-room-name {
+  background: none;
+  border: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+  color: var(--nagoya-700);
+  text-align: left;
+  padding: 0;
+}
+
+.sidebar-room.current .sidebar-room-name { color: var(--ink); cursor: default; }
+
+.sidebar-room-name:hover { text-decoration: underline; }
+
+.sidebar-room.current .sidebar-room-name:hover { text-decoration: none; }
+
+.sidebar-room-meta { font-size: 0.82rem; color: var(--muted); margin: 3px 0 6px; }
+
+.sidebar-room-ctrl { display: flex; gap: 6px; }
+
+#sidebar-dashboard-btn {
+  background: var(--ink);
+  color: #fff;
+  border: none;
+  border-radius: var(--r-sm);
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+#sidebar-dashboard-btn:hover { background: #000; }
+
+.dash-people {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.sidebar-room-name {
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+#admin-app:not(.hidden) {
+  animation: view-in var(--dur-view) var(--ease-out);
+}
+
+#sidebar-dashboard-btn:focus-visible {
+  outline-color: #fff;
+}
+
+/* --- facilitator +points control on the dashboard --- */
+.dash-score {
+  font-size: 0.82rem;
+  color: var(--nagoya-700);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.dash-points-panel {
+  flex-basis: 100%;
+  margin-top: var(--s-2);
+  padding: var(--s-3);
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.dash-points-panel .hint { flex-basis: 100%; margin: 0 0 4px; }
+
+/* --- session-code banner at the top of the admin dashboard ---
+   the facilitator can read the code aloud or copy it for late joiners without
+   having to remember it from the splash success screen --- */
+.admin-session-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(46,159,223,0.10), rgba(46,159,223,0.04));
+  border: 1.5px solid var(--primary);
+  border-radius: var(--r-md);
+}
+
+.admin-session-chip-label {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.admin-session-chip-code {
+  font-family: var(--font-mono);
+  font-size: clamp(1.2rem, 2.4vw, 1.6rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: var(--primary);
+  text-transform: uppercase;
+  user-select: all;
+  padding: 2px 4px;
+}
+
+.admin-session-chip-copy {
+  font: inherit;
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--primary);
+  background: var(--card);
+  border: 1.5px solid var(--primary);
+  padding: 6px 14px;
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: background var(--dur-base, .18s) var(--ease-out, ease),
+              color var(--dur-base, .18s) var(--ease-out, ease);
+}
+
+.admin-session-chip-copy:hover { background: var(--primary); color: var(--on-primary); }
+
+.admin-session-chip .copy-ok { color: var(--ok); font-weight: 700; font-size: 0.86rem; }
+
+/* --- "End session & download archive" admin button - calm, not alarming --- */
+#admin-close-btn {
+  background: var(--card); /* theme-aware: #fff broke dark (ivory-on-white) */
+  color: var(--ink);
+  border: 1.5px solid var(--line-strong);
+  box-shadow: none;
+}
+
+#admin-close-btn:hover:not(:disabled) {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+#admin-close-btn.done {
+  background: var(--ok-50, #e7f4ec);
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+#admin-close-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+.dash-ctrl button,.sidebar-room-ctrl button { min-height: 44px; }
+
+/* Admin dashboard preferences row — mute-alerts checkbox + Download
+   error log button. Small, low-visual-weight; sits just under the
+   stage-controls bar so it's discoverable without competing for
+   attention with the main admin actions. */
+.admin-prefs-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  color: var(--muted, #6a665d);
+}
+
+.admin-pref {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+/* --- modern admin toolbar (2026-07-21) --- */
+.admin-archive button,
+#admin-debrief-btn,
+.admin-overflow-toggle {
+  font: inherit;
+  font-weight: var(--fw-semibold);
+  font-size: var(--fs-1);
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-btn);
+  padding: 7px var(--s-4);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-soft),
+              background var(--dur-fast) var(--ease-soft);
+}
+.admin-archive button:hover,
+#admin-debrief-btn:hover,
+.admin-overflow-toggle:hover {
+  border-color: var(--primary);
+  background: var(--nagoya-50);
+}
+.admin-archive-label { color: var(--muted); font-size: var(--fs-1); }
+#admin-close-btn { border-radius: var(--r-btn); }
+.teams-row input { border-radius: var(--r-md); }
+
+/* session-links disclosure: one quiet row until a facilitator needs it */
+.admin-links-details { margin-top: var(--s-3); }
+.admin-links-details > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--fs-1);
+  font-weight: var(--fw-semibold);
+  padding: 6px var(--s-3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-btn);
+  background: var(--surface-sunk);
+}
+.admin-links-details > summary:hover { border-color: var(--muted); color: var(--ink); }
+.admin-links-details[open] > summary { margin-bottom: var(--s-2); }
