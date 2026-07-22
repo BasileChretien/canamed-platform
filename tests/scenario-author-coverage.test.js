@@ -366,6 +366,88 @@ test("Phase 3: empty pre/post tests are omitted; validate flags a bad question",
   assert.ok(errs.some((e) => /preTest\[0\] has no option marked correct/.test(e)));
 });
 
+test("Phase 3: characters are modeled — trio persona, string persona, module array, unknown key", () => {
+  const api = loadAuthor();
+  const scenario = {
+    id: "cast", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: [],
+    characters: [
+      // trio persona (like Lefebvre) + a future/unknown key that must survive
+      {
+        id: "patient", role: "patient", module: ["A"], present: "start",
+        name: T("Mr Trio", "M. Trio", "トリオ氏"), blurb: T("blurb", "", ""),
+        persona: T("You are Mr Trio.", "Vous êtes M. Trio.", "あなたはトリオ氏です。"),
+        example: T("Doctor: hi\nMr Trio: hello", "", ""), schemaVersion: 2
+      },
+      // string persona (like Tanaka) — English only, must stay a string
+      { id: "relative", role: "relative", module: ["A"], present: "start",
+        name: T("The Daughter", "", ""), persona: "You are the worried daughter." }
+    ]
+  };
+
+  const st = api.fromJson(scenario);
+  assert.strictEqual(st.characters.length, 2);
+  assert.strictEqual(st.characters[0].personaWasString, false);
+  assert.strictEqual(st.characters[1].personaWasString, true);
+  assert.strictEqual(st.characters[0].module, "A"); // array joined for editing
+  assert.ok(!("characters" in (st._extra || {})), "characters must be modeled, not captured in _extra");
+
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.characters[0].persona, scenario.characters[0].persona); // trio stays trio
+  assert.strictEqual(typeof out.characters[1].persona, "string");                    // string stays string
+  assert.strictEqual(out.characters[1].persona, "You are the worried daughter.");
+  assert.deepStrictEqual(out.characters[0].module, ["A"]);                           // array restored
+  assert.strictEqual(out.characters[0].schemaVersion, 2);                            // unknown key preserved
+  assert.ok(!("example" in out.characters[1]), "no example emitted when none authored");
+});
+
+test("Phase 3: real built-in characters round-trip faithfully (trio + string personas)", () => {
+  const api = loadAuthor();
+  const win = loadBuiltins();
+  const scenarios = win.CANAMED_SCENARIOS;
+  Object.keys(scenarios).forEach((id) => {
+    const orig = scenarios[id];
+    if (!Array.isArray(orig.characters) || orig.format === "branched") return;
+    const out = roundTrip(api, orig);
+    assert.deepStrictEqual(out.characters, orig.characters,
+      "scenario '" + id + "' characters must survive the round-trip unchanged");
+  });
+});
+
+test("Phase 3: validate() requires a patient character to have an id, name, and persona", () => {
+  const api = loadAuthor();
+  const bad = {
+    id: "novoice", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""), synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: [],
+    characters: [{ id: "", role: "patient", module: ["A"], name: T("", "", ""), persona: "" }]
+  };
+  const st = api.fromJson(bad);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /characters\[0\] is missing an id/.test(e)));
+  assert.ok(errs.some((e) => /characters\[0\] needs an English name/.test(e)));
+  assert.ok(errs.some((e) => /role=patient.*needs a persona/.test(e)));
+});
+
 test("the passthrough helpers are wired into (de)serialisation", () => {
   assert.match(JS, /function extraKeys\(/, "extraKeys helper must exist");
   assert.match(JS, /function mergeExtra\(/, "mergeExtra helper must exist");

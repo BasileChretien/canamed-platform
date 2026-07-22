@@ -229,6 +229,17 @@
         <button type="button" class="add-btn" data-add="posttest">+ Add post-test question</button>
       </fieldset>
 
+      <!-- ============= CHARACTERS (LLM chat) ============= -->
+      <fieldset class="author-section">
+        <legend>15. characters &mdash; LLM chat roles (optional)</legend>
+        <p class="field-hint">The Module&nbsp;A patient chat is driven by a character here. Add one
+          with <code>role: patient</code> and write its <em>persona</em> (the system prompt: who they
+          are, why they&rsquo;re here, how they behave). Leave empty to fall back to a neutral patient
+          synthesised from the case history. The server prepends an un-overridable safety guard.</p>
+        <div id="list-characters" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="characters">+ Add character</button>
+      </fieldset>
+
     </form>
 
     <!-- ============= Action bar ============= -->

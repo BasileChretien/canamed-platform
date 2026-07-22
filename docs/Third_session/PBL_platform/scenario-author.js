@@ -89,6 +89,28 @@
   function emptyTestQuestion() {
     return { id: "", q: emptyTrio(), options: [emptyTestOption(), emptyTestOption()], explanation: emptyTrio() };
   }
+  // A character's persona/example may be a translatable trio OR a plain English
+  // string (both occur in the built-ins). Model as a trio for editing, but
+  // remember which form it started in so the round-trip stays lossless.
+  function readFreeText(v) {
+    if (typeof v === "string") return { t: { en: v, fr: "", ja: "" }, wasString: true };
+    return { t: asTrio(v), wasString: false };
+  }
+  function writeFreeText(t, wasString) {
+    // A string-origin field with still-empty fr/ja stays a string; add a
+    // translation and it upgrades to a trio.
+    if (wasString && !(t.fr || t.ja)) return t.en || "";
+    return { en: t.en || "", fr: t.fr || "", ja: t.ja || "" };
+  }
+  function emptyCharacter() {
+    return {
+      id: "", role: "patient", module: "A", present: "start",
+      name: emptyTrio(), blurb: emptyTrio(),
+      persona: emptyTrio(), personaWasString: true,
+      example: emptyTrio(), exampleWasString: true,
+      _extra: {}
+    };
+  }
   // Branched-format editor state: English-only, FORWARD edges (option.next is a
   // target node id; "" = ends the case). buildBranchedScenario translates these
   // to the runtime's reverse unlockWhen.afterDecision gates.
@@ -127,6 +149,8 @@
       // in-platform knowledge checks (optional; empty by default)
       preTest: [],
       postTest: [],
+      // LLM chat characters (optional; the Module A patient persona lives here)
+      characters: [],
       synthId: "labs:0",
       synthPrereqs: ""
     };
@@ -535,6 +559,37 @@
     });
   }
 
+  function renderCharacters(listId, arr) {
+    var container = document.getElementById(listId);
+    container.innerHTML = "";
+    arr.forEach(function (ch, i) {
+      var shell = rowShell(listId + "[" + i + "]", function () { arr.splice(i, 1); renderAll(); });
+      var top = el("div", { class: "row-flex" });
+      function txtCell(lbl, key, ph) {
+        var cell = el("div", { class: "field-row" });
+        cell.appendChild(el("label", { class: "field-label", text: lbl }));
+        var inp = el("input", { type: "text", value: ch[key] || "", placeholder: ph || "" });
+        inp.addEventListener("input", function () { ch[key] = inp.value; refreshOutput(); });
+        cell.appendChild(inp);
+        return cell;
+      }
+      top.appendChild(txtCell("id", "id", "e.g. patient"));
+      top.appendChild(txtCell("role", "role", "patient / relative / colleague"));
+      top.appendChild(txtCell("module", "module", "A, B"));
+      top.appendChild(txtCell("present", "present", "e.g. start"));
+      shell.appendChild(top);
+      shell.appendChild(buildTrio("Name (shown in the chat header)", ch.name, refreshOutput));
+      shell.appendChild(buildTrio("Blurb (one-line description)", ch.blurb, refreshOutput));
+      shell.appendChild(el("p", { class: "field-hint",
+        text: "Persona = this character's system prompt for the Module A chat — who they are, why " +
+              "they're here, how they behave — written in the second person (“You are …”). The " +
+              "server prepends an un-overridable safety guard, so keep this to in-character content." }));
+      shell.appendChild(buildTrio("Persona (LLM system prompt)", ch.persona, refreshOutput, true));
+      shell.appendChild(buildTrio("Example exchange (optional few-shot; sets the tone)", ch.example, refreshOutput, true));
+      container.appendChild(shell);
+    });
+  }
+
   /* ------------------------------------------------------------------ */
   /* branched-format editor (English-only node graph)                   */
   /* ------------------------------------------------------------------ */
@@ -880,6 +935,8 @@
     // pre/post knowledge tests — optional; emit only when authored.
     if (STATE.preTest && STATE.preTest.length) scenarioOut.preTest = STATE.preTest.map(testQuestionToJson);
     if (STATE.postTest && STATE.postTest.length) scenarioOut.postTest = STATE.postTest.map(testQuestionToJson);
+    // LLM chat characters — optional; emit only when authored.
+    if (STATE.characters && STATE.characters.length) scenarioOut.characters = STATE.characters.map(characterToJson);
     return mergeExtra(scenarioOut, STATE._extra);
   }
 
@@ -923,6 +980,23 @@
       }),
       explanation: qq.explanation
     }, qq._extra);
+  }
+
+  /* Serialise one chat character, modeling id/role/module/present/name/blurb/
+     persona/example and preserving any unmodeled keys (e.g. a future
+     schemaVersion:2 secrets/contradicts) via the per-character passthrough. */
+  function characterToJson(ch) {
+    var out = { id: ch.id, role: ch.role };
+    var mods = parseStems(ch.module);
+    if (mods.length) out.module = mods;
+    if (ch.present) out.present = ch.present;
+    out.name = ch.name;
+    if (ch.blurb && (ch.blurb.en || ch.blurb.fr || ch.blurb.ja)) out.blurb = ch.blurb;
+    var pv = writeFreeText(ch.persona, ch.personaWasString);
+    if (pv && (typeof pv === "string" ? pv : (pv.en || pv.fr || pv.ja))) out.persona = pv;
+    var ev = writeFreeText(ch.example, ch.exampleWasString);
+    if (ev && (typeof ev === "string" ? ev : (ev.en || ev.fr || ev.ja))) out.example = ev;
+    return mergeExtra(out, ch._extra);
   }
 
   function refreshOutput() {
@@ -1128,6 +1202,17 @@
       });
     });
 
+    // chat characters (optional; the LLM patient persona lives here)
+    (json.characters || []).forEach(function (ch, i) {
+      var lbl = "characters[" + i + "]";
+      if (!ch.id) errs.push(lbl + " is missing an id.");
+      if (!ch.name || !ch.name.en) errs.push(lbl + " needs an English name.");
+      if (ch.role === "patient") {
+        var pOk = (typeof ch.persona === "string") ? ch.persona.trim() : (ch.persona && ch.persona.en);
+        if (!pOk) errs.push(lbl + " (role=patient) needs a persona (English) — it is the chat system prompt.");
+      }
+    });
+
     return errs;
   }
 
@@ -1311,14 +1396,15 @@
 
     // Top-level fields the standard editor has no UI for yet (persona,
     // preTest, postTest, and anything else) — preserve verbatim on round-trip.
-    // pre/post knowledge tests (optional) — now modeled, so they leave the
-    // top-level passthrough known-list.
+    // pre/post knowledge tests + chat characters (optional) — now modeled, so
+    // they leave the top-level passthrough known-list.
     s.preTest = (obj.preTest || []).map(testQuestionToState);
     s.postTest = (obj.postTest || []).map(testQuestionToState);
+    s.characters = (obj.characters || []).map(characterToState);
     s._extra = extraKeys(obj, [
       "id", "name", "summary", "moduleAName", "moduleBName",
       "case", "scoring", "penalties", "decisions", "synthId", "synthPrereqs",
-      "preTest", "postTest", "format"
+      "preTest", "postTest", "characters", "format"
     ]);
 
     return s;
@@ -1345,6 +1431,23 @@
       _extra: extraKeys(qq, ["id", "q", "options", "explanation"])
     };
   }
+  function characterToState(c) {
+    c = c || {};
+    var p = readFreeText(c.persona);
+    var e = readFreeText(c.example);
+    return {
+      id: c.id || "",
+      role: (typeof c.role === "string") ? c.role : "",
+      module: Array.isArray(c.module) ? c.module.join(", ")
+        : (typeof c.module === "string" ? c.module : ""),
+      present: (typeof c.present === "string") ? c.present : "",
+      name: asTrio(c.name),
+      blurb: asTrio(c.blurb),
+      persona: p.t, personaWasString: p.wasString,
+      example: e.t, exampleWasString: e.wasString,
+      _extra: extraKeys(c, ["id", "role", "module", "present", "name", "blurb", "persona", "example"])
+    };
+  }
 
   /* ------------------------------------------------------------------ */
   /* render orchestration                                               */
@@ -1369,6 +1472,7 @@
       renderDecisions();
       renderTests("list-pretest", STATE.preTest);
       renderTests("list-posttest", STATE.postTest);
+      renderCharacters("list-characters", STATE.characters);
     }
     refreshOutput();
   }
@@ -1420,6 +1524,7 @@
           case "decisions": STATE.decisions.push(emptyDecision()); break;
           case "pretest":   STATE.preTest.push(emptyTestQuestion()); break;
           case "posttest":  STATE.postTest.push(emptyTestQuestion()); break;
+          case "characters": STATE.characters.push(emptyCharacter()); break;
         }
         renderAll();
       });

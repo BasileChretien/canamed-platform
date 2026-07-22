@@ -118,4 +118,38 @@ test.describe("Scenario author — Phase 3 chat-scoring authoring", () => {
 
     expect(errors, "author page must edit the pre-test without JS errors").toEqual([]);
   });
+
+  test("a chat character (persona) authors into the JSON preview", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+
+    await page.goto("/scenario-author.html");
+    await expect(page.locator("#list-characters")).toBeAttached();
+
+    await page.locator('.add-btn[data-add="characters"]').click();
+    const chRow = page.locator("#list-characters > *").first();
+    // id / role / module / present are the first four text inputs of the row.
+    const texts = chRow.locator('input[type="text"]');
+    await texts.nth(0).fill("patient"); // id
+
+    // Name (first trio in the row) EN input.
+    const nameTrio = chRow.locator(".trio-block", {
+      has: page.locator(".trio-label", { hasText: "Name" })
+    }).first();
+    await nameTrio.locator("input").first().fill("Mrs Okafor");
+
+    // Persona (its own trio) EN textarea.
+    const personaTrio = chRow.locator(".trio-block", {
+      has: page.locator(".trio-label", { hasText: "Persona" })
+    }).first();
+    await personaTrio.locator("textarea").first().fill("You are Mrs Okafor, here about chest pain.");
+
+    const json = JSON.parse(await page.locator("#json-preview").inputValue());
+    const ch = json.characters.find((c) => c.id === "patient");
+    expect(ch.name.en).toBe("Mrs Okafor");
+    // EN-only persona stays a plain string (no fr/ja typed).
+    expect(ch.persona).toBe("You are Mrs Okafor, here about chest pain.");
+
+    expect(errors, "author page must edit characters without JS errors").toEqual([]);
+  });
 });
