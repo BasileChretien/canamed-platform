@@ -360,9 +360,23 @@ gainBlock +
      Heterogeneous tables don't fit one sheet, so the participant join (presence
      ⨝ tests ⨝ survey, by the per-room participant index) is the primary file
      and decisions ship alongside. No names; no new Firebase path. */
+  // A cell is a plain (optionally-signed) number: integer, decimal or
+  // scientific notation. Such a value can never be a dangerous spreadsheet
+  // formula (exfiltration payloads like =HYPERLINK/WEBSERVICE/DDE `cmd|…` all
+  // contain non-numeric characters), so it must be left intact — this keeps
+  // legitimate negatives such as a negative normGain readable as a number in R
+  // and Excel instead of being quoted into text.
+  const _PLAIN_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
   function _csvCell(v) {
     if (v == null) return "";
     let s = String(v);
+    // CSV formula-injection guard (OWASP): a cell that begins with a formula
+    // trigger (= + - @ tab CR) can execute when the facilitator opens the file
+    // in Excel/LibreOffice. Free-text participant answers, hypotheses and
+    // display names reach these cells, so they are untrusted — prefix such a
+    // cell with a single quote so the app treats it as literal text. Plain
+    // numbers are exempt (see _PLAIN_NUMBER) so numeric research columns survive.
+    if (/^[=+\-@\t\r]/.test(s) && !_PLAIN_NUMBER.test(s)) s = "'" + s;
     // Strip CR/LF so a free-text answer can't break the row; quote always so
     // commas, quotes and semicolons survive in any locale's Excel.
     s = s.replace(/\r?\n/g, " ").replace(/"/g, '""');
@@ -986,19 +1000,20 @@ esc(when.toLocaleString()) + "</p>" +
         }
         return;
       }
-      const esc = function (s) {
-        s = (s == null ? "" : String(s));
-        return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-      };
+      // Route through _csvCell (not a local escaper) so the roster gets the same
+      // CSV formula-injection guard as the other exports — name/university are
+      // participant-supplied and could start with a formula trigger.
       const lines = ["uid,email,name,university,recorded_at"];
       uids.forEach(function (uid) {
         const e = r[uid] || {};
         lines.push([
-          esc(uid), esc(e.email), esc(e.name), esc(e.university),
-          esc(typeof e.at === "number" ? new Date(e.at).toISOString() : "")
+          _csvCell(uid), _csvCell(e.email), _csvCell(e.name), _csvCell(e.university),
+          _csvCell(typeof e.at === "number" ? new Date(e.at).toISOString() : "")
         ].join(","));
       });
-      download(lines.join("\n"), "research_email_roster.csv", "text/csv");
+      // BOM so Excel reads UTF-8 (accented / 日本語 names) correctly on open,
+      // matching _toCSV.
+      download("﻿" + lines.join("\r\n") + "\r\n", "research_email_roster.csv", "text/csv");
       if (typeof toast === "function") {
         toast("Email roster downloaded (" + uids.length + " participant" +
               (uids.length === 1 ? "" : "s") + "). Identifiable — store securely.");
