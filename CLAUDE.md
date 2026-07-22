@@ -275,14 +275,27 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   read-verify (no rules). See `verifyAdminPassword`,
   `useAdminSecrets`, the create/recovery flows, and `tests/rules.test.js` +
   `tests-e2e/emulator/rules-smoke.spec.js` (FINDING-07).
-- `pool/$clientId/room` is intentionally writable by any authenticated user
+- ~~`pool/$clientId/room` is intentionally writable by any authenticated user
   (admin room-assignment + self-assign); residual room-griefing is accepted
-  until a cryptographic admin identity exists. A "self-assign only" rule can't
-  be the fix while admin assignment rides the same open path with no admin
-  identity. **Revisit when:** sessions become unfacilitated / self-serve or
-  scale beyond a supervised classroom — then build the cryptographic admin
-  identity and gate room-assignment behind it. Until then, accepted (a human
-  facilitator is present and the disruption is recoverable).
+  until a cryptographic admin identity exists.~~ **CLOSED — Phase 4a (2026-07-22).**
+  `pool/$clientId/room` is now restricted to SELF-assign (the client owns its
+  `clientMapping`) OR ADMIN-assign (creator `creatorUid == auth.uid` or a fresh
+  password-proof at `adminSecrets/<code>/proof/<uid>`), in both the `sessions/`
+  and `orgs/` trees. Same Phase-4a pass bound 19 other admin-write nodes
+  (`started`, `roomCount`, `summary`, `mail`, `score/manual`, `_adminPresence`,
+  the three links, org `audit`) to that same identity predicate. Validated by
+  `tests-e2e/emulator/rules-smoke.spec.js` ("admin-write nodes + pool/room are
+  creator/proof-bound (Phase 4a)") + structural asserts in
+  `tests/round3-clientmapping.test.js`.
+  - **Deferred:** `rooms/$roomId/stage` + `stageAt` stay at the
+    `adminPasswordHash` existence gate (NOT identity-bound). `setRoomStage` uses
+    an RTDB `.transaction()`, which does a client-side rule pre-check against the
+    local cache; the identity predicate references the unreadable
+    `adminSecrets/proof` node, so a legitimate admin's stage advance is rejected
+    client-side before it reaches the server. Identity-binding these needs an
+    app-level `transaction()`→`set()` change in `setRoomStage` (script.js) — a
+    separate, PWA-bumped, LOCAL-e2e-tested change. Stage griefing is recoverable
+    (advance back), unlike the closed/room-assignment vectors now bound.
 - Module A `scoring/awarded/<famId>` is client-writable (write-once, bounded
   points, requires uidMembers membership). A teammate with dev tools can
   still pre-award their own room — accepted because this is collaborative
