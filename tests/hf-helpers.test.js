@@ -7,7 +7,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const {
-  SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang, MAX_BODY_MESSAGES
+  SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang, MAX_BODY_MESSAGES, dayKey
 } = require("../docs/Third_session/PBL_platform/functions/lib/hf-helpers");
 
 test("isAllowedHfUrl: allows huggingface.co + subdomains, the default router URL", () => {
@@ -102,4 +102,15 @@ test("normLang: only en/fr/ja, everything else -> en", () => {
   assert.strictEqual(normLang(""), "en");
   assert.strictEqual(normLang(null), "en");
   assert.strictEqual(normLang(undefined), "en");
+});
+
+// Phase 4b — dayKey backs the per-day cost/rate counters. Must be a stable UTC
+// yyyymmdd integer within a day and roll over exactly at UTC midnight, so a
+// counter never spans two days nor resets mid-day.
+test("dayKey: UTC yyyymmdd integer, stable within a day, rolls over at UTC midnight", () => {
+  assert.strictEqual(dayKey(Date.UTC(2026, 6, 22, 13, 0, 0)), 20260722);
+  assert.strictEqual(dayKey(Date.UTC(2026, 6, 22, 0, 0, 1)), 20260722);
+  assert.strictEqual(dayKey(Date.UTC(2026, 6, 22, 23, 59, 59)), 20260722);
+  assert.strictEqual(dayKey(Date.UTC(2026, 6, 23, 0, 0, 0)), 20260723); // next day
+  assert.strictEqual(dayKey(Date.UTC(2026, 0, 5, 12, 0, 0)), 20260105); // zero-padded m/d
 });
