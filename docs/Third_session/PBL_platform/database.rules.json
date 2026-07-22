@@ -141,7 +141,7 @@
         "scenarioCustomJson": {
           ".read": "auth != null",
           ".write": "auth != null && !data.exists()",
-          ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32000)"
+          ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 262144)"
         },
         "scenarioRef": {
           ".read": "auth != null",
@@ -583,7 +583,7 @@
             "scenarioCustomJson": {
               ".read": "auth != null",
               ".write": "auth != null && !data.exists()",
-              ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 32000)"
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 262144)"
             },
             "scenarioRef": {
               ".read": "auth != null",

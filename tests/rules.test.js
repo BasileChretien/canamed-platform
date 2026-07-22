@@ -1049,3 +1049,24 @@ test("rules: session scenarioRef is write-once and validates {ownerUid, scenario
   const orgNode = rules.rules.orgs.$orgSlug.sessions.$sessionId.scenarioRef;
   assert.ok(orgNode, "/orgs/$orgSlug/sessions/$sessionId/scenarioRef must mirror the legacy path");
 });
+
+test("rules: session scenarioCustomJson caps at 256 KB in both trees (holds a scenario snapshot)", () => {
+  // Phase 1 (integrity): a session created from an authored scenarioRef stores
+  // a resolved SNAPSHOT of that scenario inline as scenarioCustomJson, so the
+  // running session is pinned to the version it started with. A full i18n
+  // scenario exceeds the old 32 KB cap, so the cap must match bodyJson (256 KB)
+  // in both the legacy sessions/ tree and the org-scoped mirror.
+  [
+    rules.rules.sessions.$sessionId.scenarioCustomJson,
+    rules.rules.orgs.$orgSlug.sessions.$sessionId.scenarioCustomJson
+  ].forEach((node, i) => {
+    const where = i === 0 ? "sessions/" : "orgs/";
+    assert.ok(node && node[".validate"], where + "scenarioCustomJson must validate");
+    assert.match(node[".validate"], /\.length <= 262144/,
+      where + "scenarioCustomJson must be capped at 256 KB (matching bodyJson)");
+    assert.doesNotMatch(node[".validate"], /<= 32000/,
+      where + "scenarioCustomJson must no longer carry the old 32 KB cap");
+    assert.ok(node[".write"].includes("!data.exists()"),
+      where + "scenarioCustomJson must stay write-once");
+  });
+});

@@ -164,12 +164,16 @@ Matches: /^[0-9a-f]{64}$/ (legacy PBKDF2v1, hex-encoded)
 
 **scenarioCustomJson:**
 ```
-"string, 1–32000 chars (JSON-encoded CASE/SCORING/PENALTIES/DECISIONS)"
+"string, 1–262144 chars (JSON-encoded CASE/SCORING/PENALTIES/DECISIONS)"
 ```
 
 **Notes:**
 - Immutable: set at session creation, not changeable by admin mid-session
 - scenarioCustomJson is a stringified JSON object (validated by validateScenarioJson() in script.js before write)
+- Cap is 262144 (256 KB), matching scenarios/$uid/$id/bodyJson — a session created
+  from an authored scenarioRef stores a resolved **snapshot** of that scenario here
+  at creation time, pinning the session to the version it started with (see
+  createSession() in script.js); the live scenarioRef path remains as a fallback.
 - Both can be null (use defaults from case-content.js)
 
 ### sessions/{sessionCode}/started, closed

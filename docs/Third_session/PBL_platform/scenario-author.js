@@ -665,41 +665,67 @@
       .filter(function (s) { return s.length > 0; });
   }
 
+  /* Passthrough bag — round-trip fidelity for fields the standard editor does
+     NOT yet model. Loading a built-in scenario, tweaking it, and re-exporting
+     must not silently DROP fields the UI has no control for. extraKeys()
+     captures every key of a parsed sub-object that isn't in the modeled set;
+     mergeExtra() re-emits those captured keys on export WITHOUT clobbering the
+     fields the editor did set. Covers: item group/cite/narratorOnly, decision
+     unlockWhen, option branch.reveal, scoring-family unlocks, whole-object
+     scoring.moduleA_questions / moduleA_question_penalties, and top-level
+     persona / preTest / postTest (Phase 3 will add real UI for these). */
+  function extraKeys(obj, known) {
+    var out = {};
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) return out;
+    Object.keys(obj).forEach(function (k) {
+      if (known.indexOf(k) === -1) out[k] = obj[k];
+    });
+    return out;
+  }
+  function mergeExtra(base, extra) {
+    if (extra && typeof extra === "object") {
+      Object.keys(extra).forEach(function (k) {
+        if (!(k in base)) base[k] = extra[k];
+      });
+    }
+    return base;
+  }
+
   function toScenarioJson() {
     if (isBranched()) return toBranchedJson();
     var m = STATE.meta;
     var caseObj = {
-      history: STATE.history.map(function (r) { return { q: r.q, a: r.a }; }),
-      exam:    STATE.exam.map(function (r) { return { q: r.q, a: r.a }; }),
+      history: STATE.history.map(function (r) { return mergeExtra({ q: r.q, a: r.a }, r._extra); }),
+      exam:    STATE.exam.map(function (r) { return mergeExtra({ q: r.q, a: r.a }, r._extra); }),
       labs:    STATE.labs.map(function (r) {
         var out = { q: r.q };
         if (r.key) out.key = true;
         out.a = r.a;
-        return out;
+        return mergeExtra(out, r._extra);
       }),
       prompts: STATE.prompts.map(function (p) { return p; })
     };
-    var scoring = {
+    var scoring = mergeExtra({
       moduleA: STATE.scoringA.map(scoringRowToJson),
       moduleB: STATE.scoringB.map(scoringRowToJson)
-    };
+    }, STATE._scoringExtra);
     var penalties = STATE.penalties.map(function (p) {
-      return {
+      return mergeExtra({
         id: p.id, item: p.item, points: p.points,
         title: p.title, why: p.why
-      };
+      }, p._extra);
     });
     var decisions = STATE.decisions.map(function (d) {
-      return {
+      return mergeExtra({
         id: d.id, module: d.module, points: d.points, penalty: d.penalty,
         prompt: d.prompt,
         options: d.options.map(function (o) {
-          return { text: o.text, correct: !!o.correct, why: o.why };
+          return mergeExtra({ text: o.text, correct: !!o.correct, why: o.why }, o._extra);
         })
-      };
+      }, d._extra);
     });
 
-    return {
+    return mergeExtra({
       id: m.id,
       name: m.name,
       summary: m.summary,
@@ -711,7 +737,7 @@
       scoring: scoring,
       penalties: penalties,
       decisions: decisions
-    };
+    }, STATE._extra);
   }
 
   function scoringRowToJson(r) {
@@ -721,7 +747,7 @@
     } else {
       out.any = parseStems(r.any);
     }
-    return out;
+    return mergeExtra(out, r._extra);
   }
 
   function refreshOutput() {
@@ -988,17 +1014,17 @@
 
     var c = obj.case || {};
     s.history = (c.history || []).map(function (r) {
-      return { q: asTrio(r.q), a: asTrio(r.a) };
+      return { q: asTrio(r.q), a: asTrio(r.a), _extra: extraKeys(r, ["q", "a"]) };
     });
     if (s.history.length === 0) s.history = [emptyHistoryRow()];
 
     s.exam = (c.exam || []).map(function (r) {
-      return { q: asTrio(r.q), a: asTrio(r.a) };
+      return { q: asTrio(r.q), a: asTrio(r.a), _extra: extraKeys(r, ["q", "a"]) };
     });
     if (s.exam.length === 0) s.exam = [emptyHistoryRow()];
 
     s.labs = (c.labs || []).map(function (r) {
-      return { q: asTrio(r.q), a: asTrio(r.a), key: !!r.key };
+      return { q: asTrio(r.q), a: asTrio(r.a), key: !!r.key, _extra: extraKeys(r, ["q", "a", "key"]) };
     });
     if (s.labs.length === 0) {
       var lr = emptyLabRow(); lr.key = true; s.labs = [lr];
@@ -1012,11 +1038,15 @@
     s.scoringB = (sc.moduleB || []).map(scoringJsonToState);
     if (s.scoringA.length === 0) s.scoringA = [emptyScoringRow()];
     if (s.scoringB.length === 0) s.scoringB = [emptyScoringRow()];
+    // Whole scoring families the standard editor has no UI for yet
+    // (moduleA_questions, moduleA_question_penalties, …) — preserve verbatim.
+    s._scoringExtra = extraKeys(sc, ["moduleA", "moduleB"]);
 
     s.penalties = (obj.penalties || []).map(function (p) {
       return {
         id: p.id || "", item: p.item || "", points: p.points || 0,
-        title: asTrio(p.title), why: asTrio(p.why)
+        title: asTrio(p.title), why: asTrio(p.why),
+        _extra: extraKeys(p, ["id", "item", "points", "title", "why"])
       };
     });
     if (s.penalties.length === 0) s.penalties = [emptyPenaltyRow()];
@@ -1029,8 +1059,12 @@
         penalty: d.penalty || 0,
         prompt: asTrio(d.prompt),
         options: (d.options || []).map(function (o) {
-          return { text: asTrio(o.text), correct: !!o.correct, why: asTrio(o.why) };
-        })
+          return {
+            text: asTrio(o.text), correct: !!o.correct, why: asTrio(o.why),
+            _extra: extraKeys(o, ["text", "correct", "why"])
+          };
+        }),
+        _extra: extraKeys(d, ["id", "module", "points", "penalty", "prompt", "options"])
       };
     });
     if (s.decisions.length === 0) s.decisions = [emptyDecision()];
@@ -1040,6 +1074,14 @@
       ? obj.synthPrereqs.join(", ")
       : (obj.synthPrereqs || "");
 
+    // Top-level fields the standard editor has no UI for yet (persona,
+    // preTest, postTest, and anything else) — preserve verbatim on round-trip.
+    s._extra = extraKeys(obj, [
+      "id", "name", "summary", "moduleAName", "moduleBName",
+      "case", "scoring", "penalties", "decisions", "synthId", "synthPrereqs",
+      "format"
+    ]);
+
     return s;
   }
   function scoringJsonToState(r) {
@@ -1047,7 +1089,8 @@
       id: r.id || "", points: r.points || 0,
       label: asTrio(r.label),
       any: Array.isArray(r.any) ? r.any.join(", ") : "",
-      cohorts: !!r.cohorts
+      cohorts: !!r.cohorts,
+      _extra: extraKeys(r, ["id", "points", "label", "any", "cohorts"])
     };
   }
 

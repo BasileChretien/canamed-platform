@@ -265,7 +265,7 @@ content pack. When a facilitator creates a session, the splash offers:
   case, scoring, penalties and decisions. A *"Load template"* button starts
   from the current built-in so the facilitator edits rather than writes from
   zero. The custom JSON is validated and stored on the session as
-  `sessions/{code}/scenarioCustomJson` (max 32 KB).
+  `sessions/{code}/scenarioCustomJson` (max 256 KB).
 
 The choice is stored on the session itself (`scenarioId` or
 `scenarioCustomJson`), and the engine reads it on join and swaps the global
