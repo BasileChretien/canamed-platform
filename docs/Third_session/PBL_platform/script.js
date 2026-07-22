@@ -12068,7 +12068,7 @@ function saveLastWorkshop(patch) {
     delete merged.password;
     delete merged.adminPasswordHash;
     // Security-audit finding: customJson (the full custom-scenario JSON
-    // blob, up to 32 KB) was being persisted across facilitators on
+    // blob, up to 256 KB) was being persisted across facilitators on
     // shared lab machines. A facilitator who clicked "Clone last
     // workshop" inherited the previous facilitator's custom case
     // content. Not a credential leak, but a data-integrity issue.
@@ -13430,13 +13430,23 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
   // session code, so do it once here rather than inside each retry.
   let snapshotPromise = Promise.resolve(null);
   if (!customJson && scenarioRef && scenarioRef.ownerUid && scenarioRef.scenarioId) {
-    snapshotPromise = loadScenarioByRef(scenarioRef)
+    const resolveBody = loadScenarioByRef(scenarioRef)
       .then((body) => {
         if (!body) return null;
         const s = JSON.stringify(body);
         return (s && s.length > 0 && s.length <= 262144) ? s : null;
       })
       .catch(() => null);
+    // Race the resolve against a timeout: `.catch()` only handles rejection, but
+    // a hung `.once("value")` (dropped realtime connection) would otherwise leave
+    // snapshotPromise pending forever and block session creation. On timeout we
+    // resolve null → fall back to the live ref, mirroring sessionStatus().
+    let snapTimer;
+    const snapTimeout = new Promise((resolve) => {
+      snapTimer = setTimeout(() => resolve(null), SESSION_STATUS_TIMEOUT_MS);
+    });
+    snapshotPromise = Promise.race([resolveBody, snapTimeout])
+      .then((r) => { clearTimeout(snapTimer); return r; });
   }
   return snapshotPromise.then((snapshotJson) => {
   const tryOne = (tries) => {
