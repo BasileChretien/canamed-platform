@@ -290,8 +290,10 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   hard-deleting: (1) `moderators/$uid` — admin-only allowlist (`.read:false`,
   `.write:false`; set via Console/admin-SDK; rules reference it via `root.child`).
   (2) `reports/scenarios/$shareId/$reporterUid` — write-OWN (`$reporterUid ==
-  auth.uid`) + write-ONCE (`!data.exists()`) + `.read:false` + `$other:false`
-  sentinel; moderators review reports out-of-band via the admin SDK. (3)
+  auth.uid`) + write-ONCE (`!data.exists()`) + must target an EXISTING scenario
+  (`sharedScenarios/$shareId.exists()`, bounds the queue — no fabricated-id
+  storage pollution) + `.read:false` + `$other:false` sentinel; moderators review
+  reports out-of-band via the admin SDK. (3)
   `moderation/removed/$shareId` — a tombstone writable ONLY by a moderator
   (`moderators/<uid> == true`), `.read:auth!=null` so clients can filter. It lives
   OUTSIDE `sharedScenarios` on purpose, so a scenario owner re-publishing their

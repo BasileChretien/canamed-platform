@@ -734,17 +734,27 @@ test("rules: Phase 4d moderation — report write-own/once; tombstone moderator-
   await page.goto("/");
   const uidA = await waitForUid(page);
   const ts = Date.now().toString(36);
-  const sid = `sc-${ts}`;
+  const sid = `sc-${ts}`, sid2 = `sc2-${ts}`;
 
-  // A user can file ONE report on a scenario, under their own uid.
+  // A report may only target an EXISTING shared scenario — publish two first
+  // (uidA is the owner). This also bounds the moderation queue: reports for
+  // fabricated share ids are rejected (see the nonexistent-target case below).
+  const scenario = { ownerUid: uidA, scenarioId: "s1", meta: { name: "T", updatedAt: Date.now() }, bodyJson: "{}" };
+  expect(await tryWrite(page, `sharedScenarios/${sid}`, scenario)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sharedScenarios/${sid2}`, scenario)).toBe("ALLOWED");
+
+  // A user can file ONE report on that scenario, under their own uid.
   expect(await tryWrite(page, `reports/scenarios/${sid}/${uidA}`, { at: Date.now(), reason: "spam" })).toBe("ALLOWED");
   // …cannot overwrite their own report (write-once — no silent edit/retract).
   expect(String(await tryWrite(page, `reports/scenarios/${sid}/${uidA}`, { at: Date.now(), reason: "changed" }))).toMatch(/denied/i);
   // …cannot file under ANOTHER uid (write-own) — this also covers a peer trying to
   // spoof/overwrite someone else's report slot.
   expect(String(await tryWrite(page, `reports/scenarios/${sid}/not-my-uid`, { at: Date.now() }))).toMatch(/denied/i);
-  // …and unknown keys are rejected ($other sentinel).
-  expect(String(await tryWrite(page, `reports/scenarios/${sid}-x/${uidA}`, { at: Date.now(), evil: 1 }))).toMatch(/denied/i);
+  // …cannot include unknown keys, even on a valid target+uid ($other sentinel).
+  expect(String(await tryWrite(page, `reports/scenarios/${sid2}/${uidA}`, { at: Date.now(), evil: 1 }))).toMatch(/denied/i);
+  // …and cannot report a NONEXISTENT scenario (no unbounded queue/storage pollution
+  // via fabricated share ids).
+  expect(String(await tryWrite(page, `reports/scenarios/nope-${ts}/${uidA}`, { at: Date.now() }))).toMatch(/denied/i);
 
   // Tombstone: a non-moderator cannot mark a scenario removed.
   expect(String(await tryWrite(page, `moderation/removed/${sid}`, true))).toMatch(/denied/i);
@@ -754,6 +764,13 @@ test("rules: Phase 4d moderation — report write-own/once; tombstone moderator-
   try {
     await adminPut(`moderators/${uidA}`, true);
     expect(await tryWrite(page, `moderation/removed/${sid}`, true)).toBe("ALLOWED");
+    // …and the tombstone is READABLE by any authed client — that is the whole
+    // point of moderation/removed (the picker reads it to filter removed scenarios).
+    const readBack = await page.evaluate(async (p) => {
+      try { const s = await firebase.database().ref(p).get(); return s.val(); }
+      catch (e) { return "DENIED:" + ((e && (e.code || e.message)) || e); }
+    }, `moderation/removed/${sid}`);
+    expect(readBack).toBe(true);
   } finally {
     await adminPut(`moderators/${uidA}`, null);
   }

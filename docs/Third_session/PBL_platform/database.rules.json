@@ -548,7 +548,7 @@
       "scenarios": {
         "$shareId": {
           "$reporterUid": {
-            ".write": "auth != null && $reporterUid == auth.uid && !data.exists()",
+            ".write": "auth != null && $reporterUid == auth.uid && !data.exists() && root.child('sharedScenarios').child($shareId).exists()",
             ".validate": "newData.hasChildren(['at'])",
             "at":     { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 86400000" },
             "reason": { ".validate": "newData.isString() && newData.val().length <= 500" },

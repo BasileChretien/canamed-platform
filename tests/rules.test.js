@@ -1150,6 +1150,8 @@ test("rules: Phase 4d moderation — reports write-own/once, moderators admin-on
   const rep = r.reports.scenarios.$shareId.$reporterUid[".write"];
   assert.match(rep, /\$reporterUid == auth\.uid/, "a report may only be filed under the reporter's own uid: " + rep);
   assert.match(rep, /!data\.exists\(\)/, "a report is write-once (no edit/retract by overwrite): " + rep);
+  assert.match(rep, /sharedScenarios'\)\.child\(\$shareId\)\.exists\(\)/,
+    "a report must target an EXISTING shared scenario (no unbounded queue pollution via fabricated ids): " + rep);
   assert.strictEqual(r.reports.scenarios.$shareId.$reporterUid.$other[".validate"], false,
     "reports must reject unknown keys");
 
