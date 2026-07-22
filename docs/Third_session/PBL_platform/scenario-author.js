@@ -70,18 +70,45 @@
   function emptyHistoryRow() { return { q: emptyTrio(), a: emptyTrio() }; }
   function emptyLabRow() { return { q: emptyTrio(), a: emptyTrio(), key: false }; }
   function emptyScoringRow() {
-    return { id: "", points: 5, label: emptyTrio(), any: "", cohorts: false };
+    return { id: "", points: 5, label: emptyTrio(), any: "", cohorts: false, unlocks: "" };
   }
   function emptyPenaltyRow() {
     return { id: "", item: "", points: 5, title: emptyTrio(), why: emptyTrio() };
   }
   function emptyOption() {
-    return { text: emptyTrio(), correct: false, why: emptyTrio() };
+    return { text: emptyTrio(), correct: false, why: emptyTrio(), branch: null };
   }
   function emptyDecision() {
     return {
       id: "", module: "A", prompt: emptyTrio(), points: 10, penalty: 5,
+      unlockWhen: null,
       options: [emptyOption(), emptyOption()]
+    };
+  }
+  function emptyTestOption() { return { text: emptyTrio(), correct: false }; }
+  function emptyTestQuestion() {
+    return { id: "", q: emptyTrio(), options: [emptyTestOption(), emptyTestOption()], explanation: emptyTrio() };
+  }
+  // A character's persona/example may be a translatable trio OR a plain English
+  // string (both occur in the built-ins). Model as a trio for editing, but
+  // remember which form it started in so the round-trip stays lossless.
+  function readFreeText(v) {
+    if (typeof v === "string") return { t: { en: v, fr: "", ja: "" }, wasString: true };
+    return { t: asTrio(v), wasString: false };
+  }
+  function writeFreeText(t, wasString) {
+    // A string-origin field with still-empty fr/ja stays a string; add a
+    // translation and it upgrades to a trio.
+    if (wasString && !(t.fr || t.ja)) return t.en || "";
+    return { en: t.en || "", fr: t.fr || "", ja: t.ja || "" };
+  }
+  function emptyCharacter() {
+    return {
+      id: "", role: "patient", module: "A", present: "start",
+      name: emptyTrio(), blurb: emptyTrio(),
+      persona: emptyTrio(), personaWasString: true,
+      example: emptyTrio(), exampleWasString: true,
+      _extra: {}
     };
   }
   // Branched-format editor state: English-only, FORWARD edges (option.next is a
@@ -111,8 +138,19 @@
       prompts: [emptyTrio()],
       scoringA: [emptyScoringRow()],
       scoringB: [emptyScoringRow()],
+      // Module A LLM-chat consultation scoring (optional; empty by default).
+      // moduleA_questions = points earned for good questions; the _penalties
+      // variant = deductions for harmful/opioid-seeking prompts. Same row shape
+      // as scoringA/B (id/points/label/any/unlocks).
+      scoringAQ: [],
+      scoringAQP: [],
       penalties: [emptyPenaltyRow()],
       decisions: [emptyDecision()],
+      // in-platform knowledge checks (optional; empty by default)
+      preTest: [],
+      postTest: [],
+      // LLM chat characters (optional; the Module A patient persona lives here)
+      characters: [],
       synthId: "labs:0",
       synthPrereqs: ""
     };
@@ -276,6 +314,17 @@
               "case-insensitive, word-prefix). Leave blank if this row uses cohorts instead." }));
       shell.appendChild(anyRow);
 
+      // unlocks — optional reveal-id opened when this family is earned
+      var unlRow = el("div", { class: "field-row" });
+      unlRow.appendChild(el("label", { class: "field-label", text: "unlocks (optional)" }));
+      var unlIn = el("input", { type: "text", value: row.unlocks || "",
+        placeholder: "e.g. labs:0" });
+      unlIn.addEventListener("input", function () { row.unlocks = unlIn.value; refreshOutput(); });
+      unlRow.appendChild(unlIn);
+      unlRow.appendChild(el("p", { class: "field-hint",
+        text: "Optional. When this family is scored, this reveal-id (group:index) is unlocked. Leave blank for none." }));
+      shell.appendChild(unlRow);
+
       container.appendChild(shell);
     });
   }
@@ -371,6 +420,47 @@
       shell.appendChild(top);
       shell.appendChild(buildTrio("Prompt (the question put to the team)", dec.prompt, refreshOutput, true));
 
+      // unlockWhen gate (optional) — leave all blank for "always available".
+      var uwWrap = el("div", { class: "unlockwhen-row" });
+      uwWrap.appendChild(el("p", { class: "field-hint",
+        text: "unlockWhen (optional) — gate this decision. Leave blank for always available. " +
+              "Counts require at least that many hypotheses / revealed history / revealed exam " +
+              "items; afterDecision waits until another decision id is committed." }));
+      var uwGrid = el("div", { class: "row-flex" });
+      function uwNumCell(key, lbl) {
+        var cell = el("div", { class: "field-row narrow" });
+        cell.appendChild(el("label", { class: "field-label", text: lbl }));
+        var cur = (dec.unlockWhen && typeof dec.unlockWhen[key] === "number") ? dec.unlockWhen[key] : "";
+        var inp = el("input", { type: "number", value: cur, min: "0" });
+        inp.addEventListener("input", function () {
+          if (!dec.unlockWhen) dec.unlockWhen = {};
+          var n = parseInt(inp.value, 10);
+          if (inp.value !== "" && !isNaN(n) && n > 0) dec.unlockWhen[key] = n;
+          else delete dec.unlockWhen[key];
+          refreshOutput();
+        });
+        cell.appendChild(inp);
+        return cell;
+      }
+      uwGrid.appendChild(uwNumCell("hypotheses", "min hypotheses"));
+      uwGrid.appendChild(uwNumCell("historyRevealed", "min history"));
+      uwGrid.appendChild(uwNumCell("examRevealed", "min exam"));
+      uwWrap.appendChild(uwGrid);
+      var afCell = el("div", { class: "field-row" });
+      afCell.appendChild(el("label", { class: "field-label", text: "afterDecision (decision id)" }));
+      var afIn = el("input", { type: "text",
+        value: (dec.unlockWhen && dec.unlockWhen.afterDecision) || "",
+        placeholder: "e.g. dec_prognosis" });
+      afIn.addEventListener("input", function () {
+        if (!dec.unlockWhen) dec.unlockWhen = {};
+        if (afIn.value.trim()) dec.unlockWhen.afterDecision = afIn.value.trim();
+        else delete dec.unlockWhen.afterDecision;
+        refreshOutput();
+      });
+      afCell.appendChild(afIn);
+      uwWrap.appendChild(afCell);
+      shell.appendChild(uwWrap);
+
       // options
       var optsWrap = el("div", { class: "decision-options" });
       optsWrap.appendChild(el("p", { class: "field-hint",
@@ -400,6 +490,11 @@
 
         optRow.appendChild(buildTrio("Option text", opt.text, refreshOutput));
         optRow.appendChild(buildTrio("Why (shown after the vote)", opt.why, refreshOutput, true));
+        // branch.reveal — optional "what happens next" narrative. Ensure a
+        // mutable trio for editing; an empty one is dropped on export.
+        if (!opt.branch || typeof opt.branch !== "object") opt.branch = {};
+        if (!opt.branch.reveal || typeof opt.branch.reveal !== "object") opt.branch.reveal = emptyTrio();
+        optRow.appendChild(buildTrio("Branch reveal — what happens next (optional)", opt.branch.reveal, refreshOutput, true));
         optsList.appendChild(optRow);
       });
       optsWrap.appendChild(optsList);
@@ -411,6 +506,86 @@
       optsWrap.appendChild(addOpt);
       shell.appendChild(optsWrap);
 
+      container.appendChild(shell);
+    });
+  }
+
+  function renderTests(listId, arr) {
+    var container = document.getElementById(listId);
+    container.innerHTML = "";
+    arr.forEach(function (qq, i) {
+      var shell = rowShell(listId + "[" + i + "]", function () { arr.splice(i, 1); renderAll(); });
+
+      var idCell = el("div", { class: "field-row" });
+      idCell.appendChild(el("label", { class: "field-label", text: "id" }));
+      var idIn = el("input", { type: "text", value: qq.id });
+      idIn.addEventListener("input", function () { qq.id = idIn.value; refreshOutput(); });
+      idCell.appendChild(idIn);
+      shell.appendChild(idCell);
+
+      shell.appendChild(buildTrio("Question", qq.q, refreshOutput, true));
+
+      var optsWrap = el("div", { class: "decision-options" });
+      optsWrap.appendChild(el("p", { class: "field-hint", text: "Answer options — tick the correct one(s)." }));
+      var optsList = el("div", { class: "decision-options-list" });
+      qq.options.forEach(function (o, j) {
+        var optRow = el("div", { class: "opt-row" });
+        var oh = el("div", { class: "row-header" });
+        oh.appendChild(el("span", { class: "row-title", text: "option[" + j + "]" }));
+        var rm = el("button", { type: "button", class: "remove-btn", text: "× remove" });
+        rm.addEventListener("click", function () { qq.options.splice(j, 1); renderAll(); });
+        oh.appendChild(rm);
+        optRow.appendChild(oh);
+
+        var corrCell = el("div", { class: "check-cell" });
+        var corrCb = el("input", { type: "checkbox", id: listId + "-corr-" + i + "-" + j, checked: !!o.correct });
+        corrCb.addEventListener("change", function () { o.correct = corrCb.checked; refreshOutput(); });
+        corrCell.appendChild(corrCb);
+        corrCell.appendChild(el("label", { htmlFor: listId + "-corr-" + i + "-" + j, text: "correct" }));
+        optRow.appendChild(corrCell);
+
+        optRow.appendChild(buildTrio("Option text", o.text, refreshOutput));
+        optsList.appendChild(optRow);
+      });
+      optsWrap.appendChild(optsList);
+      var addOpt = el("button", { type: "button", class: "add-btn", text: "+ Add option" });
+      addOpt.addEventListener("click", function () { qq.options.push(emptyTestOption()); renderAll(); });
+      optsWrap.appendChild(addOpt);
+      shell.appendChild(optsWrap);
+
+      shell.appendChild(buildTrio("Explanation (shown after answering)", qq.explanation, refreshOutput, true));
+
+      container.appendChild(shell);
+    });
+  }
+
+  function renderCharacters(listId, arr) {
+    var container = document.getElementById(listId);
+    container.innerHTML = "";
+    arr.forEach(function (ch, i) {
+      var shell = rowShell(listId + "[" + i + "]", function () { arr.splice(i, 1); renderAll(); });
+      var top = el("div", { class: "row-flex" });
+      function txtCell(lbl, key, ph) {
+        var cell = el("div", { class: "field-row" });
+        cell.appendChild(el("label", { class: "field-label", text: lbl }));
+        var inp = el("input", { type: "text", value: ch[key] || "", placeholder: ph || "" });
+        inp.addEventListener("input", function () { ch[key] = inp.value; refreshOutput(); });
+        cell.appendChild(inp);
+        return cell;
+      }
+      top.appendChild(txtCell("id", "id", "e.g. patient"));
+      top.appendChild(txtCell("role", "role", "patient / relative / colleague"));
+      top.appendChild(txtCell("module", "module", "A, B"));
+      top.appendChild(txtCell("present", "present", "e.g. start"));
+      shell.appendChild(top);
+      shell.appendChild(buildTrio("Name (shown in the chat header)", ch.name, refreshOutput));
+      shell.appendChild(buildTrio("Blurb (one-line description)", ch.blurb, refreshOutput));
+      shell.appendChild(el("p", { class: "field-hint",
+        text: "Persona = this character's system prompt for the Module A chat — who they are, why " +
+              "they're here, how they behave — written in the second person (“You are …”). The " +
+              "server prepends an un-overridable safety guard, so keep this to in-character content." }));
+      shell.appendChild(buildTrio("Persona (LLM system prompt)", ch.persona, refreshOutput, true));
+      shell.appendChild(buildTrio("Example exchange (optional few-shot; sets the tone)", ch.example, refreshOutput, true));
       container.appendChild(shell);
     });
   }
@@ -705,10 +880,19 @@
       }),
       prompts: STATE.prompts.map(function (p) { return p; })
     };
-    var scoring = mergeExtra({
+    var scoring = {
       moduleA: STATE.scoringA.map(scoringRowToJson),
       moduleB: STATE.scoringB.map(scoringRowToJson)
-    }, STATE._scoringExtra);
+    };
+    // Module A LLM-chat scoring families — emit only when the author defined
+    // some, so scenarios that don't use chat scoring stay clean.
+    if (STATE.scoringAQ && STATE.scoringAQ.length) {
+      scoring.moduleA_questions = STATE.scoringAQ.map(scoringRowToJson);
+    }
+    if (STATE.scoringAQP && STATE.scoringAQP.length) {
+      scoring.moduleA_question_penalties = STATE.scoringAQP.map(scoringRowToJson);
+    }
+    scoring = mergeExtra(scoring, STATE._scoringExtra);
     var penalties = STATE.penalties.map(function (p) {
       return mergeExtra({
         id: p.id, item: p.item, points: p.points,
@@ -716,16 +900,26 @@
       }, p._extra);
     });
     var decisions = STATE.decisions.map(function (d) {
-      return mergeExtra({
+      var dOut = {
         id: d.id, module: d.module, points: d.points, penalty: d.penalty,
         prompt: d.prompt,
         options: d.options.map(function (o) {
-          return mergeExtra({ text: o.text, correct: !!o.correct, why: o.why }, o._extra);
+          var oOut = { text: o.text, correct: !!o.correct, why: o.why };
+          var b = branchToJson(o.branch);
+          if (b) oOut.branch = b;
+          return mergeExtra(oOut, o._extra);
         })
-      }, d._extra);
+      };
+      // unlockWhen gate — emitted whole (preserving any keys the editor doesn't
+      // model) only when it carries at least one key; a blank gate is dropped.
+      if (d.unlockWhen && typeof d.unlockWhen === "object" &&
+          !Array.isArray(d.unlockWhen) && Object.keys(d.unlockWhen).length) {
+        dOut.unlockWhen = d.unlockWhen;
+      }
+      return mergeExtra(dOut, d._extra);
     });
 
-    return mergeExtra({
+    var scenarioOut = {
       id: m.id,
       name: m.name,
       summary: m.summary,
@@ -737,7 +931,13 @@
       scoring: scoring,
       penalties: penalties,
       decisions: decisions
-    }, STATE._extra);
+    };
+    // pre/post knowledge tests — optional; emit only when authored.
+    if (STATE.preTest && STATE.preTest.length) scenarioOut.preTest = STATE.preTest.map(testQuestionToJson);
+    if (STATE.postTest && STATE.postTest.length) scenarioOut.postTest = STATE.postTest.map(testQuestionToJson);
+    // LLM chat characters — optional; emit only when authored.
+    if (STATE.characters && STATE.characters.length) scenarioOut.characters = STATE.characters.map(characterToJson);
+    return mergeExtra(scenarioOut, STATE._extra);
   }
 
   function scoringRowToJson(r) {
@@ -747,7 +947,56 @@
     } else {
       out.any = parseStems(r.any);
     }
+    if (r.unlocks) out.unlocks = r.unlocks;
     return mergeExtra(out, r._extra);
+  }
+
+  /* Serialise a decision-option branch to JSON, or null if there's nothing to
+     emit. Models `reveal` (the "what happens next" trio) explicitly while
+     preserving any OTHER branch keys verbatim (e.g. future group-vote forks),
+     so round-trip stays lossless. An empty reveal with no other keys is dropped
+     — the editor may create a blank branch object just for editing. */
+  function branchToJson(branch) {
+    if (!branch || typeof branch !== "object" || Array.isArray(branch)) return null;
+    var reveal = branch.reveal;
+    var hasReveal = reveal && typeof reveal === "object" &&
+      (reveal.en || reveal.fr || reveal.ja);
+    var otherKeys = Object.keys(branch).filter(function (k) { return k !== "reveal"; });
+    if (!hasReveal && otherKeys.length === 0) return null;
+    var out = {};
+    if (hasReveal) out.reveal = reveal;
+    otherKeys.forEach(function (k) { out[k] = branch[k]; });
+    return out;
+  }
+
+  /* Serialise one pre/post-test question, modeling id/q/options/explanation and
+     preserving any unmodeled keys per question/option (round-trip fidelity). */
+  function testQuestionToJson(qq) {
+    return mergeExtra({
+      id: qq.id,
+      q: qq.q,
+      options: qq.options.map(function (o) {
+        return mergeExtra({ text: o.text, correct: !!o.correct }, o._extra);
+      }),
+      explanation: qq.explanation
+    }, qq._extra);
+  }
+
+  /* Serialise one chat character, modeling id/role/module/present/name/blurb/
+     persona/example and preserving any unmodeled keys (e.g. a future
+     schemaVersion:2 secrets/contradicts) via the per-character passthrough. */
+  function characterToJson(ch) {
+    var out = { id: ch.id, role: ch.role };
+    var mods = parseStems(ch.module);
+    if (mods.length) out.module = mods;
+    if (ch.present) out.present = ch.present;
+    out.name = ch.name;
+    if (ch.blurb && (ch.blurb.en || ch.blurb.fr || ch.blurb.ja)) out.blurb = ch.blurb;
+    var pv = writeFreeText(ch.persona, ch.personaWasString);
+    if (pv && (typeof pv === "string" ? pv : (pv.en || pv.fr || pv.ja))) out.persona = pv;
+    var ev = writeFreeText(ch.example, ch.exampleWasString);
+    if (ev && (typeof ev === "string" ? ev : (ev.en || ev.fr || ev.ja))) out.example = ev;
+    return mergeExtra(out, ch._extra);
   }
 
   function refreshOutput() {
@@ -868,6 +1117,35 @@
     checkScoring(json.scoring.moduleA, "scoring.moduleA");
     checkScoring(json.scoring.moduleB, "scoring.moduleB");
 
+    // Module A LLM-chat scoring families (present only when authored)
+    if (json.scoring.moduleA_questions) {
+      checkUnique(json.scoring.moduleA_questions, "scoring.moduleA_questions");
+      checkScoring(json.scoring.moduleA_questions, "scoring.moduleA_questions");
+    }
+    if (json.scoring.moduleA_question_penalties) {
+      checkUnique(json.scoring.moduleA_question_penalties, "scoring.moduleA_question_penalties");
+      checkScoring(json.scoring.moduleA_question_penalties, "scoring.moduleA_question_penalties");
+    }
+
+    // unlocks (optional, any scoring family) must resolve to a group:index item
+    [["moduleA", json.scoring.moduleA], ["moduleB", json.scoring.moduleB],
+     ["moduleA_questions", json.scoring.moduleA_questions],
+     ["moduleA_question_penalties", json.scoring.moduleA_question_penalties]
+    ].forEach(function (pair) {
+      (pair[1] || []).forEach(function (r, i) {
+        if (!r.unlocks) return;
+        var mm = /^(history|exam|labs):(\d+)$/.exec(r.unlocks);
+        if (!mm) {
+          errs.push("scoring." + pair[0] + "[" + i + "] unlocks '" + r.unlocks +
+            "' must look like history:N, exam:N or labs:N.");
+          return;
+        }
+        var n = parseInt(mm[2], 10);
+        if (n < 0 || n >= groupLen[mm[1]])
+          errs.push("scoring." + pair[0] + "[" + i + "] unlocks '" + r.unlocks + "' does not resolve.");
+      });
+    });
+
     // penalties: item must resolve
     json.penalties.forEach(function (p, i) {
       if (!p.item) { errs.push("penalties[" + i + "] (id='" + p.id + "') missing item."); return; }
@@ -902,6 +1180,56 @@
         });
         if (!anyCorrect)
           errs.push("decisions[" + i + "] (id='" + d.id + "') has no option marked correct.");
+      }
+    });
+
+    // unlockWhen gates must resolve: afterDecision → an existing decision id
+    // (never itself); count gates can't exceed the available case items — a typo
+    // or self-reference otherwise yields a decision that can never unlock.
+    var decisionIds = {};
+    json.decisions.forEach(function (d) { if (d.id) decisionIds[d.id] = true; });
+    json.decisions.forEach(function (d, i) {
+      var uw = d.unlockWhen;
+      if (!uw || typeof uw !== "object") return;
+      if (uw.afterDecision != null && uw.afterDecision !== "") {
+        if (uw.afterDecision === d.id)
+          errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision refers to itself.");
+        else if (!decisionIds[uw.afterDecision])
+          errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision '" + uw.afterDecision + "' is not an existing decision id.");
+      }
+      if (typeof uw.historyRevealed === "number" && uw.historyRevealed > groupLen.history)
+        errs.push("decisions[" + i + "] unlockWhen.historyRevealed (" + uw.historyRevealed + ") exceeds the " + groupLen.history + " history item(s).");
+      if (typeof uw.examRevealed === "number" && uw.examRevealed > groupLen.exam)
+        errs.push("decisions[" + i + "] unlockWhen.examRevealed (" + uw.examRevealed + ") exceeds the " + groupLen.exam + " exam item(s).");
+    });
+
+    // pre/post knowledge tests (optional; validated only when present)
+    [["preTest", json.preTest], ["postTest", json.postTest]].forEach(function (pair) {
+      checkUnique(pair[1] || [], pair[0]);
+      (pair[1] || []).forEach(function (qq, i) {
+        var lbl = pair[0] + "[" + i + "]";
+        if (!qq.q || !qq.q.en) errs.push(lbl + " needs an English question.");
+        if (!qq.options || qq.options.length < 2) {
+          errs.push(lbl + " needs at least 2 options.");
+        } else {
+          var anyC = false;
+          qq.options.forEach(function (o, j) {
+            if (!o.text || !o.text.en) errs.push(lbl + ".options[" + j + "] needs English text.");
+            if (o.correct) anyC = true;
+          });
+          if (!anyC) errs.push(lbl + " has no option marked correct.");
+        }
+      });
+    });
+
+    // chat characters (optional; the LLM patient persona lives here)
+    checkUnique(json.characters || [], "characters");
+    (json.characters || []).forEach(function (ch, i) {
+      var lbl = "characters[" + i + "]";
+      if (!ch.name || !ch.name.en) errs.push(lbl + " needs an English name.");
+      if (ch.role === "patient") {
+        var pOk = (typeof ch.persona === "string") ? ch.persona.trim() : (ch.persona && ch.persona.en);
+        if (!pOk) errs.push(lbl + " (role=patient) needs a persona (English) — it is the chat system prompt.");
       }
     });
 
@@ -1038,9 +1366,12 @@
     s.scoringB = (sc.moduleB || []).map(scoringJsonToState);
     if (s.scoringA.length === 0) s.scoringA = [emptyScoringRow()];
     if (s.scoringB.length === 0) s.scoringB = [emptyScoringRow()];
-    // Whole scoring families the standard editor has no UI for yet
-    // (moduleA_questions, moduleA_question_penalties, …) — preserve verbatim.
-    s._scoringExtra = extraKeys(sc, ["moduleA", "moduleB"]);
+    // Module A LLM-chat scoring families (optional — kept empty, not seeded
+    // with a blank row, so a scenario without chat scoring round-trips clean).
+    s.scoringAQ = (sc.moduleA_questions || []).map(scoringJsonToState);
+    s.scoringAQP = (sc.moduleA_question_penalties || []).map(scoringJsonToState);
+    // Any OTHER scoring families the editor still doesn't model — preserve verbatim.
+    s._scoringExtra = extraKeys(sc, ["moduleA", "moduleB", "moduleA_questions", "moduleA_question_penalties"]);
 
     s.penalties = (obj.penalties || []).map(function (p) {
       return {
@@ -1058,13 +1389,22 @@
         points: d.points || 0,
         penalty: d.penalty || 0,
         prompt: asTrio(d.prompt),
+        // unlockWhen kept whole (models hypotheses/historyRevealed/examRevealed/
+        // afterDecision in the UI, preserves any other keys) — now modeled, so
+        // it leaves the passthrough known-list below.
+        unlockWhen: (d.unlockWhen && typeof d.unlockWhen === "object" && !Array.isArray(d.unlockWhen))
+          ? d.unlockWhen : null,
         options: (d.options || []).map(function (o) {
           return {
             text: asTrio(o.text), correct: !!o.correct, why: asTrio(o.why),
-            _extra: extraKeys(o, ["text", "correct", "why"])
+            // branch kept whole (models reveal, preserves other keys) — modeled,
+            // so it leaves the option passthrough known-list.
+            branch: (o.branch && typeof o.branch === "object" && !Array.isArray(o.branch))
+              ? o.branch : null,
+            _extra: extraKeys(o, ["text", "correct", "why", "branch"])
           };
         }),
-        _extra: extraKeys(d, ["id", "module", "points", "penalty", "prompt", "options"])
+        _extra: extraKeys(d, ["id", "module", "points", "penalty", "prompt", "options", "unlockWhen"])
       };
     });
     if (s.decisions.length === 0) s.decisions = [emptyDecision()];
@@ -1076,10 +1416,15 @@
 
     // Top-level fields the standard editor has no UI for yet (persona,
     // preTest, postTest, and anything else) — preserve verbatim on round-trip.
+    // pre/post knowledge tests + chat characters (optional) — now modeled, so
+    // they leave the top-level passthrough known-list.
+    s.preTest = (obj.preTest || []).map(testQuestionToState);
+    s.postTest = (obj.postTest || []).map(testQuestionToState);
+    s.characters = (obj.characters || []).map(characterToState);
     s._extra = extraKeys(obj, [
       "id", "name", "summary", "moduleAName", "moduleBName",
       "case", "scoring", "penalties", "decisions", "synthId", "synthPrereqs",
-      "format"
+      "preTest", "postTest", "characters", "format"
     ]);
 
     return s;
@@ -1090,7 +1435,37 @@
       label: asTrio(r.label),
       any: Array.isArray(r.any) ? r.any.join(", ") : "",
       cohorts: !!r.cohorts,
-      _extra: extraKeys(r, ["id", "points", "label", "any", "cohorts"])
+      unlocks: (typeof r.unlocks === "string") ? r.unlocks : "",
+      _extra: extraKeys(r, ["id", "points", "label", "any", "cohorts", "unlocks"])
+    };
+  }
+  function testQuestionToState(qq) {
+    qq = qq || {};
+    return {
+      id: qq.id || "",
+      q: asTrio(qq.q),
+      options: (qq.options || []).map(function (o) {
+        return { text: asTrio(o.text), correct: !!o.correct, _extra: extraKeys(o, ["text", "correct"]) };
+      }),
+      explanation: asTrio(qq.explanation),
+      _extra: extraKeys(qq, ["id", "q", "options", "explanation"])
+    };
+  }
+  function characterToState(c) {
+    c = c || {};
+    var p = readFreeText(c.persona);
+    var e = readFreeText(c.example);
+    return {
+      id: c.id || "",
+      role: (typeof c.role === "string") ? c.role : "",
+      module: Array.isArray(c.module) ? c.module.join(", ")
+        : (typeof c.module === "string" ? c.module : ""),
+      present: (typeof c.present === "string") ? c.present : "",
+      name: asTrio(c.name),
+      blurb: asTrio(c.blurb),
+      persona: p.t, personaWasString: p.wasString,
+      example: e.t, exampleWasString: e.wasString,
+      _extra: extraKeys(c, ["id", "role", "module", "present", "name", "blurb", "persona", "example"])
     };
   }
 
@@ -1111,8 +1486,13 @@
       renderPrompts();
       renderScoring("list-scoringA", STATE.scoringA);
       renderScoring("list-scoringB", STATE.scoringB);
+      renderScoring("list-scoringAQ", STATE.scoringAQ);
+      renderScoring("list-scoringAQP", STATE.scoringAQP);
       renderPenalties();
       renderDecisions();
+      renderTests("list-pretest", STATE.preTest);
+      renderTests("list-posttest", STATE.postTest);
+      renderCharacters("list-characters", STATE.characters);
     }
     refreshOutput();
   }
@@ -1158,8 +1538,13 @@
           case "prompts":   STATE.prompts.push(emptyTrio()); break;
           case "scoringA":  STATE.scoringA.push(emptyScoringRow()); break;
           case "scoringB":  STATE.scoringB.push(emptyScoringRow()); break;
+          case "scoringAQ": STATE.scoringAQ.push(emptyScoringRow()); break;
+          case "scoringAQP": STATE.scoringAQP.push(emptyScoringRow()); break;
           case "penalties": STATE.penalties.push(emptyPenaltyRow()); break;
           case "decisions": STATE.decisions.push(emptyDecision()); break;
+          case "pretest":   STATE.preTest.push(emptyTestQuestion()); break;
+          case "posttest":  STATE.postTest.push(emptyTestQuestion()); break;
+          case "characters": STATE.characters.push(emptyCharacter()); break;
         }
         renderAll();
       });

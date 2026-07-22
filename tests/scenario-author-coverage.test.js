@@ -174,11 +174,323 @@ test("real built-in scenarios round-trip without dropping known fields", () => {
   });
 });
 
+test("Phase 3: moduleA_questions / moduleA_question_penalties + unlocks are modeled", () => {
+  const api = loadAuthor();
+  const scenario = {
+    id: "chat-scoring", name: T("Chat", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: {
+      moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["walk"], unlocks: "labs:0" }],
+      moduleB: [{ id: "fb", points: 4, label: T("l", "", ""), cohorts: true }],
+      moduleA_questions: [{ id: "cq", points: 3, label: T("cl", "", ""), any: ["how long", "onset"], unlocks: "history:0" }],
+      moduleA_question_penalties: [{ id: "cp", points: 2, label: T("pl", "", ""), any: ["prescribe", "oxycodone"] }]
+    },
+    penalties: [], decisions: []
+  };
+
+  // fromJson populates the dedicated STATE arrays + the unlocks field, and does
+  // NOT stash the chat families in the passthrough bag (they are now modeled).
+  const st = api.fromJson(scenario);
+  assert.strictEqual(st.scoringAQ.length, 1);
+  assert.strictEqual(st.scoringAQP.length, 1);
+  assert.strictEqual(st.scoringA[0].unlocks, "labs:0");
+  assert.strictEqual(st.scoringAQ[0].unlocks, "history:0");
+  assert.ok(!("moduleA_questions" in (st._scoringExtra || {})),
+    "moduleA_questions must be modeled, not captured in _scoringExtra");
+
+  // Round-trip is lossless for the chat families + the unlocks field.
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.scoring.moduleA_questions, scenario.scoring.moduleA_questions);
+  assert.deepStrictEqual(out.scoring.moduleA_question_penalties, scenario.scoring.moduleA_question_penalties);
+  assert.strictEqual(out.scoring.moduleA[0].unlocks, "labs:0");
+});
+
+test("Phase 3: empty chat-scoring families are omitted from the export", () => {
+  const api = loadAuthor();
+  const minimal = {
+    id: "no-chat", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: []
+  };
+  const out = roundTrip(api, minimal);
+  assert.ok(!("moduleA_questions" in out.scoring), "no moduleA_questions key when none authored");
+  assert.ok(!("moduleA_question_penalties" in out.scoring), "no penalties key when none authored");
+});
+
+test("Phase 3: validate() flags a chat-scoring family with no stems and a bad unlocks", () => {
+  const api = loadAuthor();
+  const bad = {
+    id: "bad-chat", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: {
+      moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }],
+      moduleB: [],
+      moduleA_questions: [{ id: "cq", points: 3, label: T("cl", "", ""), any: [], unlocks: "nonsense" }]
+    },
+    penalties: [], decisions: []
+  };
+  const st = api.fromJson(bad);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /moduleA_questions.*stem|moduleA_questions.*cohorts/.test(e)),
+    "must flag a chat family with neither stems nor cohorts");
+  assert.ok(errs.some((e) => /unlocks 'nonsense'/.test(e)),
+    "must flag an unlocks that isn't group:index");
+});
+
+test("Phase 3: decision branch.reveal + unlockWhen are modeled and preserve unknown sub-keys", () => {
+  const api = loadAuthor();
+  const scenario = {
+    id: "branchy", name: T("B", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [],
+    decisions: [{
+      id: "d1", module: "A", points: 10, penalty: 5, prompt: T("dp", "", ""),
+      // includes a key the editor does NOT model (customGate) — must survive.
+      unlockWhen: { hypotheses: 2, afterDecision: "d0", customGate: true },
+      options: [
+        // branch with a non-reveal key (goto) — must survive.
+        { text: T("o1", "", ""), correct: true, why: T("w1", "", ""), branch: { reveal: T("r1", "", ""), goto: "nodeX" } },
+        { text: T("o2", "", ""), correct: false, why: T("w2", "", "") }
+      ]
+    }]
+  };
+
+  const st = api.fromJson(scenario);
+  assert.deepStrictEqual(st.decisions[0].unlockWhen, { hypotheses: 2, afterDecision: "d0", customGate: true });
+  assert.deepStrictEqual(st.decisions[0].options[0].branch, { reveal: { en: "r1", fr: "", ja: "" }, goto: "nodeX" });
+  assert.strictEqual(st.decisions[0].options[1].branch, null);
+  assert.ok(!("unlockWhen" in (st.decisions[0]._extra || {})), "unlockWhen must be modeled, not passthrough");
+  assert.ok(!("branch" in (st.decisions[0].options[0]._extra || {})), "branch must be modeled, not passthrough");
+
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.decisions[0].unlockWhen, { hypotheses: 2, afterDecision: "d0", customGate: true });
+  assert.deepStrictEqual(out.decisions[0].options[0].branch, { reveal: { en: "r1", fr: "", ja: "" }, goto: "nodeX" });
+  assert.ok(!("branch" in out.decisions[0].options[1]), "option with no branch stays branch-less");
+});
+
+test("Phase 3: preTest / postTest are modeled and round-trip losslessly", () => {
+  const api = loadAuthor();
+  const q = (id) => ({
+    id, q: T("stem", "", ""),
+    options: [{ text: T("a", "", ""), correct: true }, { text: T("b", "", ""), correct: false }],
+    explanation: T("because", "", "")
+  });
+  const scenario = {
+    id: "tested", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: [],
+    preTest: [q("pre1"), q("pre2")],
+    postTest: [q("post1")]
+  };
+  const st = api.fromJson(scenario);
+  assert.strictEqual(st.preTest.length, 2);
+  assert.strictEqual(st.postTest.length, 1);
+  assert.ok(!("preTest" in (st._extra || {})), "preTest must be modeled, not captured in _extra");
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.preTest, scenario.preTest);
+  assert.deepStrictEqual(out.postTest, scenario.postTest);
+});
+
+test("Phase 3: empty pre/post tests are omitted; validate flags a bad question", () => {
+  const api = loadAuthor();
+  const base = {
+    id: "t2", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""), synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: []
+  };
+  const out = roundTrip(api, base);
+  assert.ok(!("preTest" in out), "no preTest key when none authored");
+  assert.ok(!("postTest" in out), "no postTest key when none authored");
+
+  const bad = Object.assign({}, base, {
+    preTest: [{
+      id: "p1", q: T("", "", ""),
+      options: [{ text: T("a", "", ""), correct: false }, { text: T("b", "", ""), correct: false }],
+      explanation: T("e", "", "")
+    }]
+  });
+  const st = api.fromJson(bad);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /preTest\[0\] needs an English question/.test(e)));
+  assert.ok(errs.some((e) => /preTest\[0\] has no option marked correct/.test(e)));
+});
+
+test("Phase 3: characters are modeled — trio persona, string persona, module array, unknown key", () => {
+  const api = loadAuthor();
+  const scenario = {
+    id: "cast", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: [],
+    characters: [
+      // trio persona (like Lefebvre) + a future/unknown key that must survive
+      {
+        id: "patient", role: "patient", module: ["A"], present: "start",
+        name: T("Mr Trio", "M. Trio", "トリオ氏"), blurb: T("blurb", "", ""),
+        persona: T("You are Mr Trio.", "Vous êtes M. Trio.", "あなたはトリオ氏です。"),
+        example: T("Doctor: hi\nMr Trio: hello", "", ""), schemaVersion: 2
+      },
+      // string persona (like Tanaka) — English only, must stay a string
+      { id: "relative", role: "relative", module: ["A"], present: "start",
+        name: T("The Daughter", "", ""), persona: "You are the worried daughter." }
+    ]
+  };
+
+  const st = api.fromJson(scenario);
+  assert.strictEqual(st.characters.length, 2);
+  assert.strictEqual(st.characters[0].personaWasString, false);
+  assert.strictEqual(st.characters[1].personaWasString, true);
+  assert.strictEqual(st.characters[0].module, "A"); // array joined for editing
+  assert.ok(!("characters" in (st._extra || {})), "characters must be modeled, not captured in _extra");
+
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.characters[0].persona, scenario.characters[0].persona); // trio stays trio
+  assert.strictEqual(typeof out.characters[1].persona, "string");                    // string stays string
+  assert.strictEqual(out.characters[1].persona, "You are the worried daughter.");
+  assert.deepStrictEqual(out.characters[0].module, ["A"]);                           // array restored
+  assert.strictEqual(out.characters[0].schemaVersion, 2);                            // unknown key preserved
+  assert.ok(!("example" in out.characters[1]), "no example emitted when none authored");
+});
+
+test("Phase 3: real built-in characters round-trip faithfully (trio + string personas)", () => {
+  const api = loadAuthor();
+  const win = loadBuiltins();
+  const scenarios = win.CANAMED_SCENARIOS;
+  Object.keys(scenarios).forEach((id) => {
+    const orig = scenarios[id];
+    if (!Array.isArray(orig.characters) || orig.format === "branched") return;
+    const out = roundTrip(api, orig);
+    assert.deepStrictEqual(out.characters, orig.characters,
+      "scenario '" + id + "' characters must survive the round-trip unchanged");
+  });
+});
+
+test("Phase 3: validate() requires a patient character to have an id, name, and persona", () => {
+  const api = loadAuthor();
+  const bad = {
+    id: "novoice", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""), synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: [],
+    characters: [{ id: "", role: "patient", module: ["A"], name: T("", "", ""), persona: "" }]
+  };
+  const st = api.fromJson(bad);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /characters\[0\] is missing an id/.test(e)));
+  assert.ok(errs.some((e) => /characters\[0\] needs an English name/.test(e)));
+  assert.ok(errs.some((e) => /role=patient.*needs a persona/.test(e)));
+});
+
+test("Phase 3 (review): validate() resolves unlockWhen.afterDecision + flags duplicate test ids", () => {
+  const api = loadAuthor();
+  const mkOpt = (t, c) => ({ text: T(t, "", ""), correct: c, why: T(t + "-why", "", "") });
+  const mkQ = (id) => ({
+    id, q: T("stem", "", ""),
+    options: [{ text: T("a", "", ""), correct: true }, { text: T("b", "", ""), correct: false }],
+    explanation: T("e", "", "")
+  });
+  const scenario = {
+    id: "rev", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""), synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [],
+    decisions: [
+      { id: "d1", module: "A", points: 10, penalty: 5, prompt: T("p", "", ""),
+        unlockWhen: { afterDecision: "d1" }, options: [mkOpt("o", true), mkOpt("o2", false)] },
+      { id: "d2", module: "A", points: 10, penalty: 5, prompt: T("p", "", ""),
+        unlockWhen: { afterDecision: "ghost", examRevealed: 99 }, options: [mkOpt("o", true), mkOpt("o2", false)] }
+    ],
+    preTest: [mkQ("q1"), mkQ("q1")] // duplicate ids
+  };
+  const st = api.fromJson(scenario);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /d1.*afterDecision refers to itself/.test(e)), "self-reference flagged");
+  assert.ok(errs.some((e) => /afterDecision 'ghost' is not an existing decision id/.test(e)), "dangling afterDecision flagged");
+  assert.ok(errs.some((e) => /examRevealed \(99\) exceeds/.test(e)), "over-count exam gate flagged");
+  assert.ok(errs.some((e) => /preTest has duplicate id 'q1'/.test(e)), "duplicate preTest id flagged");
+});
+
 test("the passthrough helpers are wired into (de)serialisation", () => {
   assert.match(JS, /function extraKeys\(/, "extraKeys helper must exist");
   assert.match(JS, /function mergeExtra\(/, "mergeExtra helper must exist");
-  // toScenarioJson merges the top-level extra bag
-  assert.match(JS, /mergeExtra\(\{[\s\S]{0,400}?\},\s*STATE\._extra\)/, "top-level export must merge STATE._extra");
+  // toScenarioJson merges the top-level extra bag onto the assembled scenario
+  assert.match(JS, /mergeExtra\(scenarioOut,\s*STATE\._extra\)/, "top-level export must merge STATE._extra");
   // parse side captures the extra bags
   assert.match(JS, /s\._extra\s*=\s*extraKeys\(obj,/, "scenarioJsonToState must capture top-level extras");
   assert.match(JS, /s\._scoringExtra\s*=\s*extraKeys\(sc,/, "scenarioJsonToState must capture scoring extras");
