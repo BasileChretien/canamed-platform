@@ -70,7 +70,7 @@
   function emptyHistoryRow() { return { q: emptyTrio(), a: emptyTrio() }; }
   function emptyLabRow() { return { q: emptyTrio(), a: emptyTrio(), key: false }; }
   function emptyScoringRow() {
-    return { id: "", points: 5, label: emptyTrio(), any: "", cohorts: false };
+    return { id: "", points: 5, label: emptyTrio(), any: "", cohorts: false, unlocks: "" };
   }
   function emptyPenaltyRow() {
     return { id: "", item: "", points: 5, title: emptyTrio(), why: emptyTrio() };
@@ -111,6 +111,12 @@
       prompts: [emptyTrio()],
       scoringA: [emptyScoringRow()],
       scoringB: [emptyScoringRow()],
+      // Module A LLM-chat consultation scoring (optional; empty by default).
+      // moduleA_questions = points earned for good questions; the _penalties
+      // variant = deductions for harmful/opioid-seeking prompts. Same row shape
+      // as scoringA/B (id/points/label/any/unlocks).
+      scoringAQ: [],
+      scoringAQP: [],
       penalties: [emptyPenaltyRow()],
       decisions: [emptyDecision()],
       synthId: "labs:0",
@@ -275,6 +281,17 @@
         text: "Stems are matched against the team's typed English answer (accent-stripped, " +
               "case-insensitive, word-prefix). Leave blank if this row uses cohorts instead." }));
       shell.appendChild(anyRow);
+
+      // unlocks — optional reveal-id opened when this family is earned
+      var unlRow = el("div", { class: "field-row" });
+      unlRow.appendChild(el("label", { class: "field-label", text: "unlocks (optional)" }));
+      var unlIn = el("input", { type: "text", value: row.unlocks || "",
+        placeholder: "e.g. labs:0" });
+      unlIn.addEventListener("input", function () { row.unlocks = unlIn.value; refreshOutput(); });
+      unlRow.appendChild(unlIn);
+      unlRow.appendChild(el("p", { class: "field-hint",
+        text: "Optional. When this family is scored, this reveal-id (group:index) is unlocked. Leave blank for none." }));
+      shell.appendChild(unlRow);
 
       container.appendChild(shell);
     });
@@ -705,10 +722,19 @@
       }),
       prompts: STATE.prompts.map(function (p) { return p; })
     };
-    var scoring = mergeExtra({
+    var scoring = {
       moduleA: STATE.scoringA.map(scoringRowToJson),
       moduleB: STATE.scoringB.map(scoringRowToJson)
-    }, STATE._scoringExtra);
+    };
+    // Module A LLM-chat scoring families — emit only when the author defined
+    // some, so scenarios that don't use chat scoring stay clean.
+    if (STATE.scoringAQ && STATE.scoringAQ.length) {
+      scoring.moduleA_questions = STATE.scoringAQ.map(scoringRowToJson);
+    }
+    if (STATE.scoringAQP && STATE.scoringAQP.length) {
+      scoring.moduleA_question_penalties = STATE.scoringAQP.map(scoringRowToJson);
+    }
+    scoring = mergeExtra(scoring, STATE._scoringExtra);
     var penalties = STATE.penalties.map(function (p) {
       return mergeExtra({
         id: p.id, item: p.item, points: p.points,
@@ -747,6 +773,7 @@
     } else {
       out.any = parseStems(r.any);
     }
+    if (r.unlocks) out.unlocks = r.unlocks;
     return mergeExtra(out, r._extra);
   }
 
@@ -867,6 +894,35 @@
     }
     checkScoring(json.scoring.moduleA, "scoring.moduleA");
     checkScoring(json.scoring.moduleB, "scoring.moduleB");
+
+    // Module A LLM-chat scoring families (present only when authored)
+    if (json.scoring.moduleA_questions) {
+      checkUnique(json.scoring.moduleA_questions, "scoring.moduleA_questions");
+      checkScoring(json.scoring.moduleA_questions, "scoring.moduleA_questions");
+    }
+    if (json.scoring.moduleA_question_penalties) {
+      checkUnique(json.scoring.moduleA_question_penalties, "scoring.moduleA_question_penalties");
+      checkScoring(json.scoring.moduleA_question_penalties, "scoring.moduleA_question_penalties");
+    }
+
+    // unlocks (optional, any scoring family) must resolve to a group:index item
+    [["moduleA", json.scoring.moduleA], ["moduleB", json.scoring.moduleB],
+     ["moduleA_questions", json.scoring.moduleA_questions],
+     ["moduleA_question_penalties", json.scoring.moduleA_question_penalties]
+    ].forEach(function (pair) {
+      (pair[1] || []).forEach(function (r, i) {
+        if (!r.unlocks) return;
+        var mm = /^(history|exam|labs):(\d+)$/.exec(r.unlocks);
+        if (!mm) {
+          errs.push("scoring." + pair[0] + "[" + i + "] unlocks '" + r.unlocks +
+            "' must look like history:N, exam:N or labs:N.");
+          return;
+        }
+        var n = parseInt(mm[2], 10);
+        if (n < 0 || n >= groupLen[mm[1]])
+          errs.push("scoring." + pair[0] + "[" + i + "] unlocks '" + r.unlocks + "' does not resolve.");
+      });
+    });
 
     // penalties: item must resolve
     json.penalties.forEach(function (p, i) {
@@ -1038,9 +1094,12 @@
     s.scoringB = (sc.moduleB || []).map(scoringJsonToState);
     if (s.scoringA.length === 0) s.scoringA = [emptyScoringRow()];
     if (s.scoringB.length === 0) s.scoringB = [emptyScoringRow()];
-    // Whole scoring families the standard editor has no UI for yet
-    // (moduleA_questions, moduleA_question_penalties, …) — preserve verbatim.
-    s._scoringExtra = extraKeys(sc, ["moduleA", "moduleB"]);
+    // Module A LLM-chat scoring families (optional — kept empty, not seeded
+    // with a blank row, so a scenario without chat scoring round-trips clean).
+    s.scoringAQ = (sc.moduleA_questions || []).map(scoringJsonToState);
+    s.scoringAQP = (sc.moduleA_question_penalties || []).map(scoringJsonToState);
+    // Any OTHER scoring families the editor still doesn't model — preserve verbatim.
+    s._scoringExtra = extraKeys(sc, ["moduleA", "moduleB", "moduleA_questions", "moduleA_question_penalties"]);
 
     s.penalties = (obj.penalties || []).map(function (p) {
       return {
@@ -1090,7 +1149,8 @@
       label: asTrio(r.label),
       any: Array.isArray(r.any) ? r.any.join(", ") : "",
       cohorts: !!r.cohorts,
-      _extra: extraKeys(r, ["id", "points", "label", "any", "cohorts"])
+      unlocks: (typeof r.unlocks === "string") ? r.unlocks : "",
+      _extra: extraKeys(r, ["id", "points", "label", "any", "cohorts", "unlocks"])
     };
   }
 
@@ -1111,6 +1171,8 @@
       renderPrompts();
       renderScoring("list-scoringA", STATE.scoringA);
       renderScoring("list-scoringB", STATE.scoringB);
+      renderScoring("list-scoringAQ", STATE.scoringAQ);
+      renderScoring("list-scoringAQP", STATE.scoringAQP);
       renderPenalties();
       renderDecisions();
     }
@@ -1158,6 +1220,8 @@
           case "prompts":   STATE.prompts.push(emptyTrio()); break;
           case "scoringA":  STATE.scoringA.push(emptyScoringRow()); break;
           case "scoringB":  STATE.scoringB.push(emptyScoringRow()); break;
+          case "scoringAQ": STATE.scoringAQ.push(emptyScoringRow()); break;
+          case "scoringAQP": STATE.scoringAQP.push(emptyScoringRow()); break;
           case "penalties": STATE.penalties.push(emptyPenaltyRow()); break;
           case "decisions": STATE.decisions.push(emptyDecision()); break;
         }

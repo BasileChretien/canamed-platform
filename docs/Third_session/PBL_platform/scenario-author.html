@@ -165,16 +165,35 @@
         <button type="button" class="add-btn" data-add="scoringA">+ Add moduleA family</button>
       </fieldset>
 
+      <!-- ============= SCORING.moduleA_questions (LLM chat) ============= -->
+      <fieldset class="author-section">
+        <legend>8. SCORING.moduleA_questions &mdash; LLM chat consultation scoring</legend>
+        <p class="field-hint">Points earned for good history-taking questions typed into the
+          Module&nbsp;A patient chat. Same shape as moduleA families &mdash; <em>any</em> stems
+          match the learner&rsquo;s typed question. Leave empty if the scenario has no chat scoring.</p>
+        <div id="list-scoringAQ" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="scoringAQ">+ Add chat-question family</button>
+      </fieldset>
+
+      <!-- ======= SCORING.moduleA_question_penalties (LLM chat) ======= -->
+      <fieldset class="author-section">
+        <legend>9. SCORING.moduleA_question_penalties &mdash; chat deductions</legend>
+        <p class="field-hint">Deductions for harmful or opioid-seeking prompts typed into the
+          Module&nbsp;A patient chat (e.g. demanding a prescription on demand). Optional.</p>
+        <div id="list-scoringAQP" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="scoringAQP">+ Add chat-penalty family</button>
+      </fieldset>
+
       <!-- ============= SCORING.moduleB ============= -->
       <fieldset class="author-section">
-        <legend>8. SCORING.moduleB &mdash; concept families for stage 2</legend>
+        <legend>10. SCORING.moduleB &mdash; concept families for stage 2</legend>
         <div id="list-scoringB" class="dyn-list"></div>
         <button type="button" class="add-btn" data-add="scoringB">+ Add moduleB family</button>
       </fieldset>
 
       <!-- ============= PENALTIES ============= -->
       <fieldset class="author-section">
-        <legend>9. PENALTIES &mdash; deductions for revealing the wrong item</legend>
+        <legend>11. PENALTIES &mdash; deductions for revealing the wrong item</legend>
         <p class="field-hint">Each penalty fires when the team reveals the item referenced.
           <code>item</code> takes the form <code>group:index</code>, e.g. <code>labs:4</code>.</p>
         <div id="list-penalties" class="dyn-list"></div>
@@ -183,7 +202,7 @@
 
       <!-- ============= DECISIONS ============= -->
       <fieldset class="author-section">
-        <legend>10. DECISIONS &mdash; team votes</legend>
+        <legend>12. DECISIONS &mdash; team votes</legend>
         <p class="field-hint">Each decision belongs to module A or B, has a prompt, and 2+
           options. Tick the correct option(s). <code>penalty: 0</code> = wrong vote costs
           nothing (useful for low-stakes roleplays).</p>

@@ -174,6 +174,94 @@ test("real built-in scenarios round-trip without dropping known fields", () => {
   });
 });
 
+test("Phase 3: moduleA_questions / moduleA_question_penalties + unlocks are modeled", () => {
+  const api = loadAuthor();
+  const scenario = {
+    id: "chat-scoring", name: T("Chat", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: {
+      moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["walk"], unlocks: "labs:0" }],
+      moduleB: [{ id: "fb", points: 4, label: T("l", "", ""), cohorts: true }],
+      moduleA_questions: [{ id: "cq", points: 3, label: T("cl", "", ""), any: ["how long", "onset"], unlocks: "history:0" }],
+      moduleA_question_penalties: [{ id: "cp", points: 2, label: T("pl", "", ""), any: ["prescribe", "oxycodone"] }]
+    },
+    penalties: [], decisions: []
+  };
+
+  // fromJson populates the dedicated STATE arrays + the unlocks field, and does
+  // NOT stash the chat families in the passthrough bag (they are now modeled).
+  const st = api.fromJson(scenario);
+  assert.strictEqual(st.scoringAQ.length, 1);
+  assert.strictEqual(st.scoringAQP.length, 1);
+  assert.strictEqual(st.scoringA[0].unlocks, "labs:0");
+  assert.strictEqual(st.scoringAQ[0].unlocks, "history:0");
+  assert.ok(!("moduleA_questions" in (st._scoringExtra || {})),
+    "moduleA_questions must be modeled, not captured in _scoringExtra");
+
+  // Round-trip is lossless for the chat families + the unlocks field.
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.scoring.moduleA_questions, scenario.scoring.moduleA_questions);
+  assert.deepStrictEqual(out.scoring.moduleA_question_penalties, scenario.scoring.moduleA_question_penalties);
+  assert.strictEqual(out.scoring.moduleA[0].unlocks, "labs:0");
+});
+
+test("Phase 3: empty chat-scoring families are omitted from the export", () => {
+  const api = loadAuthor();
+  const minimal = {
+    id: "no-chat", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: []
+  };
+  const out = roundTrip(api, minimal);
+  assert.ok(!("moduleA_questions" in out.scoring), "no moduleA_questions key when none authored");
+  assert.ok(!("moduleA_question_penalties" in out.scoring), "no penalties key when none authored");
+});
+
+test("Phase 3: validate() flags a chat-scoring family with no stems and a bad unlocks", () => {
+  const api = loadAuthor();
+  const bad = {
+    id: "bad-chat", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: {
+      moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }],
+      moduleB: [],
+      moduleA_questions: [{ id: "cq", points: 3, label: T("cl", "", ""), any: [], unlocks: "nonsense" }]
+    },
+    penalties: [], decisions: []
+  };
+  const st = api.fromJson(bad);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /moduleA_questions.*stem|moduleA_questions.*cohorts/.test(e)),
+    "must flag a chat family with neither stems nor cohorts");
+  assert.ok(errs.some((e) => /unlocks 'nonsense'/.test(e)),
+    "must flag an unlocks that isn't group:index");
+});
+
 test("the passthrough helpers are wired into (de)serialisation", () => {
   assert.match(JS, /function extraKeys\(/, "extraKeys helper must exist");
   assert.match(JS, /function mergeExtra\(/, "mergeExtra helper must exist");
