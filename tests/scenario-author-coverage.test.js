@@ -448,6 +448,44 @@ test("Phase 3: validate() requires a patient character to have an id, name, and 
   assert.ok(errs.some((e) => /role=patient.*needs a persona/.test(e)));
 });
 
+test("Phase 3 (review): validate() resolves unlockWhen.afterDecision + flags duplicate test ids", () => {
+  const api = loadAuthor();
+  const mkOpt = (t, c) => ({ text: T(t, "", ""), correct: c, why: T(t + "-why", "", "") });
+  const mkQ = (id) => ({
+    id, q: T("stem", "", ""),
+    options: [{ text: T("a", "", ""), correct: true }, { text: T("b", "", ""), correct: false }],
+    explanation: T("e", "", "")
+  });
+  const scenario = {
+    id: "rev", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""), synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [],
+    decisions: [
+      { id: "d1", module: "A", points: 10, penalty: 5, prompt: T("p", "", ""),
+        unlockWhen: { afterDecision: "d1" }, options: [mkOpt("o", true), mkOpt("o2", false)] },
+      { id: "d2", module: "A", points: 10, penalty: 5, prompt: T("p", "", ""),
+        unlockWhen: { afterDecision: "ghost", examRevealed: 99 }, options: [mkOpt("o", true), mkOpt("o2", false)] }
+    ],
+    preTest: [mkQ("q1"), mkQ("q1")] // duplicate ids
+  };
+  const st = api.fromJson(scenario);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /d1.*afterDecision refers to itself/.test(e)), "self-reference flagged");
+  assert.ok(errs.some((e) => /afterDecision 'ghost' is not an existing decision id/.test(e)), "dangling afterDecision flagged");
+  assert.ok(errs.some((e) => /examRevealed \(99\) exceeds/.test(e)), "over-count exam gate flagged");
+  assert.ok(errs.some((e) => /preTest has duplicate id 'q1'/.test(e)), "duplicate preTest id flagged");
+});
+
 test("the passthrough helpers are wired into (de)serialisation", () => {
   assert.match(JS, /function extraKeys\(/, "extraKeys helper must exist");
   assert.match(JS, /function mergeExtra\(/, "mergeExtra helper must exist");

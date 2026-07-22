@@ -1183,11 +1183,31 @@
       }
     });
 
+    // unlockWhen gates must resolve: afterDecision → an existing decision id
+    // (never itself); count gates can't exceed the available case items — a typo
+    // or self-reference otherwise yields a decision that can never unlock.
+    var decisionIds = {};
+    json.decisions.forEach(function (d) { if (d.id) decisionIds[d.id] = true; });
+    json.decisions.forEach(function (d, i) {
+      var uw = d.unlockWhen;
+      if (!uw || typeof uw !== "object") return;
+      if (uw.afterDecision != null && uw.afterDecision !== "") {
+        if (uw.afterDecision === d.id)
+          errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision refers to itself.");
+        else if (!decisionIds[uw.afterDecision])
+          errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision '" + uw.afterDecision + "' is not an existing decision id.");
+      }
+      if (typeof uw.historyRevealed === "number" && uw.historyRevealed > groupLen.history)
+        errs.push("decisions[" + i + "] unlockWhen.historyRevealed (" + uw.historyRevealed + ") exceeds the " + groupLen.history + " history item(s).");
+      if (typeof uw.examRevealed === "number" && uw.examRevealed > groupLen.exam)
+        errs.push("decisions[" + i + "] unlockWhen.examRevealed (" + uw.examRevealed + ") exceeds the " + groupLen.exam + " exam item(s).");
+    });
+
     // pre/post knowledge tests (optional; validated only when present)
     [["preTest", json.preTest], ["postTest", json.postTest]].forEach(function (pair) {
+      checkUnique(pair[1] || [], pair[0]);
       (pair[1] || []).forEach(function (qq, i) {
         var lbl = pair[0] + "[" + i + "]";
-        if (!qq.id) errs.push(lbl + " is missing an id.");
         if (!qq.q || !qq.q.en) errs.push(lbl + " needs an English question.");
         if (!qq.options || qq.options.length < 2) {
           errs.push(lbl + " needs at least 2 options.");
@@ -1203,9 +1223,9 @@
     });
 
     // chat characters (optional; the LLM patient persona lives here)
+    checkUnique(json.characters || [], "characters");
     (json.characters || []).forEach(function (ch, i) {
       var lbl = "characters[" + i + "]";
-      if (!ch.id) errs.push(lbl + " is missing an id.");
       if (!ch.name || !ch.name.en) errs.push(lbl + " needs an English name.");
       if (ch.role === "patient") {
         var pOk = (typeof ch.persona === "string") ? ch.persona.trim() : (ch.persona && ch.persona.en);
