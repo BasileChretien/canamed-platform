@@ -76,11 +76,12 @@
     return { id: "", item: "", points: 5, title: emptyTrio(), why: emptyTrio() };
   }
   function emptyOption() {
-    return { text: emptyTrio(), correct: false, why: emptyTrio() };
+    return { text: emptyTrio(), correct: false, why: emptyTrio(), branch: null };
   }
   function emptyDecision() {
     return {
       id: "", module: "A", prompt: emptyTrio(), points: 10, penalty: 5,
+      unlockWhen: null,
       options: [emptyOption(), emptyOption()]
     };
   }
@@ -388,6 +389,47 @@
       shell.appendChild(top);
       shell.appendChild(buildTrio("Prompt (the question put to the team)", dec.prompt, refreshOutput, true));
 
+      // unlockWhen gate (optional) — leave all blank for "always available".
+      var uwWrap = el("div", { class: "unlockwhen-row" });
+      uwWrap.appendChild(el("p", { class: "field-hint",
+        text: "unlockWhen (optional) — gate this decision. Leave blank for always available. " +
+              "Counts require at least that many hypotheses / revealed history / revealed exam " +
+              "items; afterDecision waits until another decision id is committed." }));
+      var uwGrid = el("div", { class: "row-flex" });
+      function uwNumCell(key, lbl) {
+        var cell = el("div", { class: "field-row narrow" });
+        cell.appendChild(el("label", { class: "field-label", text: lbl }));
+        var cur = (dec.unlockWhen && typeof dec.unlockWhen[key] === "number") ? dec.unlockWhen[key] : "";
+        var inp = el("input", { type: "number", value: cur, min: "0" });
+        inp.addEventListener("input", function () {
+          if (!dec.unlockWhen) dec.unlockWhen = {};
+          var n = parseInt(inp.value, 10);
+          if (inp.value !== "" && !isNaN(n) && n > 0) dec.unlockWhen[key] = n;
+          else delete dec.unlockWhen[key];
+          refreshOutput();
+        });
+        cell.appendChild(inp);
+        return cell;
+      }
+      uwGrid.appendChild(uwNumCell("hypotheses", "min hypotheses"));
+      uwGrid.appendChild(uwNumCell("historyRevealed", "min history"));
+      uwGrid.appendChild(uwNumCell("examRevealed", "min exam"));
+      uwWrap.appendChild(uwGrid);
+      var afCell = el("div", { class: "field-row" });
+      afCell.appendChild(el("label", { class: "field-label", text: "afterDecision (decision id)" }));
+      var afIn = el("input", { type: "text",
+        value: (dec.unlockWhen && dec.unlockWhen.afterDecision) || "",
+        placeholder: "e.g. dec_prognosis" });
+      afIn.addEventListener("input", function () {
+        if (!dec.unlockWhen) dec.unlockWhen = {};
+        if (afIn.value.trim()) dec.unlockWhen.afterDecision = afIn.value.trim();
+        else delete dec.unlockWhen.afterDecision;
+        refreshOutput();
+      });
+      afCell.appendChild(afIn);
+      uwWrap.appendChild(afCell);
+      shell.appendChild(uwWrap);
+
       // options
       var optsWrap = el("div", { class: "decision-options" });
       optsWrap.appendChild(el("p", { class: "field-hint",
@@ -417,6 +459,11 @@
 
         optRow.appendChild(buildTrio("Option text", opt.text, refreshOutput));
         optRow.appendChild(buildTrio("Why (shown after the vote)", opt.why, refreshOutput, true));
+        // branch.reveal — optional "what happens next" narrative. Ensure a
+        // mutable trio for editing; an empty one is dropped on export.
+        if (!opt.branch || typeof opt.branch !== "object") opt.branch = {};
+        if (!opt.branch.reveal || typeof opt.branch.reveal !== "object") opt.branch.reveal = emptyTrio();
+        optRow.appendChild(buildTrio("Branch reveal — what happens next (optional)", opt.branch.reveal, refreshOutput, true));
         optsList.appendChild(optRow);
       });
       optsWrap.appendChild(optsList);
@@ -742,13 +789,23 @@
       }, p._extra);
     });
     var decisions = STATE.decisions.map(function (d) {
-      return mergeExtra({
+      var dOut = {
         id: d.id, module: d.module, points: d.points, penalty: d.penalty,
         prompt: d.prompt,
         options: d.options.map(function (o) {
-          return mergeExtra({ text: o.text, correct: !!o.correct, why: o.why }, o._extra);
+          var oOut = { text: o.text, correct: !!o.correct, why: o.why };
+          var b = branchToJson(o.branch);
+          if (b) oOut.branch = b;
+          return mergeExtra(oOut, o._extra);
         })
-      }, d._extra);
+      };
+      // unlockWhen gate — emitted whole (preserving any keys the editor doesn't
+      // model) only when it carries at least one key; a blank gate is dropped.
+      if (d.unlockWhen && typeof d.unlockWhen === "object" &&
+          !Array.isArray(d.unlockWhen) && Object.keys(d.unlockWhen).length) {
+        dOut.unlockWhen = d.unlockWhen;
+      }
+      return mergeExtra(dOut, d._extra);
     });
 
     return mergeExtra({
@@ -775,6 +832,24 @@
     }
     if (r.unlocks) out.unlocks = r.unlocks;
     return mergeExtra(out, r._extra);
+  }
+
+  /* Serialise a decision-option branch to JSON, or null if there's nothing to
+     emit. Models `reveal` (the "what happens next" trio) explicitly while
+     preserving any OTHER branch keys verbatim (e.g. future group-vote forks),
+     so round-trip stays lossless. An empty reveal with no other keys is dropped
+     — the editor may create a blank branch object just for editing. */
+  function branchToJson(branch) {
+    if (!branch || typeof branch !== "object" || Array.isArray(branch)) return null;
+    var reveal = branch.reveal;
+    var hasReveal = reveal && typeof reveal === "object" &&
+      (reveal.en || reveal.fr || reveal.ja);
+    var otherKeys = Object.keys(branch).filter(function (k) { return k !== "reveal"; });
+    if (!hasReveal && otherKeys.length === 0) return null;
+    var out = {};
+    if (hasReveal) out.reveal = reveal;
+    otherKeys.forEach(function (k) { out[k] = branch[k]; });
+    return out;
   }
 
   function refreshOutput() {
@@ -1117,13 +1192,22 @@
         points: d.points || 0,
         penalty: d.penalty || 0,
         prompt: asTrio(d.prompt),
+        // unlockWhen kept whole (models hypotheses/historyRevealed/examRevealed/
+        // afterDecision in the UI, preserves any other keys) — now modeled, so
+        // it leaves the passthrough known-list below.
+        unlockWhen: (d.unlockWhen && typeof d.unlockWhen === "object" && !Array.isArray(d.unlockWhen))
+          ? d.unlockWhen : null,
         options: (d.options || []).map(function (o) {
           return {
             text: asTrio(o.text), correct: !!o.correct, why: asTrio(o.why),
-            _extra: extraKeys(o, ["text", "correct", "why"])
+            // branch kept whole (models reveal, preserves other keys) — modeled,
+            // so it leaves the option passthrough known-list.
+            branch: (o.branch && typeof o.branch === "object" && !Array.isArray(o.branch))
+              ? o.branch : null,
+            _extra: extraKeys(o, ["text", "correct", "why", "branch"])
           };
         }),
-        _extra: extraKeys(d, ["id", "module", "points", "penalty", "prompt", "options"])
+        _extra: extraKeys(d, ["id", "module", "points", "penalty", "prompt", "options", "unlockWhen"])
       };
     });
     if (s.decisions.length === 0) s.decisions = [emptyDecision()];

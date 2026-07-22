@@ -262,6 +262,45 @@ test("Phase 3: validate() flags a chat-scoring family with no stems and a bad un
     "must flag an unlocks that isn't group:index");
 });
 
+test("Phase 3: decision branch.reveal + unlockWhen are modeled and preserve unknown sub-keys", () => {
+  const api = loadAuthor();
+  const scenario = {
+    id: "branchy", name: T("B", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [],
+    decisions: [{
+      id: "d1", module: "A", points: 10, penalty: 5, prompt: T("dp", "", ""),
+      // includes a key the editor does NOT model (customGate) — must survive.
+      unlockWhen: { hypotheses: 2, afterDecision: "d0", customGate: true },
+      options: [
+        // branch with a non-reveal key (goto) — must survive.
+        { text: T("o1", "", ""), correct: true, why: T("w1", "", ""), branch: { reveal: T("r1", "", ""), goto: "nodeX" } },
+        { text: T("o2", "", ""), correct: false, why: T("w2", "", "") }
+      ]
+    }]
+  };
+
+  const st = api.fromJson(scenario);
+  assert.deepStrictEqual(st.decisions[0].unlockWhen, { hypotheses: 2, afterDecision: "d0", customGate: true });
+  assert.deepStrictEqual(st.decisions[0].options[0].branch, { reveal: { en: "r1", fr: "", ja: "" }, goto: "nodeX" });
+  assert.strictEqual(st.decisions[0].options[1].branch, null);
+  assert.ok(!("unlockWhen" in (st.decisions[0]._extra || {})), "unlockWhen must be modeled, not passthrough");
+  assert.ok(!("branch" in (st.decisions[0].options[0]._extra || {})), "branch must be modeled, not passthrough");
+
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.decisions[0].unlockWhen, { hypotheses: 2, afterDecision: "d0", customGate: true });
+  assert.deepStrictEqual(out.decisions[0].options[0].branch, { reveal: { en: "r1", fr: "", ja: "" }, goto: "nodeX" });
+  assert.ok(!("branch" in out.decisions[0].options[1]), "option with no branch stays branch-less");
+});
+
 test("the passthrough helpers are wired into (de)serialisation", () => {
   assert.match(JS, /function extraKeys\(/, "extraKeys helper must exist");
   assert.match(JS, /function mergeExtra\(/, "mergeExtra helper must exist");

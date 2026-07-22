@@ -56,4 +56,39 @@ test.describe("Scenario author — Phase 3 chat-scoring authoring", () => {
 
     expect(errors, "author page must load and edit without JS errors").toEqual([]);
   });
+
+  test("decision branch.reveal + unlockWhen author into the JSON preview", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+
+    await page.goto("/scenario-author.html");
+    await expect(page.locator("#list-decisions")).toBeAttached();
+
+    // The default scenario ships with one decision row + two options.
+    const decRow = page.locator("#list-decisions > *").first();
+    await decRow.locator('input[type="text"]').first().fill("dec1"); // decision id
+
+    // unlockWhen: min hypotheses (first number in the gate row) + afterDecision.
+    await decRow.locator('.unlockwhen-row input[type="number"]').first().fill("2");
+    await decRow.locator('.unlockwhen-row input[placeholder^="e.g. dec_"]').fill("dec0");
+
+    // Branch reveal on the first option: the EN textarea of the "Branch reveal" trio.
+    const branchTrio = decRow.locator(".trio-block", {
+      has: page.locator(".trio-label", { hasText: "Branch reveal" })
+    }).first();
+    await branchTrio.locator("textarea").first().fill("The patient thanks you and relaxes.");
+
+    // The live JSON preview reflects the modeled gate + branch.
+    const preview = page.locator("#json-preview");
+    await expect.poll(async () => (await preview.inputValue()).includes('"unlockWhen"')).toBe(true);
+    const json = JSON.parse(await preview.inputValue());
+    const dec = json.decisions.find((d) => d.id === "dec1");
+    expect(dec.unlockWhen.hypotheses).toBe(2);
+    expect(dec.unlockWhen.afterDecision).toBe("dec0");
+    expect(dec.options[0].branch.reveal.en).toBe("The patient thanks you and relaxes.");
+    // The second option was left untouched → no branch key.
+    expect(dec.options[1].branch).toBeUndefined();
+
+    expect(errors, "author page must edit decisions without JS errors").toEqual([]);
+  });
 });
