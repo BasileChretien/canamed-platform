@@ -5134,20 +5134,24 @@ function setRoomStage(r, from, to) {
   // Honour the scenario's stage flow (branched skips stage 2). Every advance
   // call site passes to = from ± 1, so this one guard covers them all.
   to = snapStageToFlow(to, from);
-  let changed = false;
-  db.ref(sPath("rooms/" + r + "/stage")).transaction(cur => {
-    const c = typeof cur === "number" ? cur : 0;
-    // returning undefined ABORTS the transaction - returning a value commits it,
-    // so a conflict (another admin already moved this room) must return undefined
-    if (from != null && c !== from) return undefined;
-    changed = (c !== to);
-    return to;
-  }).then(() => {
-    if (changed) {
+  // Plain read-then-set, NOT a transaction: RTDB .transaction() does a
+  // client-side rule pre-check against the LOCAL cache, but the admin-identity
+  // write rule (Phase 4a) references the unreadable adminSecrets/proof node, so
+  // a legitimate admin's advance would be rejected client-side before reaching
+  // the server. A .set() is evaluated server-side (full data access) and works
+  // for both the creator and a proved-password co-facilitator. The from-guard
+  // keeps the "another admin already moved this room" check (best-effort;
+  // last-write-wins is benign for a stage counter).
+  const stageRef = db.ref(sPath("rooms/" + r + "/stage"));
+  stageRef.once("value").then(snap => {
+    const c = typeof snap.val() === "number" ? snap.val() : 0;
+    if (from != null && c !== from) return null;   // conflict — another admin moved it
+    if (c === to) return null;                      // no-op, nothing to write
+    return stageRef.set(to).then(() => {
       db.ref(sPath("rooms/" + r + "/stageAt")).set(Date.now());
       logAdminAction("room.stage", { room: r, from: from, to: to });
       logEvent(r, "stage", { room: r, from: from, to: to });
-    }
+    });
   }).catch(e => {
     console.error("Stage change failed for " + r, e);
     alert("Could not change the stage for " + r + " - check your connection and try again.");

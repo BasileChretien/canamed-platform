@@ -128,18 +128,21 @@ test("rules: closing a session is creator/proof-bound (not any authed user)", ()
   // (i.e. any student). Both trees require creatorUid == auth.uid OR a
   // fresh admin password-proof at adminSecrets .../proof/<uid> (FINDING-07
   // scheme). Functional coverage: rules-smoke.spec.js (emulator).
+  // The proof must MATCH THE CURRENT HASH (auto-invalidates on _superadminReset
+  // rotation), not merely exist (PR #223 review, Major).
   const sess = rules.rules.sessions["$sessionId"].closed[".write"];
   assert.ok(sess.includes("'creatorUid'") && sess.includes("== auth.uid"),
     "sessions closed-write must bind to creatorUid; got: " + sess);
   assert.ok(sess.includes("'adminSecrets'") && sess.includes("'proof'") &&
-            sess.includes("child(auth.uid).exists()"),
-    "sessions closed-write must accept a password-proof holder; got: " + sess);
+            sess.includes("child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()"),
+    "sessions closed-write must accept a CURRENT-hash password-proof holder; got: " + sess);
+  assert.ok(!sess.includes("child(auth.uid).exists()"), "must not use a stale proof exists() check: " + sess);
   const org = rules.rules.orgs["$orgSlug"].sessions["$sessionId"].closed[".write"];
   assert.ok(org.includes("'creatorUid'") && org.includes("== auth.uid"),
     "org closed-write must bind to creatorUid; got: " + org);
   assert.ok(org.includes("'adminSecrets'") && org.includes("'proof'") &&
-            org.includes("child(auth.uid).exists()"),
-    "org closed-write must accept a password-proof holder; got: " + org);
+            org.includes("child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val()"),
+    "org closed-write must accept a CURRENT-hash password-proof holder; got: " + org);
 });
 
 test("rules: link fields validate https:// (no plaintext / javascript:)", () => {
