@@ -604,6 +604,9 @@ test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", 
   expect(String(await tryWrite(tabB, `sessions/${code}/started`, true))).toMatch(/denied/i);
   expect(String(await tryWrite(tabB, `sessions/${code}/roomCount`, 3))).toMatch(/denied/i);
   expect(String(await tryWrite(tabB, `sessions/${code}/summary`, { at: Date.now() }))).toMatch(/denied/i);
+  // …incl. advancing a room's stage (now identity-bound; setRoomStage was
+  // changed from a transaction to a set so the server evaluates the rule).
+  expect(String(await tryWrite(tabB, `sessions/${code}/rooms/r1/stage`, 2))).toMatch(/denied/i);
   // A "victim" participant owned by A (clientMapping = uidA) with a full pool
   // entry, so a room reassignment is decided by the room .write rule (not the
   // pool-entry .validate, which requires name/university/…).
@@ -616,6 +619,7 @@ test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", 
   // …but the creator can (admin-assign path), and can do the other admin writes.
   expect(await tryWrite(page, `sessions/${code}/pool/cidV/room`, "Room 1")).toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/${code}/started`, true)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/rooms/r1/stage`, 2)).toBe("ALLOWED");
 
   // B CAN self-assign its OWN room (owns cidB via clientMapping).
   expect(await tryWrite(tabB, `sessions/${code}/pool/cidB`, entry("Bee"))).toBe("ALLOWED");
@@ -627,6 +631,7 @@ test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", 
   expect(await tryWrite(tabB, `adminSecrets/${code}/proof/${uidB}`, REAL_HASH)).toBe("ALLOWED");
   expect(await tryWrite(tabB, `sessions/${code}/summary`, { at: Date.now() })).toBe("ALLOWED");
   expect(await tryWrite(tabB, `sessions/${code}/pool/cidV/room`, "Room 2")).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code}/rooms/r1/stage`, 3)).toBe("ALLOWED");
 
   await ctxB.close();
 });

@@ -122,16 +122,32 @@ test("CM3/P4a: /orgs pool/$clientId/room is restricted to self OR admin", () => 
   assert.ok(roomWrite, "orgs room sub-field must declare .write");
   assert.match(roomWrite, /clientMapping'\)\.child\(\$clientId\)\.val\(\) == auth\.uid/,
     "orgs self-assign must require clientMapping ownership");
+  assert.match(roomWrite, /creatorUid'\)\.val\(\) == auth\.uid/,
+    "orgs admin-assign must allow the session creator");
   assert.match(roomWrite, /adminSecrets'\)\.child\('orgs'\)/,
     "orgs admin-assign must allow a password-proof holder (org-scoped adminSecrets)");
 });
 // Phase 4a — a representative admin-write node (started) is now identity-bound
 // (creator OR proof), not merely "the session has an admin".
-test("P4a: /sessions started is bound to creatorUid OR a password-proof", () => {
+test("P4a: /sessions started is bound to creatorUid OR a CURRENT-hash password-proof", () => {
   const w = sess.started[".write"];
   assert.match(w, /adminPasswordHash'\)\.exists\(\)/, "still requires the session to have an admin");
   assert.match(w, /creatorUid'\)\.val\(\) == auth\.uid/, "must allow the creator");
-  assert.match(w, /adminSecrets'\)\.child\(\$sessionId\)\.child\('proof'\)/, "must allow a proof holder");
+  // The proof must MATCH THE CURRENT HASH (auto-invalidates when _superadminReset
+  // rotates the password), not merely exist — otherwise a proof against an old
+  // hash keeps authorizing after a rotation (PR #223 review, Major).
+  assert.match(w, /proof'\)\.child\(auth\.uid\)\.val\(\) == root\.child\('adminSecrets'\)\.child\(\$sessionId\)\.child\('hash'\)\.val\(\)/,
+    "proof must equal the current hash");
+  assert.doesNotMatch(w, /proof'\)\.child\(auth\.uid\)\.exists\(\)/, "must not use a stale exists() check");
+});
+
+test("P4a: /sessions rooms/stage + stageAt are identity-bound (setRoomStage is now a set)", () => {
+  for (const node of [sess.rooms["$roomId"].stage, sess.rooms["$roomId"].stageAt]) {
+    const w = node[".write"];
+    assert.match(w, /creatorUid'\)\.val\(\) == auth\.uid/, "stage/stageAt must allow the creator");
+    assert.match(w, /proof'\)\.child\(auth\.uid\)\.val\(\) == root\.child\('adminSecrets'\)/,
+      "stage/stageAt must allow a current-hash proof holder");
+  }
 });
 
 // ------------------------------------------------------------------

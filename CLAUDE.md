@@ -287,15 +287,19 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `tests-e2e/emulator/rules-smoke.spec.js` ("admin-write nodes + pool/room are
   creator/proof-bound (Phase 4a)") + structural asserts in
   `tests/round3-clientmapping.test.js`.
-  - **Deferred:** `rooms/$roomId/stage` + `stageAt` stay at the
-    `adminPasswordHash` existence gate (NOT identity-bound). `setRoomStage` uses
-    an RTDB `.transaction()`, which does a client-side rule pre-check against the
-    local cache; the identity predicate references the unreadable
-    `adminSecrets/proof` node, so a legitimate admin's stage advance is rejected
-    client-side before it reaches the server. Identity-binding these needs an
-    app-level `transaction()`→`set()` change in `setRoomStage` (script.js) — a
-    separate, PWA-bumped, LOCAL-e2e-tested change. Stage griefing is recoverable
-    (advance back), unlike the closed/room-assignment vectors now bound.
+  - **`rooms/$roomId/stage` + `stageAt` — now ALSO identity-bound** (completed in
+    the same PR #223). `setRoomStage` was changed from an RTDB `.transaction()`
+    to a read-then-`set()`: a transaction does a client-side rule pre-check
+    against the local cache, and the identity predicate references the unreadable
+    `adminSecrets/proof` node, so a transaction-based advance was rejected
+    client-side; a `.set()` is server-evaluated (full data). PWA shell bumped
+    v93→v94; LOCAL-e2e `advance-and-close.spec.js` confirms Advance still
+    propagates. The from-guard survives as a best-effort read-then-set check.
+  - **Stale-proof hardening (PR #223 review):** all admin predicates check
+    `adminSecrets/<code>/proof/<uid>.val() == …/hash.val()` (proof equals the
+    CURRENT hash), not `.exists()` — so a proof written against an old password
+    auto-invalidates when `_superadminReset` rotates the hash. Fixed on the
+    `closed` rule too (it previously used `.exists()`).
 - Module A `scoring/awarded/<famId>` is client-writable (write-once, bounded
   points, requires uidMembers membership). A teammate with dev tools can
   still pre-award their own room — accepted because this is collaborative
