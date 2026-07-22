@@ -1135,3 +1135,29 @@ test("rules: facilitatorGate — admin-only node; every session-establishment wr
       "_superadminReset must stay ungated so existing-session recovery works: " + w);
   }
 });
+
+test("rules: Phase 4d moderation — reports write-own/once, moderators admin-only, tombstone moderator-gated", () => {
+  const r = rules.rules;
+
+  // moderators: admin/console-only allowlist. Rules reference it via root.child,
+  // but clients can neither read nor write it (no oracle, no self-promotion).
+  assert.strictEqual(r.moderators[".read"], false, "moderators must not be client-readable");
+  assert.strictEqual(r.moderators[".write"], false, "moderators must be admin-SDK/console-only");
+
+  // reports: write-OWN (only under your own uid) + write-ONCE (no overwrite) +
+  // no read (moderators review out-of-band via the admin SDK).
+  assert.strictEqual(r.reports[".read"], false, "reports must not be client-readable");
+  const rep = r.reports.scenarios.$shareId.$reporterUid[".write"];
+  assert.match(rep, /\$reporterUid == auth\.uid/, "a report may only be filed under the reporter's own uid: " + rep);
+  assert.match(rep, /!data\.exists\(\)/, "a report is write-once (no edit/retract by overwrite): " + rep);
+  assert.strictEqual(r.reports.scenarios.$shareId.$reporterUid.$other[".validate"], false,
+    "reports must reject unknown keys");
+
+  // moderation/removed tombstone: readable by any client (so the picker can
+  // filter removed scenarios) but writable ONLY by a moderator. It lives OUTSIDE
+  // sharedScenarios so a scenario owner re-publishing cannot clear a takedown.
+  assert.strictEqual(r.moderation[".read"], "auth != null", "clients must be able to read the removed list to filter");
+  assert.strictEqual(r.moderation[".write"], false, "moderation root is not blanket-writable");
+  const tomb = r.moderation.removed.$shareId[".write"];
+  assert.match(tomb, /moderators'\)\.child\(auth\.uid\)\.val\(\) == true/, "tombstone write must require a moderator: " + tomb);
+});

@@ -285,6 +285,28 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `adminPasswordHash`/`adminSecrets` hash/**recovery code** in **both** trees, and
   an established session's `_superadminReset`→hash-overwrite recovery chain still
   succeeds under enforcement).
+- **Shared-library moderation primitive (Phase 4d, rules — client wiring PENDING).**
+  Three top-level nodes support reporting + takedown of `sharedScenarios` without
+  hard-deleting: (1) `moderators/$uid` — admin-only allowlist (`.read:false`,
+  `.write:false`; set via Console/admin-SDK; rules reference it via `root.child`).
+  (2) `reports/scenarios/$shareId/$reporterUid` — write-OWN (`$reporterUid ==
+  auth.uid`) + write-ONCE (`!data.exists()`) + `.read:false` + `$other:false`
+  sentinel; moderators review reports out-of-band via the admin SDK. (3)
+  `moderation/removed/$shareId` — a tombstone writable ONLY by a moderator
+  (`moderators/<uid> == true`), `.read:auth!=null` so clients can filter. It lives
+  OUTSIDE `sharedScenarios` on purpose, so a scenario owner re-publishing their
+  scenario cannot clear a takedown. Tested: `tests/rules.test.js` (structural) +
+  `tests-e2e/emulator/rules-smoke.spec.js` (functional: report write-own/once,
+  peer/other-uid denied, unknown-key denied, non-moderator tombstone denied,
+  moderator tombstone allowed). **⏳ CLIENT WIRING NOT YET DONE (next slice):**
+  the scenario picker must (a) read `moderation/removed` and hide removed
+  `sharedScenarios`, and (b) offer a "Report" affordance that writes
+  `reports/scenarios/$shareId/<uid>`. Until then the tombstone hides nothing in
+  the UI and no reports can be filed from the app (moderators can still tombstone
+  via the admin SDK). That slice touches `script.js` → PWA shell bump + per-viewport
+  Playwright. The DOMPurify half of Phase 4d is already DONE + audited clean (every
+  authored string reaches the DOM via textContent/esc/DOMPurify — see the
+  selfserve memory).
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
   binding.~~ **Fixed:** added `stableIdMapping/$stableId → auth.uid` (write-once,

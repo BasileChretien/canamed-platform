@@ -536,6 +536,39 @@
       }
     },
 
+    "moderators": {
+      ".read": false,
+      ".write": false,
+      "$uid": { ".validate": "newData.val() == null || newData.isBoolean()" }
+    },
+
+    "reports": {
+      ".read": false,
+      ".write": false,
+      "scenarios": {
+        "$shareId": {
+          "$reporterUid": {
+            ".write": "auth != null && $reporterUid == auth.uid && !data.exists()",
+            ".validate": "newData.hasChildren(['at'])",
+            "at":     { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 86400000" },
+            "reason": { ".validate": "newData.isString() && newData.val().length <= 500" },
+            "$other": { ".validate": false }
+          }
+        }
+      }
+    },
+
+    "moderation": {
+      ".read": "auth != null",
+      ".write": false,
+      "removed": {
+        "$shareId": {
+          ".write": "auth != null && root.child('moderators').child(auth.uid).val() == true",
+          ".validate": "newData.val() == null || newData.isBoolean()"
+        }
+      }
+    },
+
     "orgs": {
       "$orgSlug": {
         ".validate": "$orgSlug.matches(/^[a-z0-9-]+$/)",

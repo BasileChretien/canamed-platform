@@ -729,3 +729,32 @@ test("rules: facilitatorGate — every session-establishment write is gated when
     if (ctxB) await ctxB.close();
   }
 });
+
+test("rules: Phase 4d moderation — report write-own/once; tombstone moderator-gated", async ({ page }) => {
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const ts = Date.now().toString(36);
+  const sid = `sc-${ts}`;
+
+  // A user can file ONE report on a scenario, under their own uid.
+  expect(await tryWrite(page, `reports/scenarios/${sid}/${uidA}`, { at: Date.now(), reason: "spam" })).toBe("ALLOWED");
+  // …cannot overwrite their own report (write-once — no silent edit/retract).
+  expect(String(await tryWrite(page, `reports/scenarios/${sid}/${uidA}`, { at: Date.now(), reason: "changed" }))).toMatch(/denied/i);
+  // …cannot file under ANOTHER uid (write-own) — this also covers a peer trying to
+  // spoof/overwrite someone else's report slot.
+  expect(String(await tryWrite(page, `reports/scenarios/${sid}/not-my-uid`, { at: Date.now() }))).toMatch(/denied/i);
+  // …and unknown keys are rejected ($other sentinel).
+  expect(String(await tryWrite(page, `reports/scenarios/${sid}-x/${uidA}`, { at: Date.now(), evil: 1 }))).toMatch(/denied/i);
+
+  // Tombstone: a non-moderator cannot mark a scenario removed.
+  expect(String(await tryWrite(page, `moderation/removed/${sid}`, true))).toMatch(/denied/i);
+
+  // Promote uidA to moderator (admin-only node → owner REST bypasses rules); now
+  // uidA CAN tombstone. Always demote in finally so later tests are unaffected.
+  try {
+    await adminPut(`moderators/${uidA}`, true);
+    expect(await tryWrite(page, `moderation/removed/${sid}`, true)).toBe("ALLOWED");
+  } finally {
+    await adminPut(`moderators/${uidA}`, null);
+  }
+});
