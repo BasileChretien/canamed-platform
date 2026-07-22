@@ -124,7 +124,7 @@
 
         "created": {
           ".read": "auth != null",
-          ".write": "auth != null && !data.exists()",
+          ".write": "auth != null && !data.exists() && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
           ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
         },
         "workshopLabel": {
@@ -471,6 +471,15 @@
       }
     },
 
+    "facilitatorGate": {
+      ".read": false,
+      ".write": false,
+      "enforce": { ".validate": "newData.val() == null || newData.isBoolean()" },
+      "allow": {
+        "$uid": { ".validate": "newData.val() == null || newData.isBoolean()" }
+      }
+    },
+
     "adminSecrets": {
       "orgs": {
         "$orgSlug": {
@@ -566,7 +575,7 @@
 
             "created": {
               ".read": "auth != null",
-              ".write": "auth != null && !data.exists()",
+              ".write": "auth != null && !data.exists() && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
               ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
             },
             "workshopLabel": {

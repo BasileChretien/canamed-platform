@@ -635,3 +635,49 @@ test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", 
 
   await ctxB.close();
 });
+
+// Phase 4c — session-creation soft-launch gate (facilitatorGate). Admin-only
+// node (.write:false): seeded via the emulator's owner REST token, which
+// bypasses rules. Default (absent/enforce!=true) → creation open (current
+// behaviour); enforce==true → only allow/<uid>==true may create.
+const EMU_DB_REST = "http://127.0.0.1:9000";
+const EMU_NS = "canamed-sim-default-rtdb";
+async function adminPut(pathNoJson, value) {
+  const res = await fetch(`${EMU_DB_REST}/${pathNoJson}.json?ns=${EMU_NS}`, {
+    method: "PUT",
+    headers: { "Authorization": "Bearer owner", "Content-Type": "application/json" },
+    body: JSON.stringify(value)
+  });
+  if (!res.ok) throw new Error(`admin PUT ${pathNoJson} -> ${res.status}`);
+}
+
+test("rules: facilitatorGate — creation open by default, allowlist-gated when enforced (Phase 4c)", async ({ page, browser }) => {
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const ts = Date.now().toString(36);
+
+  // 1) Default (no facilitatorGate) — any authed user can create a session.
+  expect(await tryWrite(page, `sessions/fgA-${ts}/created`, { by: "A", at: Date.now() })).toBe("ALLOWED");
+
+  let ctxB;
+  try {
+    // 2) Enforce, allowlisting ONLY uidA (admin/console-only node → owner REST).
+    await adminPut("facilitatorGate", { enforce: true, allow: { [uidA]: true } });
+
+    // Allowlisted uidA still creates…
+    expect(await tryWrite(page, `sessions/fgA2-${ts}/created`, { by: "A", at: Date.now() })).toBe("ALLOWED");
+
+    // …a different, non-allowlisted uid B cannot.
+    ctxB = await browser.newContext();
+    const tabB = await ctxB.newPage();
+    await useEmulator(tabB);
+    await tabB.goto("/");
+    const uidB = await waitForUid(tabB);
+    expect(uidB).not.toBe(uidA);
+    expect(String(await tryWrite(tabB, `sessions/fgB-${ts}/created`, { by: "B", at: Date.now() }))).toMatch(/denied/i);
+  } finally {
+    // ALWAYS clear the gate so later tests' session creation isn't blocked.
+    await adminPut("facilitatorGate", null);
+    if (ctxB) await ctxB.close();
+  }
+});

@@ -1073,3 +1073,20 @@ test("rules: session scenarioCustomJson caps at 256 KB in both trees (holds a sc
       where + "scenarioCustomJson must stay write-once");
   });
 });
+
+test("rules: facilitatorGate — admin-only node; created write is opt-in gated (Phase 4c)", () => {
+  const fg = rules.rules.facilitatorGate;
+  assert.ok(fg, "/facilitatorGate must be declared");
+  assert.strictEqual(fg[".read"], false, "facilitatorGate must not be client-readable");
+  assert.strictEqual(fg[".write"], false, "facilitatorGate must be admin-SDK/console-only (write:false)");
+  // Enforcement is OPT-IN: with enforce != true (default/absent) creation is
+  // unchanged, so enabling the allowlist is a safe, reversible rollout that
+  // cannot lock out existing facilitators.
+  for (const w of [rules.rules.sessions.$sessionId.created[".write"],
+                   rules.rules.orgs.$orgSlug.sessions.$sessionId.created[".write"]]) {
+    assert.match(w, /facilitatorGate'\)\.child\('enforce'\)\.val\(\) != true/,
+      "created write must stay open unless enforcement is on: " + w);
+    assert.match(w, /facilitatorGate'\)\.child\('allow'\)\.child\(auth\.uid\)\.val\(\) == true/,
+      "created write must allow only allowlisted uids when enforced: " + w);
+  }
+});
