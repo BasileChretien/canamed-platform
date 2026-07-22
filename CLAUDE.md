@@ -275,14 +275,31 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   read-verify (no rules). See `verifyAdminPassword`,
   `useAdminSecrets`, the create/recovery flows, and `tests/rules.test.js` +
   `tests-e2e/emulator/rules-smoke.spec.js` (FINDING-07).
-- `pool/$clientId/room` is intentionally writable by any authenticated user
+- ~~`pool/$clientId/room` is intentionally writable by any authenticated user
   (admin room-assignment + self-assign); residual room-griefing is accepted
-  until a cryptographic admin identity exists. A "self-assign only" rule can't
-  be the fix while admin assignment rides the same open path with no admin
-  identity. **Revisit when:** sessions become unfacilitated / self-serve or
-  scale beyond a supervised classroom — then build the cryptographic admin
-  identity and gate room-assignment behind it. Until then, accepted (a human
-  facilitator is present and the disruption is recoverable).
+  until a cryptographic admin identity exists.~~ **CLOSED — Phase 4a (2026-07-22).**
+  `pool/$clientId/room` is now restricted to SELF-assign (the client owns its
+  `clientMapping`) OR ADMIN-assign (creator `creatorUid == auth.uid` or a fresh
+  password-proof at `adminSecrets/<code>/proof/<uid>`), in both the `sessions/`
+  and `orgs/` trees. Same Phase-4a pass bound 19 other admin-write nodes
+  (`started`, `roomCount`, `summary`, `mail`, `score/manual`, `_adminPresence`,
+  the three links, org `audit`) to that same identity predicate. Validated by
+  `tests-e2e/emulator/rules-smoke.spec.js` ("admin-write nodes + pool/room are
+  creator/proof-bound (Phase 4a)") + structural asserts in
+  `tests/round3-clientmapping.test.js`.
+  - **`rooms/$roomId/stage` + `stageAt` — now ALSO identity-bound** (completed in
+    the same PR #223). `setRoomStage` was changed from an RTDB `.transaction()`
+    to a read-then-`set()`: a transaction does a client-side rule pre-check
+    against the local cache, and the identity predicate references the unreadable
+    `adminSecrets/proof` node, so a transaction-based advance was rejected
+    client-side; a `.set()` is server-evaluated (full data). PWA shell bumped
+    v93→v94; LOCAL-e2e `advance-and-close.spec.js` confirms Advance still
+    propagates. The from-guard survives as a best-effort read-then-set check.
+  - **Stale-proof hardening (PR #223 review):** all admin predicates check
+    `adminSecrets/<code>/proof/<uid>.val() == …/hash.val()` (proof equals the
+    CURRENT hash), not `.exists()` — so a proof written against an old password
+    auto-invalidates when `_superadminReset` rotates the hash. Fixed on the
+    `closed` rule too (it previously used `.exists()`).
 - Module A `scoring/awarded/<famId>` is client-writable (write-once, bounded
   points, requires uidMembers membership). A teammate with dev tools can
   still pre-award their own room — accepted because this is collaborative

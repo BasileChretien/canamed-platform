@@ -574,3 +574,64 @@ test("rules: closing a session is creator/proof-bound — a student who knows th
   expect(await tryWrite(tabB, `sessions/${code2}/closed`, { by: "Co-facilitator", at: Date.now() })).toBe("ALLOWED");
   await ctxB.close();
 });
+
+test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", async ({ page, browser }) => {
+  // Before this, any authed user who knew the code could write admin-gated
+  // nodes (started, roomCount, summary) and assign ANY participant's room —
+  // fine under a supervised classroom, grief-able once self-serve. They are now
+  // bound to the session's creator (creatorUid == auth.uid) or a fresh
+  // password-proof, and pool/$clientId/room is restricted to the client itself
+  // (clientMapping ownership) OR an admin.
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const REAL_HASH = "c".repeat(64);
+  const code = "adm-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+
+  // Creator A establishes the session.
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+  expect(await tryWrite(page, `adminSecrets/${code}/hash`, REAL_HASH)).toBe("ALLOWED");
+
+  // Student B — distinct uid, knows the code, neither creator nor proof-holder.
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+
+  // B cannot perform admin writes…
+  expect(String(await tryWrite(tabB, `sessions/${code}/started`, true))).toMatch(/denied/i);
+  expect(String(await tryWrite(tabB, `sessions/${code}/roomCount`, 3))).toMatch(/denied/i);
+  expect(String(await tryWrite(tabB, `sessions/${code}/summary`, { at: Date.now() }))).toMatch(/denied/i);
+  // …incl. advancing a room's stage (now identity-bound; setRoomStage was
+  // changed from a transaction to a set so the server evaluates the rule).
+  expect(String(await tryWrite(tabB, `sessions/${code}/rooms/r1/stage`, 2))).toMatch(/denied/i);
+  // A "victim" participant owned by A (clientMapping = uidA) with a full pool
+  // entry, so a room reassignment is decided by the room .write rule (not the
+  // pool-entry .validate, which requires name/university/…).
+  const entry = (name) => ({ name, university: "U", year: 2, english: "B2", at: Date.now() });
+  expect(await tryWrite(page, `sessions/${code}/pool/cidV`, entry("Victim"))).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/clientMapping/cidV`, uidA)).toBe("ALLOWED");
+
+  // B (non-owner, non-admin) cannot reassign the victim's room…
+  expect(String(await tryWrite(tabB, `sessions/${code}/pool/cidV/room`, "Room 9"))).toMatch(/denied/i);
+  // …but the creator can (admin-assign path), and can do the other admin writes.
+  expect(await tryWrite(page, `sessions/${code}/pool/cidV/room`, "Room 1")).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/started`, true)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/rooms/r1/stage`, 2)).toBe("ALLOWED");
+
+  // B CAN self-assign its OWN room (owns cidB via clientMapping).
+  expect(await tryWrite(tabB, `sessions/${code}/pool/cidB`, entry("Bee"))).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code}/clientMapping/cidB`, uidB)).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code}/pool/cidB/room`, "Room 3")).toBe("ALLOWED");
+
+  // After a valid password proof-write, B is a legitimate facilitator and CAN
+  // do admin writes — incl. reassigning the victim's room (proof path).
+  expect(await tryWrite(tabB, `adminSecrets/${code}/proof/${uidB}`, REAL_HASH)).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code}/summary`, { at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code}/pool/cidV/room`, "Room 2")).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code}/rooms/r1/stage`, 3)).toBe("ALLOWED");
+
+  await ctxB.close();
+});
