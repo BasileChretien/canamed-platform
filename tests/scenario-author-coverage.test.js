@@ -301,11 +301,76 @@ test("Phase 3: decision branch.reveal + unlockWhen are modeled and preserve unkn
   assert.ok(!("branch" in out.decisions[0].options[1]), "option with no branch stays branch-less");
 });
 
+test("Phase 3: preTest / postTest are modeled and round-trip losslessly", () => {
+  const api = loadAuthor();
+  const q = (id) => ({
+    id, q: T("stem", "", ""),
+    options: [{ text: T("a", "", ""), correct: true }, { text: T("b", "", ""), correct: false }],
+    explanation: T("because", "", "")
+  });
+  const scenario = {
+    id: "tested", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: [],
+    preTest: [q("pre1"), q("pre2")],
+    postTest: [q("post1")]
+  };
+  const st = api.fromJson(scenario);
+  assert.strictEqual(st.preTest.length, 2);
+  assert.strictEqual(st.postTest.length, 1);
+  assert.ok(!("preTest" in (st._extra || {})), "preTest must be modeled, not captured in _extra");
+  const out = roundTrip(api, scenario);
+  assert.deepStrictEqual(out.preTest, scenario.preTest);
+  assert.deepStrictEqual(out.postTest, scenario.postTest);
+});
+
+test("Phase 3: empty pre/post tests are omitted; validate flags a bad question", () => {
+  const api = loadAuthor();
+  const base = {
+    id: "t2", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""), synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }], moduleB: [] },
+    penalties: [], decisions: []
+  };
+  const out = roundTrip(api, base);
+  assert.ok(!("preTest" in out), "no preTest key when none authored");
+  assert.ok(!("postTest" in out), "no postTest key when none authored");
+
+  const bad = Object.assign({}, base, {
+    preTest: [{
+      id: "p1", q: T("", "", ""),
+      options: [{ text: T("a", "", ""), correct: false }, { text: T("b", "", ""), correct: false }],
+      explanation: T("e", "", "")
+    }]
+  });
+  const st = api.fromJson(bad);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /preTest\[0\] needs an English question/.test(e)));
+  assert.ok(errs.some((e) => /preTest\[0\] has no option marked correct/.test(e)));
+});
+
 test("the passthrough helpers are wired into (de)serialisation", () => {
   assert.match(JS, /function extraKeys\(/, "extraKeys helper must exist");
   assert.match(JS, /function mergeExtra\(/, "mergeExtra helper must exist");
-  // toScenarioJson merges the top-level extra bag
-  assert.match(JS, /mergeExtra\(\{[\s\S]{0,400}?\},\s*STATE\._extra\)/, "top-level export must merge STATE._extra");
+  // toScenarioJson merges the top-level extra bag onto the assembled scenario
+  assert.match(JS, /mergeExtra\(scenarioOut,\s*STATE\._extra\)/, "top-level export must merge STATE._extra");
   // parse side captures the extra bags
   assert.match(JS, /s\._extra\s*=\s*extraKeys\(obj,/, "scenarioJsonToState must capture top-level extras");
   assert.match(JS, /s\._scoringExtra\s*=\s*extraKeys\(sc,/, "scenarioJsonToState must capture scoring extras");

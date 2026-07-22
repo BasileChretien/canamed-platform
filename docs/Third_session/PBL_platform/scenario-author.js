@@ -85,6 +85,10 @@
       options: [emptyOption(), emptyOption()]
     };
   }
+  function emptyTestOption() { return { text: emptyTrio(), correct: false }; }
+  function emptyTestQuestion() {
+    return { id: "", q: emptyTrio(), options: [emptyTestOption(), emptyTestOption()], explanation: emptyTrio() };
+  }
   // Branched-format editor state: English-only, FORWARD edges (option.next is a
   // target node id; "" = ends the case). buildBranchedScenario translates these
   // to the runtime's reverse unlockWhen.afterDecision gates.
@@ -120,6 +124,9 @@
       scoringAQP: [],
       penalties: [emptyPenaltyRow()],
       decisions: [emptyDecision()],
+      // in-platform knowledge checks (optional; empty by default)
+      preTest: [],
+      postTest: [],
       synthId: "labs:0",
       synthPrereqs: ""
     };
@@ -479,6 +486,55 @@
     });
   }
 
+  function renderTests(listId, arr) {
+    var container = document.getElementById(listId);
+    container.innerHTML = "";
+    arr.forEach(function (qq, i) {
+      var shell = rowShell(listId + "[" + i + "]", function () { arr.splice(i, 1); renderAll(); });
+
+      var idCell = el("div", { class: "field-row" });
+      idCell.appendChild(el("label", { class: "field-label", text: "id" }));
+      var idIn = el("input", { type: "text", value: qq.id });
+      idIn.addEventListener("input", function () { qq.id = idIn.value; refreshOutput(); });
+      idCell.appendChild(idIn);
+      shell.appendChild(idCell);
+
+      shell.appendChild(buildTrio("Question", qq.q, refreshOutput, true));
+
+      var optsWrap = el("div", { class: "decision-options" });
+      optsWrap.appendChild(el("p", { class: "field-hint", text: "Answer options — tick the correct one(s)." }));
+      var optsList = el("div", { class: "decision-options-list" });
+      qq.options.forEach(function (o, j) {
+        var optRow = el("div", { class: "opt-row" });
+        var oh = el("div", { class: "row-header" });
+        oh.appendChild(el("span", { class: "row-title", text: "option[" + j + "]" }));
+        var rm = el("button", { type: "button", class: "remove-btn", text: "× remove" });
+        rm.addEventListener("click", function () { qq.options.splice(j, 1); renderAll(); });
+        oh.appendChild(rm);
+        optRow.appendChild(oh);
+
+        var corrCell = el("div", { class: "check-cell" });
+        var corrCb = el("input", { type: "checkbox", id: listId + "-corr-" + i + "-" + j, checked: !!o.correct });
+        corrCb.addEventListener("change", function () { o.correct = corrCb.checked; refreshOutput(); });
+        corrCell.appendChild(corrCb);
+        corrCell.appendChild(el("label", { htmlFor: listId + "-corr-" + i + "-" + j, text: "correct" }));
+        optRow.appendChild(corrCell);
+
+        optRow.appendChild(buildTrio("Option text", o.text, refreshOutput));
+        optsList.appendChild(optRow);
+      });
+      optsWrap.appendChild(optsList);
+      var addOpt = el("button", { type: "button", class: "add-btn", text: "+ Add option" });
+      addOpt.addEventListener("click", function () { qq.options.push(emptyTestOption()); renderAll(); });
+      optsWrap.appendChild(addOpt);
+      shell.appendChild(optsWrap);
+
+      shell.appendChild(buildTrio("Explanation (shown after answering)", qq.explanation, refreshOutput, true));
+
+      container.appendChild(shell);
+    });
+  }
+
   /* ------------------------------------------------------------------ */
   /* branched-format editor (English-only node graph)                   */
   /* ------------------------------------------------------------------ */
@@ -808,7 +864,7 @@
       return mergeExtra(dOut, d._extra);
     });
 
-    return mergeExtra({
+    var scenarioOut = {
       id: m.id,
       name: m.name,
       summary: m.summary,
@@ -820,7 +876,11 @@
       scoring: scoring,
       penalties: penalties,
       decisions: decisions
-    }, STATE._extra);
+    };
+    // pre/post knowledge tests — optional; emit only when authored.
+    if (STATE.preTest && STATE.preTest.length) scenarioOut.preTest = STATE.preTest.map(testQuestionToJson);
+    if (STATE.postTest && STATE.postTest.length) scenarioOut.postTest = STATE.postTest.map(testQuestionToJson);
+    return mergeExtra(scenarioOut, STATE._extra);
   }
 
   function scoringRowToJson(r) {
@@ -850,6 +910,19 @@
     if (hasReveal) out.reveal = reveal;
     otherKeys.forEach(function (k) { out[k] = branch[k]; });
     return out;
+  }
+
+  /* Serialise one pre/post-test question, modeling id/q/options/explanation and
+     preserving any unmodeled keys per question/option (round-trip fidelity). */
+  function testQuestionToJson(qq) {
+    return mergeExtra({
+      id: qq.id,
+      q: qq.q,
+      options: qq.options.map(function (o) {
+        return mergeExtra({ text: o.text, correct: !!o.correct }, o._extra);
+      }),
+      explanation: qq.explanation
+    }, qq._extra);
   }
 
   function refreshOutput() {
@@ -1036,6 +1109,25 @@
       }
     });
 
+    // pre/post knowledge tests (optional; validated only when present)
+    [["preTest", json.preTest], ["postTest", json.postTest]].forEach(function (pair) {
+      (pair[1] || []).forEach(function (qq, i) {
+        var lbl = pair[0] + "[" + i + "]";
+        if (!qq.id) errs.push(lbl + " is missing an id.");
+        if (!qq.q || !qq.q.en) errs.push(lbl + " needs an English question.");
+        if (!qq.options || qq.options.length < 2) {
+          errs.push(lbl + " needs at least 2 options.");
+        } else {
+          var anyC = false;
+          qq.options.forEach(function (o, j) {
+            if (!o.text || !o.text.en) errs.push(lbl + ".options[" + j + "] needs English text.");
+            if (o.correct) anyC = true;
+          });
+          if (!anyC) errs.push(lbl + " has no option marked correct.");
+        }
+      });
+    });
+
     return errs;
   }
 
@@ -1219,10 +1311,14 @@
 
     // Top-level fields the standard editor has no UI for yet (persona,
     // preTest, postTest, and anything else) — preserve verbatim on round-trip.
+    // pre/post knowledge tests (optional) — now modeled, so they leave the
+    // top-level passthrough known-list.
+    s.preTest = (obj.preTest || []).map(testQuestionToState);
+    s.postTest = (obj.postTest || []).map(testQuestionToState);
     s._extra = extraKeys(obj, [
       "id", "name", "summary", "moduleAName", "moduleBName",
       "case", "scoring", "penalties", "decisions", "synthId", "synthPrereqs",
-      "format"
+      "preTest", "postTest", "format"
     ]);
 
     return s;
@@ -1235,6 +1331,18 @@
       cohorts: !!r.cohorts,
       unlocks: (typeof r.unlocks === "string") ? r.unlocks : "",
       _extra: extraKeys(r, ["id", "points", "label", "any", "cohorts", "unlocks"])
+    };
+  }
+  function testQuestionToState(qq) {
+    qq = qq || {};
+    return {
+      id: qq.id || "",
+      q: asTrio(qq.q),
+      options: (qq.options || []).map(function (o) {
+        return { text: asTrio(o.text), correct: !!o.correct, _extra: extraKeys(o, ["text", "correct"]) };
+      }),
+      explanation: asTrio(qq.explanation),
+      _extra: extraKeys(qq, ["id", "q", "options", "explanation"])
     };
   }
 
@@ -1259,6 +1367,8 @@
       renderScoring("list-scoringAQP", STATE.scoringAQP);
       renderPenalties();
       renderDecisions();
+      renderTests("list-pretest", STATE.preTest);
+      renderTests("list-posttest", STATE.postTest);
     }
     refreshOutput();
   }
@@ -1308,6 +1418,8 @@
           case "scoringAQP": STATE.scoringAQP.push(emptyScoringRow()); break;
           case "penalties": STATE.penalties.push(emptyPenaltyRow()); break;
           case "decisions": STATE.decisions.push(emptyDecision()); break;
+          case "pretest":   STATE.preTest.push(emptyTestQuestion()); break;
+          case "posttest":  STATE.postTest.push(emptyTestQuestion()); break;
         }
         renderAll();
       });

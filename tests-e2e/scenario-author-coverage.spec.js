@@ -91,4 +91,31 @@ test.describe("Scenario author — Phase 3 chat-scoring authoring", () => {
 
     expect(errors, "author page must edit decisions without JS errors").toEqual([]);
   });
+
+  test("preTest question authors into the JSON preview", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+
+    await page.goto("/scenario-author.html");
+    await expect(page.locator("#list-pretest")).toBeAttached();
+
+    await page.locator('.add-btn[data-add="pretest"]').click();
+    const qRow = page.locator("#list-pretest > *").first();
+    await qRow.locator('input[type="text"]').first().fill("pq1"); // question id
+
+    const stemTrio = qRow.locator(".trio-block", {
+      has: page.locator(".trio-label", { hasText: "Question" })
+    }).first();
+    await stemTrio.locator("textarea").first().fill("What is the red flag?");
+
+    // Tick the first answer option as correct.
+    await qRow.locator('input[type="checkbox"]').first().check();
+
+    const json = JSON.parse(await page.locator("#json-preview").inputValue());
+    const q = json.preTest.find((x) => x.id === "pq1");
+    expect(q.q.en).toBe("What is the red flag?");
+    expect(q.options[0].correct).toBe(true);
+
+    expect(errors, "author page must edit the pre-test without JS errors").toEqual([]);
+  });
 });
