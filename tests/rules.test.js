@@ -1074,19 +1074,45 @@ test("rules: session scenarioCustomJson caps at 256 KB in both trees (holds a sc
   });
 });
 
-test("rules: facilitatorGate — admin-only node; created write is opt-in gated (Phase 4c)", () => {
+test("rules: facilitatorGate — admin-only node; every session-establishment write is opt-in gated (Phase 4c)", () => {
   const fg = rules.rules.facilitatorGate;
   assert.ok(fg, "/facilitatorGate must be declared");
   assert.strictEqual(fg[".read"], false, "facilitatorGate must not be client-readable");
   assert.strictEqual(fg[".write"], false, "facilitatorGate must be admin-SDK/console-only (write:false)");
-  // Enforcement is OPT-IN: with enforce != true (default/absent) creation is
-  // unchanged, so enabling the allowlist is a safe, reversible rollout that
-  // cannot lock out existing facilitators.
-  for (const w of [rules.rules.sessions.$sessionId.created[".write"],
-                   rules.rules.orgs.$orgSlug.sessions.$sessionId.created[".write"]]) {
+
+  // Gating only `created` is bypassable: an unallowlisted user could instead
+  // write creatorUid (ownership admin path) or adminPasswordHash / the real
+  // adminSecrets hash (password-proof admin path) and operate a session without
+  // ever writing `created`. So the gate must sit on EVERY write that can bring a
+  // usable session into existence, in BOTH the sessions/ and orgs/ trees.
+  const r = rules.rules;
+  const establishmentWrites = {
+    "sessions.created": r.sessions.$sessionId.created[".write"],
+    "sessions.creatorUid": r.sessions.$sessionId.creatorUid[".write"],
+    "sessions.adminPasswordHash": r.sessions.$sessionId.adminPasswordHash[".write"],
+    "adminSecrets.$code.hash": r.adminSecrets.$code.hash[".write"],
+    "orgs.created": r.orgs.$orgSlug.sessions.$sessionId.created[".write"],
+    "orgs.creatorUid": r.orgs.$orgSlug.sessions.$sessionId.creatorUid[".write"],
+    "orgs.adminPasswordHash": r.orgs.$orgSlug.sessions.$sessionId.adminPasswordHash[".write"],
+    "adminSecrets.orgs.hash": r.adminSecrets.orgs.$orgSlug.$sessionId.hash[".write"],
+  };
+  for (const [name, w] of Object.entries(establishmentWrites)) {
+    // Enforcement is OPT-IN: with enforce != true (default/absent) creation is
+    // unchanged, so enabling the allowlist is a safe, reversible rollout that
+    // cannot lock out existing facilitators.
     assert.match(w, /facilitatorGate'\)\.child\('enforce'\)\.val\(\) != true/,
-      "created write must stay open unless enforcement is on: " + w);
+      name + " must stay open unless enforcement is on: " + w);
     assert.match(w, /facilitatorGate'\)\.child\('allow'\)\.child\(auth\.uid\)\.val\(\) == true/,
-      "created write must allow only allowlisted uids when enforced: " + w);
+      name + " must allow only allowlisted uids when enforced: " + w);
+  }
+
+  // The recovery (superadminReset) branch of the hash rules must NOT be gated —
+  // recovery acts on already-existing sessions whose creator was allowlisted at
+  // creation time, and must keep working under enforcement.
+  for (const w of [r.sessions.$sessionId.adminPasswordHash[".write"],
+                   r.orgs.$orgSlug.sessions.$sessionId.adminPasswordHash[".write"],
+                   r.adminSecrets.$code.hash[".write"],
+                   r.adminSecrets.orgs.$orgSlug.$sessionId.hash[".write"]]) {
+    assert.match(w, /_superadminReset/, "hash recovery branch must survive the gate: " + w);
   }
 });

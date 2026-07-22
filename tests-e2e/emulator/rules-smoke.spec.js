@@ -651,30 +651,47 @@ async function adminPut(pathNoJson, value) {
   if (!res.ok) throw new Error(`admin PUT ${pathNoJson} -> ${res.status}`);
 }
 
-test("rules: facilitatorGate — creation open by default, allowlist-gated when enforced (Phase 4c)", async ({ page, browser }) => {
+test("rules: facilitatorGate — every session-establishment write is gated when enforced (Phase 4c)", async ({ page, browser }) => {
+  // A 64-hex string is a valid adminPasswordHash / adminSecrets hash, so a
+  // denial here is unambiguously the .write gate, not a .validate failure.
+  const HEX = "a".repeat(64), HEX2 = "b".repeat(64);
   await page.goto("/");
   const uidA = await waitForUid(page);
   const ts = Date.now().toString(36);
 
-  // 1) Default (no facilitatorGate) — any authed user can create a session.
+  // 1) Default (no facilitatorGate) — any authed user can begin a session: both
+  //    the `created` marker AND the load-bearing `creatorUid` write are open.
   expect(await tryWrite(page, `sessions/fgA-${ts}/created`, { by: "A", at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/fgAc-${ts}/creatorUid`, uidA)).toBe("ALLOWED");
 
   let ctxB;
   try {
     // 2) Enforce, allowlisting ONLY uidA (admin/console-only node → owner REST).
     await adminPut("facilitatorGate", { enforce: true, allow: { [uidA]: true } });
 
-    // Allowlisted uidA still creates…
+    // Allowlisted uidA still creates — created + creatorUid both allowed.
     expect(await tryWrite(page, `sessions/fgA2-${ts}/created`, { by: "A", at: Date.now() })).toBe("ALLOWED");
+    expect(await tryWrite(page, `sessions/fgA2c-${ts}/creatorUid`, uidA)).toBe("ALLOWED");
 
-    // …a different, non-allowlisted uid B cannot.
+    // 3) A different, non-allowlisted uid B cannot begin a session by ANY path.
+    //    Gating only `created` was bypassable (CodeRabbit): B could instead write
+    //    creatorUid (ownership admin path) or adminPasswordHash + the real
+    //    adminSecrets hash (password-proof admin path) and operate the session
+    //    without ever writing `created`. All of these must now be denied.
     ctxB = await browser.newContext();
     const tabB = await ctxB.newPage();
     await useEmulator(tabB);
     await tabB.goto("/");
     const uidB = await waitForUid(tabB);
     expect(uidB).not.toBe(uidA);
-    expect(String(await tryWrite(tabB, `sessions/fgB-${ts}/created`, { by: "B", at: Date.now() }))).toMatch(/denied/i);
+    for (const [path, value] of [
+      [`sessions/fgB-${ts}/created`, { by: "B", at: Date.now() }],
+      [`sessions/fgBc-${ts}/creatorUid`, uidB],
+      [`sessions/fgBh-${ts}/adminPasswordHash`, HEX],
+      [`adminSecrets/fgBs-${ts}/hash`, HEX2],
+    ]) {
+      expect(String(await tryWrite(tabB, path, value)), `uidB must be denied ${path}`).toMatch(/denied/i);
+    }
   } finally {
     // ALWAYS clear the gate so later tests' session creation isn't blocked.
     await adminPut("facilitatorGate", null);
