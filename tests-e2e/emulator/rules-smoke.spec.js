@@ -635,3 +635,97 @@ test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", 
 
   await ctxB.close();
 });
+
+// Phase 4c — session-creation soft-launch gate (facilitatorGate). Admin-only
+// node (.write:false): seeded via the emulator's owner REST token, which
+// bypasses rules. Default (absent/enforce!=true) → creation open (current
+// behaviour); enforce==true → only allow/<uid>==true may create.
+const EMU_DB_REST = "http://127.0.0.1:9000";
+const EMU_NS = "canamed-sim-default-rtdb";
+async function adminPut(pathNoJson, value) {
+  const res = await fetch(`${EMU_DB_REST}/${pathNoJson}.json?ns=${EMU_NS}`, {
+    method: "PUT",
+    headers: { "Authorization": "Bearer owner", "Content-Type": "application/json" },
+    body: JSON.stringify(value)
+  });
+  if (!res.ok) throw new Error(`admin PUT ${pathNoJson} -> ${res.status}`);
+}
+
+test("rules: facilitatorGate — every session-establishment write is gated when enforced (Phase 4c)", async ({ page, browser }) => {
+  // A 64-hex string is a valid adminPasswordHash / adminSecrets hash, so a
+  // denial here is unambiguously the .write gate, not a .validate failure.
+  const HEX = "a".repeat(64), HEX2 = "b".repeat(64);
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const ts = Date.now().toString(36);
+  const org = "fgorg" + ts; // org tree must gate the same establishment writes
+
+  // 1) Default (no facilitatorGate) — any authed user can begin a session: both
+  //    the `created` marker AND the load-bearing `creatorUid` write are open,
+  //    in the legacy sessions/ tree AND the orgs/ tree.
+  expect(await tryWrite(page, `sessions/fgA-${ts}/created`, { by: "A", at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/fgAc-${ts}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `orgs/${org}/sessions/fgOA-${ts}/creatorUid`, uidA)).toBe("ALLOWED");
+
+  let ctxB;
+  try {
+    // 2) Enforce, allowlisting ONLY uidA (admin/console-only node → owner REST).
+    await adminPut("facilitatorGate", { enforce: true, allow: { [uidA]: true } });
+
+    // Allowlisted uidA still creates — every establishment write is allowed,
+    // including the recovery code (itself a first-write bootstrap field).
+    expect(await tryWrite(page, `sessions/fgA2-${ts}/created`, { by: "A", at: Date.now() })).toBe("ALLOWED");
+    expect(await tryWrite(page, `sessions/fgA2c-${ts}/creatorUid`, uidA)).toBe("ALLOWED");
+    expect(await tryWrite(page, `recovery/sessions/fgA2r-${ts}`, { code: "estrecover12345" })).toBe("ALLOWED");
+
+    // Establish a full session as the allowlisted admin so step 4 can prove its
+    // recovery/reset chain still works under enforcement.
+    const est = `est-${ts}`, estRC = "estreset-code-99";
+    expect(await tryWrite(page, `recovery/sessions/${est}`, { code: estRC })).toBe("ALLOWED");
+    expect(await tryWrite(page, `sessions/${est}/creatorUid`, uidA)).toBe("ALLOWED");
+    expect(await tryWrite(page, `sessions/${est}/adminPasswordHash`, HEX)).toBe("ALLOWED");
+
+    // 3) A different, non-allowlisted uid B cannot begin a session by ANY path.
+    //    Gating only `created` was bypassable (CodeRabbit): B could instead write
+    //    creatorUid (ownership admin path) or adminPasswordHash + the real
+    //    adminSecrets hash (password-proof admin path) and operate the session
+    //    without ever writing `created`. All of these must now be denied.
+    ctxB = await browser.newContext();
+    const tabB = await ctxB.newPage();
+    await useEmulator(tabB);
+    await tabB.goto("/");
+    const uidB = await waitForUid(tabB);
+    expect(uidB).not.toBe(uidA);
+    for (const [path, value] of [
+      [`sessions/fgB-${ts}/created`, { by: "B", at: Date.now() }],
+      [`sessions/fgBc-${ts}/creatorUid`, uidB],
+      [`sessions/fgBh-${ts}/adminPasswordHash`, HEX],
+      [`adminSecrets/fgBs-${ts}/hash`, HEX2],
+      // …and every mirror in the orgs/ tree (CodeRabbit: org parity).
+      [`orgs/${org}/sessions/fgOB-${ts}/created`, { by: "B", at: Date.now() }],
+      [`orgs/${org}/sessions/fgOBc-${ts}/creatorUid`, uidB],
+      [`orgs/${org}/sessions/fgOBh-${ts}/adminPasswordHash`, HEX],
+      [`adminSecrets/orgs/${org}/fgOBs-${ts}/hash`, HEX2],
+      // …including the recovery-code bootstrap (the _superadminReset entry point):
+      // seeding it on a fresh, hashless session was the recovery bypass.
+      [`recovery/sessions/fgBr-${ts}`, { code: "attacker-code-01" }],
+      [`recovery/orgs/${org}/sessions/fgOBr-${ts}`, { code: "attacker-code-02" }],
+    ]) {
+      expect(String(await tryWrite(tabB, path, value)), `uidB must be denied ${path}`).toMatch(/denied/i);
+    }
+
+    // 4) The recovery BRANCHES stay open for an ALREADY-established session, so
+    //    gating the recovery-code bootstrap does not break legitimate password
+    //    recovery under enforcement. uidA resets `est` (established in step 2):
+    //    _superadminReset with the known code, then overwrite the hash via the
+    //    (ungated) recovery branch — both must succeed.
+    const now = Date.now();
+    expect(await tryWrite(page, `sessions/${est}/_superadminReset`,
+      { requestedAt: now, by: "A", code: estRC, uid: uidA })).toBe("ALLOWED");
+    expect(await tryWrite(page, `sessions/${est}/adminPasswordHash`, HEX2)).toBe("ALLOWED");
+  } finally {
+    // ALWAYS clear the gate so later tests' session creation isn't blocked.
+    await adminPut("facilitatorGate", null);
+    if (ctxB) await ctxB.close();
+  }
+});

@@ -251,6 +251,40 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   sanitised in `modA-llm-init.js` — the name is scenario-authored, i.e. untrusted.
 
 ## Known security follow-ups (code, tracked)
+- **Self-serve soft-launch gate `facilitatorGate` (Phase 4c, opt-in, INERT by
+  default).** A top-level admin-only node (`.read:false`, `.write:false` — set
+  only via the Console/admin-SDK) that can restrict who may create sessions.
+  The gate guards **every first-write session-bootstrap field** — not just
+  `created` (gating only `created` was bypassable: a user could bootstrap a
+  session via the ownership path `creatorUid`, the password-proof path
+  `adminPasswordHash` + the real `adminSecrets/<code>/hash`, OR the **recovery**
+  path — seed a `recovery/…/<code>` code on a hashless session → `_superadminReset`
+  → set the hash via the recovery branch — none of which need `created`). So the
+  predicate `facilitatorGate/enforce != true || facilitatorGate/allow/<auth.uid>
+  == true` now sits on the first-write of `created`, `creatorUid`,
+  `adminPasswordHash` (initial-set), `adminSecrets` hash (initial-set), **and the
+  `recovery/…/<sessionId>` code write** — in **both** the `sessions/$id` and
+  `orgs/$slug/sessions/$id` trees (**10 rules**). The recovery-code write is
+  itself a bootstrap field (written once at creation, before any hash), so gating
+  it closes the recovery-bootstrap bypass. The `_superadminReset` write and the
+  hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
+  they act on already-established sessions (whose recovery code was written by
+  their allowlisted creator) and must keep working under enforcement. **Default
+  (node absent) → `enforce.val()` is null → creation unchanged** for every
+  existing facilitator; nothing is gated until an operator flips it on. To
+  soft-launch to a vetted allowlist: set `facilitatorGate/enforce = true` and
+  `facilitatorGate/allow/<uid> = true` for each approved uid; to open back up,
+  delete the node (or set `enforce=false`). This mirrors the App-Check
+  Monitor→Enforce posture (reversible, opt-in). Client-side "not approved"
+  messaging is a deferred follow-up (needs `script.js` + a PWA bump); until then
+  a non-allowlisted create surfaces a generic permission-denied. Covered by
+  `tests/rules.test.js` (structural: admin-only + opt-in shape on all 8
+  establishment writes + recovery branch survives) and
+  `tests-e2e/emulator/rules-smoke.spec.js` (functional: open by default,
+  allowlisted uid creates, non-allowlisted uid denied on `created`/`creatorUid`/
+  `adminPasswordHash`/`adminSecrets` hash/**recovery code** in **both** trees, and
+  an established session's `_superadminReset`→hash-overwrite recovery chain still
+  succeeds under enforcement).
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
   binding.~~ **Fixed:** added `stableIdMapping/$stableId → auth.uid` (write-once,
