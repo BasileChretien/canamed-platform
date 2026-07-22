@@ -658,11 +658,14 @@ test("rules: facilitatorGate — every session-establishment write is gated when
   await page.goto("/");
   const uidA = await waitForUid(page);
   const ts = Date.now().toString(36);
+  const org = "fgorg" + ts; // org tree must gate the same establishment writes
 
   // 1) Default (no facilitatorGate) — any authed user can begin a session: both
-  //    the `created` marker AND the load-bearing `creatorUid` write are open.
+  //    the `created` marker AND the load-bearing `creatorUid` write are open,
+  //    in the legacy sessions/ tree AND the orgs/ tree.
   expect(await tryWrite(page, `sessions/fgA-${ts}/created`, { by: "A", at: Date.now() })).toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/fgAc-${ts}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `orgs/${org}/sessions/fgOA-${ts}/creatorUid`, uidA)).toBe("ALLOWED");
 
   let ctxB;
   try {
@@ -689,6 +692,11 @@ test("rules: facilitatorGate — every session-establishment write is gated when
       [`sessions/fgBc-${ts}/creatorUid`, uidB],
       [`sessions/fgBh-${ts}/adminPasswordHash`, HEX],
       [`adminSecrets/fgBs-${ts}/hash`, HEX2],
+      // …and every mirror in the orgs/ tree (CodeRabbit: org parity).
+      [`orgs/${org}/sessions/fgOB-${ts}/created`, { by: "B", at: Date.now() }],
+      [`orgs/${org}/sessions/fgOBc-${ts}/creatorUid`, uidB],
+      [`orgs/${org}/sessions/fgOBh-${ts}/adminPasswordHash`, HEX],
+      [`adminSecrets/orgs/${org}/fgOBs-${ts}/hash`, HEX2],
     ]) {
       expect(String(await tryWrite(tabB, path, value)), `uidB must be denied ${path}`).toMatch(/denied/i);
     }

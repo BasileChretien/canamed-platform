@@ -254,20 +254,30 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
 - **Self-serve soft-launch gate `facilitatorGate` (Phase 4c, opt-in, INERT by
   default).** A top-level admin-only node (`.read:false`, `.write:false` — set
   only via the Console/admin-SDK) that can restrict who may create sessions.
-  The `created` write in **both** trees (`sessions/$id`, `orgs/$slug/sessions/$id`)
-  now also requires `facilitatorGate/enforce != true` OR
-  `facilitatorGate/allow/<auth.uid> == true`. **Default (node absent) →
-  `enforce.val()` is null → creation unchanged** for every existing facilitator;
-  nothing is gated until an operator flips it on. To soft-launch to a vetted
-  allowlist: set `facilitatorGate/enforce = true` and
+  The gate guards **every initial session-establishment write** — not just
+  `created` (gating only `created` was bypassable: a user could bootstrap a
+  session via the ownership path `creatorUid`, or the password-proof path
+  `adminPasswordHash` + the real `adminSecrets/<code>/hash`, without ever writing
+  `created`). So the predicate `facilitatorGate/enforce != true ||
+  facilitatorGate/allow/<auth.uid> == true` now sits on the **initial-set** write
+  of `created`, `creatorUid`, `adminPasswordHash`, and `adminSecrets` hash — in
+  **both** the `sessions/$id` and `orgs/$slug/sessions/$id` trees (8 rules). The
+  `_superadminReset` **recovery** branch of the two hash rules is deliberately
+  left ungated (it acts on already-existing sessions whose creator was
+  allowlisted at creation, and must keep working under enforcement). **Default
+  (node absent) → `enforce.val()` is null → creation unchanged** for every
+  existing facilitator; nothing is gated until an operator flips it on. To
+  soft-launch to a vetted allowlist: set `facilitatorGate/enforce = true` and
   `facilitatorGate/allow/<uid> = true` for each approved uid; to open back up,
   delete the node (or set `enforce=false`). This mirrors the App-Check
   Monitor→Enforce posture (reversible, opt-in). Client-side "not approved"
   messaging is a deferred follow-up (needs `script.js` + a PWA bump); until then
   a non-allowlisted create surfaces a generic permission-denied. Covered by
-  `tests/rules.test.js` (structural: admin-only + opt-in shape) and
+  `tests/rules.test.js` (structural: admin-only + opt-in shape on all 8
+  establishment writes + recovery branch survives) and
   `tests-e2e/emulator/rules-smoke.spec.js` (functional: open by default,
-  allowlisted uid creates, non-allowlisted uid denied when enforced).
+  allowlisted uid creates, non-allowlisted uid denied on `created`/`creatorUid`/
+  `adminPasswordHash`/`adminSecrets` hash in **both** trees).
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
   binding.~~ **Fixed:** added `stableIdMapping/$stableId → auth.uid` (write-once,
