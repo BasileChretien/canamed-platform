@@ -1081,20 +1081,27 @@ test("rules: facilitatorGate — admin-only node; every session-establishment wr
   assert.strictEqual(fg[".write"], false, "facilitatorGate must be admin-SDK/console-only (write:false)");
 
   // Gating only `created` is bypassable: an unallowlisted user could instead
-  // write creatorUid (ownership admin path) or adminPasswordHash / the real
-  // adminSecrets hash (password-proof admin path) and operate a session without
-  // ever writing `created`. So the gate must sit on EVERY write that can bring a
-  // usable session into existence, in BOTH the sessions/ and orgs/ trees.
+  // bring a usable session into existence via the ownership path (creatorUid),
+  // the password-proof path (adminPasswordHash / the real adminSecrets hash), or
+  // the RECOVERY path (seed a recovery code on a hashless session → _superadminReset
+  // → set the hash via the recovery branch). So the gate must sit on EVERY
+  // first-write bootstrap field, in BOTH the sessions/ and orgs/ trees. (The
+  // recovery-code write is itself a bootstrap field — written once at creation,
+  // before any hash exists — which is exactly why gating it closes the recovery
+  // bypass while leaving the _superadminReset / hash recovery branches free to
+  // reset already-established sessions.)
   const r = rules.rules;
   const establishmentWrites = {
     "sessions.created": r.sessions.$sessionId.created[".write"],
     "sessions.creatorUid": r.sessions.$sessionId.creatorUid[".write"],
     "sessions.adminPasswordHash": r.sessions.$sessionId.adminPasswordHash[".write"],
     "adminSecrets.$code.hash": r.adminSecrets.$code.hash[".write"],
+    "recovery.sessions": r.recovery.sessions.$sessionId[".write"],
     "orgs.created": r.orgs.$orgSlug.sessions.$sessionId.created[".write"],
     "orgs.creatorUid": r.orgs.$orgSlug.sessions.$sessionId.creatorUid[".write"],
     "orgs.adminPasswordHash": r.orgs.$orgSlug.sessions.$sessionId.adminPasswordHash[".write"],
     "adminSecrets.orgs.hash": r.adminSecrets.orgs.$orgSlug.$sessionId.hash[".write"],
+    "recovery.orgs": r.recovery.orgs.$orgSlug.sessions.$sessionId[".write"],
   };
   for (const [name, w] of Object.entries(establishmentWrites)) {
     // Enforcement is OPT-IN: with enforce != true (default/absent) creation is
@@ -1114,5 +1121,17 @@ test("rules: facilitatorGate — admin-only node; every session-establishment wr
                    r.adminSecrets.$code.hash[".write"],
                    r.adminSecrets.orgs.$orgSlug.$sessionId.hash[".write"]]) {
     assert.match(w, /_superadminReset/, "hash recovery branch must survive the gate: " + w);
+  }
+
+  // …and the _superadminReset write itself must stay UNGATED — it is how an
+  // existing session's admin (or a co-facilitator, who need not be allowlisted)
+  // initiates a password reset. Gating it would break recovery under enforcement.
+  // The recovery-code write that unlocks it IS gated (in establishmentWrites
+  // above), which is what blocks a fresh-session recovery bootstrap without
+  // touching resets of already-established sessions.
+  for (const w of [r.sessions.$sessionId._superadminReset[".write"],
+                   r.orgs.$orgSlug.sessions.$sessionId._superadminReset[".write"]]) {
+    assert.doesNotMatch(w, /facilitatorGate/,
+      "_superadminReset must stay ungated so existing-session recovery works: " + w);
   }
 });

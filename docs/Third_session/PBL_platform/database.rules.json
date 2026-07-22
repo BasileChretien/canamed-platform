@@ -26,7 +26,7 @@
       "sessions": {
         "$sessionId": {
           ".read": false,
-          ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists()",
+          ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
           ".validate": "newData.hasChildren(['code']) && newData.child('code').isString() && newData.child('code').val().length >= 8 && newData.child('code').val().length <= 60"
         }
       },
@@ -35,7 +35,7 @@
           "sessions": {
             "$sessionId": {
               ".read": false,
-              ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists()",
+              ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
               ".validate": "newData.hasChildren(['code']) && newData.child('code').isString() && newData.child('code').val().length >= 8 && newData.child('code').val().length <= 60"
             }
           }
