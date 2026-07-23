@@ -43,6 +43,7 @@ const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
 const { uploadToGcs } = require("./lib/gcs-archive");
+const { readSessionLocations } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -79,27 +80,34 @@ async function main() {
   console.log(`GCS:       ${GCS_BUCKET ? `gs://${GCS_BUCKET}/${GCS_PREFIX}/` : "(none — local artifact mode)"}`);
   console.log("");
 
-  const snap = await db.ref("sessions").once("value");
-  const sessions = snap.val() || {};
-  const codes = Object.keys(sessions);
-  console.log(`Found ${codes.length} sessions.`);
+  // BOTH trees: sessions/<code> and orgs/<slug>/sessions/<id>. Org-scoped
+  // sessions had no backup at all until 2026-07-23.
+  const locations = await readSessionLocations(db);
+  const orgCount = locations.filter(l => l.orgSlug).length;
+  console.log(`Found ${locations.length} sessions (${locations.length - orgCount} default, ${orgCount} org-scoped).`);
+
+  // Keyed by location key, not bare code: two orgs may legitimately use the
+  // same session code, and keying by code would silently drop one of them.
+  const sessions = {};
+  for (const loc of locations) sessions[loc.key] = loc.data;
 
   // Strip adminPasswordHash from every session — same as the in-app
   // archive does. Passwords are recoverable via the super-admin set
   // panel, so they don't need to live in backups.
   let stripped = 0;
-  for (const code of codes) {
-    if (sessions[code] && sessions[code].adminPasswordHash) {
-      delete sessions[code].adminPasswordHash;
+  for (const key of Object.keys(sessions)) {
+    if (sessions[key] && sessions[key].adminPasswordHash) {
+      delete sessions[key].adminPasswordHash;
       stripped++;
     }
   }
-  console.log(`Stripped adminPasswordHash from ${stripped}/${codes.length} sessions.`);
+  console.log(`Stripped adminPasswordHash from ${stripped}/${locations.length} sessions.`);
 
   const payload = {
     backupTakenAt: new Date().toISOString(),
     databaseUrl: DB_URL,
-    sessionCount: codes.length,
+    sessionCount: locations.length,
+    orgSessionCount: orgCount,
     sessions: sessions
   };
   const json = JSON.stringify(payload, null, 2);
