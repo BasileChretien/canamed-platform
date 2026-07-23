@@ -60,7 +60,7 @@ const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
 const { uploadToGcs } = require("./lib/gcs-archive");
-const { pseudonymiseSession } = require("./lib/pseudonymise");
+const { pseudonymiseSession, sessionHasConsent, hasResearchConsent } = require("./lib/pseudonymise");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -108,26 +108,52 @@ async function main() {
   console.log("Closed (exportable):  " + closedCodes.length);
   console.log("Open (skipped):       " + openCount);
 
+  // RESEARCH CONSENT gate (Phase-4e compliance gap 1). Participants tick an
+  // optional research box in the lobby; joining is not conditional on it. Only
+  // those who ticked it reach this export — everyone else is erased from it by
+  // pseudonymiseSession(). A session where nobody opted in is skipped outright
+  // rather than exported as a participant-free husk.
+  const consentedCodes = closedCodes.filter(c => sessionHasConsent(sessions[c]));
+  const noConsentCount = closedCodes.length - consentedCodes.length;
+
+  let participantsIn = 0;
+  let participantsOut = 0;
+  for (const code of closedCodes) {
+    const pool = (sessions[code] && sessions[code].pool) || {};
+    for (const cid of Object.keys(pool)) {
+      if (hasResearchConsent(pool[cid])) participantsIn++; else participantsOut++;
+    }
+  }
+  console.log("Sessions w/ consent:  " + consentedCodes.length);
+  console.log("Sessions skipped (no participant consented): " + noConsentCount);
+  console.log("Participants included (research consent):    " + participantsIn);
+  console.log("Participants excluded (declined / no record): " + participantsOut);
+
   const linkage = {};
   const pseudonymised = {};
-  for (const code of closedCodes) {
+  for (const code of consentedCodes) {
     pseudonymised[code] = pseudonymiseSession(sessions[code], code, linkage);
   }
 
   const pseudoPayload = {
     exportTakenAt: new Date().toISOString(),
     databaseUrl: DB_URL,
-    sessionCount: closedCodes.length,
+    sessionCount: consentedCodes.length,
     sessions: pseudonymised,
-    note: "Pseudonymised export. Participant names -> Student-A/B/... per session; " +
+    note: "Pseudonymised export. CONTAINS ONLY PARTICIPANTS WHO GAVE RESEARCH CONSENT " +
+      "(pool/<clientId>/consent.research === true); everyone else — including anyone " +
+      "whose record predates the consent field — is excluded, and sessions where nobody " +
+      "consented are omitted entirely. Participant names -> Student-A/B/... per session; " +
       "unknown names (facilitators) redacted; free-text LLM chat dropped; university " +
-      "bucketed to Univ-N. See scripts/lib/pseudonymise.js for guarantees. Linkage " +
-      "table is in a separate artefact with shorter retention (see workflow)."
+      "bucketed to Univ-N; auth-uid mappings dropped and uid-keyed membership rekeyed to " +
+      "pseudonyms (no cross-session linkage). See scripts/lib/pseudonymise.js for " +
+      "guarantees. Linkage table is in a separate artefact with shorter retention " +
+      "(see workflow)."
   };
   const linkagePayload = {
     exportTakenAt: new Date().toISOString(),
     databaseUrl: DB_URL,
-    sessionCount: closedCodes.length,
+    sessionCount: consentedCodes.length,
     linkage: linkage,
     note: "Real-name -> pseudonym mapping. SHORT-RETENTION. Used only to re-identify a participant " +
       "on request (e.g. GDPR Art. 17 erasure)."
