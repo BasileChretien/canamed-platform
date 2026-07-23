@@ -352,13 +352,18 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //
 //   2026-07-23: Phase 4d moderation client wiring (report affordance + the
 //     moderation/removed tombstone filter in listSharedScenarios). +1.12 KB gz
-//     eager (script.js +1.06, i18n.js +0.09; locales/ are lazy and uncounted).
-//     Measured 336.9 — the cap is DELIBERATELY LEFT AT 337 per the standing
-//     instruction above: the feature was trimmed to fit rather than bumping.
-//     ⚠️ HEADROOM IS NOW ~0.1 KB. The next eager byte of ANY kind fails this
-//     test, so the room-only CSS lazy-split (a <link>-loaded standard-room
-//     stylesheet mirroring branched.css) is no longer merely "overdue" — it
-//     now BLOCKS the next UI change. Do the reclaim first.
+//     eager (locales/ are lazy and uncounted). Measured just UNDER 337 — the
+//     cap is DELIBERATELY LEFT AT 337 per the standing instruction above: the
+//     feature was trimmed to fit (comment compression, a local T(k,f) i18n
+//     helper, terse EN fallbacks) rather than bumping. Adding CodeRabbit's
+//     required report-failure handling mid-review pushed it to 337.1 and had to
+//     be paid for by trimming again — that is how little slack is left.
+//     ⚠️ HEADROOM IS EFFECTIVELY ZERO. The next eager byte of ANY kind fails
+//     this test, so the room-only CSS lazy-split (a <link>-loaded standard-room
+//     stylesheet mirroring branched.css) is no longer merely "overdue" — it now
+//     BLOCKS the next UI change. Do the reclaim first. A clean adjacent
+//     candidate: localdb.js (3.7 KB gz) is the LOCAL-mode RTDB mock and is dead
+//     weight in production — load it only when CANAMED_FIREBASE is null.
 const FIRST_PARTY_BYTES_LIMIT_KB = 337;
 
 test.describe("Perf budget — splash", () => {

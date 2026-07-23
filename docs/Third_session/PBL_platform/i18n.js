@@ -249,6 +249,7 @@
       "splash.create.reported": "Reported. Thank you.",
       "splash.create.report-sent": "Report sent to the moderators",
       "splash.create.report-signin": "Sign in to report a scenario",
+      "splash.create.report-failed": "Couldn't send your report. Try again.",
       "splash.create.advanced-toggle": "Create new content (advanced) ↓",
       "splash.create.custom-label": "Custom content (JSON)",
       "splash.create.custom-help": "Paste a JSON object with the keys name, case, scoring, penalties, decisions — see the README for the full structure. Use \"Load template\" to start from the built-in content, then edit only what you need.",

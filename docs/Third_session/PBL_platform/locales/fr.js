@@ -163,6 +163,7 @@
   "splash.create.reported": "Signalé. Merci.",
   "splash.create.report-sent": "Signalement envoyé aux modérateurs",
   "splash.create.report-signin": "Connectez-vous pour signaler un scénario",
+  "splash.create.report-failed": "Envoi du signalement impossible. Réessayez.",
   "splash.create.advanced-toggle": "Créer un contenu personnalisé (avancé) ↓",
   "splash.create.custom-label": "Contenu personnalisé (JSON)",
   "splash.create.custom-help": "Collez un objet JSON avec les clés name, case, scoring, penalties, decisions — voir le README pour la structure complète. Utilisez « Charger le modèle » pour partir du contenu intégré, puis modifiez ce dont vous avez besoin.",
