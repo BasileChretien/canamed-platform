@@ -251,6 +251,71 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   sanitised in `modA-llm-init.js` — the name is scenario-authored, i.e. untrusted.
 
 ## Known security follow-ups (code, tracked)
+- **Self-serve soft-launch gate `facilitatorGate` (Phase 4c, opt-in, INERT by
+  default).** A top-level admin-only node (`.read:false`, `.write:false` — set
+  only via the Console/admin-SDK) that can restrict who may create sessions.
+  The gate guards **every first-write session-bootstrap field** — not just
+  `created` (gating only `created` was bypassable: a user could bootstrap a
+  session via the ownership path `creatorUid`, the password-proof path
+  `adminPasswordHash` + the real `adminSecrets/<code>/hash`, OR the **recovery**
+  path — seed a `recovery/…/<code>` code on a hashless session → `_superadminReset`
+  → set the hash via the recovery branch — none of which need `created`). So the
+  predicate `facilitatorGate/enforce != true || facilitatorGate/allow/<auth.uid>
+  == true` now sits on the first-write of `created`, `creatorUid`,
+  `adminPasswordHash` (initial-set), `adminSecrets` hash (initial-set), **and the
+  `recovery/…/<sessionId>` code write** — in **both** the `sessions/$id` and
+  `orgs/$slug/sessions/$id` trees (**10 rules**). The recovery-code write is
+  itself a bootstrap field (written once at creation, before any hash), so gating
+  it closes the recovery-bootstrap bypass. The `_superadminReset` write and the
+  hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
+  they act on already-established sessions (whose recovery code was written by
+  their allowlisted creator) and must keep working under enforcement. **Default
+  (node absent) → `enforce.val()` is null → creation unchanged** for every
+  existing facilitator; nothing is gated until an operator flips it on. To
+  soft-launch to a vetted allowlist: set `facilitatorGate/enforce = true` and
+  `facilitatorGate/allow/<uid> = true` for each approved uid; to open back up,
+  delete the node (or set `enforce=false`). This mirrors the App-Check
+  Monitor→Enforce posture (reversible, opt-in). Client-side "not approved"
+  messaging is a deferred follow-up (needs `script.js` + a PWA bump); until then
+  a non-allowlisted create surfaces a generic permission-denied. Covered by
+  `tests/rules.test.js` (structural: admin-only + opt-in shape on all 8
+  establishment writes + recovery branch survives) and
+  `tests-e2e/emulator/rules-smoke.spec.js` (functional: open by default,
+  allowlisted uid creates, non-allowlisted uid denied on `created`/`creatorUid`/
+  `adminPasswordHash`/`adminSecrets` hash/**recovery code** in **both** trees, and
+  an established session's `_superadminReset`→hash-overwrite recovery chain still
+  succeeds under enforcement).
+- **Shared-library moderation primitive (Phase 4d, rules — client wiring PENDING).**
+  Three top-level nodes support reporting + takedown of `sharedScenarios` without
+  hard-deleting: (1) `moderators/$uid` — admin-only allowlist (`.read:false`,
+  `.write:false`; set via Console/admin-SDK; rules reference it via `root.child`).
+  (2) `reports/scenarios/$shareId/$reporterUid` — write-OWN (`$reporterUid ==
+  auth.uid`) + write-ONCE (`!data.exists()`) + must target an EXISTING scenario
+  (`sharedScenarios/$shareId.exists()`, bounds the queue — no fabricated-id
+  storage pollution) + `.read:false` + `$other:false` sentinel; moderators review
+  reports out-of-band via the admin SDK. (3)
+  `moderation/removed/$shareId` — a tombstone writable ONLY by a moderator
+  (`moderators/<uid> == true`), `.read:auth!=null` so clients can filter. It lives
+  OUTSIDE `sharedScenarios` on purpose, so a scenario owner re-publishing their
+  scenario cannot clear a takedown. Tested: `tests/rules.test.js` (structural) +
+  `tests-e2e/emulator/rules-smoke.spec.js` (functional: report write-own/once,
+  peer/other-uid denied, unknown-key denied, non-moderator tombstone denied,
+  moderator tombstone allowed). **✅ CLIENT WIRING DONE (2026-07-23, shell v95):**
+  `listSharedScenarios()` reads `moderation/removed` alongside the list and drops
+  tombstoned entries (degrades to "nothing removed" if that read fails), so a
+  takedown actually removes a scenario from the picker; and a "Report this
+  scenario" button (`#splash-report-scenario`) appears only when the selection is
+  `__ref:shared:` — someone ELSE's scenario — confirms via `canamedConfirm`, then
+  writes `reports/scenarios/<shareId>/<uid>` via `reportSharedScenario()`.
+  Reporting needs auth (anonymous suffices); with none it says "sign in" instead
+  of faking a Reported state — which is why the LOCAL e2e (no `auth` in LOCAL
+  mode) asserts the guard, while the WRITE is covered by the emulator test.
+  Coverage: `tests-e2e/moderation-ui.spec.js` on desktop + 3 mobile viewports.
+  The DOMPurify half of Phase 4d was already DONE + audited clean (every authored
+  string reaches the DOM via textContent/esc/DOMPurify — see the selfserve memory).
+  ⚠️ This landed with the perf budget at **336.9 / 337 KB gz** — see the dated
+  note in `tests-e2e/perf.spec.js`: the room-only CSS lazy-split now BLOCKS the
+  next UI change.
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
   binding.~~ **Fixed:** added `stableIdMapping/$stableId → auth.uid` (write-once,

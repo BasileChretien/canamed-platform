@@ -103,8 +103,17 @@ function normLang(raw) {
   return (lang === "en" || lang === "fr" || lang === "ja") ? lang : "en";
 }
 
+// Phase 4b — UTC yyyymmdd integer used to key the per-day cost/rate counters
+// (metrics/hfPatient/global/<day>, /dailyUid/<uid>/<day>). Pure, so it is
+// unit-testable without firebase-admin; the date IS the window, so the counter
+// auto-resets each UTC day with no sliding-window reset logic.
+function dayKey(now) {
+  const d = new Date(now);
+  return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
+}
+
 module.exports = {
   MAX_BODY_MESSAGES, MAX_BODY_CHARS, SERVER_GUARD,
   isAllowedHfUrl, validateMessages, buildMessages, normLang,
-  safeCharacterName, buildRolePrefixRe
+  safeCharacterName, buildRolePrefixRe, dayKey
 };

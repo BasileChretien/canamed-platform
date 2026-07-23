@@ -29,7 +29,7 @@
 const { onValueCreated } = require("firebase-functions/v2/database");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
-const { defineString, defineSecret, defineBoolean } = require("firebase-functions/params");
+const { defineString, defineSecret, defineBoolean, defineInt } = require("firebase-functions/params");
 const admin = require("firebase-admin");
 const nodemailer = require("nodemailer");
 
@@ -166,11 +166,17 @@ const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 // validation + collapse, and lang normalisation (FINDING-06). The 12000-char
 // body cap lives there (system prompt ~3800 chars + ~6 transcript turns).
 const { SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang,
-        safeCharacterName, buildRolePrefixRe } = require("./lib/hf-helpers");
+        safeCharacterName, buildRolePrefixRe, dayKey } = require("./lib/hf-helpers");
 const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const SESSION_RATE_LIMIT_TURNS = 250;
+// Phase 4b cost controls: a per-uid DAILY cap (alongside the 40/hr window) and a
+// GLOBAL daily hard $ ceiling across all users/sessions (over → graceful stub
+// fallback). GLOBAL_DAILY_CAP is a param so it can be tuned per-project in .env
+// without a code change; sized to stay inside the Cloud Functions free tier.
+const RATE_LIMIT_DAILY_TURNS = 200;
+const GLOBAL_DAILY_CAP = defineInt("HF_GLOBAL_DAILY_CAP", { default: 4000 });
 const PROMPT_VERSION = "modA-llm@2.4";   // bumped to force redeploy: per-scenario personas — guard generalised from "patient" to "character", reply prefix stripped by the scenario's character name — prev 2.3: chattier patient (2–4 sentences, max_tokens 320, temp 0.55)
 
 
@@ -224,9 +230,18 @@ async function _bumpCounter(path, limit) {
   return { ok: (v.count || 0) <= limit, count: v.count || 0 };
 }
 
+// Per-day-keyed counter (the UTC day is baked into `path`), so there is no
+// sliding-window reset — a new day gets a fresh key. Returns the new count.
+async function _bumpDaily(path) {
+  const result = await admin.database().ref(path).transaction(cur => (Number(cur) || 0) + 1);
+  return (result.snapshot && result.snapshot.val()) || 0;
+}
+
 async function _rateLimit(uid, roomCode) {
   const perUid = await _bumpCounter("metrics/hfPatient/usage/" + uid, RATE_LIMIT_TURNS);
   if (!perUid.ok) return { ok: false, scope: "uid" };
+  const perUidDaily = await _bumpDaily("metrics/hfPatient/dailyUid/" + uid + "/" + dayKey(Date.now()));
+  if (perUidDaily > RATE_LIMIT_DAILY_TURNS) return { ok: false, scope: "uid-daily" };
   if (roomCode) {
     const safeCode = String(roomCode).replace(/[.#$/\[\]]/g, "");
     if (safeCode) {
@@ -368,7 +383,16 @@ exports.hfPatient = onCall({
       "not a member of the claimed room");
   }
 
-  // 5) Rate-limit per uid AND per session.
+  // 5) Global daily cost circuit-breaker (Phase 4b) — a hard $ ceiling across
+  //    ALL users/sessions. Over the cap → degrade gracefully to the client stub
+  //    (state:"disabled") instead of throwing, so the workshop chat keeps going.
+  const globalDay = await _bumpDaily("metrics/hfPatient/global/" + dayKey(Date.now()));
+  if (globalDay > GLOBAL_DAILY_CAP.value()) {
+    console.warn("[hfPatient] global daily cap reached: " + globalDay);
+    return { reply: "", state: "disabled" };
+  }
+
+  // 6) Rate-limit per uid (hourly + daily) AND per session.
   const rl = await _rateLimit(uid, member.code);
   if (!rl.ok) {
     throw new HttpsError(

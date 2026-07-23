@@ -1073,3 +1073,93 @@ test("rules: session scenarioCustomJson caps at 256 KB in both trees (holds a sc
       where + "scenarioCustomJson must stay write-once");
   });
 });
+
+test("rules: facilitatorGate — admin-only node; every session-establishment write is opt-in gated (Phase 4c)", () => {
+  const fg = rules.rules.facilitatorGate;
+  assert.ok(fg, "/facilitatorGate must be declared");
+  assert.strictEqual(fg[".read"], false, "facilitatorGate must not be client-readable");
+  assert.strictEqual(fg[".write"], false, "facilitatorGate must be admin-SDK/console-only (write:false)");
+
+  // Gating only `created` is bypassable: an unallowlisted user could instead
+  // bring a usable session into existence via the ownership path (creatorUid),
+  // the password-proof path (adminPasswordHash / the real adminSecrets hash), or
+  // the RECOVERY path (seed a recovery code on a hashless session → _superadminReset
+  // → set the hash via the recovery branch). So the gate must sit on EVERY
+  // first-write bootstrap field, in BOTH the sessions/ and orgs/ trees. (The
+  // recovery-code write is itself a bootstrap field — written once at creation,
+  // before any hash exists — which is exactly why gating it closes the recovery
+  // bypass while leaving the _superadminReset / hash recovery branches free to
+  // reset already-established sessions.)
+  const r = rules.rules;
+  const establishmentWrites = {
+    "sessions.created": r.sessions.$sessionId.created[".write"],
+    "sessions.creatorUid": r.sessions.$sessionId.creatorUid[".write"],
+    "sessions.adminPasswordHash": r.sessions.$sessionId.adminPasswordHash[".write"],
+    "adminSecrets.$code.hash": r.adminSecrets.$code.hash[".write"],
+    "recovery.sessions": r.recovery.sessions.$sessionId[".write"],
+    "orgs.created": r.orgs.$orgSlug.sessions.$sessionId.created[".write"],
+    "orgs.creatorUid": r.orgs.$orgSlug.sessions.$sessionId.creatorUid[".write"],
+    "orgs.adminPasswordHash": r.orgs.$orgSlug.sessions.$sessionId.adminPasswordHash[".write"],
+    "adminSecrets.orgs.hash": r.adminSecrets.orgs.$orgSlug.$sessionId.hash[".write"],
+    "recovery.orgs": r.recovery.orgs.$orgSlug.sessions.$sessionId[".write"],
+  };
+  for (const [name, w] of Object.entries(establishmentWrites)) {
+    // Enforcement is OPT-IN: with enforce != true (default/absent) creation is
+    // unchanged, so enabling the allowlist is a safe, reversible rollout that
+    // cannot lock out existing facilitators.
+    assert.match(w, /facilitatorGate'\)\.child\('enforce'\)\.val\(\) != true/,
+      name + " must stay open unless enforcement is on: " + w);
+    assert.match(w, /facilitatorGate'\)\.child\('allow'\)\.child\(auth\.uid\)\.val\(\) == true/,
+      name + " must allow only allowlisted uids when enforced: " + w);
+  }
+
+  // The recovery (superadminReset) branch of the hash rules must NOT be gated —
+  // recovery acts on already-existing sessions whose creator was allowlisted at
+  // creation time, and must keep working under enforcement.
+  for (const w of [r.sessions.$sessionId.adminPasswordHash[".write"],
+                   r.orgs.$orgSlug.sessions.$sessionId.adminPasswordHash[".write"],
+                   r.adminSecrets.$code.hash[".write"],
+                   r.adminSecrets.orgs.$orgSlug.$sessionId.hash[".write"]]) {
+    assert.match(w, /_superadminReset/, "hash recovery branch must survive the gate: " + w);
+  }
+
+  // …and the _superadminReset write itself must stay UNGATED — it is how an
+  // existing session's admin (or a co-facilitator, who need not be allowlisted)
+  // initiates a password reset. Gating it would break recovery under enforcement.
+  // The recovery-code write that unlocks it IS gated (in establishmentWrites
+  // above), which is what blocks a fresh-session recovery bootstrap without
+  // touching resets of already-established sessions.
+  for (const w of [r.sessions.$sessionId._superadminReset[".write"],
+                   r.orgs.$orgSlug.sessions.$sessionId._superadminReset[".write"]]) {
+    assert.doesNotMatch(w, /facilitatorGate/,
+      "_superadminReset must stay ungated so existing-session recovery works: " + w);
+  }
+});
+
+test("rules: Phase 4d moderation — reports write-own/once, moderators admin-only, tombstone moderator-gated", () => {
+  const r = rules.rules;
+
+  // moderators: admin/console-only allowlist. Rules reference it via root.child,
+  // but clients can neither read nor write it (no oracle, no self-promotion).
+  assert.strictEqual(r.moderators[".read"], false, "moderators must not be client-readable");
+  assert.strictEqual(r.moderators[".write"], false, "moderators must be admin-SDK/console-only");
+
+  // reports: write-OWN (only under your own uid) + write-ONCE (no overwrite) +
+  // no read (moderators review out-of-band via the admin SDK).
+  assert.strictEqual(r.reports[".read"], false, "reports must not be client-readable");
+  const rep = r.reports.scenarios.$shareId.$reporterUid[".write"];
+  assert.match(rep, /\$reporterUid == auth\.uid/, "a report may only be filed under the reporter's own uid: " + rep);
+  assert.match(rep, /!data\.exists\(\)/, "a report is write-once (no edit/retract by overwrite): " + rep);
+  assert.match(rep, /sharedScenarios'\)\.child\(\$shareId\)\.exists\(\)/,
+    "a report must target an EXISTING shared scenario (no unbounded queue pollution via fabricated ids): " + rep);
+  assert.strictEqual(r.reports.scenarios.$shareId.$reporterUid.$other[".validate"], false,
+    "reports must reject unknown keys");
+
+  // moderation/removed tombstone: readable by any client (so the picker can
+  // filter removed scenarios) but writable ONLY by a moderator. It lives OUTSIDE
+  // sharedScenarios so a scenario owner re-publishing cannot clear a takedown.
+  assert.strictEqual(r.moderation[".read"], "auth != null", "clients must be able to read the removed list to filter");
+  assert.strictEqual(r.moderation[".write"], false, "moderation root is not blanket-writable");
+  const tomb = r.moderation.removed.$shareId[".write"];
+  assert.match(tomb, /moderators'\)\.child\(auth\.uid\)\.val\(\) == true/, "tombstone write must require a moderator: " + tomb);
+});
