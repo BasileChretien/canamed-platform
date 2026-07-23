@@ -233,6 +233,9 @@
     return new Promise(function (resolve, reject) {
       link.addEventListener("load", function () { resolve(); }, { once: true });
       link.addEventListener("error", function () {
+        // A dead <link> never re-fires load/error, so a later call that
+        // reused it would hang forever — drop it so the retry is fresh.
+        try { link.remove(); } catch (e) {}
         reject(new Error("admin.css failed to load"));
       }, { once: true });
     });
@@ -259,6 +262,9 @@
     return new Promise(function (resolve, reject) {
       link.addEventListener("load", function () { resolve(); }, { once: true });
       link.addEventListener("error", function () {
+        // A dead <link> never re-fires load/error, so a later call that
+        // reused it would hang forever — drop it so the retry is fresh.
+        try { link.remove(); } catch (e) {}
         reject(new Error("room.css failed to load"));
       }, { once: true });
     });
@@ -282,6 +288,9 @@
       // 404/CSP/offline miss degrades gracefully there instead of throwing.
       link.addEventListener("load", function () { resolve(); }, { once: true });
       link.addEventListener("error", function () {
+        // A dead <link> never re-fires load/error, so a later call that
+        // reused it would hang forever — drop it so the retry is fresh.
+        try { link.remove(); } catch (e) {}
         reject(new Error("Failed to load stylesheet: " + link.href));
       }, { once: true });
     });

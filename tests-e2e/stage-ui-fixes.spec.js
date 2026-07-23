@@ -20,6 +20,10 @@ const { test, expect } = require("./fixtures.js");
 
 async function surfaceApp(page) {
   await page.goto("/");
+  // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+  // this spec surfaces the room synthetically, so load it explicitly (same
+  // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+  await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
   await page.evaluate(() => {
     document.body.classList.remove("locked");
     const splash = document.getElementById("splash");

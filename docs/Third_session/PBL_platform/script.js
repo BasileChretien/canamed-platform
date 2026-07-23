@@ -3614,7 +3614,19 @@ function enterRoom(roomName, asAdmin) {
     document.body.classList.remove("admin-room");
     el("room-sidebar").classList.add("hidden");
   }
-  el("app").classList.remove("hidden");
+  // room.css is lazily <link>ed, so revealing #app before it lands flashes an
+  // unstyled room (CI caught exactly this). If the sheet is already applied —
+  // the normal path, warmed at enterUnlockedSession while the lobby rendered —
+  // reveal synchronously so nothing below reorders. Only a COLD entry waits,
+  // and it reveals on failure too: degraded styling beats a blank app.
+  (function revealApp() {
+    const show = function () { el("app").classList.remove("hidden"); };
+    const link = document.getElementById("room-css");
+    if (link && link.sheet) { show(); return; }
+    let p = null;
+    try { p = CanamedLoader.ensureRoomStyles(); } catch (e) { p = null; }
+    if (p && typeof p.then === "function") p.then(show, show); else show();
+  })();
   el("room-name").textContent = roomName;
   el("call-prof-btn").classList.toggle("hidden", asAdmin);
   // admins navigate via the sidebar's "Full dashboard"; no duplicate leave button
