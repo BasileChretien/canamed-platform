@@ -104,10 +104,19 @@ test("no retention job still reads only db.ref('sessions')", () => {
   }
 });
 
+test("roomChat paths mirror the two-tree layout", () => {
+  const locs = sessionLocations(SESSIONS, ORGS);
+  const byKey = Object.fromEntries(locs.map(l => [l.key, l]));
+  assert.strictEqual(byKey.ABC.roomChatPath, "roomChat/ABC");
+  assert.strictEqual(byKey["orgs/caen/XYZ"].roomChatPath, "roomChat/orgs/caen/XYZ");
+});
+
 test("cleanup purges the session's adminSecrets entry too", () => {
   const src = read("cleanup-stale-sessions.js");
   assert.match(src, /adminSecretPath\)\.remove\(\)/,
     "adminSecrets lives outside the session subtree and nothing else purges it");
   assert.match(src, /db\.ref\(loc\.path\)\.remove\(\)/,
     "cleanup must purge by resolved location path, not a hardcoded sessions/ path");
+  assert.match(src, /roomChatPath\)\.remove\(\)/,
+    "the free-text chat lives outside the session subtree and must not outlive it");
 });

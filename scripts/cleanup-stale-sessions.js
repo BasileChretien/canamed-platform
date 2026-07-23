@@ -125,6 +125,13 @@ async function main() {
         // writes) behind forever — nothing else purges it. Remove it with the
         // session it belongs to.
         await db.ref(loc.adminSecretPath).remove();
+        // Same story for the Module A chat: it was moved out of the session
+        // read-cascade into the top-level roomChat/ tree (RTDB .read cascades
+        // and cannot be revoked deeper, so a room-scoped rule under the session
+        // restricted nothing). It is the most sensitive free text we hold, so
+        // it must not outlive its session. A no-op on deployments that predate
+        // the move.
+        await db.ref(loc.roomChatPath).remove();
       }
       if (verdict === "PURGE") purged++;
       else kept++;

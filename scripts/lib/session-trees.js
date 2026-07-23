@@ -23,7 +23,7 @@
  * @param {object} sessionsVal value of `sessions` (may be null/undefined)
  * @param {object} orgsVal     value of `orgs` (may be null/undefined)
  * @returns {Array<{key:string, code:string, orgSlug:string|null, path:string,
- *                  adminSecretPath:string, data:object}>}
+ *                  adminSecretPath:string, roomChatPath:string, data:object}>}
  *   `key` is unique across trees and is what exports should be keyed by — two
  *   orgs can legitimately use the same session code, so keying an export by the
  *   bare code would silently overwrite one with the other.
@@ -38,6 +38,7 @@ function sessionLocations(sessionsVal, orgsVal) {
       orgSlug: null,
       path: "sessions/" + code,
       adminSecretPath: "adminSecrets/" + code,
+      roomChatPath: "roomChat/" + code,
       data: sessionsVal[code]
     });
   }
@@ -52,6 +53,7 @@ function sessionLocations(sessionsVal, orgsVal) {
         orgSlug: slug,
         path: "orgs/" + slug + "/sessions/" + code,
         adminSecretPath: "adminSecrets/orgs/" + slug + "/" + code,
+        roomChatPath: "roomChat/orgs/" + slug + "/" + code,
         data: sessions[code]
       });
     }
