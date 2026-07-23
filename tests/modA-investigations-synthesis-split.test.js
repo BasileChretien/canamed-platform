@@ -77,7 +77,9 @@ test("the chat consent button has a dark-mode contrast override (white-on-cyan f
   // per-theme colour overrides: the button must reference var(--on-primary),
   // and tokens.css must remap --on-primary to dark ink in BOTH dark blocks
   // (forced [data-theme="dark"] and the prefers-color-scheme auto block).
-  const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
+  const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  " " + fs.readFileSync(path.join(PLATFORM, "room.css"), "utf8");
   assert.match(CSS, /\.moda-chat-consent-btn\s*\{[^}]*color:\s*var\(--on-primary\)/,
     "the consent button text must use the theme-aware --on-primary token");
   const TOKENS = fs.readFileSync(path.join(PLATFORM, "tokens.css"), "utf8");

@@ -3570,6 +3570,12 @@ function updateMobileTabbar() {
 
 function enterRoom(roomName, asAdmin) {
   asAdmin = !!asAdmin;
+  // Room-only CSS is lazy (split out of the eager style.css — see
+  // ensureRoomStyles in script-loader.js). Kick the fetch off at the very top of
+  // room entry, before any of the teardown/subscription work below, so the
+  // stylesheet is in flight while the room is still being wired up. Warmed even
+  // earlier from the lobby (see below), so this is normally already resolved.
+  try { CanamedLoader.ensureRoomStyles().catch(function () {}); } catch (e) {}
   if (refStage) teardownRoom();      // switching rooms: drop the old subscriptions
   isRoomAdmin = asAdmin;
   myRoom = roomName;
@@ -3608,7 +3614,19 @@ function enterRoom(roomName, asAdmin) {
     document.body.classList.remove("admin-room");
     el("room-sidebar").classList.add("hidden");
   }
-  el("app").classList.remove("hidden");
+  // room.css is lazily <link>ed, so revealing #app before it lands flashes an
+  // unstyled room (CI caught exactly this). If the sheet is already applied —
+  // the normal path, warmed at enterUnlockedSession while the lobby rendered —
+  // reveal synchronously so nothing below reorders. Only a COLD entry waits,
+  // and it reveals on failure too: degraded styling beats a blank app.
+  (function revealApp() {
+    const show = function () { el("app").classList.remove("hidden"); };
+    const link = document.getElementById("room-css");
+    if (link && link.sheet) { show(); return; }
+    let p = null;
+    try { p = CanamedLoader.ensureRoomStyles(); } catch (e) { p = null; }
+    if (p && typeof p.then === "function") p.then(show, show); else show();
+  })();
   el("room-name").textContent = roomName;
   el("call-prof-btn").classList.toggle("hidden", asAdmin);
   // admins navigate via the sidebar's "Full dashboard"; no duplicate leave button
@@ -11842,6 +11860,12 @@ function setUnlockedSession(code) {
    scenario has been applied and the lobby is showing. */
 function enterUnlockedSession(code) {
   setUnlockedSession(code);
+  // Warm the lazy room stylesheet as soon as a session is entered: the user is
+  // now committed to a room, but the lobby/waiting room still has to render
+  // first, so room.css has ample time to land before the room paints. Entering
+  // a room re-calls this (idempotent) as a backstop. Deliberately NOT on the
+  // splash — keeping it out of the eager CSS is the whole point.
+  try { CanamedLoader.ensureRoomStyles().catch(function () {}); } catch (e) {}
   return loadSessionScenario(code).then(() => {
     initLobby();
     lobbyShowLockedSession();

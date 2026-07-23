@@ -18,6 +18,10 @@ test.describe("Sticky right-column (≥961px)", () => {
   test("col-right has position:sticky on a wide viewport", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const stickyPos = await page.evaluate(() => {
       const col = document.querySelector(".columns > .col-right");
       if (!col) return "no-col-right";
@@ -28,6 +32,10 @@ test.describe("Sticky right-column (≥961px)", () => {
   test("col-right is NOT sticky on a narrow viewport (≤960px)", async ({ page }) => {
     await page.setViewportSize({ width: 480, height: 800 });
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const stickyPos = await page.evaluate(() => {
       const col = document.querySelector(".columns > .col-right");
       if (!col) return "no-col-right";
@@ -44,6 +52,10 @@ test.describe("Module A chart sections stay open when you reveal items", () => {
   // revealing items must NEVER collapse a section.
   test("revealing several items in an OPEN section does NOT collapse it", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     await page.waitForFunction(() => typeof window.renderButtons === "function" ||
       typeof window.CASE === "object", { timeout: 5000 }).catch(() => {});
     const ok = await page.evaluate(() => {
@@ -68,6 +80,10 @@ test.describe("Module A chart sections stay open when you reveal items", () => {
 
   test("the auto-collapse hook was removed", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const typeofHook = await page.evaluate(
       () => typeof window._autoCollapseCompletedChartSections);
     expect(typeofHook).toBe("undefined");
@@ -85,6 +101,10 @@ test.describe("Session archive export (CSV / JSON)", () => {
   // CSV or JSON from the admin dashboard.
   test("admin dashboard exposes CSV + JSON archive buttons (no plain/markdown dump)", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const ids = await page.evaluate(() => ({
       csv: !!document.getElementById("admin-archive-csv-btn"),
       json: !!document.getElementById("admin-archive-json-btn"),
@@ -125,6 +145,10 @@ test.describe("Session archive export (CSV / JSON)", () => {
 
   test("downloadSessionArchive('json') emits structured JSON", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const text = await captureArchive(page, "json");
     const obj = JSON.parse(text);
     expect(obj.session).toBe("TEST-CODE");
@@ -135,6 +159,10 @@ test.describe("Session archive export (CSV / JSON)", () => {
 
   test("downloadSessionArchive('csv') emits a CSV with headers + a row", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const text = await captureArchive(page, "csv");
     expect(text).toMatch(/room,stageReached,score,section,author,university,bulletKey,text/);
     expect(text).toMatch(/Room 1/);
@@ -144,6 +172,10 @@ test.describe("Session archive export (CSV / JSON)", () => {
 
   test("CSV archive neutralises spreadsheet formula injection in free-text", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const text = await page.evaluate(() => {
       if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
       if (window._test_setRoomCount)  window._test_setRoomCount(1);
@@ -185,6 +217,10 @@ test.describe("Glossary tooltips on clinical buttons", () => {
   }
   test("glossary.js exposes a populated CANAMED_GLOSSARY", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     await loadGlossary(page);
     const count = await page.evaluate(() =>
       window.CANAMED_GLOSSARY ? Object.keys(window.CANAMED_GLOSSARY).length : 0);
@@ -192,6 +228,10 @@ test.describe("Glossary tooltips on clinical buttons", () => {
   });
   test("a synthetic button with a glossed term gets a title attribute", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     await loadGlossary(page);
     const title = await page.evaluate(() => {
       const b = document.createElement("button");
@@ -210,6 +250,10 @@ test.describe("Glossary tooltips on clinical buttons", () => {
 test.describe("Inline citation badges on revealed findings", () => {
   test(".req-inline-cite styling rule exists in stylesheet", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const found = await page.evaluate(() => {
       for (const sheet of Array.from(document.styleSheets)) {
         let rules;
@@ -230,6 +274,10 @@ test.describe("Inline citation badges on revealed findings", () => {
 test.describe("Skip-able 30-second Module A walkthrough", () => {
   test("tour.js registers a studentModA tour set with 3 steps", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     // CanamedTour is lazy-loaded by script-loader.js; force the load
     // so the test isn't racy when other specs warm/cool the cache.
     const info = await page.evaluate(async () => {
@@ -255,6 +303,10 @@ test.describe("Skip-able 30-second Module A walkthrough", () => {
 test.describe("Anonymised cohort progress strip", () => {
   test(".lb-cohort-progress class is styled (bars render at viewport-fit width)", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const styled = await page.evaluate(() => {
       for (const sheet of Array.from(document.styleSheets)) {
         let rules;
@@ -279,6 +331,10 @@ test.describe("Anonymised cohort progress strip", () => {
 test.describe("End-of-session reflection", () => {
   test("the quick-reflection end-poll is removed; the questionnaire is the reflection surface", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const info = await page.evaluate(() => ({
       endpoll: !!document.getElementById("endpoll-card"),
       survey:  !!document.getElementById("survey-card")
@@ -293,6 +349,10 @@ test.describe("End-of-session reflection", () => {
 test.describe("Disagree → counter-bullet on teammate answers", () => {
   test("buildAnswerLi exposes a .entry-disagree button only on teammates' entries", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const out = await page.evaluate(() => {
       // Drive module-scope clientId through the test hook so the
       // teammate-vs-self branch in buildAnswerLi sees a real id.

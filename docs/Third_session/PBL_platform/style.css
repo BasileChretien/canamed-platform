@@ -16,9 +16,6 @@
    ========================================================================== */
 /* the four workshop "chapters" each get their own accent colour */
 #room-main[data-stage="0"] { --stage-accent: var(--meeting);     --stage-accent-50: var(--meeting-50); }
-#room-main[data-stage="1"] { --stage-accent: var(--nagoya-600);  --stage-accent-50: var(--nagoya-50); }
-#room-main[data-stage="2"] { --stage-accent: var(--caen-line);   --stage-accent-50: var(--caen-50); }
-#room-main[data-stage="3"] { --stage-accent: var(--ok);          --stage-accent-50: var(--ok-50); }
 
 /* WCAG 2.4.1 (Bypass Blocks, Level A). Hidden off-screen at rest;
    becomes visible the moment a keyboard user focuses it. Sits above the
@@ -113,18 +110,6 @@ p { margin: 0.6em 0; }
 .vignette p, .instructions p, .instructions-open p, .info-list,
 .safety-note p, .privacy-note p, .micro-framework p {
   max-width: 70ch;
-}
-/* …except in Module B, which now runs full-width in its non-bullets phases
-   (rcol-collapsed). There the 70ch cap left the prose (safety note, situation,
-   frameworks, prompts) hugging the left with a wide empty band on the right
-   (user report 2026-06-02). Let Module B prose use the available width so it
-   reads as a full block, matching the citation/reference layout. */
-#stage-2 .vignette p,
-#stage-2 .safety-note p,
-#stage-2 .micro-framework p,
-#stage-2 .info-list,
-#stage-2 .prompts-card p {
-  max-width: none;
 }
 
 /* ---------- header ---------- */
@@ -249,16 +234,6 @@ main {
 #stage-1 .columns.rcol-collapsed { grid-template-columns: 1fr; }
 #stage-1 .columns.rcol-collapsed > .col-right { display: none; }
 
-/* Module B right-column collapse (2026-06-02). Module B's right column holds
-   ONLY the group-answers card, which is itself phase-gated to the final
-   "bullets" phase. During the setup / roleplay / discussion phases that card is
-   hidden, so the right grid track sat empty and the content was squeezed into
-   ~63% of the screen with a blank band on the right (user report). applyModB-
-   PhaseVisibility() now adds .rcol-collapsed for every phase except "bullets",
-   giving the content the full width until the answers card is actually shown. */
-#stage-2 .columns.rcol-collapsed { grid-template-columns: 1fr; }
-#stage-2 .columns.rcol-collapsed > .col-right { display: none; }
-
 /* ── Branched-scenario format ──────────────────────────────────────────────
    The branched-format layout + components — the épuré body[data-format] rules,
    the .dec-documents evidence panel, the .branched-* rationale/final deliverable
@@ -272,35 +247,6 @@ main {
   html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch { background: #15212c; }
   html:not([data-theme="light"]):not([data-theme="high-contrast"]) .dec-branch p { color: var(--ink, #f1eee6); }
 }
-html[data-theme="dark"] .dec-branch { background: #15212c; }
-html[data-theme="dark"] .dec-branch p { color: var(--ink, #f1eee6); }
-
-/* Student wrap-up export button. */
-/* take-home downloads: secondary pills (Markdown keeps its primary id-role) */
-.wrapup-download-btn {
-  margin-top: var(--s-2);
-  font: inherit;
-  font-weight: var(--fw-semibold);
-  font-size: var(--fs-1);
-  color: var(--ink);
-  background: var(--card);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-btn);
-  padding: 10px var(--s-4);
-  cursor: pointer;
-  transition: border-color var(--dur-fast) var(--ease-soft),
-              background var(--dur-fast) var(--ease-soft),
-              color var(--dur-fast) var(--ease-soft);
-}
-.wrapup-download-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary-hover);
-  background: var(--nagoya-50);
-}
-.wrapup-download-btn.hidden { display: none; }
-/* Spaced-reinforcement retention card at wrap-up (link + scan-to-save QR). */
-a.wrapup-download-btn { display: inline-block; text-decoration: none; }
-
 
 
 #join-btn, #start-session-btn, #prev-btn, #next-btn, .answer-add-btn, #advance-all-btn, #wrapup-download-btn{
@@ -540,154 +486,17 @@ input, select, textarea { font-size: 16px; }
   padding: 2px 9px;
   margin-left: auto;
 }
-#findings-log { margin: 0; padding: 0; list-style: none; }
 #prompts-list { margin: 0; padding-left: 20px; }
-#findings-log li {
-  background: var(--surface-sunk);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  padding: 11px 13px;
-  margin-bottom: var(--s-2);
-}
-#findings-log .q { font-weight: 600; }
-#findings-log .a { color: var(--ink); margin-top: 2px; }
-#findings-log .by {
-  font-size: 0.8rem;
-  color: var(--muted);
-  font-style: italic;
-  margin-top: 4px;
-}
-#findings-log li.key { border-left: 3px solid var(--key); }
-#findings-log li.key .q { color: var(--key); }
-#findings-log li.key .a { background: var(--key-50); border-radius: 6px; padding: 4px 8px; }
 
 /* ---------- prompts / compare ---------- */
 .prompts-card { border-left: 4px solid var(--caen-line); }
 #prompts-list li { margin-bottom: var(--s-3); }
 .compare-card { border-left: 4px solid var(--key); }
 .compare-card ul { margin: var(--s-2) 0; padding-left: 20px; }
-
-/* Progressive single-prompt UI (user request 2026-05-18: 'too much
-   text. It must be smoother. Maybe point by point. And they write a
-   reply, then the next point appears.') — one prompt visible at a
-   time, with a reply textarea + nav controls. Cursor + replies
-   cross-room synced via Firebase. */
-.prompt-progressive { display: flex; flex-direction: column; gap: var(--s-3); }
-.prompt-progressive.hidden { display: none; }
-.prompt-progress {
-  margin: 0;
-  padding: 4px 10px;
-  background: var(--surface-sunk);
-  border-radius: var(--r-pill);
-  display: inline-block;
-  align-self: flex-start;
-  font-size: 0.82rem;
-  color: var(--muted);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.prompt-text {
-  font-size: 1rem;
-  line-height: 1.55;
-  color: var(--ink);
-  background: var(--card);
-  padding: 14px 16px;
-  border-radius: var(--r-md);
-  border-left: 3px solid var(--meeting);
-  animation: prompt-fade-in 200ms var(--ease-out);
-}
 @keyframes prompt-fade-in {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
-.prompt-reply-area { display: flex; flex-direction: column; gap: 8px; }
-#prompt-reply {
-  width: 100%;
-  min-height: 80px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  font: inherit;
-  font-size: 0.95rem;
-  line-height: 1.45;
-  resize: vertical;
-  box-sizing: border-box;
-}
-#prompt-reply:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
-  border-color: var(--primary);
-}
-.prompt-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.prompt-prev {
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--muted);
-  border-radius: var(--r-pill);
-  padding: 6px 12px;
-  font: inherit;
-  font-size: 0.88rem;
-  cursor: pointer;
-}
-.prompt-prev:disabled { opacity: 0.45; cursor: not-allowed; }
-.prompt-prev:not(:disabled):hover { border-color: var(--ink); color: var(--ink); }
-.prompt-next {
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  border-radius: var(--r-pill);
-  padding: 7px 16px;
-  font: inherit;
-  font-weight: 700;
-  font-size: 0.92rem;
-  cursor: pointer;
-}
-.prompt-next:hover { background: var(--primary-hover); transform: translateY(-1px); }
-.prompt-next:disabled { opacity: 0.45; cursor: not-allowed; }
-
-/* Done state — all prompts worked through. */
-.prompt-done {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  background: var(--ok-50);
-  border-left: 4px solid var(--ok);
-  border-radius: var(--r-md);
-  font-size: 0.95rem;
-  line-height: 1.55;
-}
-.prompt-done.hidden { display: none; }
-.prompt-done p { margin: 0; }
-.prompt-done strong { color: var(--ok-strong); }
-.prompt-done-cta {
-  background: var(--primary);
-  color: #fff;
-  border: none;
-  border-radius: var(--r-pill);
-  padding: 8px 16px;
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-.prompt-done-cta:hover { background: var(--primary-hover); }
-.prompt-review {
-  background: transparent;
-  border: none;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.84rem;
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 4px 0;
-}
-.prompt-review:hover { color: var(--ink); }
 
 /* Mobile: stack the controls. */
 @media (max-width: 480px) {
@@ -887,102 +696,6 @@ input, select, textarea { font-size: 16px; }
 /* keep the bar compact: only the current segment shows its name inline */
 .gsp-name { display: none; }
 .gsp-step.is-current .gsp-name { display: inline; }
-
-.phase-stepper {
-  margin: 0 0 var(--s-3);
-}
-.phase-stepper-list {
-  list-style: none;
-  margin: 0;
-  padding: 6px 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  background: var(--surface-sunk);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  counter-reset: phase-step;
-}
-.phase-step {
-  flex: 1 1 140px;
-  display: flex;
-  list-style: none;
-  position: relative;
-}
-/* The interactive chip is a real <button> inside the <li> (keeps the <ol>
-   valid for axe + gives native keyboard operation). It carries the chip's
-   visual styling; the is-current / is-done classes live on the parent <li>. */
-.phase-step-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--muted);
-  font-family: inherit;
-  font-size: 0.86rem;
-  line-height: 1.25;
-  text-align: left;
-  cursor: pointer;
-}
-.phase-step-btn:hover { background: var(--surface-sunk, #f3f0e8); color: var(--ink); }
-.phase-step-btn:focus-visible {
-  outline: 2px solid var(--primary);
-  outline-offset: 2px;
-}
-.phase-step.is-current .phase-step-btn {
-  background: var(--card);
-  color: var(--ink);
-  font-weight: 600;
-  box-shadow: 0 0 0 1px var(--primary) inset;
-}
-.phase-step.is-done .phase-step-btn {
-  color: var(--ok-strong);
-}
-.phase-step-num {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: var(--line);
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 700;
-}
-.phase-step.is-current .phase-step-num {
-  background: var(--primary);
-  color: #fff;
-}
-.phase-step.is-done .phase-step-num {
-  background: var(--ok);
-  color: #fff;
-}
-.phase-step-label {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.phase-step-time {
-  flex: 0 0 auto;
-  font-size: 0.78rem;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  font-weight: 500;
-}
-/* Six-phase Module B stepper (2026-06-26): tighten the chips a touch so six fit
-   in fewer rows without truncating the "Phase N — …" labels. */
-.phase-stepper[data-steps="6"] .phase-step { flex-basis: 116px; }
-.phase-stepper[data-steps="6"] .phase-step-btn { padding: 5px 8px; font-size: 0.81rem; gap: 6px; }
-.phase-stepper[data-steps="6"] .phase-step-num { width: 19px; height: 19px; font-size: 0.72rem; }
-.phase-stepper[data-steps="6"] .phase-step-time { font-size: 0.72rem; }
-@media (max-width: 520px) {
-  .phase-stepper[data-steps="6"] .phase-step { flex-basis: 47%; }
-}
 /* Generic per-phase visibility toggle (Module B): a section/prompt not in the
    current phase is removed from the flow entirely. */
 .is-phase-hidden { display: none !important; }
@@ -991,76 +704,6 @@ input, select, textarea { font-size: 16px; }
    shows only for the participant holding that role. Independent of the phase
    toggle above — an element is visible only when it carries NEITHER class. */
 .is-role-hidden { display: none !important; }
-
-/* Synced phase prev/next bar */
-.phase-nav {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin: 8px 0 4px;
-  flex-wrap: wrap;
-}
-.phase-nav-btn {
-  min-height: 40px;
-  padding: 6px 14px;
-  border-radius: var(--r-sm, 8px);
-  border: 1px solid var(--line-strong, #c9bd9c);
-  background: var(--card, #fff);
-  color: var(--ink);
-  font-weight: 600;
-  cursor: pointer;
-}
-.phase-nav-btn:hover:not(:disabled) { background: var(--surface-sunk, #f3f0e8); }
-.phase-nav-btn:disabled { opacity: 0.45; cursor: default; }
-/* Emphasise the forward action so it's obvious how to advance the room's phase
-   (user request 2026-06-02). A primary-coloured ring + bold — theme-safe (no
-   white-on-primary, which fails contrast in dark mode); dimmed automatically on
-   the last phase via :disabled above. */
-.phase-nav-btn--next:not(:disabled) {
-  border-color: var(--primary);
-  box-shadow: inset 0 0 0 1px var(--primary);
-  font-weight: 700;
-}
-.phase-nav-hint {
-  margin: 0 0 8px;
-  text-align: center;
-  font-size: 0.86rem;
-  color: var(--muted);
-}
-.phase-nav-hint strong { color: var(--ink); }
-.phase-nav-indicator {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  min-width: 6.5em;
-  text-align: center;
-}
-
-/* Phase-3 one-at-a-time prompt navigation */
-.exchange-nav {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 12px;
-  flex-wrap: wrap;
-}
-.exchange-nav-counter {
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.exchange-done {
-  margin-top: 12px;
-  padding: 10px 12px;
-  border-radius: var(--r-sm, 8px);
-  background: var(--ok-50, #e8f5ec);
-  color: var(--ok-strong, #1c7c4a);
-  font-weight: 600;
-}
 
 /* Pinned banners at the top of a panel — used for the Caen+Nagoya rule
    on the Discussion panel and the Module-B ground rule. */
@@ -1075,122 +718,6 @@ input, select, textarea { font-size: 16px; }
 }
 .banner-rule.banner-compare { background: var(--caen-50); border-left-color: var(--caen-line); }
 
-/* Module B role picker — interactive chip grid. Tapping a chip claims
-   the role (CSS-only highlight; JS in wireRolePicker() drives state). */
-.role-picker { padding: 14px 16px; }
-.role-picker-prompt { margin: 0 0 var(--s-2); font-size: 0.95rem; }
-.role-deselect-hint { margin: var(--s-2) 0 0; font-size: 0.82rem; color: var(--muted); }
-.role-chip-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 10px;
-}
-.role-chip {
-  display: flex;
-  flex-direction: column;
-  text-align: left;
-  gap: 4px;
-  padding: 10px 12px;
-  background: var(--surface-sunk);
-  border: 2px solid var(--line);
-  border-radius: var(--r-md);
-  cursor: pointer;
-  font: inherit;
-  color: var(--ink);
-  transition: border-color var(--dur-fast) var(--ease-soft),
-              background var(--dur-fast) var(--ease-soft),
-              transform var(--dur-fast) var(--ease-soft);
-}
-.role-chip:hover { border-color: var(--primary); transform: translateY(-1px); }
-.role-chip:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-.role-chip[aria-checked="true"] {
-  background: var(--nagoya-50);
-  border-color: var(--primary);
-  box-shadow: 0 1px 4px rgba(46,159,223,.18);
-}
-.role-chip-name { font-weight: 700; font-size: 0.95rem; }
-
-/* Private per-role objective panel — shown only on the device of the student
-   who picked the role (the brief used to print on every chip, leaking hidden
-   stances). Styled as a soft callout under the picker. */
-.role-objective {
-  margin-top: 12px;
-  padding: 12px 14px;
-  background: var(--nagoya-50);
-  border: 1px solid var(--primary);
-  border-radius: var(--r-md);
-}
-.role-objective-label {
-  margin: 0 0 4px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--primary);
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
-.role-objective-text { margin: 0; font-size: 0.92rem; line-height: 1.45; color: var(--ink); }
-
-/* Live role-pick sync: who has claimed each role + a double-pick flag. */
-.role-chip-claimants {
-  display: block;
-  margin-top: 6px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--primary);
-}
-.role-chip-claimants:empty { display: none; }
-.role-chip.role-clash {
-  border-color: var(--caen-line, #b45309);
-  box-shadow: 0 1px 4px rgba(180,83,9,.2);
-}
-.role-chip.role-clash .role-chip-claimants { color: var(--caen-line, #b45309); }
-.role-clash-note {
-  margin: var(--s-2) 0 0;
-  padding: 7px 11px;
-  font-size: 0.86rem;
-  border-radius: var(--r-sm);
-  background: var(--caen-50);
-  border: 1px solid #ecd9a0;
-  color: var(--ink);
-}
-
-/* Swap-and-replay loop: round indicator + the swap button + the reflective
-   "you've swapped seats" banner. */
-.role-replay {
-  display: flex;
-  align-items: center;
-  gap: var(--s-2);
-  flex-wrap: wrap;
-  margin-top: var(--s-2);
-}
-.role-replay-round {
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: var(--muted, #4d5b6a);
-}
-.role-replay-btn {
-  margin-left: auto;
-  padding: 7px 13px;
-  font-size: 0.9rem;
-  font-weight: 600;
-  border-radius: var(--r-md);
-  border: 1px solid var(--primary);
-  background: var(--nagoya-50, #eaf4fb);
-  color: var(--primary);
-  cursor: pointer;
-}
-.role-replay-btn:hover { background: var(--nagoya-100, #d6eafb); }
-.role-replay-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.role-replay-banner {
-  margin: var(--s-2) 0 0;
-  padding: 9px 12px;
-  font-size: 0.9rem;
-  border-radius: var(--r-md);
-  background: var(--nagoya-50, #eaf4fb);
-  border-left: 3px solid var(--primary);
-  color: var(--ink);
-}
-
 /* Pause/Explore/Explain/Realign — collapsed-by-default reference card.
    The per-role "how to play your part" guides (patient + family, 2026-06-03)
    share the same collapsible-card chrome; only the left-accent colour differs
@@ -1201,7 +728,6 @@ input, select, textarea { font-size: 16px; }
   border-left: 4px solid var(--ok);
   padding: 10px 14px;
 }
-.role-guide-card { border-left-color: var(--primary); }
 .micro-framework-card summary,
 .role-guide-card summary {
   cursor: pointer;
@@ -1304,20 +830,6 @@ html[data-theme="dark"] .next-step-coach {
   border-left-color: var(--meeting);
 }
 
-/* Locked tab state (per UX/pedagogy panel 2026-05-18): the Discussion
-   tab is technically clickable while the synthesis is incomplete, but
-   the panel inside is empty/locked. Without a visible lock cue on the
-   tab itself, students think it's "available but uninteresting" and
-   lose trust in the navigation. The .is-locked styling dims the tab
-   and surfaces the unlock condition inline (.rcol-tab-locked-hint). */
-.rcol-tab.is-locked {
-  opacity: 0.65;
-}
-.rcol-tab.is-locked .rcol-tab-icon { filter: grayscale(0.4); }
-.rcol-tab.is-locked.is-active {
-  opacity: 0.85;
-}
-
 
 /* ── Chart-metaphor framing for Module A (pedagogist's strongest
    claim, 2026-05-18 specialist panel): the case-work isn't a "menu
@@ -1385,54 +897,10 @@ html[data-theme="dark"] .next-step-coach {
   padding: 8px 0 0;
 }
 .chart-section:last-child { margin-bottom: 0; }
-.chart-section-h {
-  margin: 0 0 10px;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  /* When rendered as <summary> the default marker is a triangle on the
-     left — keep it but make it match the section padding. cursor:pointer
-     surfaces "this is clickable". list-style is reset on the summary
-     element so we control the disclosure caret ourselves below. */
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-.chart-section-h::-webkit-details-marker { display: none; }   /* WebKit/Safari */
-.chart-section-h::marker { content: ""; }                      /* Firefox/Chrome */
-/* Custom disclosure caret — rotates 90° when the section is open. */
-.chart-section-h::before {
-  content: "▸";
-  display: inline-block;
-  width: 1em;
-  font-size: 0.85em;
-  color: var(--muted);
-  transition: transform 0.15s ease;
-}
-.chart-section[open] > .chart-section-h::before {
-  transform: rotate(90deg);
-}
-/* UX-overload fix (2026-06-01): ease the chart-section reveal. Expanding a
-   <details> chart section used to snap the layout instantly — the only
-   un-eased interaction in an otherwise mature motion system. Animate the
-   revealed content (not the summary) with the same gentle fade+slide as the
-   inline reveals. It fires once per open (renderButtons rebuilds the
-   #group-* CONTENTS, not the section's direct children, so this never
-   re-fires on a finding reveal). Reduced-motion disables it just below. */
-.chart-section[open] > *:not(summary):not(.chart-section-h) {
-  animation: chart-section-reveal 0.22s var(--ease-out, ease);
-}
 @keyframes chart-section-reveal {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: none; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .chart-section[open] > *:not(summary):not(.chart-section-h) { animation: none; }
-}
-.chart-section-h:hover { color: var(--primary, #1763a6); }
 /* Browser-native <details> collapse hides non-summary children, but the
    .btn-group's explicit display:flex (defined above) wins specificity
    against the implicit shadow-slot. Force-hide non-summary children
@@ -1442,92 +910,6 @@ html[data-theme="dark"] .next-step-coach {
    their contents — incl. the mounted chat — hidden by this :not([open]). */
 details.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   display: none !important;
-}
-
-/* --- Patient-workup tab strip (Dialogue / Examination / Investigations) ---
-   2026-06-25: the three data-gathering sections moved from stacked <details>
-   into a horizontal tab strip (one visible at a time). Visual language clones
-   the right column's .rcol-tabs (active = filled --primary pill) so students
-   meet one tab idiom, not two. Panels keep the .chart-section base styling +
-   their original ids; .chart-tab-panel[hidden] does the show/hide. */
-.chart-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px;
-  margin-bottom: 12px;
-  background: var(--card);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-sm);
-}
-.chart-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  flex: 1 1 auto;
-  justify-content: center;
-  padding: 9px 12px;
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.86rem;
-  color: var(--ink);
-  background: transparent;
-  border: 1.5px solid transparent;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: background var(--dur-base, .18s) var(--ease-out, ease),
-              border-color var(--dur-base, .18s) var(--ease-out, ease),
-              color var(--dur-base, .18s) var(--ease-out, ease);
-}
-.chart-tab:hover { background: var(--surface-sunk, #f3f0e8); }
-.chart-tab.is-active {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
-  box-shadow: var(--sh-sm);
-}
-.chart-tab-icon { display: inline-flex; line-height: 1; }
-.chart-tab-icon .ico { width: 17px; height: 17px; }
-.chart-tab-label { white-space: nowrap; }
-.chart-tab-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.5em;
-  height: 1.5em;
-  padding: 0 6px;
-  font-size: 0.74rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--primary);
-  background: var(--surface-sunk, #f3f0e8);
-  border-radius: var(--r-pill);
-  line-height: 1;
-}
-.chart-tab.is-active .chart-tab-badge { color: var(--primary); background: #fff; }
-.chart-tab-badge[hidden] { display: none; }
-/* a calm "Mr Lefebvre answered" dot when a reply lands while a different tab
-   is open (set by modA-llm-init.js; cleared by switchChartTab on return). */
-.chart-tab.has-attention::after {
-  content: "";
-  position: absolute;
-  top: 4px; right: 6px;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #e0a86b;
-  box-shadow: 0 0 0 2px var(--card);
-  animation: rcol-pulse 1.4s var(--ease-out, ease) 4;
-}
-.chart-tab.is-active.has-attention::after { display: none; }
-.chart-tab-panel[hidden] { display: none !important; }
-.chart-tab-panel.is-active {
-  animation: rcol-fadein var(--dur-base, .18s) var(--ease-out, ease);
-}
-@media (prefers-reduced-motion: reduce) {
-  .chart-tab.has-attention::after { animation: none; }
-  .chart-tab-panel.is-active { animation: none; }
 }
 /* Narrow screens: stack icon over a wrapping label so all three tabs still
    fit one row on a 375px phone (matches the .rcol-tab mobile treatment). */
@@ -1572,26 +954,6 @@ details.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   content: "☑";
   color: var(--success, #2e7d32);
 }
-
-/* UX-overload fix (2026-06-01): the top of Stage 1 stacked TWO 4-item
-   progress strips — the phase stepper AND this per-bullet checklist —
-   reading as two competing progress bars before the student does anything.
-   Group them into one block (tighten the gap) and make the per-bullet
-   checklist visually SECONDARY so the phase stepper is the one primary
-   progress signal. Plus give the consultation note (the actual activity)
-   the single focal heading. All scoped to #stage-1 so the shared
-   .card / .vignette / phase-stepper styles on other stages are untouched. */
-#stage-1 .phase-stepper { margin-bottom: 6px; }
-#stage-1 .modA-bullet-progress {
-  font-size: 0.82rem;
-  margin: 0 0 12px;
-  padding-left: 2px;
-}
-#stage-1 .modA-bullet-progress li::before { font-size: 1em; }
-/* The patient vignette is now the single focal heading on Stage 1 (the
-   consultation-note title was fused into it, 2026-07-15). Scoped to #stage-1 so
-   the shared .vignette h2 on other stages is untouched. */
-#stage-1 .vignette h2 { font-size: 1.18rem; }
 
 /* Glossed buttons get a tiny dotted underline as a "hover for more"
    cue — sim 2026-05-19 feature for low-English students. Title
@@ -1753,53 +1115,6 @@ details.chart-section:not([open]) > *:not(summary):not(.chart-section-h) {
   white-space: nowrap;
 }
 
-/* Anonymised cohort progress strip — sim 2026-05-19 feature.
-   One bar per room, name-ordered (not rank-ordered), so a competitive
-   student can see relative progress without learning the ranking.
-   My room's bar uses the accent palette; others are muted. */
-.lb-cohort-progress {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--line, #e2dccf);
-}
-.lb-cohort-head {
-  margin: 0 0 6px;
-  font-size: 0.84rem;
-  color: var(--muted);
-}
-.lb-cohort-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-  gap: 6px;
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.lb-cohort-cell {
-  padding: 2px 0;
-  list-style: none;
-}
-.lb-cohort-bar {
-  height: 8px;
-  background: var(--n-100, #f0eadb);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.lb-cohort-bar > span {
-  display: block;
-  height: 100%;
-  width: 0;
-  background: var(--n-300, #c9bd9c);
-  transition: width var(--dur-base, 0.25s) var(--ease-soft, ease-out);
-}
-.lb-cohort-cell.is-me .lb-cohort-bar {
-  border: 1px solid var(--primary, #1763a6);
-  background: rgba(23, 99, 166, 0.08);
-}
-.lb-cohort-cell.is-me .lb-cohort-bar > span {
-  background: var(--primary, #1763a6);
-}
-
 /* --- Observer button + body-level state --- */
 .observer-btn {
   background: var(--card);
@@ -1841,23 +1156,6 @@ body[data-observer="1"] #modB-next-step {
 /* --- Counter-bullet replies under group answers --- */
 .entry-disagree { color: var(--meeting, #8a2017); }
 .entry-agree { color: #2e7d4f; }
-.answer-replies {
-  list-style: none;
-  margin: 4px 0 0 18px;
-  padding: 0;
-  font-size: 0.92rem;
-}
-.answer-reply {
-  margin: 2px 0;
-  padding: 4px 8px;
-  border-left: 3px solid var(--meeting, #8a2017);
-  background: rgba(192, 57, 43, 0.04);
-  border-radius: 0 4px 4px 0;
-}
-.answer-reply.is-support {
-  border-left-color: var(--success, #2e7d32);
-  background: rgba(46, 125, 50, 0.05);
-}
 .reply-arrow {
   color: var(--muted);
   margin-right: 4px;
@@ -1911,13 +1209,6 @@ body[data-observer="1"] #modB-next-step {
 }
 .collapsible-card:not([open]) > *:not(summary) {
   display: none !important;
-}
-.chart-section-icon { font-size: 1.1rem; line-height: 1; }
-.chart-section-hint {
-  margin: 0 0 8px;
-  font-size: 0.88rem;
-  color: var(--muted);
-  line-height: 1.5;
 }
 
 /* ── Working hypotheses panel (PBL 7-jump scaffold step) ── */
@@ -2082,23 +1373,6 @@ body[data-observer="1"] #modB-next-step {
 /* Your-role panel — a transparent container (no .card) so the moved role cards
    keep their own boxes; stack them with a consistent gap. */
 .role-panel { display: flex; flex-direction: column; gap: var(--s-3); }
-.role-card-prompt { color: var(--muted); font-size: 0.95rem; margin: 0; }
-/* "Randomly assign roles" button — a calm full-width secondary action under the
-   role chips. */
-.role-assign-row { margin: var(--s-2) 0; }
-.role-assign-btn {
-  width: 100%;
-  padding: 9px 14px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-pill);
-  background: var(--surface-sunk);
-  color: var(--ink);
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease;
-}
-.role-assign-btn:hover { background: var(--n-100); border-color: var(--primary); }
 .reference-panel { margin-top: var(--s-3); }
 .reference-panel[hidden] { display: none; }
 /* Beautiful line-breaking for the reference prose (user request 2026-06-02).
@@ -2206,19 +1480,6 @@ body[data-observer="1"] #modB-next-step {
    section per bullet question; each holds its own list + input row. */
 .answers-card-bulleted { display: flex; flex-direction: column; gap: var(--s-3); }
 .answer-bullet { display: flex; flex-direction: column; gap: 6px; }
-.answer-bullet-label {
-  font-weight: 600;
-  font-size: 0.95rem;
-  color: var(--ink);
-  line-height: 1.4;
-}
-.answer-bullet-label-muted { color: var(--muted); font-weight: 500; font-size: 0.86rem; }
-.answer-bullet .answers-list { margin: 0; }
-.answer-bullet-unsorted {
-  margin-top: var(--s-3);
-  padding-top: var(--s-3);
-  border-top: 1px dashed var(--line);
-}
 
 /* ---------- saved confirmation ---------- */
 .copy-ok { color: var(--ok); font-size: 0.86rem; margin-left: 10px; font-weight: 600; }
@@ -2243,8 +1504,6 @@ footer {
   /* containing block for the leaderboard dropdown panel below */
   position: relative;
 }
-.stage-indicator { font-weight: 700; font-size: 1.05rem; }
-.stage-wait { color: var(--muted); font-size: 0.9rem; }
 .stage-controls { display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap; row-gap: 6px; }
 /* The "Stage X of 4" indicator is now sr-only (hidden visually, 2026-06-02), so
    it no longer occupies the left of the row. The participant controls used to
@@ -2265,59 +1524,13 @@ footer {
    WebKit / Android, which would hide the buttons on desktop too.) */
 .stage-controls--participant .stage-overflow { display: contents; }
 .stage-controls--participant .stage-overflow-menu { display: contents; }
-.stage-controls--participant .stage-overflow-toggle { display: none; }
 
 @media (max-width: 720px) {
-  /* Narrow: "Call a facilitator" becomes the prominent primary action on its
-     own full-width line, and the secondary actions collapse behind the toggle. */
-  .stage-controls--participant #call-prof-btn {
-    flex: 1 1 100%;
-    order: 9;                /* drop below Back / Next / More */
-    background: var(--caen-500, var(--primary));
-    color: #4a3a10;
-    border-color: var(--caen-500, var(--primary));
-    font-weight: 700;
-  }
-  .stage-controls--participant #call-prof-btn:hover { background: var(--caen-500, var(--primary)); }
   /* A compact "··· More" chip that reveals Teams / observe / leave on tap
      (initStageOverflow toggles .is-open). */
   .stage-controls--participant .stage-overflow { display: block; position: relative; }
-  .stage-controls--participant .stage-overflow-toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    min-height: 44px;
-    padding: 9px 12px;
-    font: inherit;
-    font-weight: 600;
-    font-size: 0.85rem;
-    color: var(--caen-ink, var(--ink));
-    background: var(--card);
-    border: 1px solid var(--caen-line, var(--line-strong));
-    border-radius: var(--r-sm);
-    cursor: pointer;
-  }
-  .stage-controls--participant .stage-overflow.is-open .stage-overflow-toggle {
-    background: var(--surface-sunk, #f3f0e8);
-  }
   /* the menu is collapsed by default, shown as a popover when open */
   .stage-controls--participant .stage-overflow-menu { display: none; }
-  .stage-controls--participant .stage-overflow.is-open .stage-overflow-menu {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    position: absolute;
-    right: 0;
-    z-index: 30;
-    margin-top: 6px;
-    padding: 8px;
-    background: var(--card);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--r-md);
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
-    min-width: 12rem;
-  }
-  .stage-controls--participant .stage-overflow.is-open .stage-overflow-menu > * { width: 100%; }
 }
 
 .presence-line {
@@ -2348,17 +1561,6 @@ footer {
 .answers-card { border-left: 4px solid var(--caen-line); }
 .answers-list { list-style: none; margin: 0 0 var(--s-3); padding: 0; }
 .answers-empty { color: var(--muted); font-style: italic; font-size: 0.92rem; }
-.answer-entry {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-  padding: 7px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.95rem;
-}
-.answer-entry .dot { align-self: center; }
-.answer-by { font-weight: 600; white-space: nowrap; }
-.answer-text { flex: 1; }
 .entry-act {
   background: none;
   border: none;
@@ -2370,10 +1572,8 @@ footer {
   min-height: 40px;
 }
 .entry-act:hover { color: var(--key); }
-.answer-entry .entry-act + .entry-act { margin-left: var(--s-2); }
 .answer-add { display: flex; gap: var(--s-2); }
 .answer-add input { flex: 1; padding: 10px 12px; }
-.answer-edit { flex: 1; padding: 6px 9px; border-color: var(--primary); font-size: 0.95rem; }
 .typing-line { font-size: 0.82rem; color: var(--muted); font-style: italic; margin: 4px 0; }
 
 /* ---------- contribution tally ---------- */
@@ -2593,45 +1793,13 @@ footer {
   min-height: 40px;
 }
 
-/* ---------- wrap-up summary ---------- */
-.wrapup-mod { font-size: 0.98rem; margin: var(--s-4) 0 6px; }
-.wrapup-mod:first-child { margin-top: 0; }
-/* The official model answer (Module A case diagnosis), shown at wrap-up AFTER
-   the team's own answers and clearly set apart with its own label so it never
-   reads as something the team wrote (user request 2026-06-02). */
-.wrapup-official {
-  margin: 8px 0 4px;
-  padding: 8px 10px 9px;
-  border-left: 3px solid var(--ok, #2e9fdf);
-  background: var(--surface-sunk, rgba(46,159,223,.08));
-  border-radius: var(--r-sm, 6px);
-}
-.wrapup-official-label {
-  margin: 0 0 4px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--ok, #2e9fdf);
-}
-.wrapup-official-body { margin: 0; font-size: 0.95rem; line-height: 1.45; }
-.wrapup-official-body strong { color: var(--ink); }
-
 /* ---------- room view layout: main + admin sidebar ---------- */
 #app { display: flex; gap: var(--s-4); align-items: flex-start; }
 #room-main { flex: 1; min-width: 0; }
-#room-sidebar {
-  width: 290px;
-  flex-shrink: 0;
-  position: sticky;
-  top: 16px;
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-}
 body.admin-room #app { max-width: 1380px; }
 body.admin-room .columns { grid-template-columns: 1fr; }
 @media (max-width: 960px) {
   #app { flex-direction: column; }
-  #room-sidebar { width: 100%; position: static; }
 }
 
 
@@ -2640,22 +1808,6 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   word-break: normal;
 }
 .header-inner > div:first-child { min-width: 0; }
-
-.stage-wait:not(:empty) {
-  background: var(--caen-50);
-  border: 1px solid #ecd9a0;
-  border-radius: var(--r-sm);
-  padding: 8px 12px;
-  /* Bug 4 (user-feedback-2): switched from hardcoded #5a4519 to
-     var(--caen-ink) so the colour follows the theme. In light mode the
-     token resolves to a near-identical brown (~#5a4519) keeping the
-     WCAG-AA 4.5:1 contrast against caen-50; in dark/HC themes the token
-     remaps to a value that stays readable on the dark caen-50 surface. */
-  color: var(--caen-ink);
-  font-style: normal;
-  font-size: 0.88rem;
-}
-
 
 
 #waiting:not(.hidden), #app:not(.hidden){
@@ -2676,14 +1828,11 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   from { background: #fff3cf; }
   to   { background: var(--surface-sunk); }
 }
-#findings-log li.just-in { animation: finding-in 1.6s var(--ease-out); }
 /* "call a facilitator" pending: a calm steady pulse - it stays "live" */
 @keyframes call-pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(231,184,0,0); }
   50%      { box-shadow: 0 0 0 4px rgba(231,184,0,0.35); }
 }
-/* the "waiting for a facilitator" box breathes gently so it reads as alive */
-.stage-wait:not(:empty) { animation: breathe 2.6s var(--ease-soft) infinite; }
 /* breathe trough raised from 0.74 to 0.92 so rendered contrast stays >= 4.5:1
    throughout the cycle on the darkened #5a4519 foreground (WCAG AA) */
 @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.92; } }
@@ -2722,163 +1871,8 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
   .header-inner { flex-wrap: wrap; }
   .header-right-wrap { width: 100%; }
   .answer-add { flex-direction: column; align-items: stretch; }
-  .answer-add-btn { width: 100%; }
 }
-
-/* ==========================================================================
-   SCORING, LEADERBOARD, HISTORY CARDS & CELEBRATION
-   ========================================================================== */
-/* --- the room's score chip in the stage row --- */
-.score-chip {
-  font-size: 0.85rem;
-  font-weight: 600;
-  background: var(--caen-50);
-  border: 1px solid #ecd9a0;
-  color: var(--caen-ink);
-  border-radius: var(--r-pill);
-  padding: 5px 12px;
-  white-space: nowrap;
-}
-.score-chip .score-num { font-weight: 800; color: var(--ink); }
 @keyframes pop { 0% { transform: scale(1); } 40% { transform: scale(1.18); } 100% { transform: scale(1); } }
-.score-chip.pop { animation: pop 320ms var(--ease-out); }
-
-/* --- the live leaderboard --- */
-.leaderboard-card { background: var(--surface-sunk); }
-.leaderboard-card > summary {
-  cursor: pointer;
-  font-size: 0.98rem;
-  list-style: none;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.leaderboard-card > summary::-webkit-details-marker { display: none; }
-.leaderboard-card > summary::before { content: "\25B8  "; color: var(--muted); }
-.leaderboard-card[open] > summary::before { content: "\25BE  "; }
-.lb-hint { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
-#leaderboard { margin-top: var(--s-3); display: flex; flex-direction: column; gap: 6px; }
-
-/* ── Collapsible room-header detail + inline leaderboard (2026-07-15) ──────────
-   The stage-card header is one line: score chip + controls + a "Details" toggle
-   on the left, a compact Live-leaderboard disclosure on the right. The stepper,
-   the waiting line and the room presence collapse into #stage-details. */
-
-/* the "Details" toggle: a small pill just after the controls. */
-.stage-details-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 4px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--surface-sunk);
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.stage-details-toggle:hover { color: var(--ink); border-color: var(--muted); }
-.stage-details-toggle:focus-visible { outline: 2px solid var(--focus, var(--primary)); outline-offset: 2px; }
-.stage-details-toggle .sdt-caret {
-  display: inline-block;
-  font-size: 0.7em;
-  transition: transform var(--dur-base) var(--ease-soft);
-}
-.stage-details-toggle[aria-expanded="true"] .sdt-caret { transform: rotate(90deg); }
-
-.stage-details[hidden] { display: none; }
-.stage-details { margin-top: var(--s-3); }
-
-/* Closed: the Live-leaderboard disclosure is a compact chip on the right edge of
-   the header row. */
-.stage-row > .leaderboard-inline { margin-left: auto; }
-
-/* Card-less disclosure: override the standalone-card look
-   (.leaderboard-card background/border/shadow) now that it lives in the row. */
-.leaderboard-card.leaderboard-inline {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  padding: 0;
-  margin: 0;
-  flex: 0 0 auto;
-}
-.leaderboard-card.leaderboard-inline > summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 36px;
-  padding: 4px 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--r-pill);
-  background: var(--surface-sunk);
-  font-size: 0.85rem;
-  white-space: nowrap;
-}
-.leaderboard-card.leaderboard-inline[open] > summary { border-color: var(--muted); }
-
-/* Leaderboard open state (2026-07-21): panel is REPARENTED to .stage-card
-   while open (initLeaderboardFlow — chip stays on the top line, ranking
-   expands IN FLOW pushing content below); both homes styled. */
-.stage-card > .lb-panel,
-.leaderboard-card.leaderboard-inline > .lb-panel {
-  background: var(--card);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  padding: var(--s-4);
-  margin-top: var(--s-2);
-}
-.leaderboard-card.leaderboard-inline > .lb-panel .lb-hint { margin: 0 0 var(--s-2); }
-.leaderboard-card.leaderboard-inline > .lb-panel #leaderboard { margin-top: 0; }
-.lb-row {
-  display: flex;
-  align-items: center;
-  /* flex-wrap is REQUIRED. `.lb-gap` (only present on the "me" row)
-     has `flex-basis: 100%` so that the "+N to catch X" line drops to
-     its own row below rank/name/pts. Without flex-wrap on the parent,
-     that 100% basis can't actually force a new line — instead .lb-gap
-     competes with rank+name+pts for the SAME horizontal track,
-     squashing `.lb-name` (the team name) to 0 width and triggering
-     per-character vertical stacking via overflow-wrap. The Bug 1
-     user-feedback-2 fix added `min-width: 0` + `overflow-wrap:
-     break-word` on .lb-name to prevent that, but the actual root
-     cause was the missing flex-wrap. */
-  flex-wrap: wrap;
-  gap: var(--s-3);
-  padding: 9px 12px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-  transition: transform var(--dur-base) var(--ease-out),
-              box-shadow var(--dur-fast) var(--ease-soft);
-}
-.lb-row.me {
-  border-color: var(--primary);
-  background: var(--nagoya-50);
-  box-shadow: inset 3px 0 0 var(--primary);
-}
-.lb-rank { font-weight: 800; min-width: 2.2em; font-size: 0.95rem; }
-/* Bug 1 (user-feedback-2): team names render horizontally even with emoji
-   prefixes on narrow phones. `min-width: 0` lets the flex track shrink
-   below its content's min-content size; `overflow-wrap: break-word` only
-   breaks at character boundaries when no word break is available, which
-   prevents the per-grapheme vertical-stack render that `anywhere` caused. */
-.lb-name {
-  flex: 1;
-  min-width: 0;
-  font-weight: 600;
-  overflow-wrap: break-word;
-  word-break: normal;
-}
-.lb-pts {
-  font-weight: 800;
-  color: var(--nagoya-700);
-  white-space: nowrap;
-}
 .team-name-card { border-left: 4px solid var(--caen-line); }
 
 /* --- historical context cards --- */
@@ -3098,7 +2092,6 @@ header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 /* --- typography with more presence --- */
 .card h2 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.025em; line-height: 1.18; }
 .card h3 { font-size: 1.08rem; font-weight: 700; }
-.stage-indicator { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; }
 h2, h3 { text-wrap: balance; }
 
 /* --- primary CTA hover glow (fill comes from the primary button role:
@@ -3112,9 +2105,6 @@ h2, h3 { text-wrap: balance; }
 .req-btn:hover {
   box-shadow: 0 0 0 3px var(--nagoya-50), 0 4px 12px rgba(46,159,223,.18);
 }
-.lb-row.me {
-  box-shadow: inset 3px 0 0 var(--primary), 0 0 18px rgba(231,184,0,.22);
-}
 
 /* --- inline-SVG imagery --- */
 .ico { width: 1.3rem; height: 1.3rem; flex-shrink: 0; }
@@ -3125,7 +2115,6 @@ h2, h3 { text-wrap: balance; }
   filter: drop-shadow(var(--sh-sm));
 }
 .empty-art { width: 72px; height: 54px; display: block; margin: 0 auto 6px; }
-#findings-empty { text-align: center; }
 .wrap-art { width: 120px; height: 70px; display: block; margin: 0 0 var(--s-2); }
 
 /* --- "wow" motion --- */
@@ -3146,13 +2135,6 @@ h2, h3 { text-wrap: balance; }
   from { transform: translate(-6%, -4%); }
   to { transform: translate(6%, 5%); }
 }
-/* leaderboard rows rise + stagger when the card opens */
-.leaderboard-card[open] .lb-row { animation: lb-rise 420ms var(--ease-out) both; }
-.leaderboard-card[open] .lb-row:nth-child(1) { animation-delay: 40ms; }
-.leaderboard-card[open] .lb-row:nth-child(2) { animation-delay: 100ms; }
-.leaderboard-card[open] .lb-row:nth-child(3) { animation-delay: 160ms; }
-.leaderboard-card[open] .lb-row:nth-child(4) { animation-delay: 220ms; }
-.leaderboard-card[open] .lb-row:nth-child(n+5) { animation-delay: 280ms; }
 @keyframes lb-rise {
   from { opacity: 0; transform: translateY(14px) scale(0.98); }
   to { opacity: 1; transform: none; }
@@ -3268,43 +2250,6 @@ h2, h3 { text-wrap: balance; }
   font-size: 0.84rem;
   color: var(--muted);
 }
-.lb-rubric-note {
-  margin: var(--s-2) 0 0;
-  font-size: 0.84rem;
-  color: var(--muted);
-}
-
-/* --- cooperative shared goal --- */
-.lb-shared {
-  margin-top: var(--s-3);
-  padding: var(--s-3) var(--s-4);
-  background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
-  border: 1px solid var(--line);
-  border-radius: var(--r-md);
-}
-.lb-shared-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--s-2);
-  font-size: 0.95rem;
-  margin-bottom: 6px;
-}
-.lb-shared-head span { font-weight: 700; color: var(--nagoya-700); }
-.lb-bar {
-  height: 12px;
-  border-radius: var(--r-pill);
-  background: rgba(15,78,133,.12);
-  overflow: hidden;
-}
-.lb-bar span {
-  display: block;
-  height: 100%;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, var(--nagoya-500), var(--caen-500));
-  transition: width var(--dur-view) var(--ease-out);
-}
-.lb-shared-note { margin: 6px 0 0; font-size: 0.82rem; color: var(--muted); }
 
 /* Live-update feedback (2026-06-03, user: "the score doesn't feel like it
    updates live"). The board re-renders silently on every score change; without
@@ -3316,14 +2261,9 @@ h2, h3 { text-wrap: balance; }
   0%, 100% { box-shadow: 0 0 0 0 rgba(34,160,90,0); }
   20%, 60% { box-shadow: 0 0 0 2px var(--ok); }
 }
-.lb-bumped { animation: lb-bump 1.2s ease-in-out; border-radius: var(--r-sm, 6px); }
 @keyframes lb-together-pop {
   0%, 100% { transform: none; }
   30% { transform: scale(1.12); }
-}
-.lb-shared-bumped .lb-shared-head span {
-  animation: lb-together-pop .6s var(--ease-out, ease-out);
-  color: var(--ok);
 }
 
 /* Attention "blink" for the Module B per-role section that appears when a
@@ -3350,23 +2290,6 @@ h2, h3 { text-wrap: balance; }
   .lb-bumped, .lb-shared-bumped .lb-shared-head span, .attention-flash {
     animation: none;
   }
-}
-
-/* --- the gentle ranking --- */
-#leaderboard { margin-top: var(--s-3); }
-.lb-row.ranked { background: var(--card); }
-.lb-row:not(.ranked) {
-  background: transparent;
-  border-style: dashed;
-}
-.lb-row .lb-rank { color: var(--muted); }
-.lb-row.ranked .lb-rank { color: var(--ink); }
-.lb-gap {
-  flex-basis: 100%;
-  font-size: 0.8rem;
-  color: var(--caen-ink);
-  font-weight: 600;
-  margin-top: 2px;
 }
 
 /* --- participation dots (no per-person numbers) ---
@@ -3457,8 +2380,6 @@ h2, h3 { text-wrap: balance; }
 /* Module B "vote together" card disappears once the team has committed every
    decision (renderDecisions adds .decisions-locked). User request 2026-06-02. */
 .decisions-card.decisions-locked { display: none; }
-.dec-head h3 { margin: 0 0 4px; }
-.dec-head .hint { margin: 0 0 4px; }
 .decision {
   margin-top: 14px;
   padding: 14px;
@@ -3517,256 +2438,12 @@ h2, h3 { text-wrap: balance; }
   padding-left: 26px;
   line-height: 1.45;
 }
-.dec-prompt { margin: 0 0 10px; font-weight: 700; line-height: 1.4; }
-.dec-options { display: flex; flex-direction: column; gap: 7px; }
-
-/* an option button: a full-width row with a live "fill" bar behind the label */
-.dec-opt {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 11px 13px;
-  text-align: left;
-  font: inherit;
-  font-size: 0.92rem;
-  color: var(--ink);
-  background: var(--card);
-  border: 1.5px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
-              transform var(--dur-base, .18s) var(--ease-out, ease);
-}
-.dec-opt:hover:not(:disabled) { border-color: var(--primary); transform: translateY(-1px); }
-.dec-opt:disabled { cursor: default; }
-/* the live tally bar - grows with the share of ballots for this option */
-.dec-bar {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 0;
-  background: linear-gradient(90deg, rgba(46,159,223,.30), rgba(46,159,223,.16));
-  transition: width var(--dur-slow, .4s) var(--ease-out, ease);
-  z-index: 0;
-}
-.dec-opt-label { position: relative; z-index: 1; flex: 1; line-height: 1.35; }
-.dec-opt-count {
-  position: relative;
-  z-index: 1;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--primary);
-  min-width: 1.2em;
-  text-align: right;
-}
-/* my own current choice */
-.dec-opt.mine {
-  border-color: var(--primary);
-  box-shadow: inset 0 0 0 1.5px var(--primary);
-}
-.dec-opt.mine .dec-opt-label { font-weight: 700; }
-/* after lock-in: the option the team committed, and (if different) the right one */
-.dec-opt.won { border-color: var(--n-700); }
-.dec-opt.won .dec-bar { background: rgba(56,67,79,.18); }
-.dec-opt.is-correct {
-  border-color: var(--ok);
-}
-.dec-opt.is-correct .dec-bar {
-  background: linear-gradient(90deg, rgba(30,132,73,.28), rgba(30,132,73,.14));
-}
-.dec-opt.is-correct .dec-opt-label::after {
-  content: " ✓";
-  color: var(--ok);
-  font-weight: 800;
-}
-/* The committed-but-WRONG option (user request 2026-05-18: 'When
-   clicking wrong questions or assessment, they must be coloured in
-   red, not in green'). Mirrors .is-correct's prominence — clear red
-   border, red bar fill, and a ✗ suffix on the label — so students
-   immediately register their team picked the wrong call. */
-.dec-opt.is-wrong {
-  border-color: #c0392b;
-}
-.dec-opt.is-wrong .dec-bar {
-  background: linear-gradient(90deg, rgba(192,57,43,.30), rgba(192,57,43,.14));
-}
-.dec-opt.is-wrong .dec-opt-label::after {
-  content: " ✗";
-  color: #c0392b;
-  font-weight: 800;
-}
-
-/* the small coloured dots - who in the room chose each option */
-.dec-voters { display: flex; flex-wrap: wrap; gap: 3px; padding: 1px 4px 3px; }
-.dec-voter-dot {
-  width: 9px; height: 9px;
-  border-radius: 50%;
-  background: var(--n-300);
-  border: 1px solid rgba(0,0,0,.12);
-}
-
-/* not-yet-locked footer: the "X of Y voted" status + the lock-in button */
-.dec-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  margin-top: 11px;
-  flex-wrap: wrap;
-}
-.dec-status { font-size: 0.85rem; color: var(--muted); font-weight: 600; }
-.dec-lock {
-  font: inherit;
-  font-weight: 700;
-  font-size: 0.88rem;
-  color: var(--n-0, #fff);
-  background: var(--primary);
-  border: none;
-  padding: 9px 16px;
-  border-radius: var(--r-pill);
-  cursor: pointer;
-  box-shadow: var(--sh-sm);
-  transition: background var(--dur-base, .18s) var(--ease-out, ease),
-              transform var(--dur-base, .18s) var(--ease-out, ease);
-}
-.dec-lock:hover:not(:disabled) { background: var(--primary-hover); transform: translateY(-1px); }
-.dec-lock:disabled { background: var(--n-300); cursor: not-allowed; box-shadow: none; }
-
-/* the committed result + its teaching explanation */
-.dec-result {
-  position: relative;
-  margin-top: 11px;
-  padding: 11px 13px;
-  border-radius: var(--r-sm);
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-.dec-result.good { background: var(--ok-50, #e7f4ec); border: 1px solid var(--ok); }
-.dec-result.bad { background: #fdf2e6; border: 1px solid #e0a86b; }
-.dec-result strong { display: block; margin-bottom: 3px; }
-.dec-result.good strong { color: var(--ok); }
-.dec-result.bad strong { color: #9a3412; }
-.dec-result p { margin: 0; color: var(--ink-soft, #5b4f40); }
-.dec-result-pts {
-  position: absolute;
-  top: 10px; right: 12px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-}
-.dec-result-pts.good { color: var(--ok); }
-.dec-result-pts.bad { color: #b91c1c; }
-/* Branching: the "what happens next" consequence revealed once the room
-   locks in an option that carries a branch. */
-.dec-branch {
-  margin-top: var(--s-2);
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: var(--nagoya-50, #eaf4fb);
-  border-left: 3px solid var(--primary);
-}
-.dec-branch-h { display: block; margin-bottom: 4px; color: var(--primary); }
-.dec-branch p { margin: 0; color: var(--ink-soft, #5b4f40); line-height: 1.5; }
-@media (prefers-reduced-motion: reduce) {
-  .dec-bar { transition: none; }
-  .dec-opt:hover:not(:disabled), .dec-lock:hover:not(:disabled) { transform: none; }
-}
-
-/* ===================== STAGE 1: right-column tab bar ======================= */
-/* sticky so the user always sees what is available - one click per section */
-.rcol-tabs {
-  position: sticky;
-  top: 6px;
-  z-index: 5;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 6px;
-  margin-bottom: 12px;
-  background: var(--card);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  box-shadow: var(--sh-sm);
-}
-.rcol-tab {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  flex: 1 1 auto;
-  justify-content: center;
-  padding: 9px 12px;
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.86rem;
-  color: var(--ink);
-  background: transparent;
-  border: 1.5px solid transparent;
-  border-radius: var(--r-sm);
-  cursor: pointer;
-  transition: background var(--dur-base, .18s) var(--ease-out, ease),
-              border-color var(--dur-base, .18s) var(--ease-out, ease),
-              color var(--dur-base, .18s) var(--ease-out, ease);
-}
-.rcol-tab:hover { background: var(--surface-sunk, #f3f0e8); }
-.rcol-tab.is-active {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
-  box-shadow: var(--sh-sm);
-}
-.rcol-tab-icon { font-size: 1rem; line-height: 1; }
-.rcol-tab-label { white-space: nowrap; }
-.rcol-tab-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 1.5em;
-  height: 1.5em;
-  padding: 0 6px;
-  font-size: 0.74rem;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  color: var(--primary);
-  background: var(--surface-sunk, #f3f0e8);
-  border-radius: var(--r-pill);
-  line-height: 1;
-}
-.rcol-tab.is-active .rcol-tab-badge {
-  color: var(--primary);
-  background: #fff;
-}
-.rcol-tab[hidden] { display: none; }
-.rcol-tab-badge[hidden] { display: none; }
-/* a calm "something new" dot when content updates while a different tab is open */
-.rcol-tab.has-attention::after {
-  content: "";
-  position: absolute;
-  top: 4px; right: 6px;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: #e0a86b;
-  box-shadow: 0 0 0 2px var(--card);
-  /* UX-overload fix (2026-06-01): pulse a few times, then SETTLE to a static
-     dot instead of pulsing forever. A perpetual pulse on a "new content" cue
-     reads as anxiety and competes for attention indefinitely; the dot still
-     stays visible (the 100% keyframe = solid dot) so the "something new"
-     signal persists — it just stops moving (attention budget). */
-  animation: rcol-pulse 1.4s var(--ease-out, ease) 4;
-}
-.rcol-tab.is-active.has-attention::after { display: none; }
 @keyframes rcol-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.25); opacity: 0.7; }
 }
 .rcol-panel[hidden] { display: none; }
-.rcol-panel.is-active { animation: rcol-fadein var(--dur-base, .18s) var(--ease-out, ease); }
 @keyframes rcol-fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) {
-  .rcol-tab.has-attention::after { animation: none; }
-  .rcol-panel.is-active { animation: none; }
-}
 /* On narrow screens, keep the verb label VISIBLE (UX-overload fix
    2026-06-01). It used to be `display:none`, leaving each tab as an
    aria-hidden emoji with NO accessible name (WCAG 4.1.2 failure on the
@@ -4476,7 +3153,6 @@ body.locked > footer { display: none !important; }
 @media (prefers-reduced-motion: reduce) {
   .closed-banner { animation: none; }
 }
-body.session-closed .leaderboard-card[open] { /* no behaviour change yet */ }
 
 /* When the participant has been kicked to the "session ended" full-page
    screen, hide the rest of the chrome (header, footer) so the screen is
@@ -4663,60 +3339,6 @@ body.session-ended-shown { overflow: hidden; }
 }
 .test-result {
   text-align: center; padding: var(--s-3) 0;
-}
-.test-result .score {
-  font-size: 1.5rem; font-weight: 800; color: var(--secondary, #2e9fdf);
-  margin: 0 0 var(--s-2);
-}
-
-/* ── end-of-session feedback survey (Wrap-up) ───────────────────────────── */
-.survey-actions {
-  display: flex; flex-wrap: wrap; gap: var(--s-2); margin-top: var(--s-2);
-}
-.survey-body { margin-top: var(--s-3); }
-.survey-body.hidden { display: none; }
-.survey-form { display: flex; flex-direction: column; gap: var(--s-3); }
-.survey-section {
-  margin: var(--s-3) 0 0; padding-bottom: 4px;
-  font-size: 1.02rem; color: var(--ink, #1a2530);
-  border-bottom: 2px solid var(--secondary, #2e9fdf);
-}
-.survey-field { display: flex; flex-direction: column; gap: var(--s-2); }
-.survey-q { font-weight: 600; margin: 0; line-height: 1.4; }
-.survey-likert {
-  display: flex; gap: var(--s-2); flex-wrap: nowrap;
-}
-.survey-likert-opt {
-  flex: 1 1 0; min-width: 0; min-height: 44px;
-  border: 2px solid var(--border, #d5dde4); border-radius: var(--r-md, 10px);
-  background: var(--card, #fff); color: inherit; font: inherit; font-weight: 700;
-  cursor: pointer;
-  transition: border-color var(--dur-base, .18s) var(--ease-out, ease),
-              background var(--dur-base, .18s) var(--ease-out, ease);
-}
-.survey-likert-opt:hover { border-color: var(--secondary, #2e9fdf); }
-.survey-likert-opt[aria-checked="true"] {
-  border-color: var(--secondary, #2e9fdf); background: rgba(46,159,223,0.12);
-}
-.survey-likert-ends {
-  display: flex; justify-content: space-between;
-  font-size: 0.8rem; color: var(--ink-muted, #5a6b7a);
-}
-.survey-select, .survey-open {
-  width: 100%; padding: 10px 12px; font: inherit;
-  border: 2px solid var(--border, #d5dde4); border-radius: var(--r-md, 10px);
-  background: var(--card, #fff); color: inherit;
-}
-.survey-open { resize: vertical; min-height: 64px; }
-/* pre-filled-from-profile hint (theme token so it stays legible in dark / high-contrast) */
-.survey-prefill-hint {
-  margin: var(--s-1, 4px) 0 0; font-size: 0.8rem;
-  color: var(--ink-muted, #5a6b7a);
-}
-.survey-submit { margin-top: var(--s-3); }
-.survey-thanks {
-  text-align: center; padding: var(--s-3) 0; font-weight: 600;
-  color: var(--secondary, #2e9fdf);
 }
 .ghost-btn {
   background: transparent; border: 1px solid var(--border, #d5dde4);
@@ -5100,14 +3722,6 @@ body.session-ended-shown { overflow: hidden; }
 }
 .grade-note p { margin: 0; }
 .grade-note strong { color: var(--ok); }
-
-/* --- "Your vote" indicator on team decisions: replaces the old per-voter
-       dots which the research-ethics audit flagged as peer-shaming surface --- */
-.dec-voter-mine-label {
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-left: 2px;
-}
 #join-btn:disabled {
   background: var(--n-100);
   color: var(--muted);
@@ -5462,24 +4076,6 @@ body.session-ended-shown { overflow: hidden; }
   background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
   border: 1px solid var(--line);
 }
-/* Consolidated wrap-up (2026-07-16): the team recap and the take-home
-   downloads now live INSIDE the single wrap-up card as delineated sub-panels
-   rather than as their own cards. The recap keeps its tinted gradient (as an
-   inner panel); the take-home block is set off by a top rule. */
-.wrapup-card .team-recap-panel {
-  margin-top: var(--s-3);
-  padding: var(--s-3);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-  background: linear-gradient(135deg, var(--nagoya-50), var(--caen-50));
-}
-.wrapup-card .team-recap-panel #team-recap h3 { margin-top: 0; }
-.wrapup-card .take-home-block {
-  margin-top: var(--s-3);
-  padding-top: var(--s-3);
-  border-top: 1px solid var(--line);
-}
-.wrapup-card .take-home-block h3 { margin: 0 0 var(--s-1); font-size: 1.2rem; }
 #team-recap h3 { margin: 0 0 var(--s-2); font-size: 1.2rem; }
 .recap-total { font-size: 1rem; margin: 0 0 var(--s-2); }
 .recap-wins {
@@ -5511,13 +4107,6 @@ header h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; }
 .card h2 { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.025em; line-height: 1.16; }
 .card h3 { font-size: 1.1rem; font-weight: 700; }
 .card h4 { font-weight: 700; }
-/* editorial kicker: letterspaced caps in the current stage accent */
-.stage-indicator {
-  font-size: var(--fs-1);
-  font-weight: var(--fw-bold);
-  text-transform: uppercase;
-  letter-spacing: var(--ls-caps);
-}
 /* numbers as a graphic device - tabular, heavier */
 .score-num, .obj-tally, .lb-pts, .lb-rank, .count, .findings-count,
 .lb-shared-head span { font-variant-numeric: tabular-nums; }
@@ -5570,22 +4159,6 @@ header {
   border-top: 4px solid var(--stage-accent);
   padding: var(--s-3) var(--s-5);
 }
-.stage-indicator { color: var(--stage-accent); }
-#stage-now {
-  margin: 6px 0 0;
-  font-size: 0.96rem;
-  font-weight: 600;
-  color: var(--ink);
-  display: flex; align-items: baseline; gap: 7px;
-}
-#stage-now::before {
-  content: "▸";
-  color: var(--stage-accent);
-  font-weight: 800;
-}
-#stage-now:empty { display: none; }
-/* the stage section heading picks up the chapter colour too */
-.stage > .vignette h2 { color: var(--ink); }
 
 /* --- inline-SVG spot illustrations (the answer to "should we add images?") --- */
 /* geometric spot illustrations — the icon set's stroke language at figure
@@ -5639,32 +4212,7 @@ details.card[open] > *:not(summary) {
   from { opacity: 0; transform: translateY(-6px); }
   to   { opacity: 1; transform: none; }
 }
-
-/* --- room cards populate top-down on entry (a tasteful stagger) --- */
-#app:not(.hidden) #room-main > * { animation: card-rise var(--dur-base) var(--ease-out) both; }
-#app:not(.hidden) #room-main > *:nth-child(1) { animation-delay: 40ms; }
-#app:not(.hidden) #room-main > *:nth-child(2) { animation-delay: 100ms; }
-#app:not(.hidden) #room-main > *:nth-child(3) { animation-delay: 160ms; }
-#app:not(.hidden) #room-main > *:nth-child(n+4) { animation-delay: 210ms; }
 @keyframes card-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-
-/* --- cooperative goal bar: darker fill (AA on the track) + a moving sheen --- */
-.lb-bar {
-  border: 1px solid var(--line-strong);
-  background: var(--n-100);
-}
-.lb-bar span {
-  background: linear-gradient(90deg, var(--nagoya-600), var(--meeting), var(--caen-line));
-  position: relative;
-  overflow: hidden;
-}
-.lb-bar span::after {
-  content: "";
-  position: absolute; inset: 0;
-  background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.45) 50%, transparent 70%);
-  transform: translateX(-100%);
-  animation: bar-sheen 2.8s var(--ease-soft) 1s infinite;
-}
 @keyframes bar-sheen { to { transform: translateX(100%); } }
 
 /* --- objectives + leaderboard rendered as real lists (a11y) --- */
@@ -6010,214 +4558,6 @@ html[data-theme="high-contrast"] textarea {
 html[data-theme="high-contrast"] :focus-visible {
   outline: 3px solid #b75d00 !important;
   outline-offset: 2px !important;
-}
-
-/* ==========================================================================
-   POST-SESSION DEBRIEF DASHBOARD (PR feat/debrief-and-per-student)
-   Pure HTML/CSS aggregates — no chart library. Bars and grids use design
-   tokens so light / dark / cohort theming follows automatically.
-   ========================================================================== */
-.debrief-card { margin-top: var(--s-3); }
-.debrief-section {
-  margin: var(--s-4) 0;
-  padding: var(--s-3) 0;
-  border-top: 1px dashed var(--line);
-}
-.debrief-section:first-child { border-top: 0; padding-top: 0; }
-.debrief-section h4 {
-  margin: 0 0 var(--s-2);
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--ink);
-}
-.debrief-empty {
-  color: var(--muted);
-  font-style: italic;
-  font-size: 0.92rem;
-  padding: var(--s-3) 0;
-}
-
-/* Generic horizontal bar — used by ranking, concept coverage, time-on-stage. */
-.debrief-bar-row {
-  display: grid;
-  grid-template-columns: minmax(80px, 24%) 1fr auto;
-  align-items: center;
-  gap: var(--s-2);
-  margin-bottom: 6px;
-  font-size: 0.88rem;
-}
-.debrief-bar-row .lbl { color: var(--ink); min-width: 0; word-break: break-word; }
-.debrief-bar-row .val { color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.debrief-bar-track {
-  position: relative;
-  background: var(--n-25);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  height: 14px;
-  overflow: hidden;
-}
-.debrief-bar-fill {
-  position: absolute;
-  inset: 0 auto 0 0;
-  background: linear-gradient(90deg, var(--caen-500, #2e9fdf), var(--nagoya-500, #e08a1e));
-  border-radius: 5px;
-}
-.debrief-bar-fill.ok   { background: var(--ok); }
-.debrief-bar-fill.warn { background: #d4a017; }
-.debrief-bar-fill.bad  { background: var(--key); }
-
-/* Decision breakdown: per-option mini-bars under each decision card. */
-.debrief-decision {
-  margin-bottom: var(--s-3);
-  padding: var(--s-2) var(--s-3);
-  background: var(--n-25);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.debrief-decision-prompt {
-  font-size: 0.92rem;
-  margin: 0 0 var(--s-1);
-  font-weight: 600;
-}
-.debrief-decision-meta {
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-bottom: var(--s-2);
-}
-.debrief-decision-option {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--s-2);
-  align-items: center;
-  margin-bottom: 4px;
-  font-size: 0.86rem;
-}
-.debrief-decision-option .opt-text { color: var(--ink); }
-.debrief-decision-option .opt-text.correct {
-  color: var(--ok);
-  font-weight: 600;
-}
-.debrief-decision-option .opt-count {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.debrief-option-bar {
-  grid-column: 1 / -1;
-  height: 6px;
-  background: var(--n-25);
-  border: 1px solid var(--line);
-  border-radius: 3px;
-  overflow: hidden;
-  margin-bottom: 6px;
-}
-.debrief-option-bar > i {
-  display: block;
-  height: 100%;
-  background: var(--muted);
-}
-.debrief-option-bar > i.correct { background: var(--ok); }
-
-/* Penalty heatmap: a CSS grid of cells (penalty rows × room cols). */
-.debrief-heat-wrap { overflow-x: auto; }
-.debrief-heat {
-  display: grid;
-  gap: 2px;
-  font-size: 0.78rem;
-  min-width: max-content;
-}
-.debrief-heat-h {
-  font-weight: 600;
-  color: var(--muted);
-  padding: 4px 6px;
-  text-align: center;
-  white-space: nowrap;
-}
-.debrief-heat-rowlbl {
-  padding: 4px 8px 4px 0;
-  color: var(--ink);
-  white-space: nowrap;
-}
-.debrief-heat-cell {
-  background: var(--n-25);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  min-height: 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-variant-numeric: tabular-nums;
-  color: var(--muted);
-}
-.debrief-heat-cell.fired {
-  background: var(--key-50);
-  border-color: var(--key);
-  color: var(--key);
-  font-weight: 600;
-}
-
-/* Funnel: stacked stages with descending counts. */
-.debrief-funnel-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: var(--s-2);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--line);
-  font-size: 0.9rem;
-}
-.debrief-funnel-row:last-child { border-bottom: 0; }
-.debrief-funnel-row .pct {
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-/* Time-on-stage: horizontal stacked bar per room. */
-.debrief-time-room { margin-bottom: var(--s-2); }
-.debrief-time-room .lbl {
-  font-size: 0.86rem;
-  color: var(--ink);
-  margin-bottom: 3px;
-}
-.debrief-time-stack {
-  display: flex;
-  height: 18px;
-  background: var(--n-25);
-  border: 1px solid var(--line);
-  border-radius: 5px;
-  overflow: hidden;
-}
-.debrief-time-seg {
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.7rem;
-  color: #fff;
-  white-space: nowrap;
-  min-width: 0;
-  overflow: hidden;
-}
-.debrief-time-seg.s0 { background: #4f7d8c; }
-.debrief-time-seg.s1 { background: #2e9fdf; }
-.debrief-time-seg.s2 { background: #e08a1e; }
-.debrief-time-seg.s3 { background: var(--ok); }
-.debrief-time-legend {
-  display: flex;
-  gap: var(--s-3);
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-top: var(--s-2);
-  flex-wrap: wrap;
-}
-.debrief-time-legend i {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 3px;
-  vertical-align: middle;
-  margin-right: 4px;
 }
 
 /* Per-student debrief card (inside session-ended). */
@@ -6942,129 +5282,6 @@ body.locked .global-settings { display: none; }
   .global-settings-panel { min-width: 220px; right: -6px; }
 }
 
-/* ── Module A LLM-patient chat (2026-05-28) ──────────────────────────────
- * Mounted by modA-llm-init.js into #chart-section-history when the
- * `?llm=1` feature flag is on. Defaults match the existing chart-section
- * look (light card, blue accent) so the panel doesn't visually shout
- * "BETA". The disclosure banner is always visible (privacy-first).
- *
- * The mobile-iphone / mobile-ipad / mobile-android viewports stack the
- * transcript above the input — see the @media block at the bottom.
- */
-.moda-chat-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px 12px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  background: var(--card);
-  margin-top: 6px;
-}
-.moda-chat-disclosure {
-  font-size: 12px;
-  color: var(--muted);
-  background: var(--nagoya-50);
-  border-left: 3px solid var(--primary);
-  padding: 6px 8px;
-  border-radius: var(--r-sm);
-}
-.moda-chat-disclosure a { color: var(--primary); }
-.moda-chat-consent {
-  display: flex;
-  justify-content: center;
-  padding: 4px 0;
-}
-/* Filled primary CTA — white on --primary, the same a11y-safe pattern as the
-   #prev-btn/#next-btn primaries. The previous outline style used var(--accent),
-   which resolves to the brand ORANGE (#e08a1e): orange-on-white is only 2.68:1
-   and failed axe color-contrast once the chat became the Module A default
-   (2026-06-02). In LIGHT/high-contrast, --primary is dark (#1763a6 / #0033a0) so
-   white text clears AA; in DARK, --primary is the lighter cyan (--nagoya-500
-   #2e9fdf) where white drops to ~2.4:1 — so dark mode forces dark text, exactly
-   as the splash buttons (#splash-enter etc.) do. */
-.moda-chat-consent-btn {
-  padding: 8px 18px;
-  border-radius: var(--r-btn);
-  border: 1px solid var(--primary);
-  background: var(--primary);
-  color: var(--on-primary);
-  cursor: pointer;
-  font: inherit;
-  font-weight: var(--fw-semibold);
-}
-.moda-chat-consent-btn:hover { filter: brightness(0.94); }
-.moda-chat-transcript {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 120px;
-  max-height: 360px;
-  overflow-y: auto;
-  padding: 6px;
-  background: var(--surface-sunk);
-  border: 1px solid var(--line);
-  border-radius: var(--r-sm);
-}
-.moda-chat-bub {
-  max-width: 86%;
-  padding: 6px 10px;
-  border-radius: 12px;
-  font-size: 14px;
-  line-height: 1.35;
-  word-wrap: break-word;
-  white-space: pre-wrap;
-}
-.moda-chat-bub-user {
-  align-self: flex-end;
-  /* NOT var(--accent): that resolves to org amber → white-on-amber fails AA */
-  background: var(--primary);
-  color: var(--on-primary);
-  border-bottom-right-radius: var(--r-sm);
-}
-.moda-chat-bub-assistant {
-  align-self: flex-start;
-  background: var(--n-50);
-  color: var(--ink);
-  border-bottom-left-radius: var(--r-sm);
-}
-.moda-chat-form {
-  display: flex;
-  gap: 6px;
-  align-items: flex-end;
-}
-.moda-chat-form textarea {
-  flex: 1 1 auto;
-  resize: vertical;
-  min-height: 38px;
-  font: inherit;
-  padding: 6px 8px;
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-sm);
-  background: var(--card);
-}
-.moda-chat-form textarea:disabled {
-  background: var(--surface-sunk);
-  opacity: 0.7;
-}
-.moda-chat-form button {
-  padding: 8px 18px;
-  border-radius: var(--r-btn);
-  border: 1px solid var(--primary);
-  background: var(--primary);
-  color: var(--on-primary);
-  cursor: pointer;
-  font: inherit;
-}
-.moda-chat-form button:disabled { cursor: wait; opacity: 0.6; }
-.moda-chat-status {
-  min-height: 18px;
-  font-size: 12px;
-  color: var(--muted);
-}
-.moda-chat-status[data-kind="warn"]  { color: var(--caen-ink); }
-.moda-chat-status[data-kind="error"] { color: var(--key); }
-
 /* Mobile: tighten paddings + collapse the textarea + button to a column
    so the send button stays reachable above the fold. */
 @media (max-width: 600px) {
@@ -7091,25 +5308,6 @@ body.theme-high-contrast .moda-chat-bub-assistant,
 body[data-theme="high-contrast"] .moda-chat-bub-assistant {
   background: var(--surface-sunk);
   border: 1px solid var(--ink);
-}
-
-/* === Chat-only mode for HISTORY (2026-05-28) ==============================
- * When the LLM-patient pilot is active (body has .moda-llm-active), the
- * chat panel is the canonical interface for HISTORY-TAKING only. The
- * Examination, Investigations and Synthesis buttons stay click-based —
- * the LLM doesn't know exam findings (we excluded CASE.exam from its
- * facts to prevent fabrication) and the investigations carry per-item
- * penalty logic tied to specific button clicks. User confirmed this
- * split 2026-05-28: "For the examinations and investigations, how
- * should we do btw? Maybe keep it".
- *
- * `display: none !important` (not the `hidden` attribute) because
- * buildButtons() in script.js rebuilds .btn-group children on every
- * `revealed` change. A body-class CSS rule survives DOM rebuilds; a
- * one-shot `.hidden = true` gets blown away on the next render.
- */
-body.moda-llm-active #group-history {
-  display: none !important;
 }
 
 /* ==========================================================================
@@ -7157,35 +5355,6 @@ body.moda-llm-active #group-history {
   border: 1px solid var(--ok, #1e8449);
 }
 .toast.gain .toast-sub { opacity: 0.95; }
-
-/* (#2) In-chat points chip rendered under the student's question turn. Green
-   for points earned, amber/red for points lost. aria-hidden in markup — the
-   toast + the right-column score sidebar carry the same info for SR users. */
-.moda-chat-score {
-  align-self: flex-start;
-  margin: 2px 0 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 0.82rem;
-  font-weight: 700;
-  line-height: 1.3;
-  display: inline-flex;
-  gap: 6px;
-  max-width: 100%;
-}
-.moda-chat-score .moda-chat-score-label { font-weight: 600; }
-/* Hardcoded palettes (theme-independent) so the chip keeps strong contrast on
-   the chat transcript in both light + dark themes. */
-.moda-chat-score.is-award {
-  background: #e6f4ec;
-  color: #176b3a;
-  border: 1px solid #1e8449;
-}
-.moda-chat-score.is-penalty {
-  background: #fdecea;
-  color: #c0392b;
-  border: 1px solid #c0392b;
-}
 
 /* (#5/#6) Completion CTA inside the Group-answers card — appears once every
    bullet has an entry, inviting the room to ping the facilitator to advance. */

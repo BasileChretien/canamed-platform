@@ -19,7 +19,9 @@ const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const TOOLS  = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const INDEX  = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const CASE   = fs.readFileSync(path.join(P, "case-content.js"), "utf8");
-const CSS    = fs.readFileSync(path.join(P, "style.css"), "utf8");
+const CSS    = fs.readFileSync(path.join(P, "style.css"), "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  " " + fs.readFileSync(path.join(P, "room.css"), "utf8");
 // #48 split the non-English tables into locales/<lang>.js; read the COMBINED
 // i18n source (i18n.js + every locale chunk) so the en/fr/ja key-count holds.
 const I18N   = require("./_i18n_source.js").readI18nSource();

@@ -23,6 +23,10 @@ test.describe("Bug 1 — team name renders horizontally at narrow viewport", () 
       // iPhone-SE-like narrow viewport
       await page.setViewportSize({ width: 320, height: 568 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
 
       // Synthesize a single leaderboard row offscreen-free so we can
       // measure its rendered height. .lb-name is a flex child with
@@ -88,6 +92,10 @@ test.describe("Bug 1 — team name renders horizontally at narrow viewport", () 
     async ({ page }) => {
       await page.setViewportSize({ width: 1024, height: 768 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
 
       const heightInfo = await page.evaluate(() => {
         document.body.classList.remove("locked");
@@ -157,6 +165,10 @@ test.describe("Bug 2 — findings answer appears under the button on mobile", ()
       // Mobile-stacked layout threshold per style.css
       await page.setViewportSize({ width: 700, height: 900 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
 
       // Make the room view visible + force-trigger renderButtons with a
       // fake `revealed` map. We can't call reveal() directly without a
@@ -226,6 +238,10 @@ test.describe("Bug 2 — findings answer appears under the button on mobile", ()
       // there's a lot of vertical scrolling).
       await page.setViewportSize({ width: 1280, height: 800 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const display = await page.evaluate(() => {
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
         const splash = document.getElementById("splash");
@@ -254,6 +270,10 @@ test.describe("Module A finding buttons are English-only (picker drives the read
       // (which re-runs buildButtons and re-targets the in-page reading aid), but
       // the finding-button labels must STAY English — not flip to French.
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const result = await page.evaluate(async () => {
         // Land in stage 1 with the case buttons rendered.
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
@@ -293,6 +313,10 @@ test.describe("Bug 6 — participant settings cog + theme picker", () => {
   test("the settings cog is visible to participants and opens a panel",
     async ({ page }) => {
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       // The splash gate hides the global widgets via body.locked; once
       // hidden, the cog must be visible. We simulate splash-dismissed
       // by removing body.locked.
@@ -317,6 +341,10 @@ test.describe("Bug 6 — participant settings cog + theme picker", () => {
   test("changing theme via the settings panel sets <html data-theme> and persists",
     async ({ page }) => {
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       await page.evaluate(() => document.body.classList.remove("locked"));
       await page.locator("#global-settings-btn").click();
       await page.locator("#global-theme-select").selectOption("high-contrast");
@@ -351,6 +379,10 @@ test.describe("Bug 6 — participant settings cog + theme picker", () => {
       // every profile (chromium/firefox/webkit + mobile-*).
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       // Splash gate hides the global widgets via body.locked — peel it
       // off so the cog is in the layout tree and tappable.
       await page.evaluate(() => document.body.classList.remove("locked"));
@@ -394,6 +426,10 @@ test.describe("Bug 6 — participant settings cog + theme picker", () => {
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       await page.evaluate(() => document.body.classList.remove("locked"));
 
       await page.locator("#global-settings-btn").click();
@@ -425,6 +461,10 @@ test.describe("Random button order — shuffled display, stable IDs", () => {
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const result = await page.evaluate(() => {
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
         const splash = document.getElementById("splash");
@@ -478,6 +518,10 @@ test.describe("Random button order — shuffled display, stable IDs", () => {
         // noop — page.goto below.
       });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const first = await page.evaluate(() => {
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
         const splash = document.getElementById("splash");
@@ -493,6 +537,10 @@ test.describe("Random button order — shuffled display, stable IDs", () => {
 
       // Reload, re-render with the same session/room seed.
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const second = await page.evaluate(() => {
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
         const splash = document.getElementById("splash");
@@ -526,6 +574,10 @@ test.describe("Random button order — shuffled display, stable IDs", () => {
       // same kind of input).
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const orders = await page.evaluate(() => {
         if (typeof window._seededShuffleIndexes !== "function") return null;
         const seeds = [
@@ -553,6 +605,10 @@ test.describe("Random button order — shuffled display, stable IDs", () => {
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const result = await page.evaluate(() => {
         if (typeof window._seededShuffleIndexes !== "function") return null;
         const a = window._seededShuffleIndexes(12, "session-A:room-1:history");
@@ -583,6 +639,10 @@ test.describe("Wrong decisions are visibly RED, not green/amber", () => {
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       // We don't need the full decision flow — synthesize a
       // .dec-opt.is-wrong element and inspect the computed styles.
       const result = await page.evaluate(() => {
@@ -637,6 +697,10 @@ test.describe("Wrong decisions are visibly RED, not green/amber", () => {
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const result = await page.evaluate(() => {
         document.querySelectorAll(".hidden").forEach(n => n.classList.remove("hidden"));
         const splash = document.getElementById("splash");
@@ -661,6 +725,10 @@ test.describe("Wrong decisions are visibly RED, not green/amber", () => {
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const m = await page.evaluate(() => {
         // Pin the JS contract by inspecting the source — same pattern
         // as other 'Bug N (JS)' source-level tests in this file. The
@@ -712,6 +780,10 @@ test.describe("Merged Debate & answers — structural contract", () => {
     async ({ page }) => {
       await page.setViewportSize({ width: 390, height: 844 });
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const result = await page.evaluate(() => ({
         hasProgressive: !!document.getElementById("prompt-progressive"),
         hasDiscussionPanel: !!document.getElementById("rcol-p-discussion"),
@@ -732,6 +804,10 @@ test.describe("Merged Debate & answers — structural contract", () => {
   test("JS source: renderPrompts is a guarded no-op; ANSWER_BULLETS has the two questions",
     async ({ page }) => {
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const src = await page.evaluate(async () => {
         const r = await fetch("/script.js");
         return r.text();
@@ -749,6 +825,10 @@ test.describe("Merged Debate & answers — structural contract", () => {
       // were added without spinning up an emulator. Validity (i.e. the
       // rules compile cleanly) is checked separately by tests/rules.test.js.
       await page.goto("/");
+      // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+      // this spec surfaces the room synthetically, so load it explicitly (same
+      // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+      await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
       const rules = await page.evaluate(async () => {
         try {
           const r = await fetch("/database.rules.json");

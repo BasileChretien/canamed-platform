@@ -27,7 +27,9 @@ const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX = fs.readFileSync(path.join(P, "index.html"), "utf8");
-const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8");
+const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  " " + fs.readFileSync(path.join(P, "room.css"), "utf8");
 const JS = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const INIT = fs.readFileSync(path.join(P, "modA-llm-init.js"), "utf8");
 const I18N = fs.readFileSync(path.join(P, "i18n.js"), "utf8");

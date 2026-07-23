@@ -31,7 +31,9 @@ const readFile = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 // but caching keeps the test runtime predictable.
 const styleCss = readFile("style.css") +
   // admin-only rules moved to the lazily-loaded admin.css
-  readFile("admin.css");
+  readFile("admin.css") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  " " + readFile("room.css");
 const scriptJs = readFile("script.js");
 const indexHtml = readFile("index.html");
 const tourJs = readFile("tour.js");

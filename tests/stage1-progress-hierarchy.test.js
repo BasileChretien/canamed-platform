@@ -18,7 +18,11 @@ const path = require("node:path");
 
 const CSS = fs.readFileSync(
   path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "style.css"),
-  "utf8");
+  "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  fs.readFileSync(
+    path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "room.css"),
+    "utf8");
 
 test("the per-bullet checklist is de-emphasised under #stage-1 (secondary to the phase stepper)", () => {
   assert.match(CSS, /#stage-1 \.modA-bullet-progress\s*\{[^}]*font-size/,

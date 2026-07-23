@@ -15,6 +15,10 @@ const { test, expect } = require("./fixtures");
 test.describe("Wrap-up feedback survey", () => {
   test("survey card + controls + CSV export button exist", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const info = await page.evaluate(() => ({
       card:    !!document.getElementById("survey-card"),
       start:   !!document.getElementById("survey-start-btn"),
@@ -33,6 +37,10 @@ test.describe("Wrap-up feedback survey", () => {
 
   test("the survey form renders likert / select / open fields + a submit", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const out = await page.evaluate(() => {
       if (typeof window._mountSurveyForm !== "function") return null;
       window._mountSurveyForm();
@@ -65,6 +73,10 @@ test.describe("Wrap-up feedback survey", () => {
 
   test("the demographic questions are pre-filled from the join profile", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const r = await page.evaluate(() => {
       // simulate a participant who already gave university + year on the join form
       const uni = document.getElementById("uni-input");
@@ -93,6 +105,10 @@ test.describe("Wrap-up feedback survey", () => {
 
   test("_surveyReadyAfterPostTest helper stays exposed (retained; renderSurvey no longer gates on it, 2026-06-16)", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const r = await page.evaluate(() => {
       const f = window._surveyReadyAfterPostTest;
       if (typeof f !== "function") return null;
@@ -114,6 +130,10 @@ test.describe("Wrap-up feedback survey", () => {
 
   test("a Likert option records a selection (aria-checked)", async ({ page }) => {
     await page.goto("/");
+    // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
+    // this spec surfaces the room synthetically, so load it explicitly (same
+    // convention as branched-format.spec.js awaiting ensureBranchedStyles).
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const checked = await page.evaluate(() => {
       window._mountSurveyForm();
       const btn = document.querySelector(".survey-likert .survey-likert-opt");

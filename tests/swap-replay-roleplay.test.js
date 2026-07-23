@@ -19,7 +19,9 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
-const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8");
+const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  " " + fs.readFileSync(path.join(P, "room.css"), "utf8");
 const RULES = fs.readFileSync(path.join(P, "database.rules.json"), "utf8");
 
 test("the role-picker exposes a swap button, round indicator and banner", () => {
