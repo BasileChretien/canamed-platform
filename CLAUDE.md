@@ -409,9 +409,46 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   huggingface.co (no token exfil to arbitrary hosts); HF error body no longer
   forwarded to the client; `lang` allowlisted. PROMPT_VERSION bumped to 2.2.
 
+### 2026-07-23 Phase-4e legal fact-check — FOUR COMPLIANCE GAPS FOUND (all verified)
+
+Drafting the facilitator-as-controller legal pack forced every privacy claim to be
+checked against the code. Four are wrong in the CODE, not the prose — the legal text
+cannot be made truthful until these are fixed. **Fix these before publishing any
+consent/DPA text.**
+1. **Research export ignores consent entirely (HIGHEST).** `scripts/pseudonymise-export.js`
+   and `scripts/backup-sessions.js` walk the whole `/sessions` tree unfiltered; there is
+   no consent flag anywhere (`grep -rn consent scripts/` finds only the simulator). So
+   "using your work for research is optional" CANNOT be stated truthfully today. Needs a
+   consent field + the exports honouring it.
+2. **Org-scoped sessions have ZERO retention coverage.** `orgs.js` is shipped and live
+   (`/o/{slug}/` routing, full parallel rules tree), but all three retention jobs are
+   hard-scoped to `db.ref("sessions")` — `grep -c orgs scripts/{cleanup-stale-sessions,
+   backup-sessions,pseudonymise-export}.js` = 0/0/0. Org sessions are never deleted,
+   never backed up, never pseudonymised = GDPR storage-limitation breach in production.
+3. **`moduleA/chat` is NOT room-private** — see the corrected bullet below.
+4. **`canamed_stable_id` survives sign-out** holding the signed-out account's uid:
+   `accountSignOut()` (script.js ~14342) clears nothing, while the comment at
+   script.js ~1300 claims "signOut() removes it". Stale comment, real linkage risk.
+Also: certificates are minted on download click (`resolveCertId`) with no prompt, so
+"getting a certificate is optional" is likewise not true yet.
+Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/`.
+
 **Accepted by design (no change — documented decisions):**
 - Full room-subtree readability to any session member: intentional classroom
-  visibility (facilitator/observer). Only `moduleA/chat` is per-room read-gated.
+  visibility (facilitator/observer). ~~Only `moduleA/chat` is per-room
+  read-gated.~~ ⚠️ **THAT CLAIM IS FALSE — corrected 2026-07-23.** RTDB `.read`
+  **cascades and cannot be revoked at a deeper path**. `database.rules.json:93`
+  grants `.read` on the whole `sessions/$sessionId` subtree to any session
+  member, so the room-scoped rule on `rooms/$roomId/moduleA/chat` (~line 309,
+  requiring `uidMembers/$uid`) is **additive only** — it restricts nothing.
+  **A participant's free-text chat with the LLM character is readable by EVERY
+  member of the session, not just their room.** Found by the Phase-4e legal
+  fact-check (the draft consent text was built on the false claim) and verified
+  directly against the rules. Decide deliberately: either (a) accept it and say
+  so honestly in the privacy notice + in-product disclosure, or (b) actually
+  restrict it, which needs the chat moved OUT of the `sessions/$sessionId`
+  read-cascade (e.g. a sibling top-level `roomChat/$sessionId/$roomId` tree with
+  its own `.read`) — a deeper `.read` alone can never fix this.
 - `sharedScenarios` readable by any authenticated user: that is the opt-in
   facilitator sharing feature working as intended.
 - `credentials/$certId` public read by exact id (no `auth`): required by the
