@@ -8,8 +8,17 @@ const {
   pseudonymiseSession,
   pseudoCode,
   normName,
+  hasResearchConsent,
+  sessionHasConsent,
   REDACTED_NAME
 } = require("../scripts/lib/pseudonymise");
+
+// Research consent is a precondition for appearing in the export at all, so
+// every fixture participant who is expected to survive carries one. YES/NO
+// mirror the two lobby outcomes; a pool entry with no `consent` key at all
+// (a record predating the field) must behave exactly like NO.
+const YES = { workshop: true, research: true, version: "PIS-v2-2026-05", at: 5 };
+const NO = { workshop: true, research: false, version: "PIS-v2-2026-05", at: 5 };
 
 // A representative closed session covering every field the review flagged.
 function sampleSession() {
@@ -20,9 +29,9 @@ function sampleSession() {
     _adminPresence: { by: "Dr Facilitator", at: 2 },          // facilitator transient
     _superadminReset: { by: "Dr Facilitator", code: "ZZZ9", requestedAt: 3 },
     pool: {
-      c1: { name: "Alice", university: "Caen", at: 10 },
-      c2: { name: "Bob", university: "Nagoya", at: 20 },
-      c3: { name: "Alice", university: "Caen", at: 30 }       // DUPLICATE display name
+      c1: { name: "Alice", university: "Caen", at: 10, consent: YES },
+      c2: { name: "Bob", university: "Nagoya", at: 20, consent: YES },
+      c3: { name: "Alice", university: "Caen", at: 30, consent: YES }       // DUPLICATE display name
     },
     rooms: {
       r1: {
@@ -115,7 +124,7 @@ test("non-name fields are left intact", () => {
 
 test("name matching is whitespace/NFC tolerant", () => {
   const sess = {
-    pool: { c1: { name: "Alice", at: 1 } },
+    pool: { c1: { name: "Alice", at: 1, consent: YES } },
     rooms: { r1: { answers: { a1: { by: "  Alice  " } } } }   // padded variant
   };
   const out = pseudonymiseSession(sess, "S1", {});
@@ -145,9 +154,9 @@ test("normName trims and NFC-normalises, passes non-strings through", () => {
 test("participants named like Object built-ins are pseudonymised, not dropped", () => {
   const sess = {
     pool: {
-      c1: { name: "__proto__", at: 1 },
-      c2: { name: "toString", at: 2 },
-      c3: { name: "constructor", at: 3 }
+      c1: { name: "__proto__", at: 1, consent: YES },
+      c2: { name: "toString", at: 2, consent: YES },
+      c3: { name: "constructor", at: 3, consent: YES }
     },
     rooms: { r1: { answers: {
       a1: { by: "__proto__" }, a2: { by: "toString" }, a3: { by: "constructor" }
@@ -172,7 +181,7 @@ test("participants named like Object built-ins are pseudonymised, not dropped", 
 
 test("participant names appearing as bare array elements are scrubbed", () => {
   const sess = {
-    pool: { c1: { name: "Alice", at: 1 } },
+    pool: { c1: { name: "Alice", at: 1, consent: YES } },
     rooms: { r1: { tags: ["Alice", "keep-me", "Alice"] } }
   };
   const out = pseudonymiseSession(sess, "S1", {});
@@ -189,4 +198,126 @@ test("a session with no pool redacts every name/by and does not crash", () => {
   assert.strictEqual(out.created.by, REDACTED_NAME);
   assert.strictEqual(out.rooms.r1.answers.a1.by, REDACTED_NAME);
   assert.strictEqual(out.rooms.r1.answers.a1.text, "keep");
+});
+
+/* ============ RESEARCH CONSENT gate (Phase-4e compliance gap 1) ============
+ * The lobby collects an OPTIONAL research tick; joining the workshop is not
+ * conditional on it. These guard that opting out actually removes the person
+ * from the research export, and that the absence of a record never reads as
+ * agreement. */
+
+// A mixed session: c1 consented, c2 declined, c3 has no consent record at all
+// (a row written before the field existed). Only c1 may survive.
+function mixedConsentSession() {
+  return {
+    closed: { at: 1000 },
+    pool: {
+      c1: { name: "Yes-Person", university: "Caen", at: 10, consent: YES },
+      c2: { name: "No-Person", university: "Caen", at: 20, consent: NO },
+      c3: { name: "Legacy-Person", university: "Caen", at: 30 }
+    },
+    clientMapping: { c1: "uid1", c2: "uid2", c3: "uid3" },
+    stableIdMapping: { s1: "uid1", s2: "uid2", s3: "uid3" },
+    poll: {
+      c1: { hardest: "modA" },
+      c2: { hardest: "modB" },
+      c3: { hardest: "modA" }
+    },
+    rooms: {
+      r1: {
+        uidMembers: { uid1: true, uid2: true, uid3: true },
+        answers: {
+          a1: { by: "Yes-Person", text: "keep me" },
+          a2: { by: "No-Person", text: "drop my attribution" }
+        },
+        tags: ["No-Person", "keep-me"],
+        votes: { v1: { ballots: { s1: "opt-a", s2: "opt-b", s3: "opt-c" } } }
+      }
+    }
+  };
+}
+
+test("only participants who consented to research reach the export", () => {
+  const out = pseudonymiseSession(mixedConsentSession(), "S1", {});
+  assert.ok(out.pool.c1, "the consenting participant is kept");
+  assert.ok(!("c2" in out.pool), "a participant who declined is removed from the pool");
+  assert.ok(!("c3" in out.pool), "a participant with no consent record is removed too");
+});
+
+test("consent is fail-closed: a missing record is never treated as agreement", () => {
+  assert.strictEqual(hasResearchConsent({ consent: YES }), true);
+  assert.strictEqual(hasResearchConsent({ consent: NO }), false);
+  assert.strictEqual(hasResearchConsent({}), false);                       // no consent key
+  assert.strictEqual(hasResearchConsent({ consent: {} }), false);          // key but no field
+  assert.strictEqual(hasResearchConsent({ consent: { research: "true" } }), false); // string, not bool
+  assert.strictEqual(hasResearchConsent(null), false);
+  assert.strictEqual(hasResearchConsent(undefined), false);
+});
+
+test("a non-consenting participant's clientId-keyed data is erased", () => {
+  const out = pseudonymiseSession(mixedConsentSession(), "S1", {});
+  assert.deepStrictEqual(Object.keys(out.poll), ["c1"], "only the consenting poll answer survives");
+});
+
+test("a non-consenting participant's stableId-keyed ballot is erased", () => {
+  const out = pseudonymiseSession(mixedConsentSession(), "S1", {});
+  const ballots = out.rooms.r1.votes.v1.ballots;
+  assert.deepStrictEqual(Object.keys(ballots), ["s1"],
+    "ballots are keyed by stableId, so the clientId filter alone would miss them");
+});
+
+test("a non-consenting participant's name never survives, in any field", () => {
+  const out = pseudonymiseSession(mixedConsentSession(), "S1", {});
+  const blob = JSON.stringify(out);
+  assert.ok(!/No-Person/.test(blob), "declining participant's name must not survive");
+  assert.ok(!/Legacy-Person/.test(blob), "no-record participant's name must not survive");
+  assert.ok(!/Yes-Person/.test(blob), "the consenting participant is pseudonymised, not plaintext");
+  // Redacted rather than passed through, including as a bare array element.
+  assert.strictEqual(out.rooms.r1.answers.a2.by, REDACTED_NAME);
+  assert.deepStrictEqual(out.rooms.r1.tags, [REDACTED_NAME, "keep-me"]);
+});
+
+test("the linkage table lists only consenting participants", () => {
+  const linkage = {};
+  pseudonymiseSession(mixedConsentSession(), "S1", linkage);
+  assert.deepStrictEqual(Object.keys(linkage.S1), ["Yes-Person"],
+    "a non-consenting participant must have no re-identification key");
+});
+
+test("auth-uid mappings are dropped and uid-keyed membership is rekeyed", () => {
+  const out = pseudonymiseSession(mixedConsentSession(), "S1", {});
+  assert.ok(!("clientMapping" in out), "clientId -> uid join table must not be exported");
+  assert.ok(!("stableIdMapping" in out), "stableId -> uid join table must not be exported");
+  // uidMembers keeps its shape but is keyed by pseudonym, so room membership
+  // stays analysable without exporting a cross-session identifier.
+  // Compare the serialised form: that is what lands in the export file, and the
+  // rekeyed map is deliberately null-prototype (as the other lookup maps here).
+  assert.deepStrictEqual(
+    JSON.parse(JSON.stringify(out.rooms.r1.uidMembers)),
+    { "Student-A": true }
+  );
+  assert.ok(!/uid1|uid2|uid3/.test(JSON.stringify(out)), "no raw auth uid may survive");
+});
+
+test("a consenting participant sharing a name with a decliner keeps the pseudonym", () => {
+  const sess = {
+    pool: {
+      c1: { name: "Sam", at: 10, consent: YES },
+      c2: { name: "Sam", at: 20, consent: NO }
+    },
+    rooms: { r1: { answers: { a1: { by: "Sam" } } } }
+  };
+  const out = pseudonymiseSession(sess, "S1", {});
+  // The shared name is ambiguous, so it must resolve to the consenting
+  // participant's pseudonym rather than being redacted away.
+  assert.strictEqual(out.rooms.r1.answers.a1.by, "Student-A");
+  assert.ok(!("c2" in out.pool));
+});
+
+test("sessionHasConsent detects whether a session may be exported at all", () => {
+  assert.strictEqual(sessionHasConsent(mixedConsentSession()), true);
+  assert.strictEqual(sessionHasConsent({ pool: { c1: { name: "N", consent: NO } } }), false);
+  assert.strictEqual(sessionHasConsent({ pool: { c1: { name: "N" } } }), false);
+  assert.strictEqual(sessionHasConsent({ pool: {} }), false);
+  assert.strictEqual(sessionHasConsent({}), false);
 });
