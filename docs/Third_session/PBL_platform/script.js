@@ -1297,21 +1297,45 @@ if (!clientId) {
        upgrades the user — same value across tabs, devices, browsers.
      - Anonymous-only users: stableId is a random 80-bit id kept in
        localStorage under canamed_stable_id, so a tab close / refresh /
-       new-tab on the same browser yields the same value. Cleared on
-       full sign-out (signOut() removes it) so a shared lab machine
-       does not bleed the previous student's id into the next student.
+       new-tab on the same browser yields the same value. Cleared by
+       leaveAndReload / switchSession / forgetSavedSession, and by
+       accountSignOut / accountDelete (resetStableId), so a shared lab
+       machine does not bleed the previous student's id into the next.
    localStorage availability is best-effort — private mode / disabled
    storage falls back to the in-memory value (still better than nothing
    for the current page lifetime). */
 const STABLE_ID_KEY = "canamed_stable_id";
 let stableId = null;
 try { stableId = localStorage.getItem(STABLE_ID_KEY); } catch (e) {}
-if (!stableId) {
+if (!stableId) stableId = mintStableId();
+
+/* Mint a fresh random stableId and persist it. Hoisted (function decl) so the
+   module-init block above can call it before this point. */
+function mintStableId() {
   const sbuf = new Uint8Array(8);
   crypto.getRandomValues(sbuf);
-  stableId = "s" + Array.from(sbuf)
+  const id = "s" + Array.from(sbuf)
     .map(b => b.toString(16).padStart(2, "0")).join("");
-  try { localStorage.setItem(STABLE_ID_KEY, stableId); } catch (e) {}
+  try { localStorage.setItem(STABLE_ID_KEY, id); } catch (e) {}
+  return id;
+}
+
+/* Drop the stableId left behind by a signed-in account and replace it with a
+   fresh anonymous one.
+
+   Needed because handleAuthStateChange() binds stableId to currentUser.uid for
+   a non-anonymous user AND persists it to localStorage. Sign-out used to clear
+   neither, so canamed_stable_id kept holding the SIGNED-OUT account's uid: the
+   next person on that browser inherited it and their work was stamped with the
+   previous account's identifier.
+
+   Unlike leaveAndReload/switchSession — which clear the key and then reload —
+   the account dialog stays on the page, so removing the localStorage entry
+   alone would leave the stale uid live in the in-memory `stableId` for the rest
+   of the page lifetime. Re-mint rather than merely clear. */
+function resetStableId() {
+  try { localStorage.removeItem(STABLE_ID_KEY); } catch (e) {}
+  stableId = mintStableId();
 }
 /* Remove any legacy localStorage clientId from older builds — kept here
    so an upgrade from a pre-stableId build does not leak a stale id. */
@@ -14342,6 +14366,9 @@ function accountSaveBtn() {
 function accountSignOut() {
   if (!auth) return;
   auth.signOut().then(() => {
+    // The signed-in uid was persisted as the stableId; drop it so the next
+    // person on this browser is not stamped with the previous account's id.
+    resetStableId();
     closeAccountDialog();
     splashHintOk(el("account-action-hint"), "");
   }).catch(e => splashHintErr(el("account-action-hint"), authErrorMessage(e)));
@@ -14376,6 +14403,9 @@ function accountDelete() {
       throw e;
     });
   }).then(() => {
+    // Same stale-identifier problem as sign-out, and more acute: the account
+    // is gone, so its uid must not linger as this browser's stableId.
+    resetStableId();
     closeAccountDialog();
     // onAuthStateChanged fires with null next; paintUserChip clears the chip
   }).catch(e => {
