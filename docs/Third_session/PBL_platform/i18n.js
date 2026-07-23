@@ -243,6 +243,13 @@
       "splash.create.builtin-group": "Built-in scenarios",
       "splash.create.mine-group": "My scenarios",
       "splash.create.shared-group": "Shared scenarios",
+      "splash.create.report": "Report this scenario",
+      "splash.create.report-title": "Report this scenario?",
+      "splash.create.report-confirm": "Moderators will review this scenario. You can only report it once.",
+      "splash.create.reported": "Reported. Thank you.",
+      "splash.create.report-sent": "Report sent to the moderators",
+      "splash.create.report-signin": "Sign in to report a scenario",
+      "splash.create.report-failed": "Couldn't send your report. Try again.",
       "splash.create.advanced-toggle": "Create new content (advanced) ↓",
       "splash.create.custom-label": "Custom content (JSON)",
       "splash.create.custom-help": "Paste a JSON object with the keys name, case, scoring, penalties, decisions — see the README for the full structure. Use \"Load template\" to start from the built-in content, then edit only what you need.",
@@ -976,7 +983,7 @@
   // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
   // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
   // returning browser keeps serving the cached chunk.
-  const LOCALE_VERSION = "v6";
+  const LOCALE_VERSION = "v7";
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
