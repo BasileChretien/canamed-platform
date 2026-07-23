@@ -313,9 +313,17 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   Coverage: `tests-e2e/moderation-ui.spec.js` on desktop + 3 mobile viewports.
   The DOMPurify half of Phase 4d was already DONE + audited clean (every authored
   string reaches the DOM via textContent/esc/DOMPurify — see the selfserve memory).
-  ⚠️ This landed with the perf budget at **336.9 / 337 KB gz** — see the dated
-  note in `tests-e2e/perf.spec.js`: the room-only CSS lazy-split now BLOCKS the
-  next UI change.
+  ~~⚠️ This landed with the perf budget at 336.9 / 337 KB gz — the room-only CSS
+  lazy-split now BLOCKS the next UI change.~~ **RESOLVED 2026-07-23:** that
+  reclaim is DONE — 384 room-only rules (58.9 KB raw) moved into a lazily
+  `<link>`ed `room.css` (`CanamedLoader.ensureRoomStyles()`, same pattern as
+  admin.css/branched.css), taking the splash budget **337 → 325 KB gz**. The cap
+  stays 337, so that is ~12 KB of banked headroom, not a licence to grow. See the
+  dated entry in `tests-e2e/perf.spec.js` for the triple guard used to make the
+  split safe, and `tests-e2e/room-css-lazy.spec.js` for the contract that keeps
+  room.css off the splash. **Note for CSS work:** room styles now live in
+  `room.css`, so a unit test asserting a room rule must read style.css + room.css
+  (that is why ~11 test files concatenate both).
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
   binding.~~ **Fixed:** added `stableIdMapping/$stableId → auth.uid` (write-once,

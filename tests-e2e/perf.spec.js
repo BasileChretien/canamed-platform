@@ -361,9 +361,33 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     ⚠️ HEADROOM IS EFFECTIVELY ZERO. The next eager byte of ANY kind fails
 //     this test, so the room-only CSS lazy-split (a <link>-loaded standard-room
 //     stylesheet mirroring branched.css) is no longer merely "overdue" — it now
-//     BLOCKS the next UI change. Do the reclaim first. A clean adjacent
-//     candidate: localdb.js (3.7 KB gz) is the LOCAL-mode RTDB mock and is dead
-//     weight in production — load it only when CANAMED_FIREBASE is null.
+//     BLOCKS the next UI change. Do the reclaim first.
+//
+//   2026-07-23: THE RECLAIM — room-only CSS lazy-split. DONE, and it is the
+//     move the note above had been demanding since the branched work. 384 rules
+//     (58.9 KB raw) moved out of the eager style.css into room.css, <link>ed by
+//     CanamedLoader.ensureRoomStyles() on session/room entry (same pattern as
+//     admin.css + branched.css). style.css 58.5 → 45.2 KB gz.
+//     **Measured 337 → 325.** The cap STAYS at 337, so this bank ~12 KB of real
+//     headroom rather than spending it — do not treat 325 as a new licence to
+//     grow; keep reclaiming as features land.
+//     Safety, because a bad CSS split fails silently (visual.spec.js has NO
+//     committed baselines and covers only splash + privacy): each rule had to
+//     clear a TRIPLE GUARD — (1) its bytes overlapped NO range the pre-room UI
+//     actually used, measured by CSS coverage across light+dark x desktop+
+//     mobile+tablet incl. hover/focus; (2) every comma-separated selector was in
+//     a room-only family; (3) no selector mentioned a pre-room family. 25
+//     room-looking rules were KEPT precisely because guard (1) caught the splash
+//     using them. Verified lossless (1419 declaration blocks before and after,
+//     none lost or gained), then 327 chromium+a11y tests green — including the
+//     specs that assert moved CSS (.lb-cohort-progress bars, .dec-opt.is-wrong
+//     red border, Module B safety-note width). Contract pinned by
+//     tests-e2e/room-css-lazy.spec.js on all 4 viewports.
+//     ⚠️ CORRECTION to the 2026-07-23 entry above: it floated localdb.js as "a
+//     clean adjacent candidate". That is WRONG — dbInit() constructs
+//     `new LocalDB()` synchronously from 7 call sites and script.js carries an
+//     explicit "must stay synchronous (no awaits)" constraint, and LOCAL mode is
+//     what the whole e2e suite runs on. Do not attempt it for 3.7 KB.
 const FIRST_PARTY_BYTES_LIMIT_KB = 337;
 
 test.describe("Perf budget — splash", () => {

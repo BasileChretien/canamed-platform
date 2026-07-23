@@ -20,7 +20,9 @@ const path = require("node:path");
 
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
-const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
+const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  " " + fs.readFileSync(path.join(PLATFORM, "room.css"), "utf8");
 const EN = fs.readFileSync(path.join(PLATFORM, "i18n.js"), "utf8");
 const JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 
@@ -79,11 +81,18 @@ test("desktop keeps the buttons inline (display:contents); narrow collapses them
   assert.match(CSS, /\.stage-controls--participant\s+\.stage-overflow-toggle\s*\{\s*display:\s*none/,
     "desktop must hide the More toggle");
   // narrow: a max-width:720px block that makes Call full-width + a real menu
-  const mq = (CSS.match(/@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*?\n\}/g) || [])
-    .find((b) => b.includes("stage-controls--participant"));
-  assert.ok(mq, "a <=720px block must restyle the participant control row");
-  assert.match(mq, /#call-prof-btn\s*\{[\s\S]*?flex:\s*1 1 100%/, "Call must go full-width primary on narrow");
-  assert.match(mq, /\.stage-overflow-toggle\s*\{[\s\S]*?min-height:\s*44px/, "the More toggle must be a 44px target");
+  // These rules now live across TWO <=720px blocks — style.css keeps what the
+  // splash uses, room.css carries the rest (2026-07-23 perf reclaim re-wraps
+  // moved rules in the SAME query). So assert each rule appears in SOME narrow
+  // block rather than expecting one block to hold them all; matching per-block
+  // also stops a lazy regex from spanning a block boundary.
+  const narrow = CSS.match(/@media\s*\(max-width:\s*720px\)\s*\{[\s\S]*?\n\}/g) || [];
+  assert.ok(narrow.some((b) => b.includes("stage-controls--participant")),
+    "a <=720px block must restyle the participant control row");
+  assert.ok(narrow.some((b) => /#call-prof-btn\s*\{[\s\S]*?flex:\s*1 1 100%/.test(b)),
+    "Call must go full-width primary on narrow");
+  assert.ok(narrow.some((b) => /\.stage-overflow-toggle\s*\{[\s\S]*?min-height:\s*44px/.test(b)),
+    "the More toggle must be a 44px target");
 });
 
 test("the More label ships an EN key (fr/ja parity enforced by i18n.test)", () => {

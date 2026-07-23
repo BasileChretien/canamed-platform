@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v96";
+  var SHELL_VERSION = "v97";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
@@ -238,6 +238,32 @@
     });
   }
 
+  // Room-only stylesheet (room.css) — the stage / decision / leaderboard /
+  // debrief / wrap-up CSS, split out of the eager style.css per the perf-budget
+  // changelog's standing reclaim mandate (the splash never renders room UI).
+  // Same lazy pattern as admin.css and branched.css: injected on room entry, so
+  // it costs the splash nothing. Every rule in it was verified UNUSED by the
+  // splash / create / join / account surfaces across light+dark themes and
+  // desktop+mobile+tablet viewports (incl. hover/focus) before being moved.
+  function ensureRoomStyles() {
+    if (typeof document === "undefined") return Promise.resolve();
+    var link = document.getElementById("room-css");
+    if (!link) {
+      link = document.createElement("link");
+      link.id = "room-css";
+      link.rel = "stylesheet";
+      link.href = v("room.css");
+      (document.head || document.documentElement).appendChild(link);
+    }
+    if (link.sheet) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      link.addEventListener("load", function () { resolve(); }, { once: true });
+      link.addEventListener("error", function () {
+        reject(new Error("room.css failed to load"));
+      }, { once: true });
+    });
+  }
+
   function ensureBranchedStyles() {
     if (typeof document === "undefined") return Promise.resolve();
     var link = document.getElementById("branched-css");
@@ -269,6 +295,7 @@
     loadScript,
     ensureBranchedStyles,
     ensureAdminStyles,
+    ensureRoomStyles,
     ensureCaseContent,
     ensureQrcode,
     ensureTour,

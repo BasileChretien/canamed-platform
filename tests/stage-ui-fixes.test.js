@@ -14,7 +14,9 @@ const path = require("node:path");
 
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX = fs.readFileSync(path.join(PLATFORM, "index.html"), "utf8");
-const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8");
+const CSS = fs.readFileSync(path.join(PLATFORM, "style.css"), "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  " " + fs.readFileSync(path.join(PLATFORM, "room.css"), "utf8");
 const JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 const I18N = fs.readFileSync(path.join(PLATFORM, "i18n.js"), "utf8");
 const FR = fs.readFileSync(path.join(PLATFORM, "locales", "fr.js"), "utf8");

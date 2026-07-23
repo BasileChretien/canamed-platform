@@ -17,7 +17,11 @@ const path = require("node:path");
 
 const CSS = fs.readFileSync(
   path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "style.css"),
-  "utf8");
+  "utf8") +
+  // room-only rules moved to the lazily-loaded room.css (perf reclaim)
+  fs.readFileSync(
+    path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "room.css"),
+    "utf8");
 
 test("the attention dot pulse settles (finite iterations), not infinite", () => {
   const m = CSS.match(/\.rcol-tab\.has-attention::after\s*\{[^}]*\}/);

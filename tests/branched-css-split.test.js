@@ -19,6 +19,12 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const stripCss = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "");
 const BRANCHED_CSS = stripCss(fs.readFileSync(path.join(P, "branched.css"), "utf8"));
 const STYLE_CSS = stripCss(fs.readFileSync(path.join(P, "style.css"), "utf8"));
+// room.css (2026-07-23 perf reclaim) is the room-only sheet loaded on EVERY room
+// entry — standard and branched alike. For "is this style available to a normal
+// Module A/B room?" it counts exactly like the eager stylesheet; only
+// branched.css is conditional (branched scenarios only).
+const ROOM_CSS = stripCss(fs.readFileSync(path.join(P, "room.css"), "utf8"));
+const EVERY_ROOM_CSS = STYLE_CSS + "\n" + ROOM_CSS;
 const LOADER = fs.readFileSync(path.join(P, "script-loader.js"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const SW = fs.readFileSync(path.join(P, "sw.js"), "utf8");
@@ -50,14 +56,25 @@ test("eager style.css no longer carries the branched-only selectors", () => {
       !STYLE_CSS.includes(sel),
       sel + " leaked back into the eager style.css — keep it in branched.css",
     );
+    // …nor into room.css: that sheet loads for EVERY room, so a branched-only
+    // rule there would apply to standard scenarios too.
+    assert.ok(
+      !ROOM_CSS.includes(sel),
+      sel + " leaked into room.css — it is branched-ONLY, keep it in branched.css",
+    );
   }
 });
 
-test("the SHARED .dec-branch + .dec-opt styles stay in eager style.css", () => {
+test("the SHARED .dec-branch + .dec-opt styles stay out of the branched-only file", () => {
   // .dec-branch (chained-branch consequence) + .dec-opt (vote buttons) are used
-  // by standard Module-A/B too, so they must NOT move to the branched-only file.
-  assert.match(STYLE_CSS, /\.dec-branch\b/, ".dec-branch base/overrides stay eager");
-  assert.match(STYLE_CSS, /\.dec-opt\b/, ".dec-opt stays eager");
+  // by standard Module-A/B too, so they must NOT move to the branched-only file
+  // — a branched-scenario-only sheet would leave standard rooms unstyled.
+  // They may live in style.css OR room.css: room.css loads on every room entry,
+  // so either satisfies "available to a standard room". (Before the 2026-07-23
+  // reclaim this asserted style.css specifically; the guarantee that matters is
+  // "not conditional on the branched format", which EVERY_ROOM_CSS expresses.)
+  assert.match(EVERY_ROOM_CSS, /\.dec-branch\b/, ".dec-branch must load for every room");
+  assert.match(EVERY_ROOM_CSS, /\.dec-opt\b/, ".dec-opt must load for every room");
   assert.ok(
     !BRANCHED_CSS.includes(".dec-opt"),
     ".dec-opt must NOT be duplicated into branched.css",
