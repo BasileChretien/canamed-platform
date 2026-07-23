@@ -61,6 +61,7 @@ const fs = require("fs");
 const path = require("path");
 const { uploadToGcs } = require("./lib/gcs-archive");
 const { pseudonymiseSession, sessionHasConsent, hasResearchConsent } = require("./lib/pseudonymise");
+const { readSessionLocations } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -96,15 +97,20 @@ async function main() {
   console.log("Run time:  " + new Date().toISOString());
   console.log("");
 
-  const snap = await db.ref("sessions").once("value");
-  const sessions = snap.val() || {};
+  // BOTH trees: sessions/<code> and orgs/<slug>/sessions/<id>. Org-scoped
+  // sessions were never pseudonymised at all until 2026-07-23. Keyed by
+  // location key, not bare code — two orgs may reuse the same session code.
+  const locations = await readSessionLocations(db);
+  const sessions = {};
+  for (const loc of locations) sessions[loc.key] = loc.data;
   const codes = Object.keys(sessions);
+  const orgCount = locations.filter(l => l.orgSlug).length;
 
   // Only export CLOSED sessions (active ones could still receive writes
   // post-export, leaving the export stale)
   const closedCodes = codes.filter(c => sessions[c] && sessions[c].closed);
   const openCount = codes.length - closedCodes.length;
-  console.log("Sessions total:       " + codes.length);
+  console.log("Sessions total:       " + codes.length + " (" + orgCount + " org-scoped)");
   console.log("Closed (exportable):  " + closedCodes.length);
   console.log("Open (skipped):       " + openCount);
 

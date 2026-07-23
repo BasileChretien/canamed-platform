@@ -27,6 +27,12 @@
  *                                   session join-code, and codes of not-yet-expired
  *                                   ("KEEP") sessions could still be live/joinable.
  *
+ * Covers BOTH session trees — `sessions/<code>` and
+ * `orgs/<slug>/sessions/<id>` (see scripts/lib/session-trees.js). Org-scoped
+ * sessions were invisible to this job until 2026-07-23 and so were never
+ * purged. Purging a session also removes its `adminSecrets/...` entry, which
+ * lives outside the session subtree and nothing else cleans up.
+ *
  * Output:
  *   one line per session in the report — KEEP / PURGE / DRY-RUN (unless CLEANUP_QUIET).
  *   exits non-zero only on infrastructure errors (auth fail, DB unreachable);
@@ -36,6 +42,7 @@
 "use strict";
 
 const admin = require("firebase-admin");
+const { readSessionLocations, safeLabel } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -64,20 +71,20 @@ async function main() {
   console.log(`Mode:        ${CONFIRM ? "LIVE — deletions WILL happen" : "DRY-RUN"}`);
   console.log("");
 
-  // Shallow read of /sessions gives us just the keys, not the full subtree.
-  const sessionsRef = db.ref("sessions");
-  const shallow = await sessionsRef.once("value");
-  const all = shallow.val() || {};
-  const codes = Object.keys(all);
-  console.log(`Found ${codes.length} sessions.`);
+  // BOTH trees: sessions/<code> and orgs/<slug>/sessions/<id>. Org sessions
+  // were previously invisible to this job and so were never purged.
+  const locations = await readSessionLocations(db);
+  const orgCount = locations.filter(l => l.orgSlug).length;
+  console.log(`Found ${locations.length} sessions (${locations.length - orgCount} default, ${orgCount} org-scoped).`);
 
   let kept = 0, purged = 0, errors = 0;
-  for (const code of codes) {
+  for (const loc of locations) {
+    const label = safeLabel(loc, QUIET);
     try {
       // Fetch only the lifecycle markers, not the whole session tree
       const [createdSnap, closedSnap] = await Promise.all([
-        db.ref(`sessions/${code}/created/at`).once("value"),
-        db.ref(`sessions/${code}/closed/at`).once("value")
+        db.ref(`${loc.path}/created/at`).once("value"),
+        db.ref(`${loc.path}/closed/at`).once("value")
       ]);
       const createdAt = createdSnap.val();
       const closedAt = closedSnap.val();
@@ -109,10 +116,22 @@ async function main() {
       const tag = (verdict === "PURGE")
         ? (CONFIRM ? "PURGE   " : "DRY-RUN ")
         : "KEEP    ";
-      if (!QUIET) console.log(`${tag} ${code}  ${reason}`);
+      if (!QUIET) console.log(`${tag} ${loc.key}  ${reason}`);
 
       if (verdict === "PURGE" && CONFIRM) {
-        await db.ref(`sessions/${code}`).remove();
+        await db.ref(loc.path).remove();
+        // The session's admin secret lives OUTSIDE its subtree, so removing the
+        // session left adminSecrets/<code> (the real PBKDF2 hash + proof
+        // writes) behind forever — nothing else purges it. Remove it with the
+        // session it belongs to.
+        await db.ref(loc.adminSecretPath).remove();
+        // Same story for the Module A chat: it was moved out of the session
+        // read-cascade into the top-level roomChat/ tree (RTDB .read cascades
+        // and cannot be revoked deeper, so a room-scoped rule under the session
+        // restricted nothing). It is the most sensitive free text we hold, so
+        // it must not outlive its session. A no-op on deployments that predate
+        // the move.
+        await db.ref(loc.roomChatPath).remove();
       }
       if (verdict === "PURGE") purged++;
       else kept++;
@@ -121,7 +140,7 @@ async function main() {
       // In QUIET mode (public-repo logs are world-readable) avoid printing the
       // raw e.message too: some firebase-admin errors embed the node path,
       // which includes the session code. Use the error code only.
-      console.error(`ERROR    ${QUIET ? "<redacted>" : code}  ${QUIET ? (e && e.code ? e.code : "error") : (e && e.message)}`);
+      console.error(`ERROR    ${label}  ${QUIET ? (e && e.code ? e.code : "error") : (e && e.message)}`);
     }
   }
 
