@@ -250,8 +250,11 @@ test.describe("Module A — LLM-patient session-1 fixes (live init wiring)", () 
   test("re-entry is idempotent — chat listeners never stack (no double render)", async ({ page }) => {
     expect(await setupRoom(page, "e2e-idemp"), "LocalDB available").toBe(true);
     const counts = await page.evaluate(() => {
+      // The chat lives in the TOP-LEVEL roomChat/ tree, not under the room
+      // subtree: sessions/<code> grants .read to every session member and RTDB
+      // .read cascades, so a room-scoped rule down there restricted nothing.
       const chatSubs = () => (window.db._subs || [])
-        .filter((s) => /\/moduleA\/chat$/.test(s.path)).length;
+        .filter((s) => /^roomChat\//.test(s.path)).length;
       window.modALLMInit();
       const afterFirst = chatSubs();
       window.modALLMInit();   // a second enterRoom() (room switch / re-entry)

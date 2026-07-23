@@ -1235,6 +1235,27 @@ function adminSecretPath(code, leaf) {
     : "adminSecrets/orgs/" + currentOrg + "/" + code;
   return base + (leaf ? "/" + leaf : "");
 }
+
+/* Module A free-text chat — same read-cascade problem as FINDING-07 above.
+ *
+ * The chat used to live at <session>/rooms/<roomId>/moduleA/chat with a
+ * room-scoped `.read`. But `sessions/<code>` grants `.read` to every session
+ * member and RTDB `.read` CASCADES — it cannot be revoked at a deeper path — so
+ * that room-scoped rule was ADDITIVE ONLY and restricted nothing: every member
+ * of the session could read every room's conversation with the LLM patient.
+ * (Found by the 2026-07-23 Phase-4e legal fact-check, which had drafted the
+ * participant consent text on the false assumption that it was room-private.)
+ *
+ * The only fix is to move the data OUT of the cascade, exactly as the admin
+ * hash was moved to `adminSecrets/`: a TOP-LEVEL `roomChat/` tree whose own
+ * `.read` is granted per ROOM (plus the facilitator, who needs it for debrief).
+ * Namespacing mirrors adminSecretPath(). */
+function roomChatPath(code, roomId) {
+  const base = (_sessionPrefix(currentOrg) === "sessions/")
+    ? "roomChat/" + code
+    : "roomChat/orgs/" + currentOrg + "/" + code;
+  return base + "/" + roomId;
+}
 function randomAdminMarker() {
   // 32 random bytes -> 64 lowercase hex, which satisfies the existing
   // adminPasswordHash .validate (legacy SHA-256 shape) while revealing
@@ -4023,6 +4044,9 @@ function startRoom() {
   window.myRoom = myRoom;
   window.sessionNum = sessionNum;
   window.db = db;
+  // The chat lives in the top-level roomChat/ tree (out of the session
+  // read-cascade — see roomChatPath), so the LLM init needs the resolver too.
+  window.roomChatPath = roomChatPath;
   window.viewStage = viewStage;
   // SYNTH_ID / prereqsMet are re-exported for the chat bridge's red-flag
   // SCORING (it reveals legacy history items so prereqsMet/SYNTH_PREREQS stay

@@ -295,8 +295,18 @@
     var roomBase  = sPath("rooms/" + window.myRoom);
     var modABase  = roomBase + "/moduleA";
     var scoreBase = roomBase + "/score";
+    // The chat is deliberately NOT under the room subtree. `sessions/<code>`
+    // grants .read to every session member and RTDB .read CASCADES, so a
+    // room-scoped rule down there restricted nothing — every member of the
+    // session could read every room's conversation with the patient. It now
+    // lives in the top-level roomChat/ tree, which has its own per-room .read
+    // (plus the facilitator, for debrief). See roomChatPath() in script.js.
+    var chatPath = (typeof window.roomChatPath === "function")
+      ? window.roomChatPath(window.sessionNum, window.myRoom)
+      : null;
+    if (!chatPath) return null;
     return {
-      chat:           db.ref(modABase + "/chat"),
+      chat:           db.ref(chatPath),
       awarded:        db.ref(modABase + "/scoring/awarded"),
       points:         db.ref(modABase + "/scoring/points"),
       // ALSO write to the platform-wide score subtree so:
