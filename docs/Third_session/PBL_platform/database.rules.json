@@ -305,13 +305,6 @@
                   ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
                 }
               },
-              "chat": {
-                ".read": "auth != null && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
-                "$turnId": {
-                  ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
-                  ".validate": "newData.hasChildren(['role','content','at']) && newData.child('role').isString() && (newData.child('role').val() === 'user' || newData.child('role').val() === 'assistant') && newData.child('content').isString() && newData.child('content').val().length > 0 && newData.child('content').val().length <= 600 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
-                }
-              },
               "scoring": {
                 "awarded": {
                   "$familyId": {
@@ -480,6 +473,30 @@
       }
     },
 
+    "roomChat": {
+      "$sessionId": {
+        "$roomId": {
+          ".read": "auth != null && (root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists() || root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()))",
+          "$turnId": {
+            ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
+            ".validate": "newData.hasChildren(['role','content','at']) && newData.child('role').isString() && (newData.child('role').val() === 'user' || newData.child('role').val() === 'assistant') && newData.child('content').isString() && newData.child('content').val().length > 0 && newData.child('content').val().length <= 600 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
+          }
+        }
+      },
+      "orgs": {
+        "$orgSlug": {
+          "$sessionId": {
+            "$roomId": {
+              ".read": "auth != null && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists() || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val()))",
+              "$turnId": {
+                ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
+                ".validate": "newData.hasChildren(['role','content','at']) && newData.child('role').isString() && (newData.child('role').val() === 'user' || newData.child('role').val() === 'assistant') && newData.child('content').isString() && newData.child('content').val().length > 0 && newData.child('content').val().length <= 600 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
+              }
+            }
+          }
+        }
+      }
+    },
     "adminSecrets": {
       "orgs": {
         "$orgSlug": {
@@ -793,13 +810,6 @@
                     "$itemId": {
                       ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
                       ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
-                    }
-                  },
-                  "chat": {
-                    ".read": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
-                    "$turnId": {
-                      ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && !data.exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
-                      ".validate": "newData.hasChildren(['role','content','at']) && newData.child('role').isString() && (newData.child('role').val() === 'user' || newData.child('role').val() === 'assistant') && newData.child('content').isString() && newData.child('content').val().length > 0 && newData.child('content').val().length <= 600 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 1800000"
                     }
                   },
                   "scoring": {

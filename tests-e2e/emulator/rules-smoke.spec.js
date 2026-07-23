@@ -775,3 +775,74 @@ test("rules: Phase 4d moderation — report write-own/once; tombstone moderator-
     await adminPut(`moderators/${uidA}`, null);
   }
 });
+
+/* Attempt a read through the REAL rules; resolves the value or the
+   PERMISSION_DENIED code/message. */
+function tryRead(page, path) {
+  return page.evaluate(async (p) => {
+    try {
+      const snap = await firebase.database().ref(p).once("value");
+      return { ok: true, val: snap.val() };
+    } catch (e) {
+      return { ok: false, err: (e && (e.code || e.message)) || "DENIED" };
+    }
+  }, path);
+}
+
+test("rules: roomChat is room-private — a session member in another room cannot read it (gap 3)", async ({ page, browser }) => {
+  const code = "chat-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const turn = { role: "user", content: "my private question to the patient", at: Date.now() };
+
+  // ---- A: member of the session AND of Room 1 ----
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  expect(await tryWrite(page, `sessions/${code}/members/${uidA}`, { at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uidA}`, true)).toBe("ALLOWED");
+  expect(await tryWrite(page, `roomChat/${code}/Room 1/t1`, turn)).toBe("ALLOWED");
+
+  // A can read its OWN room's chat back.
+  const own = await tryRead(page, `roomChat/${code}/Room 1`);
+  expect(own.ok, "a room member must be able to read their own room's chat").toBe(true);
+  expect(own.val.t1.content).toBe(turn.content);
+
+  // ---- B: member of the SAME SESSION, but of Room 2 ----
+  // A fresh, isolated context — NOT ctx.newPage() — so B signs in as a
+  // DISTINCT anonymous user. useEmulator() must run BEFORE goto().
+  const ctx = await browser.newContext();
+  const pageB = await ctx.newPage();
+  await useEmulator(pageB);
+  await pageB.goto("/");
+  const uidB = await waitForUid(pageB);
+  expect(uidB).not.toBe(uidA);
+  expect(await tryWrite(pageB, `sessions/${code}/members/${uidB}`, { at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(pageB, `sessions/${code}/rooms/Room 2/uidMembers/${uidB}`, true)).toBe("ALLOWED");
+
+  // THE FIX: B is a fully-fledged session member, and the session-wide .read
+  // still cascades over the session subtree — but roomChat lives OUTSIDE it,
+  // so B cannot read Room 1's conversation.
+  const peek = await tryRead(pageB, `roomChat/${code}/Room 1`);
+  expect(peek.ok, "a member of another room must NOT be able to read this chat").toBe(false);
+  expect(String(peek.err)).toMatch(/permission_denied|denied/i);
+  // Nor a single turn, nor the whole session's chat collection.
+  expect((await tryRead(pageB, `roomChat/${code}/Room 1/t1`)).ok).toBe(false);
+  expect((await tryRead(pageB, `roomChat/${code}`)).ok).toBe(false);
+
+  // B CAN still write+read its own room's chat — the tree is not simply closed.
+  expect(await tryWrite(pageB, `roomChat/${code}/Room 2/t1`,
+    { role: "user", content: "B's own question", at: Date.now() })).toBe("ALLOWED");
+  expect((await tryRead(pageB, `roomChat/${code}/Room 2`)).ok).toBe(true);
+
+  // And B cannot write into Room 1's chat either (write gating unchanged).
+  expect(await tryWrite(pageB, `roomChat/${code}/Room 1/t2`,
+    { role: "user", content: "injected", at: Date.now() })).not.toBe("ALLOWED");
+
+  // CONTRAST — this is why the chat had to MOVE rather than get a deeper rule:
+  // the session-wide .read genuinely does reach every room's structured data,
+  // and no rule at a deeper path can revoke it.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/moduleA/hypotheses/h1`,
+    { text: "dx X", by: "S", cid: uidA, at: Date.now() })).toBe("ALLOWED");
+  const cascade = await tryRead(pageB, `sessions/${code}/rooms/Room 1/moduleA/hypotheses`);
+  expect(cascade.ok, "the session read-cascade is real — hence the move").toBe(true);
+
+  await ctx.close();
+});
