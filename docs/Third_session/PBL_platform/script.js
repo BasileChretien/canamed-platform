@@ -378,11 +378,19 @@ function listSharedScenarios() {
   const queryRef = (typeof baseRef.limitToFirst === "function")
     ? baseRef.limitToFirst(200)
     : baseRef;
-  return queryRef.once("value")
-    .then(snap => {
+  // Takedowns live at moderation/removed/<shareId> — outside sharedScenarios,
+  // so a re-publish can't clear one. Degrades to "nothing removed" if absent.
+  const removedP = db.ref("moderation/removed").once("value")
+    .then(s => s.val() || {})
+    .catch(() => ({}));
+  return Promise.all([queryRef.once("value"), removedP])
+    .then(res => {
+      const snap = res[0];
+      const removed = res[1] || {};
       const out = [];
       snap.forEach(child => {
         if (out.length >= 200) return true; // forEach stops on truthy return
+        if (removed[child.key] === true) return; // taken down by a moderator
         const v = child.val() || {};
         out.push({
           shareId: child.key,
@@ -395,6 +403,19 @@ function listSharedScenarios() {
       return out;
     })
     .catch(e => { console.warn("listSharedScenarios failed", e); return []; });
+}
+
+/* File a moderation report. Rules: write-own + write-once at
+   reports/scenarios/<shareId>/<uid>, target must exist, not client-readable.
+   A repeat report is denied server-side — callers read that as "already
+   reported". `reason` is capped to the rules' 500-char bound. */
+function reportSharedScenario(shareId, reason) {
+  if (!db || !auth || !auth.currentUser) {
+    return Promise.reject(new Error("report: not signed in"));
+  }
+  const payload = { at: Date.now() };
+  if (reason) payload.reason = String(reason).slice(0, 500);
+  return db.ref("reports/scenarios/" + shareId + "/" + auth.currentUser.uid).set(payload);
 }
 
 /* Persist an authored scenario for the signed-in user. `body` is the
@@ -13045,6 +13066,7 @@ function wireSplash() {
   // populateScenarioPicker() also calls it once case-content has loaded;
   // wireAdvancedScenarioToggle() is idempotent (dataset.wired guard).
   wireAdvancedScenarioToggle();
+  wireReportScenario();
 
   // "Clone last workshop" row — appears only when a previous create has
   // populated localStorage with a workshop summary. One click pre-fills
@@ -13228,6 +13250,7 @@ function populateScenarioPicker() {
   if (firstBuiltIn) sel.value = firstBuiltIn;
   // Wire the advanced toggle (idempotent — guard with dataset.wired)
   wireAdvancedScenarioToggle();
+  wireReportScenario();
   onScenarioChange();
 }
 /* Inject "My scenarios" and "Shared scenarios" optgroups into the picker
@@ -13326,6 +13349,50 @@ function wireAdvancedScenarioToggle() {
     }
   });
 }
+
+/* Wire the "Report this scenario" affordance (idempotent — the splash re-wires
+   on sign-in / language change). Visibility is owned by onScenarioChange(). */
+function wireReportScenario() {
+  const btn = el("splash-report-scenario");
+  if (!btn || btn.dataset.wired === "1") return;
+  btn.dataset.wired = "1";
+  const T = (k, f) => (window.t ? window.t(k) : f);
+  btn.addEventListener("click", () => {
+    const sel = el("splash-create-scenario");
+    if (!sel) return;
+    // __ref:<source>:<ownerUid>:<scenarioId>; shared keys are <uid>_<id>.
+    const parts = String(sel.value || "").split(":");
+    if (parts.length < 4 || parts[1] !== "shared") return;
+    const shareId = parts[2] + "_" + parts.slice(3).join(":");
+    const opt = sel.options[sel.selectedIndex];
+    // Needs auth (anonymous is enough). With none — LOCAL mode, or sign-in
+    // pending — say so rather than faking a "Reported" state that wrote nothing.
+    if (!auth || !auth.currentUser) {
+      toast(T("splash.create.report-signin", "Sign in to report a scenario"));
+      return;
+    }
+    const done = () => {
+      btn.disabled = true;
+      btn.textContent = T("splash.create.reported", "Reported. Thank you.");
+    };
+    canamedConfirm({
+      title: T("splash.create.report-title", "Report this scenario?"),
+      message: T("splash.create.report-confirm",
+        "Moderators will review this scenario. You can only report it once."),
+      detail: (opt && opt.textContent) || shareId,
+      okLabel: T("splash.create.report", "Report this scenario"),
+      danger: true
+    }).then(ok => {
+      if (!ok) return;
+      btn.disabled = true;
+      // Write-once: a repeat report is denied, which reads the same as success.
+      return reportSharedScenario(shareId).then(() => {
+        done();
+        toast(T("splash.create.report-sent", "Report sent to the moderators"));
+      }).catch(done);
+    }).catch(() => {});
+  });
+}
 function onScenarioChange() {
   const sel = el("splash-create-scenario");
   const wrap = el("splash-custom-wrap");
@@ -13349,6 +13416,17 @@ function onScenarioChange() {
     } else {
       const sc = (window.CANAMED_SCENARIOS || {})[sel.value];
       desc.textContent = tc(sc && sc.summary, _curLang());
+    }
+  }
+  // Only someone else's shared scenario is reportable (the picker excludes your
+  // own from that group). Reset the label so a "Reported" state can't leak.
+  const reportBtn = el("splash-report-scenario");
+  if (reportBtn) {
+    const isShared = typeof sel.value === "string" && sel.value.indexOf("__ref:shared:") === 0;
+    reportBtn.hidden = !isShared;
+    if (isShared) {
+      reportBtn.disabled = false;
+      reportBtn.textContent = (window.t ? window.t("splash.create.report") : "Report this scenario");
     }
   }
 }

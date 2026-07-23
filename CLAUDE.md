@@ -300,15 +300,22 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   scenario cannot clear a takedown. Tested: `tests/rules.test.js` (structural) +
   `tests-e2e/emulator/rules-smoke.spec.js` (functional: report write-own/once,
   peer/other-uid denied, unknown-key denied, non-moderator tombstone denied,
-  moderator tombstone allowed). **⏳ CLIENT WIRING NOT YET DONE (next slice):**
-  the scenario picker must (a) read `moderation/removed` and hide removed
-  `sharedScenarios`, and (b) offer a "Report" affordance that writes
-  `reports/scenarios/$shareId/<uid>`. Until then the tombstone hides nothing in
-  the UI and no reports can be filed from the app (moderators can still tombstone
-  via the admin SDK). That slice touches `script.js` → PWA shell bump + per-viewport
-  Playwright. The DOMPurify half of Phase 4d is already DONE + audited clean (every
-  authored string reaches the DOM via textContent/esc/DOMPurify — see the
-  selfserve memory).
+  moderator tombstone allowed). **✅ CLIENT WIRING DONE (2026-07-23, shell v95):**
+  `listSharedScenarios()` reads `moderation/removed` alongside the list and drops
+  tombstoned entries (degrades to "nothing removed" if that read fails), so a
+  takedown actually removes a scenario from the picker; and a "Report this
+  scenario" button (`#splash-report-scenario`) appears only when the selection is
+  `__ref:shared:` — someone ELSE's scenario — confirms via `canamedConfirm`, then
+  writes `reports/scenarios/<shareId>/<uid>` via `reportSharedScenario()`.
+  Reporting needs auth (anonymous suffices); with none it says "sign in" instead
+  of faking a Reported state — which is why the LOCAL e2e (no `auth` in LOCAL
+  mode) asserts the guard, while the WRITE is covered by the emulator test.
+  Coverage: `tests-e2e/moderation-ui.spec.js` on desktop + 3 mobile viewports.
+  The DOMPurify half of Phase 4d was already DONE + audited clean (every authored
+  string reaches the DOM via textContent/esc/DOMPurify — see the selfserve memory).
+  ⚠️ This landed with the perf budget at **336.9 / 337 KB gz** — see the dated
+  note in `tests-e2e/perf.spec.js`: the room-only CSS lazy-split now BLOCKS the
+  next UI change.
 - ~~`votes/ballots` is keyed by `stableId`, not `clientId`, so the clientMapping
   ownership guard (FINDING-01) does not cover it — needs a parallel stableId
   binding.~~ **Fixed:** added `stableIdMapping/$stableId → auth.uid` (write-once,

@@ -349,6 +349,16 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     standing reclaim debt is unchanged and remains the NEXT lever: a
 //     <link>-loaded standard-room stylesheet mirroring branched.css — do that
 //     move, not another bump, next time this budget is threatened.
+//
+//   2026-07-23: Phase 4d moderation client wiring (report affordance + the
+//     moderation/removed tombstone filter in listSharedScenarios). +1.12 KB gz
+//     eager (script.js +1.06, i18n.js +0.09; locales/ are lazy and uncounted).
+//     Measured 336.9 — the cap is DELIBERATELY LEFT AT 337 per the standing
+//     instruction above: the feature was trimmed to fit rather than bumping.
+//     ⚠️ HEADROOM IS NOW ~0.1 KB. The next eager byte of ANY kind fails this
+//     test, so the room-only CSS lazy-split (a <link>-loaded standard-room
+//     stylesheet mirroring branched.css) is no longer merely "overdue" — it
+//     now BLOCKS the next UI change. Do the reclaim first.
 const FIRST_PARTY_BYTES_LIMIT_KB = 337;
 
 test.describe("Perf budget — splash", () => {
