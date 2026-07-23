@@ -425,7 +425,22 @@ consent/DPA text.**
    hard-scoped to `db.ref("sessions")` — `grep -c orgs scripts/{cleanup-stale-sessions,
    backup-sessions,pseudonymise-export}.js` = 0/0/0. Org sessions are never deleted,
    never backed up, never pseudonymised = GDPR storage-limitation breach in production.
-3. **`moduleA/chat` is NOT room-private** — see the corrected bullet below.
+3. **`moduleA/chat` is NOT room-private — UNDECIDED, do NOT treat as accepted.**
+   RTDB `.read` **cascades and cannot be revoked at a deeper path**.
+   `database.rules.json:93` grants `.read` on the whole `sessions/$sessionId`
+   subtree to any session member, so the room-scoped rule on
+   `rooms/$roomId/moduleA/chat` (~line 309, requiring `uidMembers/$uid`) is
+   **additive only** — it restricts nothing. **A participant's free-text chat with
+   the LLM character is readable by EVERY member of the session, not just their
+   room.** (This corrects a claim previously filed under "Accepted by design" that
+   read "Only `moduleA/chat` is per-room read-gated" — that claim was FALSE; the
+   draft consent text had been built on it.) Verified directly against the rules.
+   **Open decision, pending product + legal sign-off:** either (a) accept it and
+   say so honestly in the privacy notice + in-product disclosure, or (b) actually
+   restrict it, which needs the chat moved OUT of the `sessions/$sessionId`
+   read-cascade (e.g. a sibling top-level `roomChat/$sessionId/$roomId` tree with
+   its own `.read`) — a deeper `.read` alone can never fix this. Only after that
+   decision is made may this move to an "accepted" or "fixed" heading.
 4. **`canamed_stable_id` survives sign-out** holding the signed-out account's uid:
    `accountSignOut()` (script.js ~14342) clears nothing, while the comment at
    script.js ~1300 claims "signOut() removes it". Stale comment, real linkage risk.
@@ -434,21 +449,13 @@ Also: certificates are minted on download click (`resolveCertId`) with no prompt
 Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/`.
 
 **Accepted by design (no change — documented decisions):**
-- Full room-subtree readability to any session member: intentional classroom
-  visibility (facilitator/observer). ~~Only `moduleA/chat` is per-room
-  read-gated.~~ ⚠️ **THAT CLAIM IS FALSE — corrected 2026-07-23.** RTDB `.read`
-  **cascades and cannot be revoked at a deeper path**. `database.rules.json:93`
-  grants `.read` on the whole `sessions/$sessionId` subtree to any session
-  member, so the room-scoped rule on `rooms/$roomId/moduleA/chat` (~line 309,
-  requiring `uidMembers/$uid`) is **additive only** — it restricts nothing.
-  **A participant's free-text chat with the LLM character is readable by EVERY
-  member of the session, not just their room.** Found by the Phase-4e legal
-  fact-check (the draft consent text was built on the false claim) and verified
-  directly against the rules. Decide deliberately: either (a) accept it and say
-  so honestly in the privacy notice + in-product disclosure, or (b) actually
-  restrict it, which needs the chat moved OUT of the `sessions/$sessionId`
-  read-cascade (e.g. a sibling top-level `roomChat/$sessionId/$roomId` tree with
-  its own `.read`) — a deeper `.read` alone can never fix this.
+- Full room-subtree readability to any session member, **for structured
+  per-room work** (scores, hypotheses, votes, prompt replies): intentional
+  classroom visibility (facilitator/observer). ⚠️ **Scope note:** this bullet
+  covers the structured nodes ONLY. The free-text `moduleA/chat` rides the same
+  cascade but is **NOT accepted** — it is an open decision, see gap 3 above.
+  A line previously here claiming "Only `moduleA/chat` is per-room read-gated"
+  was false and has been removed.
 - `sharedScenarios` readable by any authenticated user: that is the opt-in
   facilitator sharing feature working as intended.
 - `credentials/$certId` public read by exact id (no `auth`): required by the
