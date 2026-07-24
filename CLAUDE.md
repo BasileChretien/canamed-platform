@@ -409,12 +409,49 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   huggingface.co (no token exfil to arbitrary hosts); HF error body no longer
   forwarded to the client; `lang` allowlisted. PROMPT_VERSION bumped to 2.2.
 
-### 2026-07-23 Phase-4e legal fact-check — FOUR COMPLIANCE GAPS FOUND (all verified)
+### 2026-07-23 Phase-4e legal fact-check — FOUR COMPLIANCE GAPS — ✅ ALL FOUR FIXED + DEPLOYED (2026-07-24)
+
+> **STATUS (verified 2026-07-24, live):** all four are fixed, merged and
+> deployed. `main` = shell **v99**; production `sw.js` serves
+> `canamed-shell-v99`; an unauthenticated read of `roomChat` returns 401.
+> PRs: #232 (gap 1), #234 (gap 2), #235 (gap 3), #233 (gap 4).
+> `Verify:` `curl -s https://canamed-69785.web.app/sw.js | grep -o 'canamed-shell-v[0-9]*'`
+> and `grep -c roomChat docs/Third_session/PBL_platform/database.rules.json`.
+> The gap text below is kept as the historical record of what was wrong.
+
+#### ⚠️ A FIFTH gap, found 2026-07-24 — cert IDs are NOT random (OPEN)
+
+The legal drafts' finding **M13** is correct and **CLAUDE.md was wrong**: the
+credential IDs actually published to `credentials/<id>` are **deterministic**,
+not crypto-random. `resolveCertId()` ([script.js](docs/Third_session/PBL_platform/script.js) ~7331)
+mints `canamedCertId(sessionCode + "|" + clientId)` — a *non-cryptographic*
+53-bit hash ([pure-utils.js](docs/Third_session/PBL_platform/pure-utils.js) `hashStr`, cyrb53-style
+`Math.imul`). A crypto-random `randomCredentialId()` exists in the same file
+**and is unit-tested, but is never called by production code**.
+
+Both inputs are readable by any session member (`pool/` keys are the clientIds,
+and they know the session code), so **any participant can compute every
+classmate's certificate ID** and read their `credentials/<id>` record from the
+public, unauthenticated verification endpoint. The "know-the-ID-to-read-it"
+model recorded twice in this file was therefore never a gate against a session
+member. Exposure is bounded — a name **hash** + session label, no plaintext
+name — and a classmate already sees names in the pool, so the marginal
+intra-session leak is small; the real defect is that the documented security
+model does not match the code.
+
+**Not fixed here, because the naive fix breaks idempotency:** the ID is
+deterministic *on purpose*, so re-downloading a certificate yields the same ID
+and the write-once `credentials/` entry still matches. Switching to
+`randomCredentialId()` needs the minted ID persisted per participant (e.g.
+under the participant's own node) so a re-download reuses it instead of
+minting a second credential. **Decide:** (a) persist a random ID, or (b) accept
+and correct the claim honestly. Until then the acceptance above is WITHDRAWN.
+
+#### The original four (historical record)
 
 Drafting the facilitator-as-controller legal pack forced every privacy claim to be
-checked against the code. Four are wrong in the CODE, not the prose — the legal text
-cannot be made truthful until these are fixed. **Fix these before publishing any
-consent/DPA text.**
+checked against the code. Four were wrong in the CODE, not the prose — the legal text
+could not be made truthful until they were fixed.
 1. **Research export ignores consent entirely (HIGHEST).** `scripts/pseudonymise-export.js`
    and `scripts/backup-sessions.js` walk the whole `/sessions` tree unfiltered; there is
    no consent flag anywhere (`grep -rn consent scripts/` finds only the simulator). So
@@ -459,8 +496,9 @@ Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/
 - `sharedScenarios` readable by any authenticated user: that is the opt-in
   facilitator sharing feature working as intended.
 - `credentials/$certId` public read by exact id (no `auth`): required by the
-  unauthenticated certificate-verification page; cert IDs are crypto-random
-  high-entropy (no enumeration) and carry only a name **hash** + session label.
+  unauthenticated certificate-verification page. ⚠️ **The entropy half of this
+  bullet was FALSE — corrected 2026-07-24, see "cert IDs are NOT random" below.**
+  The record still carries only a name **hash** + session label.
 - `poll/$clientId` uses the same tolerant first-write `clientMapping` branch as
   `pool`/`presence`/`typing`: in the brief window before the join chain commits
   the mapping, a peer could spoof another participant's qualitative poll answer
@@ -529,10 +567,13 @@ Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/
   collaborative-edit by design — decide + document).
 
 **Round-3 — re-confirmed ACCEPTED (no change):**
-- `credentials/$certId` public read: the verification page needs it; the parent
-  collection is `.read:false` (no listing) and cert IDs are crypto-random
+- ~~`credentials/$certId` public read: … cert IDs are crypto-random
   high-entropy, so it's a "know-the-ID-to-read-it" feature, not an enumerable
-  oracle. Only a name **hash** + session label are exposed.
+  oracle.~~ ⚠️ **THE PREMISE WAS FALSE — corrected 2026-07-24. This acceptance
+  is WITHDRAWN pending a decision** (see "cert IDs are NOT random" below). The
+  parent collection is still `.read:false` (no listing), and only a name
+  **hash** + session label are exposed — but the ID is *computable*, so the
+  "know-the-ID" gate is not a gate against a session member.
 - `sessions/<code>/adminPasswordHash` `.read:auth!=null`: the value is a
   non-secret random marker (real hash is in the unreadable `adminSecrets/`);
   cross-session read leaks only "this session has admin configured".
