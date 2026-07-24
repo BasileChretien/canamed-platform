@@ -1547,21 +1547,7 @@ let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees 
                       // BEFORE running investigations. Cross-room synced via
                       // refHypotheses. Keyed by Firebase push id; value is
                       // { by, cid, university, text, at }.
-/* Progressive discussion-prompts (user request 2026-05-18: 'The compare
- * prompt is too much text. It must be smoother. Maybe point by point.
- * And they write a reply, then the next point appears.'). Only ONE
- * prompt is visible at a time. promptCursor is the room-shared index
- * of the currently-active prompt; promptReplies maps prompt index →
- * { cid → { text, by, at } } so the team's collective notes are
- * recorded alongside the conversation. Anyone in the room can advance
- * the cursor (the platform is leaderless by design). */
-let promptCursor = 0;
-let promptReplies = {};
-let _promptReplyTimer = null;
 let modBPhase = 0;          // Module B synced phase index (0..5) — room-shared
-let modBExchangeCursor = 0; // Module B Phase-3 prompt index (0..5, 6 = done) — room-shared
-let modBExchangeReplies = {}; // Module B Phase-3: prompt index → cid → {text,by,cid,at} — room-shared
-let _modBExchangeReplyTimer = null;
 let callForHelp = null;
 let teamsLink = "";
 let quizLink = "";          // end-of-session questionnaire link
@@ -1606,12 +1592,12 @@ let refPool = null, refMyPool = null, refStarted = null, refRoomCount = null,
     refTeams = null, refQuiz = null, refPreQuiz = null;
 let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
-    refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
+    refHypotheses = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
     refObservers = null, refAnswerReplies = null, refPoll = null, refCertIds = null,
     refRoleChoices = null,
     refReplayRound = null, refRoleAssign = null,
-    refModBPhase = null, refModBExchangeCursor = null, refModBExchangeReplies = null,
+    refModBPhase = null,
     refClosed = null;
 
 /* Swap-and-replay loop state (Module B). `replayRound` is the current
@@ -2004,10 +1990,8 @@ function wireLanguageSwitcher() {
       callIfFn("buildButtons");
       callIfFn("renderButtons");
       callIfFn("renderFindings");
-      callIfFn("renderPrompts");
       callIfFn("renderDecisions");
       callIfFn("renderModBPhase");
-      callIfFn("renderModBExchange");
       callIfFn("renderObjectives");
       callIfFn("renderLeaderboard");
       callIfFn("renderScore");
@@ -3477,7 +3461,7 @@ function wireRoomUI() {
   initHypotheses();
   // Initial coach paint — set the text + stepper-state from current
   // platform state on entry. Subsequent updates fire from the render
-  // paths (renderFindings / renderPrompts / renderAnswers / switchRcolTab).
+  // paths (renderFindings / renderAnswers / switchRcolTab).
   if (typeof updateModANextStep === "function") updateModANextStep();
   if (typeof updateModBNextStep === "function") updateModBNextStep();
   initChartTabs();
@@ -3490,7 +3474,7 @@ function wireRoomUI() {
    discussion, group answers, reference) - each one big enough to bury the
    others if they all flowed in a single scroll. Tabs collapse the scroll to one
    click per section. The DOM ids of every section are unchanged so the rest of
-   the engine (renderFindings, renderDecisions, renderPrompts, renderAnswers)
+   the engine (renderFindings, renderDecisions, renderAnswers)
    keeps working unmodified - the tabs only toggle visibility and a small badge
    that nudges attention when something new arrives while a different tab is
    open. */
@@ -3623,15 +3607,6 @@ function revealModARightCol() {
   // (2026-06-02), together with the Synthesis section — not on the synthesis
   // being revealed.
   const gateOpen = (typeof phaseGateOpen === "function") && phaseGateOpen();
-
-  const modAAnswers = Object.keys((answers && answers.moduleA) || {})
-    .map(k => answers.moduleA[k]).filter(Boolean);
-  const hasPromptReply = !!(typeof promptReplies !== "undefined" &&
-    promptReplies && Object.keys(promptReplies).length > 0);
-  const hasModAVote = (typeof DECISIONS !== "undefined") &&
-    DECISIONS.some(d => d && d.module === "A");
-  const moduleASettled = hasModAVote &&
-    (typeof hasOpenUncommittedModuleAVote !== "function" || !hasOpenUncommittedModuleAVote());
 
   const reveal = {
     decisions: histDone && examDone,
@@ -3789,7 +3764,7 @@ function enterRoom(roomName, asAdmin) {
   roomScore = {}; teamName = ""; celebratedEvents = {}; penalisedEvents = {};
   roomVotes = {}; committedDecisions = {}; firstVoteFire = true;
   firstScoreFire = true; wrapCelebrated = false;
-  modBPhase = 0; modBExchangeCursor = 0; modBExchangeReplies = {};
+  modBPhase = 0;
   // reset in-platform test runtime — a re-join is a fresh attempt UI-side
   // (the DB record per clientId still drives "already done" detection)
   _TEST_RUNTIME.pre = null; _TEST_RUNTIME.post = null;
@@ -3802,8 +3777,6 @@ function enterRoom(roomName, asAdmin) {
   // right-column tab state - start fresh on each room
   lastAnswerCount = { moduleA: 0, moduleB: 0 };
   lastDecisionBallotCount = 0;
-  promptsWereUnlocked = false;
-  promptsWereDone = false;
   if (typeof switchRcolTab === "function") switchRcolTab("findings");
   el("late-banner").classList.add("hidden");
 
@@ -3865,8 +3838,6 @@ function teardownRoom() {
     if (refStage) refStage.off();
     if (refRevealed) refRevealed.off();
     if (refHypotheses) refHypotheses.off();
-    if (refPromptCursor) refPromptCursor.off();
-    if (refPromptReplies) refPromptReplies.off();
     if (refPresence) refPresence.off();
     if (refTyping) refTyping.off();
     if (refAnswers.moduleA) refAnswers.moduleA.off();
@@ -3879,8 +3850,6 @@ function teardownRoom() {
     if (refReplayRound) refReplayRound.off();
     if (refRoleAssign) refRoleAssign.off();
     if (refModBPhase) refModBPhase.off();
-    if (refModBExchangeCursor) refModBExchangeCursor.off();
-    if (refModBExchangeReplies) refModBExchangeReplies.off();
     if (refAnswerReplies) refAnswerReplies.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
@@ -3906,8 +3875,6 @@ function startRoom() {
   refStage = db.ref(base + "/stage");
   refRevealed = db.ref(base + "/moduleA/revealed");
   refHypotheses = db.ref(base + "/moduleA/hypotheses");
-  refPromptCursor = db.ref(base + "/moduleA/promptCursor");
-  refPromptReplies = db.ref(base + "/moduleA/promptReplies");
   refPresence = db.ref(base + "/presence");
   refTyping = db.ref(base + "/typing");
   refAnswers.moduleA = db.ref(base + "/answers/moduleA");
@@ -3971,27 +3938,14 @@ function startRoom() {
     try { handleRoleAssign(snap.val()); } catch (_) {}
   });
 
-  // Module B synced phase + Phase-3 exchange cursor (2026-05-27): the whole
-  // room moves through the four phases together and steps through the six
-  // Phase-3 prompts one at a time. Any participant can advance either (the
-  // write rules only require auth + an open session, like promptCursor).
+  // Module B synced phase (2026-05-27): the whole room moves through the six
+  // phases together. A room member can advance it (the write rule requires
+  // auth + open session + room membership — gated in module-set M3a).
   refModBPhase = db.ref(base + "/moduleB/phase");
   refModBPhase.on("value", snap => {
     const v = snap.val();
     modBPhase = (typeof v === "number" && v >= 0 && v <= 5) ? Math.floor(v) : 0;
     if (typeof renderModBPhase === "function") renderModBPhase();
-  });
-  refModBExchangeCursor = db.ref(base + "/moduleB/exchangeCursor");
-  refModBExchangeCursor.on("value", snap => {
-    const v = snap.val();
-    modBExchangeCursor = (typeof v === "number" && v >= 0) ? Math.floor(v) : 0;
-    if (typeof renderModBExchange === "function") renderModBExchange();
-  });
-  // Phase-3 answer entry: per-prompt group notes, mirroring moduleA/promptReplies.
-  refModBExchangeReplies = db.ref(base + "/moduleB/exchangeReplies");
-  refModBExchangeReplies.on("value", snap => {
-    modBExchangeReplies = snap.val() || {};
-    if (typeof renderModBExchange === "function") renderModBExchange();
   });
 
   refStage.on("value", snap => {
@@ -4020,10 +3974,9 @@ function startRoom() {
     hypotheses = snap.val() || {};
     if (typeof renderHypotheses === "function") renderHypotheses();
     if (typeof renderButtons === "function") renderButtons();
-    // ≥1 hypothesis is the phase gate (2026-06-02; lowered to 1 on 2026-06-25): re-render the prompts so the
-    // Debate unlocks the moment the team crosses two, and refresh the coach +
-    // right-column reveal.
-    if (typeof renderPrompts === "function") renderPrompts();
+    // ≥1 hypothesis is the phase gate (2026-06-02; lowered to 1 on 2026-06-25):
+    // updateModANextStep() below re-runs revealModARightCol(), so the Debate &
+    // answers tab unlocks the moment the team crosses the gate.
     // ...and the decisions panel: a hypotheses-gated vote (e.g. dec_plan,
     // unlockWhen.hypotheses) must drop its "Ready when: add a working hypothesis"
     // lock the moment the gate opens — not wait for the next presence/score event
@@ -4031,16 +3984,6 @@ function startRoom() {
     // the team had already written a working hypothesis.)
     if (typeof renderDecisions === "function") renderDecisions();
     if (typeof updateModANextStep === "function") updateModANextStep();
-  });
-  // Progressive prompt state (cross-room synced).
-  refPromptCursor.on("value", snap => {
-    const v = snap.val();
-    promptCursor = (typeof v === "number" && v >= 0) ? Math.floor(v) : 0;
-    if (typeof renderPrompts === "function") renderPrompts();
-  });
-  refPromptReplies.on("value", snap => {
-    promptReplies = snap.val() || {};
-    if (typeof renderPrompts === "function") renderPrompts();
   });
   refPresence.on("value", snap => {
     presence = snap.val() || {};
@@ -8927,17 +8870,14 @@ function phaseGateOpen() {
   return (typeof hypothesisCount === "function") && hypothesisCount() >= 1;
 }
 
-/* Test hooks — top-level `let` bindings (revealed, promptCursor,
- * promptReplies, ITEM_IDS, CASE) are script-scoped and can't be
- * reached via `window.X = ...` assignments from E2E tests. These
- * small setters mutate the bindings directly so Playwright tests
- * can drive renderPrompts / renderButtons with deterministic state
- * without needing the full Firebase round-trip. Production code
- * never calls these; they're inert outside test runs. */
+/* Test hooks — top-level `let` bindings (revealed, ITEM_IDS, CASE) are
+ * script-scoped and can't be reached via `window.X = ...` assignments from E2E
+ * tests. These small setters mutate the bindings directly so Playwright tests
+ * can drive renderButtons / renderFindings with deterministic state without
+ * needing the full Firebase round-trip. Production code never calls these;
+ * they're inert outside test runs. */
 if (typeof window !== "undefined") {
   window._test_setRevealed = function (obj) { revealed = obj || {}; };
-  window._test_setPromptCursor = function (n) { promptCursor = (typeof n === "number") ? n : 0; };
-  window._test_setPromptReplies = function (obj) { promptReplies = obj || {}; };
   window._test_getItemIds = function () { return ITEM_IDS.slice(); };
   window._test_getCase = function () { return CASE; };
   window._test_rebuildCaseDerived = function () { rebuildCaseDerived(); };
@@ -8950,7 +8890,6 @@ if (typeof window !== "undefined") {
   window._test_setAllRooms      = function (m) { allRooms = m || {}; };
   window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
   window._test_setRoomVotes     = function (m) { roomVotes = m || {}; };
-  window._test_setModBExchangeReplies = function (m) { modBExchangeReplies = m || {}; };
   window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
   // Set the group-answers map (per module) so E2E can drive the
   // all-bullets-covered completion CTAs without a Firebase round-trip.
@@ -8971,241 +8910,6 @@ if (typeof window !== "undefined") {
   window._surveyReadyAfterPostTest = _surveyReadyAfterPostTest;
 }
 
-/* Move the room-shared promptCursor by ±1 (clamped). Anyone in the room
- * can advance it; the cursor write triggers refPromptCursor.on for every
- * teammate, which re-renders renderPrompts with the new prompt. */
-function _advancePromptCursor(delta) {
-  if (!refPromptCursor) return;
-  // Flush any pending reply edit to the previous prompt BEFORE advancing,
-  // so the change isn't lost if the user clicks Next while still in the
-  // textarea (the blur-based flush usually catches this, but a tap
-  // sequence on mobile sometimes fires next/save in the wrong order).
-  _flushPromptReply();
-  const total = (CASE && Array.isArray(CASE.prompts)) ? CASE.prompts.length : 0;
-  const next = Math.max(0, Math.min((promptCursor || 0) + delta, total));
-  refPromptCursor.set(next).catch(e => console.error("prompt cursor set failed", e));
-}
-
-/* Debounced save of the textarea content for the current prompt.
- * Cross-room synced via refPromptReplies/$promptIdx/$cid. */
-function _onPromptReplyInput(e) {
-  if (_promptReplyTimer) clearTimeout(_promptReplyTimer);
-  _promptReplyTimer = setTimeout(_flushPromptReply, 600);
-}
-
-function _flushPromptReply() {
-  if (_promptReplyTimer) { clearTimeout(_promptReplyTimer); _promptReplyTimer = null; }
-  const replyEl = el("prompt-reply");
-  if (!replyEl || !refPromptReplies) return;
-  const text = (replyEl.value || "").trim().slice(0, 600);
-  const cursor = promptCursor || 0;
-  const path = refPromptReplies.child(String(cursor)).child(clientId);
-  if (text === "") {
-    path.remove().catch(() => {});
-    return;
-  }
-  path.set({
-    text: text,
-    by: myName || "",
-    cid: clientId,
-    at: Date.now()
-  }).catch(e => console.error("prompt reply save failed", e));
-}
-
-/* Visible lock state on the Discussion tab — driven from renderPrompts()
- * via the same `unlocked` computation. Tab stays clickable but the
- * .is-locked class greys it out so students don't think it's
- * "available but uninteresting" (specialist quote: "Discussion lies
- * about being available"). */
-function updateDiscussionTabLock(unlocked) {
-  const tab = el("rcol-tab-discussion");
-  if (!tab) return;
-  tab.classList.toggle("is-locked", !unlocked);
-  tab.setAttribute("aria-disabled", unlocked ? "false" : "true");
-  if (typeof updateMobileTabbar === "function") updateMobileTabbar();
-}
-
-let promptsWereUnlocked = false;
-let promptsWereDone = false;   // fire-once guard for auto-opening Group answers
-function renderPrompts() {
-  // Debate/discussion-prompt panel was MERGED into the two-question answers
-  // panel (2026-06-25): the prompt UI no longer exists in the DOM, so this is a
-  // safe no-op now (the RTDB prompt wiring stays dormant). Guard so dormant
-  // callers — the langchange re-render, the hypotheses listener, the cursor
-  // sync — don't crash on the removed #prompts-card / #compare-card elements.
-  if (!el("prompts-card")) return;
-  const unlocked = (typeof phaseGateOpen === "function") && phaseGateOpen();
-  el("prompts-locked").classList.toggle("hidden", unlocked);
-  // Hide the legacy <ol> permanently (kept in HTML for back-compat).
-  const legacyList = el("prompts-list");
-  if (legacyList) {
-    legacyList.classList.add("hidden");
-    legacyList.innerHTML = "";
-  }
-  el("compare-card").classList.toggle("hidden", !unlocked);
-
-  const progressive = el("prompt-progressive");
-  const done = el("prompt-done");
-  if (!progressive || !done) {
-    // HTML hasn't been migrated yet; skip the new UI but DON'T crash.
-    setTabBadge("tab-badge-discussion", unlocked ? "●" : "");
-    if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(unlocked);
-    return;
-  }
-
-  if (!unlocked) {
-    progressive.classList.add("hidden");
-    done.classList.add("hidden");
-    setTabBadge("tab-badge-discussion", "");
-    if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(false);
-    return;
-  }
-
-  const lang = _curLang();
-  const prompts = (CASE && Array.isArray(CASE.prompts)) ? CASE.prompts : [];
-  const total = prompts.length;
-  const cursor = Math.max(0, Math.min(promptCursor || 0, total));
-
-  // Final state — student worked through every prompt.
-  if (cursor >= total && total > 0) {
-    progressive.classList.add("hidden");
-    done.classList.remove("hidden");
-    setTabBadge("tab-badge-discussion", "✓");
-    if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(true);
-    // Debate finished: the team cycled every Exchange prompt. promptCursor is
-    // RTDB-synced, so this fires for the whole room — auto-open Group answers
-    // once so they land on capturing their final bullets (dry-run 2026-05-27:
-    // students didn't notice the "final answers" tab). Guard typing; don't
-    // re-yank someone who already moved to answers.
-    if (!promptsWereDone) {
-      promptsWereDone = true;
-      const _typing = document.activeElement &&
-        /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
-      // Dry-run 2026-05-27: teams worked through the discussion but finished the
-      // module without ever casting the "decide together" vote — an always-open
-      // Module A decision never fires the locked→unlocked auto-open, and the
-      // synthesis/discussion auto-switches pull the team off the Decisions tab.
-      // So if a Module A vote is still open and uncommitted, send them to the
-      // vote first; only fall through to Group answers once it's settled.
-      const _target = (typeof hasOpenUncommittedModuleAVote === "function" &&
-        hasOpenUncommittedModuleAVote()) ? "decisions" : "answers";
-      if (activeRcolTab !== _target && !_typing &&
-          typeof switchRcolTab === "function") {
-        switchRcolTab(_target);
-      } else {
-        nudgeRcolTab(_target);
-      }
-    }
-    return;
-  }
-
-  // Progressive single-prompt view.
-  progressive.classList.remove("hidden");
-  done.classList.add("hidden");
-  // Re-arm the "debate done" auto-open if the team steps back into the prompts.
-  promptsWereDone = false;
-
-  const currentEl = el("prompt-progress-current");
-  const totalEl = el("prompt-progress-total");
-  const textEl = el("prompt-text");
-  const replyEl = el("prompt-reply");
-  const prevBtn = el("prompt-prev");
-  const nextBtn = el("prompt-next");
-
-  if (currentEl) currentEl.textContent = String(cursor + 1);
-  if (totalEl) totalEl.textContent = String(total);
-  const promptText = total > 0 ? tc(prompts[cursor], lang) : "";
-  if (textEl) textEl.textContent = promptText;
-
-  // Restore the team's saved reply for this prompt (if any). Use the
-  // newest reply across all room members (anyone can edit, last-write-wins
-  // on display — full per-author log is preserved in promptReplies for
-  // research/export purposes).
-  const repliesForThisPrompt = (promptReplies && promptReplies[cursor]) || {};
-  let latest = null;
-  Object.keys(repliesForThisPrompt).forEach(cid => {
-    const r = repliesForThisPrompt[cid];
-    if (r && (!latest || (r.at || 0) > (latest.at || 0))) latest = r;
-  });
-  if (replyEl && !replyEl.matches(":focus")) {
-    replyEl.value = (latest && latest.text) || "";
-  }
-
-  // Prev disabled at the start; Next always enabled (reply is optional).
-  if (prevBtn) prevBtn.disabled = cursor === 0;
-  if (nextBtn) {
-    nextBtn.disabled = false;
-    nextBtn.textContent = (cursor + 1 >= total)
-      ? (typeof window.t === "function" && window.t("prompts.next.last") !== "prompts.next.last"
-          ? window.t("prompts.next.last")
-          : "Save and finish →")
-      : (typeof window.t === "function" && window.t("prompts.next") !== "prompts.next"
-          ? window.t("prompts.next")
-          : "Save and next →");
-  }
-  // Wire handlers once (idempotent guard).
-  if (progressive && !progressive.dataset.wired) {
-    progressive.dataset.wired = "1";
-    if (nextBtn) nextBtn.addEventListener("click", () => _advancePromptCursor(+1));
-    if (prevBtn) prevBtn.addEventListener("click", () => _advancePromptCursor(-1));
-    if (replyEl) {
-      replyEl.addEventListener("input", _onPromptReplyInput);
-      replyEl.addEventListener("blur", _flushPromptReply);
-    }
-  }
-  // Wire the done-state buttons once.
-  const doneCta = el("prompt-done-cta");
-  const reviewBtn = el("prompt-review");
-  if (done && !done.dataset.wired) {
-    done.dataset.wired = "1";
-    if (doneCta) doneCta.addEventListener("click", () => {
-      if (typeof switchRcolTab === "function") switchRcolTab("answers");
-    });
-    if (reviewBtn) reviewBtn.addEventListener("click", () => {
-      if (refPromptCursor) refPromptCursor.set(Math.max(0, total - 1));
-    });
-  }
-
-  setTabBadge("tab-badge-discussion", unlocked ? "●" : "");
-  // Visible lock state on the tab itself — driven by the same `unlocked`
-  // computation as the panel content.
-  if (typeof updateDiscussionTabLock === "function") updateDiscussionTabLock(unlocked);
-  if (unlocked && !promptsWereUnlocked) {
-    promptsWereUnlocked = true;
-    nudgeRcolTab("discussion");
-    // Auto-open the Debate (Discussion) panel the moment the synthesis
-    // unlocks the Exchange prompts. Fires once (the !promptsWereUnlocked
-    // guard) so it never re-yanks on later renders. Dry-run 2026-05-27:
-    // students completed the synthesis but didn't notice the Exchange had
-    // opened, so this now fires from ANY tab (previously only when the user
-    // happened to be on Decisions). Guards: don't steal focus from someone
-    // typing, and don't drag a team that's already moved on to Group answers
-    // back to the prompts.
-    const _typing = document.activeElement &&
-      /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
-    if (activeRcolTab !== "answers" && activeRcolTab !== "discussion" &&
-        !_typing && typeof switchRcolTab === "function") {
-      switchRcolTab("discussion");
-    }
-    const banner = el("synthesis-unlocked-banner");
-    if (banner) {
-      banner.classList.remove("hidden");
-      // Trigger the 6-second auto-fade-out after a tick so the
-      // enter animation finishes first.
-      requestAnimationFrame(() => banner.classList.add("auto-fade"));
-    }
-  } else if (!unlocked) {
-    promptsWereUnlocked = false;
-    const banner = el("synthesis-unlocked-banner");
-    if (banner) {
-      banner.classList.add("hidden");
-      banner.classList.remove("auto-fade");
-    }
-  }
-  // Coach update — runs on every renderPrompts pass so the text stays
-  // in sync as state changes (e.g., when the user opens Discussion).
-  if (typeof updateModANextStep === "function") updateModANextStep();
-}
 /* "everyone taking part" - a non-numeric participation indicator. Each name in
    the room shows a filled dot once they have done ANYTHING (revealed a finding
    or written an answer). No per-person scores - this is a no-leader room of
@@ -9268,7 +8972,7 @@ function renderContrib() {
   });
 }
 function renderCase() {
-  renderButtons(); renderFindings(); renderPrompts(); renderContrib();
+  renderButtons(); renderFindings(); renderContrib();
   checkScoreEvents();
 }
 
@@ -9813,11 +9517,6 @@ function decisionUnlockHint(unmet) {
  * fire a coach-card "🗳️ A new decision opened" nudge on transitions. */
 let lastUnlockedDecisionIds = new Set();
 
-/* Track whether every open Module A vote has just become committed, so that
- * once the team has both finished the discussion AND settled their vote we can
- * complete the flow by opening Group answers (the #109 "don't miss the final
- * answers" goal, now sequenced AFTER the vote rather than skipping it). */
-let lastModuleAVotesAllCommitted = false;
 
 /* ── Live-vote a11y (2026-06-01) ───────────────────────────────────────────
    renderDecisions() rebuilds #decisions-A / -B via innerHTML on EVERY ballot
@@ -9999,25 +9698,6 @@ function renderDecisions() {
     } catch (_) { /* scrollIntoView unsupported / detached — non-fatal */ }
   });
   lastUnlockedDecisionIds = allUnlockedNow;
-
-  // Complete the Module A flow: once the team has worked through the discussion
-  // (promptsWereDone) AND there is no open uncommitted Module A vote left, open
-  // Group answers — but only on the transition into that settled state, so it
-  // fires once and never yanks a teammate mid-answer.
-  const moduleAVotes = (typeof DECISIONS !== "undefined" ? DECISIONS : [])
-    .filter(d => d && d.module === "A");
-  const moduleASettled = moduleAVotes.length > 0 &&
-    (typeof hasOpenUncommittedModuleAVote !== "function" || !hasOpenUncommittedModuleAVote());
-  if (moduleASettled && !lastModuleAVotesAllCommitted && promptsWereDone) {
-    const _typing = document.activeElement &&
-      /^(TEXTAREA|INPUT)$/.test(document.activeElement.tagName || "");
-    if (activeRcolTab !== "answers" && !_typing && typeof switchRcolTab === "function") {
-      switchRcolTab("answers");
-    } else if (typeof nudgeRcolTab === "function") {
-      nudgeRcolTab("answers");
-    }
-  }
-  lastModuleAVotesAllCommitted = moduleASettled;
 
   // Keep the progressive tab reveal in sync with decision-unlock transitions
   // (the Decide-together tab appears when the plan decisions become live).
@@ -10464,7 +10144,7 @@ function _coachSetAction(actionsEl, labelKey, fallbackLabel, onClick) {
 }
 
 /* Compute current state for Module A and update the coach card +
- * phase stepper accordingly. Called from renderFindings, renderPrompts,
+ * phase stepper accordingly. Called from renderFindings,
  * renderAnswers, switchRcolTab, and on first room entry. */
 function updateModANextStep() {
   const coach = el("modA-next-step");
@@ -10541,9 +10221,8 @@ function updateModANextStep() {
   }
 
   // Progressive right-column reveal rides the same state hook as the coach —
-  // this is called from renderFindings / renderPrompts / renderAnswers /
-  // switchRcolTab / room entry, so the tabs appear exactly when their phase
-  // becomes actionable.
+  // this is called from renderFindings / renderAnswers / switchRcolTab / room
+  // entry, so the tabs appear exactly when their phase becomes actionable.
   if (typeof revealModARightCol === "function") revealModARightCol();
 }
 
@@ -10609,12 +10288,11 @@ function updateModBNextStep() {
 }
 
 /* ===================== MODULE B — SYNCED PHASE FLOW (2026-05-27) =============
- * The room moves through the four phases together (rooms/$room/moduleB/phase,
- * 0..3) and steps through the six Phase-3 prompts one at a time
- * (rooms/$room/moduleB/exchangeCursor). Any participant can advance either.
- * Only the CURRENT phase's action sections are shown; reference material
- * (SPIKES strip, useful sentences, history, guidelines, recap) stays visible
- * throughout (those sections carry no entry in MODB_PHASE_SECTIONS). */
+ * The room moves through the six phases together (rooms/$room/moduleB/phase,
+ * 0..5). A room member can advance it. Only the CURRENT phase's action sections
+ * are shown; reference material (SPIKES strip, useful sentences, history,
+ * guidelines, recap) stays visible throughout (those sections carry no entry in
+ * MODB_PHASE_SECTIONS). */
 // Six-phase Module B (2026-06-26): a play → reflect → SWAP → replay → reflect
 // loop. P3 fuses the old 6-prompt exchange + 3-bullet write-up into TWO
 // questions + the vote; P4 swaps roles; P5 replays the scene from the new role;
@@ -10739,77 +10417,6 @@ function setModBPhase(idx) {
   else { modBPhase = n; renderModBPhase(); }   // LOCAL/solo fallback
 }
 
-function renderModBExchange() {
-  const list = el("modB-exchange-list");
-  if (!list) return;
-  const items = Array.from(list.querySelectorAll("li"));
-  const total = items.length;
-  const cursor = Math.max(0, Math.min(modBExchangeCursor, total));
-  const isDone = total > 0 && cursor >= total;
-  items.forEach((li, i) => li.classList.toggle("is-phase-hidden", i !== cursor));
-  list.classList.toggle("is-phase-hidden", isDone);
-  const done = el("modB-exchange-done");
-  if (done) done.classList.toggle("hidden", !isDone);
-  const nav = el("modB-exchange-nav");
-  if (nav) nav.classList.toggle("hidden", isDone);
-  const counter = el("modB-exchange-counter");
-  if (counter) counter.textContent = isDone ? ""
-    : _modBT("modB.exchange.counter", "Prompt {n} / {total}", { n: cursor + 1, total: total });
-  const prev = el("modB-exchange-prev"), next = el("modB-exchange-next");
-  if (prev) prev.disabled = cursor <= 0;
-  if (next) next.disabled = isDone;
-
-  // Answer entry for the CURRENT prompt. Hidden on the done screen; otherwise
-  // restore the newest note across the room (anyone can edit, last-write-wins on
-  // display — the full per-author log is preserved for research/export). Don't
-  // clobber the box while this client is the one typing in it.
-  const replyArea = el("modB-exchange-reply-area");
-  if (replyArea) replyArea.classList.toggle("hidden", isDone);
-  const replyEl = el("modB-exchange-reply");
-  if (replyEl && !isDone && !replyEl.matches(":focus")) {
-    const repliesForThisPrompt = (modBExchangeReplies && modBExchangeReplies[cursor]) || {};
-    let latest = null;
-    Object.keys(repliesForThisPrompt).forEach(cid => {
-      const r = repliesForThisPrompt[cid];
-      if (r && (!latest || (r.at || 0) > (latest.at || 0))) latest = r;
-    });
-    replyEl.value = (latest && latest.text) || "";
-  }
-}
-
-/* Debounced autosave for the Module B Phase-3 answer box, mirroring Module A's
- * _onPromptReplyInput / _flushPromptReply. Synced via
- * refModBExchangeReplies/$cursor/$cid. */
-function _onModBExchangeReplyInput() {
-  if (_modBExchangeReplyTimer) clearTimeout(_modBExchangeReplyTimer);
-  _modBExchangeReplyTimer = setTimeout(_flushModBExchangeReply, 600);
-}
-
-function _flushModBExchangeReply() {
-  if (_modBExchangeReplyTimer) { clearTimeout(_modBExchangeReplyTimer); _modBExchangeReplyTimer = null; }
-  const replyEl = el("modB-exchange-reply");
-  if (!replyEl || !refModBExchangeReplies) return;
-  const text = (replyEl.value || "").trim().slice(0, 600);
-  const cursor = modBExchangeCursor || 0;
-  const path = refModBExchangeReplies.child(String(cursor)).child(clientId);
-  if (text === "") {
-    path.remove().catch(() => {});
-    return;
-  }
-  path.set({
-    text: text,
-    by: myName || "",
-    cid: clientId,
-    at: Date.now()
-  }).catch(e => console.error("modB exchange reply save failed", e));
-}
-
-function setModBExchangeCursor(n) {
-  const v = Math.max(0, Math.min(20, n | 0));
-  if (refModBExchangeCursor) refModBExchangeCursor.set(v).catch(() => {});
-  else { modBExchangeCursor = v; renderModBExchange(); }
-}
-
 /* Wire the synced phase + exchange navigation. Idempotent (per-element _wired
  * flag) so repeated wireRoomUI calls don't stack handlers. */
 function initModBPhaseNav() {
@@ -10826,19 +10433,7 @@ function initModBPhaseNav() {
       btn.addEventListener("click", () => setModBPhase(idx));
     });
   }
-  // Flush the current prompt's note BEFORE moving the cursor, so the debounced
-  // autosave can never land against the wrong prompt index (mirrors Module A).
-  const ep = el("modB-exchange-prev"), en = el("modB-exchange-next");
-  if (ep && !ep._wired) { ep._wired = true; ep.addEventListener("click", () => { _flushModBExchangeReply(); setModBExchangeCursor(modBExchangeCursor - 1); }); }
-  if (en && !en._wired) { en._wired = true; en.addEventListener("click", () => { _flushModBExchangeReply(); setModBExchangeCursor(modBExchangeCursor + 1); }); }
-  const reply = el("modB-exchange-reply");
-  if (reply && !reply._wired) {
-    reply._wired = true;
-    reply.addEventListener("input", _onModBExchangeReplyInput);
-    reply.addEventListener("blur", _flushModBExchangeReply);
-  }
   renderModBPhase();
-  renderModBExchange();
 }
 
 /* Wire the × dismiss buttons on both coach cards. Idempotent (uses
@@ -10935,7 +10530,7 @@ function renderHypotheses() {
   // Investigations are FREELY clickable (2026-06-02) — that section is never
   // locked. The old clinical-synthesis section (removed 2026-06-02) was the
   // gated one; the ≥1-hypothesis phase gate (phaseGateOpen) now only drives the
-  // Debate/Decisions reveal in renderPrompts()/revealModARightCol().
+  // Debate/Decisions reveal in revealModARightCol().
   const inv = el("chart-investigations");
   if (inv) inv.classList.remove("is-locked");
 }

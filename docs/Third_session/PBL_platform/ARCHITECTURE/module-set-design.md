@@ -168,17 +168,28 @@ real validation for rules changes; per-viewport Playwright for any UI change.
   future writes only; existing data is untouched and still reachable via the admin
   SDK and the GCS backups. Emulator-proven: the four paths are now DENIED while
   `moduleA/revealed`, `moduleA/hypotheses` and `moduleB/phase` still write.
-- **Client half: STILL TO DO.** ~350 lines of already-no-op code in `script.js`:
-  `renderPrompts`, `_advancePromptCursor`, `_onPromptReplyInput`,
-  `_flushPromptReply`, `updateDiscussionTabLock`, `promptsWere*`, the
-  `refPrompt*` wiring, `renderModBExchange`, `_onModBExchangeReplyInput`,
-  `_flushModBExchangeReply`, `setModBExchangeCursor`, the `refModBExchange*`
-  listeners, the four dead locals in `revealModARightCol` (`modAAnswers`,
-  `hasPromptReply`, `hasModAVote`, `moduleASettled` — computed, never read), and
-  the five no-op `setPhaseStepperState("stage-1", …)` calls (`#stage-1` has no
-  `.phase-stepper`; either delete the calls or restore a stage-1 stepper, but do
-  not leave both). Needs a shell bump. `tests/mobile-bottom-tabbar.test.js` pins
-  `updateDiscussionTabLock` → update it alongside.
+- **Client half: DONE (M3a part 2, shell v105→v106).** Removed ~350 lines of
+  already-no-op code from `script.js`: `renderPrompts` + helpers, the two prompt
+  `.on` wiring blocks, `renderModBExchange` + helpers + the exchange nav wiring in
+  `initModBPhaseNav`, all four refs and their assign/`.on`/`.off`, the three
+  `_test_set*` hooks, and the four computed-never-read locals in
+  `revealModARightCol`. Also removed the collateral dead "auto-open Group answers
+  once the discussion is done" flow (it required `promptsWereDone`, permanently
+  false, so it never fired) — the Debate & answers tab reveals purely on the
+  hypothesis gate via `revealModARightCol()`. Three unguarded live call sites were
+  the real hazard (`renderCase`→`renderPrompts`, `initModBPhaseNav`→
+  `renderModBExchange`, and the `promptsWereDone` read in `renderDecisions`); all
+  three handled. script.js shrank ~4 KB gz. 984 unit + room-flow e2e (desktop + 3
+  mobile) green; the two `modA-vote-flow` tests pinning the removed routing were
+  dropped, and `investigations-anytime` / `modA-investigations-synthesis-split`
+  now assert the gate drives the reveal via `revealModARightCol()` (not the
+  removed `renderPrompts`).
+- **DELIBERATELY LEFT for a separate tidy-up:** the ~6 no-op
+  `setPhaseStepperState("stage-1", …)` calls in the LIVE `updateModANextStep()`.
+  They are out of scope for the dormant-subsystem removal — `updateModANextStep`
+  is live and not part of the prompt/exchange subsystem — and are provably inert
+  (`#stage-1` has no `.phase-stepper`), so leaving them changes nothing. Remove
+  them (or restore a stage-1 stepper) in a focused follow-up, not here.
 
 **M3b — thin adapter, NOT a merged engine.**
 - Generalise `applyModBPhaseVisibility` → `applyPhaseVisibility(stageId,

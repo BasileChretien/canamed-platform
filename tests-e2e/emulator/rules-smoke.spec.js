@@ -210,11 +210,11 @@ test("rules: FINDING-07 — admin hash is unreadable; login verifies by proof-wr
 
 test("rules: the dormant prompt/exchange nodes are now DENIED at the DB (M3a)", async ({ page }) => {
   /* Until 2026-07-24 these four nodes were participant-writable for state that
-     nothing rendered: their DOM had been deleted, so renderPrompts() and
-     renderModBExchange() early-return on their missing containers, and no export
-     ever read them. M3a removed the rules — with no rule and a `.write:false`
-     root, RTDB denies by default. This is the emulator-level proof that the
-     writable surface is really gone, not merely unused. */
+     nothing rendered: their DOM had been deleted, so the render code was a
+     guarded no-op (and later removed entirely in M3a part 2), and no export ever
+     read them. M3a removed the rules — with no rule and a `.write:false` root,
+     RTDB denies by default. This is the emulator-level proof that the writable
+     surface is really gone, not merely unused. */
   await page.goto("/");
   const uid = await waitForUid(page);
   const code = "gone-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);

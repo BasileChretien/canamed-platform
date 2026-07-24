@@ -115,33 +115,24 @@ test("hasOpenUncommittedModuleAVote() gates on module A, unlock state, and commi
   assert.match(fn, /committed/, "skips a vote the team already committed");
 });
 
-test("finishing the discussion routes to the open vote, else to Group answers", () => {
-  const fn = sliceFn("renderPrompts", "function renderContrib");
-  const doneBlock = fn.slice(fn.indexOf("promptsWereDone = true"));
-  assert.match(doneBlock, /hasOpenUncommittedModuleAVote\(\)\s*\)\s*\?\s*"decisions"\s*:\s*"answers"/,
-    "open vote → decisions, otherwise → answers");
-  assert.match(doneBlock, /switchRcolTab\(_target\)/, "switches to the computed target");
-});
-
-test("renderDecisions completes the flow to Group answers once the vote is settled", () => {
-  const fn = sliceFn("renderDecisions", "function buildLockedDecision");
-  assert.match(fn, /moduleASettled/, "tracks when no open Module A vote remains");
-  assert.match(fn, /promptsWereDone/, "only completes after the discussion is done");
-  assert.match(fn, /lastModuleAVotesAllCommitted/, "fires once on the settle transition");
-  assert.match(fn, /switchRcolTab\("answers"\)/, "opens Group answers when settled");
-});
+// The "finish the discussion → route to open vote / Group answers" flow and its
+// renderDecisions "complete the flow once settled" counterpart both lived in the
+// discussion-prompt subsystem (promptsWereDone), which was dormant since its DOM
+// was deleted and was fully excised in module-set M3a. The Debate & answers tab
+// now reveals purely on the hypothesis gate (revealModARightCol); the two tests
+// that pinned that removed routing were dropped with it.
 
 test("the hypotheses listener repaints the decisions panel (gate-refresh bug, 2026-06-16)", () => {
   // A hypotheses-gated vote (dec_plan, unlockWhen.hypotheses) must drop its
   // "Ready when: add a working hypothesis" lock the moment the team adds
   // a working hypothesis — the refHypotheses 'value' handler must therefore
-  // re-render the decisions panel, not only the prompts. Previously it called
-  // renderPrompts() but not renderDecisions(), so the management-plan vote
-  // stayed locked until the next presence/score event happened to repaint it.
+  // re-render the decisions panel. (It used to also call the now-removed
+  // renderPrompts(); the decisions repaint is the load-bearing part.)
   const start = SCRIPT.indexOf('refHypotheses.on("value"');
   assert.ok(start >= 0, "refHypotheses 'value' listener must exist");
   const handler = SCRIPT.slice(start, SCRIPT.indexOf("});", start) + 3);
-  assert.match(handler, /renderPrompts\(\)/, "still unlocks the discussion prompts on the gate");
   assert.match(handler, /renderDecisions\(\)/,
-    "must also repaint a hypotheses-gated decision so it unlocks live");
+    "must repaint a hypotheses-gated decision so it unlocks live");
+  assert.match(handler, /updateModANextStep\(\)/,
+    "and re-run the coach/reveal so the Debate & answers tab opens on the gate");
 });
