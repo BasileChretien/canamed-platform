@@ -48,9 +48,10 @@ test("phaseGateOpen() is the ≥1-hypothesis gate and drives the Debate", () => 
   const rv = SCRIPT.slice(SCRIPT.indexOf("function reveal("), SCRIPT.indexOf("function renderButtons("));
   assert.doesNotMatch(rv, /SYNTH_ID && !phaseGateOpen/,
     "reveal() no longer carries the synthesis gate guard");
-  // renderPrompts unlocks the Debate on it.
-  assert.match(SCRIPT, /const unlocked = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
-    "the discussion prompts unlock on phaseGateOpen()");
+  // The discussion-prompt subsystem was removed in module-set M3a (dormant DOM);
+  // revealModARightCol() now unlocks the Debate & answers tab on the gate.
+  assert.match(SCRIPT, /const gateOpen = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
+    "revealModARightCol() unlocks the Debate & answers tab on phaseGateOpen()");
 });
 
 test("the stage-4 take-home export carries the clinical-synthesis write-up", () => {

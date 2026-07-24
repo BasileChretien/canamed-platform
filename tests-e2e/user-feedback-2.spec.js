@@ -801,7 +801,7 @@ test.describe("Merged Debate & answers — structural contract", () => {
       expect(result.hasCulture, "Q2 (pain across cultures) input must exist").toBe(true);
     });
 
-  test("JS source: renderPrompts is a guarded no-op; ANSWER_BULLETS has the two questions",
+  test("JS source: the discussion-prompt subsystem is GONE (M3a); ANSWER_BULLETS has the two questions",
     async ({ page }) => {
       await page.goto("/");
       // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
@@ -812,9 +812,11 @@ test.describe("Merged Debate & answers — structural contract", () => {
         const r = await fetch("/script.js");
         return r.text();
       });
-      // renderPrompts early-returns when the removed prompts card is absent.
-      expect(src).toMatch(/function renderPrompts\(\)\s*\{[\s\S]*?if \(!el\("prompts-card"\)\) return;/);
-      // Module A's two merged answer bullets.
+      // renderPrompts was a guarded no-op after its DOM was deleted; module-set
+      // M3a removed it entirely (along with the promptCursor/promptReplies wiring).
+      expect(src).not.toMatch(/function renderPrompts\s*\(/);
+      expect(src).not.toMatch(/function _advancePromptCursor\s*\(/);
+      // Module A's two merged answer bullets still drive the merged panel.
       expect(src).toMatch(/moduleA:\s*\["diagnosis",\s*"culture"\]/);
     });
 

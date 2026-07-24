@@ -81,8 +81,11 @@ test("the on-screen synthesis button is gone; the Debate gates on ≥1 hypothesi
   // Gate threshold lowered to ≥1 hypothesis (user 2026-06-25).
   assert.match(SCRIPT, /function phaseGateOpen\(\)[\s\S]*?hypothesisCount\(\) >= 1/,
     "phaseGateOpen() must be hypothesisCount() >= 1");
-  assert.match(SCRIPT, /const unlocked = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
-    "the discussion prompts unlock on phaseGateOpen()");
+  // The discussion-prompt subsystem was removed (dormant since its DOM was
+  // deleted; fully excised in module-set M3a). phaseGateOpen() now drives the
+  // Debate & answers tab reveal via revealModARightCol().
+  assert.match(SCRIPT, /const gateOpen = \(typeof phaseGateOpen === "function"\) && phaseGateOpen\(\);/,
+    "the Debate & answers tab unlocks on phaseGateOpen() via revealModARightCol()");
 });
 
 test("the hypothesis-first investigations lock is gone (dead code removed)", () => {

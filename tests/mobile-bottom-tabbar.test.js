@@ -124,8 +124,8 @@ test("JS: the mirror is wired and synced from the canonical tabs", () => {
     "switchRcolTab must sync the mirror");
   assert.match(fnBody("setTabBadge"), /updateMobileTabbar\(\)/,
     "setTabBadge must sync the mirror (counts / ✓ / ●)");
-  assert.match(fnBody("updateDiscussionTabLock"), /updateMobileTabbar\(\)/,
-    "the discussion-lock toggle must sync the mirror");
+  // (updateDiscussionTabLock was part of the discussion-prompt subsystem removed
+  //  in module-set M3a; its mirror-sync went with it.)
   assert.match(fnBody("renderStage"), /updateMobileTabbar\(\)/,
     "renderStage must show/hide the bar with the on-screen stage");
 

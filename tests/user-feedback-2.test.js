@@ -131,16 +131,17 @@ test("Bug 2 (JS): renderButtons populates .req-inline-reveal directly after each
 
 test("Bug 3 (JS): canamed:langchange listener re-renders every dynamic-content panel", () => {
   // applyI18n() handles every node carrying data-i18n. Dynamic content
-  // built by renderFindings / renderDecisions / renderPrompts /
-  // renderObjectives etc. reads tc(value, lang) at build time and
-  // never re-renders. The fix is a single listener wired in
-  // wireLanguageSwitcher that calls each render helper after a switch.
+  // built by renderFindings / renderDecisions / renderObjectives etc.
+  // reads tc(value, lang) at build time and never re-renders. The fix is
+  // a single listener wired in wireLanguageSwitcher that calls each render
+  // helper after a switch. (renderPrompts / renderModBExchange were removed
+  // in module-set M3a with the dormant discussion-prompt / exchange subsystems.)
   assert.match(scriptJs,
     /document\.addEventListener\("canamed:langchange",\s*\(\)\s*=>\s*\{/,
     "a global canamed:langchange listener must be wired");
 
   const wanted = [
-    "buildButtons", "renderButtons", "renderFindings", "renderPrompts",
+    "buildButtons", "renderButtons", "renderFindings",
     "renderDecisions", "renderObjectives", "renderLeaderboard",
     "renderScore", "renderStage", "renderContrib"
   ];
