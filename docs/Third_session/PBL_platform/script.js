@@ -300,11 +300,18 @@ function loadSessionScenario(code) {
   }).then(() => Promise.all([
     db.ref(oPath(code, "scenarioId")).once("value"),
     db.ref(oPath(code, "scenarioCustomJson")).once("value"),
-    db.ref(oPath(code, "scenarioRef")).once("value")
+    db.ref(oPath(code, "scenarioRef")).once("value"),
+    db.ref(oPath(code, "modules")).once("value")
   ])).then(res => {
     const id = res[0] && res[0].val();
     const customJson = res[1] && res[1].val();
     const ref = res[2] && res[2].val();
+    // M2 — the facilitator's per-session narrowing, written write-once at create.
+    // Publish it BEFORE any applyScenario() below: applyScenario calls
+    // refreshModuleStages(), which must already see the narrowing or the first
+    // stageFlow() of the session would use the scenario's full set and briefly
+    // offer a stage this session does not run.
+    setSessionModules(res[3] && res[3].val());
     let custom = null;
     if (customJson) {
       try { custom = JSON.parse(customJson); } catch (e) {
@@ -545,7 +552,32 @@ function stageForModule(id) {
 /* The modules this session actually runs, in stage order. Today: both, except a
    branched scenario has no A/B modules at all (its content is the node graph,
    and stageFlow() already skips stage 2 for it). */
+/* The modules this SESSION runs = the scenario's set, narrowed by the
+   facilitator's per-session choice (M2). Decision 1 of the design doc: the
+   scenario declares what it CONTAINS, the facilitator narrows what to RUN. */
 function moduleSet() {
+  const scenarioSet = scenarioModuleSet();
+  const narrowed = (typeof window !== "undefined") && window.CANAMED_SESSION_MODULES;
+  if (!Array.isArray(narrowed) || !narrowed.length) return scenarioSet;
+  const kept = scenarioSet.filter(id => narrowed.indexOf(id) !== -1);
+  // A narrowing that would leave NOTHING (stale selection, or a scenario swapped
+  // under it) is ignored rather than producing an empty, unrunnable session.
+  return kept.length ? kept : scenarioSet;
+}
+/* M2 — record the facilitator's narrowing. Stored write-once at create as a CSV
+   string (e.g. "A"); absent/null means "no narrowing", i.e. run whatever the
+   scenario declares. Callers MUST invoke this before applyScenario() for a
+   session, since that calls refreshModuleStages(). */
+function setSessionModules(csv) {
+  if (typeof window === "undefined") return;
+  const list = (typeof csv === "string" && csv)
+    ? csv.split(",").map(s => s.trim()).filter(Boolean)
+    : null;
+  window.CANAMED_SESSION_MODULES = (list && list.length) ? list : null;
+  refreshModuleStages();
+}
+/* The modules the SCENARIO contains (M1). */
+function scenarioModuleSet() {
   if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") return [];
   // Precedence: an explicit scenario `modules: ["A"]` wins…
   const declared = (typeof window !== "undefined") && window.CURRENT_SCENARIO_MODULES;
@@ -13265,7 +13297,16 @@ function wireSplash() {
     }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    createSession(name, label, pass, scenarioId, customJson, scenarioRef).then(result => {
+    // M2 — per-session module narrowing. Pass null when every module is ticked so
+    // an unnarrowed session writes no `modules` field at all (identical to M1);
+    // only a strict subset is recorded. The runtime intersects the selection with
+    // the scenario's own set, so a module the scenario lacks is harmless.
+    const _modPick = MODULE_REGISTRY
+      .filter(m => { const cb = el("splash-create-mod-" + m.id); return !cb || cb.checked; })
+      .map(m => m.id);
+    const _modNarrow = (_modPick.length && _modPick.length < MODULE_REGISTRY.length)
+      ? _modPick : null;
+    createSession(name, label, pass, scenarioId, customJson, scenarioRef, _modNarrow).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -13779,7 +13820,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -13889,6 +13930,14 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       } else if (scenarioId) {
         writes.push(db.ref(oPath(code, "scenarioId")).set(scenarioId));
       }
+      // M2 — the facilitator's per-session module narrowing, write-once (the
+      // rule is `!data.exists()`, mirroring scenarioId). Stored as a CSV of
+      // module ids. Omitted entirely when they kept everything the scenario
+      // offers, so an unnarrowed session is byte-identical to M1.
+      const modCsv = Array.isArray(modules)
+        ? modules.map(m => String(m).trim()).filter(Boolean).join(",")
+        : "";
+      if (modCsv) writes.push(db.ref(oPath(code, "modules")).set(modCsv));
       return Promise.all(writes)
         .then(() => hashPassword(password, code))
         .then(h => {

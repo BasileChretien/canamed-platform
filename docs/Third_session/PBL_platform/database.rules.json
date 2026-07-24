@@ -138,6 +138,11 @@
           ".write": "auth != null && !data.exists()",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 60 && newData.val().matches(/^[a-z0-9_-]+$/))"
         },
+        "modules": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 64 && newData.val().matches(/^[A-Za-z0-9_-]{1,16}(,[A-Za-z0-9_-]{1,16})*$/))"
+        },
         "scenarioCustomJson": {
           ".read": "auth != null",
           ".write": "auth != null && !data.exists()",
@@ -660,6 +665,11 @@
               ".read": "auth != null",
               ".write": "auth != null && !data.exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 60 && newData.val().matches(/^[a-z0-9_-]+$/))"
+            },
+            "modules": {
+              ".read": "auth != null",
+              ".write": "auth != null && !data.exists()",
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 64 && newData.val().matches(/^[A-Za-z0-9_-]{1,16}(,[A-Za-z0-9_-]{1,16})*$/))"
             },
             "scenarioCustomJson": {
               ".read": "auth != null",

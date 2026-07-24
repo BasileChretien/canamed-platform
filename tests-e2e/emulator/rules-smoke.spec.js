@@ -918,3 +918,42 @@ test("rules: certIds/$id — random cert-id map is owner write-once + owner-read
   expect(closedWrite, "no cert ids can be minted after the session is closed").not.toBe("ALLOWED");
   expect(String(closedWrite)).toMatch(/permission_denied|denied/i);
 });
+
+test("rules: sessions/$id/modules — per-session module narrowing is write-once, readable, validated (M2)", async ({ page }) => {
+  // The facilitator's module selection is fixed at create (mirrors scenarioId).
+  // NB sessions/$sessionId has NO $other catch-all, so an undeclared key would be
+  // DENIED — this test is what proves the field is actually declared in BOTH trees.
+  await page.goto("/");
+  await waitForUid(page);
+  const rnd = () => Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const code = "mods-" + rnd();
+
+  // A valid CSV of module ids is accepted exactly once.
+  expect(await tryWrite(page, `sessions/${code}/modules`, "A")).toBe("ALLOWED");
+  const again = await tryWrite(page, `sessions/${code}/modules`, "B");
+  expect(again, "write-once: a session's shape must not shift under participants")
+    .not.toBe("ALLOWED");
+  expect(String(again)).toMatch(/permission_denied|denied/i);
+
+  // Participants must be able to READ it — it decides their stage flow.
+  const back = await tryRead(page, `sessions/${code}/modules`);
+  expect(back.ok).toBe(true);
+  expect(back.val).toBe("A");
+
+  // .validate rejects malformed selections.
+  const code2 = "mods2-" + rnd();
+  const bad = ["", "A,,B", "A,", ",A", "A B", "x".repeat(80), 7, ["A"], { A: true }];
+  for (const v of bad) {
+    const res = await tryWrite(page, `sessions/${code2}/modules`, v);
+    expect(res, "malformed modules value must be rejected: " + JSON.stringify(v))
+      .not.toBe("ALLOWED");
+  }
+  // …and a well-formed multi-module list IS accepted (the regex isn't over-tight).
+  expect(await tryWrite(page, `sessions/${code2}/modules`, "A,B")).toBe("ALLOWED");
+
+  // Org-tree parity — the org mirror must exist or org sessions fail closed.
+  const orgPath = `orgs/org${Math.floor(Math.random() * 1e6)}/sessions/s${Math.floor(Math.random() * 1e6)}/modules`;
+  expect(await tryWrite(page, orgPath, "B")).toBe("ALLOWED");
+  expect(await tryWrite(page, orgPath, "A"), "org tree must be write-once too")
+    .not.toBe("ALLOWED");
+});

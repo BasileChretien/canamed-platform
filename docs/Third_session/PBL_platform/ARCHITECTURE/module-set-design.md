@@ -108,12 +108,28 @@ real validation for rules changes; per-viewport Playwright for any UI change.
   unvisited stage-2 template cards — the stage-2 DOM still exists, it is merely
   never shown).
 
-### M2 — Facilitator narrows at session-create
-- Write-once `sessions/$sessionId/modules` + a rules declaration in **both**
-  trees, modelled on `scenarioId` (`database.rules.json:136-140` / `659`).
-  Needs emulator coverage. NB `sessions/$sessionId` has **no `$other`
-  catch-all**, so an undeclared child is denied — the field must be declared.
-- Create-form UI: pick a subset of the scenario's modules.
+### M2 — Facilitator narrows at session-create ← DONE
+- Write-once `sessions/$sessionId/modules` declared in **both** trees, modelled
+  on `scenarioId`. Stored as a **CSV string** (`"A"`, `"A,B"`) — the id regex is
+  generic (`[A-Za-z0-9_-]{1,16}` segments, bounded to 64 chars), so a future
+  module C needs **no rules change**. Chosen write-once (`!data.exists()`) so a
+  session's shape cannot shift under participants mid-flight; to change it, make
+  another session.
+- `moduleSet()` is now `intersection(scenarioModuleSet(), sessionNarrowing)`.
+  An intersection that would be EMPTY (stale selection, or a scenario swapped
+  under it) is **ignored** rather than producing an unrunnable session.
+- `loadSessionScenario()` reads `modules` alongside the scenario fields and calls
+  `setSessionModules()` **before** any `applyScenario()` — that calls
+  `refreshModuleStages()`, so publishing the narrowing later would let the
+  session's first `stageFlow()` briefly offer a stage it does not run.
+- `createSession(..., modules)` writes the CSV, and only when the pick is a
+  **strict subset** — an unnarrowed session writes no `modules` field at all and
+  is byte-identical to M1.
+- Create-form picker reuses the existing `.splash-role-toggle` / `.splash-role-opt`
+  classes (**no CSS change**) and plain English (the UI is English-canonical, so
+  no i18n key + `LOCALE_VERSION` churn). Both boxes ticked by default. It needs
+  no per-scenario lookup: the selection is intersected with the scenario's own
+  set, so unticking a module the scenario lacks is harmless.
 
 ### M3 — Unify the intra-module progress engine
 - One parameterised per-module phase model replacing blocker 2. Prerequisite for

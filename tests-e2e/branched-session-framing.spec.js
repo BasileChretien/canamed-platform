@@ -206,6 +206,78 @@ test.describe("branched session framing", () => {
     expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 3]);
   });
 
+  /* Phase M2 — the facilitator narrows the scenario's set for one session. */
+  test("M2: a session narrowing runs a SUBSET of the scenario's modules", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const got = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      // A built-in that contains BOTH modules.
+      window.applyScenario("chronic-pain-opioids");
+      const full = { mods: window.moduleSet(), flow: window.stageFlow() };
+      // The facilitator chose to run Module A only for this session.
+      window.setSessionModules("A");
+      const narrowed = {
+        mods: window.moduleSet(),
+        scenario: window.scenarioModuleSet(),
+        stages: window.CANAMED_MODULE_STAGES,
+        flow: window.stageFlow(),
+        fwdFromCase: window.adjacentStage(1, 1),
+      };
+      // Clearing the narrowing restores the scenario's own set.
+      window.setSessionModules(null);
+      const restored = { mods: window.moduleSet(), flow: window.stageFlow() };
+      return { full, narrowed, restored };
+    });
+
+    expect(got.full.mods).toEqual(["A", "B"]);
+    expect(got.full.flow).toEqual([0, 1, 2, 3]);
+    // Narrowed: the session runs A, though the SCENARIO still contains both.
+    expect(got.narrowed.mods).toEqual(["A"]);
+    expect(got.narrowed.scenario).toEqual(["A", "B"]);
+    expect(got.narrowed.stages).toEqual([1]);
+    expect(got.narrowed.flow).toEqual([0, 1, 3]);
+    expect(got.narrowed.fwdFromCase).toBe(3);
+    expect(got.restored.flow).toEqual([0, 1, 2, 3]);
+  });
+
+  test("M2: an impossible narrowing cannot produce an empty session", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const got = await page.evaluate(async (scn) => {
+      await window.CanamedLoader.ensureCaseContent();
+      window.applyScenario(scn.id, scn);        // A-only scenario…
+      window.setSessionModules("B");            // …with a stale "B" selection
+      return { mods: window.moduleSet(), flow: window.stageFlow() };
+    }, oneModuleScenario("A"));
+    // The empty intersection is ignored rather than collapsing the session.
+    expect(got.mods).toEqual(["A"]);
+    expect(got.flow).toEqual([0, 1, 3]);
+  });
+
+  test("M2: the create form offers the module picker, both ticked by default", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const cb = await page.evaluate(() => {
+      const a = document.getElementById("splash-create-mod-A");
+      const b = document.getElementById("splash-create-mod-B");
+      return {
+        present: !!a && !!b,
+        aChecked: !!(a && a.checked),
+        bChecked: !!(b && b.checked),
+        type: a && a.type,
+      };
+    });
+    expect(cb.present, "the create form must expose a per-module picker").toBe(true);
+    expect(cb.type).toBe("checkbox");
+    // Default = run everything the scenario contains (identical to M1).
+    expect(cb.aChecked).toBe(true);
+    expect(cb.bChecked).toBe(true);
+  });
+
   test("standard: stage nav still walks all four stages (M0 regression guard)", async ({
     page,
   }) => {

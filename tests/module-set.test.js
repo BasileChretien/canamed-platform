@@ -39,7 +39,8 @@ function loadResolver(win) {
   const src = SCRIPT.slice(start, end);
   const factory = new Function("window", src +
     "\nreturn { MODULE_REGISTRY, moduleAtStage, stageForModule, moduleSet, moduleNameTrio," +
-    "\n         moduleHasContent, moduleNameEn, moduleHasScoring, refreshModuleStages };");
+    "\n         moduleHasContent, moduleNameEn, moduleHasScoring, refreshModuleStages," +
+    "\n         setSessionModules, scenarioModuleSet };");
   return factory(win);
 }
 
@@ -260,6 +261,98 @@ test("M0: every stage-nav site steps through the ACTIVE flow, not raw arithmetic
   absent(/setRoomStage\([^)]*,\s*st\s*[-+]\s*1\s*\)/, "a stepper still writes st±1 directly");
   absent(/setRoomStage\(myRoom, roomStage, roomStage\s*[-+]\s*1\)/,
     "room-view nav still writes roomStage±1 directly");
+});
+
+/* ── M2: the facilitator narrows the scenario's set per session ───────────── */
+
+test("M2: a session's narrowing intersects the scenario's set", () => {
+  const win = {
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A"),
+    CURRENT_SCENARIO_MODULE_B_NAME: TRIO("B")
+  };
+  const r = loadResolver(win);
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "no narrowing → the scenario's set");
+  r.setSessionModules("A");
+  assert.deepStrictEqual(r.moduleSet(), ["A"]);
+  assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [1], "the stage list refreshes with it");
+  r.setSessionModules("B");
+  assert.deepStrictEqual(r.moduleSet(), ["B"]);
+  assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [2]);
+  r.setSessionModules("B,A");
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "stage order, not declaration order");
+  r.setSessionModules(null);
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "clearing it restores the scenario's set");
+});
+
+test("M2: a narrowing that would empty the session is ignored", () => {
+  // e.g. an A-only scenario carrying a stale "B" selection.
+  const r = loadResolver({ CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A only") });
+  r.setSessionModules("B");
+  assert.deepStrictEqual(r.moduleSet(), ["A"],
+    "an empty intersection falls back to the scenario's set, never a dead session");
+});
+
+test("M2: setSessionModules tolerates whitespace, empties and unknown ids", () => {
+  const r = loadResolver({
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A"),
+    CURRENT_SCENARIO_MODULE_B_NAME: TRIO("B")
+  });
+  r.setSessionModules("  A , B ");
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "whitespace is trimmed");
+  r.setSessionModules("");
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "empty string = no narrowing");
+  r.setSessionModules("Z");
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "an unknown id intersects to nothing → ignored");
+});
+
+test("M2: the scenario set is still reachable independently of the narrowing", () => {
+  const r = loadResolver({
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A"),
+    CURRENT_SCENARIO_MODULE_B_NAME: TRIO("B")
+  });
+  r.setSessionModules("A");
+  assert.deepStrictEqual(r.scenarioModuleSet(), ["A", "B"],
+    "scenarioModuleSet() reports what the scenario CONTAINS");
+  assert.deepStrictEqual(r.moduleSet(), ["A"],
+    "moduleSet() reports what this session RUNS");
+});
+
+test("M2: createSession records the narrowing write-once, and only a subset", () => {
+  assert.match(SCRIPT, /oPath\(code, "modules"\)\)\.set\(modCsv\)/,
+    "createSession must write the CSV to the session's modules field");
+  assert.match(SCRIPT, /if \(modCsv\) writes\.push/,
+    "an unnarrowed session must write NO modules field at all");
+  assert.match(SCRIPT, /_modPick\.length < MODULE_REGISTRY\.length/,
+    "the create form must pass null unless the pick is a strict subset");
+});
+
+test("M2: loadSessionScenario publishes the narrowing BEFORE applyScenario", () => {
+  // applyScenario() calls refreshModuleStages(); if the narrowing were published
+  // after it, the session's first stageFlow() would use the scenario's full set
+  // and briefly offer a stage this session does not run.
+  const read = SCRIPT.indexOf('oPath(code, "modules")).once("value")');
+  const set = SCRIPT.indexOf("setSessionModules(res[3]", read);
+  const apply = SCRIPT.indexOf("applyScenario(null, custom)", set);
+  assert.ok(read !== -1, "loadSessionScenario must read the session's modules");
+  assert.ok(set !== -1, "…and publish it via setSessionModules");
+  assert.ok(apply !== -1 && set < apply, "…before applyScenario()");
+});
+
+test("M2: `modules` is declared write-once in BOTH rule trees", () => {
+  const rules = JSON.parse(
+    fs.readFileSync(path.join(P, "database.rules.json"), "utf8")).rules;
+  const s = rules.sessions.$sessionId.modules;
+  const o = rules.orgs.$orgSlug.sessions.$sessionId.modules;
+  [["sessions", s], ["orgs", o]].forEach(([label, node]) => {
+    // sessions/$sessionId has NO $other catch-all, so an undeclared child is
+    // denied — the field must be declared in both trees or M2 silently fails.
+    assert.ok(node, label + " tree must declare `modules`");
+    assert.equal(node[".write"], "auth != null && !data.exists()",
+      label + ": must be write-once, mirroring scenarioId");
+    assert.match(node[".validate"], /A-Za-z0-9_-/,
+      label + ": ids validated generically (no A|B whitelist, so module C needs no rules change)");
+  });
+  assert.equal(s[".validate"], o[".validate"], "both trees must validate identically");
 });
 
 /* ── M1: the author can produce a single-module scenario ──────────────────── */
