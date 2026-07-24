@@ -4536,8 +4536,11 @@ function enterAdminApp() {
       // Preview the stage the room will ACTUALLY land on: a branched flow skips
       // stage 2, so cur+1 could name a stage that is never shown.
       const nxt = adjacentStage(cur, 1);
-      return r + ": " + STAGE_LABELS[cur] +
-        (nxt !== cur ? "  →  " + STAGE_LABELS[nxt] : "  (already last)");
+      // stageLabel(), not STAGE_LABELS[]: the preview must name the ACTIVE
+      // scenario's modules, or a respiratory-stewardship session still reads
+      // "Module A - Chronic Pain" in the confirm dialog.
+      return r + ": " + stageLabel(cur) +
+        (nxt !== cur ? "  →  " + stageLabel(nxt) : "  (already last)");
     }).join("\n");
     canamedConfirm({
       title: (window.t ? window.t("modal.advance-all.title") : "Advance all rooms?"),
