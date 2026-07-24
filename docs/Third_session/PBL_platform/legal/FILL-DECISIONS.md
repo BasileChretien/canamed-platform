@@ -50,6 +50,31 @@ Fill as **"data-protection contact"**, NOT as "DPO".
   "an independent DPO will review this", that claim must be **deleted**, because
   no such review will happen.
 
+## 2b. Controller address — DECIDED
+
+Use the **Nagoya University** institutional address, on the basis that this is
+doctoral work carried out at Nagoya University:
+
+> Department of International Medical Education
+> Nagoya University Graduate School of Medicine
+> [65 Tsurumai-cho, Showa-ku, Nagoya, Aichi 466-8550, Japan — **VERIFY the exact
+> postal form with the department before publication**; it is printed in a legal
+> notice and must be exact.]
+
+⚠️ **This reinforces the §1 caveat rather than resolving it.** Publishing the
+university's address while declaring a *sole individual* controller signals
+institutional backing; a supervisory authority reading the notice would more
+readily conclude that **Nagoya University is a controller or joint controller**
+in fact. The combination (individual controller + institutional address +
+institutional email + doctoral framing) is the strongest available evidence
+*against* the sole-individual position recorded in §1.
+
+**Action for the operator:** tell the supervisor / department that this platform
+and this notice exist and use the department's address. This is not a formality
+— if Nagoya is a controller in fact, it carries obligations the university
+cannot discharge without knowing. It also unlocks the two items still blocked
+below (an ethics reference, and the university's real privacy contact).
+
 ## 3. Independent contact — DECIDED
 
 **Branko (Aleksic) — `branko@med.nagoya-u.ac.jp`** (11 slots)
@@ -58,10 +83,14 @@ Fill as **"data-protection contact"**, NOT as "DPO".
   grading them. With the operator as controller, teacher *and* privacy contact,
   this is **the only independent safeguard in the entire pack** — its importance
   goes up, not down.
-- ⚠️ **BLOCKING until confirmed:** Branko must have **agreed** to be published as
-  a student-complaints contact before this notice reaches any participant.
-  Publishing a colleague's address in a participant-facing document commits them
-  to a role. Do not ship without his yes.
+- ⚠️ **BLOCKING until confirmed — operator agreed 2026-07-24 that this must be
+  obtained first.** Branko must **agree** to be published as a student-complaints
+  contact before this notice reaches any participant. Publishing a colleague's
+  address in a participant-facing document commits them to a role. Do not ship
+  without his yes.
+- Until he confirms, leave the slot as `[INDEPENDENT CONTACT — PENDING B.
+  ALEKSIC'S CONFIRMATION]` rather than filling it. A notice that ships with an
+  unconfirmed complaints address is worse than one that visibly lacks it.
 
 ## 4. Third-country transfer (Hugging Face) — DECIDED
 
