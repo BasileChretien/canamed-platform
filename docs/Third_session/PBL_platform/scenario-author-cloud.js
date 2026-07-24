@@ -279,9 +279,19 @@
             meta: v.meta || {}
           });
         }); return out;
-      }).catch(function () { return []; })
+      }).catch(function () { return []; }),
+      // Takedowns live at moderation/removed/<shareId>, OUTSIDE sharedScenarios
+      // (so an owner re-publishing can't clear one). script.js
+      // listSharedScenarios() already filters these for the session-create
+      // picker; this list MUST too, or a moderator-removed scenario stays
+      // listed — and clonable — from the author. Degrades to "nothing removed".
+      db.ref("moderation/removed").once("value")
+        .then(function (s) { return s.val() || {}; })
+        .catch(function () { return {}; })
     ]).then(function (res) {
-      renderCloudPicker(res[0], res[1]);
+      var removed = res[2] || {};
+      var shared = (res[1] || []).filter(function (s) { return removed[s.shareId] !== true; });
+      renderCloudPicker(res[0], shared);
     });
   }
 
@@ -295,6 +305,15 @@
     });
     var inner = el("div", { class: "load-modal-inner" });
     inner.appendChild(el("h3", { text: "Load scenario from your account" }));
+    inner.appendChild(el("p", {
+      class: "field-hint",
+      text: "Load edits a scenario in place (saving overwrites it). Clone copies it " +
+            "into the form under a new id, leaving the original untouched."
+    }));
+    // Ids already used by this account, so a repeated Clone doesn't land on an
+    // id that would overwrite one of the user's other scenarios on save.
+    var mineIds = {};
+    (mine || []).forEach(function (s) { if (s && s.id) mineIds[s.id] = true; });
     function pickerSection(title, items, getValue) {
       inner.appendChild(el("h4", { text: title + " (" + items.length + ")" }));
       if (!items.length) {
@@ -311,6 +330,15 @@
           loadByPath(getValue(s)).then(function () { modal.remove(); });
         });
         li.appendChild(btn);
+        var clone = el("button", {
+          type: "button", class: "secondary-btn",
+          title: "Copy into the form under a new id (the original is untouched)",
+          text: "Clone"
+        });
+        clone.addEventListener("click", function () {
+          loadByPath(getValue(s), true, mineIds).then(function () { modal.remove(); });
+        });
+        li.appendChild(clone);
         if (s.kind === "private") {
           var del = el("button", {
             type: "button", class: "secondary-btn",
@@ -351,8 +379,12 @@
     document.body.appendChild(modal);
   }
 
-  function loadByPath(path) {
-    setStatus("", "Loading…");
+  /* asClone=true re-ids the payload before it reaches the form, so saving it
+     creates a NEW scenario instead of overwriting the one it came from
+     (saveScenarioToCloud writes scenarios/<uid>/<body.id>). Plain load keeps
+     the id on purpose — that is the edit-in-place path. */
+  function loadByPath(path, asClone, takenIds) {
+    setStatus("", asClone ? "Cloning…" : "Loading…");
     return db.ref(path).once("value").then(function (snap) {
       var json = snap && snap.val();
       if (!json) {
@@ -361,9 +393,17 @@
       }
       try {
         var parsed = JSON.parse(json);
+        var fromId = parsed.id || "(no id)";
+        if (asClone && window.__scenarioAuthor &&
+            typeof window.__scenarioAuthor.cloneJson === "function") {
+          parsed = window.__scenarioAuthor.cloneJson(parsed, { taken: takenIds || {} });
+        }
         var state = window.__scenarioAuthor.fromJson(parsed);
         window.__scenarioAuthor.setState(state);
-        setStatus("success", "Loaded scenario '" + (parsed.id || "(no id)") + "' into the form.");
+        setStatus("success", asClone
+          ? "Cloned '" + fromId + "' into the form as '" + (parsed.id || "(no id)") +
+            "'. The original is untouched — save to keep the copy."
+          : "Loaded scenario '" + fromId + "' into the form.");
       } catch (e) {
         setStatus("error", "Loaded payload is not valid JSON: " + (e.message || ""));
       }
