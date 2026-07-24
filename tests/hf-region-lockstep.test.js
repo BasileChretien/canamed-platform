@@ -54,8 +54,16 @@ test("the client actually USES the region when resolving the callable", () => {
     "the callable must be resolved through the declared region");
 });
 
-test("hfPatient stays in the EEA", () => {
+/* Explicit allowlist, NOT a /^europe-/ prefix match: some europe-* Google
+   Cloud regions are outside the EEA (e.g. europe-west6 = Zurich, Switzerland),
+   so a prefix test would wave through an unassessed, non-EEA region. Adding a
+   region here is a deliberate data-residency decision — assess it against
+   Japan's APPI Art. 28 equivalent-protection list (EEA + UK) first. */
+const APPROVED_EEA_REGIONS = ["europe-west1"];
+
+test("hfPatient stays in an approved EEA region", () => {
   const region = hfPatientRegion(FUNCS);
-  assert.ok(/^europe-/.test(region),
-    "participants' free text must not transit a non-EEA region: got " + region);
+  assert.ok(APPROVED_EEA_REGIONS.includes(region),
+    "participants' free text must stay in an approved EEA region " +
+    JSON.stringify(APPROVED_EEA_REGIONS) + "; got " + region);
 });

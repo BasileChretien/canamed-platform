@@ -481,9 +481,15 @@
         // everywhere else (RTDB, Storage, sendQueuedMail), and routing the chat
         // through a US region added a transfer to a country that is NOT on
         // Japan's APPI Art. 28 equivalent-protection list, for no benefit.
-        var raw = (typeof fb.app === "function")
-          ? fb.app().functions(HF_FUNCTIONS_REGION).httpsCallable("hfPatient")
-          : fb.functions().httpsCallable("hfPatient");
+        // `fb.app` is standard in the v8 namespaced SDK. If it is somehow
+        // absent we FAIL CLOSED — throw (caught below → stub patient) rather
+        // than fall back to `fb.functions()`, which resolves to us-central1
+        // and would silently route participants' chat text to a non-EEA
+        // region (the exact data-residency leak this move closes).
+        if (typeof fb.app !== "function") {
+          throw new Error("firebase app() unavailable — cannot target " + HF_FUNCTIONS_REGION);
+        }
+        var raw = fb.app().functions(HF_FUNCTIONS_REGION).httpsCallable("hfPatient");
         // Wrap the callable so every request carries the verified room
         // context. The server (functions/index.js _verifyMembership) checks
         // rooms/<id>/uidMembers/<uid>; without these fields the call is
