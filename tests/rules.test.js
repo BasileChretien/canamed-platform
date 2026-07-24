@@ -627,6 +627,14 @@ test("rules: per-room /moduleB/phase is an auth-guarded number 0..5 (synced phas
   assert.match(node[".write"], /closed/);
   assert.match(node[".validate"], /isNumber/, "phase must validate as a number");
   assert.match(node[".validate"], /<= 5/, "phase must be capped at 5 (six phases, 0..5)");
+  // M3a: phase was the ONE room-scoped write with no membership gate, so anyone
+  // who knew the session code could jump ANOTHER room's roleplay to a different
+  // beat. Safe for facilitators: openRoomAsAdmin → enterRoom → startRoom claims
+  // uidMembers on entry, so an admin viewing a room is a member of it.
+  assert.match(node[".write"], /uidMembers/,
+    "moduleB/phase must be room-membership gated like every other room-scoped write");
+  assert.match(ORG_ROOM.moduleB.phase[".write"], /uidMembers/,
+    "…in the org tree too");
 });
 
 test("rules: the dormant prompt/exchange cursor nodes are GONE from both trees (M3a)", () => {

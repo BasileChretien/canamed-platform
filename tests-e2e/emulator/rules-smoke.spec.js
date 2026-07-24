@@ -274,12 +274,15 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
 
 test("rules: /moduleB/phase accepts the six synced phases (0..5) and rejects 6", async ({ page }) => {
   await page.goto("/");
-  await waitForUid(page);
+  const uid = await waitForUid(page);
   const code = "mbphase-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const path = `sessions/${code}/rooms/Room 1/moduleB/phase`;
-  // Any authed participant can advance the synced phase (no membership gate, like
-  // the exchange cursor). Phase 5 (the sixth phase) became valid with the
-  // 2026-06-26 swap → replay → reflect extension; 6 is out of range.
+  // M3a added the uidMembers gate to phase (it was the one room-scoped write
+  // without it), so claim membership first — exactly as enterRoom/startRoom does
+  // for participants AND for a facilitator opening the room as admin.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  // A ROOM MEMBER can advance the synced phase. Phase 5 (the sixth phase) became
+  // valid with the 2026-06-26 swap → replay → reflect extension; 6 is out of range.
   expect(await tryWrite(page, path, 0)).toBe("ALLOWED");
   expect(await tryWrite(page, path, 5)).toBe("ALLOWED");
   expect(await tryWrite(page, path, 6)).not.toBe("ALLOWED");
@@ -301,6 +304,7 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
   expect(await ok("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() })).toBe("ALLOWED");
+  expect(await ok("moduleB/phase", 3), "a room member still drives their OWN roleplay phase").toBe("ALLOWED");
   expect(await ok("score/auto/e1", { points: 3, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("score/penalties/e1", { points: 1, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("votes/v1/committed", { choice: 2, at: Date.now() })).toBe("ALLOWED");
@@ -311,9 +315,11 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   const denied = [
     await x("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() }),
     await x("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() }),
-    // NB moduleB/phase is deliberately NOT here: its rule is `auth != null`
-    // with no uidMembers gate (the shared roleplay timetable), so a cross-room
-    // write to it IS allowed. Listing it would assert the opposite of the design.
+    // moduleB/phase gained the uidMembers gate in M3a: it was the ONE room-scoped
+    // write without it, so anyone who knew the session code could jump another
+    // room's roleplay to a different beat. Safe for facilitators because
+    // openRoomAsAdmin → enterRoom → startRoom claims uidMembers on entry.
+    await x("moduleB/phase", 2),
     await x("score/auto/e1", { points: 999, at: Date.now() }),
     await x("score/penalties/e1", { points: 999, at: Date.now() }),
     await x("votes/v1/committed", { choice: 2, at: Date.now() })
