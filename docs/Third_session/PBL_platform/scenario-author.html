@@ -249,6 +249,13 @@
       <button type="button" id="btn-copy" class="primary-btn">Copy JSON snippet</button>
       <button type="button" id="btn-download" class="primary-btn">Download .json</button>
       <button type="button" id="btn-load" class="secondary-btn">Load JSON&hellip;</button>
+      <!-- Phase 5b start-from shortcuts. "Start from skeleton" loads a small
+           worked example that already validates; "Clone a built-in" copies a
+           shipped scenario under a NEW id (the original is never modified).
+           case-content.js is fetched lazily on first use, so the author page
+           stays light for everyone who doesn't clone. -->
+      <button type="button" id="btn-skeleton" class="secondary-btn">Start from skeleton</button>
+      <button type="button" id="btn-clone-builtin" class="secondary-btn">Clone a built-in&hellip;</button>
       <button type="button" id="btn-reset" class="secondary-btn">Reset form</button>
     </div>
     <div id="validation-output" class="validation-output" aria-live="polite"></div>

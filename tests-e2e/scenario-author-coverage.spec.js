@@ -153,3 +153,68 @@ test.describe("Scenario author — Phase 3 chat-scoring authoring", () => {
     expect(errors, "author page must edit characters without JS errors").toEqual([]);
   });
 });
+
+/* Phase 5b — "start from" shortcuts. Both buttons guard with a NATIVE
+   window.confirm (the pattern this standalone page already uses for "Reset
+   form" / delete). Playwright auto-DISMISSES dialogs, so every test here must
+   accept them or the click is a silent no-op. */
+test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
+  test("Start from skeleton loads a worked example that validates clean", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await expect(page.locator("#btn-skeleton")).toBeVisible();
+    await page.locator("#btn-skeleton").click();
+
+    // The form is populated from the skeleton.
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"new-scenario"'))
+      .toBe(true);
+    const json = JSON.parse(await preview.inputValue());
+    expect(json.id).toBe("new-scenario");
+    expect(json.name.en).toBeTruthy();
+    expect(json.case.labs[0].key).toBe(true);
+    expect(json.decisions[0].options.some((o) => o.correct)).toBe(true);
+
+    // …and it VALIDATES — the whole point of a starter template is that the
+    // facilitator doesn't land on a form that immediately reports errors.
+    await page.locator("#btn-validate").click();
+    const out = page.locator("#validation-output");
+    await expect(out).toHaveClass(/success/);
+    await expect(out).toContainText("Validation passed");
+
+    expect(errors, "skeleton must load without JS errors").toEqual([]);
+  });
+
+  test("Clone a built-in copies a shipped scenario under a NEW id", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-clone-builtin").click();
+
+    // case-content.js (the built-ins) is fetched lazily on first use, so the
+    // picker only appears once that script has loaded — allow for the download.
+    const picker = page.locator("#builtin-picker");
+    await expect(picker).toBeVisible({ timeout: 30_000 });
+    const first = picker.locator(".scenario-cloud-list button").first();
+    await expect(first).toBeVisible();
+    await first.click();
+
+    // The clone carries a -copy id, so a later save cannot overwrite the
+    // built-in it came from, and the picker closes.
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => /-copy"/.test(await preview.inputValue()))
+      .toBe(true);
+    const json = JSON.parse(await preview.inputValue());
+    expect(json.id).toMatch(/-copy$/);
+    await expect(picker).toHaveCount(0);
+
+    expect(errors, "cloning a built-in must not throw").toEqual([]);
+  });
+});

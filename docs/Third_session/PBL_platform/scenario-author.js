@@ -1527,6 +1527,191 @@
       JSON.stringify(json, null, 2) + ';\n';
   }
 
+  /* ------------------------------------------------------------------ */
+  /* Start-from: skeleton template + clone an existing scenario         */
+  /* ------------------------------------------------------------------ */
+
+  /* A minimal but COMPLETE scenario that passes validate() out of the box.
+     "Reset form" already gives an empty shell; this is the opposite — a small
+     worked example, so a facilitator sees what belongs in each field and edits
+     in place instead of guessing. The coverage test asserts it validates
+     clean, so keep every validate() requirement satisfied when editing it:
+     kebab-case id, EN name/summary/moduleAName/moduleBName, >=1
+     history/exam/labs/prompt each with EN q+a, EXACTLY ONE key lab row that
+     synthId points at, scoring rows with an EN label + `any` stems, penalties
+     with a resolving item + EN title/why, and a decision with >=2 options one
+     of which is correct. */
+  function skeletonJson() {
+    return {
+      id: "new-scenario",
+      name: trio("New scenario"),
+      summary: trio("One or two lines describing the case and what the team must decide."),
+      moduleAName: trio("Module A — Clinical reasoning"),
+      moduleBName: trio("Module B — Breaking bad news"),
+      case: {
+        history: [
+          { q: trio("What brings the patient in today?"),
+            a: trio("Replace with the presenting complaint.") }
+        ],
+        exam: [
+          { q: trio("What are the vital signs?"),
+            a: trio("Replace with the examination finding.") }
+        ],
+        labs: [
+          { q: trio("Which first-line test do you order?"), key: true,
+            a: trio("Replace with the result that clinches the diagnosis.") }
+        ],
+        prompts: [
+          trio("What is your leading hypothesis, and what would change your mind?")
+        ]
+      },
+      synthId: "labs:0",
+      synthPrereqs: [],
+      scoring: {
+        moduleA: [
+          { id: "a-history", points: 2, label: trio("Took a focused history"),
+            any: ["history", "onset"] }
+        ],
+        moduleB: [
+          { id: "b-empathy", points: 2, label: trio("Acknowledged the patient's emotion"),
+            any: ["sorry", "difficult"] }
+        ]
+      },
+      penalties: [
+        { id: "p-premature", item: "labs:0", points: -2,
+          title: trio("Ordered the key test before taking a history"),
+          why: trio("Explain briefly why this ordering is harmful or wasteful.") }
+      ],
+      decisions: [
+        { id: "d-plan", module: "A", points: 3, penalty: 0,
+          prompt: trio("What is your immediate management plan?"),
+          options: [
+            { text: trio("The appropriate first step."),
+              why: trio("Explain why this is the right call."), correct: true },
+            { text: trio("A plausible but wrong step."),
+              why: trio("Explain why this is wrong.") }
+          ] }
+      ]
+    };
+  }
+
+  /* Clone = start a NEW scenario FROM an existing one, so the id MUST change:
+     "Save to my scenarios" writes scenarios/<uid>/<id>, so cloning your own
+     scenario and saving it under the same id would silently OVERWRITE the
+     original. (Plain "Load" deliberately KEEPS the id — that is edit-in-place.)
+     `opts.taken` is a map of ids already in use, so repeated clones don't
+     collide. Kept pure + exported so scenario-author-cloud.js reuses it. */
+  function cloneJson(src, opts) {
+    var out = JSON.parse(JSON.stringify(src || {}));
+    var taken = (opts && opts.taken) || {};
+    var base = String(out.id || "scenario").replace(/-copy(-\d+)?$/, "");
+    var id = base + "-copy";
+    var n = 2;
+    while (taken[id]) { id = base + "-copy-" + n; n += 1; }
+    out.id = id.slice(0, 60);
+    // Mark the name so the copy is distinguishable in a picker. The field is a
+    // trio for authored scenarios but a bare string in some built-ins.
+    if (out.name && typeof out.name === "object") {
+      if (out.name.en) out.name.en = (out.name.en + " (copy)").slice(0, 200);
+    } else if (typeof out.name === "string" && out.name) {
+      out.name = (out.name + " (copy)").slice(0, 200);
+    }
+    return out;
+  }
+
+  /* window.CANAMED_SCENARIOS (the built-ins) lives in case-content.js, which
+     scenario-author.html deliberately does NOT load — the author page stays
+     light. Fetch it on FIRST use only, so a facilitator who never clones a
+     built-in never pays the download. Memoised, including the failure so a
+     dead network doesn't spawn a script tag per click. */
+  var _builtinsP = null;
+  function loadBuiltins() {
+    if (_builtinsP) return _builtinsP;
+    if (window.CANAMED_SCENARIOS) {
+      _builtinsP = Promise.resolve(window.CANAMED_SCENARIOS);
+      return _builtinsP;
+    }
+    _builtinsP = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = "case-content.js";
+      s.onload = function () {
+        if (window.CANAMED_SCENARIOS) resolve(window.CANAMED_SCENARIOS);
+        else reject(new Error("case-content.js loaded but defined no built-in scenarios."));
+      };
+      s.onerror = function () {
+        reject(new Error("Could not load case-content.js (built-in scenarios)."));
+      };
+      document.head.appendChild(s);
+    });
+    return _builtinsP;
+  }
+
+  function applyScenarioJson(json, msg) {
+    STATE = scenarioJsonToState(json);
+    renderAll();
+    var out = document.getElementById("validation-output");
+    out.className = "validation-output success";
+    out.textContent = msg;
+  }
+
+  /* Modal listing the built-ins; clicking one CLONES it (new id) into the form.
+     Reuses the .load-modal styling of the static paste modal. */
+  function openBuiltinPicker() {
+    var out = document.getElementById("validation-output");
+    out.className = "validation-output";
+    out.textContent = "Loading built-in scenarios…";
+    loadBuiltins().then(function (map) {
+      var existing = document.getElementById("builtin-picker");
+      if (existing) existing.remove();
+      var modal = el("div", { id: "builtin-picker", class: "load-modal", role: "dialog" });
+      var inner = el("div", { class: "load-modal-inner" });
+      inner.appendChild(el("h3", { text: "Clone a built-in scenario" }));
+      inner.appendChild(el("p", {
+        class: "field-hint",
+        text: "The chosen scenario is copied into the form under a NEW id, so the " +
+              "original is never modified. Edit it, then save it as your own."
+      }));
+      var ids = Object.keys(map || {});
+      if (!ids.length) {
+        inner.appendChild(el("p", { class: "field-hint", text: "No built-in scenarios found." }));
+      } else {
+        var ul = el("ul", { class: "scenario-cloud-list" });
+        ids.forEach(function (id) {
+          var src = map[id] || {};
+          var nm = src.name;
+          var label = (nm && typeof nm === "object" ? nm.en : nm) || id;
+          var li = el("li");
+          var btn = el("button", { type: "button", class: "secondary-btn", text: label });
+          btn.addEventListener("click", function () {
+            var cloned = cloneJson(Object.assign({ id: id }, src), { taken: {} });
+            try {
+              applyScenarioJson(cloned, "Cloned built-in '" + id + "' into the form as '" +
+                cloned.id + "'. The original is untouched.");
+              modal.remove();
+            } catch (e) {
+              out.className = "validation-output error";
+              out.textContent = "Could not clone '" + id + "': " + (e.message || "unknown error");
+            }
+          });
+          li.appendChild(btn);
+          ul.appendChild(li);
+        });
+        inner.appendChild(ul);
+      }
+      var row = el("div", { class: "load-modal-actions" });
+      var close = el("button", { type: "button", class: "secondary-btn", text: "Cancel" });
+      close.addEventListener("click", function () { modal.remove(); });
+      row.appendChild(close);
+      inner.appendChild(row);
+      modal.appendChild(inner);
+      document.body.appendChild(modal);
+      out.textContent = "";
+    }, function (err) {
+      out.className = "validation-output error";
+      out.textContent = err.message || "Could not load the built-in scenarios.";
+    });
+  }
+
   function wireActions() {
     document.querySelectorAll(".add-btn[data-add]").forEach(function (btn) {
       btn.addEventListener("click", function () {
@@ -1625,6 +1810,20 @@
         out.textContent = "";
       }
     });
+
+    var btnSkel = document.getElementById("btn-skeleton");
+    if (btnSkel) btnSkel.addEventListener("click", function () {
+      if (!window.confirm("Replace the current form with the starter skeleton?")) return;
+      applyScenarioJson(skeletonJson(),
+        "Loaded the Module A/B starter skeleton. It already validates — replace the " +
+        "placeholder text, give it your own id, then save.");
+    });
+
+    var btnClone = document.getElementById("btn-clone-builtin");
+    if (btnClone) btnClone.addEventListener("click", function () {
+      if (!window.confirm("Replace the current form with a copy of a built-in scenario?")) return;
+      openBuiltinPicker();
+    });
   }
 
   /* ------------------------------------------------------------------ */
@@ -1649,7 +1848,13 @@
       toJson: toScenarioJson,
       fromJson: scenarioJsonToState,
       validate: validate,
-      parseInput: tryParseScenarioInput
+      parseInput: tryParseScenarioInput,
+      // Phase 5b — start-from helpers. cloneJson is consumed by
+      // scenario-author-cloud.js so the cloud picker gets the same
+      // new-id-so-it-can't-overwrite-the-original semantics.
+      skeleton: skeletonJson,
+      cloneJson: cloneJson,
+      loadBuiltins: loadBuiltins
     };
   }
 })();
