@@ -74,4 +74,50 @@ test.describe("branched session framing", () => {
       "standard",
     );
   });
+
+  /* Phase M0 (ARCHITECTURE/module-set-design.md) — the dead-stage bug.
+     Six navigation sites did raw arithmetic on STAGE_COUNT instead of walking
+     the active flow. The worst case was silent: stepping BACK from Wrap-up in a
+     branched session targeted the SKIPPED stage 2, and snapStageToFlow() rolls a
+     skipped target FORWARD, landing back on Wrap-up — so "back" did nothing. */
+  test("branched: stage nav never targets the skipped stage (M0 dead-stage fix)", async ({
+    page,
+  }) => {
+    await applyAndFrame(page, "ward-escalation-branched");
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 3]);
+
+    // Back from Wrap-up returns to the case, NOT the skipped stage 2 (and not
+    // a no-op back on 3, which is what raw roomStage-1 produced).
+    expect(await page.evaluate(() => window.adjacentStage(3, -1))).toBe(1);
+    // Forward from the case jumps straight to Wrap-up.
+    expect(await page.evaluate(() => window.adjacentStage(1, 1))).toBe(3);
+    // Ends of the flow are fixed points, which is how the nav buttons disable.
+    expect(await page.evaluate(() => window.adjacentStage(0, -1))).toBe(0);
+    expect(await page.evaluate(() => window.adjacentStage(3, 1))).toBe(3);
+    // Neither direction ever yields the skipped stage.
+    const targets = await page.evaluate(() =>
+      [0, 1, 3].flatMap((s) => [window.adjacentStage(s, -1), window.adjacentStage(s, 1)]),
+    );
+    expect(targets).not.toContain(2);
+
+    // Documents the trap: snapStageToFlow() will NOT hand back the skipped
+    // stage, which is precisely why raw ±1 arithmetic was unsafe.
+    expect(await page.evaluate(() => window.snapStageToFlow(2, 3))).not.toBe(2);
+  });
+
+  test("standard: stage nav still walks all four stages (M0 regression guard)", async ({
+    page,
+  }) => {
+    await applyAndFrame(page, "chronic-pain");
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 3]);
+    const walk = await page.evaluate(() => [
+      window.adjacentStage(0, 1),
+      window.adjacentStage(1, 1),
+      window.adjacentStage(2, 1),
+      window.adjacentStage(3, 1),
+      window.adjacentStage(2, -1),
+    ]);
+    // Unchanged behaviour for a standard A+B session: 0→1→2→3, 3 is terminal.
+    expect(walk).toEqual([1, 2, 3, 3, 1]);
+  });
 });

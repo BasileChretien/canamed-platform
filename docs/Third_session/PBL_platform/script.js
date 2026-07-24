@@ -507,6 +507,49 @@ const STAGE_COUNT = 4;
 // existing call sites don't all need editing in one go.
 const STAGE_LABELS = ["Welcome", "Module A - Chronic Pain", "Module B - Breaking Bad News",
                       "Wrap-up"];
+
+/* ── Module set ───────────────────────────────────────────────────────────────
+   WHICH modules a session runs, and the mapping between a module id and its
+   stage. Everything that used to hardcode "stage 1 is Module A, stage 2 is
+   Module B" now goes through here, so making the set scenario-driven (M1) and
+   facilitator-narrowable (M2) means changing these few functions instead of
+   hunting literals across 14k lines.
+
+   M0 deliberately returns EXACTLY today's answer — this is a seam, not a
+   behaviour change. Declared before stageLabel() so there is no
+   const-temporal-dead-zone risk from an early call.
+   See ARCHITECTURE/module-set-design.md. */
+const MODULE_REGISTRY = [
+  { id: "A", stage: 1 },
+  { id: "B", stage: 2 }
+];
+/* Positional stage→module map, NOT filtered by the enabled set: stage 1 → "A",
+   stage 2 → "B", anything else → null. Kept unfiltered because labels must keep
+   resolving even for a branched scenario, whose moduleAName is written by
+   branched-author.js as the node title. */
+function moduleAtStage(stage) {
+  const hit = MODULE_REGISTRY.find(m => m.stage === stage);
+  return hit ? hit.id : null;
+}
+function stageForModule(id) {
+  const hit = MODULE_REGISTRY.find(m => m.id === id);
+  return hit ? hit.stage : -1;
+}
+/* The modules this session actually runs, in stage order. Today: both, except a
+   branched scenario has no A/B modules at all (its content is the node graph,
+   and stageFlow() already skips stage 2 for it). */
+function moduleSet() {
+  if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") return [];
+  return MODULE_REGISTRY.map(m => m.id);
+}
+/* The active scenario's translatable name trio for a module id. */
+function moduleNameTrio(id) {
+  if (typeof window === "undefined" || !id) return null;
+  if (id === "A") return window.CURRENT_SCENARIO_MODULE_A_NAME || null;
+  if (id === "B") return window.CURRENT_SCENARIO_MODULE_B_NAME || null;
+  return null;
+}
+
 function stageLabel(i) {
   // R3-G2 fix: stages 1 and 2 are scenario-specific (Module A / Module B
   // names depend on the chosen clinical case). Prefer the active scenario's
@@ -515,9 +558,9 @@ function stageLabel(i) {
   // Pain" in every language. Fall back to the i18n bag, then to the
   // English STAGE_LABELS.
   if (typeof window !== "undefined" && typeof window.tc === "function") {
-    let trio = null;
-    if (i === 1) trio = window.CURRENT_SCENARIO_MODULE_A_NAME || null;
-    else if (i === 2) trio = window.CURRENT_SCENARIO_MODULE_B_NAME || null;
+    // Stage→module through the registry, replacing the old hardcoded
+    // stage-index pair, so M1 can make the module set scenario-driven.
+    const trio = moduleNameTrio(moduleAtStage(i));
     if (trio) {
       // English-only UI (2026-06-25): resolve the scenario module name through
       // _curLang() (pinned "en"), NOT getLang() (the picker) — otherwise a
@@ -4490,8 +4533,14 @@ function enterAdminApp() {
   el("advance-all-btn").addEventListener("click", () => {
     const summary = roomNames(roomCount).map(r => {
       const cur = (allRooms[r] && typeof allRooms[r].stage === "number") ? allRooms[r].stage : 0;
-      return r + ": " + STAGE_LABELS[cur] +
-        (cur < STAGE_COUNT - 1 ? "  →  " + STAGE_LABELS[cur + 1] : "  (already last)");
+      // Preview the stage the room will ACTUALLY land on: a branched flow skips
+      // stage 2, so cur+1 could name a stage that is never shown.
+      const nxt = adjacentStage(cur, 1);
+      // stageLabel(), not STAGE_LABELS[]: the preview must name the ACTIVE
+      // scenario's modules, or a respiratory-stewardship session still reads
+      // "Module A - Chronic Pain" in the confirm dialog.
+      return r + ": " + stageLabel(cur) +
+        (nxt !== cur ? "  →  " + stageLabel(nxt) : "  (already last)");
     }).join("\n");
     canamedConfirm({
       title: (window.t ? window.t("modal.advance-all.title") : "Advance all rooms?"),
@@ -4503,7 +4552,8 @@ function enterAdminApp() {
       if (!ok) return;
       roomNames(roomCount).forEach(r => {
         const cur = (allRooms[r] && typeof allRooms[r].stage === "number") ? allRooms[r].stage : 0;
-        if (cur < STAGE_COUNT - 1) setRoomStage(r, cur, cur + 1);
+        const nxt = adjacentStage(cur, 1);
+        if (nxt !== cur) setRoomStage(r, cur, nxt);
       });
     });
   });
@@ -5838,12 +5888,17 @@ function renderDashboard() {
     view.className = "view-btn";
     view.textContent = "Open room";
     view.addEventListener("click", () => openRoomAsAdmin(r));
+    // Step through the ACTIVE flow (see the sidebar arrows below for why raw
+    // st±1 is wrong: a skipped stage is a dead target, and Back silently
+    // rolled forward again).
+    const _dprev = adjacentStage(st, -1);
+    const _dnext = adjacentStage(st, 1);
     const back = document.createElement("button");
-    back.textContent = "← Back"; back.disabled = st === 0;
-    back.addEventListener("click", () => setRoomStage(r, st, st - 1));
+    back.textContent = "← Back"; back.disabled = _dprev === st;
+    back.addEventListener("click", () => setRoomStage(r, st, _dprev));
     const fwd = document.createElement("button");
-    fwd.textContent = "Advance →"; fwd.disabled = st === STAGE_COUNT - 1;
-    fwd.addEventListener("click", () => setRoomStage(r, st, st + 1));
+    fwd.textContent = "Advance →"; fwd.disabled = _dnext === st;
+    fwd.addEventListener("click", () => setRoomStage(r, st, _dnext));
     const ptsBtn = document.createElement("button");
     ptsBtn.className = "pts-btn";
     ptsBtn.textContent = "+ Points";
@@ -6220,14 +6275,16 @@ function _debriefTimeSection() {
   // legend
   const legend = document.createElement("div");
   legend.className = "debrief-time-legend";
-  for (let i = 0; i < STAGE_COUNT; i++) {
+  // Only the stages this session actually visits (a branched flow skips 2), so
+  // the legend can't advertise a stage nobody will ever see.
+  stageFlow().forEach((i) => {
     const item = document.createElement("span");
     const swatch = document.createElement("i");
     swatch.className = "s" + i;
     item.appendChild(swatch);
     item.appendChild(document.createTextNode(stageLabel(i)));
     legend.appendChild(item);
-  }
+  });
   sec.appendChild(legend);
   return sec;
 }
@@ -6296,20 +6353,31 @@ function renderSidebar() {
 
     const meta = document.createElement("div");
     meta.className = "sidebar-room-meta";
-    meta.textContent = "Stage " + (st + 1) + "/" + STAGE_COUNT + " · " + stageLabel(st);
+    // Count by position in the ACTIVE stage flow (branched skips stage 2) —
+    // same as the dashboard row above.
+    const _sflow = stageFlow();
+    const _spos = _sflow.indexOf(st);
+    meta.textContent = "Stage " + ((_spos === -1 ? st : _spos) + 1) + "/" + _sflow.length +
+      " · " + stageLabel(st);
 
     const ctrl = document.createElement("div");
     ctrl.className = "sidebar-room-ctrl";
+    // Step through the active flow, not raw indices. With raw st±1 a branched
+    // room could be pointed at the skipped stage 2, and stepping BACK from
+    // Wrap-up was a silent no-op (snapStageToFlow rolls a skipped target
+    // FORWARD, landing back on Wrap-up).
+    const _sprev = adjacentStage(st, -1);
+    const _snext = adjacentStage(st, 1);
     const back = document.createElement("button");
-    back.textContent = "←"; back.disabled = st === 0;
+    back.textContent = "←"; back.disabled = _sprev === st;
     back.title = "Step " + r + " back a stage";
     back.setAttribute("aria-label", back.title);
-    back.addEventListener("click", () => setRoomStage(r, st, st - 1));
+    back.addEventListener("click", () => setRoomStage(r, st, _sprev));
     const fwd = document.createElement("button");
-    fwd.textContent = "→"; fwd.disabled = st === STAGE_COUNT - 1;
+    fwd.textContent = "→"; fwd.disabled = _snext === st;
     fwd.title = "Advance " + r + " a stage";
     fwd.setAttribute("aria-label", fwd.title);
-    fwd.addEventListener("click", () => setRoomStage(r, st, st + 1));
+    fwd.addEventListener("click", () => setRoomStage(r, st, _snext));
     ctrl.appendChild(back); ctrl.appendChild(fwd);
 
     row.appendChild(nameBtn); row.appendChild(meta); row.appendChild(ctrl);
@@ -7925,21 +7993,23 @@ function renderStage() {
     el("next-btn").textContent = "Advance room →";
     el("prev-btn").classList.remove("hidden");
     el("next-btn").classList.remove("hidden");
-    el("prev-btn").disabled = roomStage === 0;
-    el("next-btn").disabled = roomStage >= STAGE_COUNT - 1;
+    // Flow-aware: at the first/last stage OF THE ACTIVE FLOW there is nowhere
+    // to step, and a branched room must not be offered the skipped stage 2.
+    el("prev-btn").disabled = adjacentStage(roomStage, -1) === roomStage;
+    el("next-btn").disabled = adjacentStage(roomStage, 1) === roomStage;
     wait.textContent = "Admin view of " + myRoom +
       " - Back / Advance move the whole room's stage.";
   } else {
     el("prev-btn").textContent = "← Review previous stage";
     el("next-btn").textContent = "Go to next stage →";
     el("prev-btn").classList.remove("hidden");
-    el("prev-btn").disabled = viewStage === 0;
+    el("prev-btn").disabled = adjacentStage(viewStage, -1) === viewStage;
     // Students never move the room forward - only show Next to return after Back.
     el("next-btn").classList.toggle("hidden", viewStage >= roomStage);
     if (viewStage < roomStage) {
       wait.textContent = "You are looking back at an earlier stage. " +
         "Press \"Go to next stage\" to move forward again.";
-    } else if (roomStage < STAGE_COUNT - 1) {
+    } else if (adjacentStage(roomStage, 1) !== roomStage) {
       wait.textContent = "Waiting for a facilitator to open the next stage.";
     } else {
       wait.textContent = "This is the last stage - you are all caught up. " +
@@ -7949,11 +8019,14 @@ function renderStage() {
 }
 function initStageNav() {
   el("prev-btn").addEventListener("click", () => {
-    if (isRoomAdmin) setRoomStage(myRoom, roomStage, roomStage - 1);
+    // Admin steps through the active flow too: raw roomStage-1 could target the
+    // skipped stage 2, which snapStageToFlow then rolls FORWARD again — making
+    // "back" a silent no-op in a branched session.
+    if (isRoomAdmin) setRoomStage(myRoom, roomStage, adjacentStage(roomStage, -1));
     else { viewStage = adjacentStage(viewStage, -1); renderStage(); }
   });
   el("next-btn").addEventListener("click", () => {
-    if (isRoomAdmin) setRoomStage(myRoom, roomStage, roomStage + 1);
+    if (isRoomAdmin) setRoomStage(myRoom, roomStage, adjacentStage(roomStage, 1));
     else { viewStage = Math.min(roomStage, adjacentStage(viewStage, +1)); renderStage(); }
   });
 }
@@ -9238,7 +9311,7 @@ function celebrateEvents(evs) {
   const metas = evs.map(scoreEventMeta).filter(Boolean);
   if (!metas.length) return;
   const pts = metas.reduce((s, m) => s + m.points, 0);
-  const quiet = (roomStage === 2) || metas.every(m => m.module === "B");
+  const quiet = (moduleAtStage(roomStage) === "B") || metas.every(m => m.module === "B");
   const hasMilestone = metas.some(m => m.tier === "milestone");
   // has the cohort just crossed the shared goal? (rare, the biggest moment)
   let sharedGoalHit = false;
@@ -9318,7 +9391,7 @@ function renderObjectives() {
   const box = el("objectives");
   if (!box) return;
   const earned = (roomScore && roomScore.auto) || {};
-  const mod = (viewStage === 2) ? "B" : "A";
+  const mod = moduleAtStage(viewStage) || "A";
   const rows = [];
   Object.keys(SCORE_AUTO).forEach(ev => {
     const m = SCORE_AUTO[ev];

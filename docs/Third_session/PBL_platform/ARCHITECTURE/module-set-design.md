@@ -1,0 +1,122 @@
+# Module set — selectable modules per session
+
+**Status:** planned 2026-07-24. Phase M0 in progress. Supersedes decision 8 of
+[scenario-characters-design.md](scenario-characters-design.md) ("Fixed Module A +
+B skeleton"), which deliberately deferred this.
+
+## The requirement
+
+1. **Module A and Module B must be selectable independently** — run A without B,
+   or B without A.
+2. **Several modules must be implementable in the same session, as the
+   facilitator wants** — so the module set is a per-session choice, and adding a
+   module C later must be additive, not a rewrite.
+
+## Decisions (ratified 2026-07-24)
+
+| # | Decision | Rationale |
+|---|----------|-----------|
+| 1 | **Source of truth = BOTH.** The scenario *declares* the modules it contains; the facilitator *narrows* to a subset at session-create. Effective set = `intersection(scenario.modules, session.modules)`. | A breaking-bad-news scenario genuinely only contains Module B (content-determined), but the same scenario should be runnable A-only one week and A+B the next (facilitator-determined). |
+| 2 | **Target = a general N-module engine**, not a special-case A/B toggle. | Explicit user instruction. The stage plumbing already generalises (see below), so the incremental cost over a 2-module toggle is concentrated in the DOM + phase engines. |
+| 3 | **Module ids are opaque strings.** | Already the de-facto model: DB rules never constrain `decisions[].module`; `answersDeleted.module` is a length-bounded free string (`database.rules.json:392`); `characters[].module` is already an **array**. Only `scenario-author.js` validate/import narrow it to `A\|B`. |
+| 4 | **Archive / research exports stay BACK-COMPATIBLE.** New generic per-module output is *added*; the existing `moduleA`/`moduleB` columns and object keys keep emitting for scenarios that have those modules. | These are published research-data contracts tied to a live study (SAP / IRB). A breaking change would invalidate an in-flight analysis pipeline. Version the export rather than reshape it. |
+| 5 | **No user-visible behaviour change until M1.** M0 is a pure refactor + bug fix. | De-risks a large refactor: every later phase builds on a centralised seam that is already proven green. |
+
+## Why this is tractable: the seam already exists
+
+`stageFlow()` / `snapStageToFlow()` / `adjacentStage()` (`script.js:542-553` →
+`branched-render.js:430-454`) already produce **variable-length sessions**:
+branched scenarios return `[0, 1, 3]`, skipping Module B entirely, with correct
+"Stage 2 of 3" numbering, stepper, and advance-rolls-past behaviour.
+
+Two further accidents of the current design help:
+
+- `SCORING["module" + mod]` (`script.js:9165`, `9330`) and
+  `el("decisions-" + mod)` (`9722`) are **string-built lookups** — they
+  generalise for free once `mod` comes from a list rather than a literal.
+- `branched-author.js:118-119` already writes a **placeholder**
+  `moduleBName: en("Reflection")` purely to satisfy the two-module schema —
+  direct evidence the fixed pair is being worked around, not used.
+
+## Known blockers (the real cost)
+
+1. **Stage index ≠ module identity.** `stageLabel()` hardcodes `i === 1` → A,
+   `i === 2` → B (`script.js:519-520`). Also `STAGE_LABELS`, `STAGE_MINUTES`,
+   `STAGE_NOW`, `TOUR_STAGE`, and `stage.label.N` across **9 locale files**.
+2. **Two divergent intra-module progress engines** — Module A uses
+   `promptCursor` + `phaseGateOpen()` + `revealModARightCol()` +
+   `#mobile-rcol-tabbar`; Module B uses `modBPhase` + `MODB_PHASES` +
+   `MODB_PHASE_SECTIONS`. Unrelated implementations of the same idea. Merging
+   them is the single biggest chunk and the prerequisite for a 3rd module.
+3. **Static DOM.** `#stage-1` + `#stage-2` are ~1200 hand-authored lines of
+   `index.html` (1402-2679) with per-module ids (`modA-*`, `modB-*`,
+   `decisions-A/B`).
+4. **DB rules duplication.** `rooms/$roomId/module{A,B}` and
+   `answers/module{A,B}` exist in BOTH the `sessions/` and `orgs/` trees
+   (`database.rules.json:301-388` / `830-917`), and `stage` is bounded
+   `<= 3` (`239`, `761`).
+
+## Phases
+
+Each phase is one reviewable PR. Emulator (`npm run test:e2e:rules`) is the only
+real validation for rules changes; per-viewport Playwright for any UI change.
+
+### M0 — Foundation (no behaviour change) ← IN PROGRESS
+- **Fix 4 call sites that bypass `stageFlow()`** and use raw `STAGE_COUNT`:
+  admin sidebar per-room ←/→ (`script.js:6304/6309`), "Advance all rooms"
+  (`4493-4494/4506`), student Back/Next disable (`7928-7929/7942`), debrief time
+  legend (`6223`). **These are a live bug today**: a facilitator can park a
+  *branched* room on the skipped stage 2, a dead stage.
+- Introduce the central resolver — `moduleSet()`, `moduleForStage()`,
+  `stageForModule()` — returning today's answer exactly (`["A","B"]` standard,
+  `[]` branched), and route the hardcoded derivations through it:
+  `stageLabel()`'s `i===1`/`i===2`, `renderObjectives()`'s
+  `viewStage === 2 ? "B" : "A"` (`9321`), `celebrateEvents()`'s
+  `roomStage === 2` (`9241`).
+- Tests: existing suites stay green + new tests pinning the resolver and the
+  no-dead-stage guarantee.
+
+### M1 — Scenario declares its modules; single-module sessions work
+- Scenario body gains `modules: ["A","B"]`, defaulted **by inference** for every
+  existing scenario (no migration): a module is present iff it has content
+  (name / scoring family / decisions). Back-compat by construction.
+- `stageFlow()` filters on the module set instead of `format === "branched"`.
+- Author `validate()`: drop the `moduleBName.en` requirement
+  (`scenario-author.js:1042`) and add a modules editor.
+- Wrap-up (`renderWrapupSummary()`'s literal pair, `script.js:3233`) and
+  take-home (`_collectBookletSections()`'s selector string, `7526-7527`) become
+  set-driven.
+- e2e: A-only and B-only sessions on desktop + 3 mobile viewports.
+
+### M2 — Facilitator narrows at session-create
+- Write-once `sessions/$sessionId/modules` + a rules declaration in **both**
+  trees, modelled on `scenarioId` (`database.rules.json:136-140` / `659`).
+  Needs emulator coverage. NB `sessions/$sessionId` has **no `$other`
+  catch-all**, so an undeclared child is denied — the field must be declared.
+- Create-form UI: pick a subset of the scenario's modules.
+
+### M3 — Unify the intra-module progress engine
+- One parameterised per-module phase model replacing blocker 2. Prerequisite for
+  any module beyond A/B.
+
+### M4 — Templated stage DOM + generic rules + versioned exports
+- Generate a stage shell per module (blocker 3).
+- Rules: `$moduleId` wildcard for `rooms/$roomId/modules/$moduleId` +
+  `answers/$moduleId` in both trees; lift the `stage <= 3` bound.
+- Exports: add generic per-module output, keeping the A/B columns (decision 4).
+
+### M5 — Add a real third module
+- The proof the engine generalised, plus the author-UI repeater and dropping the
+  `decisions[].module` `A|B` whitelist (`scenario-author.js:1166`, and the
+  import coercion at `1388`).
+
+## Test debt to expect
+
+~40 files pin the two-module assumption. The ones that must change earliest:
+`tests/r3-blockers.test.js:376-388` (source-regex on `..._B_NAME` +
+`stageLabel`), `tests/scenario-author-startfrom.test.js:95`
+(`skel.moduleBName.en`), `tests/rules.test.js:667-688`
+(`for (const mod of ["moduleA","moduleB"])`), `tests/global-stage-stepper.test.js:37-38`
+(asserts `STAGE_COUNT` segments — **already stale**, it contradicts the shipped
+`stageFlow()` behaviour), and the stage-2 CSS/DOM assertions in
+`tests/stage-ui-fixes.test.js`.
