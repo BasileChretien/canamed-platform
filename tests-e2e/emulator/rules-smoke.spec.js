@@ -208,35 +208,37 @@ test("rules: FINDING-07 — admin hash is unreadable; login verifies by proof-wr
   expect(overwrite).not.toBe("ALLOWED");
 });
 
-test("rules: a participant can save a Module B Phase-3 exchange reply, with validation enforced", async ({ page }) => {
+test("rules: the dormant prompt/exchange nodes are now DENIED at the DB (M3a)", async ({ page }) => {
+  /* Until 2026-07-24 these four nodes were participant-writable for state that
+     nothing rendered: their DOM had been deleted, so renderPrompts() and
+     renderModBExchange() early-return on their missing containers, and no export
+     ever read them. M3a removed the rules — with no rule and a `.write:false`
+     root, RTDB denies by default. This is the emulator-level proof that the
+     writable surface is really gone, not merely unused. */
   await page.goto("/");
   const uid = await waitForUid(page);
-  const code = "exr-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
-  const path = `sessions/${code}/rooms/Room 1/moduleB/exchangeReplies/0/${uid}`;
+  const code = "gone-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = `sessions/${code}/rooms/Room 1`;
 
-  // The real flow claims write-once room membership on entry (script.js
-  // enterRoom). The per-room write rules (chat, scoring, hypotheses, replies,
-  // score, votes/committed) require it — added 2026-05-30 to stop cross-room
-  // tampering. Claim it first, exactly as a participant entering Room 1 does.
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  // Claim membership first, so a denial can't be blamed on the uidMembers gate.
+  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
 
-  // A well-formed group note for the current prompt is allowed (mirrors the
-  // proven moduleA/promptReplies rule).
-  expect(await tryWrite(page, path, {
-    text: "In France the patient is told first; in Japan the family is often told first.",
-    by: "Emu Student", cid: uid, at: Date.now()
-  })).toBe("ALLOWED");
+  const reply = { text: "note", by: "Emu", cid: uid, at: Date.now() };
+  const dead = [
+    [`${room}/moduleA/promptCursor`, 1],
+    [`${room}/moduleA/promptReplies/0/${uid}`, reply],
+    [`${room}/moduleB/exchangeCursor`, 1],
+    [`${room}/moduleB/exchangeReplies/0/${uid}`, reply]
+  ];
+  for (const [p, v] of dead) {
+    const res = await tryWrite(page, p, v);
+    expect(res, "removed node must be denied: " + p).not.toBe("ALLOWED");
+    expect(String(res)).toMatch(/permission_denied|denied/i);
+  }
 
-  // Empty text is rejected (.validate requires length > 0).
-  const empty = await tryWrite(page, path, { text: "", by: "Emu", cid: uid, at: Date.now() });
-  expect(empty).not.toBe("ALLOWED");
-
-  // Over-long text (> 600) is rejected.
-  const long = await tryWrite(page, path, { text: "x".repeat(601), by: "Emu", cid: uid, at: Date.now() });
-  expect(long).not.toBe("ALLOWED");
-
-  // Clearing the note (null) is allowed — that's how the autosave deletes.
-  expect(await tryWrite(page, path, null)).toBe("ALLOWED");
+  // …and the LIVE progress state still writes, so the deletion was surgical.
+  expect(await tryWrite(page, `${room}/moduleB/phase`, 3),
+    "moduleB/phase is the real roleplay timetable and must survive").toBe("ALLOWED");
 });
 
 test("rules: roleAssign (random role assignment) is member-gated and validates role values", async ({ page }) => {
@@ -298,7 +300,6 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   // Writing into Room 1 (own room) is allowed for every gated path...
   const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
   expect(await ok("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
-  expect(await ok("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("score/auto/e1", { points: 3, at: Date.now() })).toBe("ALLOWED");
   expect(await ok("score/penalties/e1", { points: 1, at: Date.now() })).toBe("ALLOWED");
@@ -309,9 +310,10 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   const x = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 2/${p}`, v);
   const denied = [
     await x("moduleA/hypotheses/h1", { text: "dx X", by: "S", cid: uid, at: Date.now() }),
-    await x("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
     await x("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() }),
-    await x("moduleB/exchangeReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() }),
+    // NB moduleB/phase is deliberately NOT here: its rule is `auth != null`
+    // with no uidMembers gate (the shared roleplay timetable), so a cross-room
+    // write to it IS allowed. Listing it would assert the opposite of the design.
     await x("score/auto/e1", { points: 999, at: Date.now() }),
     await x("score/penalties/e1", { points: 999, at: Date.now() }),
     await x("votes/v1/committed", { choice: 2, at: Date.now() })
@@ -370,11 +372,14 @@ test("rules: org per-room gating — moduleA/B writes allowed in own org room, d
   // Own room: the org-tree paths added for parity (2026-05-30 R2) accept writes.
   const own = (p, v) => tryWrite(page, `${base}/rooms/Room 1/${p}`, v);
   expect(await own("moduleA/hypotheses/h1", { text: "dx", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
-  expect(await own("moduleA/promptReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
-  expect(await own("moduleB/exchangeReplies/0/" + uid, { text: "r", by: "S", cid: uid, at: Date.now() })).toBe("ALLOWED");
+  expect(await own("moduleA/scoring/awarded/fam1", { points: 2, at: Date.now() })).toBe("ALLOWED");
 
-  // Room 2 (not a member): all denied (cross-room tampering closed in org tree too).
-  for (const p of ["moduleA/hypotheses/h1", "moduleA/promptReplies/0/" + uid, "moduleB/exchangeReplies/0/" + uid]) {
+  // Room 2 (not a member): denied — cross-room tampering is closed in the org
+  // tree too. Only hypotheses is listed: promptReplies/exchangeReplies were
+  // dropped in M3a (a denial there would prove "no rule", not the ROOM gate),
+  // and scoring/awarded would reject this payload on .validate, which likewise
+  // would not prove the gate.
+  for (const p of ["moduleA/hypotheses/h1"]) {
     const r = await tryWrite(page, `${base}/rooms/Room 2/${p}`, { text: "x", by: "S", cid: uid, at: Date.now() });
     expect(r, p).not.toBe("ALLOWED");
     expect(String(r)).toMatch(/permission_denied|denied/i);
