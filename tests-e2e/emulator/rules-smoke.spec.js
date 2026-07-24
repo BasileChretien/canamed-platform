@@ -846,3 +846,75 @@ test("rules: roomChat is room-private — a session member in another room canno
 
   await ctx.close();
 });
+
+test("rules: certIds/$id — random cert-id map is owner write-once + owner-read, PEER-DENIED, admin-lists, closed-blocked", async ({ page, browser }) => {
+  // The published certificate id is now crypto-random and persisted here (was a
+  // deterministic hash any classmate could recompute from the pool keys). This
+  // proves the new node's guarantees against the REAL rules.
+  const code = "cert-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const cidA = "cA_" + Math.floor(Math.random() * 1e9);
+  const cidB = "cB_" + Math.floor(Math.random() * 1e9);
+  const cidD = "cD_" + Math.floor(Math.random() * 1e9);   // spare (owned, unwritten) for the closed check
+  const idA = "CNM-2ABCD-3EFGH";      // well-formed Crockford ids (no I/L/O/U)
+  const idA2 = "CNM-9WXYZ-9WXYZ";
+  const idB = "CNM-5MNPQ-6RSTV";
+  const certA = `certIds/${code}/${cidA}`;
+
+  // ---- Owner A: bind clientMapping, then write the cert id (owner write-once) ----
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  expect(await tryWrite(page, `sessions/${code}/clientMapping/${cidA}`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, certA, idA)).toBe("ALLOWED");
+
+  // Write-once: A cannot overwrite its own published id.
+  const rewrite = await tryWrite(page, certA, idA2);
+  expect(rewrite, "cert ids are write-once").not.toBe("ALLOWED");
+  expect(String(rewrite)).toMatch(/permission_denied|denied/i);
+
+  // .validate: a spare cid A owns still rejects a malformed (non-CNM) id.
+  expect(await tryWrite(page, `sessions/${code}/clientMapping/${cidD}`, uidA)).toBe("ALLOWED");
+  const badShape = await tryWrite(page, `certIds/${code}/${cidD}`, "not-a-cnm-id");
+  expect(badShape, "malformed id rejected by .validate").not.toBe("ALLOWED");
+
+  // Owner reads its OWN id back.
+  const own = await tryRead(page, certA);
+  expect(own.ok).toBe(true);
+  expect(own.val).toBe(idA);
+
+  // ---- Peer B: fresh context = distinct anon uid ----
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+
+  // B CANNOT read A's cert id (child .read is owner-only; parent .read is admin-only).
+  const peerRead = await tryRead(tabB, certA);
+  expect(peerRead.ok, "a classmate must not read a peer's published cert id").toBe(false);
+
+  // B CANNOT write into A's cert slot (clientMapping ownership).
+  const peerWrite = await tryWrite(tabB, certA, idA2);
+  expect(peerWrite, "a classmate must not write a peer's cert slot").not.toBe("ALLOWED");
+  expect(String(peerWrite)).toMatch(/permission_denied|denied/i);
+
+  // B CAN write its OWN slot (owns cidB) — proves the rule isn't a blanket deny.
+  expect(await tryWrite(tabB, `sessions/${code}/clientMapping/${cidB}`, uidB)).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `certIds/${code}/${cidB}`, idB)).toBe("ALLOWED");
+  await ctxB.close();
+
+  // ---- Admin (creator) can LIST the whole map (parent .read), for the export.
+  //      Seed creatorUid via the emulator owner token, then A reads the map. ----
+  await adminPut(`sessions/${code}/creatorUid`, uidA);
+  const map = await tryRead(page, `certIds/${code}`);
+  expect(map.ok, "the facilitator (creator) can list all published ids for the export").toBe(true);
+  expect(map.val && map.val[cidA]).toBe(idA);
+  expect(map.val && map.val[cidB]).toBe(idB);
+
+  // ---- Closed session blocks new writes. Force the closed marker via the owner
+  //      token, then A's first write for the spare (owned) cidD is denied. ----
+  await adminPut(`sessions/${code}/closed`, { at: Date.now() });
+  const closedWrite = await tryWrite(page, `certIds/${code}/${cidD}`, "CNM-7WXYZ-8ABCD");
+  expect(closedWrite, "no cert ids can be minted after the session is closed").not.toBe("ALLOWED");
+  expect(String(closedWrite)).toMatch(/permission_denied|denied/i);
+});

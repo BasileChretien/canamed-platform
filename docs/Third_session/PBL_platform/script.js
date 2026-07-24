@@ -1256,6 +1256,22 @@ function roomChatPath(code, roomId) {
     : "roomChat/orgs/" + currentOrg + "/" + code;
   return base + "/" + roomId;
 }
+/* Published-certificate id → participant map. Same out-of-cascade rationale as
+   roomChatPath: it must live OUTSIDE sessions/<code> or a classmate could read
+   a peer's id straight from the map (RTDB .read cascades and can't be revoked
+   deeper). The stored id is CRYPTO-RANDOM (randomCredentialId) and persisted so
+   a re-download reuses it and the facilitator export can read it — replacing the
+   deterministic canamedCertId, which any classmate could recompute from the pool
+   keys. certIdBasePath(code) is the admin-listable node; certIdPath adds the
+   per-participant leaf. Namespacing mirrors roomChatPath/adminSecretPath. */
+function certIdBasePath(code) {
+  return (_sessionPrefix(currentOrg) === "sessions/")
+    ? "certIds/" + code
+    : "certIds/orgs/" + currentOrg + "/" + code;
+}
+function certIdPath(code, clientId) {
+  return certIdBasePath(code) + "/" + clientId;
+}
 function randomAdminMarker() {
   // 32 random bytes -> 64 lowercase hex, which satisfies the existing
   // adminPasswordHash .validate (legacy SHA-256 shape) while revealing
@@ -1455,7 +1471,7 @@ let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
     refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null, refPromptCursor = null, refPromptReplies = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
-    refObservers = null, refAnswerReplies = null, refPoll = null,
+    refObservers = null, refAnswerReplies = null, refPoll = null, refCertIds = null,
     refRoleChoices = null,
     refReplayRound = null, refRoleAssign = null,
     refModBPhase = null, refModBExchangeCursor = null, refModBExchangeReplies = null,
@@ -4637,6 +4653,17 @@ function startAdmin() {
   refRoomCount = db.ref(sPath("roomCount"));
   refPool = db.ref(sPath("pool"));
   refRooms = db.ref(sPath("rooms"));
+  // Preload the admin-readable certIds map (published cert id per participant) so
+  // the SYNCHRONOUS participant-row + research-CSV builders can source each id
+  // from window._certIdByCid[cid] — the id is now crypto-random and cannot be
+  // recomputed. A LIVE listener keeps it fresh as certs are downloaded during
+  // wrap-up (a one-shot read at dashboard-open would be empty and never update).
+  // Admin-only read; a denied read (e.g. before the password proof) just leaves
+  // the map empty → "" ids, and never throws.
+  window._certIdByCid = window._certIdByCid || {};
+  refCertIds = db.ref(certIdBasePath(sessionNum));
+  refCertIds.on("value", function (snap) { window._certIdByCid = snap.val() || {}; },
+    function () { /* read denied → leave the map empty */ });
   refTeams = db.ref(sPath("teamsLink"));
   refQuiz = db.ref(sPath("questionnaireLink"));
   refPreQuiz = db.ref(sPath("preQuestionnaireLink"));
@@ -7318,28 +7345,35 @@ function downloadCertificatePdf() {
   const loader = window.CanamedLoader || {};
 
   // ID + verification strategy (verifiable by DEFAULT, privacy-preserving):
-  //   • The certificate carries a deterministic id from (session, clientId).
-  //     The SAME id is recomputed by the facilitator research export, so the
-  //     cert, the public registry and the export all agree without coordination.
+  //   • The certificate carries a CRYPTO-RANDOM id, persisted per participant at
+  //     certIds/<code>/<clientId> (write-once, owner-only, OUTSIDE the sessions/
+  //     read-cascade — see certIdPath). A re-download reuses it, and the
+  //     facilitator research export reads it from that map, so the cert, the
+  //     public registry and the export still agree — now WITHOUT a guessable
+  //     join key. (The old id was a deterministic hash of (session|clientId);
+  //     every input is readable by any session member from the pool keys, so a
+  //     classmate could recompute a peer's id and read their credentials/<id>.)
   //   • Whenever a certificate is generated we publish ONLY a one-way hash of
   //     (name, session) to /credentials/<id> (write-once). The public verify
   //     page confirms a (name, id) match without the name ever being stored or
-  //     returned — it only answers "valid" / "no match". This is why scanning
-  //     the QR and typing the name on the certificate now works for everyone.
+  //     returned — it only answers "valid" / "no match".
   //   • The QR encodes the verify-page URL (id pre-filled) so a scan opens a
   //     real link, not bare text.
+  // detId is the OFFLINE-ONLY fallback: deterministic, so a cert still renders an
+  // id when there is no DB/crypto to mint+persist a random one. Nothing is
+  // published in that case (the cert is unverifiable regardless, same as any
+  // offline generation); detId is NOT published as a credential id anymore.
   const detId = (typeof canamedCertId === "function")
     ? canamedCertId((sessionNum || "") + "|" + (clientId || "")) : "";
   const detVerifyUrl = detId ? _verifyUrl(detId) : "";
+  const CID_RE = /^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/;
 
-  function resolveCertId() {
-    const fallback = { certId: detId, verifyUrl: detVerifyUrl };
-    // No id, no DB, no hashing, or no session to bind to → still hand back the
-    // id so the cert renders; verification simply can't be published here.
-    if (!detId || !(sessionNum || "").length ||
-        typeof firebase === "undefined" || typeof credentialNameHash !== "function") {
-      return Promise.resolve(fallback);
-    }
+  // Publish the (name, session) hash under credentials/<certId>. Write-once: a
+  // re-download is denied because the entry exists, which is success (already
+  // published). Resolves {certId, verifyUrl} either way.
+  function _publishCredential(certId) {
+    const done = { certId: certId, verifyUrl: _verifyUrl(certId) };
+    if (typeof credentialNameHash !== "function") return Promise.resolve(done);
     return credentialNameHash(myName || "", sessionNum || "").then(function (nameHash) {
       const sessionLabel = (typeof CANAMED_CONFIG !== "undefined" && CANAMED_CONFIG &&
         typeof CANAMED_CONFIG.workshopName === "string")
@@ -7351,21 +7385,50 @@ function downloadCertificatePdf() {
         at: Date.now(),
         // Keep inside the DB rule's ~5-year retention cap (5y minus a margin for
         // clock skew). The previous 10-year value exceeded the cap, so the rule
-        // rejected every write — leaving the id absent from the registry and the
-        // verify page reporting "not in the public registry". This was the bug.
+        // rejected every write — leaving the id absent from the registry.
         retentionUntil: Date.now() + (5 * 365 - 30) * 24 * 60 * 60 * 1000
       };
-      // Write-once: a re-download re-attempts and is denied because the entry
-      // already exists — that's fine, the credential is already published, so we
-      // treat any write outcome as success and return the id either way.
-      return firebase.database().ref("credentials/" + detId).set(payload).then(
-        function () { return fallback; },
-        function (err) {
-          console.warn("credential publish skipped", err && err.code);
-          return fallback;
+      return firebase.database().ref("credentials/" + certId).set(payload).then(
+        function () { return done; },
+        function (err) { console.warn("credential publish skipped", err && err.code); return done; }
+      );
+    }, function () { return done; });
+  }
+
+  function resolveCertId() {
+    const fallback = { certId: detId, verifyUrl: detVerifyUrl };
+    // No session/client to bind to, no DB, or no crypto to mint a random id →
+    // hand back the deterministic offline id so the cert renders; nothing is
+    // published (unverifiable, same as any offline generation).
+    if (!(sessionNum || "").length || !(clientId || "") ||
+        typeof firebase === "undefined" || typeof randomCredentialId !== "function") {
+      return Promise.resolve(fallback);
+    }
+    const idRef = firebase.database().ref(certIdPath(sessionNum, clientId));
+    // Reuse an already-minted id (idempotent re-download); else mint a fresh
+    // crypto-random one and persist it write-once. A lost write-once race
+    // (another tab of the same participant minted first) re-reads theirs.
+    return idRef.once("value").then(function (snap) {
+      const existing = (snap && snap.exists()) ? String(snap.val() || "") : "";
+      if (CID_RE.test(existing)) return _publishCredential(existing);
+      let minted;
+      try { minted = randomCredentialId(); }
+      catch (e) { return fallback; }
+      return idRef.set(minted).then(
+        function () { return _publishCredential(minted); },
+        function () {
+          // Denied/raced — re-read; use a valid id if one landed, else give up.
+          return idRef.once("value").then(function (s2) {
+            const now = (s2 && s2.exists()) ? String(s2.val() || "") : "";
+            return CID_RE.test(now) ? _publishCredential(now) : fallback;
+          }, function () { return fallback; });
         }
       );
-    }, function () { return fallback; });
+    }, function () {
+      // certIds read failed/denied → can't safely mint/persist; fall back to the
+      // offline id (nothing published) rather than reuse a guessable id.
+      return fallback;
+    });
   }
 
   if (typeof toast === "function") toast("Preparing your certificate…");
@@ -11664,6 +11727,7 @@ function leaveAndReload() {
     if (refTeams) refTeams.off();
     if (refQuiz) refQuiz.off();
     if (refPreQuiz) refPreQuiz.off();
+    if (refCertIds) refCertIds.off();
   } catch (e) { /* ignore */ }
   location.reload();
 }

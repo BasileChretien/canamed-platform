@@ -497,6 +497,28 @@
         }
       }
     },
+    "certIds": {
+      "$sessionId": {
+        ".read": "auth != null && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()))",
+        "$clientId": {
+          ".read": "auth != null && root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid",
+          ".write": "auth != null && !data.exists() && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid",
+          ".validate": "newData.isString() && newData.val().matches(/^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)"
+        }
+      },
+      "orgs": {
+        "$orgSlug": {
+          "$sessionId": {
+            ".read": "auth != null && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val()))",
+            "$clientId": {
+              ".read": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid",
+              ".write": "auth != null && !data.exists() && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('clientMapping').child($clientId).val() == auth.uid",
+              ".validate": "newData.isString() && newData.val().matches(/^CNM-[0-9A-HJKMNP-TV-Z]{5}-[0-9A-HJKMNP-TV-Z]{5}$/)"
+            }
+          }
+        }
+      }
+    },
     "adminSecrets": {
       "orgs": {
         "$orgSlug": {
