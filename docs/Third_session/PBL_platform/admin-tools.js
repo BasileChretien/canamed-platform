@@ -412,6 +412,24 @@ gainBlock +
     return cols;
   }
 
+  /* Did this participant opt in to research use?
+   *
+   * Mirrors hasResearchConsent() in scripts/lib/pseudonymise.js, which gates the
+   * server-side research export. The facilitator CSVs are named research_*.csv
+   * and carry participant NAMES plus free text, so they are a second research
+   * artefact and need the same gate — until 2026-07-24 they had none, so a
+   * student who declined research use still left the platform in
+   * research_participants.csv.
+   *
+   * FAIL-CLOSED: only an explicit boolean true counts. Absent, false or
+   * malformed consent (including pool rows written before the field existed)
+   * excludes the participant. Consent must be affirmative under GDPR Art. 7, so
+   * silence is never agreement. */
+  function _hasResearchConsent(cid) {
+    const p = (typeof pool !== "undefined" && pool) ? pool[cid] : null;
+    return !!(p && p.consent && p.consent.research === true);
+  }
+
   function researchCsvParticipantRows() {
     const rooms = activeRooms();
     const preMax = Array.isArray(window.PRETEST) ? window.PRETEST.length : 0;
@@ -441,6 +459,10 @@ gainBlock +
         const cid = hyp[k] && hyp[k].cid; if (cid) hypByCid[cid] = (hypByCid[cid] || 0) + 1;
       });
       Object.keys(pres).forEach(function (cid) {
+        // Research-consent gate: a participant who declined (or has no record)
+        // never enters a research_*.csv. Skipped BEFORE pid++ so the pids are
+        // contiguous and carry no trace of who was excluded.
+        if (!_hasResearchConsent(cid)) return;
         pid++;
         const t = tnode[cid] || {};
         const pre = (t.pre && typeof t.pre.score === "number" && !t.pre.skipped) ? t.pre.score : null;
@@ -477,7 +499,17 @@ gainBlock +
   /* Pseudonymous per-room participant index: assigns P1..Pn over presence cids
      in the SAME order as researchCsvParticipantRows(), and maps cid + name → pid
      so the detail files (reveals / votes / free-text) link back to a participant
-     without exposing names. */
+     without exposing names.
+
+     MUST apply the same research-consent filter, in the same order, as
+     researchCsvParticipantRows(). Two reasons, both load-bearing:
+       1. A non-consenting participant with no pid is dropped by every caller
+          below (they all skip a row whose pid is missing), which is what keeps
+          their free text and votes out of the detail CSVs.
+       2. If the two functions disagreed about who to skip, the P-numbers would
+          silently DESYNC between research_participants.csv and the detail files
+          — P3's free text would be attributed to a different P3. That is a
+          worse failure than the leak, because it is invisible. */
   function _participantIndex() {
     const rooms = activeRooms();
     const pidByRoomCid = {}, pidByRoomName = {};
@@ -486,6 +518,7 @@ gainBlock +
       const pres = (allRooms[r] || {}).presence || {};
       pidByRoomCid[r] = {}; pidByRoomName[r] = {};
       Object.keys(pres).forEach(function (cid) {
+        if (!_hasResearchConsent(cid)) return;
         pid++;
         const p = "P" + pid;
         pidByRoomCid[r][cid] = p;
@@ -508,8 +541,13 @@ gainBlock +
         return { item: item, by: (node[item] || {}).by || "", at: (node[item] || {}).at || 0 };
       }).sort(function (a, b) { return a.at - b.at; });
       seq.forEach(function (e, i) {
+        // No pid ⇒ no research consent ⇒ the row does not belong in a
+        // research_*.csv at all. Emitting it with a blank participant would
+        // still export their activity, just unattributed.
+        const p = (idx.pidByRoomName[r] || {})[e.by];
+        if (!p) return;
         rows.push({ session: _sess(), room: r,
-          participant: (idx.pidByRoomName[r] || {})[e.by] || "",
+          participant: p,
           item: e.item, at: e.at, order: i + 1 });
       });
     });
@@ -532,8 +570,10 @@ gainBlock +
           const b = ballots[cid] || {};
           const choice = (typeof b.choice === "number") ? b.choice : "";
           const opt = (choice !== "" && dec.options) ? dec.options[choice] : null;
+          const p = (idx.pidByRoomCid[r] || {})[cid];
+          if (!p) return;   // no research consent — see _participantIndex()
           rows.push({ session: _sess(), room: r, decision: decId, module: dec.module || "",
-            participant: (idx.pidByRoomCid[r] || {})[cid] || "",
+            participant: p,
             choice: choice, choice_correct: opt ? (opt.correct ? 1 : 0) : "",
             committed_team_choice: committed });
         });
@@ -553,8 +593,12 @@ gainBlock +
         Object.keys(m).forEach(function (k) {
           const e = m[k] || {}; const text = (e.text != null) ? e.text : (e.value != null ? e.value : "");
           if (text === "") return;
+          // Free text is the highest-risk field here (it can embed a name), so
+          // the no-consent skip matters most on this path.
+          const p = (idx.pidByRoomCid[r] || {})[e.cid];
+          if (!p) return;
           rows.push({ session: _sess(), room: r,
-            participant: (idx.pidByRoomCid[r] || {})[e.cid] || "",
+            participant: p,
             type: mk + "-answer", key: k, text: text });
         });
       });
@@ -562,8 +606,10 @@ gainBlock +
       Object.keys(hyp).forEach(function (k) {
         const e = hyp[k] || {}; const text = (e.text != null) ? e.text : "";
         if (text === "") return;
+        const p = (idx.pidByRoomCid[r] || {})[e.cid];
+        if (!p) return;   // no research consent
         rows.push({ session: _sess(), room: r,
-          participant: (idx.pidByRoomCid[r] || {})[e.cid] || "",
+          participant: p,
           type: "hypothesis", key: k, text: text });
       });
     });
