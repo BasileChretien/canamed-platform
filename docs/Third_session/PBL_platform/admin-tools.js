@@ -258,8 +258,9 @@ gainBlock +
           name: (typeof p.name === "string") ? p.name : "",
           university: uniByCid[cid] || "",
           answers: a, hypotheses: h, contributed: (a + h) > 0 ? 1 : 0,
-          certId: (typeof canamedCertId === "function")
-            ? canamedCertId(((typeof sessionNum !== "undefined") ? sessionNum : "") + "|" + cid) : ""
+          // Published cert id is crypto-random + persisted (certIds/<code>/<cid>);
+          // it can't be recomputed, so read it from the admin-preloaded map.
+          certId: (window._certIdByCid && window._certIdByCid[cid]) || ""
         });
       });
     });
@@ -476,8 +477,9 @@ gainBlock +
         const row = {
           session: (typeof sessionNum !== "undefined") ? sessionNum : "",
           participant: "P" + pid,
-          certId: (typeof canamedCertId === "function")
-            ? canamedCertId(((typeof sessionNum !== "undefined") ? sessionNum : "") + "|" + cid) : "",
+          // Crypto-random published id, sourced from the admin-preloaded map
+          // (window._certIdByCid) — see startAdmin(); it cannot be recomputed.
+          certId: (window._certIdByCid && window._certIdByCid[cid]) || "",
           name: (pres[cid] && typeof pres[cid].name === "string") ? pres[cid].name : "",
           room: r,
           university: uniByCid[cid] || "",

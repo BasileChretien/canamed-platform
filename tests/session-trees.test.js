@@ -111,6 +111,13 @@ test("roomChat paths mirror the two-tree layout", () => {
   assert.strictEqual(byKey["orgs/caen/XYZ"].roomChatPath, "roomChat/orgs/caen/XYZ");
 });
 
+test("certIds paths mirror the two-tree layout", () => {
+  const locs = sessionLocations(SESSIONS, ORGS);
+  const byKey = Object.fromEntries(locs.map(l => [l.key, l]));
+  assert.strictEqual(byKey.ABC.certIdsPath, "certIds/ABC");
+  assert.strictEqual(byKey["orgs/caen/XYZ"].certIdsPath, "certIds/orgs/caen/XYZ");
+});
+
 test("cleanup purges the session's adminSecrets entry too", () => {
   const src = read("cleanup-stale-sessions.js");
   assert.match(src, /adminSecretPath\)\.remove\(\)/,
@@ -119,4 +126,6 @@ test("cleanup purges the session's adminSecrets entry too", () => {
     "cleanup must purge by resolved location path, not a hardcoded sessions/ path");
   assert.match(src, /roomChatPath\)\.remove\(\)/,
     "the free-text chat lives outside the session subtree and must not outlive it");
+  assert.match(src, /certIdsPath\)\.remove\(\)/,
+    "the published-cert-id map lives outside the session subtree and must not outlive it");
 });

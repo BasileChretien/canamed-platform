@@ -132,6 +132,11 @@ async function main() {
         // it must not outlive its session. A no-op on deployments that predate
         // the move.
         await db.ref(loc.roomChatPath).remove();
+        // Certificate-id map (certIds/<code>): another out-of-cascade top-level
+        // tree (like roomChat/adminSecrets), so it needs the same explicit purge
+        // or it orphans a map of published cert ids after its session is gone. A
+        // no-op on deployments predating certIds.
+        await db.ref(loc.certIdsPath).remove();
       }
       if (verdict === "PURGE") purged++;
       else kept++;

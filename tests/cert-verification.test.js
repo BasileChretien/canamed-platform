@@ -1,15 +1,19 @@
 /* tests/cert-verification.test.js
  *
- * Certificate verification (2026-05-28): each certificate carries a unique,
- * deterministic verification ID (CNM-XXXXX-XXXXX) derived from (session,
- * participant) and a QR of it. The SAME id is recomputed in the facilitator's
- * research export + attestation list, which act as the registry a cert can be
- * checked against. This pins:
- *   - canamedCertId() is deterministic, well-formed, stable and distinct;
- *   - the certificate builder embeds the id + a QR when an id is supplied
- *     (and neither when it isn't);
- *   - the student flow and the facilitator export derive the id from the same
- *     (session | clientId) seed, so they agree.
+ * Certificate verification: each certificate carries a unique verification ID
+ * (CNM-XXXXX-XXXXX). Originally this was a DETERMINISTIC hash of (session,
+ * clientId) — but both inputs are readable by any session member (the pool keys
+ * ARE the clientIds), so a classmate could recompute a peer's id and read their
+ * credentials/<id> record. The published id is now CRYPTO-RANDOM and persisted
+ * per participant at certIds/<code>/<clientId> (write-once, owner-only, outside
+ * the sessions/ read-cascade); the facilitator export/attestations read it from
+ * the admin-preloaded window._certIdByCid map. This pins:
+ *   - canamedCertId() (the deterministic hash) is still well-formed/stable — it
+ *     survives ONLY as the offline fallback, never as a published id;
+ *   - the certificate builder embeds the id when one is supplied (and not else);
+ *   - the student flow mints + persists a random id and publishes credentials
+ *     under it, and the facilitator export sources the id from the preloaded map
+ *     — so cert, registry and export agree WITHOUT a guessable join key.
  */
 
 const test = require("node:test");
@@ -42,20 +46,32 @@ test("canamedCertId is collision-light across many participants in a session", (
   assert.equal(ids.size, 500, "500 distinct seeds should give 500 distinct ids");
 });
 
-test("the student cert flow seeds the id on (session | clientId)", () => {
+test("the student cert flow mints a random id and persists it (not a guessable hash)", () => {
   const fn = SCRIPT.slice(SCRIPT.indexOf("function downloadCertificatePdf"),
-                          SCRIPT.indexOf("function downloadCertificatePdf") + 1600);
+                          SCRIPT.indexOf("function downloadCertificatePdf") + 5000);
   assert.match(fn, /certId:/, "the cert data must carry certId");
-  assert.match(fn, /canamedCertId\(\s*\(sessionNum[^)]*\)\s*\+\s*"\|"\s*\+\s*\(clientId/,
-    "id must be seeded on sessionNum | clientId");
+  // The PUBLISHED id is crypto-random, persisted write-once under certIdPath so a
+  // re-download reuses it — NOT the deterministic canamedCertId (which any
+  // classmate could recompute from the pool keys to read a peer's credential).
+  assert.match(fn, /randomCredentialId\(\)/, "the published id must be minted with randomCredentialId()");
+  assert.match(fn, /certIdPath\(\s*sessionNum\s*,\s*clientId\s*\)/,
+    "the id must be persisted per participant at certIdPath(sessionNum, clientId)");
+  assert.match(fn, /credentials\/"\s*\+\s*certId/,
+    "the credential record must be keyed by the minted id");
+  assert.doesNotMatch(fn, /credentials\/"\s*\+\s*detId/,
+    "detId (deterministic) must not be published as a credential id anymore");
 });
 
-test("the facilitator export + attestations recompute the id from the same seed", () => {
-  // CSV participant rows include a certId column, seeded session | cid.
+test("the facilitator export sources the cert id from the preloaded map (not a recomputed hash)", () => {
+  // The certId CSV column stays (pinned), but its VALUE now comes from the
+  // admin-preloaded window._certIdByCid map — the id is random + persisted, so
+  // the facilitator can't recompute it the way the old deterministic hash allowed.
   assert.match(ADMIN, /"session", "participant", "certId"/, "CSV header must include certId");
-  assert.match(ADMIN, /canamedCertId\(\s*\(\(typeof sessionNum[^)]*\)[^)]*\)\s*\+\s*"\|"\s*\+\s*cid\s*\)/,
-    "export id must be seeded session | cid (matches the student's clientId seed)");
-  // Attestations print the id on each named card.
+  assert.match(ADMIN, /_certIdByCid\s*&&\s*window\._certIdByCid\[cid\]/,
+    "export id must be read from the admin-preloaded certIds map");
+  assert.doesNotMatch(ADMIN, /canamedCertId\(/,
+    "admin export must not recompute the (guessable) deterministic id anymore");
+  // Attestations print the id on each named card (sourced from the same rows).
   assert.match(ADMIN, /Verification ID:/, "attestation cards must show the verification id");
 });
 

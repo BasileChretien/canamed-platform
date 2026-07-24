@@ -459,8 +459,18 @@ Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/
 - `sharedScenarios` readable by any authenticated user: that is the opt-in
   facilitator sharing feature working as intended.
 - `credentials/$certId` public read by exact id (no `auth`): required by the
-  unauthenticated certificate-verification page; cert IDs are crypto-random
-  high-entropy (no enumeration) and carry only a name **hash** + session label.
+  unauthenticated certificate-verification page. **Published cert IDs are now
+  crypto-random + persisted** per participant (`randomCredentialId()` →
+  `certIds/<code>/<clientId>`, write-once, owner-only, OUTSIDE the sessions/
+  read-cascade), so neither an outsider (no enumeration) nor a **classmate** can
+  derive a peer's id. This closed the fifth Phase-4e gap (**FIXED 2026-07-24**):
+  the old published id was the *deterministic* `canamedCertId(session|clientId)`,
+  recomputable by any session member from the pool keys — it now survives ONLY as
+  an offline fallback, never as a published id. Migration: existing deterministic
+  certs stay valid (no backfill); new ones are random. The record carries only a
+  name **hash** + session label. `Verify:` `grep -n certIdPath
+  docs/Third_session/PBL_platform/script.js` > 0; the `certIds/$id` case in
+  `tests-e2e/emulator/rules-smoke.spec.js` proves owner-write-once + PEER-DENIED.
 - `poll/$clientId` uses the same tolerant first-write `clientMapping` branch as
   `pool`/`presence`/`typing`: in the brief window before the join chain commits
   the mapping, a peer could spoof another participant's qualitative poll answer
@@ -530,9 +540,12 @@ Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/
 
 **Round-3 — re-confirmed ACCEPTED (no change):**
 - `credentials/$certId` public read: the verification page needs it; the parent
-  collection is `.read:false` (no listing) and cert IDs are crypto-random
-  high-entropy, so it's a "know-the-ID-to-read-it" feature, not an enumerable
-  oracle. Only a name **hash** + session label are exposed.
+  collection is `.read:false` (no listing) and published cert IDs are now
+  crypto-random + persisted (see the "Accepted by design" note above; the
+  deterministic-id gap was **FIXED 2026-07-24**), so it's a genuine
+  "know-the-ID-to-read-it" feature — not an enumerable oracle, and no longer
+  classmate-recomputable for new certs. Only a name **hash** + session label are
+  exposed.
 - `sessions/<code>/adminPasswordHash` `.read:auth!=null`: the value is a
   non-secret random marker (real hash is in the unreadable `adminSecrets/`);
   cross-session read leaks only "this session has admin configured".
