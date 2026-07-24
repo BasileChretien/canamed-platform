@@ -228,6 +228,13 @@ function applyScenario(id, customContent) {
   // PBL/roleplay layout. Defaults to "standard" so untagged scenarios are
   // unaffected.
   window.CURRENT_SCENARIO_FORMAT = (sc && sc.format) || "standard";
+  // M1 — the module set this scenario CONTAINS (e.g. ["A"] for a clinical-
+  // reasoning-only case, ["B"] for a pure breaking-bad-news roleplay). Null when
+  // undeclared, in which case moduleSet() infers from content so every existing
+  // scenario still runs A+B with no migration. Must be assigned AFTER
+  // CURRENT_SCENARIO_FORMAT (moduleSet reads it) and before refreshModuleStages().
+  window.CURRENT_SCENARIO_MODULES = Array.isArray(sc && sc.modules) ? sc.modules.slice() : null;
+  refreshModuleStages();
   // Optional branched FINAL step (the OSCE diagnosis/management deliverable):
   // { title, prompt, fields:[{key,label,hint}] }. Null falls back to the
   // default diagnosis + management fields in branched-render.js.
@@ -540,7 +547,48 @@ function stageForModule(id) {
    and stageFlow() already skips stage 2 for it). */
 function moduleSet() {
   if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") return [];
-  return MODULE_REGISTRY.map(m => m.id);
+  // Precedence: an explicit scenario `modules: ["A"]` wins…
+  const declared = (typeof window !== "undefined") && window.CURRENT_SCENARIO_MODULES;
+  if (Array.isArray(declared)) {
+    const named = MODULE_REGISTRY.filter(m => declared.indexOf(m.id) !== -1).map(m => m.id);
+    if (named.length) return named;   // ignore a declaration naming nothing we know
+  }
+  // …otherwise INFER. Module NAMES are authoritative whenever any is given: this
+  // is what makes every pre-existing scenario (all three built-ins name both)
+  // keep A+B with no migration. It also avoids a staleness trap —
+  // applyScenario() resets CURRENT_SCENARIO_MODULE_*_NAME for every scenario,
+  // but only overwrites window.SCORING when the new scenario HAS a scoring key,
+  // so a scenario naming only Module A must not inherit "B exists" from the
+  // previous scenario's leftover scoring table.
+  const byName = MODULE_REGISTRY.filter(m => moduleNameEn(m.id)).map(m => m.id);
+  if (byName.length) return byName;
+  // No names at all (unusual): fall back to the scoring families.
+  const byScoring = MODULE_REGISTRY.filter(m => moduleHasScoring(m.id)).map(m => m.id);
+  // Still nothing? A standard scenario with no module content is malformed; keep
+  // the session navigable rather than collapsing the flow to Welcome → Wrap-up.
+  return byScoring.length ? byScoring : [MODULE_REGISTRY[0].id];
+}
+/* The module's English display name, or "" — the primary presence signal. */
+function moduleNameEn(id) {
+  const trio = moduleNameTrio(id);
+  return ((typeof trio === "string") ? trio : (trio && trio.en)) || "";
+}
+function moduleHasScoring(id) {
+  const sc = (typeof window !== "undefined" && window.SCORING) ||
+             ((typeof SCORING !== "undefined") ? SCORING : null);
+  const fam = sc && sc["module" + id];
+  return Array.isArray(fam) && fam.length > 0;
+}
+/* A module has substance when it is named OR carries a scoring family. */
+function moduleHasContent(id) {
+  return !!moduleNameEn(id) || moduleHasScoring(id);
+}
+/* Publish the enabled modules' stage indices so stageFlow() — here AND in the
+   lazily-loaded branched-render.js, which takes over once loaded — can drop the
+   stages of modules this scenario does not have. */
+function refreshModuleStages() {
+  if (typeof window === "undefined") return;
+  window.CANAMED_MODULE_STAGES = moduleSet().map(stageForModule).filter(s => s >= 0);
 }
 /* The active scenario's translatable name trio for a module id. */
 function moduleNameTrio(id) {
@@ -584,7 +632,21 @@ function stageLabel(i) {
    branched-render.js; these delegate once it has loaded, else the standard flow. */
 function stageFlow() {
   const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
-  return (b && b.stageFlow) ? b.stageFlow() : [0, 1, 2, STAGE_COUNT - 1];
+  return (b && b.stageFlow) ? b.stageFlow() : standardStageFlow();
+}
+/* Welcome + one stage per module this scenario RUNS + Wrap-up. So an A-only
+   scenario is [0,1,3] and a B-only one is [0,2,3], and every consumer of the
+   flow (steppers, Back/Advance, the debrief legend) follows automatically.
+   The branched format keeps its own [0,1,LAST]: its content lives on stage 1
+   even though it declares no A/B module. Mirrored in branched-render.js, which
+   owns the flow once that lazy chunk has loaded. */
+function standardStageFlow() {
+  const LAST = STAGE_COUNT - 1;
+  if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") {
+    return [0, 1, LAST];
+  }
+  const mid = moduleSet().map(stageForModule).filter(s => s > 0 && s < LAST);
+  return [0].concat(mid.length ? mid : [1, 2], [LAST]);
 }
 function snapStageToFlow(to, from) {
   const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
@@ -3273,7 +3335,11 @@ function renderWrapupSummary() {
   const box = el("wrapup-summary");
   if (!box) return;
   box.innerHTML = "";
-  [["moduleA", "Module A - Chronic Pain"], ["moduleB", "Module B - Breaking Bad News"]]
+  // Set-driven: only the modules this scenario runs, labelled from the ACTIVE
+  // scenario (the pair here used to be hardcoded to "Chronic Pain" /
+  // "Breaking Bad News", so an A-only session printed an empty Module-B block
+  // under the wrong title).
+  moduleSet().map(id => ["module" + id, stageLabel(stageForModule(id))])
     .forEach(([moduleKey, label]) => {
       const h = document.createElement("h4");
       h.className = "wrapup-mod"; h.textContent = label;
@@ -7591,8 +7657,15 @@ function _bookletBlocks(node, blocks) {
   }
 }
 function _collectBookletSections() {
-  const sel = "#stage-1 .history-card, #stage-1 .guidelines-card, #stage-1 .recap-card, " +
-              "#stage-2 .history-card, #stage-2 .guidelines-card, #stage-2 .recap-card";
+  // Only the stages this session actually runs: the stage-2 DOM still EXISTS in
+  // an A-only session (it is merely never shown), so a fixed selector would pull
+  // its unvisited template cards into the take-home.
+  const CARDS = [".history-card", ".guidelines-card", ".recap-card"];
+  const sel = moduleSet()
+    .map(id => "#stage-" + stageForModule(id))
+    .flatMap(stage => CARDS.map(c => stage + " " + c))
+    .join(", ");
+  if (!sel) return [];
   const out = [];
   document.querySelectorAll(sel).forEach(card => {
     const sum = card.querySelector("summary");

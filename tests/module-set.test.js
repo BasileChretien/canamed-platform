@@ -38,9 +38,12 @@ function loadResolver(win) {
   assert.notStrictEqual(end, -1, "the resolver block must sit just above stageLabel()");
   const src = SCRIPT.slice(start, end);
   const factory = new Function("window", src +
-    "\nreturn { MODULE_REGISTRY, moduleAtStage, stageForModule, moduleSet, moduleNameTrio };");
+    "\nreturn { MODULE_REGISTRY, moduleAtStage, stageForModule, moduleSet, moduleNameTrio," +
+    "\n         moduleHasContent, moduleNameEn, moduleHasScoring, refreshModuleStages };");
   return factory(win);
 }
+
+const TRIO = (en) => ({ en, fr: "", ja: "" });
 
 test("M0: the registry maps stages to modules positionally", () => {
   const r = loadResolver({});
@@ -53,12 +56,117 @@ test("M0: the registry maps stages to modules positionally", () => {
   assert.equal(r.stageForModule("C"), -1, "an unknown module has no stage yet");
 });
 
-test("M0: moduleSet returns today's answer — both modules, none when branched", () => {
-  assert.deepStrictEqual(loadResolver({}).moduleSet(), ["A", "B"],
-    "a standard scenario runs both modules (unchanged behaviour)");
-  assert.deepStrictEqual(loadResolver({ CURRENT_SCENARIO_FORMAT: "standard" }).moduleSet(), ["A", "B"]);
+/* ── M1: the module set is scenario-driven ────────────────────────────────── */
+
+test("M1: BACK-COMPAT — a scenario that names both modules still runs A+B", () => {
+  // This is the migration story: all three built-ins declare both names, so
+  // inference must return A+B for them with no `modules` field and no data edit.
+  const bothNames = {
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("Chronic pain"),
+    CURRENT_SCENARIO_MODULE_B_NAME: TRIO("Breaking bad news")
+  };
+  assert.deepStrictEqual(loadResolver(bothNames).moduleSet(), ["A", "B"]);
+  assert.deepStrictEqual(
+    loadResolver(Object.assign({ CURRENT_SCENARIO_FORMAT: "standard" }, bothNames)).moduleSet(),
+    ["A", "B"]);
+});
+
+test("M1: an explicit scenario `modules` declaration wins over inference", () => {
+  // Names for BOTH are present, but the scenario declares it only runs A.
+  const win = {
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("Reasoning"),
+    CURRENT_SCENARIO_MODULE_B_NAME: TRIO("Roleplay"),
+    CURRENT_SCENARIO_MODULES: ["A"]
+  };
+  assert.deepStrictEqual(loadResolver(win).moduleSet(), ["A"]);
+  win.CURRENT_SCENARIO_MODULES = ["B"];
+  assert.deepStrictEqual(loadResolver(win).moduleSet(), ["B"]);
+  win.CURRENT_SCENARIO_MODULES = ["B", "A"];
+  assert.deepStrictEqual(loadResolver(win).moduleSet(), ["A", "B"],
+    "the set is always returned in stage order, whatever order it was declared");
+});
+
+test("M1: inference — a module with no name and no scoring family is absent", () => {
+  assert.deepStrictEqual(
+    loadResolver({ CURRENT_SCENARIO_MODULE_A_NAME: TRIO("Reasoning only") }).moduleSet(),
+    ["A"], "naming only Module A yields an A-only session");
+  assert.deepStrictEqual(
+    loadResolver({ CURRENT_SCENARIO_MODULE_B_NAME: TRIO("Roleplay only") }).moduleSet(),
+    ["B"], "naming only Module B yields a B-only session");
+});
+
+test("M1: a scoring family alone is enough to make a module present", () => {
+  const r = loadResolver({ SCORING: { moduleB: [{ id: "b1" }] } });
+  assert.equal(r.moduleHasContent("B"), true);
+  assert.equal(r.moduleHasContent("A"), false);
+  assert.deepStrictEqual(r.moduleSet(), ["B"]);
+  // An EMPTY family is not content (scenario-author emits scoring.moduleB: []).
+  assert.equal(loadResolver({ SCORING: { moduleB: [] } }).moduleHasContent("B"), false);
+});
+
+test("M1: a stale SCORING table cannot resurrect a module the scenario doesn't name", () => {
+  // applyScenario() resets the module NAMES for every scenario but only
+  // overwrites window.SCORING when the new scenario has a scoring key. So after
+  // switching from an A+B scenario to an A-only one, window.SCORING.moduleB can
+  // still be populated — it must not put Module B back into the session.
+  const r = loadResolver({
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("Reasoning only"),
+    SCORING: { moduleA: [{ id: "a1" }], moduleB: [{ id: "b1" }] }   // leftover
+  });
+  assert.deepStrictEqual(r.moduleSet(), ["A"],
+    "names are authoritative when present, so the leftover B scoring is ignored");
+  // The scoring fallback still applies when NO module is named at all.
+  assert.deepStrictEqual(
+    loadResolver({ SCORING: { moduleB: [{ id: "b1" }] } }).moduleSet(), ["B"]);
+});
+
+test("M1: a branched scenario declares no A/B module, whatever else is set", () => {
   assert.deepStrictEqual(loadResolver({ CURRENT_SCENARIO_FORMAT: "branched" }).moduleSet(), [],
-    "a branched scenario has no A/B modules — its content is the node graph");
+    "its content is the node graph, not an A/B module");
+  assert.deepStrictEqual(loadResolver({
+    CURRENT_SCENARIO_FORMAT: "branched",
+    CURRENT_SCENARIO_MODULES: ["A", "B"],
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("placeholder")
+  }).moduleSet(), [], "branched wins over both a declaration and inference");
+});
+
+test("M1: a malformed standard scenario still yields a navigable session", () => {
+  // No names, no scoring, no declaration: rather than collapse the flow to
+  // Welcome → Wrap-up, keep one module stage.
+  assert.deepStrictEqual(loadResolver({}).moduleSet(), ["A"]);
+  // A declaration naming nothing we recognise falls through to inference.
+  assert.deepStrictEqual(
+    loadResolver({ CURRENT_SCENARIO_MODULES: ["Z"],
+                   CURRENT_SCENARIO_MODULE_B_NAME: TRIO("Roleplay") }).moduleSet(),
+    ["B"]);
+});
+
+test("M1: refreshModuleStages publishes the enabled modules' stage indices", () => {
+  const win = { CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A"), CURRENT_SCENARIO_MODULE_B_NAME: TRIO("B") };
+  loadResolver(win).refreshModuleStages();
+  assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [1, 2]);
+
+  const aOnly = { CURRENT_SCENARIO_MODULES: ["A"], CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A") };
+  loadResolver(aOnly).refreshModuleStages();
+  assert.deepStrictEqual(aOnly.CANAMED_MODULE_STAGES, [1], "A-only drops stage 2");
+
+  const bOnly = { CURRENT_SCENARIO_MODULES: ["B"], CURRENT_SCENARIO_MODULE_B_NAME: TRIO("B") };
+  loadResolver(bOnly).refreshModuleStages();
+  assert.deepStrictEqual(bOnly.CANAMED_MODULE_STAGES, [2], "B-only drops stage 1");
+});
+
+test("M1: applyScenario publishes the declared set, in the right order", () => {
+  // CURRENT_SCENARIO_MODULES must be assigned AFTER the format (moduleSet reads
+  // it) and refreshModuleStages() must run after both, or the first stageFlow()
+  // of a session would use a stale set.
+  const fmt = SCRIPT.indexOf("window.CURRENT_SCENARIO_FORMAT = (sc && sc.format)");
+  const mods = SCRIPT.indexOf("window.CURRENT_SCENARIO_MODULES =");
+  const refresh = SCRIPT.indexOf("refreshModuleStages();", mods);
+  assert.ok(fmt !== -1 && mods !== -1 && refresh !== -1, "all three must exist in applyScenario");
+  assert.ok(fmt < mods, "format must be published before the module set");
+  assert.ok(mods < refresh, "the stage list must be refreshed after the set is published");
+  assert.match(SCRIPT, /Array\.isArray\(sc && sc\.modules\)/,
+    "the scenario's `modules` field is the declaration");
 });
 
 test("M0: moduleNameTrio resolves the scenario's module names, unfiltered by the set", () => {
@@ -152,6 +260,78 @@ test("M0: every stage-nav site steps through the ACTIVE flow, not raw arithmetic
   absent(/setRoomStage\([^)]*,\s*st\s*[-+]\s*1\s*\)/, "a stepper still writes st±1 directly");
   absent(/setRoomStage\(myRoom, roomStage, roomStage\s*[-+]\s*1\)/,
     "room-view nav still writes roomStage±1 directly");
+});
+
+/* ── M1: the author can produce a single-module scenario ──────────────────── */
+
+const AUTHOR_JS = fs.readFileSync(path.join(P, "scenario-author.js"), "utf8");
+function loadAuthor() {
+  const win = {};
+  const doc = { readyState: "loading", addEventListener() {} };
+  new Function("window", "document", AUTHOR_JS)(win, doc);
+  return win.__scenarioAuthor;
+}
+/* Install a scenario as the live STATE (STATE itself is closure-private). */
+function installAuthor(api, scenario) {
+  const parsed = api.fromJson(scenario);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, parsed);
+}
+const NO_TRIO = { en: "", fr: "", ja: "" };
+
+test("M1: a Module-A-only scenario validates (Module B name no longer required)", () => {
+  const api = loadAuthor();
+  const s = api.skeleton();
+  s.moduleBName = NO_TRIO;
+  s.scoring.moduleB = [];
+  installAuthor(api, s);
+  assert.deepStrictEqual(api.validate(), [],
+    "naming only Module A must be a valid single-module scenario");
+});
+
+test("M1: a Module-B-only scenario validates", () => {
+  const api = loadAuthor();
+  const s = api.skeleton();
+  s.moduleAName = NO_TRIO;
+  s.scoring.moduleA = [];
+  s.decisions.forEach((d) => { d.module = "B"; });   // move the decision across
+  installAuthor(api, s);
+  assert.deepStrictEqual(api.validate(), []);
+});
+
+test("M1: a scenario that names NO module is rejected", () => {
+  const api = loadAuthor();
+  const s = api.skeleton();
+  s.moduleAName = NO_TRIO; s.moduleBName = NO_TRIO;
+  s.scoring.moduleA = []; s.scoring.moduleB = [];
+  installAuthor(api, s);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /at least one module/i.test(e)),
+    "a scenario running no module at all must be rejected; got " + JSON.stringify(errs));
+});
+
+test("M1: a decision in a module the scenario does not run is rejected", () => {
+  const api = loadAuthor();
+  const s = api.skeleton();
+  // Make it B-only while the skeleton's decision is still Module A → that
+  // decision would render into a stage the session never visits.
+  s.moduleAName = NO_TRIO;
+  s.scoring.moduleA = [];
+  installAuthor(api, s);
+  const errs = api.validate();
+  assert.ok(errs.some((e) => /only runs Module B/.test(e)),
+    "an unreachable decision must be flagged; got " + JSON.stringify(errs));
+});
+
+test("M1: an explicit `modules` override survives an author round-trip", () => {
+  // The runtime honours `modules` over inference; the editor has no control for
+  // it, so it must ride Phase 1's passthrough bag rather than being dropped.
+  const api = loadAuthor();
+  const s = api.skeleton();
+  s.modules = ["A"];
+  installAuthor(api, s);
+  assert.deepStrictEqual(api.toJson().modules, ["A"]);
 });
 
 test("M0: the debrief legend lists only the stages the session visits", () => {

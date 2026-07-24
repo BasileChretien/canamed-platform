@@ -76,17 +76,37 @@ real validation for rules changes; per-viewport Playwright for any UI change.
 - Tests: existing suites stay green + new tests pinning the resolver and the
   no-dead-stage guarantee.
 
-### M1 — Scenario declares its modules; single-module sessions work
-- Scenario body gains `modules: ["A","B"]`, defaulted **by inference** for every
-  existing scenario (no migration): a module is present iff it has content
-  (name / scoring family / decisions). Back-compat by construction.
-- `stageFlow()` filters on the module set instead of `format === "branched"`.
-- Author `validate()`: drop the `moduleBName.en` requirement
-  (`scenario-author.js:1042`) and add a modules editor.
-- Wrap-up (`renderWrapupSummary()`'s literal pair, `script.js:3233`) and
-  take-home (`_collectBookletSections()`'s selector string, `7526-7527`) become
-  set-driven.
-- e2e: A-only and B-only sessions on desktop + 3 mobile viewports.
+### M1 — Scenario declares its modules; single-module sessions work ← DONE
+- Scenario body may declare `modules: ["A"]`; it needs **no author UI and no
+  schema work** because Phase 1's passthrough bag already round-trips unknown
+  top-level keys. Undeclared scenarios are **inferred**, so there is no
+  migration: **naming a module is what switches it on.**
+- Inference is **name-first**, falling back to scoring families only when no
+  module is named. That ordering matters: `applyScenario()` resets
+  `CURRENT_SCENARIO_MODULE_*_NAME` for every scenario but only overwrites
+  `window.SCORING` when the new scenario *has* a `scoring` key — so a
+  name-blind rule would let a previous scenario's leftover `scoring.moduleB`
+  resurrect Module B in an A-only session.
+- `stageFlow()` is now Welcome + one stage per enabled module + Wrap-up
+  (A-only → `[0,1,3]`, B-only → `[0,2,3]`). script.js publishes
+  `CANAMED_MODULE_STAGES` via `refreshModuleStages()`; the lazy
+  `branched-render.js` consumes it (falling back to `[1,2]` on an older cached
+  shell). Branched keeps its own `[0,1,LAST]`.
+- Author `validate()` now requires **at least one** module rather than both, and
+  rejects a decision belonging to a module the scenario does not run (it would
+  render into a stage the session never visits).
+- **Blocker found and fixed:** the author could not save a single-module scenario
+  at all. `scenarioJsonToState()` seeds one BLANK scoring row per module so the
+  form always renders an editable line, and `toScenarioJson()` emitted it — so
+  the unused module's blank row failed validate with "missing an id", and an
+  empty family round-tripped as `[{blank}]` instead of `[]`. Blank rows are now
+  dropped on output (`notBlankScoringRow`; note `points` is NOT a blankness
+  signal — `emptyScoringRow()` defaults it to 5).
+- Wrap-up and the take-home booklet are set-driven: both previously leaked the
+  absent module's content (the wrap-up printed an empty block under a hardcoded
+  "Module B - Breaking Bad News" heading, and the booklet's fixed selector pulled
+  unvisited stage-2 template cards — the stage-2 DOM still exists, it is merely
+  never shown).
 
 ### M2 — Facilitator narrows at session-create
 - Write-once `sessions/$sessionId/modules` + a rules declaration in **both**
