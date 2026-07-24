@@ -105,10 +105,111 @@ test.describe("branched session framing", () => {
     expect(await page.evaluate(() => window.snapStageToFlow(2, 3))).not.toBe(2);
   });
 
+  /* Phase M1 — single-module sessions. Naming only one module drops the other
+     module's stage from the flow, so every flow consumer (steppers, Back/
+     Advance, the debrief legend) follows automatically. */
+  const T = (en) => ({ en, fr: "", ja: "" });
+  function oneModuleScenario(which) {
+    const item = { q: T("q"), a: T("a") };
+    const scn = {
+      id: "m1-" + which.toLowerCase() + "-only",
+      name: T(which + " only"),
+      summary: T("single-module session"),
+      case: {
+        history: [item],
+        exam: [item],
+        labs: [Object.assign({ key: true }, item)],
+        prompts: [T("p")],
+      },
+      synthId: "labs:0",
+      synthPrereqs: [],
+      scoring: { moduleA: [], moduleB: [] },
+      penalties: [],
+      decisions: [],
+    };
+    // Only ONE module is named — that is what declares the set.
+    scn["module" + which + "Name"] =
+      T(which === "A" ? "Reasoning only" : "Roleplay only");
+    return scn;
+  }
+
+  test("M1: a Module-A-only scenario runs a 3-stage session that skips stage 2", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    const got = await page.evaluate(async (scn) => {
+      await window.CanamedLoader.ensureCaseContent();
+      window.applyScenario(scn.id, scn);
+      return {
+        mods: window.moduleSet(),
+        stages: window.CANAMED_MODULE_STAGES,
+        flow: window.stageFlow(),
+        fwdFromCase: window.adjacentStage(1, 1),
+        backFromWrap: window.adjacentStage(3, -1),
+      };
+    }, oneModuleScenario("A"));
+
+    expect(got.mods).toEqual(["A"]);
+    expect(got.stages).toEqual([1]);
+    expect(got.flow).toEqual([0, 1, 3]);
+    // Module B's stage is genuinely skipped in both directions.
+    expect(got.fwdFromCase).toBe(3);
+    expect(got.backFromWrap).toBe(1);
+  });
+
+  test("M1: a Module-B-only scenario skips stage 1 instead", async ({ page }) => {
+    await page.goto("/");
+    const got = await page.evaluate(async (scn) => {
+      await window.CanamedLoader.ensureCaseContent();
+      window.applyScenario(scn.id, scn);
+      return {
+        mods: window.moduleSet(),
+        stages: window.CANAMED_MODULE_STAGES,
+        flow: window.stageFlow(),
+        fwdFromWelcome: window.adjacentStage(0, 1),
+      };
+    }, oneModuleScenario("B"));
+
+    expect(got.mods).toEqual(["B"]);
+    expect(got.stages).toEqual([2]);
+    expect(got.flow).toEqual([0, 2, 3]);
+    // Welcome leads straight to the roleplay stage — stage 1 is skipped.
+    expect(got.fwdFromWelcome).toBe(2);
+  });
+
+  test("M1: an explicit `modules` field overrides the names", async ({ page }) => {
+    await page.goto("/");
+    const got = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      // The built-in names BOTH modules; the declaration narrows it to A. Assert
+      // the fixture really is a two-module scenario, so this test cannot pass by
+      // accidentally spreading `undefined`.
+      const src = window.CANAMED_SCENARIOS["chronic-pain-opioids"];
+      if (!src) throw new Error("fixture scenario not registered");
+      if (!src.moduleAName || !src.moduleBName) {
+        throw new Error("fixture must name BOTH modules for this test to mean anything");
+      }
+      window.applyScenario("m1-declared", Object.assign({}, src, { modules: ["A"] }));
+      return { mods: window.moduleSet(), flow: window.stageFlow() };
+    });
+    expect(got.mods).toEqual(["A"]);
+    expect(got.flow).toEqual([0, 1, 3]);
+  });
+
+  test("M1: BACK-COMPAT — a built-in naming both modules still runs four stages", async ({
+    page,
+  }) => {
+    // The built-ins carry no `modules` field, so this is the no-migration path.
+    await applyAndFrame(page, "chronic-pain-opioids");
+    expect(await page.evaluate(() => window.moduleSet())).toEqual(["A", "B"]);
+    expect(await page.evaluate(() => window.CANAMED_MODULE_STAGES)).toEqual([1, 2]);
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 3]);
+  });
+
   test("standard: stage nav still walks all four stages (M0 regression guard)", async ({
     page,
   }) => {
-    await applyAndFrame(page, "chronic-pain");
+    await applyAndFrame(page, "chronic-pain-opioids");
     expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 3]);
     const walk = await page.evaluate(() => [
       window.adjacentStage(0, 1),

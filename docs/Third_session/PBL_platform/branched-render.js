@@ -428,8 +428,15 @@
      logic untouched. */
   var LAST_STAGE = 3;
   function stageFlow() {
-    return (root.CURRENT_SCENARIO_FORMAT === "branched")
-      ? [0, 1, LAST_STAGE] : [0, 1, 2, LAST_STAGE];
+    if (root.CURRENT_SCENARIO_FORMAT === "branched") return [0, 1, LAST_STAGE];
+    /* M1 — a standard session runs Welcome + one stage per module the scenario
+       actually contains + Wrap-up, so an A-only case is [0,1,3] and a B-only one
+       is [0,2,3]. script.js publishes the enabled modules' stage indices via
+       refreshModuleStages(); fall back to both mid-stages when that hasn't run
+       yet (or on an older cached shell), which is the historical flow. */
+    var mid = root.CANAMED_MODULE_STAGES;
+    if (!Array.isArray(mid) || !mid.length) mid = [1, 2];
+    return [0].concat(mid.filter(function (s) { return s > 0 && s < LAST_STAGE; }), [LAST_STAGE]);
   }
   /* Snap a requested stage to the nearest stage IN the flow, in the travel
      direction — an advance onto a skipped stage (1→2 branched) rolls on to the

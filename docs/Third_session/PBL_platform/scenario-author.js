@@ -881,8 +881,8 @@
       prompts: STATE.prompts.map(function (p) { return p; })
     };
     var scoring = {
-      moduleA: STATE.scoringA.map(scoringRowToJson),
-      moduleB: STATE.scoringB.map(scoringRowToJson)
+      moduleA: STATE.scoringA.filter(notBlankScoringRow).map(scoringRowToJson),
+      moduleB: STATE.scoringB.filter(notBlankScoringRow).map(scoringRowToJson)
     };
     // Module A LLM-chat scoring families — emit only when the author defined
     // some, so scenarios that don't use chat scoring stay clean.
@@ -938,6 +938,24 @@
     // LLM chat characters — optional; emit only when authored.
     if (STATE.characters && STATE.characters.length) scenarioOut.characters = STATE.characters.map(characterToJson);
     return mergeExtra(scenarioOut, STATE._extra);
+  }
+
+  /* M1 — was this scoring row ever actually filled in? scenarioJsonToState()
+     seeds ONE blank row per module so the form always renders an editable line.
+     Emitting that blank row (a) made an empty scoring family round-trip as
+     [ {blank} ] instead of [], and (b) blocked single-module scenarios outright:
+     the unused module's blank row failed validate() with "missing an id", so a
+     Module-A-only scenario could never be saved.
+     `points` is NOT a signal — emptyScoringRow() defaults it to 5. Anything the
+     author really typed (id, label in any language, keyword stems, cohorts,
+     unlocks, or a preserved unknown key) keeps the row. */
+  function notBlankScoringRow(r) {
+    if (!r) return false;
+    if (r.id || r.cohorts || r.unlocks) return true;
+    if (r.any && String(r.any).trim()) return true;
+    var L = r.label || {};
+    if (L.en || L.fr || L.ja) return true;
+    return !!(r._extra && Object.keys(r._extra).length);
   }
 
   function scoringRowToJson(r) {
@@ -1038,8 +1056,19 @@
       errs.push("Scenario id must be lowercase kebab-case (e.g. acute-asthma-er).");
     if (!json.name.en) errs.push("Scenario name (English) is required.");
     if (!json.summary.en) errs.push("Scenario summary (English) is required.");
-    if (!json.moduleAName.en) errs.push("Module A name (English) is required.");
-    if (!json.moduleBName.en) errs.push("Module B name (English) is required.");
+    /* M1 — a scenario may run Module A only, Module B only, or both. NAMING a
+       module is what declares it: the runtime's moduleSet() infers presence from
+       the name or a non-empty scoring family, and the session's stage flow drops
+       the stages of absent modules. So require AT LEAST ONE rather than both.
+       (An explicit top-level `modules: ["A"]` overrides at runtime and survives
+       a round-trip through the passthrough bag.) */
+    const modsPresent = [];
+    if (json.moduleAName.en || (json.scoring.moduleA || []).length) modsPresent.push("A");
+    if (json.moduleBName.en || (json.scoring.moduleB || []).length) modsPresent.push("B");
+    if (!modsPresent.length) {
+      errs.push("Name at least one module (Module A and/or Module B) — that is what " +
+        "decides which modules the session runs.");
+    }
 
     // history / exam / labs / prompts non-empty
     if (json.case.history.length === 0) errs.push("CASE.history must have at least one item.");
@@ -1165,6 +1194,12 @@
     json.decisions.forEach(function (d, i) {
       if (d.module !== "A" && d.module !== "B")
         errs.push("decisions[" + i + "] (id='" + d.id + "') module must be 'A' or 'B'.");
+      // M1 — a decision in a module this scenario does NOT run would render into
+      // a stage the session never visits, so it would be silently unreachable.
+      else if (modsPresent.length && modsPresent.indexOf(d.module) === -1)
+        errs.push("decisions[" + i + "] (id='" + d.id + "') is module '" + d.module +
+          "', but this scenario only runs Module " + modsPresent.join(" + Module ") +
+          " — name that module, or move the decision.");
       if (!d.prompt || !d.prompt.en)
         errs.push("decisions[" + i + "] (id='" + d.id + "') needs an English prompt.");
       if (!d.options || d.options.length < 2)
