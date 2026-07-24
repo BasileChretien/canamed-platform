@@ -627,15 +627,35 @@ test("rules: per-room /moduleB/phase is an auth-guarded number 0..5 (synced phas
   assert.match(node[".write"], /closed/);
   assert.match(node[".validate"], /isNumber/, "phase must validate as a number");
   assert.match(node[".validate"], /<= 5/, "phase must be capped at 5 (six phases, 0..5)");
+  // M3a: phase was the ONE room-scoped write with no membership gate, so anyone
+  // who knew the session code could jump ANOTHER room's roleplay to a different
+  // beat. Safe for facilitators: openRoomAsAdmin → enterRoom → startRoom claims
+  // uidMembers on entry, so an admin viewing a room is a member of it.
+  assert.match(node[".write"], /uidMembers/,
+    "moduleB/phase must be room-membership gated like every other room-scoped write");
+  assert.match(ORG_ROOM.moduleB.phase[".write"], /uidMembers/,
+    "…in the org tree too");
 });
 
-test("rules: per-room /moduleB/exchangeCursor is an auth-guarded number (Phase-3 cursor)", () => {
-  assert.ok(ROOM.moduleB && ROOM.moduleB.exchangeCursor,
-    "rules must declare /rooms/$roomId/moduleB/exchangeCursor");
-  const node = ROOM.moduleB.exchangeCursor;
-  assert.match(node[".write"], /auth != null/);
-  assert.match(node[".write"], /closed/);
-  assert.match(node[".validate"], /isNumber/);
+test("rules: the dormant prompt/exchange cursor nodes are GONE from both trees (M3a)", () => {
+  /* Their DOM was deleted long ago — renderPrompts() and renderModBExchange()
+     early-return on missing containers — yet the rules kept FOUR
+     participant-writable nodes alive for state nothing renders or exports.
+     Removed in M3a; this guards against reintroducing dead writable surface.
+     (ORG_ROOM is declared further down the file, but test callbacks run after
+     the module has fully evaluated, so it is bound by the time this runs.) */
+  ["promptCursor", "promptReplies"].forEach((k) => {
+    assert.ok(!ROOM.moduleA[k], "sessions tree must not declare moduleA/" + k);
+    assert.ok(!ORG_ROOM.moduleA[k], "orgs tree must not declare moduleA/" + k);
+  });
+  ["exchangeCursor", "exchangeReplies"].forEach((k) => {
+    assert.ok(!ROOM.moduleB[k], "sessions tree must not declare moduleB/" + k);
+    assert.ok(!ORG_ROOM.moduleB[k], "orgs tree must not declare moduleB/" + k);
+  });
+  // The LIVE progress state must survive untouched.
+  assert.ok(ROOM.moduleA.revealed, "moduleA/revealed is still the Module A progress state");
+  assert.ok(ROOM.moduleA.hypotheses, "moduleA/hypotheses still drives the phase gate");
+  assert.ok(ROOM.moduleB.phase, "moduleB/phase is still the shared roleplay timetable");
 });
 
 test("rules: per-room /answerReplies/$entryId/$replyId requires auth + 400-char cap", () => {

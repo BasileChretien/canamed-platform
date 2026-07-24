@@ -43,11 +43,37 @@ Two further accidents of the current design help:
 1. **Stage index ≠ module identity.** `stageLabel()` hardcodes `i === 1` → A,
    `i === 2` → B (`script.js:519-520`). Also `STAGE_LABELS`, `STAGE_MINUTES`,
    `STAGE_NOW`, `TOUR_STAGE`, and `stage.label.N` across **9 locale files**.
-2. **Two divergent intra-module progress engines** — Module A uses
+2. ~~**Two divergent intra-module progress engines** — Module A uses
    `promptCursor` + `phaseGateOpen()` + `revealModARightCol()` +
    `#mobile-rcol-tabbar`; Module B uses `modBPhase` + `MODB_PHASES` +
    `MODB_PHASE_SECTIONS`. Unrelated implementations of the same idea. Merging
-   them is the single biggest chunk and the prerequisite for a 3rd module.
+   them is the single biggest chunk and the prerequisite for a 3rd module.~~
+   **⚠️ THIS BLOCKER WAS MIS-SCOPED — corrected 2026-07-24 after a code survey.**
+   Two of the five named pieces were **dead code**: `promptCursor`/`promptReplies`
+   no-op (`renderPrompts()` early-returns; `#prompts-card` had been deleted from
+   `index.html`), as do `exchangeCursor`/`exchangeReplies`. `#mobile-rcol-tabbar`
+   is a *mirror* of the canonical tabs, not an engine. And the two surviving
+   pieces are **NOT the same idea**:
+   - Module A gates on **derived evidence** (`history≥1 && exam≥1` →
+     Decide tab; `hypotheses≥1` → Debate tab). That is the PBL 7-jump ordering —
+     it cannot be skipped and cannot be forged, because it is computed.
+     Visibility is per-participant and **stickily monotonic**.
+   - Module B is an **ungated wall-clock timetable**: an ordinal 0..5 index any
+     participant may jump freely (the minute budgets live in the markup), because
+     "the scene has been played" is not derivable from any observable. Visibility
+     *is* the shared state.
+   A merged engine would have to be simultaneously client-sticky-monotonic and
+   server-authoritative-bidirectional — contradictory storage models. Worse,
+   reifying Module A's derived gate into a writable index would **silently delete
+   the pedagogy the platform exists to teach**, and every DOM test would still
+   pass. `tests/modA-rcol-reveal.test.js` (which greps `revealModARightCol` for
+   `phaseGateOpen()`) is therefore a **design contract, not a source-regex smell** —
+   do not "clean it up".
+   **So: do NOT merge them.** See the revised M3a/M3b below.
+   Also de-risking, and previously unnoticed: **no export reads any progress
+   state** (`promptCursor`, `promptReplies`, `moduleB/phase`, `exchangeCursor`,
+   `exchangeReplies` appear in no export, no `functions/`, no `student-pdf.js`),
+   so decision 4's SAP/IRB export contract is **not in play** for M3 at all.
 3. **Static DOM.** `#stage-1` + `#stage-2` are ~1200 hand-authored lines of
    `index.html` (1402-2679) with per-module ids (`modA-*`, `modB-*`,
    `decisions-A/B`).
@@ -131,9 +157,51 @@ real validation for rules changes; per-viewport Playwright for any UI change.
   no per-scenario lookup: the selection is intersected with the scenario's own
   set, so unticking a module the scenario lacks is harmless.
 
-### M3 — Unify the intra-module progress engine
-- One parameterised per-module phase model replacing blocker 2. Prerequisite for
-  any module beyond A/B.
+### M3 — REVISED (see the correction in blocker 2). Do NOT merge the engines.
+
+**M3a — remove the dormant subsystems.**
+- **Rules half: DONE 2026-07-24.** Dropped four participant-writable nodes that
+  existed for state nothing rendered or exported —
+  `moduleA/{promptCursor,promptReplies}` and
+  `moduleB/{exchangeCursor,exchangeReplies}` — from **both** trees. Confirmed with
+  the SAP owner first that no analysis reads those paths. Removing a rule denies
+  future writes only; existing data is untouched and still reachable via the admin
+  SDK and the GCS backups. Emulator-proven: the four paths are now DENIED while
+  `moduleA/revealed`, `moduleA/hypotheses` and `moduleB/phase` still write.
+- **Client half: STILL TO DO.** ~350 lines of already-no-op code in `script.js`:
+  `renderPrompts`, `_advancePromptCursor`, `_onPromptReplyInput`,
+  `_flushPromptReply`, `updateDiscussionTabLock`, `promptsWere*`, the
+  `refPrompt*` wiring, `renderModBExchange`, `_onModBExchangeReplyInput`,
+  `_flushModBExchangeReply`, `setModBExchangeCursor`, the `refModBExchange*`
+  listeners, the four dead locals in `revealModARightCol` (`modAAnswers`,
+  `hasPromptReply`, `hasModAVote`, `moduleASettled` — computed, never read), and
+  the five no-op `setPhaseStepperState("stage-1", …)` calls (`#stage-1` has no
+  `.phase-stepper`; either delete the calls or restore a stage-1 stepper, but do
+  not leave both). Needs a shell bump. `tests/mobile-bottom-tabbar.test.js` pins
+  `updateDiscussionTabLock` → update it alongside.
+
+**M3b — thin adapter, NOT a merged engine.**
+- Generalise `applyModBPhaseVisibility` → `applyPhaseVisibility(stageId,
+  sections, phaseKey)`; move `MODB_PHASE_SECTIONS` into a `MODULE_PROGRESS`
+  registry keyed off `MODULE_REGISTRY`; generalise the nav wiring in
+  `initModBPhaseNav`. Keep `applyModBPhaseVisibility` / `setModBPhase` /
+  `renderModBPhase` / `initModBPhaseNav` as **name-preserving wrappers** so the
+  ~11 specs that drive them stay green.
+- Module A registers with `advance: null` and **keeps `revealModARightCol` as its
+  own visibility function** — its sticky per-tab reveal must not be forced into
+  B's selector table.
+- Explicitly OUT of scope: any change to `phaseGateOpen()`,
+  `revealModARightCol()`'s gate expressions, `moduleA/revealed`,
+  `moduleA/hypotheses`, or any export path.
+- Only two assertions break, both source-text greps:
+  `tests/stage-ui-fixes.test.js` (the `.columns.modB-columns` body check and the
+  `MODB_PHASE_SECTIONS = [` literal). No rules change; shell bump yes.
+- Effort: ~2 PRs, low / low-medium risk. **M3 is not the big chunk — M4 is**
+  (1200 lines of hand-authored stage DOM + `STAGE_COUNT = 4` + `stage <= 3`).
+- Do **not** introduce a `$moduleId` rules wildcard for M3: it buys nothing for
+  A+B, and because named keys shadow wildcards in RTDB you would keep the
+  duplication anyway. When module C lands, add a literal `moduleC` block
+  (~8 lines × 2 trees) — tighter and reversible. Revisit at module D.
 
 ### M4 — Templated stage DOM + generic rules + versioned exports
 - Generate a stage shell per module (blocker 3).

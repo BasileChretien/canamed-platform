@@ -818,12 +818,13 @@ test.describe("Merged Debate & answers — structural contract", () => {
       expect(src).toMatch(/moduleA:\s*\["diagnosis",\s*"culture"\]/);
     });
 
-  test("DB rules: new promptCursor + promptReplies schemas present",
+  test("DB rules: the dormant promptCursor + promptReplies schemas are GONE (M3a)",
     async ({ page }) => {
-      // The rules file isn't served from hosting, but we ship a copy
-      // with the source. This unit-style assertion confirms the schemas
-      // were added without spinning up an emulator. Validity (i.e. the
-      // rules compile cleanly) is checked separately by tests/rules.test.js.
+      // Inverted 2026-07-24: these two nodes (and moduleB's exchange pair) were
+      // participant-writable for state nothing rendered — #prompts-card had been
+      // deleted from index.html, so renderPrompts() early-returns. M3a removed
+      // the rules; this now guards against reintroducing dead writable surface.
+      // Structural coverage lives in tests/rules.test.js.
       await page.goto("/");
       // room-only CSS is lazily <link>ed by ensureRoomStyles() on real room entry;
       // this spec surfaces the room synthetically, so load it explicitly (same
@@ -839,7 +840,13 @@ test.describe("Merged Debate & answers — structural contract", () => {
       // /database.rules.json is not always served by Firebase Hosting
       // — if the fetch fails we skip this test rather than fail it.
       test.skip(!rules, "database.rules.json not served by hosting");
-      expect(rules).toMatch(/"promptCursor"/);
-      expect(rules).toMatch(/"promptReplies"/);
+      expect(rules).not.toMatch(/"promptCursor"/);
+      expect(rules).not.toMatch(/"promptReplies"/);
+      expect(rules).not.toMatch(/"exchangeCursor"/);
+      expect(rules).not.toMatch(/"exchangeReplies"/);
+      // …while the live progress state is untouched.
+      expect(rules).toMatch(/"revealed"/);
+      expect(rules).toMatch(/"hypotheses"/);
+      expect(rules).toMatch(/"phase"/);
     });
 });
