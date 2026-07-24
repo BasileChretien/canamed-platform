@@ -316,7 +316,25 @@ function _extractContent(j) {
 }
 
 exports.hfPatient = onCall({
-  region: "us-central1",
+  // EEA-resident, matching every other data path (RTDB, Cloud Storage,
+  // sendQueuedMail). Moved from us-central1 on 2026-07-24: routing
+  // participants' free-text chat through a US region added a transfer to a
+  // country that is NOT on Japan's APPI Art. 28 equivalent-protection list
+  // (which covers only the EEA and the UK), for no functional benefit. The
+  // only remaining US transfer is Hugging Face itself, papered by HF's DPA
+  // + EU SCCs (2021/914).
+  //
+  // ⚠️ The CLIENT must resolve the same region — see HF_FUNCTIONS_REGION in
+  // modA-llm-init.js. `firebase.functions()` with no argument means
+  // us-central1, so a mismatch 404s every call and the chat falls back to the
+  // stub patient on every message, SILENTLY (same symptom as the 2026-06-03
+  // App Check incident). tests/hf-region-lockstep.test.js pins the pair.
+  //
+  // ⚠️ DEPLOY: Firebase does NOT migrate a function between regions. Deploying
+  // creates the europe-west1 instance and LEAVES the us-central1 one running,
+  // still serving anyone on a cached client. Delete it explicitly:
+  //     firebase functions:delete hfPatient --region us-central1
+  region: "europe-west1",
   runtime: "nodejs22",          // explicit override; setGlobalOptions can be ignored on `update` ops
   // enforceAppCheck is driven by the APP_CHECK_ENFORCE defineBoolean param
   // (see top of file). Defaults to false so the function works for the

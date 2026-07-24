@@ -20,6 +20,11 @@
 
 (function () {
   "use strict";
+
+  /* Region of the hfPatient callable. MUST stay in lockstep with
+     `region:` in functions/index.js — see the note at the httpsCallable
+     call site for why a mismatch fails silently rather than loudly. */
+  var HF_FUNCTIONS_REGION = "europe-west1";
   if (typeof window === "undefined") return;
 
   // Auto-promote ?llm=1 to localStorage as soon as this script loads.
@@ -466,7 +471,19 @@
     var fb = window.firebase;
     if (fb && typeof fb.functions === "function") {
       try {
-        var raw = fb.functions().httpsCallable("hfPatient");
+        // REGION MUST MATCH functions/index.js. `fb.functions()` with no
+        // argument resolves to us-central1, so an unqualified call would 404
+        // against a europe-west1 function and fall back to the stub patient on
+        // every message — silently, because the bridge treats any failure as
+        // "backend unavailable" (same symptom as the 2026-06-03 App Check
+        // incident). hfPatient was moved to europe-west1 on 2026-07-24 to keep
+        // participants' free text inside the EEA: the data is EEA-resident
+        // everywhere else (RTDB, Storage, sendQueuedMail), and routing the chat
+        // through a US region added a transfer to a country that is NOT on
+        // Japan's APPI Art. 28 equivalent-protection list, for no benefit.
+        var raw = (typeof fb.app === "function")
+          ? fb.app().functions(HF_FUNCTIONS_REGION).httpsCallable("hfPatient")
+          : fb.functions().httpsCallable("hfPatient");
         // Wrap the callable so every request carries the verified room
         // context. The server (functions/index.js _verifyMembership) checks
         // rooms/<id>/uidMembers/<uid>; without these fields the call is
