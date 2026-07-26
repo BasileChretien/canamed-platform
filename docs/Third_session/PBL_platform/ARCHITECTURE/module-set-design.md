@@ -87,7 +87,11 @@ Two further accidents of the current design help:
 Each phase is one reviewable PR. Emulator (`npm run test:e2e:rules`) is the only
 real validation for rules changes; per-viewport Playwright for any UI change.
 
-### M0 — Foundation (no behaviour change) ← IN PROGRESS
+### M0 — Foundation (no behaviour change) ← DONE (PR #241, shell v102→v103)
+> Shipped exactly as planned below, plus a **6th** bypass site found during
+> implementation (the dashboard-row Back/Advance, not just the sidebar). The
+> resolver landed as `moduleSet()`/`moduleAtStage()`/`stageForModule()`/
+> `moduleNameTrio()`.
 - **Fix 4 call sites that bypass `stageFlow()`** and use raw `STAGE_COUNT`:
   admin sidebar per-room ←/→ (`script.js:6304/6309`), "Advance all rooms"
   (`4493-4494/4506`), student Back/Next disable (`7928-7929/7942`), debrief time
