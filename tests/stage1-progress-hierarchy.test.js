@@ -38,10 +38,15 @@ test("the patient vignette carries the single focal heading under #stage-1", () 
 
 test("the progress + heading hierarchy tweaks are SCOPED to #stage-1 (no global restyle)", () => {
   // each added rule must be #stage-1-prefixed — guards against a future edit
-  // dropping the scope and restyling .card / .vignette / phase-stepper or the
-  // consultation-note title everywhere (incl. the scenario-author surface).
-  assert.match(CSS, /#stage-1 \.phase-stepper\s*\{\s*margin-bottom:\s*6px/,
-    "the phase-stepper margin tweak must be scoped to #stage-1");
+  // dropping the scope and restyling .card / .vignette or the consultation-note
+  // title everywhere (incl. the scenario-author surface).
+  // (The `#stage-1 .phase-stepper` margin tweak was removed in the M3 stepper
+  //  tidy-up: Stage 1 no longer renders a phase stepper — Module A's progress is
+  //  a derived hypothesis gate, not linear phases — so the rule was dead. Its
+  //  absence is now asserted below.)
+  // Match the RULE (…{), not a mention in a comment.
+  assert.doesNotMatch(CSS, /#stage-1 \.phase-stepper\s*\{/,
+    "the dead #stage-1 phase-stepper rule must stay removed (Stage 1 has no stepper)");
   assert.match(CSS, /#stage-1 \.vignette h2\s*\{\s*font-size:\s*1\.18rem/,
     "the focal-heading bump must be scoped to #stage-1");
   // and we must NOT have introduced a bare global .card h3 / .vignette h2 resize

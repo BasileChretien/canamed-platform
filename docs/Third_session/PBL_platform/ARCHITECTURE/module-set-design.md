@@ -1,6 +1,9 @@
 # Module set — selectable modules per session
 
-**Status:** planned 2026-07-24. Phase M0 in progress. Supersedes decision 8 of
+**Status:** M0–M3a **shipped & merged** (PRs #241, #242, #243, #244, #245, + the
+M3 stepper tidy-up). The user's requirement is delivered as of M2 (#243). M3b and
+M4/M5 remain **unbuilt and optional** — they are only needed to add a module type
+*beyond* A/B; see the phase notes below. Supersedes decision 8 of
 [scenario-characters-design.md](scenario-characters-design.md) ("Fixed Module A +
 B skeleton"), which deliberately deferred this.
 
@@ -188,12 +191,15 @@ real validation for rules changes; per-viewport Playwright for any UI change.
   dropped, and `investigations-anytime` / `modA-investigations-synthesis-split`
   now assert the gate drives the reveal via `revealModARightCol()` (not the
   removed `renderPrompts`).
-- **DELIBERATELY LEFT for a separate tidy-up:** the ~6 no-op
-  `setPhaseStepperState("stage-1", …)` calls in the LIVE `updateModANextStep()`.
-  They are out of scope for the dormant-subsystem removal — `updateModANextStep`
-  is live and not part of the prompt/exchange subsystem — and are provably inert
-  (`#stage-1` has no `.phase-stepper`), so leaving them changes nothing. Remove
-  them (or restore a stage-1 stepper) in a focused follow-up, not here.
+- **Stage-1 stepper tidy-up: DONE (shell v106→v107).** Removed the 6 no-op
+  `setPhaseStepperState("stage-1", …)` calls from `updateModANextStep()` and the
+  dead `#stage-1 .phase-stepper` CSS rule (`room.css`). Chose *remove*, not
+  restore: Module A's progress is a derived hypothesis gate, not linear phases, so
+  a stepper never fit its model. `setPhaseStepperState` itself stays — Module B's
+  `renderModBPhase` still calls it for the live `#stage-2` stepper.
+  `tests/stage1-progress-hierarchy.test.js` flipped from asserting the rule EXISTS
+  to asserting it stays GONE (its no-global-restyle guard is unchanged). 984 unit
+  + Module A coach/reveal e2e green.
 
 **M3b — thin adapter, NOT a merged engine.**
 - Generalise `applyModBPhaseVisibility` → `applyPhaseVisibility(stageId,
