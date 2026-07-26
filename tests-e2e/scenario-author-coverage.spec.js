@@ -159,16 +159,21 @@ test.describe("Scenario author — Phase 3 chat-scoring authoring", () => {
    form" / delete). Playwright auto-DISMISSES dialogs, so every test here must
    accept them or the click is a silent no-op. */
 test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
-  test("Start from skeleton loads a worked example that validates clean", async ({ page }) => {
+  test("Start from skeleton → Standard loads a worked example that validates clean", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
     page.on("dialog", (d) => d.accept());
 
     await page.goto("/scenario-author.html");
     await expect(page.locator("#btn-skeleton")).toBeVisible();
+    // "Start from skeleton" now opens a picker of starter types.
     await page.locator("#btn-skeleton").click();
+    const picker = page.locator("#skeleton-picker");
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: /Standard/ }).click();
+    await expect(picker).toHaveCount(0);
 
-    // The form is populated from the skeleton.
+    // The form is populated from the standard skeleton.
     const preview = page.locator("#json-preview");
     await expect
       .poll(async () => (await preview.inputValue()).includes('"new-scenario"'))
@@ -187,6 +192,44 @@ test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
     await expect(out).toContainText("Validation passed");
 
     expect(errors, "skeleton must load without JS errors").toEqual([]);
+  });
+
+  test("Start from skeleton → Branched loads a valid branched decision-tree scaffold", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    const picker = page.locator("#skeleton-picker");
+    await expect(picker).toBeVisible();
+    // The branched scenario is a PICKABLE skeleton type.
+    await picker.getByRole("button", { name: /Branched/ }).click();
+    await expect(picker).toHaveCount(0);
+
+    // The author flipped into branched format: the branch editor appears and the
+    // format select reflects it.
+    await expect(page.locator("#branched-editor")).toBeVisible();
+    await expect(page.locator("#meta-format")).toHaveValue("branched");
+
+    // The exported JSON is a branched scenario with a real decision tree.
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"branched"'))
+      .toBe(true);
+    const json = JSON.parse(await preview.inputValue());
+    expect(json.format).toBe("branched");
+    expect(Array.isArray(json.decisions)).toBe(true);
+    expect(json.decisions.length).toBeGreaterThanOrEqual(1);
+
+    // …and it VALIDATES against the real branched-graph validator — this is the
+    // point: a branched skeleton the facilitator can edit, not an error list.
+    await page.locator("#btn-validate").click();
+    const out = page.locator("#validation-output");
+    await expect(out).toHaveClass(/success/);
+    await expect(out).toContainText("Validation passed");
+
+    expect(errors, "branched skeleton must load without JS errors").toEqual([]);
   });
 
   test("Clone a built-in copies a shipped scenario under a NEW id", async ({ page }) => {

@@ -1576,6 +1576,69 @@
      synthId points at, scoring rows with an EN label + `any` stems, penalties
      with a resolving item + EN title/why, and a decision with >=2 options one
      of which is correct. */
+  /* A minimal but COMPLETE BRANCHED scenario that passes the branched graph
+     validator out of the box: two decision nodes forming a small tree — an entry
+     call whose options lead on to a follow-up, whose options end the case. Each
+     node has an English prompt, two options, one marked correct, and a
+     consequence narrative (branch.reveal). Loading it flips the author into
+     branched format (scenarioJsonToState routes on format:"branched"), so the
+     branch editor appears with this scaffold. Keep every branched-graph rule
+     satisfied when editing: unique node ids, >=2 options per node, EXACTLY ONE
+     entry (the node with no unlockWhen), every node reachable, >=1 ending.
+     Branched content is English-only by design (the in-product reader supplies
+     FR/JA at read time — same as branched-seed.js). */
+  function branchedSkeletonJson() {
+    return {
+      id: "new-branched-scenario",
+      format: "branched",
+      name: trio("New branched scenario"),
+      summary: trio("A decision-by-decision case: the team makes one call at a " +
+        "time, and each choice changes what happens next."),
+      moduleAName: trio("The case"),
+      // Pure decision flow — empty clinical stand-ins keep case-derived code from
+      // choking (mirrors branched-seed.js).
+      case: { history: [], exam: [], labs: [] },
+      scoring: {},
+      penalties: [],
+      synthPrereqs: [],
+      decisions: [
+        {
+          id: "b-start", module: "A", points: 20, penalty: 15,
+          prompt: trio("Set the scene, then ask the team's FIRST decision. " +
+            "Replace this with your opening call."),
+          options: [
+            { text: trio("The appropriate first action."),
+              branch: { reveal: trio("Narrate what happens on the right call — " +
+                "this leads on to the next decision.") },
+              correct: true },
+            { text: trio("A plausible but wrong action."),
+              branch: { reveal: trio("Narrate the consequence of the wrong call. " +
+                "It still leads on, so a poor early choice colours what the team " +
+                "walks into next.") } }
+          ]
+        },
+        {
+          id: "b-followup", module: "A", points: 20, penalty: 15,
+          // Gated behind b-start → this is NOT the entry node; it is reached from
+          // the opening call.
+          unlockWhen: { afterDecision: "b-start" },
+          prompt: trio("The follow-up decision, reached from the opening call. " +
+            "Replace with your second call — or delete this node for a " +
+            "one-decision case."),
+          options: [
+            { text: trio("The better resolution."),
+              branch: { reveal: trio("Narrate the ending for the right call. " +
+                "With no further node, this option ENDS the case.") },
+              correct: true },
+            { text: trio("The weaker resolution."),
+              branch: { reveal: trio("Narrate the ending for the weaker call. " +
+                "This option also ENDS the case.") } }
+          ]
+        }
+      ]
+    };
+  }
+
   function skeletonJson() {
     return {
       id: "new-scenario",
@@ -1687,6 +1750,60 @@
     var out = document.getElementById("validation-output");
     out.className = "validation-output success";
     out.textContent = msg;
+  }
+
+  /* "Start from a skeleton" — pick which starter to load. Two module types are
+     pickable: the standard Module A + B scaffold, and a BRANCHED (decision-tree)
+     scaffold. Picking branched loads a valid branched skeleton, which flips the
+     author into branched format (via scenarioJsonToState) so the branch editor
+     appears. Mirrors the Clone-a-built-in modal; replaces the current form. */
+  function openSkeletonPicker() {
+    var out = document.getElementById("validation-output");
+    var existing = document.getElementById("skeleton-picker");
+    if (existing) existing.remove();
+    var modal = el("div", { id: "skeleton-picker", class: "load-modal", role: "dialog" });
+    var inner = el("div", { class: "load-modal-inner" });
+    inner.appendChild(el("h3", { text: "Start from a skeleton" }));
+    inner.appendChild(el("p", {
+      class: "field-hint",
+      text: "Replaces the current form with a small worked example that already " +
+            "validates. Pick the scenario type you want to author."
+    }));
+    var ul = el("ul", { class: "scenario-cloud-list" });
+    function choice(label, hint, jsonFn, msg) {
+      var li = el("li");
+      var btn = el("button", { type: "button", class: "secondary-btn", text: label });
+      btn.addEventListener("click", function () {
+        try {
+          applyScenarioJson(jsonFn(), msg);
+          modal.remove();
+        } catch (e) {
+          out.className = "validation-output error";
+          out.textContent = "Could not load the skeleton: " + (e.message || "unknown error");
+        }
+      });
+      li.appendChild(btn);
+      li.appendChild(el("p", { class: "field-hint", text: hint }));
+      ul.appendChild(li);
+    }
+    choice("Standard — Module A + B",
+      "A clinical-reasoning + breaking-bad-news case across two module stages.",
+      skeletonJson,
+      "Loaded the Module A/B starter skeleton. It already validates — replace the " +
+      "placeholder text, give it your own id, then save.");
+    choice("Branched — decision tree",
+      "An épuré, one-decision-at-a-time case: each choice unlocks the next.",
+      branchedSkeletonJson,
+      "Loaded the branched starter skeleton. The branch editor is now showing — " +
+      "replace the placeholder nodes, give it your own id, then save.");
+    inner.appendChild(ul);
+    var row = el("div", { class: "load-modal-actions" });
+    var close = el("button", { type: "button", class: "secondary-btn", text: "Cancel" });
+    close.addEventListener("click", function () { modal.remove(); });
+    row.appendChild(close);
+    inner.appendChild(row);
+    modal.appendChild(inner);
+    document.body.appendChild(modal);
   }
 
   /* Modal listing the built-ins; clicking one CLONES it (new id) into the form.
@@ -1847,12 +1964,9 @@
     });
 
     var btnSkel = document.getElementById("btn-skeleton");
-    if (btnSkel) btnSkel.addEventListener("click", function () {
-      if (!window.confirm("Replace the current form with the starter skeleton?")) return;
-      applyScenarioJson(skeletonJson(),
-        "Loaded the Module A/B starter skeleton. It already validates — replace the " +
-        "placeholder text, give it your own id, then save.");
-    });
+    // Was: load the standard skeleton directly. Now opens a picker so the
+    // BRANCHED scenario is a pickable skeleton type alongside standard A/B.
+    if (btnSkel) btnSkel.addEventListener("click", openSkeletonPicker);
 
     var btnClone = document.getElementById("btn-clone-builtin");
     if (btnClone) btnClone.addEventListener("click", function () {
@@ -1888,6 +2002,7 @@
       // scenario-author-cloud.js so the cloud picker gets the same
       // new-id-so-it-can't-overwrite-the-original semantics.
       skeleton: skeletonJson,
+      branchedSkeleton: branchedSkeletonJson,
       cloneJson: cloneJson,
       loadBuiltins: loadBuiltins
     };

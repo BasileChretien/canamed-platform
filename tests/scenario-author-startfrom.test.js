@@ -53,8 +53,67 @@ function install(api, scenario) {
 test("the author exposes the Phase-5b start-from helpers", () => {
   const api = loadAuthor();
   assert.equal(typeof api.skeleton, "function", "skeleton() must be exposed");
+  assert.equal(typeof api.branchedSkeleton, "function", "branchedSkeleton() must be exposed");
   assert.equal(typeof api.cloneJson, "function", "cloneJson() must be exposed (cloud reuses it)");
   assert.equal(typeof api.loadBuiltins, "function", "loadBuiltins() must be exposed");
+});
+
+/* ── the branched scenario is a pickable skeleton type ────────────────────── */
+
+test("the branched skeleton is a well-formed branched decision tree", () => {
+  const api = loadAuthor();
+  const s = api.branchedSkeleton();
+  assert.equal(s.format, "branched", "must declare the branched format");
+  assert.ok(s.name && s.name.en, "must name itself");
+  assert.ok(Array.isArray(s.decisions) && s.decisions.length >= 1, "must have >=1 decision node");
+
+  // The branched-graph validator requires: unique ids, >=2 options + an English
+  // prompt per node, EXACTLY ONE entry (no unlockWhen), >=1 correct option. Pin
+  // the shape here; the real graph validator runs in the e2e (it needs
+  // branched-validate.js, which this node harness doesn't load).
+  const ids = new Set();
+  let entries = 0;
+  s.decisions.forEach((d, i) => {
+    assert.ok(d.id, "decisions[" + i + "] needs an id");
+    assert.ok(!ids.has(d.id), "duplicate node id " + d.id);
+    ids.add(d.id);
+    assert.ok(d.prompt && d.prompt.en, "decisions[" + i + "] needs an English prompt");
+    assert.ok(Array.isArray(d.options) && d.options.length >= 2,
+      "decisions[" + i + "] needs >=2 options");
+    assert.ok(d.options.some((o) => o.correct), "decisions[" + i + "] needs a correct option");
+    d.options.forEach((o) => {
+      assert.ok(o.text && o.text.en, "every option needs English text");
+      assert.ok(o.branch && o.branch.reveal && o.branch.reveal.en,
+        "every option needs a branch.reveal consequence");
+    });
+    if (!d.unlockWhen) entries += 1;
+  });
+  assert.equal(entries, 1, "a branched scenario must have EXACTLY ONE entry node (no unlockWhen)");
+  // The non-entry node is gated behind an existing node → reachable, not orphaned.
+  const gated = s.decisions.filter((d) => d.unlockWhen && d.unlockWhen.afterDecision);
+  gated.forEach((d) => assert.ok(ids.has(d.unlockWhen.afterDecision),
+    "a gated node's afterDecision must reference an existing node"));
+});
+
+test("the branched skeleton round-trips into branched author state", () => {
+  const api = loadAuthor();
+  const state = api.fromJson(api.branchedSkeleton());
+  assert.equal(state.format, "branched", "fromJson must route a branched skeleton to branched state");
+  assert.ok(Array.isArray(state.branchedNodes) && state.branchedNodes.length >= 1,
+    "the branch nodes must populate the branched editor state");
+});
+
+test("'Start from skeleton' opens a picker offering BOTH standard and branched", () => {
+  // The button now opens a picker (so branched is pickable) instead of loading
+  // the standard skeleton directly.
+  assert.match(JS, /getElementById\("btn-skeleton"\)/, "the skeleton button must be wired");
+  assert.match(JS, /btnSkel\.addEventListener\("click", openSkeletonPicker\)/,
+    "the skeleton button must open the picker");
+  assert.match(JS, /function openSkeletonPicker\(/, "the picker must exist");
+  const picker = JS.slice(JS.indexOf("function openSkeletonPicker("));
+  const body = picker.slice(0, picker.indexOf("\n  function "));
+  assert.match(body, /skeletonJson\b/, "the picker must offer the standard skeleton");
+  assert.match(body, /branchedSkeletonJson\b/, "the picker must offer the branched skeleton");
 });
 
 test("the starter skeleton validates clean out of the box", () => {
