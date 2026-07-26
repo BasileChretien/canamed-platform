@@ -27,6 +27,19 @@ const path = require("node:path");
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 
+/* Rough source slice of a top-level `function name(...) { … }` body — brace
+   counting from the signature. Good enough for regex assertions on small fns. */
+function fnBodyOf(name) {
+  const at = SCRIPT.indexOf("function " + name + "(");
+  assert.notStrictEqual(at, -1, "function not found: " + name);
+  let i = SCRIPT.indexOf("{", at), depth = 0;
+  for (let j = i; j < SCRIPT.length; j++) {
+    if (SCRIPT[j] === "{") depth++;
+    else if (SCRIPT[j] === "}" && --depth === 0) return SCRIPT.slice(i, j + 1);
+  }
+  throw new Error("unbalanced braces for " + name);
+}
+
 /* The resolver block is self-contained (its only dependency is `window`), so we
    can slice it out and evaluate it for REAL behavioural coverage rather than
    another source-regex. */
@@ -353,6 +366,45 @@ test("M2: `modules` is declared write-once in BOTH rule trees", () => {
       label + ": ids validated generically (no A|B whitelist, so module C needs no rules change)");
   });
   assert.equal(s[".validate"], o[".validate"], "both trees must validate identically");
+});
+
+/* ── M3b: phase-based progress is a data-driven, reusable seam ─────────────── */
+
+test("M3b: MODULE_PROGRESS.B reuses the existing MODB constants, not a copy", () => {
+  const reg = SCRIPT.slice(SCRIPT.indexOf("const MODULE_PROGRESS = {"));
+  const bCfg = reg.slice(0, reg.indexOf("};"));
+  // The registry must POINT AT the canonical constants, so the section table has
+  // one source of truth (a divergent copy would silently drift from the DOM).
+  assert.match(bCfg, /phases:\s*MODB_PHASES\b/, "B.phases must reference MODB_PHASES");
+  assert.match(bCfg, /sections:\s*MODB_PHASE_SECTIONS\b/, "B.sections must reference MODB_PHASE_SECTIONS");
+  assert.match(bCfg, /stageId:\s*"stage-2"/);
+  assert.match(bCfg, /prevId:\s*"modB-phase-prev"/);
+  assert.match(bCfg, /nextId:\s*"modB-phase-next"/);
+});
+
+test("M3b: the Module B functions are name-preserving wrappers over the shared plumbing", () => {
+  // The ~11 callers/specs that drive these must keep working, so the names stay
+  // and the bodies delegate to the generic helpers.
+  assert.match(fnBodyOf("applyModBPhaseVisibility"), /applyPhaseVisibility\(/,
+    "applyModBPhaseVisibility delegates to applyPhaseVisibility");
+  assert.match(fnBodyOf("renderModBPhase"), /renderModulePhase\(MODULE_PROGRESS\.B, modBPhase\)/,
+    "renderModBPhase delegates to renderModulePhase");
+  // The generic helpers exist and take config, not hardcoded Module B specifics.
+  assert.match(SCRIPT, /function applyPhaseVisibility\(stageId, sections, phaseKey, columnsSel, expandedIn\)/);
+  assert.match(SCRIPT, /function renderModulePhase\(cfg, phaseIndex\)/);
+});
+
+test("M3b: Module A is DELIBERATELY absent from the phase registry (derived gate)", () => {
+  const reg = SCRIPT.slice(SCRIPT.indexOf("const MODULE_PROGRESS = {"));
+  const body = reg.slice(0, reg.indexOf("};") + 2);
+  // A phase entry for A would be wrong: its progress is a derived hypothesis
+  // gate (revealModARightCol), not an ordinal phase list. Guard against a future
+  // edit "helpfully" registering it.
+  assert.doesNotMatch(body, /(^|[^A-Za-z])A\s*:/,
+    "Module A must not gain a phase-registry entry — it keeps its derived-gate visibility");
+  // And Module A's visibility function is untouched by M3b.
+  assert.match(SCRIPT, /function revealModARightCol\(/,
+    "revealModARightCol must remain Module A's own visibility function");
 });
 
 /* ── M1: the author can produce a single-module scenario ──────────────────── */

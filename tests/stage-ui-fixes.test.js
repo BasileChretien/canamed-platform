@@ -70,12 +70,23 @@ test("Item 3 — renderStage scrolls to the top of the window on a stage change"
 });
 
 test("Item 6 — Module B collapses its empty right column except in the answer phases", () => {
-  const fn = fnBody("applyModBPhaseVisibility");
-  assert.match(fn, /\.columns\.modB-columns/, "must target the Module B columns wrapper");
-  // 2026-06-26: the answer cards now show in P3 "exchange" (the two questions)
-  // and P6 "reflect" (what improved); collapse the right column everywhere else.
-  assert.match(fn, /classList\.toggle\("rcol-collapsed",\s*phaseKey !== "exchange" && phaseKey !== "reflect"\)/,
-    "must collapse for every phase except 'exchange' and 'reflect'");
+  // module-set M3b: the columns-collapse mechanism moved from
+  // applyModBPhaseVisibility into the shared applyPhaseVisibility + Module B's
+  // MODULE_PROGRESS config. Behaviour is unchanged; assert the new locations.
+  const reg = JS.slice(JS.indexOf("const MODULE_PROGRESS = {"));
+  const bCfg = reg.slice(0, reg.indexOf("};"));
+  assert.match(bCfg, /columnsSel:\s*"\.columns\.modB-columns"/,
+    "MODULE_PROGRESS.B must target the Module B columns wrapper");
+  // 2026-06-26: the answer cards show in P3 "exchange" (the two questions) and
+  // P6 "reflect" (what improved); the right column stays expanded only there.
+  assert.match(bCfg, /expandedIn:\s*\["exchange",\s*"reflect"\]/,
+    "the grid stays expanded only in the answer phases (exchange, reflect)");
+  // The generic helper does the collapse; the wrapper just delegates to it.
+  assert.match(fnBody("applyPhaseVisibility"),
+    /classList\.toggle\("rcol-collapsed",\s*\(expandedIn \|\| \[\]\)\.indexOf\(phaseKey\) === -1\)/,
+    "applyPhaseVisibility collapses outside the expanded phases");
+  assert.match(fnBody("applyModBPhaseVisibility"), /applyPhaseVisibility\(/,
+    "applyModBPhaseVisibility must delegate to the shared helper (name-preserving wrapper)");
   assert.match(CSS, /#stage-2 \.columns\.rcol-collapsed\s*\{\s*grid-template-columns:\s*1fr/,
     "the #stage-2 rcol-collapsed CSS rule must exist");
   assert.match(CSS, /#stage-2 \.columns\.rcol-collapsed > \.col-right\s*\{\s*display:\s*none/,

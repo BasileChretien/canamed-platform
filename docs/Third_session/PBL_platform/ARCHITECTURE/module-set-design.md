@@ -201,28 +201,33 @@ real validation for rules changes; per-viewport Playwright for any UI change.
   to asserting it stays GONE (its no-global-restyle guard is unchanged). 984 unit
   + Module A coach/reveal e2e green.
 
-**M3b — thin adapter, NOT a merged engine.**
-- Generalise `applyModBPhaseVisibility` → `applyPhaseVisibility(stageId,
-  sections, phaseKey)`; move `MODB_PHASE_SECTIONS` into a `MODULE_PROGRESS`
-  registry keyed off `MODULE_REGISTRY`; generalise the nav wiring in
-  `initModBPhaseNav`. Keep `applyModBPhaseVisibility` / `setModBPhase` /
-  `renderModBPhase` / `initModBPhaseNav` as **name-preserving wrappers** so the
-  ~11 specs that drive them stay green.
-- Module A registers with `advance: null` and **keeps `revealModARightCol` as its
-  own visibility function** — its sticky per-tab reveal must not be forced into
-  B's selector table.
-- Explicitly OUT of scope: any change to `phaseGateOpen()`,
-  `revealModARightCol()`'s gate expressions, `moduleA/revealed`,
-  `moduleA/hypotheses`, or any export path.
-- Only two assertions break, both source-text greps:
-  `tests/stage-ui-fixes.test.js` (the `.columns.modB-columns` body check and the
-  `MODB_PHASE_SECTIONS = [` literal). No rules change; shell bump yes.
-- Effort: ~2 PRs, low / low-medium risk. **M3 is not the big chunk — M4 is**
-  (1200 lines of hand-authored stage DOM + `STAGE_COUNT = 4` + `stage <= 3`).
-- Do **not** introduce a `$moduleId` rules wildcard for M3: it buys nothing for
-  A+B, and because named keys shadow wildcards in RTDB you would keep the
-  duplication anyway. When module C lands, add a literal `moduleC` block
-  (~8 lines × 2 trees) — tighter and reversible. Revisit at module D.
+**M3b — thin adapter, NOT a merged engine. ← DONE (shell v107→v108).**
+- Extracted `applyPhaseVisibility(stageId, sections, phaseKey, columnsSel,
+  expandedIn)` and `renderModulePhase(cfg, phaseIndex)` as shared plumbing, and
+  moved Module B's phase config (`phases`, `sections`, columns-collapse, nav ids)
+  into a `MODULE_PROGRESS.B` registry entry that **references** the existing
+  `MODB_PHASES`/`MODB_PHASE_SECTIONS` (one source of truth, no copy).
+  `applyModBPhaseVisibility` and `renderModBPhase` are now **name-preserving
+  wrappers** — the ~11 callers/specs that drive them are untouched and green.
+- `setModBPhase` / `initModBPhaseNav` were **left module-B-specific on purpose**:
+  nav wiring is inherently coupled to the module's own set-phase + DB ref
+  (`refModBPhase`), so a future module supplies its own tiny nav wiring rather
+  than forcing a generic DB-write path with one consumer. Honest boundary.
+- **Module A is DELIBERATELY absent from `MODULE_PROGRESS`** — its progress is a
+  derived hypothesis gate (`revealModARightCol`), not an ordinal phase list, and
+  a unit test now guards against a future edit "helpfully" registering it.
+- Behaviour-preserving: 984 unit (the one predicted `stage-ui-fixes.test.js`
+  columns-collapse assertion moved to the new location; +3 M3b seam tests) +
+  Module B phase e2e (`modb-phase-flow`, `stage-ui-fixes`, `modab-role-sections`,
+  `module-b-collapsible`) desktop + 3 mobile green. No rules/DOM/export change.
+- **Honest note on value:** this seam buys nothing user-facing; its only future
+  consumer is a phase-based module C. Built because the plan called for it and it
+  is low-risk + behaviour-preserving. If module C is a phase-based module it can
+  now declare its phases as data; if it needs a *different* mechanic, this seam
+  costs nothing to ignore.
+- When module C lands, add a literal `moduleC` rules block (~8 lines × 2 trees) —
+  do **not** introduce a `$moduleId` wildcard (named keys shadow wildcards in
+  RTDB, so you'd keep the duplication anyway). Revisit the wildcard at module D.
 
 ### M4 — Templated stage DOM + generic rules + versioned exports
 - Generate a stage shell per module (blocker 3).

@@ -10316,20 +10316,78 @@ const MODB_PHASE_SECTIONS = [
   { sel: ".answers-card-modB-reflect",  phases: ["reflect"] }
 ];
 
-function applyModBPhaseVisibility(phaseKey) {
-  const stage = document.getElementById("stage-2");
+/* ── Phase-based progress: shared plumbing (module-set M3b) ────────────────────
+ * Module B runs on an ordinal phase index whose only job is to show/hide the
+ * right sections of #stage-2 as the room walks through the roleplay timetable.
+ * That mechanism is generic, so it lives here as data-driven helpers a FUTURE
+ * phase-based module would reuse by adding a MODULE_PROGRESS entry — instead of
+ * copy-pasting the render/visibility/nav functions.
+ *
+ * This is NOT a merge of the two module engines. Module A's progress is a
+ * DERIVED hypothesis gate (revealModARightCol) — unforgeable because computed,
+ * per-participant sticky — and is DELIBERATELY absent from this registry; it
+ * keeps its own visibility function. Module B is an ungated shared timetable.
+ * See ARCHITECTURE/module-set-design.md (M3). */
+
+/* Toggle `is-phase-hidden` on every section-table node NOT visible in phaseKey
+   (selectors scoped under the module's stage), and collapse the two-column grid
+   to full width outside the `expandedIn` phases (mirrors Module A's
+   rcol-collapsed). Pure DOM; no module-specific knowledge. */
+function applyPhaseVisibility(stageId, sections, phaseKey, columnsSel, expandedIn) {
+  const stage = document.getElementById(stageId);
   if (!stage) return;
-  MODB_PHASE_SECTIONS.forEach(({ sel, phases }) => {
-    stage.querySelectorAll(sel).forEach(node => {
-      node.classList.toggle("is-phase-hidden", phases.indexOf(phaseKey) === -1);
+  sections.forEach(function (s) {
+    stage.querySelectorAll(s.sel).forEach(function (node) {
+      node.classList.toggle("is-phase-hidden", s.phases.indexOf(phaseKey) === -1);
     });
   });
-  // The right column carries the answer cards, which show in the discussion
-  // phases only: P3 "exchange" (the two questions) and P6 "reflect" (what
-  // improved + the takeaway). Everywhere else that track is empty, so collapse
-  // the two-column grid to full width (mirrors Module A's rcol-collapsed).
-  const cols = stage.querySelector(".columns.modB-columns");
-  if (cols) cols.classList.toggle("rcol-collapsed", phaseKey !== "exchange" && phaseKey !== "reflect");
+  if (columnsSel) {
+    const cols = stage.querySelector(columnsSel);
+    if (cols) cols.classList.toggle("rcol-collapsed", (expandedIn || []).indexOf(phaseKey) === -1);
+  }
+}
+
+/* Render a phase-based module at `phaseIndex`: apply visibility, sync the
+   stepper chips, disable prev/next at the ends, set the indicator text. */
+function renderModulePhase(cfg, phaseIndex) {
+  const phaseKey = cfg.phases[phaseIndex] || cfg.phases[0];
+  applyPhaseVisibility(cfg.stageId, cfg.sections, phaseKey, cfg.columnsSel, cfg.expandedIn);
+  setPhaseStepperState(cfg.stageId, phaseKey, cfg.phases.slice(0, phaseIndex));
+  const nav = cfg.nav || {};
+  const prev = nav.prevId && el(nav.prevId), next = nav.nextId && el(nav.nextId);
+  if (prev) prev.disabled = phaseIndex <= 0;
+  if (next) next.disabled = phaseIndex >= cfg.phases.length - 1;
+  const ind = nav.indicatorId && el(nav.indicatorId);
+  if (ind) ind.textContent = _modBT(nav.indicatorKey, nav.indicatorFallback, { n: phaseIndex + 1 });
+}
+
+/* Per-module phase config the shared plumbing above reads. Module A is
+   deliberately absent (derived gate, not an ordinal phase list). A future
+   phase-based module adds an entry here + its own set-phase/DB wiring. */
+const MODULE_PROGRESS = {
+  B: {
+    stageId: "stage-2",
+    phases: MODB_PHASES,
+    sections: MODB_PHASE_SECTIONS,
+    columnsSel: ".columns.modB-columns",
+    // The right column (answer cards) is populated only in the discussion
+    // phases — P3 "exchange" (the two questions) and P6 "reflect" (what improved
+    // + the takeaway); collapse the grid to full width everywhere else.
+    expandedIn: ["exchange", "reflect"],
+    nav: {
+      prevId: "modB-phase-prev", nextId: "modB-phase-next",
+      indicatorId: "modB-phase-indicator",
+      indicatorKey: "modB.phase.indicator", indicatorFallback: "Phase {n} / 6"
+    }
+  }
+};
+
+/* Name-preserving wrapper (module-set M3b): Module B's phase visibility now runs
+   on the shared applyPhaseVisibility + its MODULE_PROGRESS.B config. Kept so the
+   ~11 callers/specs that drive applyModBPhaseVisibility stay unchanged. */
+function applyModBPhaseVisibility(phaseKey) {
+  const c = MODULE_PROGRESS.B;
+  applyPhaseVisibility(c.stageId, c.sections, phaseKey, c.columnsSel, c.expandedIn);
 }
 
 /* ── Module B — per-role section visibility (2026-06-03) ───────────────────
@@ -10394,15 +10452,10 @@ function _modBT(key, fallback, vars) {
   return s;
 }
 
+/* Name-preserving wrapper (module-set M3b): render Module B at its current
+   shared phase index via the generic renderModulePhase. */
 function renderModBPhase() {
-  const phaseKey = MODB_PHASES[modBPhase] || "setup";
-  applyModBPhaseVisibility(phaseKey);
-  setPhaseStepperState("stage-2", phaseKey, MODB_PHASES.slice(0, modBPhase));
-  const prev = el("modB-phase-prev"), next = el("modB-phase-next");
-  if (prev) prev.disabled = modBPhase <= 0;
-  if (next) next.disabled = modBPhase >= MODB_PHASES.length - 1;
-  const ind = el("modB-phase-indicator");
-  if (ind) ind.textContent = _modBT("modB.phase.indicator", "Phase {n} / 6", { n: modBPhase + 1 });
+  renderModulePhase(MODULE_PROGRESS.B, modBPhase);
 }
 
 function setModBPhase(idx) {
