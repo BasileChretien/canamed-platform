@@ -1,7 +1,7 @@
 # Module set — selectable modules per session
 
 **Status: COMPLETE for what was asked.** M0–M3b **shipped & merged** (PRs #241–#245,
-#247 stepper tidy-up, #248 M3b; live through shell v108). The requirement is
+PR #247 stepper tidy-up, #248 M3b; live through shell v108). The requirement is
 delivered as of M2 (#243): Modules A and B are independently selectable and
 facilitator-narrowed. A **third module type already exists and is live** — the
 **branched** format (see the "third module type ALREADY EXISTS" section below),
