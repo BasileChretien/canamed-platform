@@ -10186,38 +10186,32 @@ function updateModANextStep() {
     textEl.textContent = _coachT("modA.coach.read-case",
       "Read the case, then ask the patient, examine and investigate to work it up.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "setup", []);
   } else if (!gateOpen) {
     textEl.textContent = _coachT("modA.coach.gather",
       "Work the case up — ask, examine, investigate. When you're ready, write " +
       "a working hypothesis to unlock the discussion.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "case", ["setup"]);
   } else if (modAAnswerEntries.length === 0) {
     textEl.textContent = _coachT("modA.coach.open-discussion",
       "✓ Hypotheses in — open Debate & answers and tackle the two questions " +
       "together: your diagnosis & plan, and pain across cultures.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "exchange", ["setup", "case"]);
   } else if (!allBulletsCovered) {
     const remaining = 2 - bulletsCovered.size;
     const tpl = _coachT("modA.coach.bullets-partial",
       "Capturing answers — {n} still to add to cover both questions.");
     textEl.textContent = tpl.replace("{n}", String(remaining));
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
   } else if (allBulletsCovered) {
     textEl.textContent = _coachT("modA.coach.bullets-complete",
       "✓ Both questions answered. Add more refinements or wait for your facilitator.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "bullets", ["setup", "case", "exchange"]);
   } else {
     // catch-all: fall back to the generic next-step text
     textEl.textContent = _coachT("modA.coach.gather",
       "Work the case up — ask, examine, investigate. When you're ready, write " +
       "a working hypothesis to unlock the discussion.");
     _coachSetAction(actionsEl, null);
-    setPhaseStepperState("stage-1", "case", ["setup"]);
   }
 
   // Progressive right-column reveal rides the same state hook as the coach —
