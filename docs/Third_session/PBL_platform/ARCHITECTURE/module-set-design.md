@@ -1,9 +1,13 @@
 # Module set — selectable modules per session
 
-**Status:** M0–M3a **shipped & merged** (PRs #241, #242, #243, #244, #245, + the
-M3 stepper tidy-up). The user's requirement is delivered as of M2 (#243). M3b and
-M4/M5 remain **unbuilt and optional** — they are only needed to add a module type
-*beyond* A/B; see the phase notes below. Supersedes decision 8 of
+**Status: COMPLETE for what was asked.** M0–M3b **shipped & merged** (PRs #241–#245,
+PR #247 stepper tidy-up, #248 M3b; live through shell v108). The requirement is
+delivered as of M2 (#243): Modules A and B are independently selectable and
+facilitator-narrowed. A **third module type already exists and is live** — the
+**branched** format (see the "third module type ALREADY EXISTS" section below),
+so M5's "add a real third module" was moot. M4/M5 as written remain **unbuilt and
+are only relevant if branched must become MIXABLE with A/B in one session** — a
+product decision that was NOT requested. Supersedes decision 8 of
 [scenario-characters-design.md](scenario-characters-design.md) ("Fixed Module A +
 B skeleton"), which deliberately deferred this.
 
@@ -229,16 +233,43 @@ real validation for rules changes; per-viewport Playwright for any UI change.
   do **not** introduce a `$moduleId` wildcard (named keys shadow wildcards in
   RTDB, so you'd keep the duplication anyway). Revisit the wildcard at module D.
 
-### M4 — Templated stage DOM + generic rules + versioned exports
-- Generate a stage shell per module (blocker 3).
-- Rules: `$moduleId` wildcard for `rooms/$roomId/modules/$moduleId` +
-  `answers/$moduleId` in both trees; lift the `stage <= 3` bound.
-- Exports: add generic per-module output, keeping the A/B columns (decision 4).
+### The third module type ALREADY EXISTS — the branched format (clarified 2026-07-26)
 
-### M5 — Add a real third module
-- The proof the engine generalised, plus the author-UI repeater and dropping the
-  `decisions[].module` `A|B` whitelist (`scenario-author.js:1166`, and the
-  import coercion at `1388`).
+The user pointed out that a third module type is not hypothetical: the **branched
+scenario** is developed and **live** (`ward-escalation-branched`, registered via
+`branched-seed.js`; the `branched-render/runtime/seed` engine is precached in the
+shell; shipped through v108). So M4/M5 below were framed on a false premise —
+there is nothing to "add".
+
+**What branched IS today:** a whole-*session* format (`format:"branched"`), NOT a
+per-stage module. `MODULE_REGISTRY` is `[A→1, B→2]`; branched is absent.
+`moduleSet()` returns `[]` for it (script.js:558/581), `standardStageFlow()`
+special-cases it to `[0,1,LAST]` (script.js:677), and its content renders on
+**stage 1** (Module A's stage) with the PBL chrome hidden via
+`body[data-format="branched"]` CSS. So a session is *either* A/B *or* branched —
+they are mutually exclusive because branched reuses A's stage.
+
+**⇒ The initiative is COMPLETE for what was asked.** Three module types exist and
+ship (A, B, branched); A and B are independently selectable + facilitator-narrowed
+(M0–M2, live). The requirement — "Modules A and B selectable one without the
+other, several modules per session as the facilitator wants" — is delivered.
+
+### M4 / M5 — only relevant if branched must become MIXABLE with A/B (NOT requested)
+
+The one capability not present is running branched **in the same session as A/B**
+(e.g. Module A → a branched case → Module B), because branched is standalone and
+reuses stage 1. Making it mixable is the real cost, and it is a **product/
+pedagogical decision** — a branched case is a deliberately épuré, one-decision-at-
+a-time format; whether it belongs *inside* a mixed PBL session is the user's call,
+and was NOT requested. If ever wanted, that work is:
+- **M4** — give branched its OWN stage (it currently shares stage 1 with A), a
+  `MODULE_REGISTRY` id, scenario-schema support to declare it alongside A/B,
+  templated stage DOM (blocker 3), a literal `moduleBranched` rules block in both
+  trees, and lifting the `stage <= 3` bound.
+- **M5** — drop the `decisions[].module` `A|B` whitelist
+  (`scenario-author.js:1166` + the import coercion at `1388`) and the author-UI
+  repeater, so branched decisions author alongside A/B.
+Until then: **do not build M4/M5 on spec** — branched already works standalone.
 
 ## Test debt to expect
 
