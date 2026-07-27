@@ -185,6 +185,64 @@ test("M4c: the branched engine walks ONLY the composed subtree in a mixed sessio
     "a composed session's deliverable lands on the branched stage's own host");
 });
 
+/* ── M4d: a composed branched module gets its own answers bucket ───────────── */
+
+test("M4d: answers/moduleBranched is declared in BOTH trees, mirroring moduleA", () => {
+  const rules = JSON.parse(
+    fs.readFileSync(path.join(P, "database.rules.json"), "utf8")).rules;
+  const sess = rules.sessions.$sessionId.rooms.$roomId.answers;
+  const orgs = rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId.answers;
+  [["sessions", sess], ["orgs", orgs]].forEach(([label, ans]) => {
+    assert.ok(ans.moduleBranched, label + " must declare answers/moduleBranched");
+    // Cloned from that tree's own moduleA, so validation (text<=1000, by, cid,
+    // the at-window, optional university, edits) is identical by construction.
+    assert.deepStrictEqual(ans.moduleBranched, ans.moduleA,
+      label + ": moduleBranched must validate exactly like moduleA");
+  });
+  // The two trees must NOT be identical — their predicates root at different paths.
+  assert.notDeepStrictEqual(sess.moduleBranched, orgs.moduleBranched,
+    "each tree's rule must reference its own root path");
+});
+
+test("M4d: standalone branched still writes to moduleA; composed writes elsewhere", () => {
+  const BR = fs.readFileSync(path.join(P, "branched-render.js"), "utf8");
+  const fn = BR.slice(BR.indexOf("function branchedAnswerBucket()"),
+                      BR.indexOf("function branchedDecisions()"));
+  // Live rooms hold standalone branched data under moduleA — changing that would
+  // orphan it, so standalone MUST stay on moduleA.
+  assert.match(fn, /=== "branched"\) return "moduleA";/,
+    "standalone branched keeps writing to moduleA (data continuity)");
+  // And the composed branch keys off composed nodes EXISTING — not merely on
+  // "the format isn't branched", which is also true when no scenario is applied
+  // and would rename the input ids out from under addAnswer().
+  assert.match(fn, /d\.module === "branched"/, "composed is detected by the nodes themselves");
+  assert.match(fn, /composed \? "moduleBranched" : "moduleA"/,
+    "only a genuinely composed session uses the new bucket");
+});
+
+test("M4d: the textarea ids follow the bucket (else addAnswer silently no-ops)", () => {
+  // addAnswer() resolves its input as `answer-input-<moduleKey>-<bulletKey>`.
+  // If the ids stayed hardcoded to moduleA while the write bucket changed, the
+  // Add button would find no element and do NOTHING, with no error.
+  const BR = fs.readFileSync(path.join(P, "branched-render.js"), "utf8");
+  assert.ok(!/"answer-input-moduleA-"/.test(BR),
+    "no hardcoded moduleA input id may remain");
+  assert.match(BR, /"answer-input-" \+ branchedAnswerBucket\(\) \+ "-"/,
+    "ids must be built from the same bucket the write uses");
+  assert.match(BR, /answers\[branchedAnswerBucket\(\)\]/,
+    "the read-back must use the same bucket too");
+});
+
+test("M4d: the client subscribes to the new bucket (state, listener, teardown)", () => {
+  assert.match(SCRIPT, /let answers = \{ moduleA: \{\}, moduleB: \{\}, moduleBranched: \{\} \}/,
+    "the answers state needs the bucket");
+  assert.match(SCRIPT, /refAnswers\.moduleBranched = db\.ref\(base \+ "\/answers\/moduleBranched"\)/,
+    "the ref must be created");
+  assert.match(SCRIPT, /refAnswers\.moduleBranched\.on\("value"/, "…and subscribed");
+  assert.match(SCRIPT, /if \(refAnswers\.moduleBranched\) refAnswers\.moduleBranched\.off\(\);/,
+    "…and torn down with the room");
+});
+
 /* ── M1: the module set is scenario-driven ────────────────────────────────── */
 
 test("M1: BACK-COMPAT — a scenario that names both modules still runs A+B", () => {
