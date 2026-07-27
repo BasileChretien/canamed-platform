@@ -187,21 +187,38 @@ test("M4c: the branched engine walks ONLY the composed subtree in a mixed sessio
 
 /* ── M4d: a composed branched module gets its own answers bucket ───────────── */
 
-test("M4d: answers/moduleBranched is declared in BOTH trees, mirroring moduleA", () => {
+test("M4d: answers/moduleBranched is declared in BOTH trees and HARDENED", () => {
   const rules = JSON.parse(
     fs.readFileSync(path.join(P, "database.rules.json"), "utf8")).rules;
   const sess = rules.sessions.$sessionId.rooms.$roomId.answers;
   const orgs = rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId.answers;
   [["sessions", sess], ["orgs", orgs]].forEach(([label, ans]) => {
     assert.ok(ans.moduleBranched, label + " must declare answers/moduleBranched");
-    // Cloned from that tree's own moduleA, so validation (text<=1000, by, cid,
-    // the at-window, optional university, edits) is identical by construction.
-    assert.deepStrictEqual(ans.moduleBranched, ans.moduleA,
-      label + ": moduleBranched must validate exactly like moduleA");
+    const e = ans.moduleBranched.$entryId;
+    /* Deliberately STRICTER than the moduleA rule it was cloned from. moduleA /
+       moduleB still carry the older, looser contract (any authed user, no
+       $other) — a PRE-EXISTING gap, tracked separately. A brand-new node must
+       not be introduced at the weaker standard. */
+    assert.match(e[".write"], /uidMembers/,
+      label + ": writes must be room-membership gated");
+    assert.match(e[".write"], /closed/, label + ": no writes after close");
+    assert.strictEqual(e.$other[".validate"], false,
+      label + ": unknown entry fields must be rejected ($other sentinel)");
+    // Every field the client actually writes must be declared, or the $other
+    // sentinel would reject a legitimate answer.
+    ["text", "by", "cid", "at", "university", "bulletKey", "edits"].forEach(f => {
+      assert.ok(e[f], label + ": must declare the client-written field " + f);
+    });
+    assert.match(e.text[".validate"], /length <= 1000/, label + ": text bounded");
+    // It must be strictly stronger than moduleA, not a copy of it.
+    assert.notStrictEqual(e[".write"], ans.moduleA.$entryId[".write"],
+      label + ": must not inherit moduleA's ungated write");
   });
   // The two trees must NOT be identical — their predicates root at different paths.
   assert.notDeepStrictEqual(sess.moduleBranched, orgs.moduleBranched,
     "each tree's rule must reference its own root path");
+  assert.match(orgs.moduleBranched.$entryId[".write"], /orgs/,
+    "the org rule must root at the orgs tree");
 });
 
 test("M4d: standalone branched still writes to moduleA; composed writes elsewhere", () => {

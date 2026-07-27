@@ -978,21 +978,40 @@ test("rules: answers/moduleBranched accepts a composed branched deliverable (M4d
   const uid = await waitForUid(page);
   const code = "mbr-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const base = `sessions/${code}/rooms/Room 1/answers/moduleBranched`;
-  // Reading a session subtree requires session membership (the `.read` gate on
-  // sessions/$sessionId), so join first — exactly as a participant does. Writing
-  // does not need it, which is why the write below would pass either way.
-  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
-    .toBe("ALLOWED");
-
   const good = { text: "Post-op sepsis; escalate to the outreach team.",
                  by: "Emu Student", cid: uid, at: Date.now(), bulletKey: "finalDx" };
+
+  /* HARDENED beyond the moduleA rule it was cloned from (CodeRabbit review):
+     writes require ROOM MEMBERSHIP, and the entry schema is sealed with
+     $other:false. Prove the gate BEFORE joining the room. */
+  const beforeJoin = await tryWrite(page, `${base}/e0`, good);
+  expect(beforeJoin, "a non-member must not write branched answers").not.toBe("ALLOWED");
+
+  // Join the session + claim room membership, exactly as enterRoom/startRoom do.
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
+    .toBe("ALLOWED");
+
   expect(await tryWrite(page, `${base}/e1`, good)).toBe("ALLOWED");
 
-  // Same validation as moduleA (it is a clone): empty text and >1000 chars fail.
+  // Schema: empty text and >1000 chars fail…
   const empty = await tryWrite(page, `${base}/e2`, Object.assign({}, good, { text: "" }));
   expect(empty, "empty text must be rejected").not.toBe("ALLOWED");
   const long = await tryWrite(page, `${base}/e3`, Object.assign({}, good, { text: "x".repeat(1001) }));
   expect(long, "over-long text must be rejected").not.toBe("ALLOWED");
+  // …and an UNDECLARED field is rejected outright ($other sentinel).
+  const junk = await tryWrite(page, `${base}/e4`, Object.assign({}, good, { evil: "x" }));
+  expect(junk, "an unknown entry field must be rejected").not.toBe("ALLOWED");
+  // A missing required field is rejected too.
+  const noAt = await tryWrite(page, `${base}/e5`,
+    { text: "t", by: "B", cid: uid });
+  expect(noAt, "a missing required field must be rejected").not.toBe("ALLOWED");
+
+  // CROSS-ROOM: membership in Room 1 must not authorise writing into Room 2.
+  const other = await tryWrite(page,
+    `sessions/${code}/rooms/Room 2/answers/moduleBranched/e1`, good);
+  expect(other, "cross-room branched answers must be denied").not.toBe("ALLOWED");
 
   // Readable back (the entry lists render from it) and clearable (null).
   const back = await tryRead(page, `${base}/e1`);
@@ -1000,8 +1019,15 @@ test("rules: answers/moduleBranched accepts a composed branched deliverable (M4d
   expect(back.val && back.val.bulletKey).toBe("finalDx");
   expect(await tryWrite(page, `${base}/e1`, null)).toBe("ALLOWED");
 
-  // Org-tree parity — a mixed session in an org must work too.
-  const orgBase = `orgs/o${Math.floor(Math.random() * 1e6)}/sessions/s${Math.floor(Math.random() * 1e6)}` +
-                  `/rooms/Room 1/answers/moduleBranched`;
+  // Org-tree parity — same gate, same seal.
+  const oslug = `o${Math.floor(Math.random() * 1e6)}`;
+  const osid = `s${Math.floor(Math.random() * 1e6)}`;
+  const orgBase = `orgs/${oslug}/sessions/${osid}/rooms/Room 1/answers/moduleBranched`;
+  expect(await tryWrite(page, `${orgBase}/e1`, good),
+    "org tree must gate on membership too").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `orgs/${oslug}/sessions/${osid}/rooms/Room 1/uidMembers/${uid}`, true))
+    .toBe("ALLOWED");
   expect(await tryWrite(page, `${orgBase}/e1`, good)).toBe("ALLOWED");
+  expect(await tryWrite(page, `${orgBase}/e2`, Object.assign({}, good, { evil: "x" })),
+    "org tree must seal unknown fields too").not.toBe("ALLOWED");
 });
