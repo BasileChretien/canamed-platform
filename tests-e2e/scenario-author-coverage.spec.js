@@ -388,3 +388,132 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
     expect(errors, "narrowing the module set must not throw").toEqual([]);
   });
 });
+
+/* ── No horizontal scroll on a phone ───────────────────────────────────────
+ * Regression guard for a long-standing (pre-M5) defect: at 375x812 the page
+ * measured documentElement.scrollWidth 409 vs clientWidth 375 — a 34px
+ * sideways scroll, which on a real phone makes the browser zoom the whole
+ * form out to fit.
+ *
+ * Mechanism, so a future regression is diagnosable: a <fieldset> ships with
+ * a UA-default `min-inline-size: min-content`, so it cannot shrink below the
+ * widest thing inside it. A <select> is sized by its longest <option> and
+ * never wraps, so #meta-format's "Branched — épuré decision tree
+ * (English-only)" label (min-content 354px) inflated #meta-section to 396px
+ * — wider than the 351px column — and every child stretched with it. The fix
+ * is in scenario-author.css: `min-inline-size: 0` on the section plus a
+ * `max-width: 100%` cap on the controls.
+ *
+ * The first two cases deliberately narrow the viewport themselves rather than
+ * trusting the project's device width: at iPad Pro 11 (834px) the old bug was
+ * invisible, so a native-viewport-only check would have been a green test over
+ * a broken page. The third runs at each project's NATIVE width, so the
+ * per-device standing instruction is met on the real emulated devices.
+ */
+test.describe("Scenario author — no horizontal overflow on narrow viewports", () => {
+  /** Returns the page's sideways overflow plus the elements causing it. */
+  const overflowReport = (page) =>
+    page.evaluate(() => {
+      const de = document.documentElement;
+      const offenders = [];
+      document.querySelectorAll("*").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        // 0.5px guards against subpixel rounding on fractional device widths.
+        if (r.width > 0 && r.right > de.clientWidth + 0.5) {
+          offenders.push(
+            `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}` +
+              `${el.className ? "." + String(el.className).split(" ")[0] : ""}` +
+              ` w=${Math.round(r.width)} right=${Math.round(r.right)}`
+          );
+        }
+      });
+      return {
+        scrollWidth: de.scrollWidth,
+        clientWidth: de.clientWidth,
+        offenders: offenders.slice(0, 8),
+        offenderCount: offenders.length
+      };
+    });
+
+  /** Asserts the document does not scroll sideways, naming what pushed it. */
+  const expectNoOverflow = (report, where) => {
+    expect(
+      report.scrollWidth - report.clientWidth,
+      `${where}: page scrolls horizontally (scrollWidth=${report.scrollWidth} > ` +
+        `clientWidth=${report.clientWidth}); ${report.offenderCount} element(s) ` +
+        `overflow, first: ${report.offenders.join(" | ") || "(none — check margins)"}`
+    ).toBeLessThanOrEqual(2); // 2px subpixel tolerance, as in mobile.spec.js
+  };
+
+  // 320 = the narrowest phone still worth supporting (iPhone SE 1st gen);
+  // 375 = the width the defect was reported at.
+  for (const width of [320, 375]) {
+    test(`the authoring form never scrolls sideways at ${width}px`, async ({ page }) => {
+      const errors = [];
+      page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+      page.on("dialog", (d) => d.accept());
+
+      await page.setViewportSize({ width, height: 812 });
+      await page.goto("/scenario-author.html");
+      await expect(page.locator("#meta-section")).toBeVisible();
+
+      expectNoOverflow(await overflowReport(page), `${width}px on load`);
+
+      // The section that carried the bug must fit its column, not force it
+      // wider — this is the assertion that fails if `min-inline-size: 0` is
+      // ever dropped, even should some future change mask the page total.
+      const fits = await page.evaluate(() => {
+        const fs = document.getElementById("meta-section");
+        return {
+          section: fs.getBoundingClientRect().width,
+          avail: fs.parentElement.getBoundingClientRect().width
+        };
+      });
+      expect(
+        fits.section,
+        "#meta-section must not be wider than the column it sits in"
+      ).toBeLessThanOrEqual(fits.avail + 1);
+
+      // Ticking the branched module reveals #branched-ref — a second <select>,
+      // whose options are scenario titles (author-supplied, so unbounded in
+      // length). It must be capped like the format select.
+      await page.locator("#mod-branched").check();
+      await expect(page.locator("#branched-ref-row")).toBeVisible();
+      expectNoOverflow(await overflowReport(page), `${width}px with branched-ref shown`);
+      await page.locator("#mod-branched").uncheck();
+
+      // Switching format swaps the whole form for the branch-tree editor.
+      await page.locator("#meta-format").selectOption("branched");
+      await expect(page.locator("#branched-editor")).toBeVisible();
+      expectNoOverflow(await overflowReport(page), `${width}px in branched format`);
+
+      // …and with an actual node row rendered (the densest layout on the page).
+      await page.locator("#branched-editor .add-btn").first().click();
+      expectNoOverflow(await overflowReport(page), `${width}px with a branch node`);
+
+      expect(errors, "measuring layout must not throw").toEqual([]);
+    });
+  }
+
+  test("a fully-populated skeleton stays within this device's width", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+    await expect
+      .poll(async () =>
+        (await page.locator("#json-preview").inputValue()).includes('"new-scenario"'))
+      .toBe(true);
+
+    const size = page.viewportSize();
+    expectNoOverflow(
+      await overflowReport(page),
+      `native viewport ${size ? size.width : "?"}px`
+    );
+
+    expect(errors, "loading the skeleton must not throw").toEqual([]);
+  });
+});

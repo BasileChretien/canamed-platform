@@ -263,6 +263,39 @@ test("M5: selecting nothing at all is rejected", () => {
   assert.ok(errs.some((e) => /at least one module/i.test(e)), "got: " + JSON.stringify(errs));
 });
 
+test("M5: an EMPTY module list is never written (it would not round-trip)", () => {
+  // CodeRabbit #256: unticking everything used to emit `modules: []`, which the
+  // runtime IGNORES — scenarioModuleSet() falls through to inference when a
+  // declaration names no registered module — so the form could not read it back
+  // and save→reload silently "changed" the file. That state is a validate()
+  // error anyway, so the honest export is no key at all.
+  const { api } = loadAuthor();
+  const live = install(api, api.skeleton());
+  live.modules = { A: false, B: false, branched: false };
+  const out = api.toJson();
+  assert.equal("modules" in out, false, "must not emit a meaningless empty list");
+  // …and re-reading that export lands back on the inference, matching the
+  // runtime exactly rather than diverging from it.
+  assert.deepStrictEqual(api.fromJson(out).modules, { A: true, B: true, branched: false });
+});
+
+test("M5: a script-load failure is NOT memoised, so the picker can recover", () => {
+  // CodeRabbit #256: injectScript/loadBuiltins/ensureBranchedRefs all memoise
+  // their promise. Caching a REJECTION would leave the branched-case picker
+  // permanently stuck after one transient network blip — its only trigger is a
+  // re-render, which would just replay the stale rejection.
+  assert.match(JS, /s\.onerror = function \(\) \{[\s\S]{0,160}delete _scriptP\[src\];/,
+    "injectScript must forget a failed src so the next call refetches");
+  assert.match(JS, /if \(s\.parentNode\) s\.parentNode\.removeChild\(s\)/,
+    "…and remove the dead tag, so retries cannot accumulate <script> nodes");
+  assert.match(JS, /function forgetOnFailure\(p, forget\)/,
+    "the shared reset-on-rejection helper must exist");
+  assert.match(JS, /return forgetOnFailure\(_builtinsP, function \(\) \{ _builtinsP = null; \}\)/,
+    "loadBuiltins must clear its memo on failure");
+  assert.match(JS, /return forgetOnFailure\(_branchedRefsP, function \(\) \{ _branchedRefsP = null; \}\)/,
+    "ensureBranchedRefs must clear its memo on failure");
+});
+
 test("M5: an A/B decision in a branched-ONLY scenario is flagged as unreachable", () => {
   const { api, win } = loadAuthor();
   win.CANAMED_SCENARIOS = fakeRegistry();
@@ -332,8 +365,12 @@ test("M5: the meta section carries the module tick boxes and the case picker", (
   assert.match(HTML, /id="mod-branched"/);
   assert.match(HTML, /<select id="branched-ref"/);
   // It starts hidden — it is only relevant once a branched module is ticked.
-  assert.match(HTML, /class="field-row standard-only hidden" id="branched-ref-row"/,
+  assert.match(HTML, /class="field-row[^"]*\bhidden\b[^"]*" id="branched-ref-row"/,
     "the branched-case row must exist and start hidden");
+  // …and it carries the select-row clip class: its options are scenario titles,
+  // so its min-content is unbounded (see the WebKit overflow note in the CSS).
+  assert.match(HTML, /class="field-row[^"]*\bselect-row\b[^"]*" id="branched-ref-row"/,
+    "the branched-case row must be clipped like the other long-option select");
   assert.match(JS, /getElementById\("mod-" \+ id\)/, "the tick boxes must be wired");
   assert.match(JS, /function syncBranchedRefRow\(/, "the picker must have a sync function");
 });

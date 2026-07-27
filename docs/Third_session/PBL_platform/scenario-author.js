@@ -1057,14 +1057,20 @@
        list is redundant, and omitting it keeps every existing scenario
        byte-identical through a round-trip. (An inference of NOTHING is a
        malformed scenario that validate() rejects anyway — writing a list for it
-       would only entrench the mistake.) */
+       would only entrench the mistake.)
+       An EMPTY list is never written either: `modules: []` says nothing the
+       runtime acts on — scenarioModuleSet() ignores a declaration that names no
+       registered module and falls through to inference — so emitting it would
+       be a lie the form could not read back (and "no module selected" is itself
+       a validate() error, so there is no legitimate state to preserve). */
     var declared = declaredModules();
     var branchedOn = declared.indexOf(BRANCHED_MODULE) !== -1;
     var inferredAB = inferredABModules({
       moduleAName: m.moduleAName, moduleBName: m.moduleBName, scoring: scoring
     });
     var declaredAB = declared.filter(function (id) { return id !== BRANCHED_MODULE; });
-    if (branchedOn || (inferredAB.length && !sameModuleSet(declaredAB, inferredAB))) {
+    if (declared.length &&
+        (branchedOn || (inferredAB.length && !sameModuleSet(declaredAB, inferredAB)))) {
       scenarioOut.modules = declared;
     }
     // Emitted even when still blank, so the preview shows the field the author
@@ -1920,8 +1926,13 @@
      light. Fetch it on FIRST use only, so a facilitator who never clones a
      built-in never pays the download. Memoised, including the failure so a
      dead network doesn't spawn a script tag per click. */
-  /* Inject a <script> and resolve once it has run. Memoised per src INCLUDING
-     the failure, so a dead network can't spawn one tag per click. */
+  /* Inject a <script> and resolve once it has run, memoised per src so a repeat
+     caller reuses the same load.
+     A FAILURE is deliberately NOT memoised: a transient network blip must not
+     brick the feature for the rest of the session (the branched-case picker has
+     no other trigger than a re-render, so a sticky rejection would leave it
+     permanently stuck on its error line). The failed tag is removed as it is
+     forgotten, so retries cannot accumulate dead <script> nodes either. */
   var _scriptP = {};
   function injectScript(src) {
     if (_scriptP[src]) return _scriptP[src];
@@ -1929,10 +1940,20 @@
       var s = document.createElement("script");
       s.src = src;
       s.onload = function () { resolve(src); };
-      s.onerror = function () { reject(new Error("Could not load " + src + ".")); };
+      s.onerror = function () {
+        delete _scriptP[src];
+        if (s.parentNode) s.parentNode.removeChild(s);
+        reject(new Error("Could not load " + src + "."));
+      };
       document.head.appendChild(s);
     });
     return _scriptP[src];
+  }
+  /* Forget a memoised promise once it rejects, so the next call retries.
+     Returns the ORIGINAL promise — callers still see the rejection. */
+  function forgetOnFailure(p, forget) {
+    p.catch(forget);
+    return p;
   }
   var _builtinsP = null;
   function loadBuiltins() {
@@ -1947,7 +1968,7 @@
     }, function () {
       throw new Error("Could not load case-content.js (built-in scenarios).");
     });
-    return _builtinsP;
+    return forgetOnFailure(_builtinsP, function () { _builtinsP = null; });
   }
 
   /* ── M5 — the pickable branched cases ─────────────────────────────────────
@@ -1971,7 +1992,9 @@
         _branchedRefs = branchedScenarioList(window.CANAMED_SCENARIOS);
         return _branchedRefs;
       });
-    return _branchedRefsP;
+    // Retryable: the next re-render (ticking the box again, adding a row…) will
+    // re-attempt the fetch rather than replaying a stale rejection forever.
+    return forgetOnFailure(_branchedRefsP, function () { _branchedRefsP = null; });
   }
   function branchedScenarioList(map) {
     return Object.keys(map || {})
