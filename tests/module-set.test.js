@@ -137,6 +137,54 @@ test("M4b: the lazy branched chunk DERIVES the wrap-up index from the shell", ()
     "the shell must publish the wrap-up index");
 });
 
+/* ── M4c: composition — a mixed scenario REFERENCES a branched scenario ────── */
+
+test("M4c: renderDecisions renders every registry module, not a hardcoded A/B", () => {
+  const fn = fnBodyOf("renderDecisions");
+  assert.match(fn, /MODULE_REGISTRY\.map\(m => m\.id\)\.forEach/,
+    "the render loop must come from the registry so a composed branched module renders");
+  assert.ok(!/\["A", "B"\]\.forEach/.test(fn), "the hardcoded A/B loop must be gone");
+  assert.match(fn, /el\("decisions-" \+ mod\)/, "each module renders into its own container");
+});
+
+test("M4c: composeBranchedModule namespaces ids and rewrites graph edges", () => {
+  const fn = fnBodyOf("composeBranchedModule");
+  // Node ids become RTDB vote keys (votes/$voteId), so a composed graph must not
+  // collide with the outer scenario's own decision ids.
+  assert.match(fn, /BRANCHED_ID_PREFIX/, "composed node ids must be namespaced");
+  assert.match(fn, /copy\.module = "branched"/, "composed nodes are tagged for the branched stage");
+  // Both accepted afterDecision shapes must be rewritten or the graph breaks.
+  assert.match(fn, /typeof uw\.afterDecision === "string"/, "bare-id edges rewritten");
+  assert.match(fn, /uw\.afterDecision\.id = nsId/, "{id, option} edges rewritten");
+  assert.match(fn, /d\.module === "branched"/, "previously composed nodes are dropped first");
+});
+
+test("M4c: composition is inert for a scenario with no branchedRef", () => {
+  assert.match(SCRIPT, /window\.CURRENT_SCENARIO_BRANCHED_REF = \(sc && sc\.branchedRef\) \|\| null/,
+    "the reference comes off the scenario body");
+  const fn = fnBodyOf("composeBranchedModule");
+  assert.match(fn, /if \(!ref \|\| typeof ref !== "string"\) return;/,
+    "no branchedRef → nothing composed");
+});
+
+test("M4c: compose runs AFTER the finalStep assignment (it may override it)", () => {
+  // The referenced branched scenario owns its own deliverable prompt; running
+  // compose before applyScenario's finalStep line would clobber it.
+  const fin = SCRIPT.indexOf("window.CURRENT_SCENARIO_FINAL_STEP = (sc && sc.finalStep)");
+  const call = SCRIPT.indexOf("composeBranchedModule();", fin);
+  assert.ok(fin !== -1 && call !== -1 && call > fin,
+    "composeBranchedModule() must be called after CURRENT_SCENARIO_FINAL_STEP is set");
+});
+
+test("M4c: the branched engine walks ONLY the composed subtree in a mixed session", () => {
+  const BR = fs.readFileSync(path.join(P, "branched-render.js"), "utf8");
+  // Walking the outer A/B decisions as part of the graph would corrupt the path.
+  assert.match(BR, /function branchedDecisions\(\)/, "the engine needs a subtree selector");
+  assert.match(BR, /d\.module === "branched"/, "a composed session walks only branched nodes");
+  assert.match(BR, /branched-final-host-3/,
+    "a composed session's deliverable lands on the branched stage's own host");
+});
+
 /* ── M1: the module set is scenario-driven ────────────────────────────────── */
 
 test("M1: BACK-COMPAT — a scenario that names both modules still runs A+B", () => {

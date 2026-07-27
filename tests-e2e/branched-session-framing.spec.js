@@ -301,4 +301,104 @@ test.describe("branched session framing", () => {
     );
     expect(targets).not.toContain(3);
   });
+
+  /* Phase M4c — COMPOSITION. A mixed scenario runs a branched decision case
+     alongside A/B by REFERENCING a standalone branched scenario id. This is the
+     behavioural proof: the reference resolves, the nodes are namespaced + tagged,
+     the graph edges survive, and the tree renders on the branched stage. */
+  test("M4c: a mixed scenario composes a referenced branched case onto stage 3", async ({
+    page,
+  }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+
+    await page.goto("/");
+    const got = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      const outer = window.CANAMED_SCENARIOS["chronic-pain-opioids"];
+      const ref = window.CANAMED_SCENARIOS["ward-escalation-branched"];
+      if (!outer || !ref) throw new Error("fixtures missing");
+      // A mixed session: Modules A + B, plus the branched case by reference.
+      window.applyScenario("m4c-mixed", Object.assign({}, outer, {
+        id: "m4c-mixed",
+        modules: ["A", "B", "branched"],
+        branchedRef: "ward-escalation-branched",
+      }));
+      window.renderDecisions();
+      const all = window.DECISIONS || [];
+      const br = all.filter((d) => d.module === "branched");
+      const outerIds = (outer.decisions || []).map((d) => d.id);
+      const box = document.getElementById("decisions-branched");
+      return {
+        mods: window.moduleSet(),
+        flow: window.stageFlow(),
+        stages: window.CANAMED_MODULE_STAGES,
+        brCount: br.length,
+        refCount: (ref.decisions || []).length,
+        allNamespaced: br.every((d) => d.id.indexOf("br_") === 0),
+        // No composed id may collide with an outer A/B decision id.
+        collides: br.some((d) => outerIds.indexOf(d.id) !== -1),
+        // Graph edges must have been rewritten to the namespaced ids.
+        edges: br
+          .filter((d) => d.unlockWhen && d.unlockWhen.afterDecision)
+          .map((d) => {
+            const a = d.unlockWhen.afterDecision;
+            return typeof a === "string" ? a : a.id;
+          }),
+        // The outer A/B decisions survive untouched.
+        aCount: all.filter((d) => d.module === "A").length,
+        bCount: all.filter((d) => d.module === "B").length,
+        // buildDecision()'s root element carries the `decision` class.
+        rendered: box ? box.querySelectorAll(".decision").length : -1,
+        boxHidden: box ? box.classList.contains("hidden") : null,
+      };
+    });
+
+    // The branched module joins the session and gets its own stage.
+    expect(got.mods).toEqual(["A", "B", "branched"]);
+    expect(got.stages).toEqual([1, 2, 3]);
+    expect(got.flow).toEqual([0, 1, 2, 3, 4]);
+
+    // Every referenced node was composed in, namespaced, and collision-free.
+    expect(got.brCount).toBe(got.refCount);
+    expect(got.brCount).toBeGreaterThan(0);
+    expect(got.allNamespaced).toBe(true);
+    expect(got.collides).toBe(false);
+    // …and the graph edges point at the namespaced ids, so the tree still walks.
+    expect(got.edges.length).toBeGreaterThan(0);
+    got.edges.forEach((e) => expect(e).toMatch(/^br_/));
+
+    // The outer A/B content is untouched, and the tree actually rendered.
+    expect(got.aCount).toBeGreaterThan(0);
+    expect(got.bCount).toBeGreaterThan(0);
+    expect(got.boxHidden).toBe(false);
+    expect(got.rendered).toBeGreaterThan(0);
+
+    expect(errors, "composing must not throw").toEqual([]);
+  });
+
+  test("M4c: switching away from a composed scenario drops the branched nodes", async ({
+    page,
+  }) => {
+    // applyScenario only reassigns DECISIONS when the new scenario HAS a
+    // decisions key, so a stale composed graph could otherwise survive.
+    await page.goto("/");
+    const got = await page.evaluate(async () => {
+      await window.CanamedLoader.ensureCaseContent();
+      const outer = window.CANAMED_SCENARIOS["chronic-pain-opioids"];
+      window.applyScenario("m4c-mixed", Object.assign({}, outer, {
+        id: "m4c-mixed", modules: ["A", "B", "branched"],
+        branchedRef: "ward-escalation-branched",
+      }));
+      const composed = (window.DECISIONS || []).filter((d) => d.module === "branched").length;
+      // Now switch to a plain A/B scenario with no reference.
+      window.applyScenario("chronic-pain-opioids");
+      const after = (window.DECISIONS || []).filter((d) => d.module === "branched").length;
+      return { composed, after, mods: window.moduleSet(), flow: window.stageFlow() };
+    });
+    expect(got.composed).toBeGreaterThan(0);
+    expect(got.after).toBe(0);
+    expect(got.mods).toEqual(["A", "B"]);
+    expect(got.flow).toEqual([0, 1, 2, 4]);
+  });
 });
