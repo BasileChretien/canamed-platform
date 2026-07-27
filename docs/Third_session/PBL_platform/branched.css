@@ -22,18 +22,23 @@
    pure, sequential decision flow — none of the Module-A clinical workup or
    Module-B roleplay chrome. Hide everything in each stage EXCEPT the two-column
    grid, drop the left (case/role) column, and centre the decisions column to one
-   comfortable reading width. Scoped to body[data-format="branched"] so the
-   standard PBL/roleplay layout is completely untouched. */
-body[data-format="branched"] #stage-1 > *:not(.columns):not(#branched-final-host) { display: none !important; }
-/* A branched scenario has NO Module-B / Reflection stage — stageFlow() skips
-   stage 2 entirely (Welcome → the case → Wrap-up), so #stage-2 never shows. */
-body[data-format="branched"] .stage .columns { grid-template-columns: 1fr !important; }
-body[data-format="branched"] .stage .columns > .col-left { display: none !important; }
+   comfortable reading width.
+
+   SCOPED TO THE STAGE (M4a, 2026-07-27): the épuré hook moved from `body`
+   [data-format] to the per-stage `.stage[data-format="branched"]` / `#stage-1
+   [data-format="branched"]` that applyScenario() now stamps on every .stage. For
+   a STANDALONE branched scenario every stage is stamped "branched" (byte-
+   identical to the old body-scope); for a future MIXED session only the branched
+   stage is stamped, so ONLY that stage goes épuré while the A/B stages keep their
+   full PBL/roleplay chrome. Two genuinely-global rules stay body-scoped below. */
+#stage-1[data-format="branched"] > *:not(.columns):not(#branched-final-host) { display: none !important; }
+.stage[data-format="branched"] .columns { grid-template-columns: 1fr !important; }
+.stage[data-format="branched"] .columns > .col-left { display: none !important; }
 /* Stage-1's decisions live behind the rcol tab bar + an answers panel — both
    irrelevant when decisions ARE the activity. */
-body[data-format="branched"] #stage-1 .rcol-tabs,
-body[data-format="branched"] #stage-1 #rcol-p-answers { display: none !important; }
-body[data-format="branched"] .stage .columns > .col-right {
+#stage-1[data-format="branched"] .rcol-tabs,
+#stage-1[data-format="branched"] #rcol-p-answers { display: none !important; }
+.stage[data-format="branched"] .columns > .col-right {
   max-width: 760px;
   margin-inline: auto;
 }
@@ -41,14 +46,18 @@ body[data-format="branched"] .stage .columns > .col-right {
    right column until Module-A/B findings make it "actionable". A branched
    scenario has no clinical workup to reveal, so that gate would hide the
    decisions FOREVER — force the right column open regardless of the collapse. */
-body[data-format="branched"] .stage .columns.rcol-collapsed { grid-template-columns: 1fr !important; }
-body[data-format="branched"] .stage .columns.rcol-collapsed > .col-right { display: block !important; }
+.stage[data-format="branched"] .columns.rcol-collapsed { grid-template-columns: 1fr !important; }
+.stage[data-format="branched"] .columns.rcol-collapsed > .col-right { display: block !important; }
 /* switchRcolTab()/revealModARightCol() also set the `hidden` attribute on the
    decisions panel when it isn't the active tab — but in branched mode decisions
    are the only panel, so force it open (overrides .rcol-panel[hidden]). */
-body[data-format="branched"] #stage-1 #rcol-p-decisions { display: block !important; }
-/* The mobile bottom tab bar mirrors Module A's rcol tabs, which we've hidden —
-   suppress it so branched mode reads the same on phones as on desktop. */
+#stage-1[data-format="branched"] #rcol-p-decisions { display: block !important; }
+/* GENUINELY-GLOBAL rule (stays body-scoped): the mobile bottom tab bar is a
+   body-level element OUTSIDE any stage, so it can't be a stage descendant. It
+   mirrors Module A's rcol tabs, which we've hidden — for standalone branched the
+   body IS branched → hidden. updateMobileTabbar() ALSO gates the bar on #stage-1
+   visibility, so on a future mixed session's non-branched stages it is already
+   suppressed; M4c revisits per-stage. */
 body[data-format="branched"] #mobile-rcol-tabbar { display: none !important; }
 
 /* ── DOCUMENTS evidence panel ─────────────────────────────────────────────────

@@ -224,9 +224,10 @@ function applyScenario(id, customContent) {
   window.CURRENT_SCENARIO_ID = (sc && (sc.id || (sc.meta && sc.meta.id))) || id || "";
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
   // flow (the existing decision engine, with the clinical/roleplay chrome
-  // hidden via the body[data-format] CSS hook); anything else is the standard
-  // PBL/roleplay layout. Defaults to "standard" so untagged scenarios are
-  // unaffected.
+  // hidden via the per-stage .stage[data-format="branched"] CSS hook stamped
+  // below — M4a; two genuinely-global rules stay body-scoped); anything else is
+  // the standard PBL/roleplay layout. Defaults to "standard" so untagged
+  // scenarios are unaffected.
   window.CURRENT_SCENARIO_FORMAT = (sc && sc.format) || "standard";
   // M1 — the module set this scenario CONTAINS (e.g. ["A"] for a clinical-
   // reasoning-only case, ["B"] for a pure breaking-bad-news roleplay). Null when
@@ -242,6 +243,14 @@ function applyScenario(id, customContent) {
   try {
     if (typeof document !== "undefined" && document.body) {
       document.body.dataset.format = window.CURRENT_SCENARIO_FORMAT;
+      // M4a: ALSO stamp each stage, so the épuré CSS keys off the STAGE
+      // (.stage[data-format="branched"]) rather than the whole body. A standalone
+      // branched scenario stamps every stage the same as body → byte-identical
+      // rendering; a future MIXED session (M4c) stamps ONLY its branched stage,
+      // so only that stage goes épuré while the A/B stages keep their chrome.
+      var _fmt = window.CURRENT_SCENARIO_FORMAT || "standard";
+      var _stages = document.querySelectorAll(".stage");
+      for (var _i = 0; _i < _stages.length; _i++) _stages[_i].dataset.format = _fmt;
     }
   } catch (_) { /* no document (Node/tests) — the format flag is a UI-only hook */ }
   // Branched scenarios pull in their room-only stylesheet (branched.css) HERE —

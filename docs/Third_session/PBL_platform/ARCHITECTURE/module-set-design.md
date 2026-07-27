@@ -254,22 +254,72 @@ ship (A, B, branched); A and B are independently selectable + facilitator-narrow
 (M0–M2, live). The requirement — "Modules A and B selectable one without the
 other, several modules per session as the facilitator wants" — is delivered.
 
-### M4 / M5 — only relevant if branched must become MIXABLE with A/B (NOT requested)
+### M4 / M5 — branched as a MIXABLE module (REQUESTED 2026-07-27; approach = COMPOSITION)
 
-The one capability not present is running branched **in the same session as A/B**
-(e.g. Module A → a branched case → Module B), because branched is standalone and
-reuses stage 1. Making it mixable is the real cost, and it is a **product/
-pedagogical decision** — a branched case is a deliberately épuré, one-decision-at-
-a-time format; whether it belongs *inside* a mixed PBL session is the user's call,
-and was NOT requested. If ever wanted, that work is:
-- **M4** — give branched its OWN stage (it currently shares stage 1 with A), a
-  `MODULE_REGISTRY` id, scenario-schema support to declare it alongside A/B,
-  templated stage DOM (blocker 3), a literal `moduleBranched` rules block in both
-  trees, and lifting the `stage <= 3` bound.
-- **M5** — drop the `decisions[].module` `A|B` whitelist
-  (`scenario-author.js:1166` + the import coercion at `1388`) and the author-UI
-  repeater, so branched decisions author alongside A/B.
-Until then: **do not build M4/M5 on spec** — branched already works standalone.
+Goal: run branched **in the same session as A/B** (Module A → a branched case →
+Module B). **Chosen approach = COMPOSITION (survey Option C):** a mixed session
+REFERENCES a standalone branched scenario by id for its branched stage; the
+branched engine (`branched-render/runtime/validate`) and the branched scenario
+schema + authoring stay **untouched**. The new work is session/stage plumbing, not
+schema. Rejected: inline-namespaced graph (Option A) and shared `decisions[]`
+(Option B) — both entangle the branched node shape with A/B decision validation.
+
+**Verified facts driving the plan (2026-07-27 survey):**
+- Branched reuses **stage 1** and hides ALL PBL chrome via **`body[data-format=
+  "branched"]`** CSS (`branched.css`). Most rules are already `#stage-1`/`.stage`
+  scoped — only two are genuinely global: the `#mobile-rcol-tabbar` hide (but
+  `updateMobileTabbar()` ALSO gates that on `#stage-1` visibility) and the
+  `#branched-final-host` show/hide.
+- `renderDecisions()` hard-loops `["A","B"]` into `#decisions-A`/`#decisions-B`;
+  every branched node is tagged `module:"A"` so it lands in `#decisions-A`. The
+  branched engine renders INTO existing containers (`#decisions-A`,
+  `#branched-final-host`) — it builds no stage DOM. So a branched stage is ~tens
+  of lines of shell, not ~1200.
+- `STAGE_COUNT = 4` (const); `MODULE_REGISTRY = [A→1, B→2]` (fixed indices);
+  `stage <= 3` validate bound in BOTH rule trees; `stage.label.N` in i18n.js + 7
+  `locales/*`. Branched uses NO module-scoped RTDB node — it rides room-level
+  `votes/$voteId` + `score/*`, and writes its final deliverable/rationale to
+  `answers/moduleA` (would collide with real Module A in a mix → needs its own
+  `answers/moduleBranched`).
+- The branched sub-scenario runs from its own scenario context
+  (`window.DECISIONS`, `CURRENT_SCENARIO_FORMAT`, `CURRENT_SCENARIO_FINAL_STEP`),
+  which the single-scenario engine assumes globally — the hard part of M4 is
+  giving the branched STAGE its own scenario context without swapping the outer
+  A/B scenario's globals.
+
+**Staged plan (each a reviewable, verified PR):**
+- **M4a — épuré CSS body→stage re-scope (IN PROGRESS, shell bump).** Set
+  `data-format` on the `.stage` elements (not just `body`), re-scope the
+  stage-content épuré rules in `branched.css` from `body[data-format]` to
+  `.stage[data-format]` / `#stage-1[data-format]`, keep the two genuinely-global
+  rules (mobile-tabbar, final-host) body-scoped for now. Standalone branched is
+  byte-identical (body AND stages both get the attr); this lays the stage-level
+  hook so a future mixed session can be épuré on ONLY the branched stage. Survey's
+  #1 risk, isolated + done first. Verified by the branched e2e (unchanged) + a new
+  stage-attr assertion.
+- **M4b — dynamic stage model (blocker 1).** Derive the stage set/count from the
+  module set instead of `const STAGE_COUNT = 4` + fixed `MODULE_REGISTRY` indices;
+  add a branched stage id + its `#stage-*` shell + `stage.label.*` across i18n +
+  locales; lift `stage <= 3` → `<= 4` in both rule trees + emulator ruleset. Every
+  EXISTING flow (A/B, single-module, standalone branched) must be identical.
+- **M4c — composition schema + reference resolution.** A mixed scenario declares
+  `modules:[…"branched"…]` + a `branchedRef` (a standalone branched scenario id);
+  resolve+load that sub-scenario and give the branched stage its own scenario
+  context (DECISIONS/final-step) without clobbering the outer A/B globals. Render
+  the referenced tree on the branched stage via the existing branched engine.
+- **M4d — rules.** Literal `answers/moduleBranched` block × 2 trees (+ any
+  module-scoped branched state), emulator-proven. (Room-level votes/score already
+  work as long as node ids are unique.)
+- **M5 — author.** Let a scenario declare a branched module by REFERENCING a
+  standalone branched scenario (a picker of branched scenarios), not by inlining
+  a graph — so the A|B decision whitelist (`scenario-author.js` validate/import)
+  need not change for the graph shape; it only needs to accept "branched" in the
+  module list. Rework the pinned tests below.
+
+**Riskiest part (survey):** the body→stage CSS re-scope — presentation-only, so
+every DOM/unit test can pass while the layout silently breaks. Verify VISUALLY
+(screenshots) on desktop + mobile, both a standalone branched session and (once
+M4c lands) a mixed one. Runner-up: the per-stage scenario context in M4c.
 
 ## Test debt to expect
 
