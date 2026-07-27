@@ -80,11 +80,27 @@ Two further decisions, taken after the code survey below surfaced their cost:
 
 ## The real cost (three blockers)
 
-1. **Stage DOM is static and singular.** N sections in any order means the PBL
+1. ~~**Stage DOM is static and singular.** N sections in any order means the PBL
    and Roleplay chrome must become `<template>`s cloned per slot, with every id
    namespaced per slot (`#s2-modA-…`) and every `el("modA-…")` lookup
    slot-scoped. This is the single largest chunk and cannot be avoided by
-   decision 1.
+   decision 1.~~
+   **⚠️ MIS-SCOPED — corrected 2026-07-27 while implementing S1a.** N slots do
+   **not** need N copies of the markup, because **exactly one stage is visible
+   at a time**: `renderStage()` hides every stage but the viewed one. So the
+   markup is a **view the active slot borrows**, not a per-slot instance.
+   `#stage-1` stops meaning "stage number 1" and starts meaning "the PBL view";
+   `#stage-2` "the roleplay view"; `#stage-3` "the branched view". Two PBL
+   sections in one session reuse the PBL view and re-render against their own
+   slot's data. Three consequences:
+   - The ~1200-line templating job **disappears**; S1a was ~60 lines + a
+     resolver.
+   - **Zero CSS churn** — every `#stage-1 …` / `#stage-2 …` rule in `room.css`,
+     `style.css` and `branched.css` already reads as a per-type selector, which
+     is why they keep working unchanged.
+   - The real work moves to **S2**: switching slots must re-render and re-bind
+     to a different slot's DB paths, so per-slot storage is the load-bearing
+     piece, not the DOM. Budget the effort there.
 2. **Every module-scoped DB path becomes slot-scoped**, in both rule trees, with
    an emulator proof per node. Vote ids and decision ids must be namespaced per
    slot (two PBL sections in one session would otherwise collide on
@@ -109,12 +125,27 @@ Derive `window.CANAMED_SECTIONS` from the existing content: 3 PBL + 3 Roleplay
 postTest }`. The runtime still runs the old scenario path; the registry is
 unread. Includes the pre/post-test split (judgement call flagged below).
 
-### S1 — Per-slot stage engine
-`STAGE_COUNT` becomes dynamic (`flow = [0, …slots, last]`); `stageLabel()`
+### S1a — the slot seam (no behaviour change) ← DONE (shell v112→v113)
+`sectionSlots()` / `slotAtStage()` / `stageViewId()` / `allStageViewIds()`
+introduced in `script.js`, and `renderStage()` routed through them: it now shows
+the **view** the current stage resolves to instead of the like-numbered node.
+Every function returns exactly today's answer (a slot sits at its module's fixed
+stage), so this is a seam in the M0 sense — the behaviour flip is S1b.
+- The **fallback is load-bearing**: a standalone branched scenario has an empty
+  `moduleSet()` yet renders on stage 1, so an unmapped stage must still resolve
+  to its like-numbered node. Losing that blanks the whole session; test-pinned.
+- 9 new unit tests (1056 total green) + 19 chromium and 34 mobile E2E
+  (`stage-progression`, `branched-format`, `branched-playthrough`,
+  `stage-ui-fixes`) green with no spec changes — the point being that a seam
+  which needed test edits would not be a seam.
+
+### S1b — slots become positional
+`STAGE_COUNT` becomes dynamic (`flow = [0, …slots, last]`); a slot's stage is
+its **position**, so a roleplay picked first runs on stage 1. `stageLabel()`
 becomes "Section k — title"; i18n `stage.label.N` collapses to one pattern key
-across `i18n.js` + 7 locales (`LOCALE_VERSION` bump). Stage DOM converted to
-per-type `<template>`s cloned per slot with namespaced ids. Rules: `stage`
-bounded by a max slot count.
+across `i18n.js` + 7 locales (`LOCALE_VERSION` bump); `STAGE_MINUTES` /
+`STAGE_NOW` / `TOUR_STAGE` become slot-aware. Rules: `stage` bounded by a max
+slot count instead of `<= 4`.
 
 ### S1c — Roleplay content becomes data (decision 9)
 Extract the roleplay chrome out of `index.html` (`#stage-2`, ~726 lines) into

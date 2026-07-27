@@ -662,6 +662,68 @@ function refreshModuleStages() {
   window.CANAMED_MODULE_STAGES = moduleSet().map(stageForModule).filter(s => s >= 0);
 }
 
+/* ── S1a — SLOTS: a stage is a POSITION, the DOM is a per-TYPE view ───────────
+ * The section model (ARCHITECTURE/section-model-design.md) makes a session
+ * "opening + N independently-picked sections + wrap-up", where two sections may
+ * come from different cases and the same TYPE may appear twice.
+ *
+ * The design doc listed the ~1200 lines of static per-module DOM as the biggest
+ * blocker, on the assumption that N slots need N copies of the markup. They do
+ * not: **exactly one stage is visible at a time** (renderStage() hides every
+ * other one), so the markup is a VIEW the active slot borrows, not a per-slot
+ * instance. #stage-1 stops meaning "stage number 1" and starts meaning "the PBL
+ * view"; #stage-2 "the roleplay view"; #stage-3 "the branched view". Two PBL
+ * sections in one session reuse the PBL view and re-render against their own
+ * slot's data — which is why S2's per-slot DB paths are the real work, not the
+ * DOM. Bonus: every `#stage-1 …` / `#stage-2 …` CSS rule already reads as a
+ * per-type selector, so this costs ZERO CSS churn.
+ *
+ * S1a is a SEAM ONLY — same discipline as M0. Every function here returns
+ * exactly today's answer (a slot sits at its module's fixed stage), so nothing
+ * moves until S1b makes slots positional. */
+const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };
+const STAGE_VIEW_FOR_TYPE = { pbl: "stage-1", roleplay: "stage-2", branched: "stage-3" };
+
+/* The section slots this session runs, in stage order. S1a derives them from
+   moduleSet(); S3 will read the facilitator's ordered pick instead. `stage` is
+   the module's CURRENT fixed index — S1b replaces it with the slot position. */
+function sectionSlots() {
+  return moduleSet().map((mod, i) => {
+    const type = SECTION_TYPE_FOR_MODULE[mod] || null;
+    return { position: i + 1, stage: stageForModule(mod), module: mod, type: type,
+             view: STAGE_VIEW_FOR_TYPE[type] || null };
+  }).filter(s => s.stage >= 0);
+}
+function slotAtStage(stage) {
+  return sectionSlots().find(s => s.stage === stage) || null;
+}
+/* Which DOM node shows a given stage: the welcome view, the wrap-up view, or
+   the view belonging to that slot's section TYPE.
+
+   The fallback matters — a STANDALONE branched scenario has an empty
+   moduleSet() (its content is the node graph, not a module) yet renders on
+   stage 1 with the épuré CSS, so an unmapped stage must still resolve to its
+   like-numbered node rather than vanishing. */
+function stageViewId(stage) {
+  if (stage === 0) return "stage-0";
+  if (stage === STAGE_COUNT - 1) return "stage-" + (STAGE_COUNT - 1);
+  const slot = slotAtStage(stage);
+  return (slot && slot.view) || ("stage-" + stage);
+}
+/* Every stage-view node, so renderStage() can hide the lot before showing one.
+   Derived from the registry + the two fixed ends, never hardcoded, so adding a
+   4th section type means adding one STAGE_VIEW_FOR_TYPE entry. */
+function allStageViewIds() {
+  const ids = ["stage-0", "stage-" + (STAGE_COUNT - 1)];
+  Object.keys(STAGE_VIEW_FOR_TYPE).forEach(t => {
+    if (ids.indexOf(STAGE_VIEW_FOR_TYPE[t]) === -1) ids.push(STAGE_VIEW_FOR_TYPE[t]);
+  });
+  for (let i = 0; i < STAGE_COUNT; i++) {
+    if (ids.indexOf("stage-" + i) === -1) ids.push("stage-" + i);
+  }
+  return ids;
+}
+
 /* ── M4c — COMPOSITION: run a branched case as a module inside a mixed session ──
  * Rather than inventing a second node-graph schema inside the A/B scenario, a
  * mixed scenario REFERENCES a standalone branched scenario by id:
@@ -8023,10 +8085,15 @@ const STAGE_NOW = [
   "You're finished — open the questionnaire below. Thank you for taking part!"
 ];
 function renderStage() {
-  for (let i = 0; i < STAGE_COUNT; i++) {
-    const s = el("stage-" + i);
-    if (s) s.classList.toggle("hidden", i !== viewStage);
-  }
+  /* S1a — show the VIEW the current stage resolves to, not the like-numbered
+     node. Identical today (slot k sits at stage k); once slots are positional
+     a roleplay picked first shows the roleplay view on stage 1. Every other
+     view is hidden, including ones no slot uses. */
+  const activeView = stageViewId(viewStage);
+  allStageViewIds().forEach(id => {
+    const s = el(id);
+    if (s) s.classList.toggle("hidden", id !== activeView);
+  });
   // the mobile bottom tab bar mirrors Module A (stage-1) and must appear /
   // disappear with the on-screen stage — refresh once the stages are toggled.
   if (typeof updateMobileTabbar === "function") updateMobileTabbar();
