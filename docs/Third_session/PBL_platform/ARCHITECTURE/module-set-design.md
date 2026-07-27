@@ -321,11 +321,35 @@ schema. Rejected: inline-namespaced graph (Option A) and shared `decisions[]`
   - **Lands INERT:** stage 3 only enters the flow when a scenario *declares* the
     branched module, and branched is never name- or scoring-inferred. An A/B
     session runs `[0,1,2,4]`, skipping it — same seam-first pattern as M0.
-- **M4c — composition schema + reference resolution.** A mixed scenario declares
-  `modules:[…"branched"…]` + a `branchedRef` (a standalone branched scenario id);
-  resolve+load that sub-scenario and give the branched stage its own scenario
-  context (DECISIONS/final-step) without clobbering the outer A/B globals. Render
-  the referenced tree on the branched stage via the existing branched engine.
+- **M4c — composition schema + reference resolution ← DONE (shell v110→v111).**
+  A mixed scenario declares `modules:[…"branched"…]` + `branchedRef:"<id>"`:
+  ```
+  { modules: ["A","B","branched"], branchedRef: "ward-escalation-branched", … }
+  ```
+  - `composeBranchedModule()` resolves the reference out of
+    `window.CANAMED_SCENARIOS`, deep-copies the referenced nodes, tags them
+    `module:"branched"`, and appends them to the outer `DECISIONS`. **No new
+    runtime and no per-stage scenario context** — the existing decision engine
+    renders them, which is what made the "global DECISIONS" problem evaporate.
+  - **Node ids are namespaced `br_…`** because they become RTDB vote keys
+    (`votes/$voteId`) and must not collide with the outer scenario's decision
+    ids. `unlockWhen.afterDecision` is rewritten in lockstep in **both** accepted
+    shapes (bare id string and `{id, option}`), or the graph would silently break.
+  - Previously composed nodes are **dropped first**, because `applyScenario()`
+    only reassigns `DECISIONS` when the new scenario HAS a `decisions` key — a
+    stale branched graph could otherwise survive a scenario switch.
+  - `renderDecisions()` now iterates `MODULE_REGISTRY` instead of a hardcoded
+    `["A","B"]`, so the composed module renders into `#decisions-branched`.
+  - The branched engine gained `branchedDecisions()`: standalone → every
+    decision; composed → only the `module:"branched"` subset (walking the outer
+    A/B decisions as graph nodes would corrupt the path). `renderBranchedFinal()`
+    targets `#branched-final-host-3` when composed.
+  - **Ordering trap:** `composeBranchedModule()` must run AFTER
+    `CURRENT_SCENARIO_FINAL_STEP` is assigned — the referenced scenario owns its
+    own deliverable prompt and would otherwise be clobbered. Test-pinned.
+  - Verified behaviourally: a mixed scenario composes all referenced nodes,
+    namespaced + collision-free, edges rewritten, tree RENDERED on stage 3, with
+    Modules A and B intact; and switching away drops the composed nodes.
 - **M4d — rules.** Literal `answers/moduleBranched` block × 2 trees (+ any
   module-scoped branched state), emulator-proven. (Room-level votes/score already
   work as long as node ids are unique.)

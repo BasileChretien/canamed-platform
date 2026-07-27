@@ -67,7 +67,18 @@ test("decisionUnlocked() evaluates the afterDecision gate off synced committed v
 test("renderDecisions() gates ALL modules and hides hideWhenLocked follow-ups", () => {
   const i = SCRIPT.indexOf("function renderDecisions");
   assert.ok(i > -1, "renderDecisions must exist");
-  const blk = SCRIPT.slice(i, i + 2900);
+  // Slice to the END OF THE FUNCTION, not a fixed byte window: the old
+  // `i + 2900` cut mid-function, so merely adding a comment could push an
+  // assertion target out of range and fail a correct implementation (it did,
+  // in M4c). Brace-count from the signature instead.
+  const blk = (function () {
+    let open = SCRIPT.indexOf("{", i), depth = 0;
+    for (let j = open; j < SCRIPT.length; j++) {
+      if (SCRIPT[j] === "{") depth++;
+      else if (SCRIPT[j] === "}" && --depth === 0) return SCRIPT.slice(i, j + 1);
+    }
+    return SCRIPT.slice(i);
+  })();
   // The old code only gated Module A: `(mod === "A") ? decisionUnlocked(d) : ...`.
   // Gating must now apply to every module so Module B chains can lock.
   assert.doesNotMatch(blk, /mod === "A"\s*\)\s*\?\s*decisionUnlocked/,

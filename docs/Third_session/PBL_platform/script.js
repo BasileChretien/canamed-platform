@@ -235,11 +235,21 @@ function applyScenario(id, customContent) {
   // scenario still runs A+B with no migration. Must be assigned AFTER
   // CURRENT_SCENARIO_FORMAT (moduleSet reads it) and before refreshModuleStages().
   window.CURRENT_SCENARIO_MODULES = Array.isArray(sc && sc.modules) ? sc.modules.slice() : null;
+  // M4c — COMPOSITION: a mixed scenario runs a branched decision case alongside
+  // A/B by REFERENCING a standalone branched scenario id, rather than inlining a
+  // second node-graph schema. composeBranchedModule() resolves that reference and
+  // merges its nodes into DECISIONS tagged module:"branched", so the existing
+  // decision engine renders them on the branched stage with no new runtime.
+  window.CURRENT_SCENARIO_BRANCHED_REF = (sc && sc.branchedRef) || null;
   refreshModuleStages();
   // Optional branched FINAL step (the OSCE diagnosis/management deliverable):
   // { title, prompt, fields:[{key,label,hint}] }. Null falls back to the
   // default diagnosis + management fields in branched-render.js.
   window.CURRENT_SCENARIO_FINAL_STEP = (sc && sc.finalStep) || null;
+  // M4c — compose LAST of the scenario globals: it may override
+  // CURRENT_SCENARIO_FINAL_STEP with the referenced branched scenario's own
+  // deliverable, so it must run after the line above rather than before it.
+  composeBranchedModule();
   try {
     if (typeof document !== "undefined" && document.body) {
       document.body.dataset.format = window.CURRENT_SCENARIO_FORMAT;
@@ -650,6 +660,63 @@ function moduleHasContent(id) {
 function refreshModuleStages() {
   if (typeof window === "undefined") return;
   window.CANAMED_MODULE_STAGES = moduleSet().map(stageForModule).filter(s => s >= 0);
+}
+
+/* ── M4c — COMPOSITION: run a branched case as a module inside a mixed session ──
+ * Rather than inventing a second node-graph schema inside the A/B scenario, a
+ * mixed scenario REFERENCES a standalone branched scenario by id:
+ *
+ *   { modules: ["A", "B", "branched"], branchedRef: "ward-escalation-branched", … }
+ *
+ * This keeps the branched schema, engine, validator and authoring untouched —
+ * the referenced scenario is exactly the one that already runs standalone.
+ *
+ * Resolution merges the referenced nodes into the outer DECISIONS array tagged
+ * module:"branched", so the EXISTING decision engine renders them on the
+ * branched stage with no new runtime. Node ids are namespaced (br_…) because
+ * they become RTDB vote keys (votes/$voteId) and must not collide with the outer
+ * scenario's own decision ids; unlockWhen.afterDecision edges are rewritten in
+ * lockstep so the graph stays intact.
+ *
+ * Degrades to "no branched nodes" when the reference can't be resolved (registry
+ * not loaded yet, unknown id) — the stage then renders empty rather than
+ * throwing, and moduleHasContent() keeps it out of the flow. */
+const BRANCHED_ID_PREFIX = "br_";
+function composeBranchedModule() {
+  if (typeof window === "undefined") return;
+  const ref = window.CURRENT_SCENARIO_BRANCHED_REF;
+  const base = Array.isArray(window.DECISIONS) ? window.DECISIONS : [];
+  // Always drop any previously composed nodes first: applyScenario() only
+  // reassigns window.DECISIONS when the new scenario HAS a decisions key, so a
+  // stale branched graph could otherwise survive a scenario switch.
+  const outer = base.filter(d => !(d && d.module === "branched"));
+  if (outer.length !== base.length) window.DECISIONS = outer;
+  if (!ref || typeof ref !== "string") return;
+
+  const reg = window.CANAMED_SCENARIOS || {};
+  const src = reg[ref];
+  const nodes = (src && Array.isArray(src.decisions)) ? src.decisions : null;
+  if (!nodes || !nodes.length) {
+    console.warn("branchedRef could not be resolved:", ref);
+    return;
+  }
+  const nsId = id => BRANCHED_ID_PREFIX + String(id);
+  const composed = nodes.map(function (d) {
+    const copy = JSON.parse(JSON.stringify(d));
+    copy.module = "branched";
+    copy.id = nsId(copy.id);
+    // Rewrite the graph edges. afterDecision is either a bare id string or a
+    // { id, option } pair (branched-validate's two accepted shapes).
+    const uw = copy.unlockWhen;
+    if (uw && uw.afterDecision != null) {
+      if (typeof uw.afterDecision === "string") uw.afterDecision = nsId(uw.afterDecision);
+      else if (uw.afterDecision.id) uw.afterDecision.id = nsId(uw.afterDecision.id);
+    }
+    return copy;
+  });
+  window.DECISIONS = outer.concat(composed);
+  // The referenced scenario owns the deliverable prompt for its own tree.
+  if (src.finalStep) window.CURRENT_SCENARIO_FINAL_STEP = src.finalStep;
 }
 /* The active scenario's translatable name trio for a module id. */
 function moduleNameTrio(id) {
@@ -9619,15 +9686,21 @@ function renderDecisions() {
   // branched in-card reasoning textareas so a rebuild never wipes typed text.
   const _focusKey = _captureDecisionFocus();
   const _ratState = _captureRationaleInputs();
-  const srLines = { A: [], B: [] };
+  // M4c: keyed per rendered module (A, B, and — in a composed session — branched).
+  const srLines = {};
   // Combined across modules: which decisions are unlocked right now. Chained
   // branches live in Module B (a committed decision unlocks a follow-up), so
   // the unlock-transition nudge must span both modules — a single tracker
   // keeps A and B from clobbering each other's "newly opened" state.
   const allUnlockedNow = new Set();
-  ["A", "B"].forEach(mod => {
+  /* M4c: render every module that has a decisions container, not a hardcoded
+     ["A","B"]. MODULE_REGISTRY is the source of truth, so a composed branched
+     module renders into #decisions-branched on its own stage with no new engine.
+     Registry order = stage order, so the SR tallies stay deterministic. */
+  MODULE_REGISTRY.map(m => m.id).forEach(mod => {
     const box = el("decisions-" + mod);
     if (!box) return;
+    srLines[mod] = srLines[mod] || [];
     const list = (typeof DECISIONS !== "undefined" ? DECISIONS : [])
       .filter(d => d.module === mod);
     box.innerHTML = "";

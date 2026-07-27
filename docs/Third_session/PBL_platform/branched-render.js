@@ -201,9 +201,17 @@
    * "done" only when the path reaches a node with no follow-up — an ending —
    * which never reverts. Needs ≥1 committed (an empty committed map leaves the
    * entry node active → not done). Returns false until the runtime has loaded. */
-  function branchedTreeDone() {
-    if ((root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched") return false;
+  /* The nodes that form the branch tree. Standalone branched scenario → every
+     decision. COMPOSED session (M4c) → only the nodes merged in from the
+     referenced branched scenario, which carry module:"branched"; the outer A/B
+     decisions are NOT part of the graph and must not be walked. */
+  function branchedDecisions() {
     var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
+    if ((root.CURRENT_SCENARIO_FORMAT || "standard") === "branched") return list;
+    return list.filter(function (d) { return d && d.module === "branched"; });
+  }
+  function branchedTreeDone() {
+    var list = branchedDecisions();
     if (!list.length) return false;
     var rt = root.CanamedBranchedRuntime;
     if (!rt || !rt.branchedPath) return false;
@@ -223,7 +231,13 @@
    * renderDecisions on presence/ballot churn, so the answer textareas keep
    * focus + content); only the synced entry lists refresh. */
   function renderBranchedFinal() {
-    var host = document.getElementById("branched-final-host");
+    /* Standalone branched runs on stage 1 and uses #branched-final-host; a
+       COMPOSED session runs the tree on the branched stage, whose own host is
+       #branched-final-host-3 (M4b). Prefer the stage-3 host whenever the tree is
+       composed, so a mixed session's deliverable lands on the right stage. */
+    var composed = (root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched";
+    var host = (composed && document.getElementById("branched-final-host-3")) ||
+               document.getElementById("branched-final-host");
     if (!host) return;
     if (!branchedTreeDone()) {
       if (host.firstChild) host.textContent = "";
