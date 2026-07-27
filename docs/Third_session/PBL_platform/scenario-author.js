@@ -121,10 +121,23 @@
     return { id: "", stem: "", points: 20, penalty: 15,
       options: [emptyBranchedOption(), emptyBranchedOption()] };
   }
+  /* M5 — the module ids a STANDARD scenario may declare, in the runtime's stage
+     order (script.js MODULE_REGISTRY: A→1, B→2, branched→3). "branched" here is
+     a COMPOSED module: the scenario references a standalone branched scenario by
+     id (`branchedRef`) and the runtime merges its nodes in — the node graph is
+     never inlined, so `decisions[].module` stays A|B. */
+  var AUTHOR_MODULE_IDS = ["A", "B", "branched"];
+  var BRANCHED_MODULE = "branched";
+  function emptyModuleSelection() { return { A: false, B: false, branched: false }; }
+
   function defaultState() {
     return {
       format: "standard",
       branchedNodes: [emptyBranchedNode()],
+      // A fresh form offers both PBL modules (both name fields are on screen);
+      // ticking/unticking is what overrides the name-based inference.
+      modules: { A: true, B: true, branched: false },
+      branchedRef: "",
       meta: {
         id: "",
         name: emptyTrio(),
@@ -823,6 +836,73 @@
       fmtSel.value = STATE.format || "standard";
       fmtSel.onchange = function () { STATE.format = fmtSel.value; renderAll(); };
     }
+
+    // M5 — module-set tick boxes. Same onchange-assignment discipline as the
+    // format toggle. A full renderAll() because ticking `branched` reveals the
+    // case picker (and the decision-module validation depends on the set).
+    AUTHOR_MODULE_IDS.forEach(function (id) {
+      var cb = document.getElementById("mod-" + id);
+      if (!cb) return;
+      if (!STATE.modules) STATE.modules = emptyModuleSelection();
+      cb.checked = !!STATE.modules[id];
+      cb.onchange = function () {
+        STATE.modules[id] = cb.checked;
+        renderAll();
+      };
+    });
+    syncBranchedRefRow();
+  }
+
+  /* Show/populate the "Branched case to run" picker whenever a branched module
+     is selected. The registry is fetched lazily on FIRST reveal, so a
+     facilitator who never composes a branched case never pays the download. */
+  function syncBranchedRefRow() {
+    var row = document.getElementById("branched-ref-row");
+    var sel = document.getElementById("branched-ref");
+    if (!row || !sel) return;
+    var on = branchedSelected();
+    if (on) row.classList.remove("hidden");
+    else row.classList.add("hidden");
+    if (!on) return;
+    fillBranchedRefSelect(sel);
+    sel.onchange = function () {
+      STATE.branchedRef = sel.value;
+      refreshOutput();
+    };
+    if (_branchedRefs !== null) return;
+    ensureBranchedRefs().then(function () {
+      // Re-read the node: a renderAll() may have replaced the row meanwhile.
+      var live = document.getElementById("branched-ref");
+      if (live && branchedSelected()) fillBranchedRefSelect(live);
+    }, function (err) {
+      var status = document.getElementById("branched-ref-status");
+      if (status) {
+        status.textContent = "Could not load the list of branched cases (" +
+          (err && err.message ? err.message : "unknown error") +
+          "). The id you already picked is kept.";
+      }
+    });
+  }
+  function fillBranchedRefSelect(sel) {
+    var cur = STATE.branchedRef || "";
+    sel.innerHTML = "";
+    sel.appendChild(el("option", { value: "",
+      text: _branchedRefs === null ? "— loading branched cases… —" : "— pick a branched case —" }));
+    var matched = false;
+    (_branchedRefs || []).forEach(function (r) {
+      var o = el("option", { value: r.id, text: r.label });
+      if (cur === r.id) { o.selected = true; matched = true; }
+      sel.appendChild(o);
+    });
+    // An id that does not resolve stays SELECTABLE so the author sees the break
+    // (validate() flags it too) — same treatment as a dangling "Then →" target.
+    if (cur && !matched) {
+      var dangling = el("option", { value: cur,
+        text: cur + (_branchedRefs === null ? "" : " (not found!)") });
+      dangling.selected = true;
+      sel.appendChild(dangling);
+    }
+    sel.value = cur;
   }
 
   /* ------------------------------------------------------------------ */
@@ -864,6 +944,51 @@
       });
     }
     return base;
+  }
+
+  /* ── M5 — module set + the referenced branched case ───────────────────────
+     The runtime (script.js scenarioModuleSet()) resolves the module set with a
+     precedence the author must MIRROR exactly, or a round-trip would silently
+     change which stages a session runs:
+       1. an explicit top-level `modules: [...]` wins (unknown ids ignored);
+       2. otherwise the module NAMES decide (name-first — this is what keeps
+          every pre-existing scenario on A+B with no migration);
+       3. only when NO module is named do the scoring families decide.
+     `branched` is outside all of that: it has no name field and no scoring
+     family, so it can ONLY arrive as an explicit declaration. */
+  function declaredModules() {
+    var sel = STATE.modules || {};
+    return AUTHOR_MODULE_IDS.filter(function (id) { return !!sel[id]; });
+  }
+  function branchedSelected() { return declaredModules().indexOf(BRANCHED_MODULE) !== -1; }
+
+  /* What the runtime would infer for A/B from this scenario body alone. */
+  function inferredABModules(body) {
+    var names = ["A", "B"].filter(function (id) {
+      var t = body[id === "A" ? "moduleAName" : "moduleBName"];
+      return !!(t && (typeof t === "string" ? t : t.en));
+    });
+    if (names.length) return names;
+    var sc = body.scoring || {};
+    return ["A", "B"].filter(function (id) { return (sc["module" + id] || []).length > 0; });
+  }
+  function sameModuleSet(a, b) {
+    return a.length === b.length && a.every(function (id, i) { return id === b[i]; });
+  }
+  /* Which module-selection reader the form should use for a parsed scenario:
+     an explicit declaration if it names anything we know, else the inference. */
+  function moduleSelectionFromJson(obj) {
+    var sel = emptyModuleSelection();
+    var declared = Array.isArray(obj && obj.modules) ? obj.modules : null;
+    var known = declared && declared.filter(function (id) {
+      return AUTHOR_MODULE_IDS.indexOf(id) !== -1;
+    });
+    if (known && known.length) {
+      known.forEach(function (id) { sel[id] = true; });
+      return sel;
+    }
+    inferredABModules(obj || {}).forEach(function (id) { sel[id] = true; });
+    return sel;
   }
 
   function toScenarioJson() {
@@ -924,14 +1049,39 @@
       name: m.name,
       summary: m.summary,
       moduleAName: m.moduleAName,
-      moduleBName: m.moduleBName,
-      synthId: STATE.synthId,
-      synthPrereqs: parsePrereqs(STATE.synthPrereqs),
-      case: caseObj,
-      scoring: scoring,
-      penalties: penalties,
-      decisions: decisions
+      moduleBName: m.moduleBName
     };
+    /* M5 — emit `modules` only when it CARRIES INFORMATION: whenever a branched
+       module is declared (the runtime can never infer that one), or when the
+       A/B pick differs from what the names/scoring already imply. Otherwise the
+       list is redundant, and omitting it keeps every existing scenario
+       byte-identical through a round-trip. (An inference of NOTHING is a
+       malformed scenario that validate() rejects anyway — writing a list for it
+       would only entrench the mistake.)
+       An EMPTY list is never written either: `modules: []` says nothing the
+       runtime acts on — scenarioModuleSet() ignores a declaration that names no
+       registered module and falls through to inference — so emitting it would
+       be a lie the form could not read back (and "no module selected" is itself
+       a validate() error, so there is no legitimate state to preserve). */
+    var declared = declaredModules();
+    var branchedOn = declared.indexOf(BRANCHED_MODULE) !== -1;
+    var inferredAB = inferredABModules({
+      moduleAName: m.moduleAName, moduleBName: m.moduleBName, scoring: scoring
+    });
+    var declaredAB = declared.filter(function (id) { return id !== BRANCHED_MODULE; });
+    if (declared.length &&
+        (branchedOn || (inferredAB.length && !sameModuleSet(declaredAB, inferredAB)))) {
+      scenarioOut.modules = declared;
+    }
+    // Emitted even when still blank, so the preview shows the field the author
+    // must fill (validate() reports the missing pick).
+    if (branchedOn) scenarioOut.branchedRef = STATE.branchedRef || "";
+    scenarioOut.synthId = STATE.synthId;
+    scenarioOut.synthPrereqs = parsePrereqs(STATE.synthPrereqs);
+    scenarioOut.case = caseObj;
+    scenarioOut.scoring = scoring;
+    scenarioOut.penalties = penalties;
+    scenarioOut.decisions = decisions;
     // pre/post knowledge tests — optional; emit only when authored.
     if (STATE.preTest && STATE.preTest.length) scenarioOut.preTest = STATE.preTest.map(testQuestionToJson);
     if (STATE.postTest && STATE.postTest.length) scenarioOut.postTest = STATE.postTest.map(testQuestionToJson);
@@ -1060,14 +1210,47 @@
        module is what declares it: the runtime's moduleSet() infers presence from
        the name or a non-empty scoring family, and the session's stage flow drops
        the stages of absent modules. So require AT LEAST ONE rather than both.
-       (An explicit top-level `modules: ["A"]` overrides at runtime and survives
-       a round-trip through the passthrough bag.) */
-    const modsPresent = [];
-    if (json.moduleAName.en || (json.scoring.moduleA || []).length) modsPresent.push("A");
-    if (json.moduleBName.en || (json.scoring.moduleB || []).length) modsPresent.push("B");
-    if (!modsPresent.length) {
-      errs.push("Name at least one module (Module A and/or Module B) — that is what " +
-        "decides which modules the session runs.");
+       M5 — the module tick boxes are now the authority (they default to the same
+       inference), because a branched module can only ever be declared. */
+    const declared = declaredModules();
+    const modsPresent = declared.filter((id) => id !== BRANCHED_MODULE);
+    if (!declared.length) {
+      errs.push("Select at least one module (Module A, Module B and/or a branched " +
+        "decision case) — that is what decides which stages the session runs.");
+    }
+    // A ticked PBL module with neither a name nor a scoring family would render
+    // an empty stage the session still walks the team through.
+    modsPresent.forEach((id) => {
+      const named = (id === "A" ? json.moduleAName : json.moduleBName);
+      const fam = (id === "A" ? json.scoring.moduleA : json.scoring.moduleB) || [];
+      if (!(named && named.en) && !fam.length) {
+        errs.push("Module " + id + " is selected but has no name and no scoring family — " +
+          "name it, give it a scoring family, or untick it.");
+      }
+    });
+    /* M5 — a branched module is COMPOSED by reference: the session resolves
+       `branchedRef` against the built-in scenario registry at runtime
+       (composeBranchedModule()), so an id that does not resolve there yields an
+       empty branched stage with only a console warning. Catch it here instead.
+       The registry is lazily fetched by the picker, so the resolution check runs
+       only once it is loaded — never report "unknown" for a registry we simply
+       have not downloaded. */
+    if (declared.indexOf(BRANCHED_MODULE) !== -1) {
+      const ref = String(json.branchedRef || "").trim();
+      const reg = (typeof window !== "undefined" && window.CANAMED_SCENARIOS) || null;
+      if (!ref) {
+        errs.push("A branched decision case is selected but none is picked — choose one " +
+          "under “Branched case to run”, or untick the branched module.");
+      } else if (reg) {
+        const target = reg[ref];
+        if (!target) {
+          errs.push("branchedRef '" + ref + "' is not one of the branched scenarios " +
+            "shipped with the platform, so the branched stage would render empty.");
+        } else if (target.format !== "branched") {
+          errs.push("branchedRef '" + ref + "' is not a branched scenario (its format is '" +
+            (target.format || "standard") + "').");
+        }
+      }
     }
 
     // history / exam / labs / prompts non-empty
@@ -1196,10 +1379,14 @@
         errs.push("decisions[" + i + "] (id='" + d.id + "') module must be 'A' or 'B'.");
       // M1 — a decision in a module this scenario does NOT run would render into
       // a stage the session never visits, so it would be silently unreachable.
-      else if (modsPresent.length && modsPresent.indexOf(d.module) === -1)
+      // M5 — a branched-only scenario runs NO PBL module, so every A/B decision
+      // there is unreachable too (hence `declared.length`, not modsPresent's).
+      else if (declared.length && modsPresent.indexOf(d.module) === -1)
         errs.push("decisions[" + i + "] (id='" + d.id + "') is module '" + d.module +
-          "', but this scenario only runs Module " + modsPresent.join(" + Module ") +
-          " — name that module, or move the decision.");
+          "', but this scenario only runs " + (modsPresent.length
+            ? "Module " + modsPresent.join(" + Module ")
+            : "a branched decision case") +
+          " — select that module, or move the decision.");
       if (!d.prompt || !d.prompt.en)
         errs.push("decisions[" + i + "] (id='" + d.id + "') needs an English prompt.");
       if (!d.options || d.options.length < 2)
@@ -1305,6 +1492,13 @@
     if (json.summary && json.summary.en) out.appendChild(el("p", { text: json.summary.en }));
     out.appendChild(line("Module A", (json.moduleAName && json.moduleAName.en) || "—"));
     out.appendChild(line("Module B", (json.moduleBName && json.moduleBName.en) || "—"));
+    // M5 — the stages this session will actually run, in order.
+    var runs = declaredModules().map(function (id) {
+      return id === BRANCHED_MODULE
+        ? "branched decision case → " + (json.branchedRef || "(none picked)")
+        : "Module " + id;
+    });
+    out.appendChild(line("Stages", runs.length ? runs.join(" · ") : "—"));
     out.appendChild(line("Case items", json.case.history.length + " history · " +
       json.case.exam.length + " exam · " + json.case.labs.length + " labs · " +
       json.case.prompts.length + " prompts"));
@@ -1374,6 +1568,14 @@
     s.meta.summary     = asTrio(obj.summary);
     s.meta.moduleAName = asTrio(obj.moduleAName);
     s.meta.moduleBName = asTrio(obj.moduleBName);
+    /* M5 — the module set + the referenced branched case. These already SURVIVED
+       a round-trip through the passthrough bag, but they are modeled now that
+       the form controls them: leaving them in `_extra` as well would resurrect
+       the old value the moment the author unticked a module (mergeExtra only
+       skips keys the export already set). So they also leave the known-list
+       below. */
+    s.modules = moduleSelectionFromJson(obj);
+    s.branchedRef = (typeof obj.branchedRef === "string") ? obj.branchedRef : "";
 
     var c = obj.case || {};
     s.history = (c.history || []).map(function (r) {
@@ -1459,7 +1661,9 @@
     s._extra = extraKeys(obj, [
       "id", "name", "summary", "moduleAName", "moduleBName",
       "case", "scoring", "penalties", "decisions", "synthId", "synthPrereqs",
-      "preTest", "postTest", "characters", "format"
+      "preTest", "postTest", "characters", "format",
+      // M5 — modeled by the module tick boxes + the branched-case picker.
+      "modules", "branchedRef"
     ]);
 
     return s;
@@ -1722,6 +1926,35 @@
      light. Fetch it on FIRST use only, so a facilitator who never clones a
      built-in never pays the download. Memoised, including the failure so a
      dead network doesn't spawn a script tag per click. */
+  /* Inject a <script> and resolve once it has run, memoised per src so a repeat
+     caller reuses the same load.
+     A FAILURE is deliberately NOT memoised: a transient network blip must not
+     brick the feature for the rest of the session (the branched-case picker has
+     no other trigger than a re-render, so a sticky rejection would leave it
+     permanently stuck on its error line). The failed tag is removed as it is
+     forgotten, so retries cannot accumulate dead <script> nodes either. */
+  var _scriptP = {};
+  function injectScript(src) {
+    if (_scriptP[src]) return _scriptP[src];
+    _scriptP[src] = new Promise(function (resolve, reject) {
+      var s = document.createElement("script");
+      s.src = src;
+      s.onload = function () { resolve(src); };
+      s.onerror = function () {
+        delete _scriptP[src];
+        if (s.parentNode) s.parentNode.removeChild(s);
+        reject(new Error("Could not load " + src + "."));
+      };
+      document.head.appendChild(s);
+    });
+    return _scriptP[src];
+  }
+  /* Forget a memoised promise once it rejects, so the next call retries.
+     Returns the ORIGINAL promise — callers still see the rejection. */
+  function forgetOnFailure(p, forget) {
+    p.catch(forget);
+    return p;
+  }
   var _builtinsP = null;
   function loadBuiltins() {
     if (_builtinsP) return _builtinsP;
@@ -1729,19 +1962,48 @@
       _builtinsP = Promise.resolve(window.CANAMED_SCENARIOS);
       return _builtinsP;
     }
-    _builtinsP = new Promise(function (resolve, reject) {
-      var s = document.createElement("script");
-      s.src = "case-content.js";
-      s.onload = function () {
-        if (window.CANAMED_SCENARIOS) resolve(window.CANAMED_SCENARIOS);
-        else reject(new Error("case-content.js loaded but defined no built-in scenarios."));
-      };
-      s.onerror = function () {
-        reject(new Error("Could not load case-content.js (built-in scenarios)."));
-      };
-      document.head.appendChild(s);
+    _builtinsP = injectScript("case-content.js").then(function () {
+      if (window.CANAMED_SCENARIOS) return window.CANAMED_SCENARIOS;
+      throw new Error("case-content.js loaded but defined no built-in scenarios.");
+    }, function () {
+      throw new Error("Could not load case-content.js (built-in scenarios).");
     });
-    return _builtinsP;
+    return forgetOnFailure(_builtinsP, function () { _builtinsP = null; });
+  }
+
+  /* ── M5 — the pickable branched cases ─────────────────────────────────────
+     The branched built-in is NOT in case-content.js: branched-seed.js registers
+     ward-escalation-branched by MERGING it into window.CANAMED_SCENARIOS, which
+     is exactly the chained order script-loader.js uses in the app. That order is
+     load-bearing here too — branched-seed.js does
+     `CANAMED_SCENARIOS = CANAMED_SCENARIOS || {}` before merging, so fetching it
+     FIRST would leave loadBuiltins() looking at a non-empty registry and it
+     would never fetch case-content.js at all.
+     Only registry scenarios are offered because only they RESOLVE: the runtime's
+     composeBranchedModule() looks `branchedRef` up in window.CANAMED_SCENARIOS,
+     so a cloud-only branched scenario could not be composed even if picked. */
+  var _branchedRefs = null;     // null = not loaded yet; [] = loaded, none found
+  var _branchedRefsP = null;
+  function ensureBranchedRefs() {
+    if (_branchedRefsP) return _branchedRefsP;
+    _branchedRefsP = loadBuiltins()
+      .then(function () { return injectScript("branched-seed.js"); })
+      .then(function () {
+        _branchedRefs = branchedScenarioList(window.CANAMED_SCENARIOS);
+        return _branchedRefs;
+      });
+    // Retryable: the next re-render (ticking the box again, adding a row…) will
+    // re-attempt the fetch rather than replaying a stale rejection forever.
+    return forgetOnFailure(_branchedRefsP, function () { _branchedRefsP = null; });
+  }
+  function branchedScenarioList(map) {
+    return Object.keys(map || {})
+      .filter(function (id) { return map[id] && map[id].format === "branched"; })
+      .map(function (id) {
+        var nm = map[id].name;
+        var label = (nm && typeof nm === "object" ? nm.en : nm) || id;
+        return { id: id, label: label + " (" + id + ")" };
+      });
   }
 
   function applyScenarioJson(json, msg) {
@@ -2004,7 +2266,10 @@
       skeleton: skeletonJson,
       branchedSkeleton: branchedSkeletonJson,
       cloneJson: cloneJson,
-      loadBuiltins: loadBuiltins
+      loadBuiltins: loadBuiltins,
+      // M5 — module set + the referenced branched case.
+      declaredModules: declaredModules,
+      branchedScenarioList: branchedScenarioList
     };
   }
 })();

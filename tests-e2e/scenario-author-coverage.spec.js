@@ -261,3 +261,259 @@ test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
     expect(errors, "cloning a built-in must not throw").toEqual([]);
   });
 });
+
+/* Module-set M5 — authoring a MIXED scenario: Modules A + B plus a branched
+   decision case, which the scenario REFERENCES by id (`branchedRef`) rather than
+   inlining. The runtime cannot infer a branched module (it has no name field and
+   no scoring family), so the explicit `modules` list must be written whenever it
+   is ticked. The list of pickable cases is fetched lazily — case-content.js and
+   then branched-seed.js, which is where the branched built-in actually lives. */
+test.describe("Scenario author — M5 mixed A/B + branched module", () => {
+  test("a mixed scenario authors modules + a resolving branchedRef, and validates", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+
+    // Start from the standard skeleton so the rest of the form is already valid
+    // — this test is about the module set, not about re-typing a whole case.
+    await page.locator("#btn-skeleton").click();
+    const picker = page.locator("#skeleton-picker");
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: /Standard/ }).click();
+    await expect(picker).toHaveCount(0);
+
+    // A and B are ticked (the skeleton names both) and imply themselves, so no
+    // explicit list is written yet.
+    await expect(page.locator("#mod-A")).toBeChecked();
+    await expect(page.locator("#mod-B")).toBeChecked();
+    await expect(page.locator("#mod-branched")).not.toBeChecked();
+    const preview = page.locator("#json-preview");
+    expect(JSON.parse(await preview.inputValue()).modules).toBeUndefined();
+
+    // The case picker only appears once a branched module is declared.
+    await expect(page.locator("#branched-ref-row")).toBeHidden();
+    await page.locator("#mod-branched").check();
+    await expect(page.locator("#branched-ref-row")).toBeVisible();
+
+    // The pickable cases arrive lazily (case-content.js → branched-seed.js).
+    const refSelect = page.locator("#branched-ref");
+    await expect(refSelect.locator('option[value="ward-escalation-branched"]'))
+      .toBeAttached({ timeout: 30_000 });
+    // Only BRANCHED scenarios are offered — a standard built-in must never be.
+    await expect(refSelect.locator('option[value="chronic-pain"]')).toHaveCount(0);
+    await refSelect.selectOption("ward-escalation-branched");
+
+    // The export carries BOTH keys the runtime needs to compose the module.
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"branchedRef"'))
+      .toBe(true);
+    const json = JSON.parse(await preview.inputValue());
+    expect(json.modules).toEqual(["A", "B", "branched"]);
+    expect(json.branchedRef).toBe("ward-escalation-branched");
+    // Composition, not inlining: no branched node leaks into decisions[].
+    expect(json.decisions.every((d) => d.module === "A" || d.module === "B")).toBe(true);
+
+    // …and the whole thing VALIDATES — including the reference resolving against
+    // the (now downloaded) built-in registry.
+    await page.locator("#btn-validate").click();
+    const out = page.locator("#validation-output");
+    await expect(out).toHaveClass(/success/);
+    await expect(out).toContainText("Validation passed");
+
+    expect(errors, "authoring a mixed scenario must not throw").toEqual([]);
+  });
+
+  test("a branched module with no case picked is blocked, and unticking clears it", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+
+    await page.locator("#mod-branched").check();
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"branchedRef"'))
+      .toBe(true);
+    // Declared but unpicked → the export shows the gap and validate blocks it.
+    expect(JSON.parse(await preview.inputValue()).branchedRef).toBe("");
+    await page.locator("#btn-validate").click();
+    const out = page.locator("#validation-output");
+    await expect(out).toHaveClass(/error/);
+    await expect(out).toContainText("branched decision case is selected but none is picked");
+
+    // Unticking must DROP both keys rather than leaving a stale reference behind
+    // (they are modeled now, not carried in the passthrough bag).
+    await page.locator("#mod-branched").uncheck();
+    await expect(page.locator("#branched-ref-row")).toBeHidden();
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"branchedRef"'))
+      .toBe(false);
+    const json = JSON.parse(await preview.inputValue());
+    expect(json.branchedRef).toBeUndefined();
+    expect(json.modules).toBeUndefined();
+
+    await page.locator("#btn-validate").click();
+    await expect(out).toHaveClass(/success/);
+
+    expect(errors, "toggling the branched module must not throw").toEqual([]);
+  });
+
+  test("unticking a named PBL module writes the explicit modules override", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+
+    // The skeleton's only decision is Module A, so dropping B stays valid.
+    await page.locator("#mod-B").uncheck();
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"modules"'))
+      .toBe(true);
+    expect(JSON.parse(await preview.inputValue()).modules).toEqual(["A"]);
+
+    // Module B is still NAMED by the skeleton; the explicit list is what makes
+    // the session skip its stage.
+    await page.locator("#btn-validate").click();
+    await expect(page.locator("#validation-output")).toHaveClass(/success/);
+
+    expect(errors, "narrowing the module set must not throw").toEqual([]);
+  });
+});
+
+/* ── No horizontal scroll on a phone ───────────────────────────────────────
+ * Regression guard for a long-standing (pre-M5) defect: at 375x812 the page
+ * measured documentElement.scrollWidth 409 vs clientWidth 375 — a 34px
+ * sideways scroll, which on a real phone makes the browser zoom the whole
+ * form out to fit.
+ *
+ * Mechanism, so a future regression is diagnosable: a <fieldset> ships with
+ * a UA-default `min-inline-size: min-content`, so it cannot shrink below the
+ * widest thing inside it. A <select> is sized by its longest <option> and
+ * never wraps, so #meta-format's "Branched — épuré decision tree
+ * (English-only)" label (min-content 354px) inflated #meta-section to 396px
+ * — wider than the 351px column — and every child stretched with it. The fix
+ * is in scenario-author.css: `min-inline-size: 0` on the section plus a
+ * `max-width: 100%` cap on the controls.
+ *
+ * The first two cases deliberately narrow the viewport themselves rather than
+ * trusting the project's device width: at iPad Pro 11 (834px) the old bug was
+ * invisible, so a native-viewport-only check would have been a green test over
+ * a broken page. The third runs at each project's NATIVE width, so the
+ * per-device standing instruction is met on the real emulated devices.
+ */
+test.describe("Scenario author — no horizontal overflow on narrow viewports", () => {
+  /** Returns the page's sideways overflow plus the elements causing it. */
+  const overflowReport = (page) =>
+    page.evaluate(() => {
+      const de = document.documentElement;
+      const offenders = [];
+      document.querySelectorAll("*").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        // 0.5px guards against subpixel rounding on fractional device widths.
+        if (r.width > 0 && r.right > de.clientWidth + 0.5) {
+          offenders.push(
+            `${el.tagName.toLowerCase()}${el.id ? "#" + el.id : ""}` +
+              `${el.className ? "." + String(el.className).split(" ")[0] : ""}` +
+              ` w=${Math.round(r.width)} right=${Math.round(r.right)}`
+          );
+        }
+      });
+      return {
+        scrollWidth: de.scrollWidth,
+        clientWidth: de.clientWidth,
+        offenders: offenders.slice(0, 8),
+        offenderCount: offenders.length
+      };
+    });
+
+  /** Asserts the document does not scroll sideways, naming what pushed it. */
+  const expectNoOverflow = (report, where) => {
+    expect(
+      report.scrollWidth - report.clientWidth,
+      `${where}: page scrolls horizontally (scrollWidth=${report.scrollWidth} > ` +
+        `clientWidth=${report.clientWidth}); ${report.offenderCount} element(s) ` +
+        `overflow, first: ${report.offenders.join(" | ") || "(none — check margins)"}`
+    ).toBeLessThanOrEqual(2); // 2px subpixel tolerance, as in mobile.spec.js
+  };
+
+  // 320 = the narrowest phone still worth supporting (iPhone SE 1st gen);
+  // 375 = the width the defect was reported at.
+  for (const width of [320, 375]) {
+    test(`the authoring form never scrolls sideways at ${width}px`, async ({ page }) => {
+      const errors = [];
+      page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+      page.on("dialog", (d) => d.accept());
+
+      await page.setViewportSize({ width, height: 812 });
+      await page.goto("/scenario-author.html");
+      await expect(page.locator("#meta-section")).toBeVisible();
+
+      expectNoOverflow(await overflowReport(page), `${width}px on load`);
+
+      // The section that carried the bug must fit its column, not force it
+      // wider — this is the assertion that fails if `min-inline-size: 0` is
+      // ever dropped, even should some future change mask the page total.
+      const fits = await page.evaluate(() => {
+        const fs = document.getElementById("meta-section");
+        return {
+          section: fs.getBoundingClientRect().width,
+          avail: fs.parentElement.getBoundingClientRect().width
+        };
+      });
+      expect(
+        fits.section,
+        "#meta-section must not be wider than the column it sits in"
+      ).toBeLessThanOrEqual(fits.avail + 1);
+
+      // Ticking the branched module reveals #branched-ref — a second <select>,
+      // whose options are scenario titles (author-supplied, so unbounded in
+      // length). It must be capped like the format select.
+      await page.locator("#mod-branched").check();
+      await expect(page.locator("#branched-ref-row")).toBeVisible();
+      expectNoOverflow(await overflowReport(page), `${width}px with branched-ref shown`);
+      await page.locator("#mod-branched").uncheck();
+
+      // Switching format swaps the whole form for the branch-tree editor.
+      await page.locator("#meta-format").selectOption("branched");
+      await expect(page.locator("#branched-editor")).toBeVisible();
+      expectNoOverflow(await overflowReport(page), `${width}px in branched format`);
+
+      // …and with an actual node row rendered (the densest layout on the page).
+      await page.locator("#branched-editor .add-btn").first().click();
+      expectNoOverflow(await overflowReport(page), `${width}px with a branch node`);
+
+      expect(errors, "measuring layout must not throw").toEqual([]);
+    });
+  }
+
+  test("a fully-populated skeleton stays within this device's width", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+    await expect
+      .poll(async () =>
+        (await page.locator("#json-preview").inputValue()).includes('"new-scenario"'))
+      .toBe(true);
+
+    const size = page.viewportSize();
+    expectNoOverflow(
+      await overflowReport(page),
+      `native viewport ${size ? size.width : "?"}px`
+    );
+
+    expect(errors, "loading the skeleton must not throw").toEqual([]);
+  });
+});

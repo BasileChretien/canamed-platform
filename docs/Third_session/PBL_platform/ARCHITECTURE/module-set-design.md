@@ -1,13 +1,14 @@
 # Module set — selectable modules per session
 
-**Status: COMPLETE for what was asked.** M0–M3b **shipped & merged** (PRs #241–#245,
-PR #247 stepper tidy-up, #248 M3b; live through shell v108). The requirement is
-delivered as of M2 (#243): Modules A and B are independently selectable and
-facilitator-narrowed. A **third module type already exists and is live** — the
-**branched** format (see the "third module type ALREADY EXISTS" section below),
-so M5's "add a real third module" was moot. M4/M5 as written remain **unbuilt and
-are only relevant if branched must become MIXABLE with A/B in one session** — a
-product decision that was NOT requested. Supersedes decision 8 of
+**Status: ALL PHASES SHIPPED (M0–M5).** M0–M3b merged (PRs #241–#245, #247
+stepper tidy-up, #248 M3b; shell v108); M4a–M4d merged (PRs #251–#254; shell
+v112) making branched a **mixable** module by composition; M5 adds the authoring
+UI for it. The original requirement was already delivered at M2 (#243) — Modules
+A and B independently selectable and facilitator-narrowed — and M5's "add a real
+third module" was moot because the **branched** format already existed (see the
+"third module type ALREADY EXISTS" section below); M4/M5 were then re-scoped
+(requested 2026-07-27) to make branched runnable *alongside* A/B. Supersedes
+decision 8 of
 [scenario-characters-design.md](scenario-characters-design.md) ("Fixed Module A +
 B skeleton"), which deliberately deferred this.
 
@@ -373,11 +374,41 @@ schema. Rejected: inline-namespaced graph (Option A) and shared `decisions[]`
     empty/over-long text, reads back, clears, and has org-tree parity. NB the
     read requires session membership — the first version of that test failed
     because it never joined, which was the RULES WORKING, not a bug.
-- **M5 — author.** Let a scenario declare a branched module by REFERENCING a
-  standalone branched scenario (a picker of branched scenarios), not by inlining
-  a graph — so the A|B decision whitelist (`scenario-author.js` validate/import)
-  need not change for the graph shape; it only needs to accept "branched" in the
-  module list. Rework the pinned tests below.
+- **M5 — author ← DONE (no shell bump: `scenario-author.*` is not in the PWA
+  shell).** The standard authoring path can now produce a mixed scenario: a
+  **module-set tick box row** (A / B / branched) plus a **branched-case picker**
+  in the meta section, emitting `modules` + `branchedRef`. As predicted, the
+  A|B decision whitelist needed **no change** — composition means no branched
+  node ever enters `decisions[]`.
+  - **Both keys already ROUND-TRIPPED** before this PR (Phase 1's passthrough bag
+    preserves unknown top-level keys), so the real work was UI + validation. They
+    are now MODELED and had to LEAVE the passthrough known-list: `mergeExtra()`
+    only skips keys the export already set, so keeping them in `_extra` would
+    have made unticking the branched module silently **resurrect** the old
+    `branchedRef`.
+  - `modules` is emitted only when it CARRIES INFORMATION — a branched module
+    (never inferable: no name field, no scoring family) or an A/B pick that
+    differs from the names. Every existing scenario therefore round-trips
+    byte-identically instead of gaining a redundant key. The author mirrors
+    `scenarioModuleSet()`'s precedence exactly (explicit → names → scoring), or
+    a round-trip could change which stages a session runs.
+  - **The pickable cases are NOT in `case-content.js`** — `branched-seed.js`
+    registers `ward-escalation-branched` by merging into
+    `window.CANAMED_SCENARIOS`. `ensureBranchedRefs()` therefore chains
+    `loadBuiltins()` → `branched-seed.js`, the same order `script-loader.js`
+    uses, and that order is load-bearing: branched-seed does
+    `CANAMED_SCENARIOS = CANAMED_SCENARIOS || {}` before merging, so loading it
+    first would leave `loadBuiltins()` seeing a non-empty registry and
+    `case-content.js` would never be fetched. (The `<script>` injection was
+    extracted to a shared `injectScript()` for this.)
+  - Validation: a declared branched module needs a `branchedRef` that resolves
+    to a `format:"branched"` entry — checked only once the lazily-fetched
+    registry is present, so a not-yet-downloaded registry never produces a false
+    "unknown id". A ticked A/B module with neither a name nor a scoring family
+    is also rejected (it would render an empty stage).
+  - **Known limit:** only scenarios in the built-in registry can be referenced,
+    because that is all `composeBranchedModule()` can resolve at runtime — a
+    facilitator's own cloud-saved branched scenario is not composable yet.
 
 **Riskiest part (survey):** the body→stage CSS re-scope — presentation-only, so
 every DOM/unit test can pass while the layout silently breaks. Verify VISUALLY

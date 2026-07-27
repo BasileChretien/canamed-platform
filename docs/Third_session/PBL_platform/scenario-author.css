@@ -69,7 +69,16 @@ fieldset.author-section {
   padding: 18px 20px 22px;
   margin: 0;
   box-shadow: var(--sh-sm);
+  /* A <fieldset> ships with a UA-default `min-inline-size: min-content`, so it
+     refuses to shrink below the widest thing inside it. A <select> is sized by
+     its longest <option> and cannot wrap, so the "Branched — épuré decision
+     tree (English-only)" label (min-content 354px) inflated this card to 396px
+     and scrolled a 375px phone sideways by 34px. Reset it — a section must
+     never be wider than the column it sits in. */
+  min-inline-size: 0;
+  max-width: 100%;
 }
+section.author-section { max-width: 100%; }
 fieldset.author-section > legend {
   font-weight: 700;
   font-size: 1.02rem;
@@ -78,6 +87,14 @@ fieldset.author-section > legend {
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   color: var(--ink);
+  /* Legends name the JSON key they edit, so several contain a long
+     unbreakable token ("SCORING.moduleA_question_penalties", min-content
+     300px). A <legend> is sized to its content and is NOT clipped by the
+     fieldset, so on a 320px phone that one stuck 13px past the viewport even
+     with the fieldset itself correctly shrunk. Cap it and let the token break
+     rather than push the page sideways. */
+  max-width: 100%;
+  overflow-wrap: break-word;
 }
 .field-hint {
   font-size: 0.82rem;
@@ -119,6 +136,39 @@ textarea {
   width: 100%;
 }
 input[type="number"] { width: auto; min-width: 100px; }
+
+/* Second half of the no-horizontal-scroll contract (see fieldset.author-section
+   above): a control may fill its row but never exceed it, whatever its value,
+   placeholder or option labels happen to be. box-sizing is already border-box
+   globally (style.css), restated here so the max-width means the border box. */
+.author-form input,
+.author-form select,
+.author-form textarea,
+.load-modal-inner input,
+.load-modal-inner select,
+.load-modal-inner textarea {
+  box-sizing: border-box;
+  max-width: 100%;
+}
+/* Third part, and WebKit-specific: `max-width` clamps the select's BOX, but
+   WebKit still counts its unclamped min-content — the longest <option>, which
+   can never wrap — in the ANCESTORS' scrollable overflow. So at 320px Safari
+   still scrolled 22px sideways while every element's rect fitted, and the two
+   caps above could not see it. Clipping the row's inline overflow discards that
+   phantom width. `clip`, not `hidden`, so the row never becomes a scroll
+   container; the clip edge is the PADDING box, so 3px of inline padding —
+   cancelled by an equal negative margin, leaving the layout untouched —
+   preserves the 3px focus ring (2px outline + 1px offset) on engines that do
+   not support overflow-clip-margin (WebKit today). Scoped by an explicit class
+   rather than :has(> select) so no engine's selector support is load-bearing:
+   only the two long-labelled selects need it (the A|B module picker and the
+   branch editor's "Then →" have short options). */
+.author-form .field-row.select-row {
+  overflow-x: clip;
+  overflow-clip-margin: 4px;
+  padding-inline: 3px;
+  margin-inline: -3px;
+}
 textarea { line-height: 1.5; resize: vertical; min-height: 60px; }
 input:focus, textarea:focus, select:focus {
   outline: 2px solid var(--primary);
@@ -414,6 +464,14 @@ input:focus, textarea:focus, select:focus {
 .author-form[data-format="branched"] fieldset.author-section:not(#meta-section),
 .author-form[data-format="branched"] #preview-section { display: none; }
 .author-form:not([data-format="branched"]) .branched-only { display: none; }
+/* …and the mirror image: the standard-only meta controls (the module set + the
+   referenced branched case) make no sense for a WHOLE-scenario branched file,
+   which is one tree and declares no module list. */
+.author-form[data-format="branched"] .standard-only { display: none; }
+
+/* M5 — module-set tick boxes + the branched-case reference. */
+#modules-toggle { flex-wrap: wrap; gap: 1rem; margin: .3rem 0 .2rem; }
+#branched-ref { width: 100%; box-sizing: border-box; }
 
 .bn-opt { border-left: 3px solid var(--accent, #2a6); padding-left: .7rem; margin: .6rem 0; }
 .bn-opt textarea, .bn-opt input[type="text"] { width: 100%; box-sizing: border-box; }
