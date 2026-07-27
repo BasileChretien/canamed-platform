@@ -6,9 +6,13 @@
  * breaking-bad-news roleplay…" — duplicating the localized, state-aware
  * next-step coach that already owns "what to do now" inside each module.
  *
- * The two module slots are now blank; Welcome (0) and Wrap-up (3) keep their
- * line (there is no coach on those stages). renderStage() already renders
+ * Every MODULE slot is blank; Welcome (0) and Wrap-up (last) keep their line
+ * (there is no coach on those stages). renderStage() already renders
  * STAGE_NOW[v] || "".
+ *
+ * M4b added a 5th stage — the branched decision case at index 3, moving wrap-up
+ * to 4 — so the shape is now [Welcome, "", "", "", Wrap-up]: three blank module
+ * slots (A, B, branched).
  */
 "use strict";
 
@@ -20,14 +24,18 @@ const path = require("node:path");
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 
-test("STAGE_NOW blanks the two module slots and keeps Welcome + Wrap-up", () => {
-  // Shape: [ <non-empty Welcome>, "", "", <non-empty Wrap-up> ]
-  assert.match(
-    SCRIPT,
-    /const STAGE_NOW = \[\s*"[^"]+",\s*"",\s*"",\s*"[^"]+"\s*\];/,
-    "STAGE_NOW[1] (Module A) and [2] (Module B) must be empty strings, " +
-    "with non-empty Welcome [0] and Wrap-up [3] lines"
+test("STAGE_NOW blanks every module slot and keeps Welcome + Wrap-up", () => {
+  // Shape: [ <non-empty Welcome>, "", "", "", <non-empty Wrap-up> ]
+  // (comments between entries are tolerated — one annotates the branched slot).
+  const C = "(?:\\s*//[^\\n]*)?";   // optional trailing line comment
+  const re = new RegExp(
+    'const STAGE_NOW = \\[\\s*"[^"]+",' + C +
+    '\\s*"",' + C + '\\s*"",' + C + '\\s*"",' + C +
+    '\\s*"[^"]+",?' + C + '\\s*\\];'
   );
+  assert.match(SCRIPT, re,
+    "STAGE_NOW[1] (Module A), [2] (Module B) and [3] (branched) must be empty " +
+    "strings, with non-empty Welcome [0] and Wrap-up [4] lines");
 });
 
 test("the old duplicated Module A / Module B STAGE_NOW lines are gone", () => {

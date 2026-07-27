@@ -288,7 +288,7 @@ schema. Rejected: inline-namespaced graph (Option A) and shared `decisions[]`
   A/B scenario's globals.
 
 **Staged plan (each a reviewable, verified PR):**
-- **M4a — épuré CSS body→stage re-scope (IN PROGRESS, shell bump).** Set
+- **M4a — épuré CSS body→stage re-scope ← DONE (PR #251, shell v108→v109).** Set
   `data-format` on the `.stage` elements (not just `body`), re-scope the
   stage-content épuré rules in `branched.css` from `body[data-format]` to
   `.stage[data-format]` / `#stage-1[data-format]`, keep the two genuinely-global
@@ -297,11 +297,30 @@ schema. Rejected: inline-namespaced graph (Option A) and shared `decisions[]`
   hook so a future mixed session can be épuré on ONLY the branched stage. Survey's
   #1 risk, isolated + done first. Verified by the branched e2e (unchanged) + a new
   stage-attr assertion.
-- **M4b — dynamic stage model (blocker 1).** Derive the stage set/count from the
-  module set instead of `const STAGE_COUNT = 4` + fixed `MODULE_REGISTRY` indices;
-  add a branched stage id + its `#stage-*` shell + `stage.label.*` across i18n +
-  locales; lift `stage <= 3` → `<= 4` in both rule trees + emulator ruleset. Every
-  EXISTING flow (A/B, single-module, standalone branched) must be identical.
+- **M4b — the 5-stage model ← DONE (shell v109→v110).** `STAGE_COUNT` 4 → 5:
+  branched became a real `MODULE_REGISTRY` entry at **stage 3**, and **wrap-up
+  moved 3 → 4**. Chose a fixed 5th index over a fully dynamic stage count because
+  the flow must stay **monotonic** — `snapStageToFlow()` walks the flow array
+  assuming ascending order, so an out-of-order module→stage map would break nav.
+  (Consequence: a mixed session runs A → B → branched → wrap-up. Interleaving
+  branched *between* A and B would need per-session stage assignment, i.e. the
+  fully dynamic model — deliberately not built.)
+  - The renumber was **nearly free**: `script.js` never hardcodes the wrap-up
+    index (every site derives `STAGE_COUNT - 1`) and no CSS referenced
+    `#stage-3`, so it was 1 id in `index.html` + the positional arrays.
+  - Extended `STAGE_LABELS` / `STAGE_MINUTES` / `STAGE_NOW`, added
+    `stage.label.3` (decision case) + moved wrap-up to `.4` across `i18n.js`
+    **and all 7 locales**, bumped `LOCALE_VERSION` v7 → v8.
+  - Added the minimal `#stage-3` branched shell (a decisions container +
+    final-host, `data-format="branched"` stamped statically) — **tens of lines**,
+    not the ~1200 of A/B chrome, because branched has no chrome by design.
+  - **Bug caught:** `branched-render.js` hardcoded `LAST_STAGE = 3`, which the
+    renumber would have silently desynced from the shell. It now DERIVES it from
+    a published `window.CANAMED_LAST_STAGE` — one source of truth.
+  - Rules: `stage <= 3` → `<= 4` in **both** trees; emulator-proven (26 pass).
+  - **Lands INERT:** stage 3 only enters the flow when a scenario *declares* the
+    branched module, and branched is never name- or scoring-inferred. An A/B
+    session runs `[0,1,2,4]`, skipping it — same seam-first pattern as M0.
 - **M4c — composition schema + reference resolution.** A mixed scenario declares
   `modules:[…"branched"…]` + a `branchedRef` (a standalone branched scenario id);
   resolve+load that sub-scenario and give the branched stage its own scenario

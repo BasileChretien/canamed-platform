@@ -522,14 +522,26 @@ if (typeof window !== "undefined") {
   };
 }
 
-const STAGE_COUNT = 4;
+/* 5 stages since M4b: 0 Welcome, 1 Module A, 2 Module B, 3 the branched
+   decision case, 4 Wrap-up. Wrap-up moved 3→4 to make room for a branched
+   stage; that rename was nearly free because script.js never hardcodes the
+   wrap-up index — every site derives it from STAGE_COUNT - 1 (and no CSS
+   referenced #stage-3). Stage 3 is INERT until a scenario actually declares the
+   branched module: standardStageFlow() only includes the stages of modules in
+   moduleSet(), so an A/B session runs [0,1,2,4] and skips it entirely. */
+const STAGE_COUNT = 5;
 // English fallback labels — used in admin-side text exports + as the
 // fallback when i18n.js hasn't loaded yet (vanishingly rare). For
 // any UI-visible label use stageLabel(i), which reads the current
 // language from i18n.js. Keeping STAGE_LABELS so the dozens of
 // existing call sites don't all need editing in one go.
 const STAGE_LABELS = ["Welcome", "Module A - Chronic Pain", "Module B - Breaking Bad News",
-                      "Wrap-up"];
+                      "Decision case", "Wrap-up"];
+/* Publish the wrap-up index for the LAZY branched-render.js, which owns
+   stageFlow() once loaded. It used to hardcode `LAST_STAGE = 3`; M4b's 5th stage
+   moved wrap-up to 4, so a literal copy would silently desync the lazy chunk
+   from the shell. Deriving it here keeps one source of truth. */
+if (typeof window !== "undefined") window.CANAMED_LAST_STAGE = STAGE_COUNT - 1;
 
 /* ── Module set ───────────────────────────────────────────────────────────────
    WHICH modules a session runs, and the mapping between a module id and its
@@ -544,7 +556,15 @@ const STAGE_LABELS = ["Welcome", "Module A - Chronic Pain", "Module B - Breaking
    See ARCHITECTURE/module-set-design.md. */
 const MODULE_REGISTRY = [
   { id: "A", stage: 1 },
-  { id: "B", stage: 2 }
+  { id: "B", stage: 2 },
+  /* M4b — the branched decision case as a real module, so a session can run it
+     alongside A/B (composition: the scenario references a standalone branched
+     scenario for this stage). Sits at stage 3, BEFORE wrap-up, so the flow stays
+     monotonic — snapStageToFlow() walks the flow array assuming ascending order.
+     Inert until a scenario declares it: it is never NAME-inferred (moduleNameEn
+     returns "" for it) and has no scoring family, so scenarioModuleSet() cannot
+     pick it up by accident. */
+  { id: "branched", stage: 3 }
 ];
 /* Positional stage→module map, NOT filtered by the enabled set: stage 1 → "A",
    stage 2 → "B", anything else → null. Kept unfiltered because labels must keep
@@ -5370,7 +5390,7 @@ function setRoomStage(r, from, to) {
   });
 }
 /* approximate planned minutes per stage, for the dashboard "over time" cue */
-const STAGE_MINUTES = [20, 40, 40, 15];
+const STAGE_MINUTES = [20, 40, 40, 30, 15];   // 3 = the branched decision case (M4b)
 function roomProgress(data) {
   const revealed = (data.moduleA && data.moduleA.revealed) || {};
   const aCount = Object.keys((data.answers && data.answers.moduleA) || {}).length;
@@ -7920,6 +7940,7 @@ const STAGE_NOW = [
   "Watch the opening presentation together. While you wait, name your team below.",
   "",
   "",
+  "",   // 3 = branched decision case — the case itself carries the instructions
   "You're finished — open the questionnaire below. Thank you for taking part!"
 ];
 function renderStage() {
