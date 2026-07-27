@@ -405,11 +405,14 @@
       "data-rights.err.export-failed": "Could not export your data — please try again, or contact the facilitator.",
 
       // stage labels — shown in the room header + stage indicator + dashboard
+      // S1b — a stage number no longer implies a module, so the middle stages
+      // are ONE pattern filled with the picked section's position + title
+      // (decision 8 of the section model). The two ends are keyed by role; the
+      // numeric .0/.4 keys stay only as a fallback for a cached older bundle.
+      "stage.label.welcome": "Welcome",
+      "stage.label.wrapup": "Wrap-up",
+      "stage.label.section": "Section {n} — {title}",
       "stage.label.0": "Welcome",
-      "stage.label.1": "Module A — Chronic Pain",
-      "stage.label.2": "Module B — Breaking Bad News",
-      // 3 = the branched decision case (module-set M4b); wrap-up moved 3 → 4.
-      "stage.label.3": "Decision case",
       "stage.label.4": "Wrap-up",
 
       // stage 0 (Welcome) chrome
@@ -985,7 +988,7 @@
   // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
   // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
   // returning browser keeps serving the cached chunk.
-  const LOCALE_VERSION = "v8";   // M4b: stage.label.3 = decision case, wrap-up → .4
+  const LOCALE_VERSION = "v9";   // S1b: stage labels keyed by role + a section pattern
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

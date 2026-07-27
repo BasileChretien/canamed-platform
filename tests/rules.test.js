@@ -215,10 +215,12 @@ test("rules: bounded numeric fields stay clamped (no integer overflow tricks)", 
   // roomCount 1..20
   assert.match(session.roomCount[".validate"], /newData\.val\(\) >= 1/);
   assert.match(session.roomCount[".validate"], /newData\.val\(\) <= 20/);
-  // stage 0..4 (M4b lifted the bound from 3: a 5th stage was inserted for the
-  // branched decision case, moving wrap-up 3 → 4)
+  /* stage 0..9 — S1b: a session is Welcome + up to MAX_SECTION_SLOTS (8)
+     sections + Wrap-up, so the bound is the PHYSICAL cap, not the length of any
+     one session's flow. (M4b had lifted it 3 → 4 for the branched stage.)
+     Keep this in lockstep with MAX_SECTION_SLOTS in script.js. */
   assert.match(session.rooms["$roomId"].stage[".validate"], /newData\.val\(\) >= 0/);
-  assert.match(session.rooms["$roomId"].stage[".validate"], /newData\.val\(\) <= 4/);
+  assert.match(session.rooms["$roomId"].stage[".validate"], /newData\.val\(\) <= 9/);
   // manual score points 0..50
   assert.match(session.rooms["$roomId"].score.manual["$pushId"][".validate"], /<= 50/);
   // vote choice 0..9

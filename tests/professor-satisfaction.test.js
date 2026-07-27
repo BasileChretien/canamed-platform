@@ -29,7 +29,8 @@ test("sessionSignal aggregates pacing, help-calls and quiet rooms from allRooms"
     SCRIPT.indexOf("function sessionSignal") + 1400);
   assert.match(fn, /roomNames\(roomCount\)/, "must iterate the session's rooms");
   assert.match(fn, /minsSince\(d\.stageAt\)/, "must read each room's time-in-stage");
-  assert.match(fn, /STAGE_MINUTES\[st\]/, "must compare against the planned stage duration");
+  /* S1b: planned minutes are keyed by role + section type, not stage index. */
+  assert.match(fn, /stageMinutes\(st\)/, "must compare against the planned stage duration");
   assert.match(fn, /callForHelp && !d\.callForHelp\.ack/, "must count rooms calling for help");
   assert.match(fn, /roomParticipation\(d\)/, "must reuse roomParticipation for quiet rooms");
   assert.match(fn, /minStage[\s\S]*maxStage/, "must track the stage spread across rooms");

@@ -76,7 +76,9 @@ test("survey runner exists and writes to the per-room survey node", () => {
 });
 
 test("survey is rendered at wrap-up and exposed for E2E", () => {
-  assert.match(SCRIPT, /viewStage === STAGE_COUNT - 1\) renderSurvey\(\)/,
+  /* S1b: the wrap-up index is per-session (Welcome + N sections + Wrap-up), so
+     it is lastStage(), not a constant minus one. */
+  assert.match(SCRIPT, /viewStage === lastStage\(\)\) renderSurvey\(\)/,
     "renderSurvey() must run on the final (wrap-up) stage");
   assert.match(SCRIPT, /window\.renderSurvey = renderSurvey/, "renderSurvey must be exposed");
   assert.match(SCRIPT, /window\._mountSurveyForm = _mountSurveyForm/, "_mountSurveyForm must be exposed");

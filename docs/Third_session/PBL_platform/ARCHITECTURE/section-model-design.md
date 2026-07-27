@@ -139,13 +139,53 @@ stage), so this is a seam in the M0 sense — the behaviour flip is S1b.
   `stage-ui-fixes`) green with no spec changes — the point being that a seam
   which needed test edits would not be a seam.
 
-### S1b — slots become positional
-`STAGE_COUNT` becomes dynamic (`flow = [0, …slots, last]`); a slot's stage is
-its **position**, so a roleplay picked first runs on stage 1. `stageLabel()`
-becomes "Section k — title"; i18n `stage.label.N` collapses to one pattern key
-across `i18n.js` + 7 locales (`LOCALE_VERSION` bump); `STAGE_MINUTES` /
-`STAGE_NOW` / `TOUR_STAGE` become slot-aware. Rules: `stage` bounded by a max
-slot count instead of `<= 4`.
+### S1b — slots become positional ← DONE (locale v8→v9)
+The behaviour flip. A slot's stage IS its position, so **pick order is running
+order**: a roleplay picked first runs on stage 1 and shows the roleplay view
+there.
+- **The flow is now CONTIGUOUS.** `standardStageFlow()` returns
+  `[0, …positions, last]`. Before S1b an A-only session ran `[0,1,4]` with two
+  dead stages; a B-only one ran `[0,2,4]`.
+- **`STAGE_COUNT` is no longer the stage count** — it survives only as the
+  physical cap (`MAX_SECTION_SLOTS + 2`, i.e. the largest index the DB rules
+  accept). Per-session counts come from `stageCount()` / `lastStage()`, and
+  `window.CANAMED_LAST_STAGE` is republished by `refreshModuleStages()` so the
+  lazy `branched-render.js` cannot desync from the shell.
+- **Every index-keyed table became role/type-keyed**: `STAGE_LABELS`,
+  `STAGE_MINUTES_BY_ROLE` + `stageMinutes()`, `STAGE_NOW_BY_ROLE` +
+  `stageNow()`, and `TOUR_STAGE.studentModA` (now the first PBL slot, wherever
+  it landed — a session opening with a roleplay would otherwise have dismissed
+  the Module A tour the moment it started).
+- **Labels**: `stageLabel()` renders `"Section k — <title>"` from one i18n
+  pattern (`stage.label.section`) across `i18n.js` + 7 locales;
+  `stage.label.welcome` / `.wrapup` replace the index lookup for the two ends.
+  The old `stage.label.1/2/3` keys are gone; `.0`/`.4` stay only as a fallback
+  for a cached older bundle. `LOCALE_VERSION` v8 → v9.
+  - **Trap this closed:** the wrap-up used to be `"stage.label." + i`. With a
+    per-session index a 2-section session's wrap-up is stage 3, which would
+    have fetched the *"Decision case"* label.
+  - **Second trap, same cause:** the wrap-up MARKUP is `#stage-4` while it now
+    sits at stage 3, so `stageViewId()` resolves the ends by role. Resolving
+    `"stage-" + n` would have shown the branched view as the wrap-up.
+- **Standalone branched** gets a synthetic slot (`type:"branched"`,
+  `view:"stage-1"`, `standalone:true`) instead of relying on S1a's like-numbered
+  fallback: the flow now has to know the session has exactly one section. It
+  still borrows the **PBL view**, because the branched engine's standalone
+  render targets (`#decisions-A`, `#branched-final-host`) live there.
+- **Rules**: `stage <= 4` → `<= 9` in both trees (`MAX_SECTION_SLOTS` = 8).
+  Keep the two in lockstep.
+- Verified: 1060 unit green (20 specs updated — the predicted test debt, all of
+  it pinning the fixed module→stage map) + a new browser spec
+  (`section-stage-labels.spec.js`) proving the labels, the contiguous flow, the
+  reordering and the wrap-up view on chromium/firefox/webkit + all 3 mobile
+  viewports, plus the existing stage/branched/module-B suites green unchanged.
+
+**⚠️ Operational note for S1b.** Contiguous numbering changes what a stored
+`roomStage` MEANS for a session created before the deploy. `snapStageToFlow()`
+absorbs most of it (a stale wrap-up index snaps to the new wrap-up), but a
+**B-only** session mid-flight would read its old stage 2 as the new wrap-up.
+Acceptable under decision 7 (hard cutover), and B-only sessions shipped only
+weeks ago — but do not deploy S1b in the middle of a live workshop.
 
 ### S1c — Roleplay content becomes data (decision 9)
 Extract the roleplay chrome out of `index.html` (`#stage-2`, ~726 lines) into

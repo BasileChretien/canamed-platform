@@ -44,16 +44,21 @@ function fnBodyOf(name) {
    can slice it out and evaluate it for REAL behavioural coverage rather than
    another source-regex. */
 function loadResolver(win) {
-  const start = SCRIPT.indexOf("const MODULE_REGISTRY");
-  assert.notStrictEqual(start, -1, "MODULE_REGISTRY must exist");
-  const endMarker = "\nfunction stageLabel(";
+  /* S1b — the slice starts at MAX_SECTION_SLOTS, not MODULE_REGISTRY: the slot
+     model (sectionSlots / stageCount / lastStage) lives in the same block and
+     reads that cap, so a slice that skipped it threw a ReferenceError the
+     moment refreshModuleStages() ran. */
+  const start = SCRIPT.indexOf("const MAX_SECTION_SLOTS");
+  assert.notStrictEqual(start, -1, "MAX_SECTION_SLOTS must exist");
+  const endMarker = "\nfunction snapStageToFlow(";
   const end = SCRIPT.indexOf(endMarker, start);
-  assert.notStrictEqual(end, -1, "the resolver block must sit just above stageLabel()");
+  assert.notStrictEqual(end, -1, "the resolver block must sit above snapStageToFlow()");
   const src = SCRIPT.slice(start, end);
   const factory = new Function("window", src +
     "\nreturn { MODULE_REGISTRY, moduleAtStage, stageForModule, moduleSet, moduleNameTrio," +
     "\n         moduleHasContent, moduleNameEn, moduleHasScoring, refreshModuleStages," +
-    "\n         setSessionModules, scenarioModuleSet };");
+    "\n         setSessionModules, scenarioModuleSet, sectionSlots, slotAtStage," +
+    "\n         stageCount, lastStage, stageViewId, allStageViewIds, standardStageFlow };");
   return factory(win);
 }
 
@@ -77,16 +82,35 @@ test("M0: the registry maps stages to modules positionally", () => {
 /* ── M4b: the 5-stage model (branched gets a real stage), landing INERT ────── */
 
 test("M4b: there are 5 stages and wrap-up is last", () => {
-  assert.match(SCRIPT, /const STAGE_COUNT = 5;/, "a 5th stage was added for the branched case");
-  // Every wrap-up site derives from STAGE_COUNT - 1 rather than a literal 3 —
-  // that is what made moving wrap-up 3 → 4 nearly free. Guard it stays that way.
-  assert.ok(!/viewStage === 3\b/.test(SCRIPT), "wrap-up must not be hardcoded as stage 3");
-  assert.ok(!/roomStage === 3\b/.test(SCRIPT), "wrap-up must not be hardcoded as stage 3");
-  // The positional arrays must all carry 5 entries.
-  const labels = SCRIPT.match(/const STAGE_LABELS = \[([\s\S]*?)\];/);
-  assert.ok(labels, "STAGE_LABELS must exist");
-  assert.equal((labels[1].match(/"/g) || []).length / 2, 5, "STAGE_LABELS needs 5 entries");
-  assert.match(SCRIPT, /const STAGE_MINUTES = \[20, 40, 40, 30, 15\]/, "STAGE_MINUTES needs 5 entries");
+  /* SUPERSEDED BY S1b, and kept deliberately rather than deleted: what M4b was
+     really protecting is that the wrap-up index is DERIVED, never a literal.
+     S1b made it per-session (Welcome + N sections + Wrap-up), so "5 stages" is
+     no longer a fact about the app — a 1-section session has 3 stages. The
+     no-literals guard below is the part that still earns its keep. */
+  assert.ok(!/viewStage === 3\b/.test(SCRIPT), "wrap-up must not be hardcoded");
+  assert.ok(!/roomStage === 3\b/.test(SCRIPT), "wrap-up must not be hardcoded");
+  assert.ok(!/viewStage === 4\b/.test(SCRIPT), "nor at its post-M4b index");
+
+  const r = loadResolver({ CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A"),
+                           CURRENT_SCENARIO_MODULE_B_NAME: TRIO("B") });
+  assert.equal(r.stageCount(), 4, "Welcome + 2 sections + Wrap-up");
+  assert.equal(r.lastStage(), 3, "wrap-up is the last stage, whatever its number");
+  assert.deepStrictEqual(r.standardStageFlow(), [0, 1, 2, 3],
+    "the flow is CONTIGUOUS since S1b — it was [0,1,2,4] with stage 3 skipped");
+
+  const one = loadResolver({ CURRENT_SCENARIO_MODULES: ["A"],
+                             CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A") });
+  assert.equal(one.lastStage(), 2, "a 1-section session ends at stage 2");
+  assert.deepStrictEqual(one.standardStageFlow(), [0, 1, 2]);
+
+  /* The per-stage tables are keyed by ROLE / section TYPE now, because a stage
+     number no longer implies what is running on it. */
+  assert.match(SCRIPT, /const STAGE_LABELS = \{[\s\S]*?welcome:[\s\S]*?wrapup:/,
+    "STAGE_LABELS must be role-keyed");
+  assert.match(SCRIPT, /const STAGE_MINUTES_BY_ROLE = \{[\s\S]*?pbl: 40[\s\S]*?\}/,
+    "planned minutes must be keyed by section type");
+  assert.ok(!/const STAGE_MINUTES = \[/.test(SCRIPT),
+    "the index-keyed minutes array must be gone");
 });
 
 test("M4b: stage 3 is INERT — an A/B session skips it entirely", () => {
@@ -133,7 +157,9 @@ test("M4b: the lazy branched chunk DERIVES the wrap-up index from the shell", ()
   const BR = fs.readFileSync(path.join(P, "branched-render.js"), "utf8");
   assert.ok(!/var LAST_STAGE = 3;/.test(BR), "the hardcoded LAST_STAGE must be gone");
   assert.match(BR, /root\.CANAMED_LAST_STAGE/, "it must read the published global");
-  assert.match(SCRIPT, /window\.CANAMED_LAST_STAGE = STAGE_COUNT - 1/,
+  /* S1b — the wrap-up index is per-session, so it is republished by
+     refreshModuleStages() rather than computed once from a constant. */
+  assert.match(SCRIPT, /window\.CANAMED_LAST_STAGE = lastStage\(\)/,
     "the shell must publish the wrap-up index");
 });
 
@@ -373,9 +399,13 @@ test("M1: refreshModuleStages publishes the enabled modules' stage indices", () 
   loadResolver(aOnly).refreshModuleStages();
   assert.deepStrictEqual(aOnly.CANAMED_MODULE_STAGES, [1], "A-only drops stage 2");
 
+  /* S1b — stages are POSITIONS, so the single section of a B-only session runs
+     on stage 1. Before S1b it ran on stage 2 with stage 1 skipped; that fixed
+     module→stage map is exactly what the phase removed. */
   const bOnly = { CURRENT_SCENARIO_MODULES: ["B"], CURRENT_SCENARIO_MODULE_B_NAME: TRIO("B") };
   loadResolver(bOnly).refreshModuleStages();
-  assert.deepStrictEqual(bOnly.CANAMED_MODULE_STAGES, [2], "B-only drops stage 1");
+  assert.deepStrictEqual(bOnly.CANAMED_MODULE_STAGES, [1],
+    "B-only runs its one section on stage 1, not on Module B's old fixed index");
 });
 
 test("M1: applyScenario publishes the declared set, in the right order", () => {
@@ -414,10 +444,16 @@ test("M0: moduleNameTrio resolves the scenario's module names, unfiltered by the
 });
 
 test("M0: stageLabel resolves the module trio through the registry, not stage literals", () => {
+  /* S1b moved the trio lookup into stageSectionTitle(), which resolves the SLOT
+     at a stage rather than the module fixed to that index — the same principle,
+     one level further along: a stage number implies neither a module nor a
+     title any more. */
+  const title = SCRIPT.slice(SCRIPT.indexOf("function stageSectionTitle("),
+                             SCRIPT.indexOf("function stageLabel("));
+  assert.match(title, /slotAtStage\(i\)/, "the title must come from the slot at that stage");
+  assert.match(title, /moduleNameTrio\(slot\.module\)/, "resolved through the registry trio");
   const fn = SCRIPT.slice(SCRIPT.indexOf("function stageLabel("),
                           SCRIPT.indexOf("/* Stage-flow wrappers"));
-  assert.match(fn, /moduleNameTrio\(\s*moduleAtStage\(\s*i\s*\)\s*\)/,
-    "stageLabel must go through the registry");
   assert.doesNotMatch(fn, /i\s*===\s*1/, "the hardcoded stage-1 literal must be gone");
   assert.doesNotMatch(fn, /i\s*===\s*2/, "the hardcoded stage-2 literal must be gone");
 });
@@ -499,7 +535,8 @@ test("M2: a session's narrowing intersects the scenario's set", () => {
   assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [1], "the stage list refreshes with it");
   r.setSessionModules("B");
   assert.deepStrictEqual(r.moduleSet(), ["B"]);
-  assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [2]);
+  // S1b: one section → one stage, at position 1 whichever module it is.
+  assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [1]);
   r.setSessionModules("B,A");
   assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "stage order, not declaration order");
   r.setSessionModules(null);

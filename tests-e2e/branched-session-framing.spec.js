@@ -49,7 +49,7 @@ test.describe("branched session framing", () => {
     ).toBe(false);
 
     // The session is a 3-stage flow: Welcome → the case → Wrap-up (no stage 2).
-    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 4]);
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2]);
     expect(await page.evaluate(() => document.body.dataset.format)).toBe(
       "branched",
     );
@@ -69,7 +69,7 @@ test.describe("branched session framing", () => {
     expect(
       await page.locator("#lobby-struct-modB").evaluate((n) => n.hidden),
     ).toBe(false);
-    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 4]);
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 3]);
     expect(await page.evaluate(() => document.body.dataset.format)).toBe(
       "standard",
     );
@@ -80,29 +80,38 @@ test.describe("branched session framing", () => {
      the active flow. The worst case was silent: stepping BACK from Wrap-up in a
      branched session targeted the SKIPPED stage 2, and snapStageToFlow() rolls a
      skipped target FORWARD, landing back on Wrap-up — so "back" did nothing. */
-  test("branched: stage nav never targets the skipped stage (M0 dead-stage fix)", async ({
+  test("branched: stage nav never targets a stage outside the flow", async ({
     page,
   }) => {
     await applyAndFrame(page, "ward-escalation-branched");
-    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 4]);
+    /* S1b — there is no SKIPPED stage any more: the flow is contiguous, so a
+       branched session is Welcome → the case → Wrap-up as [0,1,2]. The M0 bug
+       this guards is unchanged in substance: nav must never target a stage the
+       session does not run (raw ±1 arithmetic used to). */
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2]);
 
-    // Back from Wrap-up returns to the case, NOT the skipped stage 2 (and not
-    // a no-op back on 3, which is what raw roomStage-1 produced).
-    expect(await page.evaluate(() => window.adjacentStage(4, -1))).toBe(1);
-    // Forward from the case jumps straight to Wrap-up (4 since M4b).
-    expect(await page.evaluate(() => window.adjacentStage(1, 1))).toBe(4);
+    // Back from Wrap-up returns to the case.
+    expect(await page.evaluate(() => window.adjacentStage(window.lastStage(), -1))).toBe(1);
+    // Forward from the case reaches Wrap-up.
+    expect(await page.evaluate(() => window.adjacentStage(1, 1))).toBe(2);
     // Ends of the flow are fixed points, which is how the nav buttons disable.
     expect(await page.evaluate(() => window.adjacentStage(0, -1))).toBe(0);
-    expect(await page.evaluate(() => window.adjacentStage(4, 1))).toBe(4);
-    // Neither direction ever yields the skipped stage.
+    expect(await page.evaluate(() => window.adjacentStage(window.lastStage(), 1))).toBe(2);
+    // Every reachable target is a stage this session actually runs.
     const targets = await page.evaluate(() =>
-      [0, 1, 4].flatMap((s) => [window.adjacentStage(s, -1), window.adjacentStage(s, 1)]),
+      [0, 1, 2].flatMap((s) => [window.adjacentStage(s, -1), window.adjacentStage(s, 1)]),
     );
-    expect(targets).not.toContain(2);
+    expect(targets.every((t) => [0, 1, 2].includes(t))).toBe(true);
 
-    // Documents the trap: snapStageToFlow() will NOT hand back the skipped
-    // stage, which is precisely why raw ±1 arithmetic was unsafe.
-    expect(await page.evaluate(() => window.snapStageToFlow(2, 4))).not.toBe(2);
+    /* S1b — the old assertion was "snapStageToFlow() will not hand back the
+       SKIPPED stage 2". Stage 2 is this flow's wrap-up now, so that premise is
+       gone. What snapping must still guarantee — and what carries real
+       operational weight — is that an index from OUTSIDE the flow lands inside
+       it. That is the migration path for a room whose stored roomStage predates
+       the renumbering (a branched session used to park its wrap-up at 4). */
+    const snapped = await page.evaluate(() =>
+      [4, 3, 9].map((n) => window.snapStageToFlow(n, 1)));
+    expect(snapped.every((n) => [0, 1, 2].includes(n))).toBe(true);
   });
 
   /* Phase M1 — single-module sessions. Naming only one module drops the other
@@ -145,15 +154,15 @@ test.describe("branched session framing", () => {
         stages: window.CANAMED_MODULE_STAGES,
         flow: window.stageFlow(),
         fwdFromCase: window.adjacentStage(1, 1),
-        backFromWrap: window.adjacentStage(4, -1),
+        backFromWrap: window.adjacentStage(window.lastStage(), -1),
       };
     }, oneModuleScenario("A"));
 
     expect(got.mods).toEqual(["A"]);
     expect(got.stages).toEqual([1]);
-    expect(got.flow).toEqual([0, 1, 4]);
+    expect(got.flow).toEqual([0, 1, 2]);
     // Module B's stage is genuinely skipped in both directions.
-    expect(got.fwdFromCase).toBe(4);
+    expect(got.fwdFromCase).toBe(2);
     expect(got.backFromWrap).toBe(1);
   });
 
@@ -171,10 +180,10 @@ test.describe("branched session framing", () => {
     }, oneModuleScenario("B"));
 
     expect(got.mods).toEqual(["B"]);
-    expect(got.stages).toEqual([2]);
-    expect(got.flow).toEqual([0, 2, 4]);
+    expect(got.stages).toEqual([1]);
+    expect(got.flow).toEqual([0, 1, 2]);
     // Welcome leads straight to the roleplay stage — stage 1 is skipped.
-    expect(got.fwdFromWelcome).toBe(2);
+    expect(got.fwdFromWelcome).toBe(1);
   });
 
   test("M1: an explicit `modules` field overrides the names", async ({ page }) => {
@@ -193,7 +202,7 @@ test.describe("branched session framing", () => {
       return { mods: window.moduleSet(), flow: window.stageFlow() };
     });
     expect(got.mods).toEqual(["A"]);
-    expect(got.flow).toEqual([0, 1, 4]);
+    expect(got.flow).toEqual([0, 1, 2]);
   });
 
   test("M1: BACK-COMPAT — a built-in naming both modules still runs four stages", async ({
@@ -203,7 +212,7 @@ test.describe("branched session framing", () => {
     await applyAndFrame(page, "chronic-pain-opioids");
     expect(await page.evaluate(() => window.moduleSet())).toEqual(["A", "B"]);
     expect(await page.evaluate(() => window.CANAMED_MODULE_STAGES)).toEqual([1, 2]);
-    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 4]);
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 3]);
   });
 
   /* Phase M2 — the facilitator narrows the scenario's set for one session. */
@@ -232,14 +241,14 @@ test.describe("branched session framing", () => {
     });
 
     expect(got.full.mods).toEqual(["A", "B"]);
-    expect(got.full.flow).toEqual([0, 1, 2, 4]);
+    expect(got.full.flow).toEqual([0, 1, 2, 3]);
     // Narrowed: the session runs A, though the SCENARIO still contains both.
     expect(got.narrowed.mods).toEqual(["A"]);
     expect(got.narrowed.scenario).toEqual(["A", "B"]);
     expect(got.narrowed.stages).toEqual([1]);
-    expect(got.narrowed.flow).toEqual([0, 1, 4]);
-    expect(got.narrowed.fwdFromCase).toBe(4);
-    expect(got.restored.flow).toEqual([0, 1, 2, 4]);
+    expect(got.narrowed.flow).toEqual([0, 1, 2]);
+    expect(got.narrowed.fwdFromCase).toBe(2);
+    expect(got.restored.flow).toEqual([0, 1, 2, 3]);
   });
 
   test("M2: an impossible narrowing cannot produce an empty session", async ({
@@ -254,7 +263,7 @@ test.describe("branched session framing", () => {
     }, oneModuleScenario("A"));
     // The empty intersection is ignored rather than collapsing the session.
     expect(got.mods).toEqual(["A"]);
-    expect(got.flow).toEqual([0, 1, 4]);
+    expect(got.flow).toEqual([0, 1, 2]);
   });
 
   test("M2: the create form offers the module picker, both ticked by default", async ({
@@ -278,28 +287,28 @@ test.describe("branched session framing", () => {
     expect(cb.bChecked).toBe(true);
   });
 
-  test("standard: stage nav still walks all four stages (M0 regression guard)", async ({
+  test("standard: stage nav walks every stage the session runs (M0 regression guard)", async ({
     page,
   }) => {
     await applyAndFrame(page, "chronic-pain-opioids");
-    // M4b inserted a 5th stage (branched, index 3) and moved wrap-up to 4, so an
-    // A+B session runs Welcome → A → B → Wrap-up as [0,1,2,4]: stage 3 is
-    // SKIPPED, exactly like stage 2 is skipped for a branched session.
-    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 4]);
+    /* S1b — an A+B session is Welcome → section 1 → section 2 → Wrap-up as
+       [0,1,2,3]. It used to be [0,1,2,4] with the branched stage 3 skipped;
+       stages now exist only where a section sits, so nothing is skipped. */
+    expect(await page.evaluate(() => window.stageFlow())).toEqual([0, 1, 2, 3]);
     const walk = await page.evaluate(() => [
       window.adjacentStage(0, 1),
       window.adjacentStage(1, 1),
       window.adjacentStage(2, 1),
-      window.adjacentStage(4, 1),
+      window.adjacentStage(window.lastStage(), 1),
       window.adjacentStage(2, -1),
     ]);
-    // Unchanged BEHAVIOUR: 0→1→2→wrap-up, wrap-up is terminal, back from B → A.
-    expect(walk).toEqual([1, 2, 4, 4, 1]);
-    // The skipped branched stage is never a nav target in an A/B session.
+    // Unchanged BEHAVIOUR: 0→1→2→wrap-up, wrap-up is terminal, back from 2 → 1.
+    expect(walk).toEqual([1, 2, 3, 3, 1]);
+    // Nav never leaves the flow.
     const targets = await page.evaluate(() =>
-      [0, 1, 2, 4].flatMap((s) => [window.adjacentStage(s, -1), window.adjacentStage(s, 1)]),
+      [0, 1, 2, 3].flatMap((s) => [window.adjacentStage(s, -1), window.adjacentStage(s, 1)]),
     );
-    expect(targets).not.toContain(3);
+    expect(targets.every((t) => [0, 1, 2, 3].includes(t))).toBe(true);
   });
 
   /* Phase M4c — COMPOSITION. A mixed scenario runs a branched decision case
@@ -399,6 +408,6 @@ test.describe("branched session framing", () => {
     expect(got.composed).toBeGreaterThan(0);
     expect(got.after).toBe(0);
     expect(got.mods).toEqual(["A", "B"]);
-    expect(got.flow).toEqual([0, 1, 2, 4]);
+    expect(got.flow).toEqual([0, 1, 2, 3]);
   });
 });

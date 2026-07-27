@@ -532,26 +532,37 @@ if (typeof window !== "undefined") {
   };
 }
 
-/* 5 stages since M4b: 0 Welcome, 1 Module A, 2 Module B, 3 the branched
-   decision case, 4 Wrap-up. Wrap-up moved 3→4 to make room for a branched
-   stage; that rename was nearly free because script.js never hardcodes the
-   wrap-up index — every site derives it from STAGE_COUNT - 1 (and no CSS
-   referenced #stage-3). Stage 3 is INERT until a scenario actually declares the
-   branched module: standardStageFlow() only includes the stages of modules in
-   moduleSet(), so an A/B session runs [0,1,2,4] and skips it entirely. */
-const STAGE_COUNT = 5;
+/* Stage numbering, S1b: 0 = Welcome, 1..N = the sections this session picked in
+   pick order, N+1 = Wrap-up. CONTIGUOUS — before S1b the middle indices were
+   fixed per module (A→1, B→2, branched→3, wrap-up→4) and an A-only session ran
+   [0,1,4] with two stages skipped. A stage number therefore no longer implies a
+   module, a DOM node, or a duration; use slotAtStage(), stageViewId() and
+   stageMinutes() for those. */
+/* ⚠️ S1b — STAGE_COUNT IS NO LONGER THE STAGE COUNT. A session is Welcome + one
+   stage per PICKED SECTION + Wrap-up, so the count is per-session: use
+   stageCount() / lastStage(). This constant survives only as the PHYSICAL cap
+   (the largest stage index the DB rules accept), and is what MAX_SECTION_SLOTS
+   is derived from. Reading it as "the wrap-up index" — which every pre-S1b site
+   did — is now a bug. */
+const MAX_SECTION_SLOTS = 8;
+const STAGE_COUNT = MAX_SECTION_SLOTS + 2;
 // English fallback labels — used in admin-side text exports + as the
 // fallback when i18n.js hasn't loaded yet (vanishingly rare). For
 // any UI-visible label use stageLabel(i), which reads the current
-// language from i18n.js. Keeping STAGE_LABELS so the dozens of
-// existing call sites don't all need editing in one go.
-const STAGE_LABELS = ["Welcome", "Module A - Chronic Pain", "Module B - Breaking Bad News",
-                      "Decision case", "Wrap-up"];
+// language from i18n.js. S1b: the middle entries are per-TYPE, not
+// per-index, because a stage number no longer implies a module.
+const STAGE_LABELS = { welcome: "Welcome", wrapup: "Wrap-up",
+                       pbl: "Clinical case", roleplay: "Roleplay",
+                       branched: "Decision case" };
 /* Publish the wrap-up index for the LAZY branched-render.js, which owns
    stageFlow() once loaded. It used to hardcode `LAST_STAGE = 3`; M4b's 5th stage
    moved wrap-up to 4, so a literal copy would silently desync the lazy chunk
-   from the shell. Deriving it here keeps one source of truth. */
-if (typeof window !== "undefined") window.CANAMED_LAST_STAGE = STAGE_COUNT - 1;
+   from the shell. Deriving it here keeps one source of truth.
+
+   S1b — the wrap-up index is now PER SESSION (Welcome + N sections + Wrap-up),
+   so this is republished by refreshModuleStages() whenever the section set
+   changes. The value below is only the pre-scenario default. */
+if (typeof window !== "undefined") window.CANAMED_LAST_STAGE = 3;
 
 /* ── Module set ───────────────────────────────────────────────────────────────
    WHICH modules a session runs, and the mapping between a module id and its
@@ -659,7 +670,13 @@ function moduleHasContent(id) {
    stages of modules this scenario does not have. */
 function refreshModuleStages() {
   if (typeof window === "undefined") return;
-  window.CANAMED_MODULE_STAGES = moduleSet().map(stageForModule).filter(s => s >= 0);
+  /* S1b — the stages a session runs are the slot positions, and the wrap-up
+     index moves with them. Both are republished here (rather than computed once
+     at load) because the lazy branched-render.js owns stageFlow() after it
+     loads and reads these two globals; a stale pair desyncs the lazy chunk from
+     the shell, which is exactly the bug M4b's CANAMED_LAST_STAGE fixed. */
+  window.CANAMED_MODULE_STAGES = sectionSlots().map(s => s.stage);
+  window.CANAMED_LAST_STAGE = lastStage();
 }
 
 /* ── S1a — SLOTS: a stage is a POSITION, the DOM is a per-TYPE view ───────────
@@ -683,17 +700,38 @@ function refreshModuleStages() {
  * moves until S1b makes slots positional. */
 const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };
 const STAGE_VIEW_FOR_TYPE = { pbl: "stage-1", roleplay: "stage-2", branched: "stage-3" };
+/* The two fixed ends keep their DOM ids for ever, because a stage NUMBER no
+   longer picks a node: in a 2-section session the wrap-up is stage 3, but its
+   markup is still #stage-4. */
+const WELCOME_VIEW_ID = "stage-0";
+const WRAPUP_VIEW_ID = "stage-4";
 
-/* The section slots this session runs, in stage order. S1a derives them from
-   moduleSet(); S3 will read the facilitator's ordered pick instead. `stage` is
-   the module's CURRENT fixed index — S1b replaces it with the slot position. */
+/* The section slots this session runs, in the order the facilitator picked
+   them. S1b: a slot's stage IS its position — stage 1 is whatever section was
+   picked first, so a roleplay-then-PBL session runs the roleplay on stage 1.
+   S1a derived the stage from the module's old fixed index; that mapping is
+   gone, which is the whole point of the phase.
+
+   S3 replaces moduleSet() here with the facilitator's ordered pick. */
 function sectionSlots() {
-  return moduleSet().map((mod, i) => {
+  /* A STANDALONE branched scenario declares no module (its content is the node
+     graph), but it is unambiguously one section, and it renders in the PBL view
+     because the branched engine's standalone targets live there (#decisions-A,
+     #branched-final-host) — see M4c. Giving it a real slot is what lets the
+     rest of the engine stop special-casing the format. */
+  if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") {
+    return [{ position: 1, stage: 1, module: null, type: "branched",
+              view: "stage-1", standalone: true }];
+  }
+  return moduleSet().slice(0, MAX_SECTION_SLOTS).map((mod, i) => {
     const type = SECTION_TYPE_FOR_MODULE[mod] || null;
-    return { position: i + 1, stage: stageForModule(mod), module: mod, type: type,
+    return { position: i + 1, stage: i + 1, module: mod, type: type,
              view: STAGE_VIEW_FOR_TYPE[type] || null };
-  }).filter(s => s.stage >= 0);
+  });
 }
+/* Welcome + one stage per section + Wrap-up. Per SESSION, not a constant. */
+function stageCount() { return sectionSlots().length + 2; }
+function lastStage() { return stageCount() - 1; }
 function slotAtStage(stage) {
   return sectionSlots().find(s => s.stage === stage) || null;
 }
@@ -705,8 +743,8 @@ function slotAtStage(stage) {
    stage 1 with the épuré CSS, so an unmapped stage must still resolve to its
    like-numbered node rather than vanishing. */
 function stageViewId(stage) {
-  if (stage === 0) return "stage-0";
-  if (stage === STAGE_COUNT - 1) return "stage-" + (STAGE_COUNT - 1);
+  if (stage === 0) return WELCOME_VIEW_ID;
+  if (stage === lastStage()) return WRAPUP_VIEW_ID;
   const slot = slotAtStage(stage);
   return (slot && slot.view) || ("stage-" + stage);
 }
@@ -714,13 +752,10 @@ function stageViewId(stage) {
    Derived from the registry + the two fixed ends, never hardcoded, so adding a
    4th section type means adding one STAGE_VIEW_FOR_TYPE entry. */
 function allStageViewIds() {
-  const ids = ["stage-0", "stage-" + (STAGE_COUNT - 1)];
+  const ids = [WELCOME_VIEW_ID, WRAPUP_VIEW_ID];
   Object.keys(STAGE_VIEW_FOR_TYPE).forEach(t => {
     if (ids.indexOf(STAGE_VIEW_FOR_TYPE[t]) === -1) ids.push(STAGE_VIEW_FOR_TYPE[t]);
   });
-  for (let i = 0; i < STAGE_COUNT; i++) {
-    if (ids.indexOf("stage-" + i) === -1) ids.push("stage-" + i);
-  }
   return ids;
 }
 
@@ -788,35 +823,65 @@ function moduleNameTrio(id) {
   return null;
 }
 
+/* The English fallback label for a stage — used by the admin text exports and
+   before i18n.js has loaded. Keyed by ROLE (welcome / section type / wrap-up),
+   never by index, since S1b decoupled the two. */
+function stageLabelEn(i) {
+  if (i === 0) return STAGE_LABELS.welcome;
+  if (i === lastStage()) return STAGE_LABELS.wrapup;
+  const slot = slotAtStage(i);
+  const base = (slot && STAGE_LABELS[slot.type]) || "Section";
+  return "Section " + (slot ? slot.position : i) + " - " + base;
+}
+/* The section title shown to students for a stage: the picked section's own
+   name. S1b still sources it from the module name trio (S3 sources it from the
+   section registry), minus the "Module A — " prefix that decision 8 retired. */
+const STAGE_TITLE_PREFIX = /^\s*(?:Module|モジュール)\s*[AB]\s*[—–-]\s*/;
+function stageSectionTitle(i) {
+  const slot = slotAtStage(i);
+  if (!slot || typeof window === "undefined" || typeof window.tc !== "function") return "";
+  const trio = moduleNameTrio(slot.module);
+  if (!trio) return "";
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  const v = window.tc(trio, lang);
+  return v ? String(v).replace(STAGE_TITLE_PREFIX, "") : "";
+}
 function stageLabel(i) {
-  // R3-G2 fix: stages 1 and 2 are scenario-specific (Module A / Module B
-  // names depend on the chosen clinical case). Prefer the active scenario's
-  // moduleAName / moduleBName (translatable { en, fr, ja } trios) so a
-  // future antibiotic-stewardship case does not still display "Chronic
-  // Pain" in every language. Fall back to the i18n bag, then to the
-  // English STAGE_LABELS.
-  if (typeof window !== "undefined" && typeof window.tc === "function") {
-    // Stage→module through the registry, replacing the old hardcoded
-    // stage-index pair, so M1 can make the module set scenario-driven.
-    const trio = moduleNameTrio(moduleAtStage(i));
-    if (trio) {
-      // English-only UI (2026-06-25): resolve the scenario module name through
-      // _curLang() (pinned "en"), NOT getLang() (the picker) — otherwise a
-      // student who picks FR/JA for the reading aid still sees the Module A/B
-      // titles translated. The picker only drives the hover dictionaries now.
-      const lang = (typeof _curLang === "function") ? _curLang() : "en";
-      const v = window.tc(trio, lang);
-      if (v) return v;
-    }
+  /* S1b — a middle stage reads "Section k — <the section's own title>"
+     (decision 8). The position is what students navigate by, so it leads; the
+     TYPE (PBL / Roleplay / Branched) is facilitator-facing only and appears in
+     the picker, not here. */
+  const slot = slotAtStage(i);
+  if (slot && i !== 0 && i !== lastStage()) {
+    const title = stageSectionTitle(i);
+    const pattern = (typeof window !== "undefined" && typeof window.t === "function")
+      ? window.t("stage.label.section") : "";
+    const tpl = (pattern && pattern !== "stage.label.section")
+      ? pattern : "Section {n} — {title}";
+    const n = String(slot.position);
+    if (title) return tpl.replace("{n}", n).replace("{title}", title);
+    /* No title (an unnamed authored section): keep the position, drop the
+       dangling separator rather than printing "Section 2 — ". */
+    return tpl.replace("{n}", n).replace(/\s*[—–-]?\s*\{title\}\s*$/, "");
   }
-  const key = "stage.label." + i;
+  return stageLabelLegacy(i);
+}
+/* The two fixed ends. They are looked up by ROLE, not by index: the wrap-up
+   sits at a different number in every session now, so the old
+   "stage.label." + i lookup would fetch a middle stage's label for it (a
+   2-section session's wrap-up is stage 3 — the old "Decision case" key).
+   The numeric keys stay as a fallback for a cached older locale bundle. */
+function stageLabelLegacy(i) {
+  const role = (i === 0) ? "welcome" : "wrapup";
+  const legacyKey = (i === 0) ? "stage.label.0" : "stage.label.4";
   if (typeof window !== "undefined" && typeof window.t === "function") {
-    const v = window.t(key);
-    // If translation is missing, window.t returns the key as-is — fall
-    // back to the English label rather than show "stage.label.0" in UI.
-    if (v && v !== key) return v;
+    const k = "stage.label." + role;
+    const v = window.t(k);
+    if (v && v !== k) return v;
+    const lv = window.t(legacyKey);
+    if (lv && lv !== legacyKey) return lv;
   }
-  return STAGE_LABELS[i] || ("Stage " + (i + 1));
+  return STAGE_LABELS[role] || ("Stage " + (i + 1));
 }
 /* Stage-flow wrappers — the logic (branched skips stage 2) lives in the LAZY
    branched-render.js; these delegate once it has loaded, else the standard flow. */
@@ -831,20 +896,21 @@ function stageFlow() {
    even though it declares no A/B module. Mirrored in branched-render.js, which
    owns the flow once that lazy chunk has loaded. */
 function standardStageFlow() {
-  const LAST = STAGE_COUNT - 1;
-  if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") {
-    return [0, 1, LAST];
-  }
-  const mid = moduleSet().map(stageForModule).filter(s => s > 0 && s < LAST);
-  return [0].concat(mid.length ? mid : [1, 2], [LAST]);
+  /* S1b — the flow is now CONTIGUOUS: Welcome, one stage per picked section in
+     pick order, Wrap-up. There are no skipped stages any more, because a stage
+     only exists if a section occupies it. (Before S1b an A-only session ran
+     [0,1,4] with 2 and 3 skipped; it now runs [0,1,2].) */
+  const slots = sectionSlots();
+  const mid = slots.length ? slots.map(s => s.stage) : [1];
+  return [0].concat(mid, [mid.length + 1]);
 }
 function snapStageToFlow(to, from) {
   const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
-  return (b && b.snapStageToFlow) ? b.snapStageToFlow(to, from) : Math.max(0, Math.min(STAGE_COUNT - 1, to));
+  return (b && b.snapStageToFlow) ? b.snapStageToFlow(to, from) : Math.max(0, Math.min(lastStage(), to));
 }
 function adjacentStage(cur, dir) {
   const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
-  return (b && b.adjacentStage) ? b.adjacentStage(cur, dir) : Math.max(0, Math.min(STAGE_COUNT - 1, cur + dir));
+  return (b && b.adjacentStage) ? b.adjacentStage(cur, dir) : Math.max(0, Math.min(lastStage(), cur + dir));
 }
 // Generic i18n lookup with English-string fallback. Use for hardcoded
 // strings being migrated to i18n: pass the new key and the existing English
@@ -5503,7 +5569,7 @@ function startSession() {
 }
 
 function setRoomStage(r, from, to) {
-  to = Math.max(0, Math.min(STAGE_COUNT - 1, to));
+  to = Math.max(0, Math.min(lastStage(), to));
   // Honour the scenario's stage flow (branched skips stage 2). Every advance
   // call site passes to = from ± 1, so this one guard covers them all.
   to = snapStageToFlow(to, from);
@@ -5531,7 +5597,17 @@ function setRoomStage(r, from, to) {
   });
 }
 /* approximate planned minutes per stage, for the dashboard "over time" cue */
-const STAGE_MINUTES = [20, 40, 40, 30, 15];   // 3 = the branched decision case (M4b)
+/* Approximate planned minutes, for the dashboard "over time" cue. S1b: keyed by
+   ROLE and section TYPE, not by stage index — a stage number no longer tells you
+   what is running on it. */
+const STAGE_MINUTES_BY_ROLE = { welcome: 20, wrapup: 15,
+                                pbl: 40, roleplay: 40, branched: 30 };
+function stageMinutes(st) {
+  if (st === 0) return STAGE_MINUTES_BY_ROLE.welcome;
+  if (st === lastStage()) return STAGE_MINUTES_BY_ROLE.wrapup;
+  const slot = slotAtStage(st);
+  return (slot && STAGE_MINUTES_BY_ROLE[slot.type]) || 99;
+}
 function roomProgress(data) {
   const revealed = (data.moduleA && data.moduleA.revealed) || {};
   const aCount = Object.keys((data.answers && data.answers.moduleA) || {}).length;
@@ -5865,7 +5941,7 @@ function sessionSignal() {
     active++;
     minStage = Math.min(minStage, st);
     maxStage = Math.max(maxStage, st);
-    if (mins > (STAGE_MINUTES[st] || 99)) {
+    if (mins > stageMinutes(st)) {
       over++;
       if (mins > slowestMin) { slowestMin = mins; slowest = r; }
     }
@@ -5998,10 +6074,10 @@ function renderDashboard() {
     const timer = document.createElement("div");
     const mins = minsSince(data.stageAt);
     if (mins != null) {
-      const over = mins > (STAGE_MINUTES[st] || 99);
+      const over = mins > stageMinutes(st);
       timer.className = "dash-timer" + (over ? " over" : "");
       timer.textContent = mins + " min in this stage" +
-        (over ? " (planned ~" + STAGE_MINUTES[st] + ")" : "");
+        (over ? " (planned ~" + stageMinutes(st) + ")" : "");
     } else {
       timer.className = "dash-timer";
       timer.textContent = "";
@@ -7538,7 +7614,7 @@ function _sessionArchiveData(anon) {
       .map(h => ({ by: labelFor(h.by), university: h.university || "", text: h.text || "" }));
     rooms.push({
       room: r,
-      stageReached: STAGE_LABELS[st] || ("Stage " + (st + 1)),
+      stageReached: stageLabelEn(st),
       score: (typeof scoreTotal === "function") ? scoreTotal(data) : null,
       hypotheses: hypList,
       answers: { moduleA: mapEntries("moduleA"), moduleB: mapEntries("moduleB") }
@@ -8072,18 +8148,21 @@ function showLateBanner(stage) {
 
 /* one short, plain-language "do this now" line per stage - the single biggest
    help for a stressed second-language student who has lost the thread */
-// De-dup (2026-06-01): Module A (index 1) and Module B (index 2) used to repeat
-// the whole flow here ("ask, examine, investigate — then debate…"), duplicating
-// the localized, state-aware next-step coach that owns "what to do now" inside
-// each module. Those two are now blank so the coach is the single source. Welcome
-// (0) and Wrap-up (3) keep their line — there is no coach on those stages.
-const STAGE_NOW = [
-  "Watch the opening presentation together. While you wait, name your team below.",
-  "",
-  "",
-  "",   // 3 = branched decision case — the case itself carries the instructions
-  "You're finished — open the questionnaire below. Thank you for taking part!"
-];
+// De-dup (2026-06-01): the section stages used to repeat the whole flow here
+// ("ask, examine, investigate — then debate…"), duplicating the localized,
+// state-aware next-step coach that owns "what to do now" inside each module.
+// They are blank so the coach is the single source. Only Welcome and Wrap-up
+// keep a line — there is no coach on those two.
+// S1b: keyed by ROLE, since a section can now sit at any stage number.
+const STAGE_NOW_BY_ROLE = {
+  welcome: "Watch the opening presentation together. While you wait, name your team below.",
+  wrapup: "You're finished — open the questionnaire below. Thank you for taking part!"
+};
+function stageNow(st) {
+  if (st === 0) return STAGE_NOW_BY_ROLE.welcome;
+  if (st === lastStage()) return STAGE_NOW_BY_ROLE.wrapup;
+  return "";
+}
 function renderStage() {
   /* S1a — show the VIEW the current stage resolves to, not the like-numbered
      node. Identical today (slot k sits at stage k); once slots are positional
@@ -8108,13 +8187,13 @@ function renderStage() {
     try { window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" }); }
     catch (_) { try { window.scrollTo(0, 0); } catch (__) {} }
   }
-  if (viewStage === STAGE_COUNT - 1) renderWrapupSummary();
+  if (viewStage === lastStage()) renderWrapupSummary();
   // in-platform pre-test (Welcome) and post-test (Wrap-up) — both optional
   // and per-scenario. Render functions are no-ops when the scenario does
   // not ship a question bank or when the user is an admin viewing a room.
   if (viewStage === 0) renderPreTest();
-  if (viewStage === STAGE_COUNT - 1) renderPostTest();
-  if (viewStage === STAGE_COUNT - 1) renderSurvey();
+  if (viewStage === lastStage()) renderPostTest();
+  if (viewStage === lastStage()) renderSurvey();
   renderObjectives();   // the objectives panel tracks the module the room is on
   renderDecisions();    // the team-decision cards for Module A and Module B
   // per-stage "chapter" accent + the "do this now" line
@@ -8124,7 +8203,7 @@ function renderStage() {
   if (now) {
     now.textContent = isRoomAdmin
       ? ""
-      : (viewStage < roomStage ? "" : (STAGE_NOW[viewStage] || ""));
+      : (viewStage < roomStage ? "" : stageNow(viewStage));
   }
   // De-dup (2026-06-01): the module name used to be appended here AND shown on
   // the current segment of the #global-stage-progress stepper below — the same
@@ -8175,7 +8254,7 @@ function renderStage() {
   // clicks its disclosure triangle. (It used to force-open at Wrap-up, which
   // read as the page "opening it by itself" when navigating between stages.)
   // a celebration when the room reaches the wrap-up (once)
-  if (!wrapCelebrated && roomStage === STAGE_COUNT - 1 && viewStage === STAGE_COUNT - 1) {
+  if (!wrapCelebrated && roomStage === lastStage() && viewStage === lastStage()) {
     wrapCelebrated = true;
     burst();
     toast("Great work today — thank you for taking part!");
@@ -8204,8 +8283,12 @@ function renderStage() {
   // the bubble misaligns over an empty area.
   if (window.CanamedTour && typeof window.CanamedTour.activeSet === "function") {
     const activeSet = window.CanamedTour.activeSet();
-    // Map of stage-bound tour sets → the stage they belong on.
-    const TOUR_STAGE = { student: 0, studentModA: 1 };
+    /* Map of stage-bound tour sets → the stage they belong on. S1b: the Module
+       A tour is bound to the FIRST PBL section wherever it landed, not to
+       stage 1 — a session that opens with a roleplay would otherwise dismiss
+       the tour the moment it started. */
+    const firstPbl = sectionSlots().find(s => s.type === "pbl");
+    const TOUR_STAGE = { student: 0, studentModA: firstPbl ? firstPbl.stage : -1 };
     if (activeSet && TOUR_STAGE.hasOwnProperty(activeSet) &&
         TOUR_STAGE[activeSet] !== viewStage) {
       try { window.CanamedTour.dismiss(); } catch (e) {}
