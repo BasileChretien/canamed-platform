@@ -128,6 +128,23 @@ test("test items are partitioned, never duplicated or dropped", () => {
   });
 });
 
+test("every section has a blurb of its own, not the case-wide one", () => {
+  Object.keys(SECTIONS).forEach(id => {
+    const s = SECTIONS[id];
+    assert.ok(s.summary && s.summary.en, id + " needs a summary");
+    assert.equal(s.summaryIsCaseWide, false,
+      id + " must not inherit the case summary — stage 0 prints one blurb per " +
+      "picked section, and a case summary advertises the other half too");
+    const caseSummary = (SCENARIOS[s.source].summary || {}).en || "";
+    assert.notEqual(s.summary.en, caseSummary);
+  });
+});
+
+test("the two sections of one case get DIFFERENT blurbs", () => {
+  assert.notEqual(SECTIONS["jaundice-pbl"].summary.en,
+                  SECTIONS["jaundice-roleplay"].summary.en);
+});
+
 test("the known thin-section gap is pinned, so filling it is visible", () => {
   /* Decision 10: the jaundice case's items are almost entirely disclosure, so
      its PBL section starts with 0 pre-test and 1 post-test item. Drafted items

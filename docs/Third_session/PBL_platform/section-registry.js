@@ -128,6 +128,52 @@
     }
   };
 
+  /* ── Per-section blurbs ───────────────────────────────────────────────────
+     A case summary describes BOTH of its halves ("Module A is the workup;
+     Module B is the roleplay"), so a section cannot inherit it: stage 0 prints
+     one blurb per PICKED section (decision 4), and a mixed session would
+     otherwise advertise content it does not run.
+
+     English only, deliberately. The platform is English-canonical since the
+     reading-aid work — t() renders English for everything outside the
+     consent/safety whitelist — so a trilingual blurb would be three strings to
+     maintain and one to display. DRAFT: written from each section's own
+     content, awaiting the author's review alongside
+     ARCHITECTURE/section-test-items-proposal.md. */
+  const SECTION_SUMMARIES = {
+    "chronic-pain-pbl": { en:
+      "A 45-year-old office worker with 8 months of low-back pain asks for " +
+      "oxycodone by name. Work the pain up, sort red flags from yellow flags, " +
+      "and build a plan that does not start with an opioid." },
+    "chronic-pain-roleplay": { en:
+      "Play the consultation in which the requested opioid is declined — " +
+      "keeping the patient's pain credible and the relationship intact, across " +
+      "a French and a Japanese consulting style." },
+    "jaundice-pbl": { en:
+      "A 75-year-old woman presents with painless obstructive jaundice. Work " +
+      "through the biochemistry and imaging to a diagnosis of Stage IV " +
+      "pancreatic adenocarcinoma, and decide what to do about the biliary " +
+      "obstruction." },
+    "jaundice-roleplay": { en:
+      "The patient's adult son asks the team, privately, not to tell his " +
+      "mother. Run the disclosure with SPIKES, between France's Loi-Kouchner " +
+      "default of direct patient information and Japan's evolving " +
+      "family-mediated tradition." },
+    "sore-throat-pbl": { en:
+      "A 32-year-old with five days of pharyngitis and a Centor/McIsaac score " +
+      "of 0 wants amoxicillin before a Friday presentation. Score the throat, " +
+      "weigh delayed prescribing, and land on a no-antibiotic plan you can " +
+      "defend." },
+    "sore-throat-roleplay": { en:
+      "Hold the conversation with a patient who has already decided she needs " +
+      "antibiotics — against France's persistently high outpatient prescribing " +
+      "and Japan's AMR action plan and stewardship premium." },
+    "ward-escalation-branched": { en:
+      "A breathless patient on the ward deteriorates. The team works through a " +
+      "branching decision tree in which each choice reveals its consequence and " +
+      "opens the next fork." }
+  };
+
   /* Strip the "Module A — " / "Module B — " prefix from a trilingual name.
      Decision 8 makes the student-facing label "Section k — <title>", so the
      A/B wording must not survive into a section title. Derived rather than
@@ -197,7 +243,8 @@
         type: "branched",
         source: scenario.id,
         name: stripModulePrefix(scenario.name),
-        summary: scenario.summary || null,
+        summary: SECTION_SUMMARIES[scenario.id] || scenario.summary || null,
+        summaryIsCaseWide: !SECTION_SUMMARIES[scenario.id],
         /* A branched section is the whole case: its graph, its deliverable and
            its documents already live at the top level, and the branched engine
            reads them from there (M4c). Passed through unchanged so composition
@@ -224,16 +271,16 @@
     const named = !!(name && name.en);
     if (!named && !scoring.length && !decisions.length) return null;
 
+    const id = slug + "-" + typeId;
     const section = {
-      id: slug + "-" + typeId,
+      id: id,
       type: typeId,
       source: scenario.id,
       name: name || null,
-      /* Per-section blurbs are not authored yet: the case summary describes
-         BOTH modules. S3 shows one blurb per picked section, so these need
-         writing — tracked in section-test-items-proposal.md. */
-      summary: scenario.summary || null,
-      summaryIsCaseWide: true,
+      /* Falls back to the case-wide summary only for a section with no blurb of
+         its own — an authored one, until S5 gives the author a blurb field. */
+      summary: SECTION_SUMMARIES[id] || scenario.summary || null,
+      summaryIsCaseWide: !SECTION_SUMMARIES[id],
       content: { scoring: scoring, decisions: decisions,
                  characters: byModule(scenario.characters, mod) },
       preTest: [],
@@ -272,7 +319,7 @@
     return out;
   }
 
-  return { SECTION_TYPES, SECTION_SOURCES, TEST_SPLIT, MODULE_PREFIX,
+  return { SECTION_TYPES, SECTION_SOURCES, TEST_SPLIT, SECTION_SUMMARIES, MODULE_PREFIX,
            stripModulePrefix, byModule, buildSection, buildSectionRegistry,
            unclassifiedTestItems };
 });
