@@ -224,9 +224,10 @@ function applyScenario(id, customContent) {
   window.CURRENT_SCENARIO_ID = (sc && (sc.id || (sc.meta && sc.meta.id))) || id || "";
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
   // flow (the existing decision engine, with the clinical/roleplay chrome
-  // hidden via the body[data-format] CSS hook); anything else is the standard
-  // PBL/roleplay layout. Defaults to "standard" so untagged scenarios are
-  // unaffected.
+  // hidden via the per-stage .stage[data-format="branched"] CSS hook stamped
+  // below — M4a; two genuinely-global rules stay body-scoped); anything else is
+  // the standard PBL/roleplay layout. Defaults to "standard" so untagged
+  // scenarios are unaffected.
   window.CURRENT_SCENARIO_FORMAT = (sc && sc.format) || "standard";
   // M1 — the module set this scenario CONTAINS (e.g. ["A"] for a clinical-
   // reasoning-only case, ["B"] for a pure breaking-bad-news roleplay). Null when
