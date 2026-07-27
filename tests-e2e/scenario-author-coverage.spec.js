@@ -261,3 +261,130 @@ test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
     expect(errors, "cloning a built-in must not throw").toEqual([]);
   });
 });
+
+/* Module-set M5 — authoring a MIXED scenario: Modules A + B plus a branched
+   decision case, which the scenario REFERENCES by id (`branchedRef`) rather than
+   inlining. The runtime cannot infer a branched module (it has no name field and
+   no scoring family), so the explicit `modules` list must be written whenever it
+   is ticked. The list of pickable cases is fetched lazily — case-content.js and
+   then branched-seed.js, which is where the branched built-in actually lives. */
+test.describe("Scenario author — M5 mixed A/B + branched module", () => {
+  test("a mixed scenario authors modules + a resolving branchedRef, and validates", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+
+    // Start from the standard skeleton so the rest of the form is already valid
+    // — this test is about the module set, not about re-typing a whole case.
+    await page.locator("#btn-skeleton").click();
+    const picker = page.locator("#skeleton-picker");
+    await expect(picker).toBeVisible();
+    await picker.getByRole("button", { name: /Standard/ }).click();
+    await expect(picker).toHaveCount(0);
+
+    // A and B are ticked (the skeleton names both) and imply themselves, so no
+    // explicit list is written yet.
+    await expect(page.locator("#mod-A")).toBeChecked();
+    await expect(page.locator("#mod-B")).toBeChecked();
+    await expect(page.locator("#mod-branched")).not.toBeChecked();
+    const preview = page.locator("#json-preview");
+    expect(JSON.parse(await preview.inputValue()).modules).toBeUndefined();
+
+    // The case picker only appears once a branched module is declared.
+    await expect(page.locator("#branched-ref-row")).toBeHidden();
+    await page.locator("#mod-branched").check();
+    await expect(page.locator("#branched-ref-row")).toBeVisible();
+
+    // The pickable cases arrive lazily (case-content.js → branched-seed.js).
+    const refSelect = page.locator("#branched-ref");
+    await expect(refSelect.locator('option[value="ward-escalation-branched"]'))
+      .toBeAttached({ timeout: 30_000 });
+    // Only BRANCHED scenarios are offered — a standard built-in must never be.
+    await expect(refSelect.locator('option[value="chronic-pain"]')).toHaveCount(0);
+    await refSelect.selectOption("ward-escalation-branched");
+
+    // The export carries BOTH keys the runtime needs to compose the module.
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"branchedRef"'))
+      .toBe(true);
+    const json = JSON.parse(await preview.inputValue());
+    expect(json.modules).toEqual(["A", "B", "branched"]);
+    expect(json.branchedRef).toBe("ward-escalation-branched");
+    // Composition, not inlining: no branched node leaks into decisions[].
+    expect(json.decisions.every((d) => d.module === "A" || d.module === "B")).toBe(true);
+
+    // …and the whole thing VALIDATES — including the reference resolving against
+    // the (now downloaded) built-in registry.
+    await page.locator("#btn-validate").click();
+    const out = page.locator("#validation-output");
+    await expect(out).toHaveClass(/success/);
+    await expect(out).toContainText("Validation passed");
+
+    expect(errors, "authoring a mixed scenario must not throw").toEqual([]);
+  });
+
+  test("a branched module with no case picked is blocked, and unticking clears it", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+
+    await page.locator("#mod-branched").check();
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"branchedRef"'))
+      .toBe(true);
+    // Declared but unpicked → the export shows the gap and validate blocks it.
+    expect(JSON.parse(await preview.inputValue()).branchedRef).toBe("");
+    await page.locator("#btn-validate").click();
+    const out = page.locator("#validation-output");
+    await expect(out).toHaveClass(/error/);
+    await expect(out).toContainText("branched decision case is selected but none is picked");
+
+    // Unticking must DROP both keys rather than leaving a stale reference behind
+    // (they are modeled now, not carried in the passthrough bag).
+    await page.locator("#mod-branched").uncheck();
+    await expect(page.locator("#branched-ref-row")).toBeHidden();
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"branchedRef"'))
+      .toBe(false);
+    const json = JSON.parse(await preview.inputValue());
+    expect(json.branchedRef).toBeUndefined();
+    expect(json.modules).toBeUndefined();
+
+    await page.locator("#btn-validate").click();
+    await expect(out).toHaveClass(/success/);
+
+    expect(errors, "toggling the branched module must not throw").toEqual([]);
+  });
+
+  test("unticking a named PBL module writes the explicit modules override", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+
+    // The skeleton's only decision is Module A, so dropping B stays valid.
+    await page.locator("#mod-B").uncheck();
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => (await preview.inputValue()).includes('"modules"'))
+      .toBe(true);
+    expect(JSON.parse(await preview.inputValue()).modules).toEqual(["A"]);
+
+    // Module B is still NAMED by the skeleton; the explicit list is what makes
+    // the session skip its stage.
+    await page.locator("#btn-validate").click();
+    await expect(page.locator("#validation-output")).toHaveClass(/success/);
+
+    expect(errors, "narrowing the module set must not throw").toEqual([]);
+  });
+});

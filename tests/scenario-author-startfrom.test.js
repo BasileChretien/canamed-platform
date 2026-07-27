@@ -230,8 +230,13 @@ test("built-ins are lazy-loaded, not a static tag on the author page", () => {
   // facilitators who never clone a built-in.
   assert.doesNotMatch(HTML, /<script[^>]+src="case-content\.js"/,
     "case-content.js must NOT be a static <script> on scenario-author.html");
-  assert.match(JS, /src\s*=\s*"case-content\.js"/,
+  // M5 moved the tag injection into the shared injectScript() helper (the
+  // branched-case picker chains branched-seed.js onto it), so assert on that
+  // call rather than the raw `s.src = "case-content.js"` it replaced.
+  assert.match(JS, /injectScript\("case-content\.js"\)/,
     "loadBuiltins() must inject case-content.js on demand");
+  assert.match(JS, /function injectScript\(src\)/,
+    "the on-demand <script> injector must exist");
   assert.match(JS, /CANAMED_SCENARIOS/, "built-ins come from window.CANAMED_SCENARIOS");
 });
 

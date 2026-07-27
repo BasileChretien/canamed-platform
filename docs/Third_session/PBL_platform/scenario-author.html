@@ -92,6 +92,44 @@
         </p>
         <div class="trio-block" data-trio="meta.moduleAName" data-label="Module A name"></div>
         <div class="trio-block" data-trio="meta.moduleBName" data-label="Module B name"></div>
+
+        <!-- M5 — the module set this scenario runs. A and B are normally implied
+             by the names above; the tick boxes let you override that, and they
+             are the ONLY way to add a branched decision case, which the runtime
+             cannot infer (it has no name field and no scoring family). -->
+        <div class="field-row standard-only" id="modules-row">
+          <span class="field-label" id="modules-label">Modules this scenario runs</span>
+          <div class="row-flex" id="modules-toggle" role="group" aria-labelledby="modules-label">
+            <div class="check-cell">
+              <input type="checkbox" id="mod-A" />
+              <label for="mod-A">Module A &mdash; clinical reasoning</label>
+            </div>
+            <div class="check-cell">
+              <input type="checkbox" id="mod-B" />
+              <label for="mod-B">Module B &mdash; roleplay</label>
+            </div>
+            <div class="check-cell">
+              <input type="checkbox" id="mod-branched" />
+              <label for="mod-branched">Branched decision case</label>
+            </div>
+          </div>
+          <p class="field-hint">Ticking A / B normally just mirrors the module names above, so an
+            explicit <code>modules</code> list is written only when your pick differs from them.
+            A <strong>branched</strong> module can never be inferred, so ticking it always writes
+            the list &mdash; plus the <code>branchedRef</code> below. It runs as its own stage,
+            <em>after</em> Modules A and B.</p>
+        </div>
+        <div class="field-row standard-only hidden" id="branched-ref-row">
+          <label class="field-label" for="branched-ref">Branched case to run <span class="required">*</span></label>
+          <select id="branched-ref" name="branchedRef">
+            <option value="">&mdash; pick a branched case &mdash;</option>
+          </select>
+          <p class="field-hint" id="branched-ref-status">The branched stage <strong>references</strong>
+            a standalone branched scenario by id &mdash; its nodes are not copied into this file, so
+            the referenced case stays the single source of truth. Only branched scenarios that ship
+            with the platform can be referenced (the session resolves the id against the built-in
+            registry at runtime).</p>
+        </div>
       </fieldset>
 
       <!-- ============= Branch tree (branched format only) ============= -->

@@ -414,6 +414,14 @@ input:focus, textarea:focus, select:focus {
 .author-form[data-format="branched"] fieldset.author-section:not(#meta-section),
 .author-form[data-format="branched"] #preview-section { display: none; }
 .author-form:not([data-format="branched"]) .branched-only { display: none; }
+/* …and the mirror image: the standard-only meta controls (the module set + the
+   referenced branched case) make no sense for a WHOLE-scenario branched file,
+   which is one tree and declares no module list. */
+.author-form[data-format="branched"] .standard-only { display: none; }
+
+/* M5 — module-set tick boxes + the branched-case reference. */
+#modules-toggle { flex-wrap: wrap; gap: 1rem; margin: .3rem 0 .2rem; }
+#branched-ref { width: 100%; box-sizing: border-box; }
 
 .bn-opt { border-left: 3px solid var(--accent, #2a6); padding-left: .7rem; margin: .6rem 0; }
 .bn-opt textarea, .bn-opt input[type="text"] { width: 100%; box-sizing: border-box; }
