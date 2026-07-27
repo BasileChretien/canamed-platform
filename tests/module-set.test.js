@@ -64,10 +64,77 @@ test("M0: the registry maps stages to modules positionally", () => {
   assert.equal(r.moduleAtStage(1), "A", "stage 1 is Module A");
   assert.equal(r.moduleAtStage(2), "B", "stage 2 is Module B");
   assert.equal(r.moduleAtStage(0), null, "Welcome is not a module stage");
-  assert.equal(r.moduleAtStage(3), null, "Wrap-up is not a module stage");
+  // M4b: the branched decision case became a real module at stage 3, and
+  // wrap-up moved 3 → 4 to keep the flow monotonic.
+  assert.equal(r.moduleAtStage(3), "branched", "stage 3 is the branched decision case");
+  assert.equal(r.moduleAtStage(4), null, "Wrap-up is not a module stage");
   assert.equal(r.stageForModule("A"), 1);
   assert.equal(r.stageForModule("B"), 2);
+  assert.equal(r.stageForModule("branched"), 3);
   assert.equal(r.stageForModule("C"), -1, "an unknown module has no stage yet");
+});
+
+/* ── M4b: the 5-stage model (branched gets a real stage), landing INERT ────── */
+
+test("M4b: there are 5 stages and wrap-up is last", () => {
+  assert.match(SCRIPT, /const STAGE_COUNT = 5;/, "a 5th stage was added for the branched case");
+  // Every wrap-up site derives from STAGE_COUNT - 1 rather than a literal 3 —
+  // that is what made moving wrap-up 3 → 4 nearly free. Guard it stays that way.
+  assert.ok(!/viewStage === 3\b/.test(SCRIPT), "wrap-up must not be hardcoded as stage 3");
+  assert.ok(!/roomStage === 3\b/.test(SCRIPT), "wrap-up must not be hardcoded as stage 3");
+  // The positional arrays must all carry 5 entries.
+  const labels = SCRIPT.match(/const STAGE_LABELS = \[([\s\S]*?)\];/);
+  assert.ok(labels, "STAGE_LABELS must exist");
+  assert.equal((labels[1].match(/"/g) || []).length / 2, 5, "STAGE_LABELS needs 5 entries");
+  assert.match(SCRIPT, /const STAGE_MINUTES = \[20, 40, 40, 30, 15\]/, "STAGE_MINUTES needs 5 entries");
+});
+
+test("M4b: stage 3 is INERT — an A/B session skips it entirely", () => {
+  // This is the whole safety argument: adding the stage changes nothing until a
+  // scenario actually declares the branched module.
+  const win = {
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("Chronic pain"),
+    CURRENT_SCENARIO_MODULE_B_NAME: TRIO("Breaking bad news")
+  };
+  const r = loadResolver(win);
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B"], "branched must not be inferred");
+  r.refreshModuleStages();
+  assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [1, 2], "only A and B stages are published");
+});
+
+test("M4b: branched is never NAME- or SCORING-inferred into a standard scenario", () => {
+  // It has no CURRENT_SCENARIO_MODULE_branched_NAME and no scoring.modulebranched,
+  // so the two inference paths cannot pick it up by accident.
+  const r = loadResolver({
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("A only"),
+    SCORING: { moduleA: [{ id: "a1" }], moduleB: [{ id: "b1" }] }
+  });
+  assert.equal(r.moduleNameEn("branched"), "", "branched has no scenario name field");
+  assert.equal(r.moduleHasScoring("branched"), false, "branched has no scoring family");
+  assert.ok(r.moduleSet().indexOf("branched") === -1, "branched must not appear by inference");
+});
+
+test("M4b: a scenario CAN declare branched explicitly, and it lands at stage 3", () => {
+  const win = {
+    CURRENT_SCENARIO_MODULE_A_NAME: TRIO("Reasoning"),
+    CURRENT_SCENARIO_MODULE_B_NAME: TRIO("Roleplay"),
+    CURRENT_SCENARIO_MODULES: ["A", "branched", "B"]
+  };
+  const r = loadResolver(win);
+  // Returned in STAGE order, which is what keeps the flow monotonic.
+  assert.deepStrictEqual(r.moduleSet(), ["A", "B", "branched"]);
+  r.refreshModuleStages();
+  assert.deepStrictEqual(win.CANAMED_MODULE_STAGES, [1, 2, 3]);
+});
+
+test("M4b: the lazy branched chunk DERIVES the wrap-up index from the shell", () => {
+  // branched-render.js hardcoded LAST_STAGE = 3; the 5th stage would have
+  // silently desynced the lazy chunk from the shell.
+  const BR = fs.readFileSync(path.join(P, "branched-render.js"), "utf8");
+  assert.ok(!/var LAST_STAGE = 3;/.test(BR), "the hardcoded LAST_STAGE must be gone");
+  assert.match(BR, /root\.CANAMED_LAST_STAGE/, "it must read the published global");
+  assert.match(SCRIPT, /window\.CANAMED_LAST_STAGE = STAGE_COUNT - 1/,
+    "the shell must publish the wrap-up index");
 });
 
 /* ── M1: the module set is scenario-driven ────────────────────────────────── */

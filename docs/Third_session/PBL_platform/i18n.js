@@ -408,7 +408,9 @@
       "stage.label.0": "Welcome",
       "stage.label.1": "Module A — Chronic Pain",
       "stage.label.2": "Module B — Breaking Bad News",
-      "stage.label.3": "Wrap-up",
+      // 3 = the branched decision case (module-set M4b); wrap-up moved 3 → 4.
+      "stage.label.3": "Decision case",
+      "stage.label.4": "Wrap-up",
 
       // stage 0 (Welcome) chrome
       "stage.welcome.title": "Welcome to Session 3",
@@ -983,7 +985,7 @@
   // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
   // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
   // returning browser keeps serving the cached chunk.
-  const LOCALE_VERSION = "v7";
+  const LOCALE_VERSION = "v8";   // M4b: stage.label.3 = decision case, wrap-up → .4
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

@@ -278,7 +278,7 @@ test.describe("branched scenario — full playthrough", () => {
         return s2 ? getComputedStyle(s2).display : "absent";
       }),
     ).toBe("none");
-    await expect(stu.locator("#stage-3")).toBeVisible({ timeout: 10_000 });
+    await expect(stu.locator("#stage-4")).toBeVisible({ timeout: 10_000 });
 
     await stu.close();
   });

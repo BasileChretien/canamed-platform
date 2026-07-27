@@ -1,6 +1,6 @@
 /* tests-e2e/wrapup-consolidation.spec.js
  *
- * Consolidated wrap-up (2026-07-16, user request). The wrap-up (#stage-3) used
+ * Consolidated wrap-up (2026-07-16, user request). The wrap-up (#stage-4) used
  * to be several separate cards: "Wrap-up & Next Steps", a team-recap card, a
  * lone "Download my room's answers" button card, and a "Take it with you" PDF
  * card — with the optional post-test / survey cards interleaved between them.
@@ -12,7 +12,7 @@
  * next-step line was removed.
  *
  * These are static-DOM contracts (the wrap-up markup ships in index.html and is
- * only hidden until stage-3), asserted at "/" so they run identically per-device
+ * only hidden until stage-4), asserted at "/" so they run identically per-device
  * (chromium/firefox/webkit + mobile-iphone/ipad/android — the mobile projects
  * via the testMatch allow-list in playwright.config.js). A final per-device
  * check un-hides the card and asserts it doesn't overflow its width on narrow
@@ -26,7 +26,7 @@ test.describe("Wrap-up — consolidated single card", () => {
   test("the three wrap-up sections live inside ONE .wrapup-card", async ({ page }) => {
     await page.goto("/");
     const dom = await page.evaluate(() => {
-      const cards = Array.from(document.querySelectorAll("#stage-3 .wrapup-card"));
+      const cards = Array.from(document.querySelectorAll("#stage-4 .wrapup-card"));
       const card = cards[0] || null;
       const has = (sel) => !!(card && card.querySelector(sel));
       return {
@@ -74,7 +74,7 @@ test.describe("Wrap-up — consolidated single card", () => {
   test("the optional post-test + survey cards stay their own cards below", async ({ page }) => {
     await page.goto("/");
     const layout = await page.evaluate(() => {
-      const card = document.querySelector("#stage-3 .wrapup-card");
+      const card = document.querySelector("#stage-4 .wrapup-card");
       const post = document.getElementById("posttest-card");
       const survey = document.getElementById("survey-card");
       return {
@@ -96,14 +96,14 @@ test.describe("Wrap-up — consolidated single card", () => {
   test("the consolidated card fits its width (no horizontal overflow) per-device", async ({ page }) => {
     await page.goto("/");
     const fit = await page.evaluate(() => {
-      // un-hide stage-3 and its ancestors (siblings stay hidden) so the wrap-up
+      // un-hide stage-4 and its ancestors (siblings stay hidden) so the wrap-up
       // card lays out at the real viewport width for this device.
-      const s3 = document.getElementById("stage-3");
+      const s3 = document.getElementById("stage-4");
       for (let el = s3; el; el = el.parentElement) {
         if (el.classList) el.classList.remove("hidden");
       }
       try { if (typeof window.renderTeamRecap === "function") window.renderTeamRecap(); } catch (e) { /* app state may be absent; the card still lays out */ }
-      const card = document.querySelector("#stage-3 .wrapup-card");
+      const card = document.querySelector("#stage-4 .wrapup-card");
       if (!card) return null;
       const rect = card.getBoundingClientRect();
       const btns = ["wrapup-booklet-btn", "wrapup-cert-btn", "wrapup-download-btn"].map((id) => {

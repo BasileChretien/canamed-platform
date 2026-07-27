@@ -426,8 +426,18 @@
      all-stages flow in the brief pre-load window, before any stage is
      navigable). The shared endpoints (0, 3) leave the first/last button-disable
      logic untouched. */
-  var LAST_STAGE = 3;
+  /* DERIVED, not hardcoded: script.js publishes CANAMED_LAST_STAGE (= its
+     STAGE_COUNT - 1). It was a literal 3 until M4b inserted a 5th stage (the
+     branched decision case at 3) and moved wrap-up to 4 — a hardcoded copy here
+     silently desynced the lazy chunk from the shell, which is exactly the class
+     of drift the M0 seam exists to prevent. Falls back to 4 for an older cached
+     shell that predates the global. */
+  function lastStage() {
+    var n = root.CANAMED_LAST_STAGE;
+    return (typeof n === "number" && n > 0) ? n : 4;
+  }
   function stageFlow() {
+    var LAST_STAGE = lastStage();
     if (root.CURRENT_SCENARIO_FORMAT === "branched") return [0, 1, LAST_STAGE];
     /* M1 — a standard session runs Welcome + one stage per module the scenario
        actually contains + Wrap-up, so an A-only case is [0,1,3] and a B-only one
