@@ -199,9 +199,20 @@ test("M4d: answers/moduleBranched is declared in BOTH trees and HARDENED", () =>
        moduleB still carry the older, looser contract (any authed user, no
        $other) — a PRE-EXISTING gap, tracked separately. A brand-new node must
        not be introduced at the weaker standard. */
-    assert.match(e[".write"], /uidMembers/,
-      label + ": writes must be room-membership gated");
-    assert.match(e[".write"], /closed/, label + ": no writes after close");
+    /* Assert the COMPLETE predicate, not just token presence: a substring check
+       for "uidMembers"/"closed" would still pass a permissive or wrongly-ordered
+       rule (e.g. an `||` where an `&&` belongs, or a gate on the wrong room).
+       Behavioural evaluation of these rules lives in the emulator spec
+       (member/non-member, closed session, unknown field, cross-room, both
+       trees) — this is the cheap structural lock that catches a weakening edit. */
+    const root = label === "sessions"
+      ? "root.child('sessions').child($sessionId)"
+      : "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)";
+    assert.strictEqual(
+      e[".write"],
+      "auth != null && !" + root + ".child('closed').exists() && " +
+      root + ".child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
+      label + ": exact write predicate (authed AND not closed AND a member of THIS room)");
     assert.strictEqual(e.$other[".validate"], false,
       label + ": unknown entry fields must be rejected ($other sentinel)");
     // Every field the client actually writes must be declared, or the $other
@@ -210,15 +221,23 @@ test("M4d: answers/moduleBranched is declared in BOTH trees and HARDENED", () =>
       assert.ok(e[f], label + ": must declare the client-written field " + f);
     });
     assert.match(e.text[".validate"], /length <= 1000/, label + ": text bounded");
-    // It must be strictly stronger than moduleA, not a copy of it.
-    assert.notStrictEqual(e[".write"], ans.moduleA.$entryId[".write"],
-      label + ": must not inherit moduleA's ungated write");
+    /* Strictly stronger than moduleA — shown POSITIVELY, by the conjunct
+       moduleA lacks, rather than by a notStrictEqual that any difference would
+       satisfy. If moduleA is ever hardened too (tracked in CLAUDE.md), this
+       flips to both having the gate, and the assertion below should be updated
+       deliberately rather than deleted. */
+    const modA = ans.moduleA.$entryId[".write"];
+    assert.ok(!/uidMembers/.test(modA),
+      label + ": moduleA is still the un-gated legacy contract (update this test " +
+      "when moduleA is hardened)");
+    assert.ok(/uidMembers/.test(e[".write"]),
+      label + ": moduleBranched adds the membership conjunct moduleA lacks");
   });
-  // The two trees must NOT be identical — their predicates root at different paths.
-  assert.notDeepStrictEqual(sess.moduleBranched, orgs.moduleBranched,
+  // The two trees are NOT interchangeable: each must gate on its OWN root, or an
+  // org session would be checked against the default tree (and vice versa).
+  assert.notStrictEqual(sess.moduleBranched.$entryId[".write"],
+    orgs.moduleBranched.$entryId[".write"],
     "each tree's rule must reference its own root path");
-  assert.match(orgs.moduleBranched.$entryId[".write"], /orgs/,
-    "the org rule must root at the orgs tree");
 });
 
 test("M4d: standalone branched still writes to moduleA; composed writes elsewhere", () => {

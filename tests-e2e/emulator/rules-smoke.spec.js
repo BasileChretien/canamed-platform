@@ -1030,4 +1030,10 @@ test("rules: answers/moduleBranched accepts a composed branched deliverable (M4d
   expect(await tryWrite(page, `${orgBase}/e1`, good)).toBe("ALLOWED");
   expect(await tryWrite(page, `${orgBase}/e2`, Object.assign({}, good, { evil: "x" })),
     "org tree must seal unknown fields too").not.toBe("ALLOWED");
+
+  /* CLOSED session: a member may no longer contribute. Force the marker via the
+     emulator owner token (the `closed` write is admin-gated) and re-try. */
+  await adminPut(`sessions/${code}/closed`, { at: Date.now() });
+  const afterClose = await tryWrite(page, `${base}/e9`, good);
+  expect(afterClose, "no branched answers after the session closes").not.toBe("ALLOWED");
 });
