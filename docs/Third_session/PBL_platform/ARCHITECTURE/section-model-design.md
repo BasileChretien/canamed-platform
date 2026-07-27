@@ -189,12 +189,43 @@ weeks ago — but do not deploy S1b in the middle of a live workshop.
 
 ### S1c — Roleplay content becomes data (decision 9)
 Extract the roleplay chrome out of `index.html` (`#stage-2`, ~726 lines) into
-per-section data: role briefs (public + private), the SPIKES/framework steps,
-useful sentences, historical context and guidelines. The 3 built-in roleplays
-must be re-expressed as data with **no visible change** (screenshot-verified),
-and the `data-i18n` keys they use today move from the shell into section
-content across `i18n.js` + 7 locales. This is the prerequisite for a Roleplay
-skeleton that is genuinely "empty but ready to fill".
+per-section data. Sliced, because it is content extraction across three
+independent subsystems and each needs its own no-visible-change proof:
+
+**S1c-1 — the CAST ← DONE (shell v113→v114).**
+The roles were hardcoded in **three places at once** — the four `.role-chip`
+buttons in `index.html`, `ASSIGN_ROLE_DECK` and `REPLAY_ROLE_ORDER` — so every
+roleplay on the platform was necessarily physician / patient / family /
+observer with Mrs Tanaka's briefs. The cast is now ONE list
+(`roleplayRoles()`) read from `CURRENT_SECTION_ROLEPLAY`, defaulting to today's
+four **including their existing i18n keys**, so the built-ins are unchanged.
+- `assignRoleDeck()` and `replayRoleOrder()` replace the two literal arrays;
+  the random-assign spill now goes to the **last declared role** rather than a
+  literal `"observer"` (an authored cast need not have one).
+- `renderRoleChips()` rebuilds the chip row from the cast and **no-ops when it
+  matches the markup**, so the shipped chips keep their hand-authored i18n
+  attributes. It re-arms `initRolePicker()`, whose listeners are wired once over
+  the chips that existed at the time — without that an authored cast renders
+  but does not respond.
+- Role ids are validated (`^[a-z][a-z0-9_-]{0,23}$`, deduped): they become DOM
+  `data-role` values and RTDB keys. A declaration that resolves to nothing
+  usable falls back to the default rather than leaving a roleplay with no cast.
+- `applyScenario()` reassigns the block **including to null** — the same
+  staleness trap `scenarioModuleSet()` documents for module names.
+- An authored brief goes in as `textContent`, not via the sanitised-innerHTML
+  i18n path: it is facilitator input, not a shipped string.
+- 10 new unit + 3 browser tests; 1070 unit + 351 chromium E2E green.
+
+**S1c-2 — the reference panels (TODO).** `refB-panel-history`,
+`-guidelines`, `-recap`, `-useful` are static case-specific text.
+**S1c-3 — framework, phases, vignette (TODO).** The observer checklist is
+SPIKES-shaped in the markup; `MODB_PHASES` and their minute budgets are a
+literal array; the vignette + `stage.modB.title` name the built-in case.
+
+**Same audit is owed for PBL.** The stage-1 reference panels (`#refA-panel-
+history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —
+chronic-pain-flavoured text shown regardless of the active case. They belong in
+section data for the same reason.
 
 **Same audit is owed for PBL.** The stage-1 reference panels (`#refA-panel-
 history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —

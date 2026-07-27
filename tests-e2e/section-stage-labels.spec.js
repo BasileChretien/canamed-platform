@@ -119,3 +119,67 @@ test.describe("S1b — section stage labels and ordering", () => {
       expect(nums).toEqual(["1", "2", "3", "4"]);
     });
 });
+
+/* ── S1c-1 — the roleplay CAST is section data ─────────────────────────────
+   Proof in the real shell: a section declaring its own roles rebuilds the chip
+   row, and the built-in cast leaves the hand-authored chips untouched. */
+test.describe("S1c-1 — an authored roleplay cast", () => {
+  test("the built-in cast leaves the shipped chips exactly as authored", async ({ page }) => {
+    await surfaceApp(page);
+    const roles = await page.locator("#modB-role-picker .role-chip")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-role")));
+    expect(roles).toEqual(["physician", "patient", "family", "observer"]);
+    // i18n attributes survive because renderRoleChips() no-ops on a match.
+    await expect(page.locator('#modB-role-picker .role-chip[data-role="family"] span'))
+      .toHaveAttribute("data-i18n", "modB.role.family.name");
+  });
+
+  test("a section's own cast replaces the chips, with its own names", async ({ page }) => {
+    await surfaceApp(page);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = { roles: [
+        { id: "pharmacist", name: "Community pharmacist" },
+        { id: "prescriber", name: "Prescriber" },
+        { id: "observer", name: "Observer" }
+      ] };
+      window.renderRoleChips();
+    });
+    const chips = page.locator("#modB-role-picker .role-chip");
+    await expect(chips).toHaveCount(3);
+    expect(await chips.evaluateAll((els) => els.map((e) => e.textContent.trim())))
+      .toEqual(["Community pharmacist", "Prescriber", "Observer"]);
+  });
+
+  test("an authored cast is still clickable — the picker re-arms", async ({ page }) => {
+    await surfaceApp(page);
+    /* The chip has to be VISIBLE to be clicked, so run a roleplay-only session
+       and show its stage — which is stage 1 since S1b. */
+    await pick(page, ["B"]);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = { roles: [
+        { id: "pharmacist", name: "Community pharmacist", brief: "You dispensed it." },
+        { id: "prescriber", name: "Prescriber" }
+      ] };
+      window.renderRoleChips();
+      window._test_setViewStage(1);
+      window.renderStage();
+      /* Module B gates its cards by phase; the role picker lives in the setup
+         phase, so without this the chip is present but not visible. */
+      if (typeof window.renderModBPhase === "function") window.renderModBPhase(0);
+    });
+    await expect(page.locator("#stage-2")).toBeVisible();
+    await expect(page.locator('.role-chip[data-role="pharmacist"]')).toBeVisible();
+    /* Fire the chip's own click rather than a synthetic pointer event: this
+       page is a half-mounted room (no startRoom(), so the usual chrome/overlay
+       state is not settled) and Playwright's actionability gate times out on
+       something overlapping it. The claim under test is that renderRoleChips()
+       RE-ARMED the picker's listener over the new chips — which the element's
+       own click() exercises exactly. Visibility is asserted separately above. */
+    await page.locator('.role-chip[data-role="pharmacist"]').evaluate((e) => e.click());
+    await expect(page.locator('.role-chip[data-role="pharmacist"]'))
+      .toHaveAttribute("aria-checked", "true");
+    /* And its private brief is the authored text, not a shipped i18n string. */
+    await expect(page.locator("#modB-role-objective-text"))
+      .toHaveText("You dispensed it.");
+  });
+});

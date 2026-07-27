@@ -222,6 +222,14 @@ function applyScenario(id, customContent) {
   window.CURRENT_SCENARIO_MODULE_A_NAME = sc.moduleAName || null;
   window.CURRENT_SCENARIO_MODULE_B_NAME = sc.moduleBName || null;
   window.CURRENT_SCENARIO_ID = (sc && (sc.id || (sc.meta && sc.meta.id))) || id || "";
+  /* S1c-1 — the roleplay section's own content (its cast, for now). ALWAYS
+     reassigned, including to null: a scenario without it must fall back to the
+     built-in cast rather than inherit the previous scenario's, which is the
+     same staleness trap scenarioModuleSet() documents for module names. */
+  window.CURRENT_SECTION_ROLEPLAY = (sc && typeof sc.roleplay === "object") ? sc.roleplay : null;
+  if (typeof renderRoleChips === "function" && typeof document !== "undefined") {
+    try { renderRoleChips(); } catch (e) { /* pre-DOM call sites */ }
+  }
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
   // flow (the existing decision engine, with the clinical/roleplay chrome
   // hidden via the per-stage .stage[data-format="branched"] CSS hook stamped
@@ -698,6 +706,52 @@ function refreshModuleStages() {
  * S1a is a SEAM ONLY — same discipline as M0. Every function here returns
  * exactly today's answer (a slot sits at its module's fixed stage), so nothing
  * moves until S1b makes slots positional. */
+/* ── S1c-1 — the roleplay's ROLE SET becomes section data ─────────────────────
+ * A Roleplay section's cast used to be hardcoded in three places at once: the
+ * four `.role-chip` buttons in index.html, ASSIGN_ROLE_DECK and
+ * REPLAY_ROLE_ORDER — so every roleplay in the platform was necessarily
+ * physician / patient / family / observer, with Mrs Tanaka's briefs. A
+ * facilitator authoring their own roleplay (a pharmacist and a prescriber; a
+ * nurse, a relative and two clinicians) had nothing to change.
+ *
+ * The cast is now ONE list, read from the active section. Defaults reproduce
+ * today's four roles exactly — including their i18n keys — so the built-in
+ * roleplays are unchanged until a section declares its own.
+ *
+ * Names and briefs may be given inline by an authored section; the built-ins
+ * keep resolving through i18n (`modB.role.<id>.name` / `.brief`), which is
+ * where their translations already live. */
+const ROLEPLAY_DEFAULT_ROLES = [
+  { id: "physician", nameKey: "modB.role.physician.name", briefKey: "modB.role.physician.brief" },
+  { id: "patient",   nameKey: "modB.role.patient.name",   briefKey: "modB.role.patient.brief" },
+  { id: "family",    nameKey: "modB.role.family.name",    briefKey: "modB.role.family.brief" },
+  { id: "observer",  nameKey: "modB.role.observer.name",  briefKey: "modB.role.observer.brief" }
+];
+/* The cast of the roleplay section this session runs. An authored section
+   supplies `roleplay.roles`; anything it omits falls back to the default entry
+   with the same id, so a section may rename one role without restating all of
+   them. Ids are validated (they become DOM data-role values and RTDB keys). */
+function roleplayRoles() {
+  const declared = (typeof window !== "undefined") && window.CURRENT_SECTION_ROLEPLAY;
+  const list = declared && Array.isArray(declared.roles) ? declared.roles : null;
+  if (!list || !list.length) return ROLEPLAY_DEFAULT_ROLES.slice();
+  const out = [];
+  list.forEach(r => {
+    const id = r && typeof r.id === "string" ? r.id.trim() : "";
+    if (!/^[a-z][a-z0-9_-]{0,23}$/.test(id)) return;   // DOM + RTDB safe
+    if (out.some(o => o.id === id)) return;            // a duplicate would break the deck
+    const base = ROLEPLAY_DEFAULT_ROLES.find(d => d.id === id) || {};
+    out.push({ id: id,
+               name: r.name || null, nameKey: base.nameKey || null,
+               brief: r.brief || null, briefKey: base.briefKey || null });
+  });
+  /* A declaration that resolves to NOTHING usable (all ids malformed) falls
+     back rather than leaving a roleplay with no cast at all. */
+  return out.length ? out : ROLEPLAY_DEFAULT_ROLES.slice();
+}
+function roleplayRoleIds() { return roleplayRoles().map(r => r.id); }
+function roleplayRole(id) { return roleplayRoles().find(r => r.id === id) || null; }
+
 const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };
 const STAGE_VIEW_FOR_TYPE = { pbl: "stage-1", roleplay: "stage-2", branched: "stage-3" };
 /* The two fixed ends keep their DOM ids for ever, because a stage NUMBER no
@@ -10879,8 +10933,21 @@ function showRoleObjective(role) {
   const panel = el("modB-role-objective");
   if (!panel) return;
   const textEl = el("modB-role-objective-text");
+  /* S1c-1 — an authored section supplies its own private brief; the built-ins
+     keep resolving through i18n, where their translations live. Authored text
+     goes in as textContent (never the sanitised-innerHTML i18n path), because
+     it is facilitator input rather than a shipped string. */
+  const _authored = roleplayRole(role);
+  if (role && textEl && _authored && _authored.brief) {
+    textEl.removeAttribute("data-i18n");
+    textEl.removeAttribute("data-i18n-html");
+    textEl.textContent = (typeof tc === "function")
+      ? tc(_authored.brief, _curLang()) : String(_authored.brief);
+    panel.classList.remove("hidden");
+    return;
+  }
   if (role && textEl) {
-    const key = "modB.role." + role + ".brief";
+    const key = (_authored && _authored.briefKey) || ("modB.role." + role + ".brief");
     textEl.setAttribute("data-i18n", key);
     textEl.setAttribute("data-i18n-html", "");
     if (typeof window !== "undefined" && typeof window.applyI18n === "function") {
@@ -10897,6 +10964,51 @@ function showRoleObjective(role) {
     }
     panel.classList.add("hidden");
   }
+}
+
+/* S1c-1 — rebuild the chip row from the section's cast.
+   No-ops when the cast already matches the markup, so the built-in roleplays
+   keep their hand-authored chips and i18n attributes untouched; this only
+   rewrites the row for a section that declares its own roles. Built with
+   createElement + textContent, never innerHTML — a role name is
+   facilitator-authored text. */
+function renderRoleChips() {
+  const row = document.querySelector("#modB-role-picker .role-chip-row");
+  if (!row) return;
+  const cast = roleplayRoles();
+  const current = Array.prototype.map.call(
+    row.querySelectorAll(".role-chip"), c => c.getAttribute("data-role"));
+  if (current.join(",") === cast.map(r => r.id).join(",")) return;
+
+  row.textContent = "";
+  cast.forEach(r => {
+    const b = document.createElement("button");
+    b.className = "role-chip";
+    b.type = "button";
+    b.setAttribute("data-role", r.id);
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", "false");
+    const span = document.createElement("span");
+    span.className = "role-chip-name";
+    if (r.name) {
+      span.textContent = (typeof tc === "function") ? tc(r.name, _curLang()) : String(r.name);
+    } else if (r.nameKey) {
+      span.setAttribute("data-i18n", r.nameKey);
+      span.textContent = r.id;
+    } else {
+      span.textContent = r.id;
+    }
+    b.appendChild(span);
+    row.appendChild(b);
+  });
+  if (typeof window !== "undefined" && typeof window.applyI18n === "function") {
+    window.applyI18n(row);
+  }
+  /* The picker wires its listeners once, over the chips that existed then —
+     re-arm it against the new ones. */
+  const picker = el("modB-role-picker");
+  if (picker) picker._wired = false;
+  initRolePicker();
 }
 
 function initRolePicker() {
@@ -10989,7 +11101,11 @@ function initRolePicker() {
    its OWN slot (no cross-writes). Re-tapping reshuffles; solo mode gives this
    device one of the four at random. Grief surface (a skewed mapping) is the
    accepted room-griefing class — each client only writes its own roleChoices. */
-const ASSIGN_ROLE_DECK = ["physician", "patient", "family", "observer"];
+/* S1c-1 — the deck is the SECTION's cast, not a literal. Kept as a function so
+   it re-reads after a scenario switch; the "extras become observers" fallback
+   uses the LAST declared role, which is the observer in every built-in and the
+   natural spectator slot in an authored cast. */
+function assignRoleDeck() { return roleplayRoleIds(); }
 
 function _fisherYates(arr) {
   // Browser Math.random (client code, not the deterministic workflow sandbox).
@@ -11006,9 +11122,11 @@ function _fisherYates(arr) {
    filled; the shuffle above randomises only WHO gets which. Pure + global so the
    distinctness property is testable. */
 function _roleDeckFor(count) {
+  const cast = assignRoleDeck();
+  const spare = cast[cast.length - 1] || "observer";
   const deck = [];
   for (let i = 0; i < count; i++) {
-    deck.push(i < ASSIGN_ROLE_DECK.length ? ASSIGN_ROLE_DECK[i] : "observer");
+    deck.push(i < cast.length ? cast[i] : spare);
   }
   return deck;
 }
@@ -11016,7 +11134,8 @@ function _roleDeckFor(count) {
 function assignRolesRandomly() {
   // Solo / LOCAL: no shared roster — give THIS device a random role.
   if (MODE !== "shared" || !refRoleAssign) {
-    _applyAssignedRole(ASSIGN_ROLE_DECK[Math.floor(Math.random() * ASSIGN_ROLE_DECK.length)]);
+    const _solo = assignRoleDeck();
+    _applyAssignedRole(_solo[Math.floor(Math.random() * _solo.length)]);
     return;
   }
   const roster = Object.keys(presence || {});
@@ -11039,7 +11158,7 @@ function handleRoleAssign(val) {
   if (at && at <= _lastRoleAssignAt) return;   // already applied this draw
   _lastRoleAssignAt = at;
   const mine = val.assignments[clientId];
-  if (typeof mine === "string" && ASSIGN_ROLE_DECK.indexOf(mine) !== -1) {
+  if (typeof mine === "string" && assignRoleDeck().indexOf(mine) !== -1) {
     _applyAssignedRole(mine);
   }
 }
@@ -11112,7 +11231,8 @@ function renderRoleChoices(map) {
    advances the round (synced via <base>/roleplayRound); each client rotates
    ITS OWN pick only, so no cross-client writes or extra privilege are needed.
    Works in LOCAL/solo mode (no listener — the button applies the bump here). */
-const REPLAY_ROLE_ORDER = ["physician", "patient", "family", "observer"];
+/* S1c-1 — the swap rotation walks the SECTION's cast in declared order. */
+function replayRoleOrder() { return roleplayRoleIds(); }
 
 function _swapT(key, fallback) {
   if (typeof window !== "undefined" && typeof window.t === "function") {
@@ -11124,10 +11244,11 @@ function _swapT(key, fallback) {
 
 /* Rotate a role by `steps` around the 4-role cycle. Unknown/unpicked → unchanged. */
 function rotateRole(role, steps) {
-  const i = REPLAY_ROLE_ORDER.indexOf(role);
+  const order = replayRoleOrder();
+  const i = order.indexOf(role);
   if (i < 0) return role;
-  const n = REPLAY_ROLE_ORDER.length;
-  return REPLAY_ROLE_ORDER[(i + ((steps % n) + n)) % n];
+  const n = order.length;
+  return order[(i + ((steps % n) + n)) % n];
 }
 
 /* Wire the "Swap roles & replay" button and seed local round state. */
@@ -11146,7 +11267,7 @@ function wireSwapReplay() {
    listener then drives every client's own rotation); LOCAL applies it here. */
 function bumpReplayRound() {
   const next = replayRound + 1;
-  if (next > REPLAY_ROLE_ORDER.length) {
+  if (next > replayRoleOrder().length) {
     if (typeof toast === "function") {
       toast(_swapT("modB.replay.full",
         "Everyone has now played every role — nicely done."));
@@ -11164,7 +11285,7 @@ function bumpReplayRound() {
    ONLY on a real increment after the baseline round is known — a late joiner
    landing straight into round 2 must NOT rotate on arrival. */
 function handleReplayRound(round, fromSync) {
-  round = (typeof round === "number" && round >= 1 && round <= REPLAY_ROLE_ORDER.length)
+  round = (typeof round === "number" && round >= 1 && round <= replayRoleOrder().length)
     ? round : 1;
   const prev = replayRound;
   const wasReady = replayRoundReady;
