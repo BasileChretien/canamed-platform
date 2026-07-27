@@ -230,3 +230,43 @@ test.describe("S1c-2 — optional roleplay reference panels", () => {
       .toHaveText("<img src=x onerror=alert(1)>");
   });
 });
+
+/* ── S1c-3a — the observation framework is a shipped library ────────────────
+   Decision 11: a roleplay picks its observer checklist from frameworks I own,
+   or supplies its own. Declaring nothing keeps the shipped SPIKES list. */
+test.describe("S1c-3a — the observer's framework", () => {
+  test("the built-in roleplay keeps its six SPIKES steps", async ({ page }) => {
+    await surfaceApp(page);
+    const ids = await page.locator("#observer-checklist input[data-obs]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-obs")));
+    expect(ids).toEqual(["s", "p", "i", "k", "e", "s2"]);
+  });
+
+  test("a section swaps in a library framework", async ({ page }) => {
+    await surfaceApp(page);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = { framework: "pause-explore-explain-realign" };
+      window.renderObserverChecklist();
+    });
+    const boxes = page.locator("#observer-checklist input[data-obs]");
+    await expect(boxes).toHaveCount(4);
+    await expect(page.locator("#observer-checklist li").first())
+      .toContainText("Pause —");
+  });
+
+  test("an authored checklist still persists what the observer ticks", async ({ page }) => {
+    await surfaceApp(page);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = { framework: {
+        label: "Ours", steps: [{ id: "one", label: "Asked first" },
+                               { id: "two", label: "Then told" }] } };
+      window.renderObserverChecklist();
+      /* The wiring must have been re-armed over the NEW boxes; without that an
+         authored framework ticks but never saves. */
+      document.querySelector('#observer-checklist input[data-obs="two"]').click();
+    });
+    const saved = await page.evaluate(() =>
+      JSON.parse(sessionStorage.getItem("canamed_obs_spikes") || "{}"));
+    expect(saved.two).toBe(1);
+  });
+});

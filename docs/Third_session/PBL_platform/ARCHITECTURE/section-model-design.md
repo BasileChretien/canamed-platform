@@ -237,9 +237,31 @@ an absent one.
 - Text-only by construction (`createElement` + `textContent`) — panel prose is
   facilitator input. E2E-pinned with an injection payload.
 - 5 unit + 3 browser tests; 1075 unit / 585 chromium+mobile E2E green.
-**S1c-3 — framework, phases, vignette (TODO).** The observer checklist is
-SPIKES-shaped in the markup; `MODB_PHASES` and their minute budgets are a
-literal array; the vignette + `stage.modB.title` name the built-in case.
+**S1c-3a — the observation framework ← DONE (shell v115→v116).** The observer's
+tick-list was six hardcoded SPIKES `<li>`, so an antibiotic-negotiation roleplay
+handed its observer a breaking-bad-news checklist. It now comes from a shipped
+LIBRARY (decision 11) — `OBSERVATION_FRAMEWORKS`: SPIKES, Calgary–Cambridge,
+Pause/Explore/Explain/Realign — picked by id, with a custom `{label, steps}`
+escape hatch. Library is code-owned, instances facilitator-owned, the same rule
+as the skeleton types.
+- SPIKES keeps its existing `modB.obs.*` i18n keys; the two added frameworks
+  ship English-only per the English-canonical policy.
+- Declaring nothing → no-op, shipped markup untouched. An unknown id or a
+  custom framework with no usable step degrades to the shipped list rather than
+  emptying the checklist.
+- Custom step ids are validated because they key the observer's private
+  `sessionStorage` scratchpad — a malformed one would tick but never persist.
+- `renderObserverChecklist()` re-arms `initObserverChecklist()`, which binds its
+  change listeners once over the boxes that existed then. Browser-pinned: an
+  authored checklist still saves what the observer ticks.
+- 8 unit + 3 browser tests; 1083 unit / 591 chromium+mobile E2E green.
+
+**S1c-3b — authored phases (TODO).** `MODB_PHASES` and the minute budgets are a
+literal array, and the six-step stepper is hand-authored markup. Decision 12
+makes the phase list section data, with card visibility part of the
+declaration — the consumer M3b's seam was built for.
+**S1c-3c — vignette + title (TODO).** `stage.modB.title` and the vignette name
+the built-in case.
 
 **Same audit is owed for PBL.** The stage-1 reference panels (`#refA-panel-
 history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —

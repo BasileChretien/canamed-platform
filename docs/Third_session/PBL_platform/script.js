@@ -231,6 +231,7 @@ function applyScenario(id, customContent) {
     try {
       if (typeof renderRoleChips === "function") renderRoleChips();
       if (typeof renderRoleplayPanels === "function") renderRoleplayPanels();
+      if (typeof renderObserverChecklist === "function") renderObserverChecklist();
     } catch (e) { /* pre-DOM call sites */ }
   }
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
@@ -823,6 +824,108 @@ function renderRoleplayPanels() {
     if (!on) { node.textContent = ""; node.hidden = true; return; }
     _fillRoleplayPanel(node, spec);
   });
+}
+
+/* ── S1c-3a — the OBSERVATION FRAMEWORK becomes a shipped library ─────────────
+ * The observer's tick-list was SPIKES, hardcoded as six <li> in index.html — so
+ * an antibiotic-negotiation roleplay handed its observer a breaking-bad-news
+ * checklist. Decision 11: the checklist comes from a small library I own (the
+ * same rule as the skeleton types — code-owned frameworks, facilitator-owned
+ * instances), with a custom escape hatch.
+ *
+ * A section picks one by id (`roleplay.framework: "calgary-cambridge"`) or
+ * supplies its own (`{ label, steps: [{ id, label }] }`). Declaring nothing
+ * leaves the shipped SPIKES markup untouched — the same no-op discipline as the
+ * chips and panels, so the built-in roleplays cannot regress.
+ *
+ * SPIKES keeps its i18n keys (its translations already exist). The frameworks
+ * added here ship English-only, per the English-canonical policy. */
+const OBSERVATION_FRAMEWORKS = {
+  spikes: {
+    label: "SPIKES",
+    steps: [
+      { id: "s",  labelKey: "modB.obs.s" },
+      { id: "p",  labelKey: "modB.obs.p" },
+      { id: "i",  labelKey: "modB.obs.i" },
+      { id: "k",  labelKey: "modB.obs.k" },
+      { id: "e",  labelKey: "modB.obs.e" },
+      { id: "s2", labelKey: "modB.obs.s2" }
+    ]
+  },
+  "calgary-cambridge": {
+    label: "Calgary–Cambridge",
+    steps: [
+      { id: "cc1", label: "Initiating the session — greeting, agenda, the patient's opening concern" },
+      { id: "cc2", label: "Gathering information — open questions first, then focused ones" },
+      { id: "cc3", label: "Providing structure — signposting and summarising along the way" },
+      { id: "cc4", label: "Building the relationship — acknowledging feelings, involving the patient" },
+      { id: "cc5", label: "Explanation and planning — chunked information, checked understanding" },
+      { id: "cc6", label: "Closing the session — agreed next step, safety-netting" }
+    ]
+  },
+  "pause-explore-explain-realign": {
+    label: "Pause / Explore / Explain / Realign",
+    steps: [
+      { id: "pe1", label: "Pause — stopped rather than answering the demand straight away" },
+      { id: "pe2", label: "Explore — asked what is behind the request" },
+      { id: "pe3", label: "Explain — gave the reasoning in plain language, no jargon wall" },
+      { id: "pe4", label: "Realign — offered a plan that meets the underlying need" }
+    ]
+  }
+};
+/* The framework this roleplay observes with, or null to keep the shipped one. */
+function observationFramework() {
+  const rp = (typeof window !== "undefined") && window.CURRENT_SECTION_ROLEPLAY;
+  const f = rp && rp.framework;
+  if (!f) return null;
+  if (typeof f === "string") return OBSERVATION_FRAMEWORKS[f] || null;
+  if (typeof f === "object" && Array.isArray(f.steps)) {
+    const steps = f.steps
+      .filter(s => s && typeof s.id === "string" && /^[a-z0-9_-]{1,16}$/i.test(s.id))
+      .map(s => ({ id: s.id, label: s.label || s.id }));
+    /* Step ids are sessionStorage keys for the observer's private scratchpad;
+       a malformed one would silently fail to persist. A custom framework with
+       no usable step is ignored rather than emptying the checklist. */
+    return steps.length ? { label: f.label || "Observation", steps: steps } : null;
+  }
+  return null;
+}
+function renderObserverChecklist() {
+  const fw = observationFramework();
+  if (!fw) return;                 // built-in: leave the shipped SPIKES list
+  const root = document.getElementById("observer-checklist");
+  if (!root) return;
+  const ul = root.querySelector("ul");
+  if (!ul) return;
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  ul.textContent = "";
+  fw.steps.forEach(step => {
+    const li = document.createElement("li");
+    const label = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.setAttribute("data-obs", step.id);
+    const span = document.createElement("span");
+    if (step.labelKey) {
+      span.setAttribute("data-i18n", step.labelKey);
+      span.textContent = step.labelKey;
+    } else {
+      span.textContent = (typeof tc === "function") ? tc(step.label, lang) : String(step.label);
+    }
+    label.appendChild(box);
+    label.appendChild(document.createTextNode(" "));
+    label.appendChild(span);
+    li.appendChild(label);
+    ul.appendChild(li);
+  });
+  if (typeof window !== "undefined" && typeof window.applyI18n === "function") {
+    window.applyI18n(ul);
+  }
+  /* initObserverChecklist() binds its change listeners once, over the boxes
+     that existed then — re-arm it against the new ones, or an authored
+     framework ticks but never persists. */
+  root.dataset.wired = "";
+  if (typeof initObserverChecklist === "function") initObserverChecklist();
 }
 
 const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };
