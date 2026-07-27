@@ -32,6 +32,11 @@ const SW = fs.readFileSync(path.join(P, "sw.js"), "utf8");
 // Selectors that are branched-ONLY → must live in branched.css, not style.css.
 const BRANCHED_ONLY = [
   'body[data-format="branched"]',
+  // M4a: the épuré layout moved from body-level to the per-stage hook so a mixed
+  // session can be épuré on ONLY its branched stage. These stage-scoped hooks are
+  // branched-only too — keep them in the lazy sheet, out of the eager budget.
+  '.stage[data-format="branched"]',
+  '#stage-1[data-format="branched"]',
   ".dec-documents",
   ".dec-documents-head",
   ".branched-rationale",
