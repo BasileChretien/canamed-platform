@@ -523,6 +523,21 @@ Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/
   can't set retention indefinitely and defeat GDPR cleanup.
 
 **Round-3 — TRACKED hardening (defense-in-depth, not active exploits):**
+- **`answers/moduleA` + `answers/moduleB` are the weakest participant-writable
+  nodes left** (surfaced 2026-07-27 by a CodeRabbit review of M4d). Their
+  `$entryId .write` is only `auth != null && !closed` — **no `uidMembers`
+  room-membership gate and no `$other` sentinel** — so any authenticated user who
+  knows a session code can write/overwrite an answer in ANY room, with undeclared
+  fields. Every other per-room participant node (hypotheses, scoring/awarded,
+  votes/committed, roomChat) IS membership-gated, so this is an outlier, not the
+  house standard. The new `answers/moduleBranched` (M4d) was deliberately shipped
+  **hardened** (membership gate + named child validators + `$other:false`) rather
+  than cloning the weak contract — use it as the template. Bringing A/B up to it
+  touches LIVE data paths (in-flight sessions writing answers), so it wants its
+  own PR + emulator run, not a drive-by. **Note the ordering trap when you do it:**
+  the client writes `bulletKey` and `university`, which the current `.validate`
+  does not declare — adding `$other:false` without declaring them first would
+  reject legitimate answers.
 - **`$other:{".validate":false}` sentinels** on participant-writable per-room
   nodes (chat/$turnId, score/auto+penalties/$eventId, scoring/awarded/$familyId,
   hypotheses/$entryId, promptReplies+exchangeReplies/$cid, callForHelp,

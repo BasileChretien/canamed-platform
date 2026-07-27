@@ -350,9 +350,29 @@ schema. Rejected: inline-namespaced graph (Option A) and shared `decisions[]`
   - Verified behaviourally: a mixed scenario composes all referenced nodes,
     namespaced + collision-free, edges rewritten, tree RENDERED on stage 3, with
     Modules A and B intact; and switching away drops the composed nodes.
-- **M4d — rules.** Literal `answers/moduleBranched` block × 2 trees (+ any
-  module-scoped branched state), emulator-proven. (Room-level votes/score already
-  work as long as node ids are unique.)
+- **M4d — the composed module's answers bucket ← DONE (shell v111→v112).**
+  A branched deliverable + in-card reasoning used to write to `answers/moduleA`.
+  Fine standalone; in a MIXED session it would pollute a concurrently-running
+  Module A's answers node **and its research-export column**.
+  - Literal `answers/moduleBranched` block added to **both** trees, cloned from
+    each tree's own `moduleA` rule so validation is identical by construction
+    (text ≤ 1000, by ≤ 40, cid, the at-window, optional university, edits).
+  - `branchedAnswerBucket()`: **standalone stays on `moduleA`** — live rooms hold
+    data there and renaming would orphan it — and only a **genuinely composed**
+    session uses `moduleBranched`.
+  - ⚠️ **Subtlety worth keeping:** "composed" is detected by
+    `module:"branched"` nodes EXISTING, *not* by `format !== "branched"`. The
+    latter is also true when no scenario is applied, which silently renamed the
+    input ids in the branched-format e2e. Caught by those tests.
+  - ⚠️ **Three things must move together or the feature silently no-ops:** the
+    write bucket, the **textarea ids** (`addAnswer()` resolves
+    `answer-input-<bucket>-<key>`, so a stale id = a dead Add button with no
+    error), and the read-back (`_finalEntries`). Plus the client state, RTDB
+    listener and teardown for the new bucket. All test-pinned.
+  - Emulator-proven (28 pass): the node accepts a valid deliverable, rejects
+    empty/over-long text, reads back, clears, and has org-tree parity. NB the
+    read requires session membership — the first version of that test failed
+    because it never joined, which was the RULES WORKING, not a bug.
 - **M5 — author.** Let a scenario declare a branched module by REFERENCING a
   standalone branched scenario (a picker of branched scenarios), not by inlining
   a graph — so the A|B decision whitelist (`scenario-author.js` validate/import)

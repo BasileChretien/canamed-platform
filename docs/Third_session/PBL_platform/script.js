@@ -1637,7 +1637,7 @@ let seenFindingIds = {};   // findings already shown once, so new ones can flash
 let presence = {};
 let typingState = {};      // who is typing - kept off the presence node so a
                            // keystroke does not force a presence re-render for everyone
-let answers = { moduleA: {}, moduleB: {} };
+let answers = { moduleA: {}, moduleB: {}, moduleBranched: {} };
 let answerReplies = {};   // map: entryId → { replyId → { text, by, cid, at, stance } }
 let hypotheses = {};  // PBL 7-jump scaffold: working diagnoses the team agrees on
                       // BEFORE running investigations. Cross-room synced via
@@ -1687,7 +1687,7 @@ let _anonSignInPromise = null;
 let refPool = null, refMyPool = null, refStarted = null, refRoomCount = null,
     refTeams = null, refQuiz = null, refPreQuiz = null;
 let refStage = null, refRevealed = null, refPresence = null, refTyping = null,
-    refAnswers = { moduleA: null, moduleB: null }, refCallForHelp = null, refRooms = null,
+    refAnswers = { moduleA: null, moduleB: null, moduleBranched: null }, refCallForHelp = null, refRooms = null,
     refHypotheses = null,
     refScore = null, refTeamName = null, refLeaderboard = null, refVotes = null,
     refObservers = null, refAnswerReplies = null, refPoll = null, refCertIds = null,
@@ -3856,7 +3856,7 @@ function enterRoom(roomName, asAdmin) {
   firstStageFire = true;
   revealed = {}; presence = {}; typingState = {}; seenFindingIds = {};
   myPendingReveal = null;
-  answers = { moduleA: {}, moduleB: {} }; callForHelp = null;
+  answers = { moduleA: {}, moduleB: {}, moduleBranched: {} }; callForHelp = null;
   roomScore = {}; teamName = ""; celebratedEvents = {}; penalisedEvents = {};
   roomVotes = {}; committedDecisions = {}; firstVoteFire = true;
   firstScoreFire = true; wrapCelebrated = false;
@@ -3938,6 +3938,7 @@ function teardownRoom() {
     if (refTyping) refTyping.off();
     if (refAnswers.moduleA) refAnswers.moduleA.off();
     if (refAnswers.moduleB) refAnswers.moduleB.off();
+    if (refAnswers.moduleBranched) refAnswers.moduleBranched.off();
     if (refCallForHelp) refCallForHelp.off();
     if (refScore) refScore.off();
     if (refVotes) refVotes.off();
@@ -3975,6 +3976,8 @@ function startRoom() {
   refTyping = db.ref(base + "/typing");
   refAnswers.moduleA = db.ref(base + "/answers/moduleA");
   refAnswers.moduleB = db.ref(base + "/answers/moduleB");
+  // M4d — a COMPOSED branched module keeps its deliverables out of Module A.
+  refAnswers.moduleBranched = db.ref(base + "/answers/moduleBranched");
   refCallForHelp = db.ref(base + "/callForHelp");
   refScore = db.ref(base + "/score");
   refVotes = db.ref(base + "/votes");
@@ -4109,6 +4112,15 @@ function startRoom() {
     answers.moduleB = snap.val() || {};
     renderAnswers("moduleB");
     renderObjectives();
+  });
+  // M4d — the composed branched module's deliverable + in-card reasoning.
+  // Mirrors the moduleA handler's branched half: a teammate's contribution
+  // must re-render the decision cards (the reasoning lists live inside them)
+  // and refresh the final-answer lists.
+  refAnswers.moduleBranched.on("value", snap => {
+    answers.moduleBranched = snap.val() || {};
+    if (typeof renderDecisions === "function") renderDecisions();
+    if (typeof renderBranchedFinal === "function") renderBranchedFinal();
   });
   // Sim 2026-05-19 — counter-bullet replies on group-answer entries.
   // Re-render Module A + B answers so the new replies appear under

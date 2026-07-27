@@ -86,11 +86,14 @@
   /* The FINAL diagnosis / management deliverable (the OSCE answer). Shown when
    * the branch tree is finished. Two free-text fields by default — diagnosis +
    * management/guidelines — or whatever scenario.finalStep.fields defines. Each
-   * field reuses the EXISTING Module-A answers mechanism: addAnswer() pushes to
-   * rooms/<room>/answers/moduleA tagged with the field's bulletKey, so storage,
+   * field reuses the EXISTING answers mechanism: addAnswer() pushes to
+   * rooms/<room>/answers/<bucket> tagged with the field's bulletKey, so storage,
    * rules, cross-tab sync, the wrap-up and the research export all work with no
-   * new schema. Entries (each team member's contribution) render beneath each
-   * field, read from the synced `answers.moduleA`. DOM-built, textContent only.
+   * new schema. The bucket is branchedAnswerBucket(): `moduleA` when the branched
+   * case runs STANDALONE (unchanged — live rooms hold data there), and
+   * `moduleBranched` when it is COMPOSED into a mixed session, so a branched
+   * deliverable never pollutes a concurrently-running Module A (M4d). Entries
+   * render beneath each field from the synced answers. DOM-built, textContent only.
    *
    * Reads/calls globals from the shared script scope: tc, el, answers, addAnswer.
    */
@@ -102,7 +105,8 @@
   ];
 
   function _finalEntries(bulletKey) {
-    var all = (typeof answers !== "undefined" && answers && answers.moduleA) || {};
+    var all = (typeof answers !== "undefined" && answers &&
+               answers[branchedAnswerBucket()]) || {};
     return Object.keys(all)
       .map(function (k) { return all[k]; })
       .filter(function (e) { return e && e.bulletKey === bulletKey && e.text; });
@@ -159,7 +163,7 @@
       wrap.className = "branched-final-field";
       var lab = document.createElement("label");
       lab.className = "branched-final-label";
-      lab.setAttribute("for", "answer-input-moduleA-" + f.key);
+      lab.setAttribute("for", "answer-input-" + branchedAnswerBucket() + "-" + f.key);
       lab.textContent = tc(f.label, lang) || f.key;
       wrap.appendChild(lab);
       if (f.hint) {
@@ -169,7 +173,7 @@
         wrap.appendChild(hint);
       }
       var ta = document.createElement("textarea");
-      ta.id = "answer-input-moduleA-" + f.key;
+      ta.id = "answer-input-" + branchedAnswerBucket() + "-" + f.key;
       ta.className = "branched-final-input";
       ta.setAttribute("maxlength", "1000");
       wrap.appendChild(ta);
@@ -178,7 +182,7 @@
       add.className = "add-btn branched-final-add";
       add.textContent = "Add to the team's answer";
       add.addEventListener("click", function () {
-        if (typeof addAnswer === "function") addAnswer("moduleA", f.key);
+        if (typeof addAnswer === "function") addAnswer(branchedAnswerBucket(), f.key);
       });
       wrap.appendChild(add);
 
@@ -205,6 +209,23 @@
      decision. COMPOSED session (M4c) → only the nodes merged in from the
      referenced branched scenario, which carry module:"branched"; the outer A/B
      decisions are NOT part of the graph and must not be walked. */
+  /* Which answers bucket a branched contribution belongs in (M4d).
+     STANDALONE branched has always written to answers/moduleA, and live sessions
+     hold data there — keep it, so existing rooms and the research export stay
+     continuous. A COMPOSED session must NOT do that: Module A is running too, and
+     branched deliverables would pollute its answers node and its export column.
+     Those go to answers/moduleBranched (declared in both rule trees). */
+  function branchedAnswerBucket() {
+    if ((root.CURRENT_SCENARIO_FORMAT || "standard") === "branched") return "moduleA";
+    /* Only a GENUINELY composed session uses the new bucket. "not the branched
+       format" is NOT the same as "composed" — with no scenario applied the
+       format defaults to "standard", and defaulting that to moduleBranched
+       would rename the input ids out from under addAnswer(). Key off the
+       composed nodes actually existing. */
+    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
+    var composed = list.some(function (d) { return d && d.module === "branched"; });
+    return composed ? "moduleBranched" : "moduleA";
+  }
   function branchedDecisions() {
     var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
     if ((root.CURRENT_SCENARIO_FORMAT || "standard") === "branched") return list;
@@ -283,11 +304,11 @@
     if (!committed) {
       var lab = document.createElement("label");
       lab.className = "branched-rationale-label";
-      lab.setAttribute("for", "answer-input-moduleA-" + key);
+      lab.setAttribute("for", "answer-input-" + branchedAnswerBucket() + "-" + key);
       lab.textContent = "Your group's reasoning (and any disagreement)";
       box.appendChild(lab);
       var ta = document.createElement("textarea");
-      ta.id = "answer-input-moduleA-" + key;
+      ta.id = "answer-input-" + branchedAnswerBucket() + "-" + key;
       ta.className = "branched-rationale-input";
       ta.setAttribute("data-dec", decision.id);
       ta.setAttribute("maxlength", "1000");
@@ -298,7 +319,7 @@
       add.className = "add-btn branched-rationale-add";
       add.textContent = "Add to the group's reasoning";
       add.addEventListener("click", function () {
-        if (typeof addAnswer === "function") addAnswer("moduleA", key);
+        if (typeof addAnswer === "function") addAnswer(branchedAnswerBucket(), key);
       });
       box.appendChild(add);
     }

@@ -185,6 +185,100 @@ test("M4c: the branched engine walks ONLY the composed subtree in a mixed sessio
     "a composed session's deliverable lands on the branched stage's own host");
 });
 
+/* ── M4d: a composed branched module gets its own answers bucket ───────────── */
+
+test("M4d: answers/moduleBranched is declared in BOTH trees and HARDENED", () => {
+  const rules = JSON.parse(
+    fs.readFileSync(path.join(P, "database.rules.json"), "utf8")).rules;
+  const sess = rules.sessions.$sessionId.rooms.$roomId.answers;
+  const orgs = rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId.answers;
+  [["sessions", sess], ["orgs", orgs]].forEach(([label, ans]) => {
+    assert.ok(ans.moduleBranched, label + " must declare answers/moduleBranched");
+    const e = ans.moduleBranched.$entryId;
+    /* Deliberately STRICTER than the moduleA rule it was cloned from. moduleA /
+       moduleB still carry the older, looser contract (any authed user, no
+       $other) — a PRE-EXISTING gap, tracked separately. A brand-new node must
+       not be introduced at the weaker standard. */
+    /* Assert the COMPLETE predicate, not just token presence: a substring check
+       for "uidMembers"/"closed" would still pass a permissive or wrongly-ordered
+       rule (e.g. an `||` where an `&&` belongs, or a gate on the wrong room).
+       Behavioural evaluation of these rules lives in the emulator spec
+       (member/non-member, closed session, unknown field, cross-room, both
+       trees) — this is the cheap structural lock that catches a weakening edit. */
+    const root = label === "sessions"
+      ? "root.child('sessions').child($sessionId)"
+      : "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)";
+    assert.strictEqual(
+      e[".write"],
+      "auth != null && !" + root + ".child('closed').exists() && " +
+      root + ".child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
+      label + ": exact write predicate (authed AND not closed AND a member of THIS room)");
+    assert.strictEqual(e.$other[".validate"], false,
+      label + ": unknown entry fields must be rejected ($other sentinel)");
+    // Every field the client actually writes must be declared, or the $other
+    // sentinel would reject a legitimate answer.
+    ["text", "by", "cid", "at", "university", "bulletKey", "edits"].forEach(f => {
+      assert.ok(e[f], label + ": must declare the client-written field " + f);
+    });
+    assert.match(e.text[".validate"], /length <= 1000/, label + ": text bounded");
+    /* Strictly stronger than moduleA — shown POSITIVELY, by the conjunct
+       moduleA lacks, rather than by a notStrictEqual that any difference would
+       satisfy. If moduleA is ever hardened too (tracked in CLAUDE.md), this
+       flips to both having the gate, and the assertion below should be updated
+       deliberately rather than deleted. */
+    const modA = ans.moduleA.$entryId[".write"];
+    assert.ok(!/uidMembers/.test(modA),
+      label + ": moduleA is still the un-gated legacy contract (update this test " +
+      "when moduleA is hardened)");
+    assert.ok(/uidMembers/.test(e[".write"]),
+      label + ": moduleBranched adds the membership conjunct moduleA lacks");
+  });
+  // The two trees are NOT interchangeable: each must gate on its OWN root, or an
+  // org session would be checked against the default tree (and vice versa).
+  assert.notStrictEqual(sess.moduleBranched.$entryId[".write"],
+    orgs.moduleBranched.$entryId[".write"],
+    "each tree's rule must reference its own root path");
+});
+
+test("M4d: standalone branched still writes to moduleA; composed writes elsewhere", () => {
+  const BR = fs.readFileSync(path.join(P, "branched-render.js"), "utf8");
+  const fn = BR.slice(BR.indexOf("function branchedAnswerBucket()"),
+                      BR.indexOf("function branchedDecisions()"));
+  // Live rooms hold standalone branched data under moduleA — changing that would
+  // orphan it, so standalone MUST stay on moduleA.
+  assert.match(fn, /=== "branched"\) return "moduleA";/,
+    "standalone branched keeps writing to moduleA (data continuity)");
+  // And the composed branch keys off composed nodes EXISTING — not merely on
+  // "the format isn't branched", which is also true when no scenario is applied
+  // and would rename the input ids out from under addAnswer().
+  assert.match(fn, /d\.module === "branched"/, "composed is detected by the nodes themselves");
+  assert.match(fn, /composed \? "moduleBranched" : "moduleA"/,
+    "only a genuinely composed session uses the new bucket");
+});
+
+test("M4d: the textarea ids follow the bucket (else addAnswer silently no-ops)", () => {
+  // addAnswer() resolves its input as `answer-input-<moduleKey>-<bulletKey>`.
+  // If the ids stayed hardcoded to moduleA while the write bucket changed, the
+  // Add button would find no element and do NOTHING, with no error.
+  const BR = fs.readFileSync(path.join(P, "branched-render.js"), "utf8");
+  assert.ok(!/"answer-input-moduleA-"/.test(BR),
+    "no hardcoded moduleA input id may remain");
+  assert.match(BR, /"answer-input-" \+ branchedAnswerBucket\(\) \+ "-"/,
+    "ids must be built from the same bucket the write uses");
+  assert.match(BR, /answers\[branchedAnswerBucket\(\)\]/,
+    "the read-back must use the same bucket too");
+});
+
+test("M4d: the client subscribes to the new bucket (state, listener, teardown)", () => {
+  assert.match(SCRIPT, /let answers = \{ moduleA: \{\}, moduleB: \{\}, moduleBranched: \{\} \}/,
+    "the answers state needs the bucket");
+  assert.match(SCRIPT, /refAnswers\.moduleBranched = db\.ref\(base \+ "\/answers\/moduleBranched"\)/,
+    "the ref must be created");
+  assert.match(SCRIPT, /refAnswers\.moduleBranched\.on\("value"/, "…and subscribed");
+  assert.match(SCRIPT, /if \(refAnswers\.moduleBranched\) refAnswers\.moduleBranched\.off\(\);/,
+    "…and torn down with the room");
+});
+
 /* ── M1: the module set is scenario-driven ────────────────────────────────── */
 
 test("M1: BACK-COMPAT — a scenario that names both modules still runs A+B", () => {
