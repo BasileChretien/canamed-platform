@@ -227,8 +227,11 @@ function applyScenario(id, customContent) {
      built-in cast rather than inherit the previous scenario's, which is the
      same staleness trap scenarioModuleSet() documents for module names. */
   window.CURRENT_SECTION_ROLEPLAY = (sc && typeof sc.roleplay === "object") ? sc.roleplay : null;
-  if (typeof renderRoleChips === "function" && typeof document !== "undefined") {
-    try { renderRoleChips(); } catch (e) { /* pre-DOM call sites */ }
+  if (typeof document !== "undefined") {
+    try {
+      if (typeof renderRoleChips === "function") renderRoleChips();
+      if (typeof renderRoleplayPanels === "function") renderRoleplayPanels();
+    } catch (e) { /* pre-DOM call sites */ }
   }
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
   // flow (the existing decision engine, with the clinical/roleplay chrome
@@ -751,6 +754,76 @@ function roleplayRoles() {
 }
 function roleplayRoleIds() { return roleplayRoles().map(r => r.id); }
 function roleplayRole(id) { return roleplayRoles().find(r => r.id === id) || null; }
+
+/* ── S1c-2 — the roleplay's REFERENCE PANELS become optional section data ─────
+ * The four panels behind the roleplay toolbar (historical context, guidelines,
+ * recap, useful sentences) are static case-specific prose in index.html, shown
+ * to every roleplay regardless of the case — so a facilitator's own roleplay
+ * still displayed France/Japan disclosure history.
+ *
+ * Decision 11: every panel is OPTIONAL. A section fills what it wants; an
+ * unfilled panel DISAPPEARS (button and all) rather than rendering blank.
+ *
+ * Built-ins are untouched by construction: a section that declares no `panels`
+ * key at all leaves the shipped markup exactly as authored — same no-op
+ * discipline as renderRoleChips(). Declaring `panels` opts INTO full control,
+ * so an authored section shows only its own panels.
+ *
+ * Panel content shape (all fields optional):
+ *   { label: "…", paragraphs: ["…"], bullets: ["…"] }                        */
+const ROLEPLAY_PANEL_IDS = ["history", "guidelines", "recap", "useful"];
+
+function roleplayPanels() {
+  const rp = (typeof window !== "undefined") && window.CURRENT_SECTION_ROLEPLAY;
+  return (rp && typeof rp.panels === "object" && rp.panels) ? rp.panels : null;
+}
+/* Fill one panel from data. Text only — createElement + textContent, never
+   innerHTML: every string here is facilitator-authored. */
+function _fillRoleplayPanel(node, spec) {
+  node.textContent = "";
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  const str = v => (typeof v === "object" && typeof tc === "function")
+    ? tc(v, lang) : String(v == null ? "" : v);
+  if (spec.label) {
+    const p = document.createElement("p");
+    const strong = document.createElement("strong");
+    strong.textContent = str(spec.label);
+    p.appendChild(strong);
+    node.appendChild(p);
+  }
+  (Array.isArray(spec.paragraphs) ? spec.paragraphs : []).forEach(t => {
+    const p = document.createElement("p");
+    p.textContent = str(t);
+    node.appendChild(p);
+  });
+  if (Array.isArray(spec.bullets) && spec.bullets.length) {
+    const ul = document.createElement("ul");
+    ul.className = "info-list";
+    spec.bullets.forEach(t => {
+      const li = document.createElement("li");
+      li.textContent = str(t);
+      ul.appendChild(li);
+    });
+    node.appendChild(ul);
+  }
+}
+function renderRoleplayPanels() {
+  const panels = roleplayPanels();
+  if (!panels) return;              // built-in: leave the shipped markup alone
+  ROLEPLAY_PANEL_IDS.forEach(id => {
+    const node = el("refB-panel-" + id);
+    const btn = el("refB-btn-" + id);
+    const spec = panels[id];
+    const on = !!(spec && typeof spec === "object");
+    /* Hide the BUTTON as well as the panel: a toolbar button that opens an
+       empty region is worse than an absent one, and the toolbar is a row of
+       buttons the accordion wiring walks. */
+    if (btn) btn.classList.toggle("hidden", !on);
+    if (!node) return;
+    if (!on) { node.textContent = ""; node.hidden = true; return; }
+    _fillRoleplayPanel(node, spec);
+  });
+}
 
 const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };
 const STAGE_VIEW_FOR_TYPE = { pbl: "stage-1", roleplay: "stage-2", branched: "stage-3" };

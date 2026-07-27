@@ -51,6 +51,10 @@ Two further decisions, taken after the code survey below surfaced their cost:
 |---|----------|----------|
 | 9 | The Roleplay chrome is hardcoded HTML, so a Roleplay skeleton has nothing to fill. | **Extract it all into section data** — role briefs, SPIKES steps, useful sentences, historical context and guidelines become per-section content. Adds phase **S1c**. |
 | 10 | Splitting the tests per section leaves the jaundice PBL section with ~0 items. | **Ship the split with the honest distribution, and draft the missing PBL items as a clearly-marked proposal** for medical review — never auto-merged into the live tests. |
+| 11 | Must an authored roleplay fill all four reference panels + an observer checklist? | **Every panel is OPTIONAL** — an authored roleplay shows only what it fills, and an unfilled panel disappears rather than rendering blank. The observer checklist picks from a **shipped framework library** (SPIKES, Calgary–Cambridge, Pause/Explore/Explain/Realign) with a custom option. The library is code-owned, like the skeleton types. |
+| 12 | Can an authored roleplay change the six fixed phases? | **Yes — it declares its own phase list** (names + minutes), and which cards appear in which phase is part of that declaration. This is the consumer M3b's phase-visibility seam was built for. |
+| 13 | `revisit.html` lets participants re-open a past session. | **New shape only.** Honour the hard cutover: revisit resolves sessions created after the change, and older revisit links stop working. Accepted user-visible loss, chosen over a permanent compatibility branch. |
+| 14 | What happens to facilitators' existing whole-scenario cloud saves? | **Auto-split on load**, using the same derivation S0 applies to the built-ins; saving writes them back as separate sections. No migration script, no second shape in the library. |
 
 ## What exists today (verified 2026-07-27, not from memory)
 
@@ -216,8 +220,23 @@ four **including their existing i18n keys**, so the built-ins are unchanged.
   i18n path: it is facilitator input, not a shipped string.
 - 10 new unit + 3 browser tests; 1070 unit + 351 chromium E2E green.
 
-**S1c-2 — the reference panels (TODO).** `refB-panel-history`,
-`-guidelines`, `-recap`, `-useful` are static case-specific text.
+**S1c-2 — the reference panels ← DONE (shell v114→v115).**
+`refB-panel-{history,guidelines,recap,useful}` were static case-specific prose
+shown to every roleplay, so a facilitator's own roleplay still displayed
+France/Japan disclosure history. They are now OPTIONAL section data
+(decision 11): a section fills what it wants and an unfilled panel disappears
+**button and all** — a toolbar button that opens an empty region is worse than
+an absent one.
+- Built-ins are safe **by construction**: a section that declares no `panels`
+  key at all leaves the shipped markup untouched (`if (!panels) return`), the
+  same no-op discipline as `renderRoleChips()`. Declaring `panels` opts INTO
+  full control.
+- Content shape, all fields optional:
+  `{ label, paragraphs: [...], bullets: [...] }`; trios are resolved through
+  `tc()` so an authored section may still be multilingual.
+- Text-only by construction (`createElement` + `textContent`) — panel prose is
+  facilitator input. E2E-pinned with an injection payload.
+- 5 unit + 3 browser tests; 1075 unit / 585 chromium+mobile E2E green.
 **S1c-3 — framework, phases, vignette (TODO).** The observer checklist is
 SPIKES-shaped in the markup; `MODB_PHASES` and their minute budgets are a
 literal array; the vignette + `stage.modB.title` name the built-in case.

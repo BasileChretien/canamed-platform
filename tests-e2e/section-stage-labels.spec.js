@@ -183,3 +183,50 @@ test.describe("S1c-1 — an authored roleplay cast", () => {
       .toHaveText("You dispensed it.");
   });
 });
+
+/* ── S1c-2 — the roleplay reference panels are optional section data ────────
+   Decision 11: fill what you want; an unfilled panel disappears, button and
+   all. The built-ins declare nothing, so their shipped panels are untouched. */
+test.describe("S1c-2 — optional roleplay reference panels", () => {
+  test("the built-in roleplay keeps all four shipped panels", async ({ page }) => {
+    await surfaceApp(page);
+    for (const id of ["history", "guidelines", "recap", "useful"]) {
+      await expect(page.locator("#refB-btn-" + id)).not.toHaveClass(/hidden/);
+      expect(await page.locator("#refB-panel-" + id).innerHTML()).not.toBe("");
+    }
+  });
+
+  test("a section fills only the panels it wants; the rest disappear", async ({ page }) => {
+    await surfaceApp(page);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = { panels: {
+        useful: { label: "Phrases that help",
+                  paragraphs: ["Can I check what you already know?"],
+                  bullets: ["Name the emotion", "Then pause"] }
+      } };
+      window.renderRoleplayPanels();
+    });
+    await expect(page.locator("#refB-btn-useful")).not.toHaveClass(/hidden/);
+    for (const id of ["history", "guidelines", "recap"]) {
+      await expect(page.locator("#refB-btn-" + id)).toHaveClass(/hidden/);
+      expect(await page.locator("#refB-panel-" + id).innerHTML()).toBe("");
+    }
+    const filled = page.locator("#refB-panel-useful");
+    await expect(filled.locator("strong")).toHaveText("Phrases that help");
+    await expect(filled.locator("p").nth(1)).toHaveText("Can I check what you already know?");
+    await expect(filled.locator("li")).toHaveCount(2);
+  });
+
+  test("authored panel prose is inserted as text, never as markup", async ({ page }) => {
+    await surfaceApp(page);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = { panels: {
+        recap: { paragraphs: ["<img src=x onerror=alert(1)>"] }
+      } };
+      window.renderRoleplayPanels();
+    });
+    await expect(page.locator("#refB-panel-recap img")).toHaveCount(0);
+    await expect(page.locator("#refB-panel-recap p"))
+      .toHaveText("<img src=x onerror=alert(1)>");
+  });
+});
