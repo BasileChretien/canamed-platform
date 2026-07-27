@@ -45,6 +45,13 @@ Decision 6+7 together are the reason this is a re-architecture rather than an
 increment: they remove the obligation to keep `moduleA`/`moduleB` alive, which
 is what makes per-slot paths tractable at all.
 
+Two further decisions, taken after the code survey below surfaced their cost:
+
+| # | Question | Decision |
+|---|----------|----------|
+| 9 | The Roleplay chrome is hardcoded HTML, so a Roleplay skeleton has nothing to fill. | **Extract it all into section data** — role briefs, SPIKES steps, useful sentences, historical context and guidelines become per-section content. Adds phase **S1c**. |
+| 10 | Splitting the tests per section leaves the jaundice PBL section with ~0 items. | **Ship the split with the honest distribution, and draft the missing PBL items as a clearly-marked proposal** for medical review — never auto-merged into the live tests. |
+
 ## What exists today (verified 2026-07-27, not from memory)
 
 - `window.CANAMED_SCENARIOS` (`case-content.js:3994`) holds **3** standard
@@ -108,6 +115,20 @@ becomes "Section k — title"; i18n `stage.label.N` collapses to one pattern key
 across `i18n.js` + 7 locales (`LOCALE_VERSION` bump). Stage DOM converted to
 per-type `<template>`s cloned per slot with namespaced ids. Rules: `stage`
 bounded by a max slot count.
+
+### S1c — Roleplay content becomes data (decision 9)
+Extract the roleplay chrome out of `index.html` (`#stage-2`, ~726 lines) into
+per-section data: role briefs (public + private), the SPIKES/framework steps,
+useful sentences, historical context and guidelines. The 3 built-in roleplays
+must be re-expressed as data with **no visible change** (screenshot-verified),
+and the `data-i18n` keys they use today move from the shell into section
+content across `i18n.js` + 7 locales. This is the prerequisite for a Roleplay
+skeleton that is genuinely "empty but ready to fill".
+
+**Same audit is owed for PBL.** The stage-1 reference panels (`#refA-panel-
+history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —
+chronic-pain-flavoured text shown regardless of the active case. They belong in
+section data for the same reason.
 
 ### S2 — Per-slot DB paths
 `rooms/$roomId/section/$slot/…` and `answers/section/$slot` replace the
