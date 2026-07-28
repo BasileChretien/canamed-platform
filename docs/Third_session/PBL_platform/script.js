@@ -233,6 +233,7 @@ function applyScenario(id, customContent) {
       if (typeof renderRoleplayPanels === "function") renderRoleplayPanels();
       if (typeof renderObserverChecklist === "function") renderObserverChecklist();
       if (typeof renderPhaseStepper === "function") renderPhaseStepper();
+      if (typeof renderRoleplayVignette === "function") renderRoleplayVignette();
     } catch (e) { /* pre-DOM call sites */ }
   }
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
@@ -1050,6 +1051,51 @@ function renderPhaseStepper() {
      picker, observer checklist, now the stepper). */
   nav._wired = false;
   if (typeof initModBPhaseNav === "function") initModBPhaseNav();
+}
+
+/* ── S1c-3c — the roleplay's TITLE and VIGNETTE become section data ───────────
+ * The last hardcoded case-specific block on the roleplay stage: an <h2> reading
+ * "Module B — Breaking Bad News: A Cross-Cultural Roleplay" and the situation
+ * paragraph naming Mr/Mrs Tanaka-Martin. Both were shown to every roleplay.
+ *
+ * The heading also carried the "Module B" wording decision 8 retired — a
+ * section is "Section k — <title>" now, and its own stage heading should be its
+ * own title, not a module label.
+ *
+ * `vignette` accepts a string or an array of paragraphs, so the situation can
+ * be read out in beats. Declaring neither leaves the shipped markup alone. */
+function renderRoleplayVignette() {
+  const rp = (typeof window !== "undefined") && window.CURRENT_SECTION_ROLEPLAY;
+  if (!rp || (!rp.title && !rp.vignette)) return;
+  const stage = document.getElementById("stage-2");
+  const card = stage && stage.querySelector(".vignette");
+  if (!card) return;
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  const str = v => (v && typeof v === "object" && typeof tc === "function")
+    ? tc(v, lang) : String(v == null ? "" : v);
+
+  if (rp.title) {
+    const h = card.querySelector("h2");
+    if (h) {
+      /* Drop the i18n binding as well as the text: applyI18n() runs on every
+         language switch and would otherwise put the shipped heading straight
+         back over the authored one. */
+      h.removeAttribute("data-i18n");
+      h.removeAttribute("data-i18n-html");
+      h.textContent = str(rp.title);
+    }
+  }
+  if (rp.vignette) {
+    const paras = Array.isArray(rp.vignette) ? rp.vignette : [rp.vignette];
+    /* Replace only the prose, never the whole card — the editorial SVG spot is
+       shell decoration and belongs to the layout, not to the section. */
+    Array.prototype.slice.call(card.querySelectorAll("p")).forEach(p => p.remove());
+    paras.forEach(t => {
+      const p = document.createElement("p");
+      p.textContent = str(t);
+      card.appendChild(p);
+    });
+  }
 }
 
 const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };

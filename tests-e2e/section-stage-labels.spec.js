@@ -343,3 +343,49 @@ test.describe("S1c-3b — authored phases", () => {
     await expect(page.locator("#modB-phase-indicator")).toHaveText("Phase 2 / 3");
   });
 });
+
+/* ── S1c-3c — the roleplay's title and vignette are section data ────────────
+   The last hardcoded case-specific block on the roleplay stage. The heading
+   also carried the "Module B" wording decision 8 retired. */
+test.describe("S1c-3c — authored title and vignette", () => {
+  test("the built-in roleplay keeps its shipped heading and situation", async ({ page }) => {
+    await surfaceApp(page);
+    await expect(page.locator("#stage-2 .vignette h2"))
+      .toHaveAttribute("data-i18n", "stage.modB.title");
+    await expect(page.locator("#stage-2 .vignette p").first())
+      .toContainText("Tanaka-Martin");
+  });
+
+  test("a section supplies its own heading and situation beats", async ({ page }) => {
+    await surfaceApp(page);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = {
+        title: "The antibiotic request",
+        vignette: ["Mme Moreau has had a sore throat for five days.",
+                   "She has a client presentation on Friday."]
+      };
+      window.renderRoleplayVignette();
+    });
+    const card = page.locator("#stage-2 .vignette");
+    await expect(card.locator("h2")).toHaveText("The antibiotic request");
+    await expect(card.locator("p")).toHaveCount(2);
+    await expect(card.locator("p").nth(1)).toHaveText("She has a client presentation on Friday.");
+    /* The editorial SVG is shell decoration and must survive. */
+    await expect(card.locator("svg.spot-illustration")).toHaveCount(1);
+  });
+
+  test("a language switch cannot restore the shipped heading over the authored one",
+    async ({ page }) => {
+      await surfaceApp(page);
+      await page.evaluate(() => {
+        window.CURRENT_SECTION_ROLEPLAY = { title: "The antibiotic request" };
+        window.renderRoleplayVignette();
+        /* applyI18n re-applies every data-i18n binding on the subtree — the
+           renderer has to have REMOVED the binding, not just overwritten it. */
+        if (typeof window.applyI18n === "function") {
+          window.applyI18n(document.getElementById("stage-2"));
+        }
+      });
+      await expect(page.locator("#stage-2 .vignette h2")).toHaveText("The antibiotic request");
+    });
+});

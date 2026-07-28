@@ -282,8 +282,24 @@ was built for and never had.**
   the wrong flag leaves an authored stepper rendering perfectly and completely
   untappable. Test-pinned in both layers.
 - 8 unit + 5 browser tests; 1091 unit / 601 chromium+mobile E2E green.
-**S1c-3c — vignette + title (TODO).** `stage.modB.title` and the vignette name
-the built-in case.
+**S1c-3c — vignette + title ← DONE (shell v117→v118). S1c IS COMPLETE.**
+The last hardcoded case-specific block on the roleplay stage: an `<h2>` reading
+"Module B — Breaking Bad News: A Cross-Cultural Roleplay" (carrying the very
+"Module B" wording decision 8 retired) and a situation paragraph naming
+Mr/Mrs Tanaka-Martin, both shown to every roleplay. `vignette` takes a string
+or an array of paragraphs so the situation can be read out in beats.
+- **An authored title must REMOVE the `data-i18n` binding, not just overwrite
+  the text** — `applyI18n()` runs on every language switch and would otherwise
+  put the shipped heading straight back over the authored one. Browser-pinned
+  by re-running `applyI18n` after the override.
+- Only the prose is replaced; the editorial SVG spot is shell decoration and
+  belongs to the layout, not the section.
+- 6 unit + 3 browser tests; 1097 unit / 859 chromium+mobile E2E green.
+
+**⇒ A Roleplay section is now fully authorable**: cast, briefs, four reference
+panels, observation framework, phase timetable, title and vignette. That is the
+prerequisite decision 9 named for a Roleplay skeleton that is genuinely "empty
+but ready to fill" (S5).
 
 **Same audit is owed for PBL.** The stage-1 reference panels (`#refA-panel-
 history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —
