@@ -58,7 +58,7 @@ test("all four panels are addressable, and only those four", () => {
 
 test("applyScenario refreshes the panels alongside the cast", () => {
   const i = SCRIPT.indexOf("window.CURRENT_SECTION_ROLEPLAY =");
-  const after = SCRIPT.slice(i, i + 400);
+  const after = SCRIPT.slice(i, i + 700);
   assert.match(after, /renderRoleplayPanels\(\)/);
   assert.match(after, /catch \(e\)/, "applyScenario also runs before the DOM exists");
 });

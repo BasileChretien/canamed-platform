@@ -270,3 +270,76 @@ test.describe("S1c-3a — the observer's framework", () => {
     expect(saved.two).toBe(1);
   });
 });
+
+/* ── S1c-3b — an authored roleplay declares its own phases ──────────────────
+   Decision 12. The shipped six-phase timetable is right for breaking bad news
+   and wrong for a three-beat negotiation; the phase list, its minutes and the
+   cards each phase shows are now section data. */
+test.describe("S1c-3b — authored phases", () => {
+  async function threePhase(page) {
+    await pick(page, ["B"]);
+    await page.evaluate(() => {
+      window.CURRENT_SECTION_ROLEPLAY = { phases: [
+        { id: "brief", label: "Brief the room", minutes: 4, shows: ["vignette", "roles"] },
+        { id: "play", label: "Play it", minutes: 12, shows: ["roles"] },
+        { id: "debrief", label: "Debrief", minutes: 6, shows: ["reflect"], expanded: true }
+      ] };
+      window.renderPhaseStepper();
+      window._test_setViewStage(1);
+      window.renderStage();
+    });
+  }
+
+  test("the built-in roleplay keeps its six shipped phase chips", async ({ page }) => {
+    await surfaceApp(page);
+    const ids = await page.locator("#stage-2 .phase-step")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-phase")));
+    expect(ids).toEqual(["setup", "play", "exchange", "swap", "replay", "reflect"]);
+  });
+
+  test("an authored list replaces the stepper, with its own labels and minutes",
+    async ({ page }) => {
+      await surfaceApp(page);
+      await threePhase(page);
+      const steps = page.locator("#stage-2 .phase-step");
+      await expect(steps).toHaveCount(3);
+      await expect(steps.first()).toContainText("Brief the room");
+      await expect(steps.first()).toContainText("4 min");
+      await expect(page.locator("#stage-2 .phase-stepper"))
+        .toHaveAttribute("data-steps", "3");
+    });
+
+  test("phase visibility follows the declaration, and unlisted cards stay hidden",
+    async ({ page }) => {
+      await surfaceApp(page);
+      await threePhase(page);
+      await page.evaluate(() => window.applyModBPhaseVisibility("brief"));
+      await expect(page.locator("#modB-role-picker")).not.toHaveClass(/is-phase-hidden/);
+      /* Never declared by any phase — it must be hidden, not left permanently
+         on screen because applyPhaseVisibility never touched it. */
+      await expect(page.locator("#modB-swap-card")).toHaveClass(/is-phase-hidden/);
+
+      await page.evaluate(() => window.applyModBPhaseVisibility("debrief"));
+      await expect(page.locator("#modB-role-picker")).toHaveClass(/is-phase-hidden/);
+      await expect(page.locator(".answers-card-modB-reflect")).not.toHaveClass(/is-phase-hidden/);
+    });
+
+  test("an authored stepper is still tappable — the nav re-arms", async ({ page }) => {
+    await surfaceApp(page);
+    await threePhase(page);
+    await page.locator('#stage-2 .phase-step[data-phase="debrief"] .phase-step-btn')
+      .evaluate((e) => e.click());
+    await expect(page.locator('#stage-2 .phase-step[data-phase="debrief"]'))
+      .toHaveClass(/is-current/);
+  });
+
+  test("the indicator counts the authored phases, not a literal six", async ({ page }) => {
+    await surfaceApp(page);
+    await threePhase(page);
+    /* renderModBPhase() takes no argument — it reads the module-scoped
+       modBPhase — so drive the shared renderer with the section's config
+       directly; the indicator is what is under test. */
+    await page.evaluate(() => window.renderModulePhase(window.modBProgressCfg(), 1));
+    await expect(page.locator("#modB-phase-indicator")).toHaveText("Phase 2 / 3");
+  });
+});

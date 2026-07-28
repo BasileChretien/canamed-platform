@@ -633,8 +633,13 @@ test("M3b: the Module B functions are name-preserving wrappers over the shared p
   // and the bodies delegate to the generic helpers.
   assert.match(fnBodyOf("applyModBPhaseVisibility"), /applyPhaseVisibility\(/,
     "applyModBPhaseVisibility delegates to applyPhaseVisibility");
-  assert.match(fnBodyOf("renderModBPhase"), /renderModulePhase\(MODULE_PROGRESS\.B, modBPhase\)/,
-    "renderModBPhase delegates to renderModulePhase");
+  /* S1c-3b — the config is resolved per section (modBProgressCfg()) so an
+     authored roleplay can declare its own phases; MODULE_PROGRESS.B is still
+     what that returns when nothing is declared. */
+  assert.match(fnBodyOf("renderModBPhase"), /renderModulePhase\(modBProgressCfg\(\), modBPhase\)/,
+    "renderModBPhase delegates to renderModulePhase with the section's config");
+  assert.match(fnBodyOf("modBProgressCfg"), /if \(!authored\) return MODULE_PROGRESS\.B;/,
+    "and falls back to the shipped config untouched");
   // The generic helpers exist and take config, not hardcoded Module B specifics.
   assert.match(SCRIPT, /function applyPhaseVisibility\(stageId, sections, phaseKey, columnsSel, expandedIn\)/);
   assert.match(SCRIPT, /function renderModulePhase\(cfg, phaseIndex\)/);

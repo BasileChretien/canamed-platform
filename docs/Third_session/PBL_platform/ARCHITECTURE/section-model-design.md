@@ -256,10 +256,32 @@ as the skeleton types.
   authored checklist still saves what the observer ticks.
 - 8 unit + 3 browser tests; 1083 unit / 591 chromium+mobile E2E green.
 
-**S1c-3b — authored phases (TODO).** `MODB_PHASES` and the minute budgets are a
-literal array, and the six-step stepper is hand-authored markup. Decision 12
-makes the phase list section data, with card visibility part of the
-declaration — the consumer M3b's seam was built for.
+**S1c-3b — authored phases ← DONE (shell v116→v117).** `MODB_PHASES` was a
+six-entry literal, the minute budgets lived in the markup and the stepper was
+six hand-authored `<li>`, so every roleplay ran the breaking-bad-news
+timetable. Decision 12: the phase list is section data, and WHICH CARDS a phase
+shows is part of the declaration — **the consumer M3b's phase-visibility seam
+was built for and never had.**
+- A phase names its cards by **key, not CSS selector** (`ROLEPLAY_CARDS`):
+  a raw selector from a facilitator can be malformed (`querySelectorAll`
+  throws) or reach chrome it has no business touching, and a key is something
+  the S5 author UI can offer as a tick box.
+- `modBProgressCfg()` resolves the config per section and returns
+  `MODULE_PROGRESS.B` untouched when nothing is declared. All three consumers
+  route through it — including the `Math.min(…phases.length - 1)` clamp, which
+  against a literal six would have stranded the last phase of a longer list.
+- **Every known card gets a `sections` entry, even one no phase shows.** An
+  omitted card is never touched by `applyPhaseVisibility` and would sit
+  permanently visible; an empty `phases` array is what "the author did not
+  include this" has to mean.
+- Phase ids are validated: they are written to `rooms/$room/moduleB/phase` and
+  read back as DOM `data-phase` values.
+- **Third instance of the re-arm bug** — and the one that nearly shipped:
+  `initModBPhaseNav()` guards on a `_wired` **property** of the stepper node
+  (not a dataset flag) and binds one listener **per chip, by index**. Clearing
+  the wrong flag leaves an authored stepper rendering perfectly and completely
+  untappable. Test-pinned in both layers.
+- 8 unit + 5 browser tests; 1091 unit / 601 chromium+mobile E2E green.
 **S1c-3c — vignette + title (TODO).** `stage.modB.title` and the vignette name
 the built-in case.
 

@@ -232,6 +232,7 @@ function applyScenario(id, customContent) {
       if (typeof renderRoleChips === "function") renderRoleChips();
       if (typeof renderRoleplayPanels === "function") renderRoleplayPanels();
       if (typeof renderObserverChecklist === "function") renderObserverChecklist();
+      if (typeof renderPhaseStepper === "function") renderPhaseStepper();
     } catch (e) { /* pre-DOM call sites */ }
   }
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
@@ -926,6 +927,129 @@ function renderObserverChecklist() {
      framework ticks but never persists. */
   root.dataset.wired = "";
   if (typeof initObserverChecklist === "function") initObserverChecklist();
+}
+
+/* ── S1c-3b — an authored roleplay declares its own PHASES ────────────────────
+ * `MODB_PHASES` is a six-entry literal, its minute budgets live in the markup,
+ * and the stepper is six hand-authored <li>. So every roleplay ran the same
+ * setup → play → exchange → swap → replay → reflect timetable, which is right
+ * for breaking bad news and wrong for, say, a three-beat pharmacy negotiation.
+ * Decision 12: the phase list is section data, and WHICH CARDS a phase shows is
+ * part of the declaration — the consumer M3b's phase-visibility seam was built
+ * for and never had.
+ *
+ * A phase names the cards it shows by KEY, not by CSS selector:
+ *
+ *   phases: [ { id: "brief", label: "Brief the room", minutes: 5,
+ *               shows: ["vignette", "roles"] },
+ *             { id: "play",  label: "Play it",  minutes: 12, shows: ["roles"] },
+ *             { id: "debrief", label: "Debrief", minutes: 8,
+ *               shows: ["reflect"], expanded: true } ]
+ *
+ * Keys rather than selectors on purpose: a raw selector from a facilitator can
+ * be malformed (querySelectorAll throws) or reach chrome it has no business
+ * touching, and a key is something the S5 author UI can offer as a tick box. */
+const ROLEPLAY_CARDS = {
+  vignette:  ".vignette",
+  roles:     "#modB-role-picker",
+  exchange:  ".answers-card-modB-exchange",
+  decisions: "#decisions-B",
+  swap:      "#modB-swap-card",
+  replay:    "#modB-replay-card",
+  reflect:   ".answers-card-modB-reflect"
+};
+/* The authored phase list, or null to keep the shipped six. */
+function roleplayPhases() {
+  const rp = (typeof window !== "undefined") && window.CURRENT_SECTION_ROLEPLAY;
+  const list = rp && Array.isArray(rp.phases) ? rp.phases : null;
+  if (!list || !list.length) return null;
+  const out = [];
+  list.forEach(p => {
+    const id = p && typeof p.id === "string" ? p.id.trim() : "";
+    /* Phase ids are written to RTDB (rooms/$room/moduleB/phase) and read back
+       as DOM data-phase values, so they are validated like role ids. */
+    if (!/^[a-z][a-z0-9_-]{0,23}$/.test(id)) return;
+    if (out.some(o => o.id === id)) return;
+    const shows = (Array.isArray(p.shows) ? p.shows : [])
+      .filter(k => Object.prototype.hasOwnProperty.call(ROLEPLAY_CARDS, k));
+    out.push({ id: id, label: p.label || id,
+               minutes: (typeof p.minutes === "number" && p.minutes > 0) ? p.minutes : null,
+               shows: shows, expanded: !!p.expanded });
+  });
+  return out.length ? out : null;
+}
+/* The phase config the roleplay actually runs on. Falls back to the shipped
+   MODULE_PROGRESS.B untouched, so the built-ins are byte-identical. */
+function modBProgressCfg() {
+  const authored = roleplayPhases();
+  if (!authored) return MODULE_PROGRESS.B;
+  /* EVERY known card gets an entry, including ones no phase shows — an omitted
+     card is absent from `sections`, so applyPhaseVisibility never touches it
+     and it would stay permanently visible. An empty `phases` array hides it in
+     every phase, which is what "the author did not include this" means. */
+  const sections = Object.keys(ROLEPLAY_CARDS).map(key => ({
+    sel: ROLEPLAY_CARDS[key],
+    phases: authored.filter(p => p.shows.indexOf(key) !== -1).map(p => p.id)
+  }));
+  return {
+    stageId: MODULE_PROGRESS.B.stageId,
+    phases: authored.map(p => p.id),
+    sections: sections,
+    columnsSel: MODULE_PROGRESS.B.columnsSel,
+    expandedIn: authored.filter(p => p.expanded).map(p => p.id),
+    nav: {
+      prevId: MODULE_PROGRESS.B.nav.prevId,
+      nextId: MODULE_PROGRESS.B.nav.nextId,
+      indicatorId: MODULE_PROGRESS.B.nav.indicatorId,
+      /* Deliberately no i18n key here — the shipped one reads "Phase {n} / 6"
+         and an authored roleplay rarely has six. Count-aware literal instead. */
+      indicatorFallback: "Phase {n} / " + authored.length
+    }
+  };
+}
+/* Rebuild the phase stepper for an authored phase list. No-ops for the
+   built-ins, so their hand-authored chips and i18n attributes survive. */
+function renderPhaseStepper() {
+  const authored = roleplayPhases();
+  if (!authored) return;
+  const stage = document.getElementById(MODULE_PROGRESS.B.stageId);
+  const nav = stage && stage.querySelector(".phase-stepper");
+  const list = nav && nav.querySelector(".phase-stepper-list");
+  if (!list) return;
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  nav.setAttribute("data-steps", String(authored.length));
+  list.textContent = "";
+  authored.forEach((p, i) => {
+    const li = document.createElement("li");
+    li.className = "phase-step" + (i === 0 ? " is-current" : "");
+    li.setAttribute("data-phase", p.id);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "phase-step-btn";
+    const num = document.createElement("span");
+    num.className = "phase-step-num";
+    num.textContent = String(i + 1);
+    const label = document.createElement("span");
+    label.className = "phase-step-label";
+    label.textContent = (typeof tc === "function") ? tc(p.label, lang) : String(p.label);
+    btn.appendChild(num);
+    btn.appendChild(label);
+    if (p.minutes) {
+      const time = document.createElement("span");
+      time.className = "phase-step-time";
+      time.textContent = p.minutes + " min";
+      btn.appendChild(time);
+    }
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+  /* initModBPhaseNav() binds one listener PER CHIP, by index, and guards on a
+     `_wired` PROPERTY of the stepper node — not a dataset flag. Clearing the
+     right one matters: a rebuilt stepper otherwise renders perfectly and is
+     completely untappable. Third instance of this class of bug in S1c (role
+     picker, observer checklist, now the stepper). */
+  nav._wired = false;
+  if (typeof initModBPhaseNav === "function") initModBPhaseNav();
 }
 
 const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };
@@ -10881,7 +11005,7 @@ const MODULE_PROGRESS = {
    on the shared applyPhaseVisibility + its MODULE_PROGRESS.B config. Kept so the
    ~11 callers/specs that drive applyModBPhaseVisibility stay unchanged. */
 function applyModBPhaseVisibility(phaseKey) {
-  const c = MODULE_PROGRESS.B;
+  const c = modBProgressCfg();   // S1c-3b — authored phases when declared
   applyPhaseVisibility(c.stageId, c.sections, phaseKey, c.columnsSel, c.expandedIn);
 }
 
@@ -10950,11 +11074,11 @@ function _modBT(key, fallback, vars) {
 /* Name-preserving wrapper (module-set M3b): render Module B at its current
    shared phase index via the generic renderModulePhase. */
 function renderModBPhase() {
-  renderModulePhase(MODULE_PROGRESS.B, modBPhase);
+  renderModulePhase(modBProgressCfg(), modBPhase);
 }
 
 function setModBPhase(idx) {
-  const n = Math.max(0, Math.min(MODB_PHASES.length - 1, idx | 0));
+  const n = Math.max(0, Math.min(modBProgressCfg().phases.length - 1, idx | 0));
   if (refModBPhase) refModBPhase.set(n).catch(() => {});
   else { modBPhase = n; renderModBPhase(); }   // LOCAL/solo fallback
 }
