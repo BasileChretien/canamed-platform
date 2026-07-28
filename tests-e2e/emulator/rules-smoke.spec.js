@@ -1129,3 +1129,27 @@ test("rules: per-slot answers validate exactly like the module-scoped ones", asy
   expect(await tryWrite(page, `${room}/answers/sections/0/plan`,
     { text: "ok", by: "Ann", cid: "c1", at: Date.now() })).not.toBe("ALLOWED");
 });
+
+test("rules: the session's ordered section pick is write-once and bounded", async ({ page }) => {
+  await page.goto("/");
+  await waitForUid(page);
+  const code = "secpick-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const path = `sessions/${code}/sections`;
+
+  /* S3a — an ordered CSV of section ids, modelled on M2's `modules`. Section
+     ids are longer than module ids ("chronic-pain-pbl"), so the per-segment
+     bound is 48 rather than 16. */
+  expect(await tryWrite(page, path, "sore-throat-roleplay,chronic-pain-pbl"))
+    .toBe("ALLOWED");
+  /* Write-once: a session's shape must not shift under participants mid-flight.
+     To change it, make another session. */
+  expect(await tryWrite(page, path, "jaundice-pbl")).not.toBe("ALLOWED");
+
+  const other = `sessions/${code}-b/sections`;
+  expect(await tryWrite(page, other, "")).not.toBe("ALLOWED");
+  expect(await tryWrite(page, other, "has space,x")).not.toBe("ALLOWED");
+  expect(await tryWrite(page, other, "x".repeat(60))).not.toBe("ALLOWED");
+  expect(await tryWrite(page, other, 42)).not.toBe("ALLOWED");
+  // Two sections of the SAME type is the whole point — it must be accepted.
+  expect(await tryWrite(page, other, "chronic-pain-pbl,jaundice-pbl")).toBe("ALLOWED");
+});

@@ -16,14 +16,22 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") +
+  /* S3a — the roleplay content renderers were extracted to the room-only
+     section-content.js chunk to reclaim splash bytes. These assertions are
+     about the CODE, not about which file carries it. */
+  fs.readFileSync(path.join(P, "section-content.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 
 /* Slice the cast resolver out and run it — real behaviour, not a source regex. */
 function cast(win) {
   const start = SCRIPT.indexOf("const ROLEPLAY_DEFAULT_ROLES");
   assert.ok(start > -1, "the default cast must exist");
-  const end = SCRIPT.indexOf("const SECTION_TYPE_FOR_MODULE", start);
+  /* S3a — the block moved to section-content.js, which is APPENDED to the
+     script.js source above; SECTION_TYPE_FOR_MODULE sits earlier in script.js,
+     so it can no longer serve as the end marker. */
+  const end = SCRIPT.indexOf("const ROLEPLAY_PANEL_IDS", start);
+  assert.ok(end > start, "the cast block must be followed by the panel block");
   const src = SCRIPT.slice(start, end) +
     "\nreturn { ROLEPLAY_DEFAULT_ROLES, roleplayRoles, roleplayRoleIds, roleplayRole };";
   // eslint-disable-next-line no-new-func
@@ -75,8 +83,14 @@ test("a declaration with nothing usable falls back rather than leaving no cast",
 });
 
 test("the random-assign deck and the swap rotation both read the cast", () => {
-  assert.match(SCRIPT, /function assignRoleDeck\(\) \{ return roleplayRoleIds\(\); \}/);
-  assert.match(SCRIPT, /function replayRoleOrder\(\) \{ return roleplayRoleIds\(\); \}/);
+  /* S3a — the cast/phase code moved to the room-only section-content.js
+     chunk, whose load failure is deliberately swallowed, so script.js
+     calls it through a guarded accessor that falls back to the shipped
+     defaults rather than throwing. */
+  assert.match(SCRIPT, /function assignRoleDeck\(\)[\s\S]*?roleplayRoleIds\(\)/);
+  assert.match(SCRIPT, /function replayRoleOrder\(\)[\s\S]*?roleplayRoleIds\(\)/);
+  assert.match(SCRIPT, /ROLEPLAY_FALLBACK_ROLE_IDS/,
+    "absence of the chunk must degrade to the shipped four, not throw");
   assert.ok(!/const ASSIGN_ROLE_DECK = \[/.test(SCRIPT),
     "the hardcoded deck must be gone");
   assert.ok(!/const REPLAY_ROLE_ORDER = \[/.test(SCRIPT),

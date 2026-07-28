@@ -18,6 +18,10 @@ const path = require("node:path");
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+const SECTION_CONTENT = fs.readFileSync(path.join(P, "section-content.js"), "utf8");
+/* S3a — the roleplay content (cast, panels, framework, phases) lives in the
+   room-only section-content.js chunk now. These assertions are about the
+   CODE, not which file carries it. */
 const I18N = require("./_i18n_source.js").readI18nSource();
 const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8") +
   // room-only rules moved to the lazily-loaded room.css (perf reclaim)
@@ -39,11 +43,11 @@ test("rotateRole cycles physician → patient → family → observer", () => {
      facilitator's roleplay swaps through its own roles. The DEFAULT cast is
      unchanged, which is what keeps the built-in roleplays rotating
      physician → patient → family → observer. */
-  assert.match(SCRIPT, /function replayRoleOrder\(\) \{ return roleplayRoleIds\(\); \}/,
+  assert.match(SCRIPT, /function replayRoleOrder\(\)[\s\S]*?roleplayRoleIds\(\)/,
     "the rotation order must come from the section's cast");
-  const i = SCRIPT.indexOf("const ROLEPLAY_DEFAULT_ROLES");
+  const i = SECTION_CONTENT.indexOf("const ROLEPLAY_DEFAULT_ROLES");
   assert.ok(i > -1, "the default cast must be defined");
-  const order = SCRIPT.slice(i, SCRIPT.indexOf("];", i));
+  const order = SECTION_CONTENT.slice(i, SECTION_CONTENT.indexOf("];", i));
   assert.match(order, /"physician"[\s\S]*"patient"[\s\S]*"family"[\s\S]*"observer"/,
     "the default rotation must stay physician → patient → family → observer");
   assert.match(SCRIPT, /function rotateRole\(role, steps\)/, "rotateRole must exist");

@@ -26,16 +26,23 @@ const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+const SECTION_CONTENT = fs.readFileSync(path.join(P, "section-content.js"), "utf8");
+/* S3a — the roleplay content (cast, panels, framework, phases) lives in the
+   room-only section-content.js chunk now. These assertions are about the
+   CODE, not which file carries it. */
 
 /* Rough source slice of a top-level `function name(...) { … }` body — brace
    counting from the signature. Good enough for regex assertions on small fns. */
 function fnBodyOf(name) {
-  const at = SCRIPT.indexOf("function " + name + "(");
+  /* S3a — look in script.js first, then in the room-only section-content.js
+     chunk the roleplay content moved to. */
+  const SRC = (SCRIPT.indexOf("function " + name + "(") > -1) ? SCRIPT : SECTION_CONTENT;
+  const at = SRC.indexOf("function " + name + "(");
   assert.notStrictEqual(at, -1, "function not found: " + name);
-  let i = SCRIPT.indexOf("{", at), depth = 0;
-  for (let j = i; j < SCRIPT.length; j++) {
-    if (SCRIPT[j] === "{") depth++;
-    else if (SCRIPT[j] === "}" && --depth === 0) return SCRIPT.slice(i, j + 1);
+  let i = SRC.indexOf("{", at), depth = 0;
+  for (let j = i; j < SRC.length; j++) {
+    if (SRC[j] === "{") depth++;
+    else if (SRC[j] === "}" && --depth === 0) return SRC.slice(i, j + 1);
   }
   throw new Error("unbalanced braces for " + name);
 }
@@ -636,7 +643,7 @@ test("M3b: the Module B functions are name-preserving wrappers over the shared p
   /* S1c-3b — the config is resolved per section (modBProgressCfg()) so an
      authored roleplay can declare its own phases; MODULE_PROGRESS.B is still
      what that returns when nothing is declared. */
-  assert.match(fnBodyOf("renderModBPhase"), /renderModulePhase\(modBProgressCfg\(\), modBPhase\)/,
+  assert.match(fnBodyOf("renderModBPhase"), /renderModulePhase\(modBCfg\(\), modBPhase\)/,
     "renderModBPhase delegates to renderModulePhase with the section's config");
   assert.match(fnBodyOf("modBProgressCfg"), /if \(!authored\) return MODULE_PROGRESS\.B;/,
     "and falls back to the shipped config untouched");

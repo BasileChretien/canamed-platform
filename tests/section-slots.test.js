@@ -42,11 +42,18 @@ function seam(moduleSetImpl, win) {
     "const window = arguments[2];\n" +
     "const moduleSet = arguments[0];\n" +
     "const stageForModule = arguments[1];\n" +
-    grab("sectionSlots") + "\n" + grab("stageCount") + "\n" + grab("lastStage") + "\n" +
+    /* setSessionSections republishes the derived stage list for the lazy
+       branched chunk; that side effect belongs to the real runtime, so stub it. */
+    "const refreshModuleStages = () => {};\n" +
+    /* S3a — sectionSlots() now tries the session's explicit pick first and falls
+       back to the module-derived slots, so the slice needs both halves. */
+    grab("setSessionSections") + "\n" + grab("pickedSections") + "\n" +
+    grab("sectionSlots") + "\n" + grab("_moduleDerivedSlots") + "\n" +
+    grab("stageCount") + "\n" + grab("lastStage") + "\n" +
     grab("slotAtStage") + "\n" +
     grab("stageViewId") + "\n" + grab("allStageViewIds") + "\n" +
     "return { sectionSlots, slotAtStage, stageViewId, allStageViewIds, " +
-    "stageCount, lastStage };";
+    "stageCount, lastStage, setSessionSections, pickedSections };";
   const REG = { A: 1, B: 2, branched: 3 };
   // eslint-disable-next-line no-new-func
   return new Function(src)(moduleSetImpl,
@@ -164,4 +171,67 @@ test("the shell version is bumped in lockstep (script.js changed)", () => {
   assert.ok(loader.indexOf('SHELL_VERSION = "' + v + '"') !== -1,
     "script-loader.js must agree with sw.js");
   assert.ok(HTML.indexOf("?v=" + v) !== -1, "index.html must agree too");
+});
+
+/* ── S3a — the session's own ordered SECTION pick ─────────────────────────── */
+
+const LIB = {
+  "chronic-pain-pbl":      { id: "chronic-pain-pbl",      type: "pbl" },
+  "jaundice-pbl":          { id: "jaundice-pbl",          type: "pbl" },
+  "sore-throat-roleplay":  { id: "sore-throat-roleplay",  type: "roleplay" },
+  "ward-escalation-branched": { id: "ward-escalation-branched", type: "branched" }
+};
+function picked(ids, lib) {
+  const win = { CANAMED_SECTIONS: lib === undefined ? LIB : lib };
+  const s = seam(() => ["A", "B"], win);
+  s.setSessionSections(ids);
+  return s;
+}
+
+test("S3a — an explicit pick decides the slots, in pick order", () => {
+  const s = picked("sore-throat-roleplay,chronic-pain-pbl");
+  assert.deepEqual(s.sectionSlots().map(x => [x.stage, x.type, x.sectionId]),
+    [[1, "roleplay", "sore-throat-roleplay"], [2, "pbl", "chronic-pain-pbl"]]);
+  assert.equal(s.stageViewId(1), "stage-2", "the roleplay picked first runs first");
+});
+
+test("S3a — TWO SECTIONS OF THE SAME TYPE, the case the module set could not express", () => {
+  const s = picked("chronic-pain-pbl,jaundice-pbl");
+  assert.deepEqual(s.sectionSlots().map(x => [x.stage, x.sectionId]),
+    [[1, "chronic-pain-pbl"], [2, "jaundice-pbl"]]);
+  assert.equal(s.lastStage(), 3, "Welcome + two PBL sections + Wrap-up");
+  // Both borrow the same view; their state is what differs (S2b).
+  assert.equal(s.stageViewId(1), "stage-1");
+  assert.equal(s.stageViewId(2), "stage-1");
+});
+
+test("S3a — a pick read before the library loads falls back, it does not blank", () => {
+  /* section-registry.js is a lazy chunk chained after case-content, so the
+     session's pick is routinely read first. Returning no slots here would give
+     the student a session with no stages. */
+  const s = picked("chronic-pain-pbl", null);
+  assert.deepEqual(s.sectionSlots().map(x => x.type), ["pbl", "roleplay"],
+    "falls back to the module-derived slots until the library arrives");
+});
+
+test("S3a — unknown ids are skipped; an all-unknown pick falls back", () => {
+  const partial = picked("no-such-section,jaundice-pbl");
+  assert.deepEqual(partial.sectionSlots().map(x => x.sectionId), ["jaundice-pbl"]);
+  const none = picked("no-such-section,also-missing");
+  assert.deepEqual(none.sectionSlots().map(x => x.type), ["pbl", "roleplay"],
+    "a stale pick must not produce a session with no stages");
+});
+
+test("S3a — the pick is capped at the physical slot maximum", () => {
+  const ids = new Array(12).fill("chronic-pain-pbl").join(",");
+  assert.equal(picked(ids).sectionSlots().length, 8);
+});
+
+test("S3a — clearing the pick restores the module-derived slots", () => {
+  const s = picked("jaundice-pbl");
+  assert.equal(s.sectionSlots().length, 1);
+  s.setSessionSections(null);
+  assert.equal(s.sectionSlots().length, 2);
+  s.setSessionSections("   ");
+  assert.equal(s.sectionSlots().length, 2, "whitespace is not a pick");
 });

@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v120";
+  var SHELL_VERSION = "v121";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
@@ -122,7 +122,24 @@
         // branched-runtime.js — branchedPath(): used in-room to decide when the
         // branch tree is FINISHED (the committed path reached an ending), so the
         // final-diagnosis card never appears early. Optional + non-fatal.
-        loadScript(v("branched-runtime.js")).catch(function () {})
+        loadScript(v("branched-runtime.js")).catch(function () {}),
+        /* section-registry.js (S3a): derives the flat SECTION library from the
+           scenario registry, so the picker and the per-slot engine can resolve a
+           section id. It reads window.CANAMED_SCENARIOS, so it MUST come after
+           case-content.js — and after branched-seed.js for the branched section
+           to exist, which the Promise.all does not guarantee. Chained onto the
+           seed for that reason rather than sitting alongside it. Optional +
+           non-fatal like its siblings: without it sectionSlots() falls back to
+           the module-derived slots. */
+        loadScript(v("branched-seed.js"))
+          .then(function () { return loadScript(v("section-registry.js")); })
+          .then(function () {
+            if (typeof window.buildSectionRegistry === "function") {
+              window.CANAMED_SECTIONS =
+                window.buildSectionRegistry(window.CANAMED_SCENARIOS || {});
+            }
+          })
+          .catch(function () {})
       ]);
     });
   }
@@ -248,7 +265,22 @@
   // it costs the splash nothing. Every rule in it was verified UNUSED by the
   // splash / create / join / account surfaces across light+dark themes and
   // desktop+mobile+tablet viewports (incl. hover/focus) before being moved.
+  /* section-content.js (S3a): a roleplay section's authorable content
+     renderers. Room-only, so it rides the room dependency that room entry
+     already awaits rather than sitting in the shell — see the file header for
+     why (the splash byte budget). Chained here, not in ensureCaseContent, so it
+     is guaranteed present BEFORE the room is revealed. */
+  function ensureSectionContent() { return loadScript(v("section-content.js")); }
   function ensureRoomStyles() {
+    /* Resolves when BOTH the room stylesheet and the room-only section-content
+       chunk are in. Room entry awaits this before revealing the app, so every
+       renderer in that chunk is present under its bare name in-room. The script
+       failure is swallowed: a hiccup fetching it must not block the room, and
+       the applyScenario() call sites degrade gracefully without it. */
+    return Promise.all([_roomCss(), ensureSectionContent().catch(function () {})])
+      .then(function () {});
+  }
+  function _roomCss() {
     if (typeof document === "undefined") return Promise.resolve();
     var link = document.getElementById("room-css");
     if (!link) {
@@ -305,6 +337,7 @@
     ensureBranchedStyles,
     ensureAdminStyles,
     ensureRoomStyles,
+    ensureSectionContent,
     ensureCaseContent,
     ensureQrcode,
     ensureTour,

@@ -136,3 +136,42 @@ test("binding is idempotent — it unbinds before it rebinds", () => {
   assert.ok(f.indexOf("unbindSectionRefs()") < f.indexOf("sectionSlots()"),
     "unbind must come first");
 });
+
+/* ── S3a — the section-content chunk's export contract ────────────────────── */
+
+test("the chunk publishes without eval — a strict CSP blocks it", () => {
+  /* An eval-based publish throws EvalError under the page CSP and, swallowed
+     per name, leaves the chunk LOADED but exporting nothing — which presents as
+     "X is not defined" for every name at once, with no console error from the
+     chunk itself. The first cut of this extraction shipped exactly that. */
+  const SC = fs.readFileSync(path.join(P, "section-content.js"), "utf8");
+  const code = SC.replace(/\/\*[\s\S]*?\*\//g, "");   // strip block comments
+  assert.ok(!/eval\(/.test(code), "exports must be explicit assignments");
+});
+
+test("the chunk publishes EVERY declaration it makes", () => {
+  /* script.js calls into section-content.js by BARE NAME, so a hand-maintained
+     export list is a ReferenceError waiting to happen — that is exactly how the
+     first cut of this extraction broke four E2E specs (modBProgressCfg,
+     roleplayRoles, roleplayRole were all missing). */
+  const SC = fs.readFileSync(path.join(P, "section-content.js"), "utf8");
+  const declared = (SC.match(/^  (?:function|const) ([A-Za-z_][A-Za-z0-9_]*)/gm) || [])
+    .map(l => l.replace(/^  (?:function|const) /, ""))
+    .filter(n => ["el", "_curLang", "tc"].indexOf(n) === -1);
+  declared.forEach(n =>
+    assert.ok(SC.indexOf("root." + n + " = " + n + ";") > -1,
+      n + " is declared in section-content.js but never published on window"));
+});
+
+test("every bare-name call from script.js into the chunk resolves", () => {
+  const SC = fs.readFileSync(path.join(P, "section-content.js"), "utf8");
+  const declared = (SC.match(/^  (?:function|const) ([A-Za-z_][A-Za-z0-9_]*)/gm) || [])
+    .map(l => l.replace(/^  (?:function|const) /, ""));
+  /* Anything script.js calls must be in the chunk's publish list — which the
+     test above proves is exhaustive — so this just documents the coupling. */
+  ["roleplayRoleIds", "roleplayRole", "roleplayRoles", "modBProgressCfg"]
+    .forEach(n => {
+      assert.ok(SCRIPT.indexOf(n + "(") > -1, "script.js must still call " + n);
+      assert.ok(declared.indexOf(n) > -1, n + " must be declared in the chunk");
+    });
+});

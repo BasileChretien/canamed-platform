@@ -15,7 +15,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") +
+  /* S3a — ROLEPLAY_CARDS and the phase resolvers moved with the rest of the
+     roleplay content into the room-only section-content.js chunk. */
+  fs.readFileSync(path.join(P, "section-content.js"), "utf8");
 
 function phases(win) {
   const start = SCRIPT.indexOf("const ROLEPLAY_CARDS");
@@ -94,9 +97,12 @@ test("the rebuilt stepper clears the flag the nav actually guards on", () => {
 });
 
 test("the phase consumers all resolve the config per section", () => {
-  assert.match(SCRIPT, /const c = modBProgressCfg\(\);/);
-  assert.match(SCRIPT, /renderModulePhase\(modBProgressCfg\(\), modBPhase\)/);
-  assert.match(SCRIPT, /Math\.min\(modBProgressCfg\(\)\.phases\.length - 1, idx \| 0\)/,
+  /* S3a — script.js reaches the resolver through modBCfg(), a guarded
+     accessor that falls back to the shipped config when the room-only
+     section-content.js chunk is absent (its load failure is swallowed). */
+  assert.match(SCRIPT, /const c = modBCfg\(\);/);
+  assert.match(SCRIPT, /renderModulePhase\(modBCfg\(\), modBPhase\)/);
+  assert.match(SCRIPT, /Math\.min\(modBCfg\(\)\.phases\.length - 1, idx \| 0\)/,
     "clamping to a literal six would strand the last phase of a longer list");
 });
 
@@ -110,6 +116,6 @@ test("the phase READ clamps to this roleplay's length, not the built-in six", ()
   assert.ok(i > -1, "the phase listener must exist");
   const fn = SCRIPT.slice(i, i + 900);
   assert.ok(!/v <= 5\b/.test(fn), "the built-in six must not be hardcoded on read");
-  assert.match(fn, /modBProgressCfg\(\)\.phases \|\| \[\]\)\.length - 1/,
+  assert.match(fn, /modBCfg\(\)\.phases\) \|\| \[\]\)\.length - 1/,
     "the clamp must come from the roleplay's own phase list");
 });

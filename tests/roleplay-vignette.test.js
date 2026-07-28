@@ -14,7 +14,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") +
+  /* S3a — the roleplay content renderers were extracted to the room-only
+     section-content.js chunk to reclaim splash bytes. These assertions are
+     about the CODE, not about which file carries it. */
+  fs.readFileSync(path.join(P, "section-content.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 
 const FN = (() => {

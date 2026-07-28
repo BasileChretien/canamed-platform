@@ -489,6 +489,14 @@ test.describe("Perf budget — splash", () => {
       // branched-runtime.js (2026-06-29): branchedPath() — used in-room to decide
       // when the branch tree is finished. Chained in ensureCaseContent, room-only.
       "branched-runtime.js",
+      // section-registry.js (2026-07-28, S3a): the flat SECTION library derived
+      // from the scenario registry. Chained after branched-seed.js in
+      // ensureCaseContent() — room/author only, never on the splash path.
+      "section-registry.js",
+      // section-content.js (2026-07-28, S3a): a roleplay section's authorable
+      // content renderers, extracted from script.js and chained into
+      // ensureRoomStyles(). Room-only, never on the splash path.
+      "section-content.js",
       "glossary.js",
       // Reading aid (2026-06-24): idle-prefetched + opt-in via the "Word help"
       // toggle, only actually used in Module A/B — never on the splash critical
