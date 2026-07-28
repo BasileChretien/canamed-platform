@@ -1869,6 +1869,98 @@ function refreshActiveSlotState() {
   /* S2b-2 — and the WRITE refs follow the same slot, so an item revealed while
      looking at section 3 lands in section 3's node, not section 1's. */
   if (typeof pointSectionRefs === "function") pointSectionRefs();
+  /* S3c — and so does the CONTENT. */
+  applySectionContent(slot);
+}
+/* ── S3c — the active slot's section supplies the content ─────────────────────
+ * With sections picked from different clinical cases, "the case" is no longer a
+ * property of the session — it is a property of the SLOT. The globals the render
+ * code reads (CASE, SCORING, PENALTIES, DECISIONS, the synthesis gate, the LLM
+ * characters) are therefore re-pointed as the student moves between stages, the
+ * same pattern as the state pointer and the write refs.
+ *
+ * NO-OP without an explicit pick: a session still running one scenario keeps
+ * exactly today's behaviour, where applyScenario() sets these once. That is what
+ * makes this safe to land before the picker UI exists.
+ *
+ * `_appliedSectionId` guards against re-applying on every render — these
+ * assignments are cheap but rebuildCaseDerived() is not, and re-running it
+ * mid-stage would rebuild ITEM_IDS underneath a half-rendered board. */
+let _appliedSectionId = null;
+function applySectionContent(slot) {
+  if (typeof window === "undefined") return;
+  if (!slot || !slot.sectionId) return;          // no pick ⇒ leave the globals alone
+  if (slot.sectionId === _appliedSectionId) return;
+  const sec = (window.CANAMED_SECTIONS || {})[slot.sectionId];
+  if (!sec || !sec.content) return;
+  const c = sec.content;
+  _appliedSectionId = slot.sectionId;
+
+  /* Only assign what the section HAS. A roleplay section carries no case or
+     penalties, and blanking them would strip the board the PBL slot next door
+     still needs when the student walks back to it. */
+  if (c.case) window.CASE = c.case;
+  if (Array.isArray(c.characters)) window.CURRENT_SCENARIO_CHARACTERS = c.characters;
+  if (Array.isArray(c.penalties)) window.PENALTIES = c.penalties;
+  if (c.synthId) { window.SYNTH_ID = c.synthId; SYNTH_ID = c.synthId; }
+  if (Array.isArray(c.synthPrereqs) && c.synthPrereqs.length) {
+    window.SYNTH_PREREQS = c.synthPrereqs; SYNTH_PREREQS = c.synthPrereqs;
+  }
+  /* Scoring is stored per section as a FLAT family list, but the engine reads
+     SCORING["module" + id]. Publish it under the key this slot's type maps to,
+     so the existing string-built lookups keep resolving. */
+  if (Array.isArray(c.scoring)) {
+    const mod = SECTION_MODULE_FOR_TYPE[slot.type];
+    if (mod) {
+      window.SCORING = window.SCORING || {};
+      window.SCORING["module" + mod] = c.scoring;
+    }
+  }
+  /* DECISIONS are namespaced PER SLOT before they are published, because a
+     decision id becomes an RTDB vote key (votes/$voteId). Two PBL sections in
+     one session routinely carry the same ids — both built-in workups have a
+     `dec_plan` — and unnamespaced they would share a tally: room votes on
+     section 1's plan would appear pre-cast on section 3's. Same mechanism
+     composeBranchedModule() uses for its `br_` prefix, and the edges must be
+     rewritten in lockstep or the graph silently breaks. */
+  if (Array.isArray(c.decisions)) {
+    window.DECISIONS = namespaceDecisions(c.decisions, slot);
+  }
+  /* The roleplay's authorable content travels with its section. */
+  window.CURRENT_SECTION_ROLEPLAY = (sec.roleplay && typeof sec.roleplay === "object")
+    ? sec.roleplay : null;
+  if (typeof document !== "undefined" && window.CanamedSectionContent) {
+    try { window.CanamedSectionContent.refresh(); } catch (e) {}
+  }
+  try { rebuildCaseDerived(); } catch (e) {}
+}
+/* A slot's TYPE maps back to the module key the scoring/decision engine uses. */
+const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" };
+
+/* Deep-copy a section's decisions with slot-scoped ids, and tag them with the
+   module key their stage renders into. Pure — the library entry is never
+   mutated, so switching back to a slot re-derives the same graph. */
+function sectionDecisionPrefix(slot) { return "s" + slot.position + "_"; }
+function namespaceDecisions(decisions, slot) {
+  const pre = sectionDecisionPrefix(slot);
+  const mod = SECTION_MODULE_FOR_TYPE[slot.type] || "A";
+  const own = {};
+  decisions.forEach(d => { if (d && d.id) own[d.id] = true; });
+  /* Only rewrite references to ids INSIDE this section. An edge pointing at
+     something else is already broken; renaming it would hide that. */
+  const nsId = id => (own[id] ? pre + id : id);
+
+  return decisions.map(d => {
+    const copy = JSON.parse(JSON.stringify(d));
+    if (copy.id) copy.id = pre + copy.id;
+    copy.module = mod;
+    const uw = copy.unlockWhen;
+    if (uw && uw.afterDecision != null) {
+      if (typeof uw.afterDecision === "string") uw.afterDecision = nsId(uw.afterDecision);
+      else if (uw.afterDecision.id) uw.afterDecision.id = nsId(uw.afterDecision.id);
+    }
+    return copy;
+  });
 }
 let revealed = {};
 let seenFindingIds = {};   // findings already shown once, so new ones can flash in

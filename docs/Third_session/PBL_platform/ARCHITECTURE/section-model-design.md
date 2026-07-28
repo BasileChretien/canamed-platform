@@ -400,7 +400,47 @@ tested against an actual two-PBL session rather than asserted in the abstract.
 **S6 will retire the module-literal nodes** (`moduleA`/`moduleB`/`moduleBranched`),
 which are now unread by the client.
 
-### S3 — The section picker at session-create
+### S3 — The section picker
+
+**S3a — storage + resolution ← DONE.** Write-once `sessions/$id/sections` (an
+ordered CSV of section ids) in both trees; `pickedSections()` resolves it
+against the lazily-loaded library and `sectionSlots()` prefers it over the
+module-derived slots. Two sections of the SAME TYPE now work. Resolution is
+tolerant by design — the library is a lazy chunk, so a pick is routinely read
+before it exists. Also forced the **perf reckoning**: script.js had grown
+205 → 217 KB gz, so the room-only roleplay renderers were extracted to
+`section-content.js` and the budget raised 337 → 345 with the reasoning
+recorded in `perf.spec.js`. Three bugs surfaced by that extraction — a
+**CSP-blocked `eval()` publish** that left the chunk exporting nothing, an
+incomplete hand-written export list, and callers that could not tolerate the
+chunk's (deliberately swallowed) load failure — are fixed and test-pinned.
+
+**S3c — per-slot CONTENT ← DONE (shell v121→v122).** Done BEFORE the picker UI
+on purpose: a picker that visibly renders the wrong case is a worse increment
+than no picker. `applySectionContent(slot)` re-points `CASE`, `SCORING`,
+`PENALTIES`, the synthesis gate, the characters, the roleplay content and
+`DECISIONS` as the student moves between stages — the same pointer pattern as
+the per-slot state and write refs.
+- **No-op without an explicit pick**, so a single-scenario session keeps exactly
+  today's behaviour. That is what made it safe to land early.
+- **Only what the section HAS is assigned.** A roleplay carries no case, and
+  blanking it would strip the board the PBL slot next door still needs when the
+  student walks back.
+- **Vote-id namespacing lands here** (deferred from S2 for exactly this moment).
+  Decision ids become `s<slot>_<id>` because they are RTDB vote keys: both
+  built-in workups carry a `dec_plan`, so unnamespaced, a vote cast in section 1
+  would appear pre-cast in section 3. `unlockWhen.afterDecision` is rewritten in
+  lockstep (both accepted shapes), an edge pointing OUTSIDE the section is left
+  alone rather than silently renamed, and the transform is PURE so returning to
+  a slot re-derives the same graph instead of a doubly-prefixed one.
+- Guarded by `_appliedSectionId`: re-running `rebuildCaseDerived()` mid-stage
+  would rebuild `ITEM_IDS` under a half-rendered board.
+- 10 new tests; 1131 unit + chromium/mobile E2E green.
+
+**S3b — the create-form picker (TODO).** Replace the Scenario select with an
+add/reorder list writing the `sections` CSV. Everything underneath it now works.
+
+### S3 (original plan) — The section picker at session-create
 The Scenario `<select>` is replaced by an add/reorder list. The session stores
 an ordered, write-once `sections` list. Pre/post-tests concatenate in slot
 order; stage 0 renders one blurb + objectives block per section.
