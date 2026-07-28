@@ -565,7 +565,37 @@ library saves sections (not scenarios); authored sections appear in the picker
 alongside built-ins; an authored Branched section resolves at runtime (lifting
 the built-ins-only limit).
 
-### S6 — Hard cutover cleanup
+### S6 — Hard cutover cleanup (started)
+
+**⚠️ DECISION 13 WAS BASED ON A WRONG PREMISE — corrected 2026-07-28.** The plan
+said `revisit.html` "lets participants re-open a past session", so the hard
+cutover would break older links, and that loss was accepted. **It does not read
+session state at all.** It takes an id from `?s=` and renders that content's
+post-test straight from the registry. So the change here is **additive**: a
+SECTION id now resolves to that section's own post-test (decision 3), and every
+previously-shared scenario link keeps working unchanged. Sections are resolved
+before scenarios; an unknown id still falls back rather than showing an empty
+page. `revisit.html` gained the `branched-seed` + `section-registry` chain, in
+dependency order, all `defer`. **No user-visible loss — better than the decision
+accepted, so it was taken.** 5 tests.
+
+**⚠️ A SECOND INSTANCE OF THE S4 BREAK, found here.** S2b-2 moved room STATE to
+`sections/$slot` but left **ANSWERS** on the module-literal nodes — so S4's
+export, which read `answers/sections/$slot`, was still exporting **empty
+answers**. The S4 unit test passed because its fixture wrote where the export
+read; a fixture cannot prove "the export reads where the CLIENT writes".
+- Export now reads the per-slot node **and falls back to the module node** keyed
+  by the slot's type, so it is correct on both sides of the migration. The
+  fallback is marked TRANSITIONAL and deleted when the answers migration lands.
+- A test now pins the real invariant, including that the client still writes one
+  of the two addresses.
+
+**Still TODO in S6:** the answers migration itself (`refAnswers` + ~12 readers,
+including the admin/dashboard aggregation, which is why it was NOT rushed into
+this phase), removing the `scenarioId` create path, and retiring the
+module-literal rules nodes once nothing reads them.
+
+### S6 (original plan) — Hard cutover cleanup
 Remove the `scenarioId` create path, the `modules` CSV narrowing, `moduleA/B`
 naming and the now-dead rules nodes.
 

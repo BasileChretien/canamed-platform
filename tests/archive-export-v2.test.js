@@ -28,14 +28,32 @@ const { convertArchive } = require("../scripts/convert-archive-v2.js");
 
 /* ── the live export ──────────────────────────────────────────────────────── */
 
-test("the export reads the PER-SLOT nodes, not the retired module ones", () => {
+test("the export reads HYPOTHESES from the per-slot node", () => {
   const i = SCRIPT.indexOf("function _sessionArchiveData(anon)");
   const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction _sessionArchiveToCSV", i));
   assert.match(fn, /data\.sections \|\| \{\}/,
     "room state has lived at rooms/$roomId/sections/$slot since S2b-2");
-  assert.match(fn, /data\.answers && data\.answers\.sections/);
-  assert.ok(!/answers\.moduleA|moduleA\.hypotheses|mapEntries\("moduleA"\)/.test(fn),
-    "reading the retired nodes exports empties, which reads as a silent session");
+  assert.ok(!/moduleA\.hypotheses/.test(fn),
+    "reading the retired node exports empties, which reads as a silent session");
+});
+
+test("the export reads ANSWERS from EITHER address, per-slot first", () => {
+  /* ⚠️ The invariant that actually matters, and the one a FIXTURE CANNOT PROVE:
+     the export must read where the CLIENT WRITES. S2b-2 moved room state to
+     sections/$slot but left ANSWERS on the module-literal nodes, so reading only
+     the new address exported empty answers — indistinguishable from a session in
+     which nobody wrote anything. The fallback goes when the answers migration
+     lands; until then BOTH addresses are live. */
+  const i = SCRIPT.indexOf("function _sessionArchiveData(anon)");
+  const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction _sessionArchiveToCSV", i));
+  assert.match(fn, /roomAnswers\.sections \|\| \{\}/, "prefer the per-slot node");
+  assert.match(fn, /LEGACY_ANSWER_KEY/, "fall back to the module node");
+  assert.match(fn, /perSlotAnswers \|\| legacy/);
+
+  /* And the client must still WRITE one of those two addresses. */
+  assert.ok(/db\.ref\(base \+ "\/answers\/module[AB]"\)/.test(SCRIPT) ||
+            /answers\/sections/.test(SCRIPT),
+    "if this fails, the export is reading an address nothing writes");
 });
 
 test("the export is driven by the MANIFEST, so a silent slot still appears", () => {

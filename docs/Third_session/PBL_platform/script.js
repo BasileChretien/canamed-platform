@@ -7917,12 +7917,23 @@ function _sessionArchiveData(anon) {
        indistinguishable from it never having run. */
     const perSlot = {};
     const roomSections = data.sections || {};
-    const roomAnswers = (data.answers && data.answers.sections) || {};
+    const roomAnswers = data.answers || {};
+    /* ⚠️ TRANSITIONAL. S2b-2 moved the room's STATE to sections/$slot but left
+       ANSWERS on the module-literal nodes, so a slot's answers may live at
+       either address depending on when the session ran. Prefer the per-slot
+       node, fall back to the module one keyed by the slot's type.
+       Delete the fallback once the answers migration lands — and note WHY it is
+       here: reading only the new address silently exported EMPTY answers, which
+       is indistinguishable from a session where nobody wrote anything. */
+    const LEGACY_ANSWER_KEY = { pbl: "moduleA", roleplay: "moduleB",
+                                branched: "moduleBranched" };
     manifest.forEach(m => {
       const k = String(m.slot);
+      const perSlotAnswers = (roomAnswers.sections || {})[k];
+      const legacy = roomAnswers[LEGACY_ANSWER_KEY[m.type]];
       perSlot[k] = {
         hypotheses: mapHyps((roomSections[k] || {}).hypotheses),
-        answers: mapEntries(roomAnswers[k])
+        answers: mapEntries(perSlotAnswers || legacy)
       };
     });
     rooms.push({

@@ -20,7 +20,12 @@
   <!-- case-content.js populates window.CANAMED_SCENARIOS; revisit.js reads the
        scenario's post-test and runs the self-check. Both deferred (order
        preserved), external (CSP: script-src 'self', no inline). -->
-  <script src="case-content.js?v=v3" defer></script>
-  <script src="revisit.js?v=v3" defer></script>
+  <script src="case-content.js?v=v4" defer></script>
+  <!-- branched-seed registers the branched case; section-registry derives the
+       flat SECTION library from both. Ordered, and all `defer`, so the registry
+       is built before revisit.js runs. -->
+  <script src="branched-seed.js?v=v4" defer></script>
+  <script src="section-registry.js?v=v4" defer></script>
+  <script src="revisit.js?v=v4" defer></script>
 </body>
 </html>
