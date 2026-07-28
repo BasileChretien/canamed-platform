@@ -2362,7 +2362,12 @@
       var btn = el("button", { type: "button", class: "secondary-btn", text: label });
       btn.addEventListener("click", function () {
         try {
-          applyScenarioJson(jsonFn(), msg);
+          /* applySectionJson, NOT applyScenarioJson: the auto-split (decision
+             14) is for LOADING a saved scenario, where a two-module body is
+             legacy data. A skeleton is a deliberate starting point the
+             facilitator just chose, so splitting it would answer a question
+             they never asked. */
+          applySectionJson(jsonFn(), msg);
           modal.remove();
         } catch (e) {
           out.className = "validation-output error";
@@ -2388,6 +2393,18 @@
       roleplaySkeletonJson,
       "Loaded the Roleplay section skeleton. Replace the cast, briefs, vignette " +
       "and phases — anything you leave out simply does not appear.");
+    /* Kept until S6 retires mixed A/B authoring outright. A session is built
+       from sections now, so this is NOT how a facilitator should start — but the
+       author still SUPPORTS two-module scenarios (M5 mixed A/B + branchedRef),
+       and removing the starter before removing the capability would leave that
+       path unreachable and untestable. Labelled so nobody picks it by accident. */
+    choice("Two-module scenario (legacy)",
+      "The pre-section shape: one case carrying both a Module A and a Module B. " +
+      "Prefer PBL or Roleplay above — this exists only while mixed authoring is " +
+      "still supported.",
+      skeletonJson,
+      "Loaded the legacy two-module skeleton. Sessions are assembled from " +
+      "sections now — prefer starting from PBL or Roleplay.");
     choice("Branched Scenario",
       "An épuré, one-decision-at-a-time case: each choice unlocks the next.",
       branchedSkeletonJson,

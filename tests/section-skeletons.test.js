@@ -40,11 +40,22 @@ function skeletons() {
 
 const S = skeletons();
 
-test("the picker offers exactly the three types the user named", () => {
+test("the picker LEADS with the three types the user named", () => {
   const i = AUTHOR.indexOf("function openSkeletonPicker");
   const fn = AUTHOR.slice(i, AUTHOR.indexOf("\n  function ", i + 1));
   const labels = (fn.match(/choice\("([^"]+)"/g) || []).map(m => m.slice(8, -1));
-  assert.deepEqual(labels, ["PBL", "Roleplay", "Branched Scenario"]);
+  /* The three section types come FIRST — those are what a facilitator should
+     pick. The two-module starter survives only while mixed A/B authoring is
+     still supported; removing the starter before the capability would leave
+     that path unreachable and untestable. It is therefore last and labelled
+     legacy, and S6 retires both together — this assertion is what fails when
+     someone adds a fourth unlabelled entry. */
+  assert.deepEqual(labels.slice(0, 2), ["PBL", "Roleplay"]);
+  assert.ok(labels.indexOf("Branched Scenario") > -1, "the third named type");
+  labels.slice(2).forEach(l => {
+    assert.ok(l === "Branched Scenario" || /legacy/i.test(l),
+      "anything beyond the three named types must be marked legacy: " + l);
+  });
 });
 
 /* ── PBL ──────────────────────────────────────────────────────────────────── */

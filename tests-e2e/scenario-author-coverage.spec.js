@@ -173,7 +173,7 @@ test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
     await page.locator("#btn-skeleton").click();
     const picker = page.locator("#skeleton-picker");
     await expect(picker).toBeVisible();
-    await picker.getByRole("button", { name: /^PBL$/ }).click();
+    await picker.getByRole("button", { name: /^Two-module scenario \(legacy\)$/ }).click();
     await expect(picker).toHaveCount(0);
 
     // The form is populated from the standard skeleton.
@@ -251,15 +251,32 @@ test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
     await expect(first).toBeVisible();
     await first.click();
 
-    // The clone carries a -copy id, so a later save cannot overwrite the
-    // built-in it came from, and the picker closes.
+    await expect(picker).toHaveCount(0);
+
+    /* S5 / decision 14 — a built-in is a two-module body, so cloning one now
+       SPLITS it and asks which section to open. The author edits one section at
+       a time; handing over a whole workshop would present two sections' fields
+       as if they were one. */
+    const split = page.locator("#section-split-picker");
+    await expect(split).toBeVisible();
+    await split.getByRole("button", { name: /^PBL — / }).click();
+    await expect(split).toHaveCount(0);
+
+    /* The id still cannot collide with the built-in it came from: the clone
+       carries -copy, and the split half appends its section type. */
     const preview = page.locator("#json-preview");
     await expect
-      .poll(async () => /-copy"/.test(await preview.inputValue()))
+      .poll(async () => /-copy-pbl"/.test(await preview.inputValue()))
       .toBe(true);
     const json = JSON.parse(await preview.inputValue());
-    expect(json.id).toMatch(/-copy$/);
-    await expect(picker).toHaveCount(0);
+    expect(json.id).toMatch(/-copy-pbl$/);
+    /* NOT asserting a `modules` key: the author omits one that carries no
+       information beyond the module NAMES (M5), and this half names only
+       Module A. What must hold is that it is a single PBL section. */
+    expect(json.moduleAName.en).toBeTruthy();
+    /* The form seeds an EMPTY trio rather than omitting the key, so "not a
+       roleplay" means an empty English name, not an absent field. */
+    expect((json.moduleBName || {}).en || "").toBe("");
 
     expect(errors, "cloning a built-in must not throw").toEqual([]);
   });
@@ -279,12 +296,14 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
 
     await page.goto("/scenario-author.html");
 
-    // Start from the standard skeleton so the rest of the form is already valid
-    // — this test is about the module set, not about re-typing a whole case.
+    /* Start from the legacy two-module starter: this test is about the MODULE
+       SET, not about re-typing a case. S5 made PBL/Roleplay the primary
+       skeletons, and the two-module shape survives only while mixed A/B
+       authoring is still supported (S6 retires both together). */
     await page.locator("#btn-skeleton").click();
     const picker = page.locator("#skeleton-picker");
     await expect(picker).toBeVisible();
-    await picker.getByRole("button", { name: /^PBL$/ }).click();
+    await picker.getByRole("button", { name: /^Two-module scenario \(legacy\)$/ }).click();
     await expect(picker).toHaveCount(0);
 
     // A and B are ticked (the skeleton names both) and imply themselves, so no
@@ -335,7 +354,7 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
 
     await page.goto("/scenario-author.html");
     await page.locator("#btn-skeleton").click();
-    await page.locator("#skeleton-picker").getByRole("button", { name: /^PBL$/ }).click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /^Two-module scenario \(legacy\)$/ }).click();
 
     await page.locator("#mod-branched").check();
     const preview = page.locator("#json-preview");
@@ -373,7 +392,7 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
 
     await page.goto("/scenario-author.html");
     await page.locator("#btn-skeleton").click();
-    await page.locator("#skeleton-picker").getByRole("button", { name: /^PBL$/ }).click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /^Two-module scenario \(legacy\)$/ }).click();
 
     // The skeleton's only decision is Module A, so dropping B stays valid.
     await page.locator("#mod-B").uncheck();
@@ -505,7 +524,7 @@ test.describe("Scenario author — no horizontal overflow on narrow viewports", 
 
     await page.goto("/scenario-author.html");
     await page.locator("#btn-skeleton").click();
-    await page.locator("#skeleton-picker").getByRole("button", { name: /^PBL$/ }).click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /^Two-module scenario \(legacy\)$/ }).click();
     await expect
       .poll(async () =>
         (await page.locator("#json-preview").inputValue()).includes('"new-scenario"'))

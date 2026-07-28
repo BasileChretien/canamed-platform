@@ -28,41 +28,47 @@ const { convertArchive } = require("../scripts/convert-archive-v2.js");
 
 /* ── the live export ──────────────────────────────────────────────────────── */
 
-test("the export reads HYPOTHESES from the per-slot node", () => {
-  const i = SCRIPT.indexOf("function _sessionArchiveData(anon)");
-  const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction _sessionArchiveToCSV", i));
-  assert.match(fn, /data\.sections \|\| \{\}/,
-    "room state has lived at rooms/$roomId/sections/$slot since S2b-2");
-  assert.ok(!/moduleA\.hypotheses/.test(fn),
-    "reading the retired node exports empties, which reads as a silent session");
+test("EVERY snapshot reader resolves addresses through ONE helper", () => {
+  /* The guard that actually matters. THREE times in this initiative a path move
+     fixed one reader and silently zeroed another — the export's hypotheses, the
+     export's answers, and the dashboard's "findings N/M", which had been
+     reporting 0 for every room since S2b-2. Funnelling every snapshot reader
+     through roomSlotBuckets() gives the next move one place to change. */
+  ["_sessionArchiveData", "roomProgress", "roomParticipation"].forEach(name => {
+    const i = SCRIPT.indexOf("function " + name + "(");
+    assert.ok(i > -1, name + " must exist");
+    const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction ", i + 1));
+    assert.match(fn, /roomSlotBuckets\(/, name + " must resolve through the helper");
+    assert.ok(!/data\.moduleA|answers\.moduleA/.test(fn),
+      name + " must not reach a module-literal node directly");
+  });
 });
 
-test("the export reads ANSWERS from EITHER address, per-slot first", () => {
-  /* ⚠️ The invariant that actually matters, and the one a FIXTURE CANNOT PROVE:
-     the export must read where the CLIENT WRITES. S2b-2 moved room state to
-     sections/$slot but left ANSWERS on the module-literal nodes, so reading only
-     the new address exported empty answers — indistinguishable from a session in
-     which nobody wrote anything. The fallback goes when the answers migration
-     lands; until then BOTH addresses are live. */
-  const i = SCRIPT.indexOf("function _sessionArchiveData(anon)");
-  const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction _sessionArchiveToCSV", i));
-  assert.match(fn, /roomAnswers\.sections \|\| \{\}/, "prefer the per-slot node");
-  assert.match(fn, /LEGACY_ANSWER_KEY/, "fall back to the module node");
-  assert.match(fn, /perSlotAnswers \|\| legacy/);
+test("the helper reads ANSWERS from EITHER address, per-slot first", () => {
+  /* ⚠️ The invariant a FIXTURE CANNOT PROVE: a reader must read where the CLIENT
+     WRITES. S2b-2 moved room state to sections/$slot but left ANSWERS on the
+     module-literal nodes, so reading only the new address returned empty
+     answers — indistinguishable from a session in which nobody wrote anything.
+     Both addresses stay live until the answers migration lands. */
+  const i = SCRIPT.indexOf("function roomSlotBuckets(data)");
+  const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction ", i + 1));
+  assert.match(fn, /answers\.sections \|\| \{\}/, "prefer the per-slot node");
+  assert.match(fn, /LEGACY_SLOT_KEY/, "fall back to the module node");
 
   /* And the client must still WRITE one of those two addresses. */
   assert.ok(/db\.ref\(base \+ "\/answers\/module[AB]"\)/.test(SCRIPT) ||
             /answers\/sections/.test(SCRIPT),
-    "if this fails, the export is reading an address nothing writes");
+    "if this fails, every reader is pointed at an address nothing writes");
 });
 
-test("the export is driven by the MANIFEST, so a silent slot still appears", () => {
-  /* A slot that ran and produced nothing must be distinguishable from a slot
-     that never ran at all. */
-  const i = SCRIPT.indexOf("function _sessionArchiveData(anon)");
-  const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction _sessionArchiveToCSV", i));
-  assert.match(fn, /manifest\.forEach\(m => \{/);
-  assert.ok(!/Object\.keys\(roomSections\)\.forEach/.test(fn),
+test("the helper is driven by the SLOT LIST, so a silent slot still appears", () => {
+  /* A slot that ran and produced nothing must stay distinguishable from one
+     that never ran: the buckets come from sectionSlots(), not from whichever
+     keys happen to exist in the snapshot. */
+  const i = SCRIPT.indexOf("function roomSlotBuckets(data)");
+  const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction ", i + 1));
+  assert.match(fn, /sectionSlots\(\)\.map/);
+  assert.ok(!/Object\.keys\(sections\)\.forEach/.test(fn),
     "iterating the keys that exist would drop empty slots");
 });
 

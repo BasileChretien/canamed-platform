@@ -590,10 +590,35 @@ read; a fixture cannot prove "the export reads where the CLIENT writes".
 - A test now pins the real invariant, including that the client still writes one
   of the two addresses.
 
-**Still TODO in S6:** the answers migration itself (`refAnswers` + ~12 readers,
-including the admin/dashboard aggregation, which is why it was NOT rushed into
-this phase), removing the `scenarioId` create path, and retiring the
-module-literal rules nodes once nothing reads them.
+**S6 — every SNAPSHOT READER now resolves through ONE helper.** Chasing the
+answers gap turned up **two more broken readers**: `roomProgress()` and the
+participation tally still read `data.moduleA.revealed`, so **the admin
+dashboard had been showing "findings 0" for every room since S2b-2**.
+- `roomSlotBuckets(data)` is now the single address resolver for every reader
+  that works off an `allRooms` snapshot — the dashboard summary, the
+  participation tally, the GDPR personal-data export and the archive export.
+  Each reads per-slot with a TRANSITIONAL fallback to the module node.
+- A test asserts all three named readers go through it and none reaches a
+  module-literal node directly. **That guard is the actual deliverable**: three
+  separate times a path move fixed one reader and silently zeroed another.
+- The GDPR export now records the `slot` and `sectionId` on each entry, and
+  walks slots rather than the two module keys — otherwise a participant's own
+  answers come back short.
+
+**Skeletons vs loads.** The auto-split (decision 14) applies to LOADING a saved
+scenario, not to picking a skeleton: a skeleton is a starting point the
+facilitator just chose, so splitting it answers a question they never asked.
+Cloning a built-in DOES split (it is a two-module body), and each half keeps a
+non-colliding id (`…-copy-pbl`).
+
+**A two-module starter stays in the picker, labelled legacy,** because the author
+still SUPPORTS mixed A/B scenarios (M5). Removing the starter before the
+capability would leave that path unreachable and untestable; S6 retires both
+together.
+
+**Still TODO in S6:** moving the WRITE path for answers to `answers/sections/$slot`
+(the readers now accept either), removing the `scenarioId` create path, and
+retiring the module-literal rules nodes once nothing reads them.
 
 ### S6 (original plan) — Hard cutover cleanup
 Remove the `scenarioId` create path, the `modules` CSV narrowing, `moduleA/B`

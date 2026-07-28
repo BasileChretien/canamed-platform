@@ -5883,12 +5883,45 @@ function stageMinutes(st) {
   const slot = slotAtStage(st);
   return (slot && STAGE_MINUTES_BY_ROLE[slot.type]) || 99;
 }
+/* ── S6 — reading a room SNAPSHOT's per-slot data ─────────────────────────────
+ * The admin dashboard, the participation tally and the exports all read rooms
+ * out of `allRooms` rather than through the live refs, so they need their own
+ * address resolution. Routing every one of them through this helper is what
+ * stops the next path move from silently zeroing a counter — which is exactly
+ * what happened three times in this initiative (export hypotheses, export
+ * answers, and the dashboard's "findings N/M", which read `data.moduleA.revealed`
+ * and had been showing 0 for every room since S2b-2).
+ *
+ * ⚠️ TRANSITIONAL: answers may still live on the module-literal node for rooms
+ * that ran before the migration, so both addresses are read. Drop the legacy
+ * half once no live session predates it. */
+const LEGACY_SLOT_KEY = { pbl: "moduleA", roleplay: "moduleB", branched: "moduleBranched" };
+function roomSlotBuckets(data) {
+  const d = data || {};
+  const sections = d.sections || {};
+  const answers = d.answers || {};
+  return sectionSlots().map(sl => {
+    const k = String(sl.position);
+    const legacyKey = LEGACY_SLOT_KEY[sl.type];
+    const state = sections[k] || (legacyKey ? (d[legacyKey] || {}) : {});
+    const ans = (answers.sections || {})[k] || (legacyKey ? answers[legacyKey] : null) || {};
+    return { slot: sl.position, type: sl.type, sectionId: sl.sectionId || null,
+             revealed: state.revealed || {}, hypotheses: state.hypotheses || {},
+             answers: ans };
+  });
+}
+
 function roomProgress(data) {
-  const revealed = (data.moduleA && data.moduleA.revealed) || {};
-  const aCount = Object.keys((data.answers && data.answers.moduleA) || {}).length;
-  const bCount = Object.keys((data.answers && data.answers.moduleB) || {}).length;
-  return "findings " + Object.keys(revealed).length + "/" + ITEM_IDS.length +
-    " · answers A" + aCount + " B" + bCount;
+  /* Summed across the session's slots: a room may run two PBL sections, and the
+     facilitator wants the room's total, not slot 1's. */
+  const buckets = roomSlotBuckets(data);
+  let found = 0, answered = 0;
+  buckets.forEach(b => {
+    found += Object.keys(b.revealed).length;
+    answered += Object.keys(b.answers).length;
+  });
+  const cap = ITEM_IDS.length * Math.max(1, buckets.filter(b => b.type === "pbl").length);
+  return "findings " + found + "/" + cap + " · answers " + answered;
 }
 
 /* Live participation equity for the facilitator dashboard. Returns how many
@@ -5930,9 +5963,8 @@ function roomParticipation(data) {
       if (typeof cid === "string") counts[cid] = (counts[cid] || 0) + 1;
     });
   };
-  tally(data && data.answers && data.answers.moduleA);
-  tally(data && data.answers && data.answers.moduleB);
-  tally(data && data.moduleA && data.moduleA.hypotheses);
+  /* Every slot's answers and hypotheses count toward participation. */
+  roomSlotBuckets(data).forEach(b => { tally(b.answers); tally(b.hypotheses); });
   const perPresent = present.map(cid => counts[cid] || 0);
   const contributing = perPresent.filter(c => c > 0).length;
   // "Who's stuck" — present students who haven't contributed anything yet.
@@ -7166,11 +7198,17 @@ function downloadMyData() {
       if (r.typing && r.typing[clientId]) {
         out.typing[roomName] = r.typing[clientId];
       }
-      ["moduleA", "moduleB"].forEach(mod => {
-        const ans = (r.answers && r.answers[mod]) || {};
+      /* S6 — walk the session's SLOTS, not the two retired module keys: a
+         participant's own answers must come back whatever slot they wrote them
+         in, or a GDPR export silently under-reports their data. */
+      roomSlotBuckets(r).forEach(b => {
+        const mod = LEGACY_SLOT_KEY[b.type] || "moduleA";
+        const ans = b.answers || {};
         Object.keys(ans).forEach(entryId => {
           if (ans[entryId] && ans[entryId].cid === clientId) {
-            out.answers[mod].push(Object.assign({ room: roomName, entryId: entryId }, ans[entryId]));
+            out.answers[mod].push(Object.assign(
+              { room: roomName, slot: b.slot, sectionId: b.sectionId, entryId: entryId },
+              ans[entryId]));
           }
         });
       });
@@ -7915,25 +7953,13 @@ function _sessionArchiveData(anon) {
     /* Driven by the MANIFEST, not by whichever keys happen to exist: a slot
        that ran and produced nothing must still appear, or its silence is
        indistinguishable from it never having run. */
+    /* One address resolver for every snapshot reader (roomSlotBuckets), so a
+       future path move cannot fix the dashboard and miss the export again. */
     const perSlot = {};
-    const roomSections = data.sections || {};
-    const roomAnswers = data.answers || {};
-    /* ⚠️ TRANSITIONAL. S2b-2 moved the room's STATE to sections/$slot but left
-       ANSWERS on the module-literal nodes, so a slot's answers may live at
-       either address depending on when the session ran. Prefer the per-slot
-       node, fall back to the module one keyed by the slot's type.
-       Delete the fallback once the answers migration lands — and note WHY it is
-       here: reading only the new address silently exported EMPTY answers, which
-       is indistinguishable from a session where nobody wrote anything. */
-    const LEGACY_ANSWER_KEY = { pbl: "moduleA", roleplay: "moduleB",
-                                branched: "moduleBranched" };
-    manifest.forEach(m => {
-      const k = String(m.slot);
-      const perSlotAnswers = (roomAnswers.sections || {})[k];
-      const legacy = roomAnswers[LEGACY_ANSWER_KEY[m.type]];
-      perSlot[k] = {
-        hypotheses: mapHyps((roomSections[k] || {}).hypotheses),
-        answers: mapEntries(perSlotAnswers || legacy)
+    roomSlotBuckets(data).forEach(b => {
+      perSlot[String(b.slot)] = {
+        hypotheses: mapHyps(b.hypotheses),
+        answers: mapEntries(b.answers)
       };
     });
     rooms.push({

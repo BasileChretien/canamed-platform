@@ -24,8 +24,12 @@ test("roomParticipation derives present, contributing, gini + who's-stuck names"
   const fn = SCRIPT.slice(SCRIPT.indexOf("function roomParticipation"),
     SCRIPT.indexOf("function roomParticipation") + 1600);
   assert.match(fn, /presence/, "must read presence for the present set");
-  assert.match(fn, /answers[\s\S]*moduleA/, "must count Module A answers");
-  assert.match(fn, /moduleA[\s\S]*hypotheses/, "must count hypotheses as contributions");
+  /* S6 — every SLOT's answers and hypotheses count, not just Module A/B's: a
+     session may run two PBL sections, and a contribution in the second one is
+     still a contribution. Address resolution lives in roomSlotBuckets(). */
+  assert.match(fn, /roomSlotBuckets\(data\)/, "must walk the session's slots");
+  assert.match(fn, /tally\(b\.answers\); tally\(b\.hypotheses\)/,
+    "must count both answers and hypotheses as contributions");
   assert.match(fn, /\.cid/, "contribution authorship is keyed by clientId (cid)");
   assert.match(fn, /gini:/, "must return a gini spread measure");
   assert.match(fn, /quietNames:/, "must return the names of present non-contributors");
