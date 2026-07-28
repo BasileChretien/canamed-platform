@@ -259,9 +259,19 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
     by: uid, at: Date.now()
   })).toBe("ALLOWED");
 
-  // A bogus role value is rejected by the per-assignment validator.
-  expect(await tryWrite(page, path, { assignments: { c1: "wizard" }, by: uid, at: Date.now() }))
-    .not.toBe("ALLOWED");
+  /* S1c-1 — an authored roleplay declares its OWN cast, so the validator can no
+     longer be the four built-in role ids: it is the same id GRAMMAR the client
+     enforces. This was a real defect in S1c-1 — the client happily assigned a
+     pharmacist and the DB rejected the write, invisible to the LOCAL-mode E2E
+     suite because it does not exercise rules at all. */
+  expect(await tryWrite(page, path, {
+    assignments: { c1: "pharmacist", c2: "prescriber" }, by: uid, at: Date.now()
+  })).toBe("ALLOWED");
+  // …but the grammar still holds: no spaces, no capitals, bounded length.
+  for (const bad of ["Has Space", "UPPER", "1leading", "x".repeat(40), ""]) {
+    expect(await tryWrite(page, path, { assignments: { c1: bad }, by: uid, at: Date.now() }))
+      .not.toBe("ALLOWED");
+  }
 
   // An unknown sibling field is rejected ($other sentinel).
   expect(await tryWrite(page, path, {
@@ -272,7 +282,7 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
 });
 
-test("rules: /moduleB/phase accepts the six synced phases (0..5) and rejects 6", async ({ page }) => {
+test("rules: /moduleB/phase accepts an authored phase list, bounded", async ({ page }) => {
   await page.goto("/");
   const uid = await waitForUid(page);
   const code = "mbphase-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
@@ -281,11 +291,18 @@ test("rules: /moduleB/phase accepts the six synced phases (0..5) and rejects 6",
   // without it), so claim membership first — exactly as enterRoom/startRoom does
   // for participants AND for a facilitator opening the room as admin.
   expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
-  // A ROOM MEMBER can advance the synced phase. Phase 5 (the sixth phase) became
-  // valid with the 2026-06-26 swap → replay → reflect extension; 6 is out of range.
+  /* S1c-3b — an authored roleplay declares its own phase list, so a bound of 5
+     (the built-in six-phase timetable) would have made phase 7 of an 8-phase
+     roleplay unwritable. Second defect of the same class as the role-id enum:
+     making content authorable moved a boundary the rules still policed against
+     the BUILT-IN shape. The bound is now a generous sanity cap, not the shipped
+     timetable's length. */
   expect(await tryWrite(page, path, 0)).toBe("ALLOWED");
   expect(await tryWrite(page, path, 5)).toBe("ALLOWED");
-  expect(await tryWrite(page, path, 6)).not.toBe("ALLOWED");
+  expect(await tryWrite(page, path, 12)).toBe("ALLOWED");
+  expect(await tryWrite(page, path, 19)).toBe("ALLOWED");
+  expect(await tryWrite(page, path, 20)).not.toBe("ALLOWED");
+  expect(await tryWrite(page, path, -1)).not.toBe("ALLOWED");
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
   // Integer-only: the client floors phase on read, so a fractional value would
   // persist shared state the UI never shows — the rule rejects it.

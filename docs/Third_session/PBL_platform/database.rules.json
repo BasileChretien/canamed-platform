@@ -328,14 +328,14 @@
             "moduleB": {
               "phase": {
                 ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
-                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 5 && newData.val() % 1 == 0)"
+                ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 19 && newData.val() % 1 == 0)"
               },
               "roleAssign": {
                 ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                 ".validate": "newData.val() == null || (newData.hasChild('assignments') && newData.hasChild('by') && newData.hasChild('at'))",
                 "assignments": {
                   "$cid": {
-                    ".validate": "newData.isString() && (newData.val() == 'physician' || newData.val() == 'patient' || newData.val() == 'family' || newData.val() == 'observer')"
+                    ".validate": "newData.isString() && newData.val().matches(/^[a-z][a-z0-9_-]{0,23}$/)"
                   }
                 },
                 "by": { ".validate": "newData.isString() && newData.val().length <= 64" },
@@ -870,14 +870,14 @@
                 "moduleB": {
                   "phase": {
                     ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
-                    ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 5 && newData.val() % 1 == 0)"
+                    ".validate": "newData.val() == null || (newData.isNumber() && newData.val() >= 0 && newData.val() <= 19 && newData.val() % 1 == 0)"
                   },
                   "roleAssign": {
                     ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
                     ".validate": "newData.val() == null || (newData.hasChild('assignments') && newData.hasChild('by') && newData.hasChild('at'))",
                     "assignments": {
                       "$cid": {
-                        ".validate": "newData.isString() && (newData.val() == 'physician' || newData.val() == 'patient' || newData.val() == 'family' || newData.val() == 'observer')"
+                        ".validate": "newData.isString() && newData.val().matches(/^[a-z][a-z0-9_-]{0,23}$/)"
                       }
                     },
                     "by": { ".validate": "newData.isString() && newData.val().length <= 64" },

@@ -311,6 +311,24 @@ history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —
 chronic-pain-flavoured text shown regardless of the active case. They belong in
 section data for the same reason.
 
+### S1c-fix — two rules that still policed the BUILT-IN shape ← DONE
+Making content authorable moved validation boundaries the DB rules were still
+enforcing against the shipped roleplay. **Both were live defects in S1c**, and
+neither could be caught by the LOCAL-mode E2E suite, which does not exercise
+rules at all:
+1. `moduleB/roleAssign/assignments/$cid` validated against the literal four role
+   ids (`physician|patient|family|observer`). An authored cast's random-assign
+   wrote fine client-side and was **rejected by the database**. Now validated
+   against the same id GRAMMAR the client enforces.
+2. `moduleB/phase` was bounded `<= 5` — the built-in six-phase timetable's
+   length — so phase 7 of an authored 8-phase roleplay was **unwritable**. Now a
+   generous sanity cap (`<= 19`), not the shipped timetable's length.
+
+Both fixed in **both** rule trees and emulator-proven (28 pass). **Lesson for
+S2 and S5: every rule that enumerates a built-in value is a latent bug the
+moment that value becomes authorable.** Worth grepping the rules for literal
+enums before the next extraction.
+
 ### S2 — Per-slot DB paths
 `rooms/$roomId/section/$slot/…` and `answers/section/$slot` replace the
 module-literal nodes in both trees; decision/vote ids namespaced per slot.
