@@ -2201,12 +2201,142 @@
       });
   }
 
+  /* ── S5 (decision 14) — AUTO-SPLIT a legacy whole-scenario save on load ──────
+   * A facilitator's existing cloud saves are whole two-module scenarios, but the
+   * author edits SECTIONS now. Rather than keep a second shape alive in the
+   * library forever, a two-module save is split on load into the same PBL +
+   * Roleplay pair the built-ins were split into (S0), and the facilitator picks
+   * which half to open.
+   *
+   * Pure and total: it never mutates the input, and a scenario that already runs
+   * a single module (or is branched) comes back as ONE section unchanged, so the
+   * caller can always treat the result as a list.
+   *
+   * Deliberately mirrors section-registry.js's buildSection(): the workup,
+   * penalties and synthesis gate belong to the PBL half; scoring, decisions and
+   * characters are filtered by module; the roleplay content travels with the
+   * Roleplay half. Divergence between the two would mean a section authored here
+   * behaves differently from the same section derived at runtime. */
+  function scenarioRunsModule(json, mod) {
+    if (!json) return false;
+    if (Array.isArray(json.modules) && json.modules.length) {
+      return json.modules.indexOf(mod) !== -1;
+    }
+    var named = json["module" + mod + "Name"];
+    if (named && named.en) return true;
+    /* No names at all: fall back to the scoring families, same as the runtime. */
+    var fam = ((json.scoring || {})["module" + mod]) || [];
+    return fam.length > 0;
+  }
+
+  function byModule(list, mod) {
+    return (Array.isArray(list) ? list : []).filter(function (x) {
+      if (!x) return false;
+      var m = x.module;
+      if (Array.isArray(m)) return m.indexOf(mod) !== -1;
+      return m === mod;
+    });
+  }
+
+  function splitScenarioIntoSections(json) {
+    if (!json || typeof json !== "object") return [];
+    /* A branched scenario is already one section — splitting it would be
+       meaningless (its content is the node graph, not modules). */
+    if (json.format === "branched") return [json];
+
+    var runsA = scenarioRunsModule(json, "A");
+    var runsB = scenarioRunsModule(json, "B");
+    if (!(runsA && runsB)) return [json];         // already a single section
+
+    var base = {
+      summary: json.summary,
+      preTest: json.preTest,
+      postTest: json.postTest
+    };
+    var pbl = {
+      id: (json.id || "scenario") + "-pbl",
+      modules: ["A"],
+      name: json.moduleAName || json.name,
+      moduleAName: json.moduleAName || json.name,
+      summary: base.summary,
+      case: json.case,
+      characters: byModule(json.characters, "A"),
+      scoring: { moduleA: ((json.scoring || {}).moduleA) || [] },
+      penalties: json.penalties || [],
+      decisions: byModule(json.decisions, "A"),
+      synthId: json.synthId,
+      synthPrereqs: json.synthPrereqs,
+      preTest: base.preTest,
+      postTest: base.postTest
+    };
+    var roleplay = {
+      id: (json.id || "scenario") + "-roleplay",
+      modules: ["B"],
+      name: json.moduleBName || json.name,
+      moduleBName: json.moduleBName || json.name,
+      summary: base.summary,
+      characters: byModule(json.characters, "B"),
+      scoring: { moduleB: ((json.scoring || {}).moduleB) || [] },
+      decisions: byModule(json.decisions, "B"),
+      preTest: base.preTest,
+      postTest: base.postTest
+    };
+    if (json.roleplay) roleplay.roleplay = json.roleplay;
+    return [pbl, roleplay];
+  }
+
   function applyScenarioJson(json, msg) {
+    /* S5 / decision 14 — a legacy two-module save is SPLIT on load, and the
+       facilitator picks which half to edit. The author works on one section at
+       a time now, so opening a whole workshop would silently present two
+       sections' fields as if they were one. */
+    var parts = splitScenarioIntoSections(json);
+    if (parts.length > 1) { openSectionSplitPicker(parts, msg); return; }
+    applySectionJson(parts[0] || json, msg);
+  }
+  function applySectionJson(json, msg) {
     STATE = scenarioJsonToState(json);
     renderAll();
     var out = document.getElementById("validation-output");
     out.className = "validation-output success";
     out.textContent = msg;
+  }
+  /* Ask which half of a split legacy scenario to open. Same modal furniture as
+     the skeleton picker, so it reads as part of the same flow. */
+  function openSectionSplitPicker(parts, msg) {
+    var existing = document.getElementById("section-split-picker");
+    if (existing) existing.remove();
+    var modal = el("div", { id: "section-split-picker", class: "load-modal", role: "dialog" });
+    var inner = el("div", { class: "load-modal-inner" });
+    inner.appendChild(el("h3", { text: "This is a two-module scenario" }));
+    inner.appendChild(el("p", {
+      class: "field-hint",
+      text: "Sessions are built from sections now, and the author edits one at a " +
+            "time. Pick the section to open — the other half is unchanged and can " +
+            "be opened the same way afterwards."
+    }));
+    var ul = el("ul", { class: "scenario-cloud-list" });
+    parts.forEach(function (part) {
+      var isPbl = (part.modules || []).indexOf("A") !== -1;
+      var label = (isPbl ? "PBL — " : "Roleplay — ") +
+        ((part.name && (part.name.en || part.name)) || part.id);
+      var li = el("li");
+      var btn = el("button", { type: "button", class: "secondary-btn", text: label });
+      btn.addEventListener("click", function () {
+        applySectionJson(part, (msg || "Loaded.") +
+          " Opened as a single section — it has its own id (" + part.id + "), so " +
+          "saving it will not overwrite the original scenario.");
+        modal.remove();
+      });
+      li.appendChild(btn);
+      ul.appendChild(li);
+    });
+    inner.appendChild(ul);
+    var cancel = el("button", { type: "button", class: "secondary-btn", text: "Cancel" });
+    cancel.addEventListener("click", function () { modal.remove(); });
+    inner.appendChild(cancel);
+    modal.appendChild(inner);
+    document.body.appendChild(modal);
   }
 
   /* "Start from a skeleton" — pick which starter to load. Two module types are
@@ -2472,6 +2602,7 @@
       // new-id-so-it-can't-overwrite-the-original semantics.
       skeleton: skeletonJson,
       branchedSkeleton: branchedSkeletonJson,
+      splitScenario: splitScenarioIntoSections,
       pblSkeleton: pblSkeletonJson,
       roleplaySkeleton: roleplaySkeletonJson,
       cloneJson: cloneJson,

@@ -536,8 +536,25 @@ unknowingly running the built-in content in its place.
 
 12 skeleton tests + 4 validate/round-trip tests; 1170 unit green.
 
-**Still TODO in S5:** the cloud library half — sections saved as sections, and
-decision 14's auto-split of existing whole-scenario saves on load.
+**S5 auto-split ← DONE.** Decision 14: a facilitator's existing whole-scenario
+save is SPLIT on load into the same PBL + Roleplay pair the built-ins were split
+into, and they pick which half to open. No second shape survives in the library.
+- `splitScenarioIntoSections()` deliberately **mirrors section-registry.js's
+  `buildSection()`** — workup/penalties/synthesis gate to the PBL half, scoring
+  and decisions and characters filtered by module, roleplay content travelling
+  with the Roleplay half. Divergence between the two would mean a section
+  authored here behaves differently from the same section derived at runtime,
+  and that would stay invisible until a session ran.
+- Splitting is **name-first**, matching the runtime, because a pre-section save
+  has no `modules` key at all.
+- Each half gets **its own id** (`<id>-pbl` / `<id>-roleplay`), so saving cannot
+  overwrite the original — the same hazard `cloneJson()` guards.
+- Pure: a single-module or branched scenario is returned unchanged as one
+  section, and the input is never mutated.
+- Both halves inherit the legacy shared pre/post-test. Decision 3 gives each
+  section its own items, but a v1 save has only one set — duplicating it is the
+  honest conversion, and the author can delete what does not belong.
+- 11 tests; 1181 unit green.
 
 ### S5 (original plan) — Author: three skeletons, single-section authoring
 Skeleton picker offers **PBL**, **Roleplay**, **Branched Scenario**, each empty
