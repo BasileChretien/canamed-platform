@@ -2160,6 +2160,46 @@ let firstStageFire = true; // detect a late join (room already past stage 0)
 let roomStage = 0;         // the room's stage (admin-controlled)
 let viewStage = 0;         // the stage this participant is looking at (<= roomStage)
 let _lastRenderedViewStage = -1; // last stage we scrolled-to-top for (see renderStage)
+/* ── S2b-1 — per-SLOT room state, with an active-slot pointer ─────────────────
+ * A session may run two sections of the SAME TYPE (decision 1), so "the
+ * revealed items" and "the hypotheses" are no longer one map per room — they
+ * are one map per SLOT. Rather than thread a slot argument through ~115 read
+ * sites, the store holds every slot and `revealed` / `hypotheses` stay as
+ * POINTERS at the slot currently on screen. Exactly one stage is visible at a
+ * time (the same fact that made the stage DOM a per-type view in S1a), so a
+ * pointer is always unambiguous.
+ *
+ * S2b-1 is a SEAM: the listeners still bind to the LEGACY moduleA/moduleB paths,
+ * so two PBL slots read the same node and nothing changes for today's sessions.
+ * S2b-2 repoints them at rooms/$roomId/sections/$slot and the slots diverge. */
+/* Which slot the LEGACY module path feeds, while S2b-1 still binds to
+   moduleA/moduleB: the FIRST slot of that type. With two PBL sections both
+   reading the same node today, the second mirrors the first until S2b-2 gives
+   each its own path. Falls back to slot 1 so a session with no slot of that
+   type — or a read that lands before the scenario applies — still has a home
+   rather than throwing. */
+function _legacySlotFor(type) {
+  const hit = sectionSlots().find(s => s.type === type);
+  return hit ? hit.position : 1;
+}
+let sectionState = {};     // slot → { revealed: {…}, hypotheses: {…} }
+let activeSlot = 1;        // the slot whose state the pointers below refer to
+function slotState(slot) {
+  const k = String(slot);
+  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {} };
+  return sectionState[k];
+}
+/* Repoint the legacy globals at the slot on screen. Called whenever the viewed
+   stage changes or a listener writes into the store. Assigning the SAME object
+   (not a copy) matters: render code mutates `revealed` in place in a few spots,
+   and a copy would silently drop those writes. */
+function refreshActiveSlotState() {
+  const slot = slotAtStage(viewStage);
+  activeSlot = slot ? slot.position : activeSlot;
+  const st = slotState(activeSlot);
+  revealed = st.revealed;
+  hypotheses = st.hypotheses;
+}
 let revealed = {};
 let seenFindingIds = {};   // findings already shown once, so new ones can flash in
 let presence = {};
@@ -4382,7 +4422,12 @@ function enterRoom(roomName, asAdmin) {
   myRoom = roomName;
   roomStage = 0; viewStage = 0;
   firstStageFire = true;
-  revealed = {}; presence = {}; typingState = {}; seenFindingIds = {};
+  /* S2b-1 — clear the per-slot store too. Clearing only the pointer would
+     leave the previous room's reveals in sectionState, and the next room's
+     first refreshActiveSlotState() would hand them straight back. */
+  sectionState = {}; activeSlot = 1;
+  revealed = {}; hypotheses = {};
+  presence = {}; typingState = {}; seenFindingIds = {};
   myPendingReveal = null;
   answers = { moduleA: {}, moduleB: {}, moduleBranched: {} }; callForHelp = null;
   roomScore = {}; teamName = ""; celebratedEvents = {}; penalisedEvents = {};
@@ -4571,7 +4616,14 @@ function startRoom() {
   refModBPhase = db.ref(base + "/moduleB/phase");
   refModBPhase.on("value", snap => {
     const v = snap.val();
-    modBPhase = (typeof v === "number" && v >= 0 && v <= 5) ? Math.floor(v) : 0;
+    /* S1c-3b — clamp to THIS roleplay's phase count, not the built-in six. A
+       literal `<= 5` silently reset an authored 8-phase roleplay to phase 0 the
+       moment the room advanced past its sixth beat: third instance of the same
+       class as the two rules enums, and the only one on a READ path — so it
+       would have looked like the room jumping back rather than a write being
+       refused. */
+    const _maxPhase = (modBProgressCfg().phases || []).length - 1;
+    modBPhase = (typeof v === "number" && v >= 0 && v <= _maxPhase) ? Math.floor(v) : 0;
     if (typeof renderModBPhase === "function") renderModBPhase();
   });
 
@@ -4590,7 +4642,11 @@ function startRoom() {
     renderStage();
   });
   refRevealed.on("value", snap => {
-    revealed = snap.val() || {};
+    /* S2b-1 — land it in the SLOT's store, then repoint. Writing straight to
+       `revealed` would make the last listener to fire win once two PBL slots
+       exist. */
+    slotState(_legacySlotFor("pbl")).revealed = snap.val() || {};
+    refreshActiveSlotState();
     renderCase();
     // The Investigations unlock gate now depends on revealed items
     // (red-flag screen: history:1 + history:2 + exam:3). Re-render
@@ -4598,7 +4654,8 @@ function startRoom() {
     if (typeof renderHypotheses === "function") renderHypotheses();
   });
   refHypotheses.on("value", snap => {
-    hypotheses = snap.val() || {};
+    slotState(_legacySlotFor("pbl")).hypotheses = snap.val() || {};
+    refreshActiveSlotState();
     if (typeof renderHypotheses === "function") renderHypotheses();
     if (typeof renderButtons === "function") renderButtons();
     // ≥1 hypothesis is the phase gate (2026-06-02; lowered to 1 on 2026-06-25):
@@ -8568,6 +8625,10 @@ function renderStage() {
      node. Identical today (slot k sits at stage k); once slots are positional
      a roleplay picked first shows the roleplay view on stage 1. Every other
      view is hidden, including ones no slot uses. */
+  /* S2b-1 — the pointer follows the stage: walking Back into an earlier PBL
+     section must show THAT section's reveals, not the one most recently
+     written. */
+  if (typeof refreshActiveSlotState === "function") refreshActiveSlotState();
   const activeView = stageViewId(viewStage);
   allStageViewIds().forEach(id => {
     const s = el(id);

@@ -355,9 +355,29 @@ session.
   stage-advance test can flake on a 15 s timeout under load — re-run before
   believing it.
 
-**S2b — move the client onto them (TODO).** Read/write paths, decision and vote
-id namespacing per slot (two PBL sections must not collide on `votes/$voteId`),
-then retire the module-literal nodes in S6.
+**S2b-1 — per-slot client state, still on the legacy paths ← DONE (v118→v119).**
+Room state is now one map PER SLOT (`sectionState`), with `revealed` and
+`hypotheses` kept as POINTERS at the slot on screen. That avoids threading a
+slot argument through ~115 read sites, and it is unambiguous for the same
+reason the stage DOM could stay a per-type view: exactly one stage is visible
+at a time.
+- `refreshActiveSlotState()` runs at the TOP of `renderStage()`, so walking Back
+  into an earlier section shows THAT section's reveals rather than whichever
+  slot last received a snapshot.
+- The pointer ALIASES the stored object; it must never copy. Some render code
+  mutates `revealed` in place, and a clone would silently drop those writes —
+  test-pinned.
+- Teardown clears the whole store, not just the pointer; otherwise the next
+  room's first refresh hands back the previous room's reveals.
+- Still a SEAM: listeners bind to the legacy `moduleA`/`moduleB` paths via
+  `_legacySlotFor(type)`, so today's sessions are byte-identical and a second
+  PBL slot simply mirrors the first.
+- 1105 unit / 607 chromium+mobile E2E / 31 emulator green, exit 0.
+
+**S2b-2 — repoint the paths (TODO).** Bind per slot to
+`rooms/$roomId/sections/$slot`, namespace decision and vote ids per slot (two
+PBL sections must not collide on `votes/$voteId`), then retire the
+module-literal nodes in S6.
 
 ### S3 — The section picker at session-create
 The Scenario `<select>` is replaced by an add/reorder list. The session stores

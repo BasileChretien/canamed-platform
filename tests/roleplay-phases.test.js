@@ -99,3 +99,17 @@ test("the phase consumers all resolve the config per section", () => {
   assert.match(SCRIPT, /Math\.min\(modBProgressCfg\(\)\.phases\.length - 1, idx \| 0\)/,
     "clamping to a literal six would strand the last phase of a longer list");
 });
+
+test("the phase READ clamps to this roleplay's length, not the built-in six", () => {
+  /* Third instance of the same class as the two rules enums fixed in S1c —
+     and the only one on a READ path, so it would have presented as the room
+     jumping back to phase 0 rather than as a write being refused. A literal
+     `<= 5` silently reset an authored 8-phase roleplay the moment the room
+     advanced past its sixth beat. */
+  const i = SCRIPT.indexOf("refModBPhase.on(");
+  assert.ok(i > -1, "the phase listener must exist");
+  const fn = SCRIPT.slice(i, i + 900);
+  assert.ok(!/v <= 5\b/.test(fn), "the built-in six must not be hardcoded on read");
+  assert.match(fn, /modBProgressCfg\(\)\.phases \|\| \[\]\)\.length - 1/,
+    "the clamp must come from the roleplay's own phase list");
+});
