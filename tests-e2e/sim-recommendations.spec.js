@@ -124,7 +124,10 @@ test.describe("Session archive export (CSV / JSON)", () => {
       if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
       if (window._test_setRoomCount)  window._test_setRoomCount(1);
       if (window._test_setAllRooms)   window._test_setAllRooms({
-        "Room 1": { stage: 3, answers: { moduleA: { x: { by: "A", text: "first" } } } }
+        /* S4 — room state lives per SLOT now (answers/sections/$slot), so the
+           fixture writes where the app writes. Feeding the retired moduleA node
+           would export empties and this spec would pass on nothing. */
+        "Room 1": { stage: 3, answers: { sections: { 1: { x: { by: "A", text: "first" } } } } }
       });
       const realCO = URL.createObjectURL.bind(URL);
       const realRO = URL.revokeObjectURL.bind(URL);
@@ -154,7 +157,10 @@ test.describe("Session archive export (CSV / JSON)", () => {
     expect(obj.session).toBe("TEST-CODE");
     expect(Array.isArray(obj.rooms)).toBe(true);
     expect(obj.rooms[0].room).toBe("Room 1");
-    expect(obj.rooms[0].answers.moduleA[0].text).toBe("first");
+    /* v2: per-slot, with the section manifest alongside. */
+    expect(obj.exportVersion).toBe(2);
+    expect(Array.isArray(obj.sections)).toBe(true);
+    expect(obj.rooms[0].sections["1"].answers[0].text).toBe("first");
   });
 
   test("downloadSessionArchive('csv') emits a CSV with headers + a row", async ({ page }) => {
@@ -164,9 +170,13 @@ test.describe("Session archive export (CSV / JSON)", () => {
     // convention as branched-format.spec.js awaiting ensureBranchedStyles).
     await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
     const text = await captureArchive(page, "csv");
-    expect(text).toMatch(/room,stageReached,score,section,author,university,bulletKey,text/);
+    expect(text).toMatch(
+      /room,stageReached,score,slot,sectionId,sectionType,kind,author,university,bulletKey,text/);
     expect(text).toMatch(/Room 1/);
-    expect(text).toMatch(/moduleA/);
+    /* Every row is tagged with the SLOT it came from — "the PBL answers" is
+       meaningless once a session can run two PBL sections. */
+    expect(text).toMatch(/,1,/);
+    expect(text).toMatch(/answer/);
     expect(text).toMatch(/first/);
   });
 
@@ -180,7 +190,7 @@ test.describe("Session archive export (CSV / JSON)", () => {
       if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
       if (window._test_setRoomCount)  window._test_setRoomCount(1);
       if (window._test_setAllRooms)   window._test_setAllRooms({
-        "Room 1": { stage: 3, answers: { moduleA: { x: { by: "A", text: "=1+2" } } } }
+        "Room 1": { stage: 3, answers: { sections: { 1: { x: { by: "A", text: "=1+2" } } } } }
       });
       const realCO = URL.createObjectURL.bind(URL);
       const realRO = URL.revokeObjectURL.bind(URL);

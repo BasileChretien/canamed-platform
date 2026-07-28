@@ -7860,13 +7860,37 @@ function _archiveCsvCell(v) {
   if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
+/* ── S4 — the research export, v2 ─────────────────────────────────────────────
+ * A session is opening + N picked sections + wrap-up, so an export keyed by
+ * `moduleA` / `moduleB` can no longer describe one: two sections of the SAME
+ * type collide on the key, and the room's state has lived at
+ * rooms/$roomId/sections/$slot since S2b-2 — the v1 reader was pointing at
+ * nodes nothing writes any more, so it had silently started exporting empties.
+ *
+ * v2 is a CLEAN BREAK (decision 6), plus a converter for archived v1 files
+ * (scripts/convert-archive-v2.js) so the whole dataset ends up one shape.
+ *
+ * Every row carries its SLOT and the section that ran there, which is what
+ * makes a mixed session analysable at all: "the PBL answers" means nothing when
+ * a session ran two different PBL sections. */
+const ARCHIVE_EXPORT_VERSION = 2;
+
+function _archiveSectionManifest() {
+  return sectionSlots().map(sl => {
+    const sec = (typeof window !== "undefined" &&
+                 (window.CANAMED_SECTIONS || {})[sl.sectionId]) || null;
+    const title = (sec && sec.name && (sec.name.en || sec.name)) ||
+                  (sl.module ? moduleNameEn(sl.module) : "") || "";
+    return { slot: sl.position, sectionId: sl.sectionId || null,
+             type: sl.type || null, title: String(title) };
+  });
+}
 function _sessionArchiveData(anon) {
+  const manifest = _archiveSectionManifest();
   const rooms = [];
   roomNames(roomCount).forEach(r => {
     const data = allRooms[r] || {};
     const st = typeof data.stage === "number" ? data.stage : 0;
-    const ans = data.answers || {};
-    const hyps = (data.moduleA && data.moduleA.hypotheses) || {};
     const aliasMap = {};
     let aliasN = 0;
     const labelFor = nm => {
@@ -7880,39 +7904,66 @@ function _sessionArchiveData(anon) {
       }
       return aliasMap[nm];
     };
-    const mapEntries = mk => entriesSorted(ans[mk]).map(e => ({
+    const mapEntries = obj => entriesSorted(obj).map(e => ({
       by: labelFor(e.by), university: e.university || "",
       bulletKey: e.bulletKey || "", text: e.text || ""
     }));
-    const hypList = Object.keys(hyps).map(k => hyps[k]).filter(Boolean)
+    const mapHyps = obj => Object.keys(obj || {}).map(k => obj[k]).filter(Boolean)
       .sort((a, b) => (a.at || 0) - (b.at || 0))
       .map(h => ({ by: labelFor(h.by), university: h.university || "", text: h.text || "" }));
+
+    /* Driven by the MANIFEST, not by whichever keys happen to exist: a slot
+       that ran and produced nothing must still appear, or its silence is
+       indistinguishable from it never having run. */
+    const perSlot = {};
+    const roomSections = data.sections || {};
+    const roomAnswers = (data.answers && data.answers.sections) || {};
+    manifest.forEach(m => {
+      const k = String(m.slot);
+      perSlot[k] = {
+        hypotheses: mapHyps((roomSections[k] || {}).hypotheses),
+        answers: mapEntries(roomAnswers[k])
+      };
+    });
     rooms.push({
       room: r,
       stageReached: stageLabelEn(st),
       score: (typeof scoreTotal === "function") ? scoreTotal(data) : null,
-      hypotheses: hypList,
-      answers: { moduleA: mapEntries("moduleA"), moduleB: mapEntries("moduleB") }
+      sections: perSlot
     });
   });
   return {
     session: sessionNum,
+    exportVersion: ARCHIVE_EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
     pseudonymised: !!anon,
+    sections: manifest,
     rooms: rooms
   };
 }
 function _sessionArchiveToCSV(archive) {
-  const headers = ["room", "stageReached", "score", "section", "author", "university", "bulletKey", "text"];
+  const headers = ["room", "stageReached", "score", "slot", "sectionId", "sectionType",
+                   "kind", "author", "university", "bulletKey", "text"];
+  const bySlot = {};
+  (archive.sections || []).forEach(m => { bySlot[String(m.slot)] = m; });
   const rows = [];
   (archive.rooms || []).forEach(rm => {
     const base = [rm.room, rm.stageReached, rm.score == null ? "" : rm.score];
-    rm.hypotheses.forEach(h => rows.push(base.concat(["hypothesis", h.by, h.university, "", h.text])));
-    rm.answers.moduleA.forEach(e => rows.push(base.concat(["moduleA", e.by, e.university, e.bulletKey, e.text])));
-    rm.answers.moduleB.forEach(e => rows.push(base.concat(["moduleB", e.by, e.university, e.bulletKey, e.text])));
-    if (!rm.hypotheses.length && !rm.answers.moduleA.length && !rm.answers.moduleB.length) {
-      rows.push(base.concat(["(empty)", "", "", "", ""]));
-    }
+    let any = false;
+    Object.keys(rm.sections || {}).forEach(slot => {
+      const m = bySlot[slot] || {};
+      const sBase = base.concat([slot, m.sectionId || "", m.type || ""]);
+      const bucket = rm.sections[slot] || {};
+      (bucket.hypotheses || []).forEach(h => {
+        any = true;
+        rows.push(sBase.concat(["hypothesis", h.by, h.university, "", h.text]));
+      });
+      (bucket.answers || []).forEach(e => {
+        any = true;
+        rows.push(sBase.concat(["answer", e.by, e.university, e.bulletKey, e.text]));
+      });
+    });
+    if (!any) rows.push(base.concat(["", "", "", "(empty)", "", "", "", ""]));
   });
   const head = headers.join(",");
   const body = rows.map(row => row.map(_archiveCsvCell).join(",")).join("\r\n");

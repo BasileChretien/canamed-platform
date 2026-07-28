@@ -476,7 +476,32 @@ The Scenario `<select>` is replaced by an add/reorder list. The session stores
 an ordered, write-once `sections` list. Pre/post-tests concatenate in slot
 order; stage 0 renders one blurb + objectives block per section.
 
-### S4 — Export v2 + converter
+### S4 — Export v2 + converter ← DONE (shell v123→v124)
+
+**This phase fixed a LIVE BREAK, not just a format.** Since S2b-2 the room's
+state lives at `rooms/$roomId/sections/$slot`, but the export still read
+`answers.moduleA` and `moduleA.hypotheses` — nodes nothing writes any more — so
+it had begun silently emitting **empties** for every new session. For a research
+artefact that is the worst failure mode available: it looks exactly like a
+session where nobody said anything.
+- v2 carries a **section manifest** (`slot`, `sectionId`, `type`, `title`) and
+  per-slot buckets; every CSV row is tagged with its slot and section, because
+  "the PBL answers" is meaningless once a session can run two PBL sections.
+- Iteration is driven by the MANIFEST, not by whichever keys exist — a slot that
+  ran and produced nothing must stay distinguishable from one that never ran.
+- `scripts/convert-archive-v2.js` converts archived v1 files: `moduleA` → slot 1
+  (pbl), `moduleB` → slot 2 (roleplay), hypotheses → slot 1. It is pure,
+  idempotent, throws on malformed input, and **does not re-pseudonymise** —
+  already-aliased names must not be re-aliased into different ones.
+- **`sectionId` is emitted as `null`, never guessed.** A v1 archive never
+  recorded which clinical case ran, and the null says "pre-section session, case
+  unknown" — which is what an analysis needs to know. A single-module v1 session
+  gains no phantom empty second section.
+- 11 new unit tests; the three export E2E specs moved to the v2 shape with the
+  **spreadsheet-formula-injection guard untouched** (only the fixture's write
+  path changed). 1154 unit + 626 chromium/mobile/perf green.
+
+### S4 (original plan) — Export v2 + converter
 Per-slot `sections` manifest and per-slot columns; a one-off script re-emits
 archived sessions in the v2 shape.
 
