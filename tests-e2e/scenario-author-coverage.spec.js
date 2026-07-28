@@ -166,11 +166,14 @@ test.describe("Scenario author — Phase 5b start-from shortcuts", () => {
 
     await page.goto("/scenario-author.html");
     await expect(page.locator("#btn-skeleton")).toBeVisible();
-    // "Start from skeleton" now opens a picker of starter types.
+    /* "Start from skeleton" opens a picker of the three SECTION types
+       (S5): PBL, Roleplay, Branched Scenario. "Standard - Module A + B" is
+       gone, because a skeleton is one SECTION now, not a two-module
+       workshop. */
     await page.locator("#btn-skeleton").click();
     const picker = page.locator("#skeleton-picker");
     await expect(picker).toBeVisible();
-    await picker.getByRole("button", { name: /Standard/ }).click();
+    await picker.getByRole("button", { name: /^PBL$/ }).click();
     await expect(picker).toHaveCount(0);
 
     // The form is populated from the standard skeleton.
@@ -281,7 +284,7 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
     await page.locator("#btn-skeleton").click();
     const picker = page.locator("#skeleton-picker");
     await expect(picker).toBeVisible();
-    await picker.getByRole("button", { name: /Standard/ }).click();
+    await picker.getByRole("button", { name: /^PBL$/ }).click();
     await expect(picker).toHaveCount(0);
 
     // A and B are ticked (the skeleton names both) and imply themselves, so no
@@ -332,7 +335,7 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
 
     await page.goto("/scenario-author.html");
     await page.locator("#btn-skeleton").click();
-    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /^PBL$/ }).click();
 
     await page.locator("#mod-branched").check();
     const preview = page.locator("#json-preview");
@@ -370,7 +373,7 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
 
     await page.goto("/scenario-author.html");
     await page.locator("#btn-skeleton").click();
-    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /^PBL$/ }).click();
 
     // The skeleton's only decision is Module A, so dropping B stays valid.
     await page.locator("#mod-B").uncheck();
@@ -502,7 +505,7 @@ test.describe("Scenario author — no horizontal overflow on narrow viewports", 
 
     await page.goto("/scenario-author.html");
     await page.locator("#btn-skeleton").click();
-    await page.locator("#skeleton-picker").getByRole("button", { name: /Standard/ }).click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /^PBL$/ }).click();
     await expect
       .poll(async () =>
         (await page.locator("#json-preview").inputValue()).includes('"new-scenario"'))

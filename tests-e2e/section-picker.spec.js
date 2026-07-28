@@ -31,17 +31,7 @@ const ids = (page) =>
 
 async function add(page, id) {
   await page.selectOption("#splash-section-add", id);
-  await tap(page, "#splash-section-add-btn");
-}
-
-/* The splash card overflows a phone viewport (PRE-EXISTING: measured 528px wide
-   against a 412px Pixel 7, with zero sections added), and that overflow zooms
-   the page out so synthetic pointer events land a few pixels off — the same
-   failure mode as PR #172. Fire the control's own click so the picker's
-   BEHAVIOUR keeps per-device coverage while that layout bug is fixed
-   separately. Visibility is asserted where it matters. */
-async function tap(page, selector) {
-  await page.locator(selector).first().evaluate((e) => e.click());
+  await page.locator("#splash-section-add-btn").click();
 }
 
 test.describe("S3b — the section picker", () => {
@@ -89,7 +79,7 @@ test.describe("S3b — the section picker", () => {
     await add(page, "chronic-pain-pbl");
     await add(page, "sore-throat-roleplay");
     await page.locator(".splash-section-row").nth(1)
-      .locator(".splash-section-up").evaluate((e) => e.click());
+      .locator(".splash-section-up").click();
     expect(await ids(page)).toEqual(["sore-throat-roleplay", "chronic-pain-pbl"]);
     // …and the numbering follows the new order.
     await expect(page.locator(".splash-section-row").first())
@@ -110,7 +100,7 @@ test.describe("S3b — the section picker", () => {
     await add(page, "chronic-pain-pbl");
     await add(page, "jaundice-pbl");
     await page.locator(".splash-section-row").first()
-      .locator(".splash-section-remove").evaluate((e) => e.click());
+      .locator(".splash-section-remove").click();
     expect(await ids(page)).toEqual(["jaundice-pbl"]);
   });
 

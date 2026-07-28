@@ -1200,6 +1200,26 @@
     var errs = [];
     var json = toScenarioJson();
 
+    /* S5 — does this section run a PBL module? Everything workup-shaped (the
+       case rows, the prompts, the penalties) is meaningless without one, and a
+       Roleplay section must not be blocked from saving because the shared form
+       carries blank starter rows for a board it does not have.
+
+       Precedence MIRRORS the runtime's scenarioModuleSet(): explicit `modules`
+       → module NAMES → scoring family. Keying off `modules` alone would be
+       wrong, because the author deliberately omits that key when it carries no
+       information beyond the names. */
+    var _runsPbl;
+    if (Array.isArray(json.modules) && json.modules.length) {
+      _runsPbl = json.modules.indexOf("A") !== -1;
+    } else if ((json.moduleAName && json.moduleAName.en) ||
+               (json.moduleBName && json.moduleBName.en)) {
+      _runsPbl = !!(json.moduleAName && json.moduleAName.en);
+    } else {
+      _runsPbl = !!((json.scoring || {}).moduleA || []).length ||
+                 !((json.scoring || {}).moduleB || []).length;
+    }
+
     // scenario meta
     if (!json.id) errs.push("Scenario id is required.");
     else if (!/^[a-z0-9][a-z0-9-]*$/.test(json.id))
@@ -1253,22 +1273,27 @@
       }
     }
 
-    // history / exam / labs / prompts non-empty
-    if (json.case.history.length === 0) errs.push("CASE.history must have at least one item.");
-    if (json.case.exam.length === 0)    errs.push("CASE.exam must have at least one item.");
-    if (json.case.labs.length === 0)    errs.push("CASE.labs must have at least one item.");
-    if (json.case.prompts.length === 0) errs.push("CASE.prompts must have at least one item.");
+    /* The whole workup block is PBL-only: a Roleplay section has no history /
+       examination / investigations, and the shared form's blank starter rows
+       must not block it from saving. */
+    if (_runsPbl) {
+      // history / exam / labs / prompts non-empty
+      if (json.case.history.length === 0) errs.push("CASE.history must have at least one item.");
+      if (json.case.exam.length === 0)    errs.push("CASE.exam must have at least one item.");
+      if (json.case.labs.length === 0)    errs.push("CASE.labs must have at least one item.");
+      if (json.case.prompts.length === 0) errs.push("CASE.prompts must have at least one item.");
 
-    // each q/a must have English
-    ["history", "exam", "labs"].forEach(function (g) {
-      json.case[g].forEach(function (r, i) {
-        if (!r.q || !r.q.en) errs.push(g + ":" + i + " — question (English) is required.");
-        if (!r.a || !r.a.en) errs.push(g + ":" + i + " — answer (English) is required.");
+      // each q/a must have English
+      ["history", "exam", "labs"].forEach(function (g) {
+        json.case[g].forEach(function (r, i) {
+          if (!r.q || !r.q.en) errs.push(g + ":" + i + " — question (English) is required.");
+          if (!r.a || !r.a.en) errs.push(g + ":" + i + " — answer (English) is required.");
+        });
       });
-    });
-    json.case.prompts.forEach(function (p, i) {
-      if (!p || !p.en) errs.push("prompts:" + i + " — English text is required.");
-    });
+      json.case.prompts.forEach(function (p, i) {
+        if (!p || !p.en) errs.push("prompts:" + i + " — English text is required.");
+      });
+    }
 
     // exactly one labs row with key
     var keyRows = STATE.labs.filter(function (r) { return r.key; });
@@ -1314,7 +1339,9 @@
     }
     checkUnique(json.scoring.moduleA, "scoring.moduleA");
     checkUnique(json.scoring.moduleB, "scoring.moduleB");
-    checkUnique(json.penalties, "penalties");
+    /* Same reasoning as the penalties loop below: a non-PBL section carries no
+       penalties, so the shared form's blank starter row is not a missing id. */
+    checkUnique(_runsPbl ? json.penalties : [], "penalties");
     checkUnique(json.decisions, "decisions");
 
     // scoring rows: either cohorts or any must be present
@@ -1359,7 +1386,10 @@
     });
 
     // penalties: item must resolve
-    json.penalties.forEach(function (p, i) {
+    /* A penalty's `item` is a workup id (history:N / exam:N / labs:N), so
+       penalties are inherently PBL-scoped: a roleplay section carries none, and
+       the shared form's blank starter row must not be reported as an error. */
+    (_runsPbl ? json.penalties : []).forEach(function (p, i) {
       if (!p.item) { errs.push("penalties[" + i + "] (id='" + p.id + "') missing item."); return; }
       var m = /^(history|exam|labs):(\d+)$/.exec(p.item);
       if (!m) {
@@ -1843,6 +1873,171 @@
     };
   }
 
+  /* ── S5 — the three SKELETON TYPES (user request, 2026-07-27) ────────────────
+   * "They must be called something like PBL, Roleplay, Branched Scenario and be
+   * empty but ready to fill." Each is a minimal, already-VALID section of that
+   * type: every field the type supports is present with placeholder text, so a
+   * facilitator can see the whole surface and overwrite it rather than guess
+   * what a section may contain.
+   *
+   * Skeleton TYPES stay code-owned — a facilitator authors instances; only the
+   * platform owner adds a type. Same split as the observation-framework library. */
+
+  function pblSkeletonJson() {
+    return {
+      id: "new-pbl-section",
+      modules: ["A"],
+      name: trio("New PBL section"),
+      summary: trio("One or two lines: who the patient is and what the team must work out."),
+      moduleAName: trio("New PBL section"),
+      /* The LLM patient. The persona prompt is the field the user asked for by
+         name — it is what the model plays, so it carries the character's
+         knowledge, stance and refusals. */
+      characters: [
+        { id: "patient", role: "patient", module: ["A"], present: "start",
+          name: trio("Patient name"),
+          blurb: trio("Age, occupation, one line of context."),
+          persona: trio(
+            "You are <NAME>, a <AGE>-year-old <OCCUPATION> speaking to a doctor. " +
+            "You are a real person in this conversation - NOT an AI. Never break character.\n\n" +
+            "WHY YOU ARE HERE: replace with the presenting complaint, in the patient's own words.\n\n" +
+            "WHAT YOU KNOW: what the patient can volunteer if asked directly.\n\n" +
+            "WHAT YOU WANT: the request or worry driving the consultation.\n\n" +
+            "HOW YOU SPEAK: short, everyday sentences. No medical jargon. If the " +
+            "doctor asks something you would not know, say so.") }
+      ],
+      case: {
+        history: [
+          { q: trio("What brings you in today?"),
+            a: trio("Replace with what the patient answers."),
+            group: trio("Presenting complaint") }
+        ],
+        exam: [
+          { q: trio("What are the vital signs?"),
+            a: trio("Replace with the examination finding."),
+            group: trio("General") }
+        ],
+        labs: [
+          { q: trio("Which first-line test do you order?"), key: true,
+            a: trio("Replace with the result that clinches the diagnosis.") }
+        ],
+        prompts: [
+          trio("What is your leading hypothesis, and what would change your mind?")
+        ]
+      },
+      synthId: "labs:0",
+      synthPrereqs: ["history:0", "exam:0"],
+      scoring: {
+        moduleA: [
+          { id: "a-history", points: 2, label: trio("Took a focused history"),
+            any: ["history", "onset"] }
+        ]
+      },
+      penalties: [
+        { id: "p-premature", item: "labs:0", points: -2,
+          title: trio("Ordered the key test before examining the patient"),
+          why: trio("Explain briefly why this ordering is harmful or wasteful.") }
+      ],
+      decisions: [
+        { id: "dec_plan", module: "A", title: trio("Agree the plan"),
+          prompt: trio("What will you do next, and why?"),
+          options: [
+            { text: trio("The defensible option"), correct: true,
+              why: trio("Why this is the right call.") },
+            { text: trio("The tempting wrong option"),
+              why: trio("Why this is worse than it looks.") }
+          ] }
+      ],
+      preTest: [
+        { id: "q1", q: trio("A knowledge question the team should answer BEFORE the section."),
+          options: [
+            { text: trio("The correct answer"), correct: true },
+            { text: trio("A plausible distractor") }
+          ],
+          explanation: trio("Why the correct answer is correct.") }
+      ],
+      postTest: [
+        { id: "q1", q: trio("The same knowledge, asked AFTER - or one step deeper."),
+          options: [
+            { text: trio("The correct answer"), correct: true },
+            { text: trio("A plausible distractor") }
+          ],
+          explanation: trio("Why the correct answer is correct.") }
+      ]
+    };
+  }
+
+  function roleplaySkeletonJson() {
+    return {
+      id: "new-roleplay-section",
+      modules: ["B"],
+      name: trio("New roleplay section"),
+      summary: trio("One or two lines: the scene, and what makes it hard."),
+      moduleBName: trio("New roleplay section"),
+      /* Everything under `roleplay` became authorable in S1c. A skeleton that
+         omitted any of it would leave the facilitator unknowingly running the
+         built-in breaking-bad-news content in its place. */
+      roleplay: {
+        title: "New roleplay section",
+        vignette: [
+          "The situation, read once together - who is in the room and why.",
+          "The complication that makes the conversation difficult."
+        ],
+        roles: [
+          { id: "physician", name: "Physician",
+            brief: "Your private brief - what you know, and what you must try to do." },
+          { id: "patient", name: "Patient",
+            brief: "Your private brief - what you want, and what you are afraid of." },
+          { id: "observer", name: "Observer",
+            brief: "Watch against the checklist; note one thing that worked and one hard moment." }
+        ],
+        framework: "spikes",
+        phases: [
+          { id: "setup", label: "Set up", minutes: 5, shows: ["rolePicker"] },
+          { id: "play", label: "Play the scene", minutes: 12, shows: [] },
+          { id: "reflect", label: "Reflect", minutes: 6, shows: ["reflectAnswers"], expanded: true }
+        ],
+        panels: {
+          useful: { label: "Useful sentences",
+                    bullets: ["A phrase that opens the conversation.",
+                              "A phrase for when the other person goes quiet."] }
+        }
+      },
+      scoring: {
+        moduleB: [
+          { id: "b-empathy", points: 2, label: trio("Acknowledged the other person's emotion"),
+            any: ["sorry", "difficult"] }
+        ]
+      },
+      decisions: [
+        { id: "dec_approach", module: "B", title: trio("Agree your approach"),
+          prompt: trio("How will you open, and what will you avoid?"),
+          options: [
+            { text: trio("The defensible option"), correct: true,
+              why: trio("Why this works.") },
+            { text: trio("The tempting wrong option"),
+              why: trio("Why this backfires.") }
+          ] }
+      ],
+      preTest: [
+        { id: "q1", q: trio("A communication question the team should answer BEFORE the roleplay."),
+          options: [
+            { text: trio("The correct answer"), correct: true },
+            { text: trio("A plausible distractor") }
+          ],
+          explanation: trio("Why the correct answer is correct.") }
+      ],
+      postTest: [
+        { id: "q1", q: trio("The same skill, asked AFTER the roleplay."),
+          options: [
+            { text: trio("The correct answer"), correct: true },
+            { text: trio("A plausible distractor") }
+          ],
+          explanation: trio("Why the correct answer is correct.") }
+      ]
+    };
+  }
+
   function skeletonJson() {
     return {
       id: "new-scenario",
@@ -2048,14 +2243,26 @@
       li.appendChild(el("p", { class: "field-hint", text: hint }));
       ul.appendChild(li);
     }
-    choice("Standard — Module A + B",
-      "A clinical-reasoning + breaking-bad-news case across two module stages.",
-      skeletonJson,
-      "Loaded the Module A/B starter skeleton. It already validates — replace the " +
-      "placeholder text, give it your own id, then save.");
-    choice("Branched — decision tree",
+    /* S5 — the three SECTION types. A session is assembled from sections now, so
+       a skeleton is ONE section rather than a whole two-module workshop. */
+    choice("PBL",
+      "A clinical case the team works up: history / examination / investigations, " +
+      "a scoring key, and the prompt that drives the LLM patient.",
+      pblSkeletonJson,
+      "Loaded the PBL section skeleton. Every field the type supports is present " +
+      "with placeholder text — including the patient PERSONA PROMPT under " +
+      "Characters. Replace the text, give it your own id, then save.");
+    choice("Roleplay",
+      "A played scene: a cast with private briefs, an observation framework, a " +
+      "phase timetable and optional reference panels.",
+      roleplaySkeletonJson,
+      "Loaded the Roleplay section skeleton. Replace the cast, briefs, vignette " +
+      "and phases — anything you leave out simply does not appear.");
+    choice("Branched Scenario",
       "An épuré, one-decision-at-a-time case: each choice unlocks the next.",
       branchedSkeletonJson,
+      pblSkeletonJson,
+      roleplaySkeletonJson,
       "Loaded the branched starter skeleton. The branch editor is now showing — " +
       "replace the placeholder nodes, give it your own id, then save.");
     inner.appendChild(ul);
@@ -2265,6 +2472,8 @@
       // new-id-so-it-can't-overwrite-the-original semantics.
       skeleton: skeletonJson,
       branchedSkeleton: branchedSkeletonJson,
+      pblSkeleton: pblSkeletonJson,
+      roleplaySkeleton: roleplaySkeletonJson,
       cloneJson: cloneJson,
       loadBuiltins: loadBuiltins,
       // M5 — module set + the referenced branched case.

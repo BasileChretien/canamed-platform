@@ -2572,7 +2572,12 @@ body.locked > footer { display: none !important; }
 }
 @media (max-width: 900px) {
   #splash {
-    grid-template-columns: 1fr;
+    /* minmax(0,1fr), NOT 1fr: bare `1fr` is `minmax(auto,1fr)`, so the track's
+       floor is the card's min-content — set by the create form's <select>s,
+       whose min-content is their longest <option>. That floored the page at
+       528px on a 412px phone; the browser then zooms out to fit and taps land
+       off-target (the PR #172 failure). Guarded by splash-overflow.spec.js. */
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "masthead"
       "card"

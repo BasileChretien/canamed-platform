@@ -505,7 +505,41 @@ session where nobody said anything.
 Per-slot `sections` manifest and per-slot columns; a one-off script re-emits
 archived sessions in the v2 shape.
 
-### S5 — Author: three skeletons, single-section authoring
+### S5 — Author: three skeletons ← DONE (skeletons half)
+
+**The second half of the user's request, delivered.** "Start from skeleton" now
+offers exactly the three types they named — **PBL**, **Roleplay**, **Branched
+Scenario** — each a minimal, already-VALID section of that type with every
+supported field present as placeholder text. "Empty but ready to fill" is the
+load-bearing part: a skeleton that omits a field leaves the facilitator
+unknowingly running the built-in content in its place.
+- The **PBL skeleton carries the patient PERSONA PROMPT** — the field asked for
+  by name — as a real template with the sections that keep an LLM in character
+  (`Never break character`, `WHY YOU ARE HERE`, `WHAT YOU KNOW`, `HOW YOU
+  SPEAK`), plus workup items, an answer key, a penalty, a vote card, and its own
+  pre/post-tests.
+- The **Roleplay skeleton fills everything S1c made authorable**: title,
+  vignette, a three-role cast with private briefs, an observation framework, a
+  phase timetable and a reference panel.
+
+**Two real authoring bugs this surfaced, both fixed:**
+1. `validate()` demanded a clinical workup from EVERY section, so the Roleplay
+   skeleton could not be saved at all. The workup checks (case rows, prompts,
+   penalties, penalty-id uniqueness) are now scoped to sections that actually
+   run a PBL module — and the PBL-ness test **mirrors the runtime's
+   name-first precedence**, because the author deliberately omits a `modules`
+   key that carries no information beyond the names (M5). Keying off `modules`
+   alone would have decided "PBL" for a roleplay.
+2. My first cut used `label`/`reveal` for decision options; the validator wants
+   `text`/`why`. Caught only because the skeletons are asserted to validate
+   clean — which is exactly what that test is for.
+
+12 skeleton tests + 4 validate/round-trip tests; 1170 unit green.
+
+**Still TODO in S5:** the cloud library half — sections saved as sections, and
+decision 14's auto-split of existing whole-scenario saves on load.
+
+### S5 (original plan) — Author: three skeletons, single-section authoring
 Skeleton picker offers **PBL**, **Roleplay**, **Branched Scenario**, each empty
 but complete. A PBL skeleton must expose: the **LLM patient persona prompt** +
 case vignette, history/exam/investigation items with scoring + penalties, group
