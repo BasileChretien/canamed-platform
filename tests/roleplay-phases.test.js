@@ -106,7 +106,7 @@ test("the phase READ clamps to this roleplay's length, not the built-in six", ()
      jumping back to phase 0 rather than as a write being refused. A literal
      `<= 5` silently reset an authored 8-phase roleplay the moment the room
      advanced past its sixth beat. */
-  const i = SCRIPT.indexOf("refModBPhase.on(");
+  const i = SCRIPT.indexOf("R.phase.on(");
   assert.ok(i > -1, "the phase listener must exist");
   const fn = SCRIPT.slice(i, i + 900);
   assert.ok(!/v <= 5\b/.test(fn), "the built-in six must not be hardcoded on read");

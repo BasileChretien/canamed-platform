@@ -374,10 +374,31 @@ at a time.
   PBL slot simply mirrors the first.
 - 1105 unit / 607 chromium+mobile E2E / 31 emulator green, exit 0.
 
-**S2b-2 — repoint the paths (TODO).** Bind per slot to
-`rooms/$roomId/sections/$slot`, namespace decision and vote ids per slot (two
-PBL sections must not collide on `votes/$voteId`), then retire the
-module-literal nodes in S6.
+**S2b-2 — the listeners move to the per-slot paths ← DONE (v119→v120).**
+`bindSectionRefs(base)` binds one listener set per slot at
+`rooms/$roomId/sections/$slot/{revealed,hypotheses,phase,roleAssign}`. No
+room-state ref is built from a module-literal path any more.
+- A set is bound for **every** slot, not just the visible one: the wrap-up
+  aggregates all of them and Back can land on any.
+- `pointSectionRefs()` keeps `refRevealed` / `refHypotheses` / `refModBPhase` /
+  `refRoleAssign` aimed at the ACTIVE slot, which is what left all **ten write
+  sites unchanged** — an item revealed while looking at section 3 lands in
+  section 3's node.
+- `phase` and `roleAssign` snapshots are **guarded on `slot === activeSlot`**:
+  they drive shared UI directly, so an inactive slot's timetable must not
+  repaint the stage on screen. `revealed`/`hypotheses` need no guard — they land
+  in their own slot's store and the pointer decides what renders.
+- Binding is idempotent (unbind first); otherwise a rebind would double every
+  listener and render each snapshot twice.
+- 1111 unit / 607 chromium+mobile E2E / 31 emulator green, exit 0.
+
+**Deliberately NOT done here: decision/vote id namespacing.** It only becomes
+real when the picker composes two sections of the same type into one session, and
+it changes `votes/$voteId` keys — so it belongs with **S3**, where it can be
+tested against an actual two-PBL session rather than asserted in the abstract.
+
+**S6 will retire the module-literal nodes** (`moduleA`/`moduleB`/`moduleBranched`),
+which are now unread by the client.
 
 ### S3 — The section picker at session-create
 The Scenario `<select>` is replaced by an add/reorder list. The session stores

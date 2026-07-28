@@ -128,7 +128,9 @@ test("the hypotheses listener repaints the decisions panel (gate-refresh bug, 20
   // a working hypothesis — the refHypotheses 'value' handler must therefore
   // re-render the decisions panel. (It used to also call the now-removed
   // renderPrompts(); the decisions repaint is the load-bearing part.)
-  const start = SCRIPT.indexOf('refHypotheses.on("value"');
+  /* S2b-2 — listeners are bound per SLOT inside bindSectionRefs(), so the
+     hypotheses handler hangs off that slot's ref rather than a room-wide one. */
+  const start = SCRIPT.indexOf('R.hypotheses.on("value"');
   assert.ok(start >= 0, "refHypotheses 'value' listener must exist");
   const handler = SCRIPT.slice(start, SCRIPT.indexOf("});", start) + 3);
   assert.match(handler, /renderDecisions\(\)/,

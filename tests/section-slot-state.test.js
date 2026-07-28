@@ -59,11 +59,13 @@ test("renderStage repoints before it renders", () => {
 });
 
 test("listeners write into the SLOT, not straight onto the pointer", () => {
-  const i = SCRIPT.indexOf('refRevealed.on("value"');
+  /* S2b-2 — one listener set per slot, bound at the per-slot path. Writing
+     straight to `revealed` would make the last snapshot to arrive win once two
+     PBL slots exist. */
+  const i = SCRIPT.indexOf('R.revealed.on("value"');
+  assert.ok(i > -1, "the revealed listener must be bound per slot");
   const fn = SCRIPT.slice(i, i + 700);
-  assert.match(fn, /slotState\(_legacySlotFor\("pbl"\)\)\.revealed = snap\.val\(\)/,
-    "writing straight to `revealed` makes the last listener to fire win once " +
-    "two PBL slots exist");
+  assert.match(fn, /slotState\(slot\)\.revealed = snap\.val\(\)/);
   assert.match(fn, /refreshActiveSlotState\(\)/);
 });
 
@@ -81,4 +83,56 @@ test("the legacy slot resolver degrades instead of throwing", () => {
   assert.match(f, /sectionSlots\(\)\.find\(s => s\.type === type\)/);
   assert.match(f, /: 1;/,
     "a session with no slot of that type still needs a home for the state");
+});
+
+/* ── S2b-2 — the listeners now bind at the PER-SLOT paths ─────────────────── */
+
+test("state binds at rooms/$roomId/sections/$slot, not moduleA/moduleB", () => {
+  const f = fnOf("bindSectionRefs");
+  assert.match(f, /base \+ "\/sections\/" \+ slot/);
+  assert.ok(!/db\.ref\([^)]*module[AB]\//.test(SCRIPT),
+    "no room-state ref may still be built from a module-literal path");
+});
+
+test("a listener set is bound for EVERY slot, not just the visible one", () => {
+  const f = fnOf("bindSectionRefs");
+  assert.match(f, /sectionSlots\(\)\.forEach/,
+    "the wrap-up aggregates every slot and Back can land on any of them");
+  ["revealed", "hypotheses", "phase", "roleAssign"].forEach(n =>
+    assert.ok(f.indexOf("R." + n + ".on(") > -1, n + " must be bound per slot"));
+});
+
+test("only the ACTIVE slot's phase/roleAssign snapshots drive the shared UI", () => {
+  /* An inactive slot's roleplay phase must not repaint the stage the student is
+     looking at. revealed/hypotheses need no such guard — they land in their own
+     slot's store and the pointer decides what renders. */
+  const f = fnOf("bindSectionRefs");
+  const ph = f.slice(f.indexOf("R.phase.on("));
+  assert.match(ph.slice(0, 200), /if \(slot !== activeSlot\) return;/);
+  const ra = f.slice(f.indexOf("R.roleAssign.on("));
+  assert.match(ra.slice(0, 200), /if \(slot !== activeSlot\) return;/);
+});
+
+test("the WRITE refs follow the active slot too", () => {
+  /* Otherwise an item revealed while looking at section 3 lands in section 1's
+     node — the write sites are unchanged precisely because these are pointers. */
+  const f = fnOf("pointSectionRefs");
+  ["refRevealed", "refHypotheses", "refModBPhase", "refRoleAssign"].forEach(r =>
+    assert.ok(f.indexOf(r + " ") > -1 || f.indexOf(r + "=") > -1, r + " must be repointed"));
+  assert.match(fnOf("refreshActiveSlotState"), /pointSectionRefs\(\)/);
+});
+
+test("teardown detaches every slot's listeners", () => {
+  const f = fnOf("unbindSectionRefs");
+  assert.match(f, /Object\.keys\(refSection\)\.forEach/);
+  assert.match(f, /refSection = \{\}/);
+  assert.match(SCRIPT, /unbindSectionRefs\(\);/, "room teardown must call it");
+});
+
+test("binding is idempotent — it unbinds before it rebinds", () => {
+  /* Called again without unbinding, every slot would carry two listeners and
+     each snapshot would render twice. */
+  const f = fnOf("bindSectionRefs");
+  assert.ok(f.indexOf("unbindSectionRefs()") < f.indexOf("sectionSlots()"),
+    "unbind must come first");
 });

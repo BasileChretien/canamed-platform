@@ -967,7 +967,7 @@ function roleplayPhases() {
   const out = [];
   list.forEach(p => {
     const id = p && typeof p.id === "string" ? p.id.trim() : "";
-    /* Phase ids are written to RTDB (rooms/$room/moduleB/phase) and read back
+    /* Phase ids are written to RTDB (rooms/$room/sections/$slot/phase) and read back
        as DOM data-phase values, so they are validated like role ids. */
     if (!/^[a-z][a-z0-9_-]{0,23}$/.test(id)) return;
     if (out.some(o => o.id === id)) return;
@@ -2199,6 +2199,9 @@ function refreshActiveSlotState() {
   const st = slotState(activeSlot);
   revealed = st.revealed;
   hypotheses = st.hypotheses;
+  /* S2b-2 — and the WRITE refs follow the same slot, so an item revealed while
+     looking at section 3 lands in section 3's node, not section 1's. */
+  if (typeof pointSectionRefs === "function") pointSectionRefs();
 }
 let revealed = {};
 let seenFindingIds = {};   // findings already shown once, so new ones can flash in
@@ -4505,8 +4508,7 @@ function teardownRoom() {
     // NEXT room's typing ref after an admin switches rooms
     clearTimeout(typingTimer);
     if (refStage) refStage.off();
-    if (refRevealed) refRevealed.off();
-    if (refHypotheses) refHypotheses.off();
+    unbindSectionRefs();
     if (refPresence) refPresence.off();
     if (refTyping) refTyping.off();
     if (refAnswers.moduleA) refAnswers.moduleA.off();
@@ -4518,8 +4520,8 @@ function teardownRoom() {
     if (refObservers) refObservers.off();
     if (refRoleChoices) refRoleChoices.off();
     if (refReplayRound) refReplayRound.off();
-    if (refRoleAssign) refRoleAssign.off();
-    if (refModBPhase) refModBPhase.off();
+    /* refRoleAssign / refModBPhase are pointers into refSection, already
+       detached by unbindSectionRefs() above. */
     if (refAnswerReplies) refAnswerReplies.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
@@ -4540,11 +4542,109 @@ function teardownRoom() {
   } catch (e) { /* ignore */ }
 }
 
+/* ── S2b-2 — bind one listener set PER SLOT, at the per-slot paths ────────────
+ * Room state now lives at rooms/$roomId/sections/$slot/… A set is bound for
+ * EVERY slot the session runs, not just the one on screen: the wrap-up
+ * aggregates all of them, and Back navigation can land on any.
+ *
+ * refRevealed / refHypotheses / refModBPhase / refRoleAssign remain as POINTERS
+ * at the ACTIVE slot's refs (pointSectionRefs, called from
+ * refreshActiveSlotState) — which is what leaves all ten write sites untouched.
+ *
+ * Bound once from startRoom(): the section set is write-once per session and is
+ * loaded before the room starts, so it cannot change under a live room. */
+let refSection = {};          // slot -> { revealed, hypotheses, phase, roleAssign }
+function bindSectionRefs(base) {
+  unbindSectionRefs();
+  sectionSlots().forEach(sl => {
+    const slot = sl.position;
+    const p = base + "/sections/" + slot;
+    const R = {
+      revealed:   db.ref(p + "/revealed"),
+      hypotheses: db.ref(p + "/hypotheses"),
+      phase:      db.ref(p + "/phase"),
+      roleAssign: db.ref(p + "/roleAssign")
+    };
+    refSection[slot] = R;
+
+    R.revealed.on("value", snap => {
+      slotState(slot).revealed = snap.val() || {};
+      refreshActiveSlotState();
+
+      /* S2b-1 — land it in the SLOT's store, then repoint. Writing straight to
+         `revealed` would make the last listener to fire win once two PBL slots
+         exist. */
+          renderCase();
+      // The Investigations unlock gate now depends on revealed items
+      // (red-flag screen: history:1 + history:2 + exam:3). Re-render
+      // the hypotheses block so its visible lock state stays in sync.
+      if (typeof renderHypotheses === "function") renderHypotheses();
+    });
+    R.hypotheses.on("value", snap => {
+      slotState(slot).hypotheses = snap.val() || {};
+      refreshActiveSlotState();
+
+          if (typeof renderHypotheses === "function") renderHypotheses();
+      if (typeof renderButtons === "function") renderButtons();
+      // ≥1 hypothesis is the phase gate (2026-06-02; lowered to 1 on 2026-06-25):
+      // updateModANextStep() below re-runs revealModARightCol(), so the Debate &
+      // answers tab unlocks the moment the team crosses the gate.
+      // ...and the decisions panel: a hypotheses-gated vote (e.g. dec_plan,
+      // unlockWhen.hypotheses) must drop its "Ready when: add a working hypothesis"
+      // lock the moment the gate opens — not wait for the next presence/score event
+      // to repaint it. (Bug 2026-06-16: the management-plan vote stayed locked after
+      // the team had already written a working hypothesis.)
+      if (typeof renderDecisions === "function") renderDecisions();
+      if (typeof updateModANextStep === "function") updateModANextStep();
+    });
+    /* The roleplay's synced phase and role draw are per slot too, so two
+       roleplay sections in one session keep separate timetables. Only the
+       ACTIVE slot's snapshots may drive the shared UI — an inactive slot's
+       phase must not repaint the stage the student is looking at. */
+    R.phase.on("value", snap => {
+      if (slot !== activeSlot) return;
+
+      const v = snap.val();
+      /* S1c-3b — clamp to THIS roleplay's phase count, not the built-in six. A
+         literal `<= 5` silently reset an authored 8-phase roleplay to phase 0 the
+         moment the room advanced past its sixth beat: third instance of the same
+         class as the two rules enums, and the only one on a READ path — so it
+         would have looked like the room jumping back rather than a write being
+         refused. */
+      const _maxPhase = (modBProgressCfg().phases || []).length - 1;
+      modBPhase = (typeof v === "number" && v >= 0 && v <= _maxPhase) ? Math.floor(v) : 0;
+      if (typeof renderModBPhase === "function") renderModBPhase();
+    });
+    R.roleAssign.on("value", snap => {
+      if (slot !== activeSlot) return;
+
+      try { handleRoleAssign(snap.val()); } catch (_) {}
+    });
+  });
+  pointSectionRefs();
+}
+function unbindSectionRefs() {
+  Object.keys(refSection).forEach(k => {
+    const R = refSection[k];
+    ["revealed", "hypotheses", "phase", "roleAssign"].forEach(n => {
+      if (R && R[n]) { try { R[n].off(); } catch (_) {} }
+    });
+  });
+  refSection = {};
+}
+/* Point the legacy write refs at the active slot. */
+function pointSectionRefs() {
+  const R = refSection[activeSlot];
+  refRevealed   = R ? R.revealed   : null;
+  refHypotheses = R ? R.hypotheses : null;
+  refModBPhase  = R ? R.phase      : null;
+  refRoleAssign = R ? R.roleAssign : null;
+}
+
 function startRoom() {
   const base = sPath("rooms/" + myRoom);
   refStage = db.ref(base + "/stage");
-  refRevealed = db.ref(base + "/moduleA/revealed");
-  refHypotheses = db.ref(base + "/moduleA/hypotheses");
+  bindSectionRefs(base);
   refPresence = db.ref(base + "/presence");
   refTyping = db.ref(base + "/typing");
   refAnswers.moduleA = db.ref(base + "/answers/moduleA");
@@ -4603,29 +4703,14 @@ function startRoom() {
   // a distinct-role draw over the present roster and writes a {clientId: role}
   // mapping here; each client then claims its OWN assigned role. handleRoleAssign
   // guards on `at` so a refresh / late snapshot doesn't re-apply an old draw.
-  refRoleAssign = db.ref(base + "/moduleB/roleAssign");
   _lastRoleAssignAt = 0;   // room-scoped: a fresh room's draw must not be skipped
                            // just because the previous room's draw had a later `at`
-  refRoleAssign.on("value", snap => {
-    try { handleRoleAssign(snap.val()); } catch (_) {}
-  });
+
 
   // Module B synced phase (2026-05-27): the whole room moves through the six
   // phases together. A room member can advance it (the write rule requires
   // auth + open session + room membership — gated in module-set M3a).
-  refModBPhase = db.ref(base + "/moduleB/phase");
-  refModBPhase.on("value", snap => {
-    const v = snap.val();
-    /* S1c-3b — clamp to THIS roleplay's phase count, not the built-in six. A
-       literal `<= 5` silently reset an authored 8-phase roleplay to phase 0 the
-       moment the room advanced past its sixth beat: third instance of the same
-       class as the two rules enums, and the only one on a READ path — so it
-       would have looked like the room jumping back rather than a write being
-       refused. */
-    const _maxPhase = (modBProgressCfg().phases || []).length - 1;
-    modBPhase = (typeof v === "number" && v >= 0 && v <= _maxPhase) ? Math.floor(v) : 0;
-    if (typeof renderModBPhase === "function") renderModBPhase();
-  });
+
 
   refStage.on("value", snap => {
     const newStage = typeof snap.val() === "number" ? snap.val() : 0;
@@ -4641,34 +4726,8 @@ function startRoom() {
     }
     renderStage();
   });
-  refRevealed.on("value", snap => {
-    /* S2b-1 — land it in the SLOT's store, then repoint. Writing straight to
-       `revealed` would make the last listener to fire win once two PBL slots
-       exist. */
-    slotState(_legacySlotFor("pbl")).revealed = snap.val() || {};
-    refreshActiveSlotState();
-    renderCase();
-    // The Investigations unlock gate now depends on revealed items
-    // (red-flag screen: history:1 + history:2 + exam:3). Re-render
-    // the hypotheses block so its visible lock state stays in sync.
-    if (typeof renderHypotheses === "function") renderHypotheses();
-  });
-  refHypotheses.on("value", snap => {
-    slotState(_legacySlotFor("pbl")).hypotheses = snap.val() || {};
-    refreshActiveSlotState();
-    if (typeof renderHypotheses === "function") renderHypotheses();
-    if (typeof renderButtons === "function") renderButtons();
-    // ≥1 hypothesis is the phase gate (2026-06-02; lowered to 1 on 2026-06-25):
-    // updateModANextStep() below re-runs revealModARightCol(), so the Debate &
-    // answers tab unlocks the moment the team crosses the gate.
-    // ...and the decisions panel: a hypotheses-gated vote (e.g. dec_plan,
-    // unlockWhen.hypotheses) must drop its "Ready when: add a working hypothesis"
-    // lock the moment the gate opens — not wait for the next presence/score event
-    // to repaint it. (Bug 2026-06-16: the management-plan vote stayed locked after
-    // the team had already written a working hypothesis.)
-    if (typeof renderDecisions === "function") renderDecisions();
-    if (typeof updateModANextStep === "function") updateModANextStep();
-  });
+
+
   refPresence.on("value", snap => {
     presence = snap.val() || {};
     renderPresence();
@@ -11008,7 +11067,7 @@ function updateModBNextStep() {
 }
 
 /* ===================== MODULE B — SYNCED PHASE FLOW (2026-05-27) =============
- * The room moves through the six phases together (rooms/$room/moduleB/phase,
+ * The room moves through its phases together (rooms/$room/sections/$slot/phase,
  * 0..5). A room member can advance it. Only the CURRENT phase's action sections
  * are shown; reference material (SPIKES strip, useful sentences, history,
  * guidelines, recap) stays visible throughout (those sections carry no entry in
