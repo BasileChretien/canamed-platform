@@ -1054,3 +1054,78 @@ test("rules: answers/moduleBranched accepts a composed branched deliverable (M4d
   const afterClose = await tryWrite(page, `${base}/e9`, good);
   expect(afterClose, "no branched answers after the session closes").not.toBe("ALLOWED");
 });
+
+/* ── S2a — per-slot section nodes (section model) ───────────────────────────
+ * A session is Welcome + N independently-picked sections + wrap-up, and two
+ * sections of the SAME TYPE may run in one session — so room state can no
+ * longer hang off `moduleA` / `moduleB`. These land INERT: the rules accept the
+ * per-slot paths, nothing writes them yet (S2b moves the client).
+ *
+ * The blocks are CLONED from each tree's own moduleA/moduleB, so validation is
+ * identical by construction rather than by careful re-typing. What these tests
+ * pin is the plumbing around that: the slot guard, the $other sentinel, and
+ * that two slots really are independent.
+ */
+test("rules: per-slot section state is accepted, and slots are independent", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "slots-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = `sessions/${code}/rooms/Room 1`;
+  /* Reading room state needs SESSION membership as well as room membership —
+     the read cascade hangs off sessions/<code>/members. Claiming only
+     uidMembers writes fine and then reads back undefined, which is the rules
+     working, not a bug. */
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  // Two PBL sections in one session: slot 1 and slot 3 keep separate boards.
+  expect(await tryWrite(page, `${room}/sections/1/revealed/history:0`,
+    { by: "Ann", at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/sections/3/revealed/history:0`,
+    { by: "Ann", at: Date.now() })).toBe("ALLOWED");
+  // …and slot 1's reveal did not leak into slot 3's node.
+  expect((await tryRead(page, `${room}/sections/3/revealed/history:0/by`)).val).toBe("Ann");
+
+  // A roleplay slot carries its phase; a PBL slot its hypotheses.
+  expect(await tryWrite(page, `${room}/sections/2/phase`, 3)).toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/sections/1/hypotheses/h1`,
+    { text: "Mechanical low-back pain", by: "Ann", cid: "c1", at: Date.now() })).toBe("ALLOWED");
+});
+
+test("rules: the slot key is bounded, and unknown children are rejected", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "slotguard-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = `sessions/${code}/rooms/Room 1`;
+  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  /* MAX_SECTION_SLOTS is 8 and stage 0 is Welcome, so 1..9 is the accepted
+     range. A slot key outside it — or one that is not a slot at all — must not
+     open an unvalidated corner of the room. */
+  for (const bad of ["0", "10", "99", "moduleA", "../x", "a"]) {
+    expect(await tryWrite(page, `${room}/sections/${bad}/phase`, 1)).not.toBe("ALLOWED");
+  }
+  // The $other sentinel: an unknown child of a slot is refused outright.
+  expect(await tryWrite(page, `${room}/sections/1/somethingElse`, { x: 1 }))
+    .not.toBe("ALLOWED");
+});
+
+test("rules: per-slot answers validate exactly like the module-scoped ones", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "slotans-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = `sessions/${code}/rooms/Room 1`;
+  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  const path = `${room}/answers/sections/2/plan`;
+  expect(await tryWrite(page, path,
+    { text: "Taper over 8 weeks", by: "Ann", cid: "c1", at: Date.now() })).toBe("ALLOWED");
+  // Same bounds as answers/moduleA — cloned, so these must hold for free.
+  expect(await tryWrite(page, path,
+    { text: "", by: "Ann", cid: "c1", at: Date.now() })).not.toBe("ALLOWED");
+  expect(await tryWrite(page, path,
+    { text: "x".repeat(1001), by: "Ann", cid: "c1", at: Date.now() })).not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/answers/sections/0/plan`,
+    { text: "ok", by: "Ann", cid: "c1", at: Date.now() })).not.toBe("ALLOWED");
+});

@@ -330,9 +330,34 @@ moment that value becomes authorable.** Worth grepping the rules for literal
 enums before the next extraction.
 
 ### S2 — Per-slot DB paths
-`rooms/$roomId/section/$slot/…` and `answers/section/$slot` replace the
-module-literal nodes in both trees; decision/vote ids namespaced per slot.
-Emulator-proven per node, including cross-room and cross-slot denial.
+
+**S2a — the rules land INERT ← DONE.** `rooms/$roomId/sections/$slot/…` and
+`answers/sections/$slot` added to **both** trees; nothing writes them yet, so
+this is additive-only (118 insertions, 0 deletions) and cannot affect a live
+session.
+- **Slot children are CLONED from each tree's own `moduleA`/`moduleB`**, so
+  validation is identical by construction rather than by careful re-typing:
+  `revealed`, `scoring/awarded`, `hypotheses` (PBL-shaped) + `phase`,
+  `roleAssign` (roleplay-shaped). A slot node carries the union because a slot's
+  TYPE is a property of the section, not of the path.
+- `$slot` is guarded `^[1-9]$` (`MAX_SECTION_SLOTS` = 8, stage 0 being Welcome)
+  and closed with an `$other` sentinel, per the R3 hardening pattern.
+- Emulator-proven (**31 pass**): two PBL slots keep independent boards, a
+  roleplay slot carries its phase, out-of-range and non-numeric slot keys are
+  refused, unknown slot children are refused, and per-slot answers inherit the
+  same bounds as `answers/moduleA`.
+- **The formatting trap:** re-dumping the rules JSON from a parsed object
+  reflowed hand-tuned one-liners across the whole file (194±63 lines of churn in
+  a security-critical file). Insert surgically as text instead — the diff must
+  be reviewable as pure addition.
+- ⚠️ Note for whoever runs the emulator: kill orphaned `java.exe` on 9000/9099
+  first ("Could not start Database Emulator, port taken"), and the cross-tab
+  stage-advance test can flake on a 15 s timeout under load — re-run before
+  believing it.
+
+**S2b — move the client onto them (TODO).** Read/write paths, decision and vote
+id namespacing per slot (two PBL sections must not collide on `votes/$voteId`),
+then retire the module-literal nodes in S6.
 
 ### S3 — The section picker at session-create
 The Scenario `<select>` is replaced by an add/reorder list. The session stores
