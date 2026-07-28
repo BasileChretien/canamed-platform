@@ -266,26 +266,24 @@ test.describe("branched session framing", () => {
     expect(got.flow).toEqual([0, 1, 2]);
   });
 
-  test("M2: the create form offers the module picker, both ticked by default", async ({
-    page,
-  }) => {
-    await page.goto("/");
-    const cb = await page.evaluate(() => {
-      const a = document.getElementById("splash-create-mod-A");
-      const b = document.getElementById("splash-create-mod-B");
-      return {
-        present: !!a && !!b,
-        aChecked: !!(a && a.checked),
-        bChecked: !!(b && b.checked),
-        type: a && a.type,
-      };
+  test("S3b: the create form offers the SECTION picker, not a module tick-row",
+    async ({ page }) => {
+      /* SUPERSEDES the M2 tick-row test. A section pick IS the module set, at a
+         granularity the tick-row could not reach: it can name two sections of
+         the same type, and it carries ORDER. The tick-row is gone from the form;
+         `modules` itself is still honoured on the read side for sessions created
+         before the picker. */
+      await page.goto("/");
+      await page.locator("#splash-go-create").click();
+      const form = await page.evaluate(() => ({
+        tickRow: !!document.getElementById("splash-create-mod-A"),
+        sectionList: !!document.getElementById("splash-section-list"),
+        addControl: !!document.getElementById("splash-section-add-btn")
+      }));
+      expect(form.tickRow, "the per-module tick-row is superseded").toBe(false);
+      expect(form.sectionList).toBe(true);
+      expect(form.addControl).toBe(true);
     });
-    expect(cb.present, "the create form must expose a per-module picker").toBe(true);
-    expect(cb.type).toBe("checkbox");
-    // Default = run everything the scenario contains (identical to M1).
-    expect(cb.aChecked).toBe(true);
-    expect(cb.bChecked).toBe(true);
-  });
 
   test("standard: stage nav walks every stage the session runs (M0 regression guard)", async ({
     page,

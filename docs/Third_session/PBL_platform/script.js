@@ -13566,16 +13566,13 @@ function wireSplash() {
     }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    // M2 — per-session module narrowing. Pass null when every module is ticked so
-    // an unnarrowed session writes no `modules` field at all (identical to M1);
-    // only a strict subset is recorded. The runtime intersects the selection with
-    // the scenario's own set, so a module the scenario lacks is harmless.
-    const _modPick = MODULE_REGISTRY
-      .filter(m => { const cb = el("splash-create-mod-" + m.id); return !cb || cb.checked; })
-      .map(m => m.id);
-    const _modNarrow = (_modPick.length && _modPick.length < MODULE_REGISTRY.length)
-      ? _modPick : null;
-    createSession(name, label, pass, scenarioId, customJson, scenarioRef, _modNarrow).then(result => {
+    /* S3b — the facilitator's ordered SECTION pick supersedes M2's module
+       narrowing: a section pick IS the module set, at the right granularity.
+       Null when nothing was picked, in which case the session falls back to the
+       chosen scenario's own shape exactly as before S3. */
+    const _sectionCsv = sectionPickCsv();
+    createSession(name, label, pass, scenarioId, customJson, scenarioRef,
+                  null, _sectionCsv).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -13647,6 +13644,11 @@ function wireSplash() {
   // populate the scenario picker from window.CANAMED_SCENARIOS + wire the
   // description line and the "Create new content (advanced)" → textarea toggle
   populateScenarioPicker();
+  /* S3b — the SECTION picker is the primary control now. Wired eagerly (its
+     button ships in the shell); the add-list fills itself once the lazy section
+     library lands. */
+  wireSectionPicker();
+  populateSectionPicker();
   const sel = el("splash-create-scenario");
   if (sel) sel.addEventListener("change", onScenarioChange);
   const tplBtn = el("splash-load-template");
@@ -13796,6 +13798,129 @@ function wireSplash() {
   if (window.CanamedTour && typeof window.CanamedTour.addReopenLink === "function") {
     window.CanamedTour.addReopenLink("splash-tour-reopen", "create");
   }
+}
+
+/* ── S3b — the SECTION PICKER on the create form ──────────────────────────────
+ * Replaces "Scenario (the clinical case for this workshop)" as the primary
+ * control. A session is opening + N independently-picked sections + wrap-up:
+ * sections may come from different clinical cases, the same TYPE may appear
+ * twice, and PICK ORDER IS RUNNING ORDER.
+ *
+ * It also supersedes M2's "Modules to run" tick-row — a section pick IS the
+ * module set, and expressed at the right granularity, so that row is gone.
+ *
+ * The library is a lazily-loaded chunk, so the add-list fills itself once the
+ * chunk lands (same pattern as populateScenarioPicker below). */
+let splashSectionPick = [];       // ordered section ids the facilitator chose
+const SECTION_TYPE_LABEL = { pbl: "PBL", roleplay: "Roleplay", branched: "Branched" };
+
+function sectionLibraryList() {
+  const lib = (typeof window !== "undefined" && window.CANAMED_SECTIONS) || null;
+  if (!lib) return null;
+  return Object.keys(lib).map(id => lib[id]).filter(Boolean);
+}
+function populateSectionPicker() {
+  const add = el("splash-section-add");
+  if (!add) return;
+  const list = sectionLibraryList();
+  if (!list) {
+    /* Not loaded yet — chain onto the same fetch the scenario picker uses and
+       come back. Without this the picker is permanently empty on a cold load. */
+    if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+      window.CanamedLoader.ensureCaseContent().then(populateSectionPicker);
+    }
+    return;
+  }
+  const lang = _curLang();
+  add.textContent = "";
+  list.forEach(sec => {
+    const o = document.createElement("option");
+    o.value = sec.id;
+    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, lang) : sec.name.en))
+      || sec.id;
+    o.textContent = (SECTION_TYPE_LABEL[sec.type] || sec.type) + " — " + title;
+    add.appendChild(o);
+  });
+  renderSectionPick();
+}
+function renderSectionPick() {
+  const ol = el("splash-section-list");
+  const empty = el("splash-section-empty");
+  if (!ol) return;
+  const lib = (window.CANAMED_SECTIONS || {});
+  ol.textContent = "";
+  if (empty) empty.classList.toggle("hidden", splashSectionPick.length > 0);
+
+  splashSectionPick.forEach((id, i) => {
+    const sec = lib[id] || { id: id, type: "", name: null };
+    const li = document.createElement("li");
+    li.className = "splash-section-row";
+    li.setAttribute("data-section-id", id);
+
+    const name = document.createElement("span");
+    name.className = "splash-section-name";
+    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, _curLang()) : sec.name.en))
+      || id;
+    /* textContent, never innerHTML — a section title can be facilitator-authored. */
+    name.textContent = "Section " + (i + 1) + " — " + title;
+    li.appendChild(name);
+
+    const type = document.createElement("span");
+    type.className = "splash-section-type";
+    type.textContent = SECTION_TYPE_LABEL[sec.type] || sec.type || "";
+    li.appendChild(type);
+
+    const mk = (cls, label, disabled, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "splash-link " + cls;
+      b.textContent = label;
+      b.setAttribute("aria-label", label + " " + title);
+      if (disabled) b.disabled = true;
+      else b.addEventListener("click", fn);
+      li.appendChild(b);
+      return b;
+    };
+    mk("splash-section-up", "↑", i === 0, () => moveSectionPick(i, -1));
+    mk("splash-section-down", "↓", i === splashSectionPick.length - 1,
+       () => moveSectionPick(i, 1));
+    mk("splash-section-remove", "×", false, () => {
+      splashSectionPick.splice(i, 1);
+      renderSectionPick();
+    });
+    ol.appendChild(li);
+  });
+}
+function moveSectionPick(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= splashSectionPick.length) return;
+  const t = splashSectionPick[i];
+  splashSectionPick[i] = splashSectionPick[j];
+  splashSectionPick[j] = t;
+  renderSectionPick();
+}
+function addSectionPick(id) {
+  if (!id) return;
+  /* Duplicates are ALLOWED — running the same section twice is legitimate (a
+     replay), and the slot model keys state by position, not by section id. The
+     only bound is the physical slot cap the DB rules enforce. */
+  if (splashSectionPick.length >= MAX_SECTION_SLOTS) return;
+  splashSectionPick.push(id);
+  renderSectionPick();
+}
+function wireSectionPicker() {
+  const btn = el("splash-section-add-btn");
+  if (!btn || btn._wired) return;
+  btn._wired = true;
+  btn.addEventListener("click", () => {
+    const sel = el("splash-section-add");
+    addSectionPick(sel && sel.value);
+  });
+}
+/* The CSV written at create, or null when nothing was picked (in which case the
+   session falls back to the scenario's own shape, exactly as before S3). */
+function sectionPickCsv() {
+  return splashSectionPick.length ? splashSectionPick.join(",") : null;
 }
 
 /* fill the scenario dropdown from the SCENARIOS registry + one trailing
@@ -14089,7 +14214,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -14207,6 +14332,10 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
         ? modules.map(m => String(m).trim()).filter(Boolean).join(",")
         : "";
       if (modCsv) writes.push(db.ref(oPath(code, "modules")).set(modCsv));
+      /* S3b — the ordered section pick. Write-once, like `modules`: a session's
+         shape must not shift under participants mid-flight. */
+      if (typeof sections === "string" && sections)
+        writes.push(db.ref(oPath(code, "sections")).set(sections));
       return Promise.all(writes)
         .then(() => hashPassword(password, code))
         .then(h => {

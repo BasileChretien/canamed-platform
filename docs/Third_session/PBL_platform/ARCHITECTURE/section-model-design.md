@@ -437,8 +437,39 @@ the per-slot state and write refs.
   would rebuild `ITEM_IDS` under a half-rendered board.
 - 10 new tests; 1131 unit + chromium/mobile E2E green.
 
-**S3b — the create-form picker (TODO).** Replace the Scenario select with an
-add/reorder list writing the `sections` CSV. Everything underneath it now works.
+**S3b — the create-form picker ← DONE (shell v122→v123). THE ORIGINAL REQUEST
+IS NOW VISIBLE.** "Scenario (the clinical case for this workshop)" is no longer
+the control a facilitator uses: they add the SECTIONS the session runs, in
+order, from a flat list labelled by type (PBL / Roleplay / Branched).
+- Sections from **different clinical cases** combine, and **two of the same
+  type** is allowed — duplicates are deliberately permitted because the slot
+  model keys state by POSITION, not by section id. The only bound is
+  `MAX_SECTION_SLOTS`.
+- Rows are numbered "Section k — title", matching exactly what the student will
+  read on the stage (decision 8).
+- **M2's "Modules to run" tick-row is GONE**: a section pick IS the module set,
+  at a granularity the tick-row could not express. `modules` is still honoured
+  on the read side for sessions created before the picker.
+- An empty pick writes no `sections` field, so the session falls back to the
+  chosen scenario's shape exactly as before S3.
+- 12 unit + 9 browser tests, per-device.
+
+**Two CSS traps worth remembering.** (1) The first cut used invented token names
+(`--space-1`, `--radius-sm`); the real scale is `--s-1` / `--r-sm` / `--line` /
+`--card`. An unknown custom property is an INVALID declaration the browser
+silently drops, so the rules simply did nothing — padding and margins computed
+to 0 with no error anywhere. A test now asserts every `var(--…)` the picker uses
+exists in `tokens.css`. (2) Three separate source guards ("never innerHTML",
+"no eval", "no raw hex") were tripped by the COMMENT explaining the guard —
+`PR #172` reads as a hex colour. Strip comments before asserting on source.
+
+**⚠️ Pre-existing bug found, NOT introduced here.** The splash card overflows a
+phone viewport: measured **528 px wide against a 412 px Pixel 7 with zero
+sections added**, i.e. before the picker renders anything. That overflow zooms
+the page out and makes pointer hit-testing land off-target (the PR #172 failure
+mode), which is why the picker's mobile specs drive controls via their own
+`click()`. Worth fixing on its own — it affects every student joining on a
+phone, not just this form.
 
 ### S3 (original plan) — The section picker at session-create
 The Scenario `<select>` is replaced by an add/reorder list. The session stores

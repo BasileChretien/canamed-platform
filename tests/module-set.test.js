@@ -588,8 +588,15 @@ test("M2: createSession records the narrowing write-once, and only a subset", ()
     "createSession must write the CSV to the session's modules field");
   assert.match(SCRIPT, /if \(modCsv\) writes\.push/,
     "an unnarrowed session must write NO modules field at all");
-  assert.match(SCRIPT, /_modPick\.length < MODULE_REGISTRY\.length/,
-    "the create form must pass null unless the pick is a strict subset");
+  /* S3b — the create form's "Modules to run" tick-row is GONE: the section
+     picker supersedes it, expressing the same choice at the right granularity
+     (a pick may name two sections of one type, which a module tick-row cannot).
+     `modules` itself stays supported on the read side for sessions created
+     before the picker, so the write path above is still asserted. */
+  assert.ok(!/splash-create-mod-/.test(SCRIPT),
+    "the module tick-row is superseded by the section picker");
+  assert.match(SCRIPT, /oPath\(code, "sections"\)\)\.set\(sections\)/,
+    "the create form must write the ordered section pick instead");
 });
 
 test("M2: loadSessionScenario publishes the narrowing BEFORE applyScenario", () => {
