@@ -13958,7 +13958,8 @@ function wireSplash() {
  *
  * The library is a lazily-loaded chunk, so the add-list fills itself once the
  * chunk lands (same pattern as populateScenarioPicker below). */
-let splashSectionPick = [];       // ordered section ids the facilitator chose
+let splashSectionPick = [];
+let _sectionPickerTries = 0;       // ordered section ids the facilitator chose
 /* Type labels go through i18n like the rest of the create form — the picker was
    the only part of it shipping hardcoded English, so a French facilitator saw a
    mixed-language form. */
@@ -13981,12 +13982,26 @@ function populateSectionPicker() {
   const list = sectionLibraryList();
   if (!list) {
     /* Not loaded yet — chain onto the same fetch the scenario picker uses and
-       come back. Without this the picker is permanently empty on a cold load. */
+       come back. Without this the picker is permanently empty on a cold load.
+
+       BOUNDED: section-registry.js is optional and its load failure is
+       swallowed, so ensureCaseContent() can resolve for ever with the library
+       still absent. An unbounded retry would then recurse without end (the
+       promise is already settled, so each attempt re-fires immediately). Give
+       up after a few tries and leave the picker empty — the session simply
+       falls back to the scenario shape, which is the designed degradation. */
+    _sectionPickerTries += 1;
+    if (_sectionPickerTries > 3) {
+      const add = el("splash-section-add");
+      if (add && !add.options.length) add.disabled = true;
+      return;
+    }
     if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
       window.CanamedLoader.ensureCaseContent().then(populateSectionPicker);
     }
     return;
   }
+  _sectionPickerTries = 0;
   const lang = _curLang();
   add.textContent = "";
   list.forEach(sec => {

@@ -12,9 +12,11 @@
  * scenario yields two sections (a PBL and a Roleplay); a branched scenario
  * yields one.
  *
- * S0 IS INERT. Nothing loads this in the browser yet (no <script> tag, so no
- * shell-version bump and no splash perf cost); the runtime still runs the
- * scenarioId path. S1 wires it in.
+ * LIFECYCLE: this landed INERT in S0 (nothing loaded it), and is now LIVE —
+ * loaded lazily by ensureCaseContent() for the room and the author, and by
+ * revisit.html, off the splash critical path so it costs no splash bytes. The
+ * runtime reads it through pickedSections()/sectionSlots(); a session with no
+ * explicit pick still falls back to the scenario shape.
  * ================================================================ */
 
 (function (root, factory) {

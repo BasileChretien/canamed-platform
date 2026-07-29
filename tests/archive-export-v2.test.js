@@ -155,3 +155,18 @@ test("a malformed input fails loudly rather than emitting a broken archive", () 
   assert.throws(() => convertArchive(null), TypeError);
   assert.throws(() => convertArchive("nope"), TypeError);
 });
+
+test("a malformed room or answer shape is REJECTED, not silently dropped", () => {
+  /* The converter runs over PII that may have no other copy. Coercing an
+     unreadable shape to [] would emit a valid-LOOKING archive with the data
+     missing — the one failure mode worse than crashing. */
+  assert.throws(() => convertArchive({ session: "x", rooms: "nope" }), TypeError);
+  assert.throws(() => convertArchive({ session: "x", rooms: [null] }), TypeError);
+  assert.throws(() => convertArchive({ session: "x", rooms: [{ answers: 7 }] }), TypeError);
+  assert.throws(() => convertArchive({ session: "x", rooms: [{ hypotheses: {} }] }), TypeError);
+  assert.throws(() => convertArchive({
+    session: "x", rooms: [{ answers: { moduleA: { not: "an array" } } }]
+  }), TypeError);
+  /* A well-formed archive with fields simply absent is still fine. */
+  assert.doesNotThrow(() => convertArchive({ session: "x", rooms: [{ room: "R1" }] }));
+});

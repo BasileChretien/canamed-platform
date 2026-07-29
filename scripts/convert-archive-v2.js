@@ -36,7 +36,32 @@ function convertArchive(v1) {
   if (!v1 || typeof v1 !== "object") throw new TypeError("not an archive object");
   if (v1.exportVersion >= 2) return v1;            // already converted; idempotent
 
+  /* Reject a malformed shape rather than coercing it away. A converter that
+     quietly turns an unreadable `rooms` into [] emits a VALID-LOOKING archive
+     with no data in it — and this runs over PII that may have no other copy, so
+     a loud failure is the only safe behaviour. */
+  if (v1.rooms != null && !Array.isArray(v1.rooms)) {
+    throw new TypeError("archive.rooms must be an array; got " + typeof v1.rooms);
+  }
   const rooms = Array.isArray(v1.rooms) ? v1.rooms : [];
+  rooms.forEach((rm, i) => {
+    if (!rm || typeof rm !== "object") {
+      throw new TypeError("archive.rooms[" + i + "] is not an object");
+    }
+    if (rm.answers != null && typeof rm.answers !== "object") {
+      throw new TypeError("archive.rooms[" + i + "].answers is not an object");
+    }
+    if (rm.hypotheses != null && !Array.isArray(rm.hypotheses)) {
+      throw new TypeError("archive.rooms[" + i + "].hypotheses must be an array");
+    }
+    V1_SLOTS.forEach(m => {
+      const a = (rm.answers || {})[m.key];
+      if (a != null && !Array.isArray(a)) {
+        throw new TypeError("archive.rooms[" + i + "].answers." + m.key +
+                            " must be an array");
+      }
+    });
+  });
   /* A slot only enters the manifest if SOME room carried content for it. A v1
      single-module session must not gain a phantom empty second section. */
   const used = {};
