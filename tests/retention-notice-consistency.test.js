@@ -89,14 +89,10 @@ function publishedStrings() {
   assert.ok(fallback, "index.html is missing the lobby.privacy.p3 fallback paragraph");
   out.push({ where: "index.html lobby.privacy.p3 fallback", text: fallback[1] });
 
-  // privacy.html section 8 — one <ul> per language (EN/FR/JA).
-  const privacySrc = read(PLATFORM, "privacy.html");
-  const sections = privacySrc.match(
-    /<h2>8\.[^<]*<\/h2>\s*<ul>([\s\S]*?)<\/ul>/g
-  ) || [];
-  assert.strictEqual(sections.length, 3,
-    "expected exactly 3 language variants of privacy.html section 8, got " + sections.length);
-  sections.forEach((s, i) => {
+  // privacy.html section 8 — one <ul> per language (EN/FR/JA). The live-session
+  // period is the FIRST <li>; the research-storage claim is a separate <li>
+  // collected by researchStorageStrings() below.
+  sections8().forEach((s, i) => {
     const firstLi = s.match(/<li>([\s\S]*?)<\/li>/);
     assert.ok(firstLi, `privacy.html section 8 variant ${i} has no <li>`);
     out.push({ where: `privacy.html section 8 variant ${i + 1}`, text: firstLi[1] });
@@ -104,6 +100,34 @@ function publishedStrings() {
 
   return out;
 }
+
+// privacy.html section 8, one <ul> per language, in EN/FR/JA document order.
+function sections8() {
+  const privacySrc = read(PLATFORM, "privacy.html");
+  const sections = privacySrc.match(
+    /<h2>8\.[^<]*<\/h2>\s*<ul>([\s\S]*?)<\/ul>/g
+  ) || [];
+  assert.strictEqual(sections.length, 3,
+    "expected exactly 3 language variants of privacy.html section 8, got " + sections.length);
+  return sections;
+}
+
+// The research-dataset <li> of each privacy.html section 8. Kept separate from
+// PUBLISHED because it makes a DIFFERENT claim (how the research copy is stored)
+// from the live-session retention period, and because a negative-only check
+// would pass if the disclosure were deleted outright.
+const RESEARCH_STORAGE = [
+  // [document order, the localized wording that must be present]
+  { lang: "en", must: /stored\s+linked\s+to\s+you\s*\(identifiable\)/i, years: /5\s*years/i },
+  { lang: "fr", must: /conservé\s+de\s+façon\s+nominative\s*\(identifiable\)/i, years: /5\s*ans/i },
+  { lang: "ja", must: /紐づけた\s*\(\s*識別可能な\s*\)\s*形式/, years: /最長\s*5\s*年/ },
+].map((spec, i) => {
+  const lis = sections8()[i].match(/<li>([\s\S]*?)<\/li>/g) || [];
+  assert.ok(lis.length >= 2,
+    `privacy.html section 8 variant ${i + 1} (${spec.lang}) lost its research-dataset <li>`);
+  return { ...spec, where: `privacy.html section 8 (${spec.lang}) research-dataset item`,
+           text: lis[1].replace(/<[^>]+>/g, "") };
+});
 
 const PUBLISHED = publishedStrings();
 
@@ -151,6 +175,29 @@ test("retention: the research dataset is described as identifiable, never pseudo
   // lobby.consent-research — that key is deliberately not checked here.)
   const PSEUDO = /pseudonym|pseudonim|seudonim|가명화|假名化/i;
   for (const { where, text } of PUBLISHED) {
+    assert.ok(!PSEUDO.test(text),
+      `${where} describes the research dataset as pseudonymised, but it is stored identifiably.\n` +
+      `  got: ${text.replace(/\s+/g, " ").trim()}`);
+  }
+});
+
+test("retention: privacy.html POSITIVELY discloses identifiable research storage", () => {
+  // The negative check above would also pass if the disclosure were deleted
+  // outright — silence is not compliance for an Art. 13 notice. Assert the
+  // claim is actually present, in each language, with its 5-year period.
+  for (const { where, must, years, text } of RESEARCH_STORAGE) {
+    assert.ok(must.test(text),
+      `${where} no longer states that the research dataset is stored linked to the ` +
+      `participant (identifiable).\n  got: ${text.replace(/\s+/g, " ").trim()}`);
+    assert.ok(years.test(text),
+      `${where} no longer states the 5-year research retention.\n` +
+      `  got: ${text.replace(/\s+/g, " ").trim()}`);
+  }
+});
+
+test("retention: the research-storage claim is never described as pseudonymised either", () => {
+  const PSEUDO = /pseudonym|pseudonim|seudonim|仮名|가명화|假名化/i;
+  for (const { where, text } of RESEARCH_STORAGE) {
     assert.ok(!PSEUDO.test(text),
       `${where} describes the research dataset as pseudonymised, but it is stored identifiably.\n` +
       `  got: ${text.replace(/\s+/g, " ").trim()}`);
