@@ -616,9 +616,29 @@ still SUPPORTS mixed A/B scenarios (M5). Removing the starter before the
 capability would leave that path unreachable and untestable; S6 retires both
 together.
 
-**Still TODO in S6:** moving the WRITE path for answers to `answers/sections/$slot`
-(the readers now accept either), removing the `scenarioId` create path, and
-retiring the module-literal rules nodes once nothing reads them.
+**S6 — the answers WRITE path moved ← DONE (shell v125→v126).** Answers were the
+last room state on a module-literal node, which is why three readers kept coming
+up empty. They now bind per slot at `answers/sections/$slot`, alongside the rest
+of the slot's refs, with teardown included.
+- **Aggregated by TYPE, not aliased.** `answers.moduleA/B/Branched` is rebuilt
+  from the per-slot buckets, because the score engine drives DIFFERENT micro-
+  bullets off `aEntries` and `bEntries` — pointing both keys at one map would
+  award a roleplay's bullets for a PBL section's answers.
+- **The mapping is spelled out, not derived.** `"module" + moduleId` yields
+  `modulebranched` for a branched section, which is neither a key of the
+  aggregate nor what `branchedAnswerBucket()` reads — the branched
+  final-diagnosis deliverable came back **empty**, caught by the playthrough
+  E2E. A standalone branched session aggregates into `moduleA`, matching the
+  engine's own bucket choice; only a COMPOSED branched module uses the separate
+  one.
+- **KNOWN LIMIT:** two sections of the same type share the type-keyed view, so
+  the wrap-up lists their answers together. Per-slot display needs the renderer
+  scoped to a slot — tracked, not done here.
+- 1187 unit + 636 chromium/mobile E2E + 32 emulator green.
+
+**Still TODO in S6:** removing the `scenarioId` create path, retiring the
+module-literal rules nodes and the transitional read fallbacks, and retiring
+mixed A/B authoring together with its legacy skeleton entry.
 
 ### S6 (original plan) — Hard cutover cleanup
 Remove the `scenarioId` create path, the `modules` CSV narrowing, `moduleA/B`

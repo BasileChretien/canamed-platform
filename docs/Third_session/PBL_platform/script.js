@@ -4270,9 +4270,8 @@ function teardownRoom() {
     unbindSectionRefs();
     if (refPresence) refPresence.off();
     if (refTyping) refTyping.off();
-    if (refAnswers.moduleA) refAnswers.moduleA.off();
-    if (refAnswers.moduleB) refAnswers.moduleB.off();
-    if (refAnswers.moduleBranched) refAnswers.moduleBranched.off();
+    /* refAnswers.* are pointers into refSection, detached by
+       unbindSectionRefs() above. */
     if (refCallForHelp) refCallForHelp.off();
     if (refScore) refScore.off();
     if (refVotes) refVotes.off();
@@ -4322,7 +4321,11 @@ function bindSectionRefs(base) {
       revealed:   db.ref(p + "/revealed"),
       hypotheses: db.ref(p + "/hypotheses"),
       phase:      db.ref(p + "/phase"),
-      roleAssign: db.ref(p + "/roleAssign")
+      roleAssign: db.ref(p + "/roleAssign"),
+      /* S6 — answers move per slot too. They were the last room state still on
+         a module-literal node, which is why three separate readers kept coming
+         up empty. */
+      answers:    db.ref(base + "/answers/sections/" + slot)
     };
     refSection[slot] = R;
 
@@ -4374,6 +4377,16 @@ function bindSectionRefs(base) {
       modBPhase = (typeof v === "number" && v >= 0 && v <= _maxPhase) ? Math.floor(v) : 0;
       if (typeof renderModBPhase === "function") renderModBPhase();
     });
+    R.answers.on("value", snap => {
+      slotState(slot).answers = snap.val() || {};
+      refreshAnswerAggregates();
+      renderAnswers(ANSWER_KEY_FOR_TYPE[sl.type] === "moduleB" ? "moduleB" : "moduleA");
+      renderObjectives();
+      /* Branched: the "before you vote" reasoning lists live INSIDE the decision
+         cards, so a teammate's contribution must re-render them. */
+      if (typeof renderDecisions === "function") renderDecisions();
+      if (typeof renderBranchedFinal === "function") renderBranchedFinal();
+    });
     R.roleAssign.on("value", snap => {
       if (slot !== activeSlot) return;
 
@@ -4385,11 +4398,40 @@ function bindSectionRefs(base) {
 function unbindSectionRefs() {
   Object.keys(refSection).forEach(k => {
     const R = refSection[k];
-    ["revealed", "hypotheses", "phase", "roleAssign"].forEach(n => {
+    ["revealed", "hypotheses", "phase", "roleAssign", "answers"].forEach(n => {
       if (R && R[n]) { try { R[n].off(); } catch (_) {} }
     });
   });
   refSection = {};
+}
+/* The type-keyed view every existing reader expects (`answers.moduleA` …),
+   rebuilt from the per-slot buckets. Aggregating by TYPE rather than aliasing
+   both keys to one bucket matters: the score engine drives DIFFERENT micro-
+   bullets off aEntries and bEntries, so pointing both at the same map would
+   award a roleplay's bullets for a PBL section's answers.
+   KNOWN LIMIT: two sections of the same type share this view, so the wrap-up
+   lists their answers together. Per-slot display needs the renderer scoped to a
+   slot — tracked, not done here. */
+/* Type → the answers key the readers use. NOT "module" + moduleId: that yields
+   "modulebranched" for a branched section, which is neither a key of the
+   aggregate nor what branchedAnswerBucket() reads — the final-diagnosis
+   deliverable came back empty. Spelled out so the casing cannot drift. */
+const ANSWER_KEY_FOR_TYPE = { pbl: "moduleA", roleplay: "moduleB",
+                              branched: "moduleBranched" };
+function refreshAnswerAggregates() {
+  const agg = { moduleA: {}, moduleB: {}, moduleBranched: {} };
+  sectionSlots().forEach(sl => {
+    /* A STANDALONE branched session renders in the PBL view and its engine
+       reads "moduleA" (branchedAnswerBucket), so its slot aggregates there —
+       only a COMPOSED branched module uses the separate bucket. */
+    const key = (sl.standalone && sl.type === "branched")
+      ? "moduleA" : (ANSWER_KEY_FOR_TYPE[sl.type] || "moduleA");
+    const bucket = slotState(sl.position).answers || {};
+    Object.keys(bucket).forEach(k => { agg[key][k] = bucket[k]; });
+  });
+  answers.moduleA = agg.moduleA;
+  answers.moduleB = agg.moduleB;
+  answers.moduleBranched = agg.moduleBranched;
 }
 /* Point the legacy write refs at the active slot. */
 function pointSectionRefs() {
@@ -4398,6 +4440,10 @@ function pointSectionRefs() {
   refHypotheses = R ? R.hypotheses : null;
   refModBPhase  = R ? R.phase      : null;
   refRoleAssign = R ? R.roleAssign : null;
+  /* All three module keys write into the ACTIVE slot's bucket: which container
+     the entry belongs to is decided by the stage on screen, not by the key. */
+  refAnswers.moduleA = refAnswers.moduleB = refAnswers.moduleBranched =
+    R ? R.answers : null;
 }
 
 function startRoom() {
@@ -4406,10 +4452,6 @@ function startRoom() {
   bindSectionRefs(base);
   refPresence = db.ref(base + "/presence");
   refTyping = db.ref(base + "/typing");
-  refAnswers.moduleA = db.ref(base + "/answers/moduleA");
-  refAnswers.moduleB = db.ref(base + "/answers/moduleB");
-  // M4d — a COMPOSED branched module keeps its deliverables out of Module A.
-  refAnswers.moduleBranched = db.ref(base + "/answers/moduleBranched");
   refCallForHelp = db.ref(base + "/callForHelp");
   refScore = db.ref(base + "/score");
   refVotes = db.ref(base + "/votes");
@@ -4499,32 +4541,10 @@ function startRoom() {
   // answer arrives, the counter waits a tick to tick up). Re-rendering
   // objectives directly off the answer event makes the goal counter feel
   // live for every teammate, not just the writer.
-  refAnswers.moduleA.on("value", snap => {
-    answers.moduleA = snap.val() || {};
-    renderAnswers("moduleA");
-    renderObjectives();
-    // Branched: the "before you vote" reasoning lists live INSIDE the decision
-    // cards, so a teammate's new contribution must re-render the decisions to
-    // show it (renderDecisions preserves the in-progress textarea + focus).
-    // The final-diagnosis entries refresh via renderBranchedFinal.
-    if ((window.CURRENT_SCENARIO_FORMAT || "standard") === "branched" &&
-        typeof renderDecisions === "function") renderDecisions();
-    if (typeof renderBranchedFinal === "function") renderBranchedFinal();
-  });
-  refAnswers.moduleB.on("value", snap => {
-    answers.moduleB = snap.val() || {};
-    renderAnswers("moduleB");
-    renderObjectives();
-  });
   // M4d — the composed branched module's deliverable + in-card reasoning.
   // Mirrors the moduleA handler's branched half: a teammate's contribution
   // must re-render the decision cards (the reasoning lists live inside them)
   // and refresh the final-answer lists.
-  refAnswers.moduleBranched.on("value", snap => {
-    answers.moduleBranched = snap.val() || {};
-    if (typeof renderDecisions === "function") renderDecisions();
-    if (typeof renderBranchedFinal === "function") renderBranchedFinal();
-  });
   // Sim 2026-05-19 — counter-bullet replies on group-answer entries.
   // Re-render Module A + B answers so the new replies appear under
   // their parent <li>. The pure-DOM render is cheap.

@@ -302,14 +302,21 @@ test("M4d: the textarea ids follow the bucket (else addAnswer silently no-ops)",
     "the read-back must use the same bucket too");
 });
 
-test("M4d: the client subscribes to the new bucket (state, listener, teardown)", () => {
+test("M4d: the branched bucket is subscribed — now per SLOT", () => {
+  /* S6 moved answers to rooms/$roomId/answers/sections/$slot, the last room
+     state still on a module-literal node. The branched module's deliverables
+     still get their OWN bucket — that was M4d's point, keeping them out of
+     Module A's — but the separation is now by SLOT, which is strictly stronger:
+     two branched sections in one session no longer share it either. */
   assert.match(SCRIPT, /let answers = \{ moduleA: \{\}, moduleB: \{\}, moduleBranched: \{\} \}/,
-    "the answers state needs the bucket");
-  assert.match(SCRIPT, /refAnswers\.moduleBranched = db\.ref\(base \+ "\/answers\/moduleBranched"\)/,
-    "the ref must be created");
-  assert.match(SCRIPT, /refAnswers\.moduleBranched\.on\("value"/, "…and subscribed");
-  assert.match(SCRIPT, /if \(refAnswers\.moduleBranched\) refAnswers\.moduleBranched\.off\(\);/,
-    "…and torn down with the room");
+    "the type-keyed view every reader expects still exists");
+  assert.match(SCRIPT, /answers:\s+db\.ref\(base \+ "\/answers\/sections\/" \+ slot\)/,
+    "the per-slot ref must be created");
+  assert.match(SCRIPT, /R\.answers\.on\("value"/, "…and subscribed");
+  assert.match(SCRIPT, /\["revealed", "hypotheses", "phase", "roleAssign", "answers"\]/,
+    "…and torn down with the rest of the slot's refs");
+  assert.ok(!/db\.ref\(base \+ "\/answers\/moduleBranched"\)/.test(SCRIPT),
+    "the module-literal answers node is retired");
 });
 
 /* ── M1: the module set is scenario-driven ────────────────────────────────── */
