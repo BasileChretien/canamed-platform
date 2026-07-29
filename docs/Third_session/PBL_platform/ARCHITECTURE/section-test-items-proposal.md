@@ -1,39 +1,54 @@
 # Proposed test items for the thin sections — FOR MEDICAL REVIEW
 
-**Not merged.** Nothing in this file is loaded by the platform. It exists
-because decision 3 of [section-model-design.md](section-model-design.md) gives
-every section its own pre/post-test, and splitting the existing tests exposed
-sections with almost no items of their own (decision 10).
+> **STATUS: APPROVED AND MERGED, 2026-07-28.** Every draft below is now live in
+> `case-content.js`, classified in `TEST_SPLIT` (`section-registry.js`) and
+> carried in EN + FR + JA. The vote cards landed too — `DECISIONS_B` gained the
+> two Module-A cards, `DECISIONS_C` the two Module-B ones. This file is kept as
+> the clinical rationale: the English drafts below are what was reviewed, and
+> the shipped strings are these plus their translations.
+>
+> The floors are now pinned by `tests/section-registry.test.js`: no non-branched
+> section may drop below 4 pre-test items, 4 post-test items, or 1 vote card of
+> its own.
 
-Approve / correct / reject item by item. On approval I add them to
-`case-content.js`, classify them in `TEST_SPLIT` (`section-registry.js`) and
-translate them to FR + JA — the drafts below are **English only** on purpose, so
-no unreviewed clinical wording enters three languages at once.
+It exists because decision 3 of
+[section-model-design.md](section-model-design.md) gives every section its own
+pre/post-test, and splitting the existing tests exposed sections with almost no
+items of their own (decision 10). The drafts were written **English only** on
+purpose, so no unreviewed clinical wording entered three languages at once.
 
 ## Where the split actually lands
 
-| Section | Pre-test | Post-test | Verdict |
+Before → after the 2026-07-28 fill (**bold** = what was short):
+
+| Section | Pre-test | Post-test | Votes |
 |---|---|---|---|
-| `chronic-pain-pbl` | 9 | 6 | fine |
-| `chronic-pain-roleplay` | **1** | 4 | thin pre-test |
-| `jaundice-pbl` | **0** | **1** | the real gap |
-| `jaundice-roleplay` | 10 | 9 | fine |
-| `sore-throat-pbl` | 5 | **1** | thin post-test |
-| `sore-throat-roleplay` | **1** | 5 | thin pre-test |
-| `ward-escalation-branched` | 0 | 0 | branched cases have never had tests — separate decision |
+| `chronic-pain-pbl` | 9 | 6 | 2 |
+| `chronic-pain-roleplay` | **1 → 4** | 4 | 1 |
+| `jaundice-pbl` | **0 → 6** | **1 → 5** | **0 → 2** |
+| `jaundice-roleplay` | 10 | 9 | 5 |
+| `sore-throat-pbl` | 5 | **1 → 4** | 3 |
+| `sore-throat-roleplay` | **1 → 4** | 5 | **0 → 2** |
+| `ward-escalation-branched` | 0 | 0 | 4 |
+
+Branched cases have never carried tests — that stays a separate decision, and
+the test floor exempts them.
 
 The pattern is systematic, not accidental: the tests were written per *case*
 around whatever that case's teaching centre of gravity was (the jaundice case
 is a disclosure case that happens to open with a workup), so they never had to
 balance across modules. Once sections mix freely, a session of
-`jaundice-pbl` + `sore-throat-roleplay` would currently show a pre-test drawn
-entirely from the roleplay half.
+`jaundice-pbl` + `sore-throat-roleplay` would have shown a pre-test drawn
+entirely from the roleplay half — which is what this fill fixes.
 
-Also missing, and cheaper to fix: **per-section summaries**. Each section
-currently inherits its case's summary, which describes both halves ("Module A is
-the workup; Module B is the roleplay"). Stage 0 will print one blurb per picked
-section (decision 4), so each section needs a 1–2 sentence blurb of its own. Say
-the word and I draft those too.
+**Per-section summaries** were the same problem on another axis, and are also
+done: a section used to inherit its case's summary, which describes both halves
+("Module A is the workup; Module B is the roleplay"), so stage 0 would have
+advertised content the session does not run. Each section now carries its own
+1–2 sentence blurb in `SECTION_SUMMARIES` (`section-registry.js`), pinned by the
+"every section has a blurb of its own" test. **The blurb WORDING is still
+unreviewed** — it is drafted from each section's content, unlike the clinical
+items below.
 
 ---
 
@@ -261,10 +276,14 @@ is itching badly but is not septic.*
   ignores the Invitation step — the obligation is to offer the information, not
   to impose it.
 
-> **NB for the author:** this second card deliberately overlaps
-> `jaundice-roleplay`'s territory. If you would rather keep the disclosure
-> decision entirely in the roleplay, drop J-vote-2 and the PBL section runs with
-> one card — still better than none.
+> **NB for the author — KEPT (2026-07-28), but flagged.** This second card
+> deliberately overlaps `jaundice-roleplay`'s territory: a session that picks
+> BOTH halves of the jaundice case will vote on the son's request twice (here as
+> `dec_who_decides`, and again as the roleplay's `dec_family`). It was kept
+> because the argument for it is the section model itself — picked ALONE,
+> `jaundice-pbl` would otherwise never raise disclosure in a case that is
+> fundamentally about disclosure. Say the word and it comes out; the PBL section
+> then runs with one card, which is still better than none.
 
 ## `sore-throat-roleplay` — proposed vote cards (2)
 

@@ -152,8 +152,13 @@ test("Round2-polish-P3: each new bank has 6-10 questions and each carries en/fr/
 
   for (const [name, bank] of Object.entries(banks)) {
     assert.ok(Array.isArray(bank), `${name} must be an array`);
-    assert.ok(bank.length >= 6 && bank.length <= 10,
-      `${name} should hold 6-10 questions (got ${bank.length})`);
+    /* Upper bound relaxed 10 → 20 for the section model: a case's bank is now
+       the SUM of its two sections' banks, so 16 pre-test items on the jaundice
+       case is 6 PBL + 10 roleplay, not a 16-item sitting. The per-SECTION
+       sizes — the ones a participant actually answers — are pinned in
+       tests/section-registry.test.js. */
+    assert.ok(bank.length >= 6 && bank.length <= 20,
+      `${name} should hold 6-20 questions (got ${bank.length})`);
     for (const q of bank) {
       assert.ok(q.q && q.q.en && q.q.fr && q.q.ja,
         `${name} question ${q.id} must have en/fr/ja stems`);

@@ -145,14 +145,53 @@ test("the two sections of one case get DIFFERENT blurbs", () => {
                   SECTIONS["jaundice-roleplay"].summary.en);
 });
 
-test("the known thin-section gap is pinned, so filling it is visible", () => {
-  /* Decision 10: the jaundice case's items are almost entirely disclosure, so
-     its PBL section starts with 0 pre-test and 1 post-test item. Drafted items
-     await medical review (ARCHITECTURE/section-test-items-proposal.md). When
-     they are merged this test SHOULD fail — update the numbers then. */
-  assert.equal(SECTIONS["jaundice-pbl"].preTest.length, 0);
-  assert.equal(SECTIONS["jaundice-pbl"].postTest.length, 1);
-  assert.equal(SECTIONS["jaundice-roleplay"].preTest.length, 10);
+test("the jaundice PBL gap is FILLED — every section carries its own test", () => {
+  /* This test used to pin the gap: jaundice-pbl had 0 pre-test and 1 post-test
+     item, because the case's questions were written almost entirely around
+     disclosure. The drafted workup items were approved 2026-07-28 and merged,
+     so the assertion flips from documenting the hole to guarding the fill. */
+  assert.equal(SECTIONS["jaundice-pbl"].preTest.length, 6);
+  assert.equal(SECTIONS["jaundice-pbl"].postTest.length, 5,
+    "the pre-existing ERCP item plus the four approved ones");
+  assert.equal(SECTIONS["jaundice-roleplay"].preTest.length, 10,
+    "the disclosure half is unchanged");
+
+  /* The other three thin halves, filled in the same pass: chronic-pain-roleplay
+     and sore-throat-roleplay had ONE pre-test item each, sore-throat-pbl ONE
+     post-test item. A section that can be picked alone needs a knowledge check
+     that is about the section — so the floor is 4, not 1. */
+  Object.keys(SECTIONS).forEach(id => {
+    if (SECTIONS[id].type === "branched") return;   // branched cases carry none
+    assert.ok(SECTIONS[id].preTest.length >= 4,
+      id + " pre-test is too thin to stand alone (" + SECTIONS[id].preTest.length + ")");
+    assert.ok(SECTIONS[id].postTest.length >= 4,
+      id + " post-test is too thin to stand alone (" + SECTIONS[id].postTest.length + ")");
+  });
+});
+
+test("every section carries at least one vote card of its own", () => {
+  /* The same gap as the test items, on the other axis. jaundice-pbl had zero
+     Module A decisions and sore-throat-roleplay zero Module B ones, because
+     each case's votes had been written entirely around one of its two halves.
+     Harmless while a session ran both halves of one case; under the section
+     model either half can be picked alone, and it would then reach the
+     decide-together stage with nothing to decide. Filled 2026-07-28. */
+  Object.keys(SECTIONS).forEach(id => {
+    assert.ok(SECTIONS[id].content.decisions.length > 0,
+      id + " must carry at least one decision of its own");
+  });
+  assert.equal(SECTIONS["jaundice-pbl"].content.decisions.length, 2);
+  assert.equal(SECTIONS["sore-throat-roleplay"].content.decisions.length, 2);
+});
+
+test("no two decisions in a case share an id (they become RTDB vote keys)", () => {
+  /* Decision ids are namespaced per slot (s<slot>_<id>) but stay unique WITHIN
+     a section, so a duplicate id in one bank would collapse two votes onto one
+     ballot node. */
+  Object.keys(SECTIONS).forEach(id => {
+    const ids = SECTIONS[id].content.decisions.map(d => d.id);
+    assert.equal(new Set(ids).size, ids.length, id + " has a duplicate vote id");
+  });
 });
 
 test("S0 is inert — no shell tag loads the registry yet", () => {

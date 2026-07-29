@@ -95,10 +95,21 @@ test("the chronic-pain Module A vote (dec_opioid) is unlocked from the start", (
   assert.ok(opioid && !opioid.unlockWhen, "dec_opioid stays always-open (this is why it never auto-fired)");
 });
 
-test("breaking-bad-news Module A has no vote (votes live in Module B) — routing must no-op there", () => {
+test("breaking-bad-news NOW has Module A votes — every section must carry its own", () => {
+  /* This test used to pin the opposite: BBN had no Module A vote at all, so
+     every vote in that case belonged to the roleplay half. Harmless while a
+     session always ran Module A and Module B of the SAME case — but under the
+     section model jaundice-pbl can be picked alone, and it would then have run
+     a decide-together stage with nothing to decide. Two workup cards were
+     added 2026-07-28; the assertion flips from documenting the hole to
+     guarding the fill. */
   const { DECISIONS_B } = loadCases();
-  assert.equal(DECISIONS_B.filter(d => d.module === "A").length, 0,
-    "BBN Module A has no decide-together vote; hasOpenUncommittedModuleAVote() must return false there");
+  const modA = DECISIONS_B.filter(d => d.module === "A");
+  assert.equal(modA.length, 2, "the staging-first and who-decides cards");
+  assert.ok(modA.every(d => !d.unlockWhen),
+    "both stay always-open, like chronic-pain's dec_opioid");
+  assert.ok(DECISIONS_B.some(d => d.module === "B"),
+    "the disclosure votes stay with the roleplay section");
 });
 
 function sliceFn(name, nextMarker) {

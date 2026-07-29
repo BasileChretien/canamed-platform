@@ -80,7 +80,14 @@
              q7: "pbl",      /* first-line non-pharmacological      */
              q8: "pbl",      /* paracetamol alone                   */
              q9: "pbl",      /* fear-avoidance management           */
-             q10: "pbl" },   /* natural history                     */
+             q10: "pbl",     /* natural history                     */
+             /* Approved 2026-07-28: the roleplay half had ONE pre-test item of
+                its own (q5). These three test the consultation skills the
+                section actually rehearses, without repeating the jaundice
+                roleplay's SPIKES bank. */
+             q11: "roleplay",/* opening an unwelcome refusal        */
+             q12: "roleplay",/* the warning shot                    */
+             q13: "roleplay" },/* SPIKES — Strategy & Summary       */
       post: { q1: "pbl",       /* guideline-supported combination     */
               q2: "roleplay",  /* addressing a damage belief          */
               q3: "roleplay",  /* France/HAS vs JOA comparison        */
@@ -102,7 +109,15 @@
              q7: "roleplay",  /* SPIKES — Setting                    */
              q8: "roleplay",  /* SPIKES — Empathy                    */
              q9: "roleplay",  /* the right not to know               */
-             q10: "roleplay" },/* SPIKES — Perception                */
+             q10: "roleplay",/* SPIKES — Perception                 */
+             /* Approved 2026-07-28: the workup items this case never had. The
+                jaundice PBL section had ZERO pre-test items of its own. */
+             q11: "pbl",     /* Courvoisier's sign                  */
+             q12: "pbl",     /* first-line imaging                  */
+             q13: "pbl",     /* cholestatic LFT pattern             */
+             q14: "pbl",     /* new diabetes + weight loss          */
+             q15: "pbl",     /* role of CA 19-9                     */
+             q16: "pbl" },   /* staging for resectability           */
       post: { q1: "roleplay",  /* resolving family-vs-patient         */
               q2: "roleplay",  /* prognosis via SPIKES                */
               q3: "pbl",       /* ERCP biliary stenting — management  */
@@ -112,7 +127,11 @@
               q7: "roleplay",  /* silence after disclosure            */
               q8: "roleplay",  /* advance care planning               */
               q9: "roleplay",  /* softer Japanese clinical language   */
-              q10: "roleplay" }/* transferable lesson                 */
+              q10: "roleplay",/* transferable lesson                */
+              q11: "pbl",     /* tissue diagnosis before chemo      */
+              q12: "pbl",     /* stage BEFORE stenting              */
+              q13: "pbl",     /* pancreatic enzyme replacement      */
+              q14: "pbl" }    /* early palliative care              */
     },
     "respiratory-stewardship": {
       pre: { q1: "pbl",       /* Centor/McIsaac criteria             */
@@ -120,13 +139,21 @@
              q3: "pbl",       /* delayed (back-pocket) prescribing   */
              q4: "pbl",       /* amoxicillin in EBV                  */
              q5: "roleplay",  /* MHLW AMR national plan target       */
-             q6: "pbl" },     /* FeverPAIN                           */
+             q6: "pbl",       /* FeverPAIN                           */
+             /* Approved 2026-07-28: the roleplay half had ONE pre-test item. */
+             q7: "roleplay",  /* satisfaction ≠ getting a script     */
+             q8: "roleplay",  /* the misread-expectation driver      */
+             q9: "roleplay" },/* what makes safety-netting work      */
       post: { q1: "roleplay",  /* "it always works for me"            */
               q2: "roleplay",  /* what to offer instead               */
               q3: "roleplay",  /* France/Japan financial signal       */
               q4: "roleplay",  /* AMR in the individual consultation  */
               q5: "roleplay",  /* cross-cultural summary              */
-              q6: "pbl" }      /* amoxicillin & the COC pill          */
+              q6: "pbl",       /* amoxicillin & the COC pill          */
+              /* Approved 2026-07-28: the PBL half had ONE post-test item. */
+              q7: "pbl",       /* what a positive RADT establishes    */
+              q8: "pbl",       /* which complication treatment averts */
+              q9: "pbl" }      /* first-line agent once GAS confirmed */
     }
   };
 
