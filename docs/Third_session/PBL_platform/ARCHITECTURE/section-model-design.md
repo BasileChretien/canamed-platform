@@ -636,9 +636,37 @@ of the slot's refs, with teardown included.
   scoped to a slot — tracked, not done here.
 - 1187 unit + 636 chromium/mobile E2E + 32 emulator green.
 
-**Still TODO in S6:** removing the `scenarioId` create path, retiring the
-module-literal rules nodes and the transitional read fallbacks, and retiring
-mixed A/B authoring together with its legacy skeleton entry.
+### END-TO-END VERIFICATION — `tests-e2e/mixed-session-e2e.spec.js`
+
+Every phase was verified in its own layer; this asserts the thing the user asked
+for, in one session: two sections from **different clinical cases** run as one
+session, with per-position labels, per-slot content, per-slot state, per-slot
+vote ids and a per-slot export. Per-device.
+
+**It found a real bug immediately.** A PICKED slot carries a `sectionId` and no
+module, so `stageSectionTitle()`'s module-name lookup found nothing and **every
+label in a picker-created session collapsed to a bare "Section k"** — the exact
+sessions the picker exists to create. Fixed by resolving the section's own name
+first.
+
+It also surfaced a **content fact worth knowing**: vote cards are as unevenly
+distributed as the test items. `jaundice-pbl` and `sore-throat-roleplay` ship
+**zero** decisions, so a mixed session drawn from those two shows no vote card
+at all. The first draft of this spec used exactly that pair and would have
+asserted vote-id namespacing over two empty lists — passing vacuously. Section
+decision counts: chronic-pain-pbl 2, chronic-pain-roleplay 1, jaundice-pbl **0**,
+jaundice-roleplay 5, sore-throat-pbl 3, sore-throat-roleplay **0**,
+ward-escalation-branched 4.
+
+### Still TODO — and DEPLOYMENT-GATED, not code-gated
+
+- Retiring the module-literal **rules** nodes would deny writes from any student
+  still on a cached shell, and the transitional read fallbacks exist for rooms
+  that ran before the migration. Both go **after** the model is deployed and no
+  old client or in-flight session remains — not before.
+- Removing the `scenarioId` create path and retiring mixed A/B authoring (with
+  its legacy skeleton entry) are safe to do any time, but they are pure deletion
+  with no user-visible gain, so they are best done once the rest has settled.
 
 ### S6 (original plan) — Hard cutover cleanup
 Remove the `scenarioId` create path, the `modules` CSV narrowing, `moduleA/B`

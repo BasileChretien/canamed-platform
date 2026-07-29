@@ -907,6 +907,19 @@ const STAGE_TITLE_PREFIX = /^\s*(?:Module|モジュール)\s*[AB]\s*[—–-]\s*
 function stageSectionTitle(i) {
   const slot = slotAtStage(i);
   if (!slot || typeof window === "undefined" || typeof window.tc !== "function") return "";
+  /* A PICKED slot carries a sectionId and no module, so the module-name lookup
+     below finds nothing — which silently reduced every label in a
+     picker-created session to a bare "Section k". Resolve the section's own
+     name first; the module trio remains the path for module-derived slots. */
+  if (slot.sectionId) {
+    const sec = (window.CANAMED_SECTIONS || {})[slot.sectionId];
+    const nm = sec && sec.name;
+    if (nm) {
+      const l = (typeof _curLang === "function") ? _curLang() : "en";
+      const v = window.tc(nm, l);
+      if (v) return String(v).replace(STAGE_TITLE_PREFIX, "");
+    }
+  }
   const trio = moduleNameTrio(slot.module);
   if (!trio) return "";
   const lang = (typeof _curLang === "function") ? _curLang() : "en";
