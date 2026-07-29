@@ -409,6 +409,14 @@
       // are ONE pattern filled with the picked section's position + title
       // (decision 8 of the section model). The two ends are keyed by role; the
       // numeric .0/.4 keys stay only as a fallback for a cached older bundle.
+      "splash.create.sections-label": "Sections to run",
+      "splash.create.sections-help": "Add the parts this session runs, in the order you want them. They can come from different clinical cases. An opening and a wrap-up are always included.",
+      "splash.create.sections-empty": "No sections yet — add at least one.",
+      "splash.create.sections-add-label": "Add a section",
+      "splash.create.sections-add": "+ Add section",
+      "splash.create.sections-type-pbl": "PBL",
+      "splash.create.sections-type-roleplay": "Roleplay",
+      "splash.create.sections-type-branched": "Branched",
       "stage.label.welcome": "Welcome",
       "stage.label.wrapup": "Wrap-up",
       "stage.label.section": "Section {n} — {title}",
@@ -988,7 +996,7 @@
   // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
   // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
   // returning browser keeps serving the cached chunk.
-  const LOCALE_VERSION = "v9";   // S1b: stage labels keyed by role + a section pattern
+  const LOCALE_VERSION = "v10";  // S3b: the section picker's own strings
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

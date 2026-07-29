@@ -306,10 +306,7 @@ history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —
 chronic-pain-flavoured text shown regardless of the active case. They belong in
 section data for the same reason.
 
-**Same audit is owed for PBL.** The stage-1 reference panels (`#refA-panel-
-history`, `#refA-panel-guidelines`, `index.html:1525/1575`) are static too —
-chronic-pain-flavoured text shown regardless of the active case. They belong in
-section data for the same reason.
+
 
 ### S1c-fix — two rules that still policed the BUILT-IN shape ← DONE
 Making content authorable moved validation boundaries the DB rules were still

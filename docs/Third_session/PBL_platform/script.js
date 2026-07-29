@@ -980,9 +980,11 @@ function standardStageFlow() {
      pick order, Wrap-up. There are no skipped stages any more, because a stage
      only exists if a section occupies it. (Before S1b an A-only session ran
      [0,1,4] with 2 and 3 skipped; it now runs [0,1,2].) */
-  const slots = sectionSlots();
-  const mid = slots.length ? slots.map(s => s.stage) : [1];
-  return [0].concat(mid, [mid.length + 1]);
+  /* Derive the tail from lastStage() so the stepper and the nav clamps cannot
+     disagree — an empty-slot fallback of [1] used to render "Stage 1 of 3"
+     while navigation clamped at 1, leaving a dead final segment. */
+  const mid = sectionSlots().map(s => s.stage);
+  return [0].concat(mid, [lastStage()]);
 }
 function snapStageToFlow(to, from) {
   const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
@@ -1866,7 +1868,7 @@ let sectionState = {};     // slot → { revealed: {…}, hypotheses: {…} }
 let activeSlot = 1;        // the slot whose state the pointers below refer to
 function slotState(slot) {
   const k = String(slot);
-  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {} };
+  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {}, answers: {} };
   return sectionState[k];
 }
 /* Repoint the legacy globals at the slot on screen. Called whenever the viewed
@@ -1884,6 +1886,19 @@ function refreshActiveSlotState() {
   if (typeof pointSectionRefs === "function") pointSectionRefs();
   /* S3c — and so does the CONTENT. */
   applySectionContent(slot);
+  /* Replay the slot's last-seen synced values. Without this the shared UI keeps
+     the PREVIOUS slot's phase/role draw, because the listener that would have
+     corrected it already fired while this slot was inactive. */
+  const _st = slotState(activeSlot);
+  if (typeof _st.phase !== "undefined") {
+    const _max = ((modBCfg().phases) || []).length - 1;
+    modBPhase = (typeof _st.phase === "number" && _st.phase >= 0 && _st.phase <= _max)
+      ? Math.floor(_st.phase) : 0;
+    if (typeof renderModBPhase === "function") { try { renderModBPhase(); } catch (e) {} }
+  }
+  if (typeof _st.roleAssign !== "undefined" && typeof handleRoleAssign === "function") {
+    try { handleRoleAssign(_st.roleAssign); } catch (e) {}
+  }
 }
 /* ── S3c — the active slot's section supplies the content ─────────────────────
  * With sections picked from different clinical cases, "the case" is no longer a
@@ -1903,11 +1918,16 @@ let _appliedSectionId = null;
 function applySectionContent(slot) {
   if (typeof window === "undefined") return;
   if (!slot || !slot.sectionId) return;          // no pick ⇒ leave the globals alone
-  if (slot.sectionId === _appliedSectionId) return;
+  /* Keyed on slot+section, NOT section alone: duplicates are supported, so the
+     SAME section at slots 1 and 3 would otherwise return early at slot 3 and
+     leave DECISIONS carrying the s1_ prefix while that stage's votes write into
+     slot 3 — exactly the shared tally namespaceDecisions() exists to prevent. */
+  const _applyKey = slot.position + ":" + slot.sectionId;
+  if (_applyKey === _appliedSectionId) return;
   const sec = (window.CANAMED_SECTIONS || {})[slot.sectionId];
   if (!sec || !sec.content) return;
   const c = sec.content;
-  _appliedSectionId = slot.sectionId;
+  _appliedSectionId = _applyKey;
 
   /* Only assign what the section HAS. A roleplay section carries no case or
      penalties, and blanking them would strip the board the PBL slot next door
@@ -4200,7 +4220,7 @@ function enterRoom(roomName, asAdmin) {
   /* S2b-1 — clear the per-slot store too. Clearing only the pointer would
      leave the previous room's reveals in sectionState, and the next room's
      first refreshActiveSlotState() would hand them straight back. */
-  sectionState = {}; activeSlot = 1;
+  sectionState = {}; activeSlot = 1; _appliedSectionId = null;
   revealed = {}; hypotheses = {};
   presence = {}; typingState = {}; seenFindingIds = {};
   myPendingReveal = null;
@@ -4372,11 +4392,14 @@ function bindSectionRefs(base) {
       if (typeof renderDecisions === "function") renderDecisions();
       if (typeof updateModANextStep === "function") updateModANextStep();
     });
-    /* The roleplay's synced phase and role draw are per slot too, so two
-       roleplay sections in one session keep separate timetables. Only the
-       ACTIVE slot's snapshots may drive the shared UI — an inactive slot's
-       phase must not repaint the stage the student is looking at. */
+    /* The roleplay's synced phase and role draw are per slot, so two roleplay
+       sections keep separate timetables. An inactive slot's snapshot must not
+       repaint the visible stage — but it must NOT be thrown away either: RTDB
+       does not re-fire on("value") for an unchanged value, so a dropped
+       snapshot never comes back and walking into the second roleplay would show
+       the FIRST one's phase. Store it per slot, then replay on activation. */
     R.phase.on("value", snap => {
+      slotState(slot).phase = snap.val();
       if (slot !== activeSlot) return;
 
       const v = snap.val();
@@ -4401,6 +4424,7 @@ function bindSectionRefs(base) {
       if (typeof renderBranchedFinal === "function") renderBranchedFinal();
     });
     R.roleAssign.on("value", snap => {
+      slotState(slot).roleAssign = snap.val();
       if (slot !== activeSlot) return;
 
       try { handleRoleAssign(snap.val()); } catch (_) {}
@@ -7201,7 +7225,9 @@ function downloadMyData() {
     pool: null,
     presence: {},
     typing: {},
-    answers: { moduleA: [], moduleB: [] },
+    /* moduleBranched included: LEGACY_SLOT_KEY maps a branched slot to it,
+       and an uninitialised bucket threw and rejected the WHOLE export. */
+    answers: { moduleA: [], moduleB: [], moduleBranched: [] },
     votes: [],
     // R3-A2 — pre/post-test answers belong to the participant and must be
     // exported under GDPR Art. 15. Keyed by room then by 'pre'/'post' so a
@@ -13933,7 +13959,16 @@ function wireSplash() {
  * The library is a lazily-loaded chunk, so the add-list fills itself once the
  * chunk lands (same pattern as populateScenarioPicker below). */
 let splashSectionPick = [];       // ordered section ids the facilitator chose
-const SECTION_TYPE_LABEL = { pbl: "PBL", roleplay: "Roleplay", branched: "Branched" };
+/* Type labels go through i18n like the rest of the create form — the picker was
+   the only part of it shipping hardcoded English, so a French facilitator saw a
+   mixed-language form. */
+function sectionTypeLabel(type) {
+  const key = "splash.create.sections-type-" + type;
+  const v = (typeof window !== "undefined" && typeof window.t === "function")
+    ? window.t(key) : "";
+  if (v && v !== key) return v;
+  return { pbl: "PBL", roleplay: "Roleplay", branched: "Branched" }[type] || type;
+}
 
 function sectionLibraryList() {
   const lib = (typeof window !== "undefined" && window.CANAMED_SECTIONS) || null;
@@ -13959,7 +13994,7 @@ function populateSectionPicker() {
     o.value = sec.id;
     const title = (sec.name && (typeof tc === "function" ? tc(sec.name, lang) : sec.name.en))
       || sec.id;
-    o.textContent = (SECTION_TYPE_LABEL[sec.type] || sec.type) + " — " + title;
+    o.textContent = sectionTypeLabel(sec.type) + " — " + title;
     add.appendChild(o);
   });
   renderSectionPick();
@@ -13983,12 +14018,17 @@ function renderSectionPick() {
     const title = (sec.name && (typeof tc === "function" ? tc(sec.name, _curLang()) : sec.name.en))
       || id;
     /* textContent, never innerHTML — a section title can be facilitator-authored. */
-    name.textContent = "Section " + (i + 1) + " — " + title;
+    /* Reuse the stage label pattern the STUDENT sees, so the facilitator's row
+       and the student's stage read identically in every language. */
+    const pat = (typeof window !== "undefined" && typeof window.t === "function")
+      ? window.t("stage.label.section") : "";
+    const tpl = (pat && pat !== "stage.label.section") ? pat : "Section {n} — {title}";
+    name.textContent = tpl.replace("{n}", String(i + 1)).replace("{title}", title);
     li.appendChild(name);
 
     const type = document.createElement("span");
     type.className = "splash-section-type";
-    type.textContent = SECTION_TYPE_LABEL[sec.type] || sec.type || "";
+    type.textContent = sectionTypeLabel(sec.type);
     li.appendChild(type);
 
     const mk = (cls, label, disabled, fn) => {

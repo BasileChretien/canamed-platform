@@ -64,12 +64,21 @@ test("duplicates are ALLOWED — running a section twice is legitimate", () => {
 test("section titles are rendered as TEXT — they can be facilitator-authored", () => {
   assert.ok(!/innerHTML/.test(codeOf("renderSectionPick")));
   const f = fnOf("renderSectionPick");
-  assert.match(f, /name\.textContent = "Section " \+ \(i \+ 1\)/,
-    "the row must read the way the student will see it");
+  /* The row now renders through the SAME i18n pattern as the student's stage
+     label, so the facilitator's list and the stage read identically in every
+     language rather than the picker being the one hardcoded-English part of an
+     otherwise-translated form. */
+  assert.match(f, /window\.t\("stage\.label\.section"\)/,
+    "the row must reuse the student's stage-label pattern");
+  assert.match(f, /tpl\.replace\("\{n\}", String\(i \+ 1\)\)/,
+    "…numbered by position");
 });
 
 test("the row is numbered by POSITION, matching the student's stage label", () => {
-  assert.match(fnOf("renderSectionPick"), /"Section " \+ \(i \+ 1\) \+ " — "/);
+  const f = fnOf("renderSectionPick");
+  assert.match(f, /window\.t\("stage\.label\.section"\)/,
+    "same pattern the student sees on the stage");
+  assert.match(f, /replace\("\{title\}", title\)/);
 });
 
 test("an empty pick writes NO sections field — the session falls back", () => {

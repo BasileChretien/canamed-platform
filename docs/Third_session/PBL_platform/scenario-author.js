@@ -1993,9 +1993,9 @@
         ],
         framework: "spikes",
         phases: [
-          { id: "setup", label: "Set up", minutes: 5, shows: ["rolePicker"] },
+          { id: "setup", label: "Set up", minutes: 5, shows: ["vignette", "roles"] },
           { id: "play", label: "Play the scene", minutes: 12, shows: [] },
-          { id: "reflect", label: "Reflect", minutes: 6, shows: ["reflectAnswers"], expanded: true }
+          { id: "reflect", label: "Reflect", minutes: 6, shows: ["reflect"], expanded: true }
         ],
         panels: {
           useful: { label: "Useful sentences",
@@ -2408,8 +2408,6 @@
     choice("Branched Scenario",
       "An épuré, one-decision-at-a-time case: each choice unlocks the next.",
       branchedSkeletonJson,
-      pblSkeletonJson,
-      roleplaySkeletonJson,
       "Loaded the branched starter skeleton. The branch editor is now showing — " +
       "replace the placeholder nodes, give it your own id, then save.");
     inner.appendChild(ul);
