@@ -420,11 +420,15 @@ consent/DPA text.**
    no consent flag anywhere (`grep -rn consent scripts/` finds only the simulator). So
    "using your work for research is optional" CANNOT be stated truthfully today. Needs a
    consent field + the exports honouring it.
-2. **Org-scoped sessions have ZERO retention coverage.** `orgs.js` is shipped and live
-   (`/o/{slug}/` routing, full parallel rules tree), but all three retention jobs are
-   hard-scoped to `db.ref("sessions")` — `grep -c orgs scripts/{cleanup-stale-sessions,
-   backup-sessions,pseudonymise-export}.js` = 0/0/0. Org sessions are never deleted,
-   never backed up, never pseudonymised = GDPR storage-limitation breach in production.
+2. ~~**Org-scoped sessions have ZERO retention coverage.**~~ **✅ FIXED — label was stale,
+   corrected 2026-07-29.** The gap was real when written (all three retention jobs were
+   hard-scoped to `db.ref("sessions")`), but has since been closed: all three now walk
+   BOTH trees via the shared `scripts/lib/session-trees.js` helper
+   (`readSessionLocations`), and `cleanup-stale-sessions.js` also purges the session's
+   `adminSecrets/…` entry, which lives outside the session subtree. `Verify:`
+   `grep -c orgs scripts/{cleanup-stale-sessions,backup-sessions,pseudonymise-export}.js`
+   = 2/2/2 (was 0/0/0), and all three appear in
+   `grep -ln session-trees scripts/*.js`.
 3. **`moduleA/chat` is NOT room-private — UNDECIDED, do NOT treat as accepted.**
    RTDB `.read` **cascades and cannot be revoked at a deeper path**.
    `database.rules.json:93` grants `.read` on the whole `sessions/$sessionId`
@@ -447,6 +451,31 @@ consent/DPA text.**
 Also: certificates are minted on download click (`resolveCertId`) with no prompt, so
 "getting a certificate is optional" is likewise not true yet.
 Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/`.
+
+**A FIFTH gap, found 2026-07-29 while preparing the CER Unicaen dossier — ✅ FIXED
+(shell v112→v113).** The Art. 13 notice promised live session data was "purged within
+7 days" while the deployed job keeps closed sessions **30** days and abandoned ones **90**
+(`CLEANUP_RETENTION_CLOSED_DAYS` / `_OPEN_DAYS`, pinned to the same values by
+`.github/workflows/cleanup-stale-sessions.yml`). Resolved by **correcting the notice to
+30/90**, not by tightening the job: 30/90 is proportionate to the facilitator debrief
+window, tightening to 7 d would have purged sessions still in use (a never-closed session
+would die after a week), and `cleanup-stale-sessions.js`'s own header already documented
+30/90 as the intended policy — the 7-day text was the stale outlier. Twelve published
+surfaces were corrected: `privacy.html` §8 (EN/FR/JA), `lobby.privacy.p3` in `i18n.js`,
+all seven `locales/*.js`, and the hardcoded fallback `<p>` in `index.html`.
+- **Same pass fixed a second, worse drift in that sentence:** `de/es/ko/pt/zh` and the
+  `index.html` fallback described the research dataset as **pseudonymised**, while
+  `privacy.html`, the EN canonical, `fr`/`ja` and the CER dossier all declare it stored
+  **linked to the participant (identifiable)** for up to 5 y. Those participants' consent
+  rested on a false premise. (`lobby.consent-research` saying analysis/publication happens
+  in pseudonymised form is a *different, accurate* claim — deliberately left alone.)
+- **Regression guard:** `tests/retention-notice-consistency.test.js` parses the enforced
+  days out of the script + workflow and asserts all 12 published surfaces state them,
+  claim no 7-day purge, and never say "pseudonymised". Nothing linked those two sources
+  before, which is why they diverged unnoticed for months. `Verify:` `node --test
+  tests/retention-notice-consistency.test.js`.
+- `LOCALE_VERSION` (i18n.js) bumped v8→v9 alongside the shell bump — it is a **separate
+  counter**, and without it returning browsers keep serving the cached 7-day locale chunk.
 
 **Accepted by design (no change — documented decisions):**
 - Full room-subtree readability to any session member, **for structured

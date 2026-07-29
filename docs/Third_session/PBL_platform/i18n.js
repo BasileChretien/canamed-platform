@@ -375,7 +375,7 @@
       "lobby.privacy.summary": "How your data is used (please read before joining)",
       "lobby.privacy.p1": "The CaNaMED research team (<strong>Université de Caen Normandie × Nagoya University</strong>, joint controllers under GDPR Art. 26 / joint users under APPI Art. 27(5)) collects your first name or nickname, university, year of study and self-assessed English level. Your name is visible to everyone in your room and appears next to the points you contribute.",
       "lobby.privacy.p2": "The free-text answers you write may disclose health-related, religious or philosophical opinions about clinical scenarios — <strong>special-category data</strong> under GDPR Art. 9 and <strong>要配慮個人情報</strong> under APPI Art. 2(3). The optional second consent box below covers this.",
-      "lobby.privacy.p3": "Data is stored on Google Firebase Realtime Database in <strong>europe-west1 (Belgium, EU)</strong>. For Japanese participants this is a cross-border transfer protected by the EU–Japan mutual adequacy decision (PPC, 2019). Live session data is purged within 7 days; if you ticked the research-consent box your contributions are kept linked to you (identifiable) for up to 5 years after publication.",
+      "lobby.privacy.p3": "Data is stored on Google Firebase Realtime Database in <strong>europe-west1 (Belgium, EU)</strong>. For Japanese participants this is a cross-border transfer protected by the EU–Japan mutual adequacy decision (PPC, 2019). Live session data is purged within 30 days of the session closing, or within 90 days of creation if the session is never closed; if you ticked the research-consent box your contributions are kept linked to you (identifiable) for up to 5 years after publication.",
       "lobby.privacy.p4": "<strong>Signing in with Google is optional.</strong> If you do, a small profile and a list of session codes you have joined are tied to your Google account; you can edit or delete this at any time from the \"My account\" panel. Anonymous joining works exactly the same way.",
       "lobby.privacy.p5": "You can withdraw your consent at any time. Whether you tick the second consent box has <strong>no effect on your grade, your standing at your university, or your participation in the workshop.</strong> To exercise any right (access, correction, deletion, portability, restriction, objection, withdrawal, complaint), contact your facilitator or write to <strong><a href=\"mailto:canamed-ethics@unicaen.fr\">canamed-ethics@unicaen.fr</a></strong> (see the <a href=\"privacy.html\" data-i18n-href=\"privacy\" target=\"_blank\" rel=\"noopener\">full privacy policy</a> for the stable mailbox).",
       "lobby.privacy.p6": "The <a href=\"privacy.html\" data-i18n-href=\"privacy\" target=\"_blank\" rel=\"noopener\">full privacy policy</a> lists the controllers' identities, the legal bases, the joint-use items, the international-transfer safeguards, retention periods, your rights with response times, and the ethics-committee approvals. Please read it once before joining.",
@@ -985,7 +985,7 @@
   // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
   // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
   // returning browser keeps serving the cached chunk.
-  const LOCALE_VERSION = "v8";   // M4b: stage.label.3 = decision case, wrap-up → .4
+  const LOCALE_VERSION = "v9";   // retention notice: 7d → 30d closed / 90d abandoned
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
