@@ -26,11 +26,12 @@ const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 
 function loadCases() {
   let src = fs.readFileSync(path.join(P, "case-content.js"), "utf8");
-  src += "\nthis.__CASE = CASE; this.__CASE_B = CASE_B; this.__CASE_C = CASE_C; this.__DEC = DECISIONS; this.__DEC_B = DECISIONS_B;";
+  src += "\nthis.__CASE = CASE; this.__CASE_B = CASE_B; this.__CASE_C = CASE_C; this.__DEC = DECISIONS; this.__DEC_B = DECISIONS_B; this.__DEC_C = DECISIONS_C;";
   const ctx = {};
   // eslint-disable-next-line no-new-func
   new Function("window", "self", src).call(ctx, {}, {});
-  return { CASE: ctx.__CASE, CASE_B: ctx.__CASE_B, CASE_C: ctx.__CASE_C, DECISIONS: ctx.__DEC, DECISIONS_B: ctx.__DEC_B };
+  return { CASE: ctx.__CASE, CASE_B: ctx.__CASE_B, CASE_C: ctx.__CASE_C,
+           DECISIONS: ctx.__DEC, DECISIONS_B: ctx.__DEC_B, DECISIONS_C: ctx.__DEC_C };
 }
 
 const tri = o => !!(o && typeof o.en === "string" && o.en &&
@@ -106,10 +107,51 @@ test("breaking-bad-news NOW has Module A votes — every section must carry its 
   const { DECISIONS_B } = loadCases();
   const modA = DECISIONS_B.filter(d => d.module === "A");
   assert.equal(modA.length, 2, "the staging-first and who-decides cards");
-  assert.ok(modA.every(d => !d.unlockWhen),
-    "both stay always-open, like chronic-pain's dec_opioid");
   assert.ok(DECISIONS_B.some(d => d.module === "B"),
     "the disclosure votes stay with the roleplay section");
+
+  /* Both gate, but NOT identically, and the difference is the point.
+     dec_stage_first is a clinical-management decision — committing to it before
+     the workup is exactly the anchoring error the case teaches — so it gates on
+     the full workup and carries a penalty, like dec_plan.
+     dec_who_decides gates on a working hypothesis ONLY: you cannot sensibly
+     decide who is told WHAT before you know what there is to tell, but the
+     son's request does not become answerable by examining the patient. Its
+     penalty stays 0 to match dec_family, the roleplay's twin of this same
+     decision — penalising it here but not there would be incoherent. */
+  const stage = modA.find(d => d.id === "dec_stage_first");
+  assert.deepEqual(stage.unlockWhen,
+    { hypotheses: 1, historyRevealed: 1, examRevealed: 1 });
+  assert.equal(stage.penalty, 15);
+
+  const who = modA.find(d => d.id === "dec_who_decides");
+  assert.deepEqual(who.unlockWhen, { hypotheses: 1 },
+    "no history/exam gate — the son's request is not contingent on an exam");
+  assert.equal(who.penalty, 0,
+    "matches dec_family, the roleplay's twin of this decision");
+});
+
+test("a gated vote may only name reveal groups its own case actually has", () => {
+  /* A gate on a group with NO entries never opens, which presents as a vote
+     that is permanently locked with no error anywhere. Cheap to assert, and
+     the section model makes it likelier: a section can be picked alone, so its
+     gates can no longer lean on another section's board. */
+  const cases = loadCases();
+  const PAIRS = [["DECISIONS", "CASE"], ["DECISIONS_B", "CASE_B"], ["DECISIONS_C", "CASE_C"]];
+  const GROUP_FOR = { historyRevealed: "history", examRevealed: "exam", labsRevealed: "labs" };
+  PAIRS.forEach(([dk, ck]) => {
+    (cases[dk] || []).forEach(d => {
+      Object.keys(d.unlockWhen || {}).forEach(key => {
+        const group = GROUP_FOR[key];
+        if (!group) return;                       // hypotheses / afterDecision / synthesis
+        const items = (cases[ck] || {})[group] || [];
+        assert.ok(items.length >= d.unlockWhen[key],
+          dk + " " + d.id + " gates on " + key + " >= " + d.unlockWhen[key] +
+          " but " + ck + "." + group + " has only " + items.length + " entries — " +
+          "that vote could never unlock");
+      });
+    });
+  });
 });
 
 function sliceFn(name, nextMarker) {
