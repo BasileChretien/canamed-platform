@@ -36,12 +36,12 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v114" below to the matching new string.
+         2. Update every "?v=v115" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v114"></script>
+  <script src="theme-init.js?v=v115"></script>
   <!-- Design tokens + self-hosted variable fonts (Clinical Editorial).
        tokens.css MUST precede style.css: it is the single source of truth
        for every custom property style.css consumes. Fonts are same-origin
@@ -49,14 +49,14 @@
        first — crossorigin is required for font preloads even same-origin. -->
   <link rel="preload" href="fonts/source-sans-3-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="fonts/source-serif-4-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="tokens.css?v=v114" />
-  <link rel="stylesheet" href="style.css?v=v114" />
+  <link rel="stylesheet" href="tokens.css?v=v115" />
+  <link rel="stylesheet" href="style.css?v=v115" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
-  <link rel="manifest" href="manifest.webmanifest?v=v114" />
+  <link rel="manifest" href="manifest.webmanifest?v=v115" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v114" defer></script>
+  <script src="sw-register.js?v=v115" defer></script>
 </head>
 <body class="locked">
   <!-- ============ INLINE SVG ICON SPRITE (2026-07-17) ============
@@ -999,6 +999,25 @@
           90 days of creation if the session is never closed; if you ticked
           the research-consent box your contributions are kept linked to you
           (identifiable) for up to 5 years after publication.</p>
+        <!-- Video conference + transcript (2026-07-29). The sessions run on
+             Microsoft Teams, whose automatic transcript carries the speaker's
+             name against each utterance, and the raw recording is retained
+             too. Both are covered by the THIRD consent box below, which is
+             optional and independent of the research box. Microsoft is named
+             here as a processor alongside Google, per GDPR Art. 13(1)(e). -->
+        <p data-i18n-html="lobby.privacy.transcript">Sessions are held by
+          <strong>video conference on Microsoft Teams</strong>, under your
+          university's subscription &mdash; <strong>Microsoft</strong> is a
+          processor for this alongside Google. The tool produces a
+          <strong>written transcript automatically</strong>, and that
+          transcript carries your name against each thing you say; the
+          audio/video recording of the session is kept as well, not only the
+          transcript. The transcript and the recording are kept <strong>only
+          if you tick the third consent box</strong> &mdash; for 5 years after
+          publication, with the same restricted access as the rest of the
+          research dataset, and you can ask for them to be deleted at any
+          time. <strong>No photograph is taken, and you are not required to
+          turn your camera on.</strong></p>
         <p data-i18n-html="lobby.privacy.p4"><strong>Signing in with Google is optional.</strong> If you do, a
           small profile and a list of session codes you have joined are tied
           to your Google account; you can edit or delete this at any time
@@ -1092,8 +1111,31 @@
               participation, my grades or my standing at my university.
             </span>
           </label>
+          <!-- Box C — transcript + recording of the video conference
+               (2026-07-29). Optional and INDEPENDENT of box B: a participant
+               may consent to research use while refusing transcript
+               retention, or the reverse, or neither. Only box A gates the
+               Join button (see refreshJoinBtnState in script.js). -->
+          <label class="consent-row">
+            <input type="checkbox" id="consent-transcript" />
+            <span data-i18n="lobby.consent-transcript">
+              I additionally consent to the written transcript AND the
+              audio/video recording of the video-conference sessions being
+              kept and analysed for the CaNaMED study. The transcript is
+              produced automatically by the video-conference tool (Microsoft
+              Teams) and carries my name against each of my utterances; the
+              recording of the session is kept as well, not only the
+              transcript. Both are kept for 5 years after publication, with
+              the same restricted access as the rest of the research dataset,
+              and I can ask for them to be deleted at any time. No photograph
+              is taken and I am not required to turn my camera on. I can take
+              part in the workshop without ticking this third box, and without
+              ticking the research box above &mdash; refusing has no effect on
+              my participation, my grades or my standing at my university.
+            </span>
+          </label>
           <p class="lobby-hint consent-version" id="consent-version">
-            <span data-i18n="lobby.consent-version">Notice version PIS v2 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
+            <span data-i18n="lobby.consent-version">Notice version PIS v3 &middot; 2026-07. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
           </p>
         </div>
 
@@ -3253,46 +3295,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v114" defer></script>
+  <script src="firebase-config.js?v=v115" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v114" defer></script>
+  <script src="orgs.js?v=v115" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v114" defer></script>
+  <script src="platform-config.js?v=v115" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v114" defer></script>
+  <script src="telemetry.js?v=v115" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v114" defer></script>
+  <script src="purify.min.js?v=v115" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v114" defer></script>
+  <script src="i18n.js?v=v115" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v114" defer></script>
+  <script src="localdb.js?v=v115" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v114" defer></script>
+  <script src="lib.js?v=v115" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v114" defer></script>
+  <script src="pure-utils.js?v=v115" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3303,7 +3345,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v114" defer></script>
+  <script src="script-loader.js?v=v115" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3313,7 +3355,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v114" defer></script>
+  <script src="script.js?v=v115" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
