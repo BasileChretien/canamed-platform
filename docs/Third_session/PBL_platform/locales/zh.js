@@ -109,7 +109,7 @@
   "lobby.privacy.summary": "您的数据如何被使用(加入前请阅读)",
   "lobby.privacy.p1": "CaNaMED 研究团队(<strong>卡昂诺曼底大学 × 名古屋大学</strong>,GDPR 第 26 条意义上的共同管理者 / APPI 第 27 条第(5)款意义上的共同使用者)会收集您的名字或昵称、大学、年级和自我评估的英语水平。您的姓名对同房间的所有参与者可见,并会显示在您所贡献的分数旁边。",
   "lobby.privacy.p2": "您撰写的自由文本回答可能会涉及对临床情境的健康、宗教或哲学观点——这属于 GDPR 第 9 条所称的<strong>特殊类别数据</strong>以及 APPI 第 2 条第(3)款所称的<strong>要配慮個人情報</strong>。下方的第二个可选同意项即用于覆盖此情况。",
-  "lobby.privacy.p3": "数据存储于 Google Firebase 实时数据库的 <strong>europe-west1(比利时,欧盟)</strong>。对于日本参与者而言,这是一次跨境传输,受欧盟–日本相互充分性决定(PPC,2019)的保护。实时会话数据将在 7 天内清除;如您勾选了研究同意项,您的贡献将在发表后以假名化形式保留最多 5 年。",
+  "lobby.privacy.p3": "数据存储于 Google Firebase 实时数据库的 <strong>europe-west1(比利时,欧盟)</strong>。对于日本参与者而言,这是一次跨境传输,受欧盟–日本相互充分性决定(PPC,2019)的保护。实时会话数据将在会话结束后 30 天内清除(若会话始终未结束,则在创建后 90 天内清除);如您勾选了研究同意项,您的贡献将在发表后以与您关联(可识别身份)的形式保留最多 5 年。",
   "lobby.privacy.p4": "<strong>使用 Google 登录是可选的。</strong>如选择登录,一个小型个人资料以及您加入过的会话代码列表将与您的 Google 账号相关联;您可以随时在「我的账户」面板中编辑或删除。匿名加入完全以相同方式工作。",
   "lobby.privacy.p5": "您可以随时撤回同意。是否勾选第二个同意项<strong>不会对您的成绩、所在大学的地位或参加工作坊产生任何影响。</strong>如需行使任何权利(访问、更正、删除、可携、限制、反对、撤回、投诉),请联系主持人或发送邮件至 <strong><a href=\"mailto:canamed-ethics@unicaen.fr\">canamed-ethics@unicaen.fr</a></strong>(稳定的联系邮箱请参见<a href=\"privacy.html\" data-i18n-href=\"privacy\" target=\"_blank\" rel=\"noopener\">完整隐私政策</a>)。",
   "lobby.privacy.p6": "<a href=\"privacy.html\" data-i18n-href=\"privacy\" target=\"_blank\" rel=\"noopener\">完整隐私政策</a>列明了管理者身份、法律依据、共同使用项目、跨境传输保护措施、保存期限、您的权利及响应时限,以及伦理委员会批准。请在加入前阅读一次。",
