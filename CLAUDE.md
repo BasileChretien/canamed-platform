@@ -453,7 +453,7 @@ Also: certificates are minted on download click (`resolveCertId`) with no prompt
 Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/`.
 
 **A FIFTH gap, found 2026-07-29 while preparing the CER Unicaen dossier — ✅ FIXED
-(shell v112→v113).** The Art. 13 notice promised live session data was "purged within
+(shell v113→v114).** The Art. 13 notice promised live session data was "purged within
 7 days" while the deployed job keeps closed sessions **30** days and abandoned ones **90**
 (`CLEANUP_RETENTION_CLOSED_DAYS` / `_OPEN_DAYS`, pinned to the same values by
 `.github/workflows/cleanup-stale-sessions.yml`). Resolved by **correcting the notice to
