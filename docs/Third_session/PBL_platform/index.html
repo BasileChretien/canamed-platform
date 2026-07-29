@@ -1000,9 +1000,29 @@
           <strong>europe-west1 (Belgium, EU)</strong>. For Japanese
           participants this is a cross-border transfer protected by the
           EU&ndash;Japan mutual adequacy decision (PPC, 2019). Live session
-          data is purged within 7 days; if you ticked the research-consent
-          box your contributions are kept pseudonymised for up to 5 years
-          after publication.</p>
+          data is purged within 30 days of the session closing, or within
+          90 days of creation if the session is never closed; if you ticked
+          the research-consent box your contributions are kept linked to you
+          (identifiable) for up to 5 years after publication.</p>
+        <!-- Video conference + transcript (2026-07-29). The sessions run on
+             Microsoft Teams, whose automatic transcript carries the speaker's
+             name against each utterance, and the raw recording is retained
+             too. Both are covered by the THIRD consent box below, which is
+             optional and independent of the research box. Microsoft is named
+             here as a processor alongside Google, per GDPR Art. 13(1)(e). -->
+        <p data-i18n-html="lobby.privacy.transcript">Sessions are held by
+          <strong>video conference on Microsoft Teams</strong>, under your
+          university's subscription &mdash; <strong>Microsoft</strong> is a
+          processor for this alongside Google. The tool produces a
+          <strong>written transcript automatically</strong>, and that
+          transcript carries your name against each thing you say; the
+          audio/video recording of the session is kept as well, not only the
+          transcript. The transcript and the recording are kept <strong>only
+          if you tick the third consent box</strong> &mdash; for 5 years after
+          publication, with the same restricted access as the rest of the
+          research dataset, and you can ask for them to be deleted at any
+          time. <strong>No photograph is taken, and you are not required to
+          turn your camera on.</strong></p>
         <p data-i18n-html="lobby.privacy.p4"><strong>Signing in with Google is optional.</strong> If you do, a
           small profile and a list of session codes you have joined are tied
           to your Google account; you can edit or delete this at any time
@@ -1096,8 +1116,31 @@
               participation, my grades or my standing at my university.
             </span>
           </label>
+          <!-- Box C — transcript + recording of the video conference
+               (2026-07-29). Optional and INDEPENDENT of box B: a participant
+               may consent to research use while refusing transcript
+               retention, or the reverse, or neither. Only box A gates the
+               Join button (see refreshJoinBtnState in script.js). -->
+          <label class="consent-row">
+            <input type="checkbox" id="consent-transcript" />
+            <span data-i18n="lobby.consent-transcript">
+              I additionally consent to the written transcript AND the
+              audio/video recording of the video-conference sessions being
+              kept and analysed for the CaNaMED study. The transcript is
+              produced automatically by the video-conference tool (Microsoft
+              Teams) and carries my name against each of my utterances; the
+              recording of the session is kept as well, not only the
+              transcript. Both are kept for 5 years after publication, with
+              the same restricted access as the rest of the research dataset,
+              and I can ask for them to be deleted at any time. No photograph
+              is taken and I am not required to turn my camera on. I can take
+              part in the workshop without ticking this third box, and without
+              ticking the research box above &mdash; refusing has no effect on
+              my participation, my grades or my standing at my university.
+            </span>
+          </label>
           <p class="lobby-hint consent-version" id="consent-version">
-            <span data-i18n="lobby.consent-version">Notice version PIS v2 &middot; 2026-05. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
+            <span data-i18n="lobby.consent-version">Notice version PIS v3 &middot; 2026-07. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
           </p>
         </div>
 

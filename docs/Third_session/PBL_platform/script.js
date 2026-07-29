@@ -2743,7 +2743,7 @@ function readSession(hintId) {
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
    participant consented to. */
-const CONSENT_NOTICE_VERSION = "PIS-v2-2026-05";
+const CONSENT_NOTICE_VERSION = "PIS-v3-2026-07";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */
 function joinParticipant() {
@@ -2755,6 +2755,11 @@ function joinParticipant() {
   // analysis pipelines can skip participants who opted out
   const cWorkshop = !!(el("consent-workshop") && el("consent-workshop").checked);
   const cResearch = !!(el("consent-research") && el("consent-research").checked);
+  // Box C — retention of the Teams transcript + recording. Optional and
+  // INDEPENDENT of box B (a participant may accept research use but refuse
+  // the transcript, or the reverse), so it is read and recorded separately
+  // and never gates the join.
+  const cTranscript = !!(el("consent-transcript") && el("consent-transcript").checked);
   // Certificate verification is on by default and privacy-preserving (only a
   // one-way hash of name+session is ever published — see the verification note
   // in the lobby and the certificate flow). Recorded true for the audit trail.
@@ -2788,6 +2793,7 @@ function joinParticipant() {
   myConsent = {
     workshop: cWorkshop,
     research: cResearch,
+    transcript: cTranscript,
     verification: cVerification,
     version: CONSENT_NOTICE_VERSION,
     at: Date.now()
@@ -12667,9 +12673,11 @@ function autoResume() {
   const prior = resumeData.consent;
   const cWorkshop = el("consent-workshop");
   const cResearch = el("consent-research");
+  const cTranscript = el("consent-transcript");
   if (prior && prior.version === CONSENT_NOTICE_VERSION) {
     if (cWorkshop) cWorkshop.checked = !!prior.workshop;
     if (cResearch) cResearch.checked = !!prior.research;
+    if (cTranscript) cTranscript.checked = !!prior.transcript;
     if (el("join-btn")) el("join-btn").disabled = !prior.workshop;
     // consent is fresh enough - resume seamlessly
     if (prior.workshop) joinParticipant();

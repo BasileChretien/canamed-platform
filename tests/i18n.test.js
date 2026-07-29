@@ -235,7 +235,8 @@ test("i18n: privacy paragraphs translate to different prose per language", () =>
   // Sanity-check that the FR + JA translations are not accidental copies
   // of the English source. Catches a real bug we hit during the first
   // pass where a copy-paste left the EN string in the FR table.
-  for (const k of ["lobby.privacy.summary", "lobby.privacy.p1", "lobby.privacy.p3"]) {
+  for (const k of ["lobby.privacy.summary", "lobby.privacy.p1", "lobby.privacy.p3",
+                   "lobby.privacy.transcript", "lobby.consent-transcript"]) {
     assert.notStrictEqual(T.fr[k], T.en[k], `${k} fr should differ from en`);
     assert.notStrictEqual(T.ja[k], T.en[k], `${k} ja should differ from en`);
   }
@@ -255,6 +256,11 @@ test("i18n: lobby.privacy.* keys cover all 8 supported languages (R2-43)", () =>
     "lobby.privacy.p4",
     "lobby.privacy.p5",
     "lobby.privacy.p6",
+    // Video-conference + transcript disclosure and its consent box (added
+    // 2026-07-29). Both are Art. 13 copy, so they must reach all 8 tables for
+    // the same reason the p1–p6 family does.
+    "lobby.privacy.transcript",
+    "lobby.consent-transcript",
     "lobby.consent-workshop-detail",
     "lobby.consent-version",
     "lobby.consent-version-link",
