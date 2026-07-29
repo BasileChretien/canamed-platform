@@ -202,3 +202,97 @@ prescription, and its risk?
 - Ask whether they have understood
 - Provide a leaflet instead
 - Repeat the explanation more slowly
+
+---
+
+# Proposed VOTE CARDS for the two sections that have none — FOR MEDICAL REVIEW
+
+**Not merged.** Surfaced by the end-to-end integration test: vote cards are as
+unevenly distributed as the test items, and a session mixing these two sections
+would run with **no group decision at all**.
+
+| Section | Vote cards |
+|---|---|
+| chronic-pain-pbl | 2 |
+| chronic-pain-roleplay | 1 |
+| **jaundice-pbl** | **0** |
+| jaundice-roleplay | 5 |
+| sore-throat-pbl | 3 |
+| **sore-throat-roleplay** | **0** |
+| ward-escalation-branched | 4 |
+
+Same rules as the test items above: English only, approve/correct/reject each,
+and I add them to `case-content.js` (tagged with the right `module`) on approval.
+
+## `jaundice-pbl` — proposed vote cards (2)
+
+**J-vote-1 — "The scan is back. What do you order next?"**
+*Ultrasound shows a dilated intra- and extra-hepatic biliary tree and a
+suspicious mass in the pancreatic head. Bilirubin 210 µmol/L, ALP 640 U/L. She
+is itching badly but is not septic.*
+
+- **Pancreatic-protocol contrast CT for staging, BEFORE any biliary
+  intervention** ✅
+  *Reveal:* Staging first preserves the information you need. A stent
+  introduces inflammatory change and artefact that degrade assessment of
+  vascular involvement, and ERCP carries a pancreatitis risk — so a decision
+  taken for comfort can cost you the resectability question.
+- **ERCP with stenting now, to relieve the jaundice**
+  *Reveal:* Tempting, because she is uncomfortable and the bilirubin is high.
+  But she is not septic and not in renal failure, so this is not urgent
+  drainage — and doing it first degrades the staging CT.
+- **Refer straight to oncology without further imaging**
+  *Reveal:* No tissue, no stage, no resectability assessment — oncology cannot
+  plan from this, and it delays rather than shortens the pathway.
+
+**J-vote-2 — "Who takes the decision about what she is told?"**
+*Her son asks the team, privately, not to tell her.*
+
+- **Establish what SHE wants to know first, then honour it** ✅
+  *Reveal:* Capacity is intact, so the decision is hers — including the right
+  not to know. Asking her what she wants is not the same as telling her
+  everything, and it takes the family out of the position of gatekeeper without
+  making them the adversary.
+- **Agree with the son and defer the conversation**
+  *Reveal:* It buys calm now at the cost of her autonomy, and it puts the team
+  in an undertaking it cannot keep once she asks a direct question.
+- **Tell her the full diagnosis immediately, as the law requires**
+  *Reveal:* Direct information is the default, but "immediately and in full"
+  ignores the Invitation step — the obligation is to offer the information, not
+  to impose it.
+
+> **NB for the author:** this second card deliberately overlaps
+> `jaundice-roleplay`'s territory. If you would rather keep the disclosure
+> decision entirely in the roleplay, drop J-vote-2 and the PBL section runs with
+> one card — still better than none.
+
+## `sore-throat-roleplay` — proposed vote cards (2)
+
+**R-vote-1 — "She asks a second time, more firmly. What does your group commit
+to?"**
+
+- **No antibiotic, an explicit symptomatic plan, and clear return advice** ✅
+  *Reveal:* Centor/McIsaac 0 with cough and coryza is viral. The defensible
+  position is not "no" — it is "no, here is why, here is what will actually
+  help, and here is when to come back".
+- **Prescribe amoxicillin — she has a deadline and it keeps the relationship**
+  *Reveal:* It ends the consultation faster and costs the patient the most:
+  no benefit at this score, a rash if this turns out to be EBV, and the next
+  sore throat starts from "last time I got antibiotics".
+- **Give a delayed prescription without explaining it**
+  *Reveal:* Delayed prescribing works when it is framed as a safety net. Handed
+  over silently it reads as "the doctor thinks I'll need it", and it is filled
+  the same day.
+
+**R-vote-2 — "What do you do with the Friday presentation?"**
+
+- **Treat it as the real problem and plan around it** ✅
+  *Reveal:* Regular analgesia, fluids, voice care and realistic expectations
+  for Friday address what she actually came for. Naming the deadline as
+  legitimate is what makes the refusal land as care rather than obstruction.
+- **Tell her work is not a medical indication**
+  *Reveal:* True, and useless. It answers a question she did not ask and
+  confirms that you were not listening.
+- **Offer a sick note instead**
+  *Reveal:* A reasonable option to have available, but offered *instead* of a
+  plan it substitutes your priority for hers.
