@@ -292,6 +292,7 @@
   "splash.create.sections-empty": "Aucune section pour l'instant — ajoutez-en au moins une.",
   "splash.create.sections-add-label": "Ajouter une section",
   "splash.create.sections-add": "+ Ajouter une section",
+  "splash.create.author-link": "Il vous manque une section ? Créez-la sur le plan de travail →",
   "splash.create.sections-type-pbl": "APP",
   "splash.create.sections-type-roleplay": "Jeu de rôle",
   "splash.create.sections-type-branched": "Cas à décisions",
