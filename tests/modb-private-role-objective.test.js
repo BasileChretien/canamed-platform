@@ -60,10 +60,16 @@ test("a showRoleObjective helper reuses the brief i18n keys", () => {
   assert.match(SCRIPT, /function showRoleObjective\s*\(/,
     "a showRoleObjective(role) helper must exist");
   const start = SCRIPT.indexOf("function showRoleObjective");
-  const fn = SCRIPT.slice(start, start + 1800);
-  // Reuse the existing brief keys rather than inventing new copy.
+  const fn = SCRIPT.slice(start, start + 2600);
+  /* Reuse the existing brief keys rather than inventing new copy. S1c-1 added a
+     branch ahead of this for an AUTHORED section's own brief text; the i18n key
+     remains the path for every built-in roleplay. */
   assert.match(fn, /"modB\.role\." \+ role \+ "\.brief"/,
     "the helper must bind the panel to the role's existing .brief key");
+  assert.match(fn, /_authored\.brief/,
+    "an authored section's own brief must take precedence over the shipped key");
+  assert.match(fn, /textEl\.textContent = \(typeof tc === "function"\)/,
+    "authored brief text must go in as textContent, not through sanitised innerHTML");
   // Translate via the sanitised applyI18n path (briefs carry <strong>/<em>).
   assert.match(fn, /applyI18n/,
     "the helper must re-translate the panel via applyI18n (sanitised innerHTML)");

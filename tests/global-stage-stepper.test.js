@@ -31,11 +31,20 @@ test("the global stepper container exists with an accessible name", () => {
 });
 
 test("renderStage fills the stepper with one step per session stage", () => {
-  // it loops STAGE_COUNT and targets the container
   assert.match(SCRIPT, /el\("global-stage-progress"\)/,
     "renderStage must populate #global-stage-progress");
-  assert.match(SCRIPT, /for \(let i = 0; i < STAGE_COUNT; i\+\+\)[\s\S]*?global-stage-progress|global-stage-progress[\s\S]*?for \(let i = 0; i < STAGE_COUNT; i\+\+\)/,
-    "the stepper must render STAGE_COUNT segments");
+  /* One step per stage the session ACTUALLY runs — stageFlow(), never a fixed
+     count. The old assertion looked for `for (let i = 0; i < STAGE_COUNT; i++)`
+     and only passed by accident: it matched renderStage's stage-HIDING loop
+     elsewhere in the file, and it contradicted shipped behaviour (a branched
+     session has always drawn 3 steps, not STAGE_COUNT). Since S1b there is no
+     fixed count at all — a session has as many stages as it has sections. */
+  const i = SCRIPT.indexOf('el("global-stage-progress")');
+  const block = SCRIPT.slice(i, i + 900);
+  assert.match(block, /stageFlow\(\)\.forEach\(\(i, pos\)/,
+    "the stepper must iterate the session's stage flow");
+  assert.doesNotMatch(block, /STAGE_COUNT/,
+    "the stepper must not size itself from a constant");
 });
 
 test("the stepper marks current / done / live state and is accessible", () => {

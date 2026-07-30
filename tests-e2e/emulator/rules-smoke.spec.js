@@ -259,9 +259,19 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
     by: uid, at: Date.now()
   })).toBe("ALLOWED");
 
-  // A bogus role value is rejected by the per-assignment validator.
-  expect(await tryWrite(page, path, { assignments: { c1: "wizard" }, by: uid, at: Date.now() }))
-    .not.toBe("ALLOWED");
+  /* S1c-1 — an authored roleplay declares its OWN cast, so the validator can no
+     longer be the four built-in role ids: it is the same id GRAMMAR the client
+     enforces. This was a real defect in S1c-1 — the client happily assigned a
+     pharmacist and the DB rejected the write, invisible to the LOCAL-mode E2E
+     suite because it does not exercise rules at all. */
+  expect(await tryWrite(page, path, {
+    assignments: { c1: "pharmacist", c2: "prescriber" }, by: uid, at: Date.now()
+  })).toBe("ALLOWED");
+  // …but the grammar still holds: no spaces, no capitals, bounded length.
+  for (const bad of ["Has Space", "UPPER", "1leading", "x".repeat(40), ""]) {
+    expect(await tryWrite(page, path, { assignments: { c1: bad }, by: uid, at: Date.now() }))
+      .not.toBe("ALLOWED");
+  }
 
   // An unknown sibling field is rejected ($other sentinel).
   expect(await tryWrite(page, path, {
@@ -272,7 +282,7 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
 });
 
-test("rules: /moduleB/phase accepts the six synced phases (0..5) and rejects 6", async ({ page }) => {
+test("rules: /moduleB/phase accepts an authored phase list, bounded", async ({ page }) => {
   await page.goto("/");
   const uid = await waitForUid(page);
   const code = "mbphase-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
@@ -281,11 +291,18 @@ test("rules: /moduleB/phase accepts the six synced phases (0..5) and rejects 6",
   // without it), so claim membership first — exactly as enterRoom/startRoom does
   // for participants AND for a facilitator opening the room as admin.
   expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
-  // A ROOM MEMBER can advance the synced phase. Phase 5 (the sixth phase) became
-  // valid with the 2026-06-26 swap → replay → reflect extension; 6 is out of range.
+  /* S1c-3b — an authored roleplay declares its own phase list, so a bound of 5
+     (the built-in six-phase timetable) would have made phase 7 of an 8-phase
+     roleplay unwritable. Second defect of the same class as the role-id enum:
+     making content authorable moved a boundary the rules still policed against
+     the BUILT-IN shape. The bound is now a generous sanity cap, not the shipped
+     timetable's length. */
   expect(await tryWrite(page, path, 0)).toBe("ALLOWED");
   expect(await tryWrite(page, path, 5)).toBe("ALLOWED");
-  expect(await tryWrite(page, path, 6)).not.toBe("ALLOWED");
+  expect(await tryWrite(page, path, 12)).toBe("ALLOWED");
+  expect(await tryWrite(page, path, 19)).toBe("ALLOWED");
+  expect(await tryWrite(page, path, 20)).not.toBe("ALLOWED");
+  expect(await tryWrite(page, path, -1)).not.toBe("ALLOWED");
   expect(await tryWrite(page, path, null)).toBe("ALLOWED");
   // Integer-only: the client floors phase on read, so a fractional value would
   // persist shared state the UI never shows — the rule rejects it.
@@ -1036,4 +1053,103 @@ test("rules: answers/moduleBranched accepts a composed branched deliverable (M4d
   await adminPut(`sessions/${code}/closed`, { at: Date.now() });
   const afterClose = await tryWrite(page, `${base}/e9`, good);
   expect(afterClose, "no branched answers after the session closes").not.toBe("ALLOWED");
+});
+
+/* ── S2a — per-slot section nodes (section model) ───────────────────────────
+ * A session is Welcome + N independently-picked sections + wrap-up, and two
+ * sections of the SAME TYPE may run in one session — so room state can no
+ * longer hang off `moduleA` / `moduleB`. These land INERT: the rules accept the
+ * per-slot paths, nothing writes them yet (S2b moves the client).
+ *
+ * The blocks are CLONED from each tree's own moduleA/moduleB, so validation is
+ * identical by construction rather than by careful re-typing. What these tests
+ * pin is the plumbing around that: the slot guard, the $other sentinel, and
+ * that two slots really are independent.
+ */
+test("rules: per-slot section state is accepted, and slots are independent", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "slots-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = `sessions/${code}/rooms/Room 1`;
+  /* Reading room state needs SESSION membership as well as room membership —
+     the read cascade hangs off sessions/<code>/members. Claiming only
+     uidMembers writes fine and then reads back undefined, which is the rules
+     working, not a bug. */
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  // Two PBL sections in one session: slot 1 and slot 3 keep separate boards.
+  expect(await tryWrite(page, `${room}/sections/1/revealed/history:0`,
+    { by: "Ann", at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/sections/3/revealed/history:0`,
+    { by: "Ann", at: Date.now() })).toBe("ALLOWED");
+  // …and slot 1's reveal did not leak into slot 3's node.
+  expect((await tryRead(page, `${room}/sections/3/revealed/history:0/by`)).val).toBe("Ann");
+
+  // A roleplay slot carries its phase; a PBL slot its hypotheses.
+  expect(await tryWrite(page, `${room}/sections/2/phase`, 3)).toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/sections/1/hypotheses/h1`,
+    { text: "Mechanical low-back pain", by: "Ann", cid: "c1", at: Date.now() })).toBe("ALLOWED");
+});
+
+test("rules: the slot key is bounded, and unknown children are rejected", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "slotguard-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = `sessions/${code}/rooms/Room 1`;
+  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  /* MAX_SECTION_SLOTS is 8 and stage 0 is Welcome, so 1..9 is the accepted
+     range. A slot key outside it — or one that is not a slot at all — must not
+     open an unvalidated corner of the room. */
+  for (const bad of ["0", "10", "99", "moduleA", "../x", "a"]) {
+    expect(await tryWrite(page, `${room}/sections/${bad}/phase`, 1)).not.toBe("ALLOWED");
+  }
+  // The $other sentinel: an unknown child of a slot is refused outright.
+  expect(await tryWrite(page, `${room}/sections/1/somethingElse`, { x: 1 }))
+    .not.toBe("ALLOWED");
+});
+
+test("rules: per-slot answers validate exactly like the module-scoped ones", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "slotans-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const room = `sessions/${code}/rooms/Room 1`;
+  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+
+  const path = `${room}/answers/sections/2/plan`;
+  expect(await tryWrite(page, path,
+    { text: "Taper over 8 weeks", by: "Ann", cid: "c1", at: Date.now() })).toBe("ALLOWED");
+  // Same bounds as answers/moduleA — cloned, so these must hold for free.
+  expect(await tryWrite(page, path,
+    { text: "", by: "Ann", cid: "c1", at: Date.now() })).not.toBe("ALLOWED");
+  expect(await tryWrite(page, path,
+    { text: "x".repeat(1001), by: "Ann", cid: "c1", at: Date.now() })).not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${room}/answers/sections/0/plan`,
+    { text: "ok", by: "Ann", cid: "c1", at: Date.now() })).not.toBe("ALLOWED");
+});
+
+test("rules: the session's ordered section pick is write-once and bounded", async ({ page }) => {
+  await page.goto("/");
+  await waitForUid(page);
+  const code = "secpick-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const path = `sessions/${code}/sections`;
+
+  /* S3a — an ordered CSV of section ids, modelled on M2's `modules`. Section
+     ids are longer than module ids ("chronic-pain-pbl"), so the per-segment
+     bound is 48 rather than 16. */
+  expect(await tryWrite(page, path, "sore-throat-roleplay,chronic-pain-pbl"))
+    .toBe("ALLOWED");
+  /* Write-once: a session's shape must not shift under participants mid-flight.
+     To change it, make another session. */
+  expect(await tryWrite(page, path, "jaundice-pbl")).not.toBe("ALLOWED");
+
+  const other = `sessions/${code}-b/sections`;
+  expect(await tryWrite(page, other, "")).not.toBe("ALLOWED");
+  expect(await tryWrite(page, other, "has space,x")).not.toBe("ALLOWED");
+  expect(await tryWrite(page, other, "x".repeat(60))).not.toBe("ALLOWED");
+  expect(await tryWrite(page, other, 42)).not.toBe("ALLOWED");
+  // Two sections of the SAME type is the whole point — it must be accepted.
+  expect(await tryWrite(page, other, "chronic-pain-pbl,jaundice-pbl")).toBe("ALLOWED");
 });

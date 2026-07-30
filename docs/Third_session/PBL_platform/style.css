@@ -2572,7 +2572,12 @@ body.locked > footer { display: none !important; }
 }
 @media (max-width: 900px) {
   #splash {
-    grid-template-columns: 1fr;
+    /* minmax(0,1fr), NOT 1fr: bare `1fr` is `minmax(auto,1fr)`, so the track's
+       floor is the card's min-content — set by the create form's <select>s,
+       whose min-content is their longest <option>. That floored the page at
+       528px on a 412px phone; the browser then zooms out to fit and taps land
+       off-target (the PR #172 failure). Guarded by splash-overflow.spec.js. */
+    grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "masthead"
       "card"
@@ -2841,6 +2846,60 @@ body.locked > footer { display: none !important; }
   color: var(--ink);
 }
 .splash-role-toggle { display: flex; gap: 8px; }
+
+/* ── S3b — the section picker on the create form ─────────────────────────────
+   An ordered list of the sections this session will run. Deliberately plain:
+   the create form is a dense utility surface, and this row has to stay legible
+   at mobile widths with four controls on it. Tokens only, no raw hex/px. */
+.splash-section-list {
+  list-style: none;
+  min-width: 0;
+  margin: var(--s-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+.splash-section-row {
+  display: flex;
+  align-items: center;
+  /* WRAP, or the row's content floor (a long section title + the type chip +
+     three controls) pushes the page wider than a phone viewport. That overflow
+     does not merely scroll: mobile zooms the page out to fit it and every hit
+     test in the form lands a few pixels off, which is how the reorder buttons
+     became untappable on Pixel 7 (same failure as PR #172). */
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  padding: var(--s-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--card);
+}
+.splash-section-name { flex: 1 1 12ch; min-width: 0; }
+.splash-section-type {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: var(--fs-0);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+/* The three row controls read as one group, set apart from the label they act
+   on — without the gap they crowd the type chip and the ↑↓ pair stops being
+   scannable as a pair. */
+.splash-section-row .splash-link {
+  flex: 0 0 auto;
+  padding: var(--s-1);
+  min-width: var(--s-5);
+  line-height: 1;
+  text-align: center;
+}
+.splash-section-row .splash-section-up { margin-left: var(--s-2); }
+.splash-section-row .splash-section-remove { margin-left: var(--s-1); }
+.splash-section-row .splash-link[disabled] { opacity: 0.35; cursor: default; }
+.splash-section-add { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
+.splash-section-add select { flex: 1 1 auto; min-width: 0; }
+
 .splash-role-opt {
   flex: 1;
   display: flex;

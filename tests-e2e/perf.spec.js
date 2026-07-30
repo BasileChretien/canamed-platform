@@ -388,7 +388,35 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     `new LocalDB()` synchronously from 7 call sites and script.js carries an
 //     explicit "must stay synchronous (no awaits)" constraint, and LOCAL mode is
 //     what the whole e2e suite runs on. Do not attempt it for 3.7 KB.
-const FIRST_PARTY_BYTES_LIMIT_KB = 337;
+//     2026-07-28 (section model, S3a) — RAISED 337 → 345, deliberately, and with
+//     the reclaim done FIRST. The section model (a session = opening + N
+//     independently-picked sections + wrap-up) grew script.js 205 → 217 KB gz,
+//     putting first-party at 342.5 KB. Before touching this number the room-only
+//     roleplay content renderers were extracted to section-content.js (~6 KB gz
+//     off the critical path, chained into ensureRoomStyles), which brought it to
+//     337.2 — over by 0.2.
+//     Chasing that last 0.2 KB was attempted and REVERTED: moving one more
+//     renderer bought 0.8 KB and cost two regressions, because the remaining
+//     candidates are entangled with room state held in script.js closures. A
+//     documented step up is the honest choice over code contortion.
+//     Next real reclaim if this is ever tight again: the Module B phase plumbing
+//     (MODULE_PROGRESS / MODB_PHASE_SECTIONS, ~2-3 KB) — room-only, but its
+//     callers need threading through an accessor first.
+//     2026-07-29 (merge of main into feat/section-picker) — RAISED 345 → 348.
+//     This one is NOT new code: it is the SUM of two independently-approved
+//     lines of work meeting. main shipped the privacy/consent set (#260 FR/JA
+//     section 18 resync, #261 retention notice 30/90, #262 consent box C for
+//     the Teams transcript) under its own 337 cap; this branch shipped the
+//     section model under 345. Neither exceeded its own budget; merged,
+//     first-party measured 346.8. Attribution of the +2.2 KB gz the merge adds
+//     on top of this branch, measured from the blobs: script.js +1212 B (the
+//     consent-box handlers), i18n.js +694 B (the new consent/retention
+//     strings), style.css +341 B.
+//     No reclaim was attempted against it, deliberately: this is Art. 13
+//     consent text and the code that renders it — the least appropriate thing
+//     in the bundle to shave — and the reclaim this branch owed was already
+//     spent on the 337 → 345 step above. 348 leaves ~1.2 KB headroom.
+const FIRST_PARTY_BYTES_LIMIT_KB = 348;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -489,6 +517,14 @@ test.describe("Perf budget — splash", () => {
       // branched-runtime.js (2026-06-29): branchedPath() — used in-room to decide
       // when the branch tree is finished. Chained in ensureCaseContent, room-only.
       "branched-runtime.js",
+      // section-registry.js (2026-07-28, S3a): the flat SECTION library derived
+      // from the scenario registry. Chained after branched-seed.js in
+      // ensureCaseContent() — room/author only, never on the splash path.
+      "section-registry.js",
+      // section-content.js (2026-07-28, S3a): a roleplay section's authorable
+      // content renderers, extracted from script.js and chained into
+      // ensureRoomStyles(). Room-only, never on the splash path.
+      "section-content.js",
       "glossary.js",
       // Reading aid (2026-06-24): idle-prefetched + opt-in via the "Word help"
       // toggle, only actually used in Module A/B — never on the splash critical

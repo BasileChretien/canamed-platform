@@ -5,8 +5,10 @@
  * bad-news pre/post banks were expanded to 10 questions each (chronic-pain
  * +5/+5; breaking-bad-news +4/+4). The new items are DRAFTS pending PI
  * (clinical) sign-off; this test pins their structural integrity so a malformed
- * bank can't ship: 10 questions, contiguous q1..q10 ids, exactly one correct
- * option per question, 4 options each, and complete en/fr/ja everywhere.
+ * bank can't ship: a contiguous q1..qN id run, exactly one correct option per
+ * question, 4 options each, and complete en/fr/ja everywhere. (The banks were
+ * a fixed 10 until the section model made a case's bank the sum of its two
+ * sections' — see the id test below.)
  *
  * Loaded with a window shim (same approach as case-more-wrong-items.test.js).
  */
@@ -40,11 +42,18 @@ const BANKS = loadBanks();
 Object.keys(BANKS).forEach(name => {
   const bank = BANKS[name];
 
-  test(name + ": has 10 questions with contiguous q1..q10 ids", () => {
-    assert.equal(bank.length, 10, name + " should have 10 questions");
+  test(name + ": ids are a contiguous q1..qN run, in order", () => {
+    /* The bank LENGTH stopped being a fixed 10 with the section model: a case's
+       bank is now the SUM of its two sections' banks, and jaundice-pbl had
+       almost none of its own until the 2026-07-28 fill (+6 pre / +4 post).
+       Per-SECTION sizes are pinned in tests/section-registry.test.js. What
+       matters here is that the ids stay a gapless, duplicate-free run — a gap
+       or a repeat would silently drop or double an item when TEST_SPLIT
+       partitions the bank between the two sections. */
+    assert.ok(bank.length >= 6, name + " should keep at least 6 questions");
     assert.deepEqual(bank.map(q => q.id),
-      Array.from({ length: 10 }, (_, i) => "q" + (i + 1)),
-      name + " ids must be q1..q10 in order");
+      Array.from({ length: bank.length }, (_, i) => "q" + (i + 1)),
+      name + " ids must be q1..q" + bank.length + " in order");
   });
 
   test(name + ": every question is well-formed + fully trilingual", () => {

@@ -103,17 +103,19 @@ test("the branched skeleton round-trips into branched author state", () => {
     "the branch nodes must populate the branched editor state");
 });
 
-test("'Start from skeleton' opens a picker offering BOTH standard and branched", () => {
-  // The button now opens a picker (so branched is pickable) instead of loading
-  // the standard skeleton directly.
+test("'Start from skeleton' offers the three SECTION types", () => {
+  /* S5 — a session is assembled from sections now, so a skeleton is ONE
+     section rather than a whole two-module workshop. The user named the three
+     types: "PBL", "Roleplay", "Branched Scenario". */
   assert.match(JS, /getElementById\("btn-skeleton"\)/, "the skeleton button must be wired");
   assert.match(JS, /btnSkel\.addEventListener\("click", openSkeletonPicker\)/,
     "the skeleton button must open the picker");
   assert.match(JS, /function openSkeletonPicker\(/, "the picker must exist");
   const picker = JS.slice(JS.indexOf("function openSkeletonPicker("));
   const body = picker.slice(0, picker.indexOf("\n  function "));
-  assert.match(body, /skeletonJson\b/, "the picker must offer the standard skeleton");
-  assert.match(body, /branchedSkeletonJson\b/, "the picker must offer the branched skeleton");
+  assert.match(body, /pblSkeletonJson\b/, "the picker must offer the PBL section");
+  assert.match(body, /roleplaySkeletonJson\b/, "the picker must offer the Roleplay section");
+  assert.match(body, /branchedSkeletonJson\b/, "the picker must offer the Branched Scenario");
 });
 
 test("the starter skeleton validates clean out of the box", () => {
@@ -122,6 +124,41 @@ test("the starter skeleton validates clean out of the box", () => {
   const errs = api.validate();
   assert.deepStrictEqual(errs, [],
     "skeletonJson() must satisfy every validate() rule; got: " + JSON.stringify(errs));
+});
+
+/* S5 — the two new SECTION skeletons must clear the same bar. This is the test
+   that actually protects a facilitator: a skeleton that fails validate() means
+   "Start from skeleton" hands them a form they cannot save. */
+["pblSkeleton", "roleplaySkeleton"].forEach(kind => {
+  test("the " + kind + " validates clean out of the box", () => {
+    const api = loadAuthor();
+    install(api, api[kind]());
+    const errs = api.validate();
+    assert.deepStrictEqual(errs, [],
+      kind + "() must satisfy every validate() rule; got: " + JSON.stringify(errs));
+  });
+
+  test("the " + kind + " round-trips losslessly through the form", () => {
+    /* The author parses JSON into form state and re-serialises on save. A field
+       the form cannot represent is dropped SILENTLY — the facilitator only
+       finds out when the section runs without it. */
+    const api = loadAuthor();
+    const before = api[kind]();
+    install(api, before);
+    const after = api.toJson();
+    assert.deepStrictEqual(api.validate(), [], "still valid after a round trip");
+    assert.equal(after.id, before.id);
+    /* NOT asserting `modules` round-trips verbatim: the author deliberately
+       omits a key that carries no information beyond the module NAMES (M5), so
+       a re-emitted section can legitimately drop it. What must survive is which
+       module the section declares itself to be. */
+    assert.equal(!!(after.moduleAName && after.moduleAName.en),
+                 !!(before.moduleAName && before.moduleAName.en),
+      "the section's PBL identity must survive the round trip");
+    assert.equal(!!(after.moduleBName && after.moduleBName.en),
+                 !!(before.moduleBName && before.moduleBName.en),
+      "the section's Roleplay identity must survive the round trip");
+  });
 });
 
 test("the starter skeleton round-trips losslessly through the form", () => {

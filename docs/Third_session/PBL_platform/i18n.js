@@ -407,11 +407,22 @@
       "data-rights.err.export-failed": "Could not export your data — please try again, or contact the facilitator.",
 
       // stage labels — shown in the room header + stage indicator + dashboard
+      // S1b — a stage number no longer implies a module, so the middle stages
+      // are ONE pattern filled with the picked section's position + title
+      // (decision 8 of the section model). The two ends are keyed by role; the
+      // numeric .0/.4 keys stay only as a fallback for a cached older bundle.
+      "splash.create.sections-label": "Sections to run",
+      "splash.create.sections-help": "Add the parts this session runs, in the order you want them. They can come from different clinical cases. An opening and a wrap-up are always included.",
+      "splash.create.sections-empty": "No sections yet — add at least one.",
+      "splash.create.sections-add-label": "Add a section",
+      "splash.create.sections-add": "+ Add section",
+      "splash.create.sections-type-pbl": "PBL",
+      "splash.create.sections-type-roleplay": "Roleplay",
+      "splash.create.sections-type-branched": "Branched",
+      "stage.label.welcome": "Welcome",
+      "stage.label.wrapup": "Wrap-up",
+      "stage.label.section": "Section {n} — {title}",
       "stage.label.0": "Welcome",
-      "stage.label.1": "Module A — Chronic Pain",
-      "stage.label.2": "Module B — Breaking Bad News",
-      // 3 = the branched decision case (module-set M4b); wrap-up moved 3 → 4.
-      "stage.label.3": "Decision case",
       "stage.label.4": "Wrap-up",
 
       // stage 0 (Welcome) chrome
@@ -987,7 +998,12 @@
   // LOCALE_VERSION is its own counter, independent of SHELL_VERSION (which is
   // far ahead of it). Bump it whenever a locales/<lang>.js changes, or a
   // returning browser keeps serving the cached chunk.
-  const LOCALE_VERSION = "v10";  // consent box C (transcript + recording) + Microsoft as processor
+  // v11 is a MERGE BUMP. main and feat/section-picker each went v8 -> v10
+  // independently (consent box C there, the section picker here), so the two
+  // v10s cover DISJOINT locale changes: a browser holding main's v10 would
+  // never refetch and would miss the picker's strings entirely. The union
+  // therefore needs a number neither side has used.
+  const LOCALE_VERSION = "v11";  // consent box C + Microsoft as processor + the section picker's strings
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

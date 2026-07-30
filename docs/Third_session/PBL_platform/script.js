@@ -222,6 +222,20 @@ function applyScenario(id, customContent) {
   window.CURRENT_SCENARIO_MODULE_A_NAME = sc.moduleAName || null;
   window.CURRENT_SCENARIO_MODULE_B_NAME = sc.moduleBName || null;
   window.CURRENT_SCENARIO_ID = (sc && (sc.id || (sc.meta && sc.meta.id))) || id || "";
+  /* S1c-1 — the roleplay section's own content (its cast, for now). ALWAYS
+     reassigned, including to null: a scenario without it must fall back to the
+     built-in cast rather than inherit the previous scenario's, which is the
+     same staleness trap scenarioModuleSet() documents for module names. */
+  window.CURRENT_SECTION_ROLEPLAY = (sc && typeof sc.roleplay === "object") ? sc.roleplay : null;
+  if (typeof document !== "undefined") {
+    try {
+      if (typeof renderRoleChips === "function") renderRoleChips();
+      if (typeof renderRoleplayPanels === "function") renderRoleplayPanels();
+      if (typeof renderObserverChecklist === "function") renderObserverChecklist();
+      if (typeof renderPhaseStepper === "function") renderPhaseStepper();
+      if (typeof renderRoleplayVignette === "function") renderRoleplayVignette();
+    } catch (e) { /* pre-DOM call sites */ }
+  }
   // Activity format: "branched" runs the épuré one-decision-at-a-time branch
   // flow (the existing decision engine, with the clinical/roleplay chrome
   // hidden via the per-stage .stage[data-format="branched"] CSS hook stamped
@@ -320,7 +334,8 @@ function loadSessionScenario(code) {
     db.ref(oPath(code, "scenarioId")).once("value"),
     db.ref(oPath(code, "scenarioCustomJson")).once("value"),
     db.ref(oPath(code, "scenarioRef")).once("value"),
-    db.ref(oPath(code, "modules")).once("value")
+    db.ref(oPath(code, "modules")).once("value"),
+    db.ref(oPath(code, "sections")).once("value")
   ])).then(res => {
     const id = res[0] && res[0].val();
     const customJson = res[1] && res[1].val();
@@ -331,6 +346,12 @@ function loadSessionScenario(code) {
     // stageFlow() of the session would use the scenario's full set and briefly
     // offer a stage this session does not run.
     setSessionModules(res[3] && res[3].val());
+    /* S3a — the facilitator's ordered SECTION pick, same write-once timing rule
+       as the narrowing above: publish it before any applyScenario(), or the
+       session's first stageFlow() runs the scenario's shape instead of the
+       picked one. Resolution needs the lazily-loaded section library, so a pick
+       read before that chunk lands simply falls back until it does. */
+    setSessionSections(res[4] && res[4].val());
     let custom = null;
     if (customJson) {
       try { custom = JSON.parse(customJson); } catch (e) {
@@ -532,26 +553,37 @@ if (typeof window !== "undefined") {
   };
 }
 
-/* 5 stages since M4b: 0 Welcome, 1 Module A, 2 Module B, 3 the branched
-   decision case, 4 Wrap-up. Wrap-up moved 3→4 to make room for a branched
-   stage; that rename was nearly free because script.js never hardcodes the
-   wrap-up index — every site derives it from STAGE_COUNT - 1 (and no CSS
-   referenced #stage-3). Stage 3 is INERT until a scenario actually declares the
-   branched module: standardStageFlow() only includes the stages of modules in
-   moduleSet(), so an A/B session runs [0,1,2,4] and skips it entirely. */
-const STAGE_COUNT = 5;
+/* Stage numbering, S1b: 0 = Welcome, 1..N = the sections this session picked in
+   pick order, N+1 = Wrap-up. CONTIGUOUS — before S1b the middle indices were
+   fixed per module (A→1, B→2, branched→3, wrap-up→4) and an A-only session ran
+   [0,1,4] with two stages skipped. A stage number therefore no longer implies a
+   module, a DOM node, or a duration; use slotAtStage(), stageViewId() and
+   stageMinutes() for those. */
+/* ⚠️ S1b — STAGE_COUNT IS NO LONGER THE STAGE COUNT. A session is Welcome + one
+   stage per PICKED SECTION + Wrap-up, so the count is per-session: use
+   stageCount() / lastStage(). This constant survives only as the PHYSICAL cap
+   (the largest stage index the DB rules accept), and is what MAX_SECTION_SLOTS
+   is derived from. Reading it as "the wrap-up index" — which every pre-S1b site
+   did — is now a bug. */
+const MAX_SECTION_SLOTS = 8;
+const STAGE_COUNT = MAX_SECTION_SLOTS + 2;
 // English fallback labels — used in admin-side text exports + as the
 // fallback when i18n.js hasn't loaded yet (vanishingly rare). For
 // any UI-visible label use stageLabel(i), which reads the current
-// language from i18n.js. Keeping STAGE_LABELS so the dozens of
-// existing call sites don't all need editing in one go.
-const STAGE_LABELS = ["Welcome", "Module A - Chronic Pain", "Module B - Breaking Bad News",
-                      "Decision case", "Wrap-up"];
+// language from i18n.js. S1b: the middle entries are per-TYPE, not
+// per-index, because a stage number no longer implies a module.
+const STAGE_LABELS = { welcome: "Welcome", wrapup: "Wrap-up",
+                       pbl: "Clinical case", roleplay: "Roleplay",
+                       branched: "Decision case" };
 /* Publish the wrap-up index for the LAZY branched-render.js, which owns
    stageFlow() once loaded. It used to hardcode `LAST_STAGE = 3`; M4b's 5th stage
    moved wrap-up to 4, so a literal copy would silently desync the lazy chunk
-   from the shell. Deriving it here keeps one source of truth. */
-if (typeof window !== "undefined") window.CANAMED_LAST_STAGE = STAGE_COUNT - 1;
+   from the shell. Deriving it here keeps one source of truth.
+
+   S1b — the wrap-up index is now PER SESSION (Welcome + N sections + Wrap-up),
+   so this is republished by refreshModuleStages() whenever the section set
+   changes. The value below is only the pre-scenario default. */
+if (typeof window !== "undefined") window.CANAMED_LAST_STAGE = 3;
 
 /* ── Module set ───────────────────────────────────────────────────────────────
    WHICH modules a session runs, and the mapping between a module id and its
@@ -659,7 +691,139 @@ function moduleHasContent(id) {
    stages of modules this scenario does not have. */
 function refreshModuleStages() {
   if (typeof window === "undefined") return;
-  window.CANAMED_MODULE_STAGES = moduleSet().map(stageForModule).filter(s => s >= 0);
+  /* S1b — the stages a session runs are the slot positions, and the wrap-up
+     index moves with them. Both are republished here (rather than computed once
+     at load) because the lazy branched-render.js owns stageFlow() after it
+     loads and reads these two globals; a stale pair desyncs the lazy chunk from
+     the shell, which is exactly the bug M4b's CANAMED_LAST_STAGE fixed. */
+  window.CANAMED_MODULE_STAGES = sectionSlots().map(s => s.stage);
+  window.CANAMED_LAST_STAGE = lastStage();
+}
+
+/* ── S1a — SLOTS: a stage is a POSITION, the DOM is a per-TYPE view ───────────
+ * The section model (ARCHITECTURE/section-model-design.md) makes a session
+ * "opening + N independently-picked sections + wrap-up", where two sections may
+ * come from different cases and the same TYPE may appear twice.
+ *
+ * The design doc listed the ~1200 lines of static per-module DOM as the biggest
+ * blocker, on the assumption that N slots need N copies of the markup. They do
+ * not: **exactly one stage is visible at a time** (renderStage() hides every
+ * other one), so the markup is a VIEW the active slot borrows, not a per-slot
+ * instance. #stage-1 stops meaning "stage number 1" and starts meaning "the PBL
+ * view"; #stage-2 "the roleplay view"; #stage-3 "the branched view". Two PBL
+ * sections in one session reuse the PBL view and re-render against their own
+ * slot's data — which is why S2's per-slot DB paths are the real work, not the
+ * DOM. Bonus: every `#stage-1 …` / `#stage-2 …` CSS rule already reads as a
+ * per-type selector, so this costs ZERO CSS churn.
+ *
+ * S1a is a SEAM ONLY — same discipline as M0. Every function here returns
+ * exactly today's answer (a slot sits at its module's fixed stage), so nothing
+ * moves until S1b makes slots positional. */
+const SECTION_TYPE_FOR_MODULE = { A: "pbl", B: "roleplay", branched: "branched" };
+const STAGE_VIEW_FOR_TYPE = { pbl: "stage-1", roleplay: "stage-2", branched: "stage-3" };
+/* The two fixed ends keep their DOM ids for ever, because a stage NUMBER no
+   longer picks a node: in a 2-section session the wrap-up is stage 3, but its
+   markup is still #stage-4. */
+const WELCOME_VIEW_ID = "stage-0";
+const WRAPUP_VIEW_ID = "stage-4";
+
+/* The section slots this session runs, in the order the facilitator picked
+   them. S1b: a slot's stage IS its position — stage 1 is whatever section was
+   picked first, so a roleplay-then-PBL session runs the roleplay on stage 1.
+   S1a derived the stage from the module's old fixed index; that mapping is
+   gone, which is the whole point of the phase.
+
+   S3 replaces moduleSet() here with the facilitator's ordered pick. */
+/* ── S3a — the session's own ordered SECTION pick ─────────────────────────────
+ * Stored write-once as a CSV of section ids (`sessions/$id/sections`), modelled
+ * on M2's `modules` and read the same way. This is what finally decouples a
+ * session from a single scenario: the ids may come from different clinical
+ * cases, and the same TYPE may appear twice.
+ *
+ * Resolution is deliberately TOLERANT. The library is a lazily-loaded chunk
+ * (`section-registry.js`, chained after case-content), so a pick can be read
+ * before it exists; and a stale pick may name a section that has since been
+ * renamed. Either way we fall back to the module-derived slots rather than
+ * producing a session with no stages at all. */
+function setSessionSections(csv) {
+  if (typeof window === "undefined") return;
+  const list = (typeof csv === "string" && csv)
+    ? csv.split(",").map(x => x.trim()).filter(Boolean)
+    : null;
+  window.CANAMED_SESSION_SECTIONS = (list && list.length) ? list : null;
+  refreshModuleStages();
+}
+/* The picked sections resolved against the library, in pick order, or null when
+   there is no usable pick — the caller then keeps today's behaviour. */
+function pickedSections() {
+  if (typeof window === "undefined") return null;
+  const ids = window.CANAMED_SESSION_SECTIONS;
+  if (!Array.isArray(ids) || !ids.length) return null;
+  const lib = window.CANAMED_SECTIONS;
+  if (!lib) return null;                       // library not loaded yet
+  const out = [];
+  ids.slice(0, MAX_SECTION_SLOTS).forEach(id => {
+    const sec = lib[id];
+    if (sec && STAGE_VIEW_FOR_TYPE[sec.type]) out.push(sec);
+  });
+  return out.length ? out : null;              // every id unknown ⇒ no pick
+}
+function sectionSlots() {
+  /* An explicit pick wins: it is the facilitator's write-once choice for this
+     session, and unlike the module set it can name two sections of one type. */
+  const picked = pickedSections();
+  if (picked) {
+    return picked.map((sec, i) => ({
+      position: i + 1, stage: i + 1, module: null, type: sec.type,
+      view: STAGE_VIEW_FOR_TYPE[sec.type], sectionId: sec.id
+    }));
+  }
+  return _moduleDerivedSlots();
+}
+function _moduleDerivedSlots() {
+  /* A STANDALONE branched scenario declares no module (its content is the node
+     graph), but it is unambiguously one section, and it renders in the PBL view
+     because the branched engine's standalone targets live there (#decisions-A,
+     #branched-final-host) — see M4c. Giving it a real slot is what lets the
+     rest of the engine stop special-casing the format. */
+  if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") {
+    return [{ position: 1, stage: 1, module: null, type: "branched",
+              view: "stage-1", standalone: true }];
+  }
+  return moduleSet().slice(0, MAX_SECTION_SLOTS).map((mod, i) => {
+    const type = SECTION_TYPE_FOR_MODULE[mod] || null;
+    return { position: i + 1, stage: i + 1, module: mod, type: type,
+             view: STAGE_VIEW_FOR_TYPE[type] || null };
+  });
+}
+/* Welcome + one stage per section + Wrap-up. Per SESSION, not a constant. */
+function stageCount() { return sectionSlots().length + 2; }
+function lastStage() { return stageCount() - 1; }
+function slotAtStage(stage) {
+  return sectionSlots().find(s => s.stage === stage) || null;
+}
+/* Which DOM node shows a given stage: the welcome view, the wrap-up view, or
+   the view belonging to that slot's section TYPE.
+
+   The fallback matters — a STANDALONE branched scenario has an empty
+   moduleSet() (its content is the node graph, not a module) yet renders on
+   stage 1 with the épuré CSS, so an unmapped stage must still resolve to its
+   like-numbered node rather than vanishing. */
+function stageViewId(stage) {
+  if (stage === 0) return WELCOME_VIEW_ID;
+  if (stage === lastStage()) return WRAPUP_VIEW_ID;
+  const slot = slotAtStage(stage);
+  return (slot && slot.view) || ("stage-" + stage);
+}
+/* Every stage-view node, so renderStage() can hide the lot before showing one.
+   Derived from the registry + the two fixed ends, never hardcoded, so adding a
+   4th section type means adding one STAGE_VIEW_FOR_TYPE entry. */
+function allStageViewIds() {
+  const ids = [WELCOME_VIEW_ID, WRAPUP_VIEW_ID];
+  Object.keys(STAGE_VIEW_FOR_TYPE).forEach(t => {
+    if (ids.indexOf(STAGE_VIEW_FOR_TYPE[t]) === -1) ids.push(STAGE_VIEW_FOR_TYPE[t]);
+  });
+  return ids;
 }
 
 /* ── M4c — COMPOSITION: run a branched case as a module inside a mixed session ──
@@ -726,35 +890,78 @@ function moduleNameTrio(id) {
   return null;
 }
 
-function stageLabel(i) {
-  // R3-G2 fix: stages 1 and 2 are scenario-specific (Module A / Module B
-  // names depend on the chosen clinical case). Prefer the active scenario's
-  // moduleAName / moduleBName (translatable { en, fr, ja } trios) so a
-  // future antibiotic-stewardship case does not still display "Chronic
-  // Pain" in every language. Fall back to the i18n bag, then to the
-  // English STAGE_LABELS.
-  if (typeof window !== "undefined" && typeof window.tc === "function") {
-    // Stage→module through the registry, replacing the old hardcoded
-    // stage-index pair, so M1 can make the module set scenario-driven.
-    const trio = moduleNameTrio(moduleAtStage(i));
-    if (trio) {
-      // English-only UI (2026-06-25): resolve the scenario module name through
-      // _curLang() (pinned "en"), NOT getLang() (the picker) — otherwise a
-      // student who picks FR/JA for the reading aid still sees the Module A/B
-      // titles translated. The picker only drives the hover dictionaries now.
-      const lang = (typeof _curLang === "function") ? _curLang() : "en";
-      const v = window.tc(trio, lang);
-      if (v) return v;
+/* The English fallback label for a stage — used by the admin text exports and
+   before i18n.js has loaded. Keyed by ROLE (welcome / section type / wrap-up),
+   never by index, since S1b decoupled the two. */
+function stageLabelEn(i) {
+  if (i === 0) return STAGE_LABELS.welcome;
+  if (i === lastStage()) return STAGE_LABELS.wrapup;
+  const slot = slotAtStage(i);
+  const base = (slot && STAGE_LABELS[slot.type]) || "Section";
+  return "Section " + (slot ? slot.position : i) + " - " + base;
+}
+/* The section title shown to students for a stage: the picked section's own
+   name. S1b still sources it from the module name trio (S3 sources it from the
+   section registry), minus the "Module A — " prefix that decision 8 retired. */
+const STAGE_TITLE_PREFIX = /^\s*(?:Module|モジュール)\s*[AB]\s*[—–-]\s*/;
+function stageSectionTitle(i) {
+  const slot = slotAtStage(i);
+  if (!slot || typeof window === "undefined" || typeof window.tc !== "function") return "";
+  /* A PICKED slot carries a sectionId and no module, so the module-name lookup
+     below finds nothing — which silently reduced every label in a
+     picker-created session to a bare "Section k". Resolve the section's own
+     name first; the module trio remains the path for module-derived slots. */
+  if (slot.sectionId) {
+    const sec = (window.CANAMED_SECTIONS || {})[slot.sectionId];
+    const nm = sec && sec.name;
+    if (nm) {
+      const l = (typeof _curLang === "function") ? _curLang() : "en";
+      const v = window.tc(nm, l);
+      if (v) return String(v).replace(STAGE_TITLE_PREFIX, "");
     }
   }
-  const key = "stage.label." + i;
-  if (typeof window !== "undefined" && typeof window.t === "function") {
-    const v = window.t(key);
-    // If translation is missing, window.t returns the key as-is — fall
-    // back to the English label rather than show "stage.label.0" in UI.
-    if (v && v !== key) return v;
+  const trio = moduleNameTrio(slot.module);
+  if (!trio) return "";
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  const v = window.tc(trio, lang);
+  return v ? String(v).replace(STAGE_TITLE_PREFIX, "") : "";
+}
+function stageLabel(i) {
+  /* S1b — a middle stage reads "Section k — <the section's own title>"
+     (decision 8). The position is what students navigate by, so it leads; the
+     TYPE (PBL / Roleplay / Branched) is facilitator-facing only and appears in
+     the picker, not here. */
+  const slot = slotAtStage(i);
+  if (slot && i !== 0 && i !== lastStage()) {
+    const title = stageSectionTitle(i);
+    const pattern = (typeof window !== "undefined" && typeof window.t === "function")
+      ? window.t("stage.label.section") : "";
+    const tpl = (pattern && pattern !== "stage.label.section")
+      ? pattern : "Section {n} — {title}";
+    const n = String(slot.position);
+    if (title) return tpl.replace("{n}", n).replace("{title}", title);
+    /* No title (an unnamed authored section): keep the position, drop the
+       dangling separator rather than printing "Section 2 — ". */
+    return tpl.replace("{n}", n).replace(/\s*[—–-]?\s*\{title\}\s*$/, "");
   }
-  return STAGE_LABELS[i] || ("Stage " + (i + 1));
+  return stageLabelLegacy(i);
+}
+/* The two fixed ends. They are looked up by ROLE, not by index: the wrap-up
+   sits at a different number in every session now, so the old
+   "stage.label." + i lookup would fetch a middle stage's label for it (a
+   2-section session's wrap-up is stage 3 — the old "Decision case" key).
+   The numeric keys stay as a fallback for a cached older locale bundle. */
+function stageLabelLegacy(i) {
+  const role = (i === 0) ? "welcome" : "wrapup";
+  const legacyKey = (i === 0) ? "stage.label.0" : "stage.label.4";
+  if (typeof window !== "undefined" && typeof window.t === "function") {
+    const k = "stage.label." + role;
+    const v = window.t(k);
+    if (v && v !== k) return v;
+    const lv = window.t(legacyKey);
+    if (lv && lv !== legacyKey) return lv;
+  }
+  return STAGE_LABELS[role] || ("Stage " + (i + 1));
 }
 /* Stage-flow wrappers — the logic (branched skips stage 2) lives in the LAZY
    branched-render.js; these delegate once it has loaded, else the standard flow. */
@@ -769,20 +976,23 @@ function stageFlow() {
    even though it declares no A/B module. Mirrored in branched-render.js, which
    owns the flow once that lazy chunk has loaded. */
 function standardStageFlow() {
-  const LAST = STAGE_COUNT - 1;
-  if (typeof window !== "undefined" && window.CURRENT_SCENARIO_FORMAT === "branched") {
-    return [0, 1, LAST];
-  }
-  const mid = moduleSet().map(stageForModule).filter(s => s > 0 && s < LAST);
-  return [0].concat(mid.length ? mid : [1, 2], [LAST]);
+  /* S1b — the flow is now CONTIGUOUS: Welcome, one stage per picked section in
+     pick order, Wrap-up. There are no skipped stages any more, because a stage
+     only exists if a section occupies it. (Before S1b an A-only session ran
+     [0,1,4] with 2 and 3 skipped; it now runs [0,1,2].) */
+  /* Derive the tail from lastStage() so the stepper and the nav clamps cannot
+     disagree — an empty-slot fallback of [1] used to render "Stage 1 of 3"
+     while navigation clamped at 1, leaving a dead final segment. */
+  const mid = sectionSlots().map(s => s.stage);
+  return [0].concat(mid, [lastStage()]);
 }
 function snapStageToFlow(to, from) {
   const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
-  return (b && b.snapStageToFlow) ? b.snapStageToFlow(to, from) : Math.max(0, Math.min(STAGE_COUNT - 1, to));
+  return (b && b.snapStageToFlow) ? b.snapStageToFlow(to, from) : Math.max(0, Math.min(lastStage(), to));
 }
 function adjacentStage(cur, dir) {
   const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
-  return (b && b.adjacentStage) ? b.adjacentStage(cur, dir) : Math.max(0, Math.min(STAGE_COUNT - 1, cur + dir));
+  return (b && b.adjacentStage) ? b.adjacentStage(cur, dir) : Math.max(0, Math.min(lastStage(), cur + dir));
 }
 // Generic i18n lookup with English-string fallback. Use for hardcoded
 // strings being migrated to i18n: pass the new key and the existing English
@@ -1632,6 +1842,159 @@ let firstStageFire = true; // detect a late join (room already past stage 0)
 let roomStage = 0;         // the room's stage (admin-controlled)
 let viewStage = 0;         // the stage this participant is looking at (<= roomStage)
 let _lastRenderedViewStage = -1; // last stage we scrolled-to-top for (see renderStage)
+/* ── S2b-1 — per-SLOT room state, with an active-slot pointer ─────────────────
+ * A session may run two sections of the SAME TYPE (decision 1), so "the
+ * revealed items" and "the hypotheses" are no longer one map per room — they
+ * are one map per SLOT. Rather than thread a slot argument through ~115 read
+ * sites, the store holds every slot and `revealed` / `hypotheses` stay as
+ * POINTERS at the slot currently on screen. Exactly one stage is visible at a
+ * time (the same fact that made the stage DOM a per-type view in S1a), so a
+ * pointer is always unambiguous.
+ *
+ * S2b-1 is a SEAM: the listeners still bind to the LEGACY moduleA/moduleB paths,
+ * so two PBL slots read the same node and nothing changes for today's sessions.
+ * S2b-2 repoints them at rooms/$roomId/sections/$slot and the slots diverge. */
+/* Which slot the LEGACY module path feeds, while S2b-1 still binds to
+   moduleA/moduleB: the FIRST slot of that type. With two PBL sections both
+   reading the same node today, the second mirrors the first until S2b-2 gives
+   each its own path. Falls back to slot 1 so a session with no slot of that
+   type — or a read that lands before the scenario applies — still has a home
+   rather than throwing. */
+function _legacySlotFor(type) {
+  const hit = sectionSlots().find(s => s.type === type);
+  return hit ? hit.position : 1;
+}
+let sectionState = {};     // slot → { revealed: {…}, hypotheses: {…} }
+let activeSlot = 1;        // the slot whose state the pointers below refer to
+function slotState(slot) {
+  const k = String(slot);
+  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {}, answers: {} };
+  return sectionState[k];
+}
+/* Repoint the legacy globals at the slot on screen. Called whenever the viewed
+   stage changes or a listener writes into the store. Assigning the SAME object
+   (not a copy) matters: render code mutates `revealed` in place in a few spots,
+   and a copy would silently drop those writes. */
+function refreshActiveSlotState() {
+  const slot = slotAtStage(viewStage);
+  activeSlot = slot ? slot.position : activeSlot;
+  const st = slotState(activeSlot);
+  revealed = st.revealed;
+  hypotheses = st.hypotheses;
+  /* S2b-2 — and the WRITE refs follow the same slot, so an item revealed while
+     looking at section 3 lands in section 3's node, not section 1's. */
+  if (typeof pointSectionRefs === "function") pointSectionRefs();
+  /* S3c — and so does the CONTENT. */
+  applySectionContent(slot);
+  /* Replay the slot's last-seen synced values. Without this the shared UI keeps
+     the PREVIOUS slot's phase/role draw, because the listener that would have
+     corrected it already fired while this slot was inactive. */
+  const _st = slotState(activeSlot);
+  if (typeof _st.phase !== "undefined") {
+    const _max = ((modBCfg().phases) || []).length - 1;
+    modBPhase = (typeof _st.phase === "number" && _st.phase >= 0 && _st.phase <= _max)
+      ? Math.floor(_st.phase) : 0;
+    if (typeof renderModBPhase === "function") { try { renderModBPhase(); } catch (e) {} }
+  }
+  if (typeof _st.roleAssign !== "undefined" && typeof handleRoleAssign === "function") {
+    try { handleRoleAssign(_st.roleAssign); } catch (e) {}
+  }
+}
+/* ── S3c — the active slot's section supplies the content ─────────────────────
+ * With sections picked from different clinical cases, "the case" is no longer a
+ * property of the session — it is a property of the SLOT. The globals the render
+ * code reads (CASE, SCORING, PENALTIES, DECISIONS, the synthesis gate, the LLM
+ * characters) are therefore re-pointed as the student moves between stages, the
+ * same pattern as the state pointer and the write refs.
+ *
+ * NO-OP without an explicit pick: a session still running one scenario keeps
+ * exactly today's behaviour, where applyScenario() sets these once. That is what
+ * makes this safe to land before the picker UI exists.
+ *
+ * `_appliedSectionId` guards against re-applying on every render — these
+ * assignments are cheap but rebuildCaseDerived() is not, and re-running it
+ * mid-stage would rebuild ITEM_IDS underneath a half-rendered board. */
+let _appliedSectionId = null;
+function applySectionContent(slot) {
+  if (typeof window === "undefined") return;
+  if (!slot || !slot.sectionId) return;          // no pick ⇒ leave the globals alone
+  /* Keyed on slot+section, NOT section alone: duplicates are supported, so the
+     SAME section at slots 1 and 3 would otherwise return early at slot 3 and
+     leave DECISIONS carrying the s1_ prefix while that stage's votes write into
+     slot 3 — exactly the shared tally namespaceDecisions() exists to prevent. */
+  const _applyKey = slot.position + ":" + slot.sectionId;
+  if (_applyKey === _appliedSectionId) return;
+  const sec = (window.CANAMED_SECTIONS || {})[slot.sectionId];
+  if (!sec || !sec.content) return;
+  const c = sec.content;
+  _appliedSectionId = _applyKey;
+
+  /* Only assign what the section HAS. A roleplay section carries no case or
+     penalties, and blanking them would strip the board the PBL slot next door
+     still needs when the student walks back to it. */
+  if (c.case) window.CASE = c.case;
+  if (Array.isArray(c.characters)) window.CURRENT_SCENARIO_CHARACTERS = c.characters;
+  if (Array.isArray(c.penalties)) window.PENALTIES = c.penalties;
+  if (c.synthId) { window.SYNTH_ID = c.synthId; SYNTH_ID = c.synthId; }
+  if (Array.isArray(c.synthPrereqs) && c.synthPrereqs.length) {
+    window.SYNTH_PREREQS = c.synthPrereqs; SYNTH_PREREQS = c.synthPrereqs;
+  }
+  /* Scoring is stored per section as a FLAT family list, but the engine reads
+     SCORING["module" + id]. Publish it under the key this slot's type maps to,
+     so the existing string-built lookups keep resolving. */
+  if (Array.isArray(c.scoring)) {
+    const mod = SECTION_MODULE_FOR_TYPE[slot.type];
+    if (mod) {
+      window.SCORING = window.SCORING || {};
+      window.SCORING["module" + mod] = c.scoring;
+    }
+  }
+  /* DECISIONS are namespaced PER SLOT before they are published, because a
+     decision id becomes an RTDB vote key (votes/$voteId). Two PBL sections in
+     one session routinely carry the same ids — both built-in workups have a
+     `dec_plan` — and unnamespaced they would share a tally: room votes on
+     section 1's plan would appear pre-cast on section 3's. Same mechanism
+     composeBranchedModule() uses for its `br_` prefix, and the edges must be
+     rewritten in lockstep or the graph silently breaks. */
+  if (Array.isArray(c.decisions)) {
+    window.DECISIONS = namespaceDecisions(c.decisions, slot);
+  }
+  /* The roleplay's authorable content travels with its section. */
+  window.CURRENT_SECTION_ROLEPLAY = (sec.roleplay && typeof sec.roleplay === "object")
+    ? sec.roleplay : null;
+  if (typeof document !== "undefined" && window.CanamedSectionContent) {
+    try { window.CanamedSectionContent.refresh(); } catch (e) {}
+  }
+  try { rebuildCaseDerived(); } catch (e) {}
+}
+/* A slot's TYPE maps back to the module key the scoring/decision engine uses. */
+const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" };
+
+/* Deep-copy a section's decisions with slot-scoped ids, and tag them with the
+   module key their stage renders into. Pure — the library entry is never
+   mutated, so switching back to a slot re-derives the same graph. */
+function sectionDecisionPrefix(slot) { return "s" + slot.position + "_"; }
+function namespaceDecisions(decisions, slot) {
+  const pre = sectionDecisionPrefix(slot);
+  const mod = SECTION_MODULE_FOR_TYPE[slot.type] || "A";
+  const own = {};
+  decisions.forEach(d => { if (d && d.id) own[d.id] = true; });
+  /* Only rewrite references to ids INSIDE this section. An edge pointing at
+     something else is already broken; renaming it would hide that. */
+  const nsId = id => (own[id] ? pre + id : id);
+
+  return decisions.map(d => {
+    const copy = JSON.parse(JSON.stringify(d));
+    if (copy.id) copy.id = pre + copy.id;
+    copy.module = mod;
+    const uw = copy.unlockWhen;
+    if (uw && uw.afterDecision != null) {
+      if (typeof uw.afterDecision === "string") uw.afterDecision = nsId(uw.afterDecision);
+      else if (uw.afterDecision.id) uw.afterDecision.id = nsId(uw.afterDecision.id);
+    }
+    return copy;
+  });
+}
 let revealed = {};
 let seenFindingIds = {};   // findings already shown once, so new ones can flash in
 let presence = {};
@@ -3860,7 +4223,12 @@ function enterRoom(roomName, asAdmin) {
   myRoom = roomName;
   roomStage = 0; viewStage = 0;
   firstStageFire = true;
-  revealed = {}; presence = {}; typingState = {}; seenFindingIds = {};
+  /* S2b-1 — clear the per-slot store too. Clearing only the pointer would
+     leave the previous room's reveals in sectionState, and the next room's
+     first refreshActiveSlotState() would hand them straight back. */
+  sectionState = {}; activeSlot = 1; _appliedSectionId = null;
+  revealed = {}; hypotheses = {};
+  presence = {}; typingState = {}; seenFindingIds = {};
   myPendingReveal = null;
   answers = { moduleA: {}, moduleB: {}, moduleBranched: {} }; callForHelp = null;
   roomScore = {}; teamName = ""; celebratedEvents = {}; penalisedEvents = {};
@@ -3938,21 +4306,19 @@ function teardownRoom() {
     // NEXT room's typing ref after an admin switches rooms
     clearTimeout(typingTimer);
     if (refStage) refStage.off();
-    if (refRevealed) refRevealed.off();
-    if (refHypotheses) refHypotheses.off();
+    unbindSectionRefs();
     if (refPresence) refPresence.off();
     if (refTyping) refTyping.off();
-    if (refAnswers.moduleA) refAnswers.moduleA.off();
-    if (refAnswers.moduleB) refAnswers.moduleB.off();
-    if (refAnswers.moduleBranched) refAnswers.moduleBranched.off();
+    /* refAnswers.* are pointers into refSection, detached by
+       unbindSectionRefs() above. */
     if (refCallForHelp) refCallForHelp.off();
     if (refScore) refScore.off();
     if (refVotes) refVotes.off();
     if (refObservers) refObservers.off();
     if (refRoleChoices) refRoleChoices.off();
     if (refReplayRound) refReplayRound.off();
-    if (refRoleAssign) refRoleAssign.off();
-    if (refModBPhase) refModBPhase.off();
+    /* refRoleAssign / refModBPhase are pointers into refSection, already
+       detached by unbindSectionRefs() above. */
     if (refAnswerReplies) refAnswerReplies.off();
     if (refTeamName) refTeamName.off();
     if (refLeaderboard) refLeaderboard.off();
@@ -3973,17 +4339,162 @@ function teardownRoom() {
   } catch (e) { /* ignore */ }
 }
 
+/* ── S2b-2 — bind one listener set PER SLOT, at the per-slot paths ────────────
+ * Room state now lives at rooms/$roomId/sections/$slot/… A set is bound for
+ * EVERY slot the session runs, not just the one on screen: the wrap-up
+ * aggregates all of them, and Back navigation can land on any.
+ *
+ * refRevealed / refHypotheses / refModBPhase / refRoleAssign remain as POINTERS
+ * at the ACTIVE slot's refs (pointSectionRefs, called from
+ * refreshActiveSlotState) — which is what leaves all ten write sites untouched.
+ *
+ * Bound once from startRoom(): the section set is write-once per session and is
+ * loaded before the room starts, so it cannot change under a live room. */
+let refSection = {};          // slot -> { revealed, hypotheses, phase, roleAssign }
+function bindSectionRefs(base) {
+  unbindSectionRefs();
+  sectionSlots().forEach(sl => {
+    const slot = sl.position;
+    const p = base + "/sections/" + slot;
+    const R = {
+      revealed:   db.ref(p + "/revealed"),
+      hypotheses: db.ref(p + "/hypotheses"),
+      phase:      db.ref(p + "/phase"),
+      roleAssign: db.ref(p + "/roleAssign"),
+      /* S6 — answers move per slot too. They were the last room state still on
+         a module-literal node, which is why three separate readers kept coming
+         up empty. */
+      answers:    db.ref(base + "/answers/sections/" + slot)
+    };
+    refSection[slot] = R;
+
+    R.revealed.on("value", snap => {
+      slotState(slot).revealed = snap.val() || {};
+      refreshActiveSlotState();
+
+      /* S2b-1 — land it in the SLOT's store, then repoint. Writing straight to
+         `revealed` would make the last listener to fire win once two PBL slots
+         exist. */
+          renderCase();
+      // The Investigations unlock gate now depends on revealed items
+      // (red-flag screen: history:1 + history:2 + exam:3). Re-render
+      // the hypotheses block so its visible lock state stays in sync.
+      if (typeof renderHypotheses === "function") renderHypotheses();
+    });
+    R.hypotheses.on("value", snap => {
+      slotState(slot).hypotheses = snap.val() || {};
+      refreshActiveSlotState();
+
+          if (typeof renderHypotheses === "function") renderHypotheses();
+      if (typeof renderButtons === "function") renderButtons();
+      // ≥1 hypothesis is the phase gate (2026-06-02; lowered to 1 on 2026-06-25):
+      // updateModANextStep() below re-runs revealModARightCol(), so the Debate &
+      // answers tab unlocks the moment the team crosses the gate.
+      // ...and the decisions panel: a hypotheses-gated vote (e.g. dec_plan,
+      // unlockWhen.hypotheses) must drop its "Ready when: add a working hypothesis"
+      // lock the moment the gate opens — not wait for the next presence/score event
+      // to repaint it. (Bug 2026-06-16: the management-plan vote stayed locked after
+      // the team had already written a working hypothesis.)
+      if (typeof renderDecisions === "function") renderDecisions();
+      if (typeof updateModANextStep === "function") updateModANextStep();
+    });
+    /* The roleplay's synced phase and role draw are per slot, so two roleplay
+       sections keep separate timetables. An inactive slot's snapshot must not
+       repaint the visible stage — but it must NOT be thrown away either: RTDB
+       does not re-fire on("value") for an unchanged value, so a dropped
+       snapshot never comes back and walking into the second roleplay would show
+       the FIRST one's phase. Store it per slot, then replay on activation. */
+    R.phase.on("value", snap => {
+      slotState(slot).phase = snap.val();
+      if (slot !== activeSlot) return;
+
+      const v = snap.val();
+      /* S1c-3b — clamp to THIS roleplay's phase count, not the built-in six. A
+         literal `<= 5` silently reset an authored 8-phase roleplay to phase 0 the
+         moment the room advanced past its sixth beat: third instance of the same
+         class as the two rules enums, and the only one on a READ path — so it
+         would have looked like the room jumping back rather than a write being
+         refused. */
+      const _maxPhase = ((modBCfg().phases) || []).length - 1;
+      modBPhase = (typeof v === "number" && v >= 0 && v <= _maxPhase) ? Math.floor(v) : 0;
+      if (typeof renderModBPhase === "function") renderModBPhase();
+    });
+    R.answers.on("value", snap => {
+      slotState(slot).answers = snap.val() || {};
+      refreshAnswerAggregates();
+      renderAnswers(ANSWER_KEY_FOR_TYPE[sl.type] === "moduleB" ? "moduleB" : "moduleA");
+      renderObjectives();
+      /* Branched: the "before you vote" reasoning lists live INSIDE the decision
+         cards, so a teammate's contribution must re-render them. */
+      if (typeof renderDecisions === "function") renderDecisions();
+      if (typeof renderBranchedFinal === "function") renderBranchedFinal();
+    });
+    R.roleAssign.on("value", snap => {
+      slotState(slot).roleAssign = snap.val();
+      if (slot !== activeSlot) return;
+
+      try { handleRoleAssign(snap.val()); } catch (_) {}
+    });
+  });
+  pointSectionRefs();
+}
+function unbindSectionRefs() {
+  Object.keys(refSection).forEach(k => {
+    const R = refSection[k];
+    ["revealed", "hypotheses", "phase", "roleAssign", "answers"].forEach(n => {
+      if (R && R[n]) { try { R[n].off(); } catch (_) {} }
+    });
+  });
+  refSection = {};
+}
+/* The type-keyed view every existing reader expects (`answers.moduleA` …),
+   rebuilt from the per-slot buckets. Aggregating by TYPE rather than aliasing
+   both keys to one bucket matters: the score engine drives DIFFERENT micro-
+   bullets off aEntries and bEntries, so pointing both at the same map would
+   award a roleplay's bullets for a PBL section's answers.
+   KNOWN LIMIT: two sections of the same type share this view, so the wrap-up
+   lists their answers together. Per-slot display needs the renderer scoped to a
+   slot — tracked, not done here. */
+/* Type → the answers key the readers use. NOT "module" + moduleId: that yields
+   "modulebranched" for a branched section, which is neither a key of the
+   aggregate nor what branchedAnswerBucket() reads — the final-diagnosis
+   deliverable came back empty. Spelled out so the casing cannot drift. */
+const ANSWER_KEY_FOR_TYPE = { pbl: "moduleA", roleplay: "moduleB",
+                              branched: "moduleBranched" };
+function refreshAnswerAggregates() {
+  const agg = { moduleA: {}, moduleB: {}, moduleBranched: {} };
+  sectionSlots().forEach(sl => {
+    /* A STANDALONE branched session renders in the PBL view and its engine
+       reads "moduleA" (branchedAnswerBucket), so its slot aggregates there —
+       only a COMPOSED branched module uses the separate bucket. */
+    const key = (sl.standalone && sl.type === "branched")
+      ? "moduleA" : (ANSWER_KEY_FOR_TYPE[sl.type] || "moduleA");
+    const bucket = slotState(sl.position).answers || {};
+    Object.keys(bucket).forEach(k => { agg[key][k] = bucket[k]; });
+  });
+  answers.moduleA = agg.moduleA;
+  answers.moduleB = agg.moduleB;
+  answers.moduleBranched = agg.moduleBranched;
+}
+/* Point the legacy write refs at the active slot. */
+function pointSectionRefs() {
+  const R = refSection[activeSlot];
+  refRevealed   = R ? R.revealed   : null;
+  refHypotheses = R ? R.hypotheses : null;
+  refModBPhase  = R ? R.phase      : null;
+  refRoleAssign = R ? R.roleAssign : null;
+  /* All three module keys write into the ACTIVE slot's bucket: which container
+     the entry belongs to is decided by the stage on screen, not by the key. */
+  refAnswers.moduleA = refAnswers.moduleB = refAnswers.moduleBranched =
+    R ? R.answers : null;
+}
+
 function startRoom() {
   const base = sPath("rooms/" + myRoom);
   refStage = db.ref(base + "/stage");
-  refRevealed = db.ref(base + "/moduleA/revealed");
-  refHypotheses = db.ref(base + "/moduleA/hypotheses");
+  bindSectionRefs(base);
   refPresence = db.ref(base + "/presence");
   refTyping = db.ref(base + "/typing");
-  refAnswers.moduleA = db.ref(base + "/answers/moduleA");
-  refAnswers.moduleB = db.ref(base + "/answers/moduleB");
-  // M4d — a COMPOSED branched module keeps its deliverables out of Module A.
-  refAnswers.moduleBranched = db.ref(base + "/answers/moduleBranched");
   refCallForHelp = db.ref(base + "/callForHelp");
   refScore = db.ref(base + "/score");
   refVotes = db.ref(base + "/votes");
@@ -4036,22 +4547,14 @@ function startRoom() {
   // a distinct-role draw over the present roster and writes a {clientId: role}
   // mapping here; each client then claims its OWN assigned role. handleRoleAssign
   // guards on `at` so a refresh / late snapshot doesn't re-apply an old draw.
-  refRoleAssign = db.ref(base + "/moduleB/roleAssign");
   _lastRoleAssignAt = 0;   // room-scoped: a fresh room's draw must not be skipped
                            // just because the previous room's draw had a later `at`
-  refRoleAssign.on("value", snap => {
-    try { handleRoleAssign(snap.val()); } catch (_) {}
-  });
+
 
   // Module B synced phase (2026-05-27): the whole room moves through the six
   // phases together. A room member can advance it (the write rule requires
   // auth + open session + room membership — gated in module-set M3a).
-  refModBPhase = db.ref(base + "/moduleB/phase");
-  refModBPhase.on("value", snap => {
-    const v = snap.val();
-    modBPhase = (typeof v === "number" && v >= 0 && v <= 5) ? Math.floor(v) : 0;
-    if (typeof renderModBPhase === "function") renderModBPhase();
-  });
+
 
   refStage.on("value", snap => {
     const newStage = typeof snap.val() === "number" ? snap.val() : 0;
@@ -4067,29 +4570,8 @@ function startRoom() {
     }
     renderStage();
   });
-  refRevealed.on("value", snap => {
-    revealed = snap.val() || {};
-    renderCase();
-    // The Investigations unlock gate now depends on revealed items
-    // (red-flag screen: history:1 + history:2 + exam:3). Re-render
-    // the hypotheses block so its visible lock state stays in sync.
-    if (typeof renderHypotheses === "function") renderHypotheses();
-  });
-  refHypotheses.on("value", snap => {
-    hypotheses = snap.val() || {};
-    if (typeof renderHypotheses === "function") renderHypotheses();
-    if (typeof renderButtons === "function") renderButtons();
-    // ≥1 hypothesis is the phase gate (2026-06-02; lowered to 1 on 2026-06-25):
-    // updateModANextStep() below re-runs revealModARightCol(), so the Debate &
-    // answers tab unlocks the moment the team crosses the gate.
-    // ...and the decisions panel: a hypotheses-gated vote (e.g. dec_plan,
-    // unlockWhen.hypotheses) must drop its "Ready when: add a working hypothesis"
-    // lock the moment the gate opens — not wait for the next presence/score event
-    // to repaint it. (Bug 2026-06-16: the management-plan vote stayed locked after
-    // the team had already written a working hypothesis.)
-    if (typeof renderDecisions === "function") renderDecisions();
-    if (typeof updateModANextStep === "function") updateModANextStep();
-  });
+
+
   refPresence.on("value", snap => {
     presence = snap.val() || {};
     renderPresence();
@@ -4102,32 +4584,10 @@ function startRoom() {
   // answer arrives, the counter waits a tick to tick up). Re-rendering
   // objectives directly off the answer event makes the goal counter feel
   // live for every teammate, not just the writer.
-  refAnswers.moduleA.on("value", snap => {
-    answers.moduleA = snap.val() || {};
-    renderAnswers("moduleA");
-    renderObjectives();
-    // Branched: the "before you vote" reasoning lists live INSIDE the decision
-    // cards, so a teammate's new contribution must re-render the decisions to
-    // show it (renderDecisions preserves the in-progress textarea + focus).
-    // The final-diagnosis entries refresh via renderBranchedFinal.
-    if ((window.CURRENT_SCENARIO_FORMAT || "standard") === "branched" &&
-        typeof renderDecisions === "function") renderDecisions();
-    if (typeof renderBranchedFinal === "function") renderBranchedFinal();
-  });
-  refAnswers.moduleB.on("value", snap => {
-    answers.moduleB = snap.val() || {};
-    renderAnswers("moduleB");
-    renderObjectives();
-  });
   // M4d — the composed branched module's deliverable + in-card reasoning.
   // Mirrors the moduleA handler's branched half: a teammate's contribution
   // must re-render the decision cards (the reasoning lists live inside them)
   // and refresh the final-answer lists.
-  refAnswers.moduleBranched.on("value", snap => {
-    answers.moduleBranched = snap.val() || {};
-    if (typeof renderDecisions === "function") renderDecisions();
-    if (typeof renderBranchedFinal === "function") renderBranchedFinal();
-  });
   // Sim 2026-05-19 — counter-bullet replies on group-answer entries.
   // Re-render Module A + B answers so the new replies appear under
   // their parent <li>. The pure-DOM render is cheap.
@@ -5447,7 +5907,7 @@ function startSession() {
 }
 
 function setRoomStage(r, from, to) {
-  to = Math.max(0, Math.min(STAGE_COUNT - 1, to));
+  to = Math.max(0, Math.min(lastStage(), to));
   // Honour the scenario's stage flow (branched skips stage 2). Every advance
   // call site passes to = from ± 1, so this one guard covers them all.
   to = snapStageToFlow(to, from);
@@ -5475,13 +5935,56 @@ function setRoomStage(r, from, to) {
   });
 }
 /* approximate planned minutes per stage, for the dashboard "over time" cue */
-const STAGE_MINUTES = [20, 40, 40, 30, 15];   // 3 = the branched decision case (M4b)
+/* Approximate planned minutes, for the dashboard "over time" cue. S1b: keyed by
+   ROLE and section TYPE, not by stage index — a stage number no longer tells you
+   what is running on it. */
+const STAGE_MINUTES_BY_ROLE = { welcome: 20, wrapup: 15,
+                                pbl: 40, roleplay: 40, branched: 30 };
+function stageMinutes(st) {
+  if (st === 0) return STAGE_MINUTES_BY_ROLE.welcome;
+  if (st === lastStage()) return STAGE_MINUTES_BY_ROLE.wrapup;
+  const slot = slotAtStage(st);
+  return (slot && STAGE_MINUTES_BY_ROLE[slot.type]) || 99;
+}
+/* ── S6 — reading a room SNAPSHOT's per-slot data ─────────────────────────────
+ * The admin dashboard, the participation tally and the exports all read rooms
+ * out of `allRooms` rather than through the live refs, so they need their own
+ * address resolution. Routing every one of them through this helper is what
+ * stops the next path move from silently zeroing a counter — which is exactly
+ * what happened three times in this initiative (export hypotheses, export
+ * answers, and the dashboard's "findings N/M", which read `data.moduleA.revealed`
+ * and had been showing 0 for every room since S2b-2).
+ *
+ * ⚠️ TRANSITIONAL: answers may still live on the module-literal node for rooms
+ * that ran before the migration, so both addresses are read. Drop the legacy
+ * half once no live session predates it. */
+const LEGACY_SLOT_KEY = { pbl: "moduleA", roleplay: "moduleB", branched: "moduleBranched" };
+function roomSlotBuckets(data) {
+  const d = data || {};
+  const sections = d.sections || {};
+  const answers = d.answers || {};
+  return sectionSlots().map(sl => {
+    const k = String(sl.position);
+    const legacyKey = LEGACY_SLOT_KEY[sl.type];
+    const state = sections[k] || (legacyKey ? (d[legacyKey] || {}) : {});
+    const ans = (answers.sections || {})[k] || (legacyKey ? answers[legacyKey] : null) || {};
+    return { slot: sl.position, type: sl.type, sectionId: sl.sectionId || null,
+             revealed: state.revealed || {}, hypotheses: state.hypotheses || {},
+             answers: ans };
+  });
+}
+
 function roomProgress(data) {
-  const revealed = (data.moduleA && data.moduleA.revealed) || {};
-  const aCount = Object.keys((data.answers && data.answers.moduleA) || {}).length;
-  const bCount = Object.keys((data.answers && data.answers.moduleB) || {}).length;
-  return "findings " + Object.keys(revealed).length + "/" + ITEM_IDS.length +
-    " · answers A" + aCount + " B" + bCount;
+  /* Summed across the session's slots: a room may run two PBL sections, and the
+     facilitator wants the room's total, not slot 1's. */
+  const buckets = roomSlotBuckets(data);
+  let found = 0, answered = 0;
+  buckets.forEach(b => {
+    found += Object.keys(b.revealed).length;
+    answered += Object.keys(b.answers).length;
+  });
+  const cap = ITEM_IDS.length * Math.max(1, buckets.filter(b => b.type === "pbl").length);
+  return "findings " + found + "/" + cap + " · answers " + answered;
 }
 
 /* Live participation equity for the facilitator dashboard. Returns how many
@@ -5523,9 +6026,8 @@ function roomParticipation(data) {
       if (typeof cid === "string") counts[cid] = (counts[cid] || 0) + 1;
     });
   };
-  tally(data && data.answers && data.answers.moduleA);
-  tally(data && data.answers && data.answers.moduleB);
-  tally(data && data.moduleA && data.moduleA.hypotheses);
+  /* Every slot's answers and hypotheses count toward participation. */
+  roomSlotBuckets(data).forEach(b => { tally(b.answers); tally(b.hypotheses); });
   const perPresent = present.map(cid => counts[cid] || 0);
   const contributing = perPresent.filter(c => c > 0).length;
   // "Who's stuck" — present students who haven't contributed anything yet.
@@ -5809,7 +6311,7 @@ function sessionSignal() {
     active++;
     minStage = Math.min(minStage, st);
     maxStage = Math.max(maxStage, st);
-    if (mins > (STAGE_MINUTES[st] || 99)) {
+    if (mins > stageMinutes(st)) {
       over++;
       if (mins > slowestMin) { slowestMin = mins; slowest = r; }
     }
@@ -5942,10 +6444,10 @@ function renderDashboard() {
     const timer = document.createElement("div");
     const mins = minsSince(data.stageAt);
     if (mins != null) {
-      const over = mins > (STAGE_MINUTES[st] || 99);
+      const over = mins > stageMinutes(st);
       timer.className = "dash-timer" + (over ? " over" : "");
       timer.textContent = mins + " min in this stage" +
-        (over ? " (planned ~" + STAGE_MINUTES[st] + ")" : "");
+        (over ? " (planned ~" + stageMinutes(st) + ")" : "");
     } else {
       timer.className = "dash-timer";
       timer.textContent = "";
@@ -6729,7 +7231,9 @@ function downloadMyData() {
     pool: null,
     presence: {},
     typing: {},
-    answers: { moduleA: [], moduleB: [] },
+    /* moduleBranched included: LEGACY_SLOT_KEY maps a branched slot to it,
+       and an uninitialised bucket threw and rejected the WHOLE export. */
+    answers: { moduleA: [], moduleB: [], moduleBranched: [] },
     votes: [],
     // R3-A2 — pre/post-test answers belong to the participant and must be
     // exported under GDPR Art. 15. Keyed by room then by 'pre'/'post' so a
@@ -6759,11 +7263,17 @@ function downloadMyData() {
       if (r.typing && r.typing[clientId]) {
         out.typing[roomName] = r.typing[clientId];
       }
-      ["moduleA", "moduleB"].forEach(mod => {
-        const ans = (r.answers && r.answers[mod]) || {};
+      /* S6 — walk the session's SLOTS, not the two retired module keys: a
+         participant's own answers must come back whatever slot they wrote them
+         in, or a GDPR export silently under-reports their data. */
+      roomSlotBuckets(r).forEach(b => {
+        const mod = LEGACY_SLOT_KEY[b.type] || "moduleA";
+        const ans = b.answers || {};
         Object.keys(ans).forEach(entryId => {
           if (ans[entryId] && ans[entryId].cid === clientId) {
-            out.answers[mod].push(Object.assign({ room: roomName, entryId: entryId }, ans[entryId]));
+            out.answers[mod].push(Object.assign(
+              { room: roomName, slot: b.slot, sectionId: b.sectionId, entryId: entryId },
+              ans[entryId]));
           }
         });
       });
@@ -7453,13 +7963,37 @@ function _archiveCsvCell(v) {
   if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
+/* ── S4 — the research export, v2 ─────────────────────────────────────────────
+ * A session is opening + N picked sections + wrap-up, so an export keyed by
+ * `moduleA` / `moduleB` can no longer describe one: two sections of the SAME
+ * type collide on the key, and the room's state has lived at
+ * rooms/$roomId/sections/$slot since S2b-2 — the v1 reader was pointing at
+ * nodes nothing writes any more, so it had silently started exporting empties.
+ *
+ * v2 is a CLEAN BREAK (decision 6), plus a converter for archived v1 files
+ * (scripts/convert-archive-v2.js) so the whole dataset ends up one shape.
+ *
+ * Every row carries its SLOT and the section that ran there, which is what
+ * makes a mixed session analysable at all: "the PBL answers" means nothing when
+ * a session ran two different PBL sections. */
+const ARCHIVE_EXPORT_VERSION = 2;
+
+function _archiveSectionManifest() {
+  return sectionSlots().map(sl => {
+    const sec = (typeof window !== "undefined" &&
+                 (window.CANAMED_SECTIONS || {})[sl.sectionId]) || null;
+    const title = (sec && sec.name && (sec.name.en || sec.name)) ||
+                  (sl.module ? moduleNameEn(sl.module) : "") || "";
+    return { slot: sl.position, sectionId: sl.sectionId || null,
+             type: sl.type || null, title: String(title) };
+  });
+}
 function _sessionArchiveData(anon) {
+  const manifest = _archiveSectionManifest();
   const rooms = [];
   roomNames(roomCount).forEach(r => {
     const data = allRooms[r] || {};
     const st = typeof data.stage === "number" ? data.stage : 0;
-    const ans = data.answers || {};
-    const hyps = (data.moduleA && data.moduleA.hypotheses) || {};
     const aliasMap = {};
     let aliasN = 0;
     const labelFor = nm => {
@@ -7473,39 +8007,65 @@ function _sessionArchiveData(anon) {
       }
       return aliasMap[nm];
     };
-    const mapEntries = mk => entriesSorted(ans[mk]).map(e => ({
+    const mapEntries = obj => entriesSorted(obj).map(e => ({
       by: labelFor(e.by), university: e.university || "",
       bulletKey: e.bulletKey || "", text: e.text || ""
     }));
-    const hypList = Object.keys(hyps).map(k => hyps[k]).filter(Boolean)
+    const mapHyps = obj => Object.keys(obj || {}).map(k => obj[k]).filter(Boolean)
       .sort((a, b) => (a.at || 0) - (b.at || 0))
       .map(h => ({ by: labelFor(h.by), university: h.university || "", text: h.text || "" }));
+
+    /* Driven by the MANIFEST, not by whichever keys happen to exist: a slot
+       that ran and produced nothing must still appear, or its silence is
+       indistinguishable from it never having run. */
+    /* One address resolver for every snapshot reader (roomSlotBuckets), so a
+       future path move cannot fix the dashboard and miss the export again. */
+    const perSlot = {};
+    roomSlotBuckets(data).forEach(b => {
+      perSlot[String(b.slot)] = {
+        hypotheses: mapHyps(b.hypotheses),
+        answers: mapEntries(b.answers)
+      };
+    });
     rooms.push({
       room: r,
-      stageReached: STAGE_LABELS[st] || ("Stage " + (st + 1)),
+      stageReached: stageLabelEn(st),
       score: (typeof scoreTotal === "function") ? scoreTotal(data) : null,
-      hypotheses: hypList,
-      answers: { moduleA: mapEntries("moduleA"), moduleB: mapEntries("moduleB") }
+      sections: perSlot
     });
   });
   return {
     session: sessionNum,
+    exportVersion: ARCHIVE_EXPORT_VERSION,
     exportedAt: new Date().toISOString(),
     pseudonymised: !!anon,
+    sections: manifest,
     rooms: rooms
   };
 }
 function _sessionArchiveToCSV(archive) {
-  const headers = ["room", "stageReached", "score", "section", "author", "university", "bulletKey", "text"];
+  const headers = ["room", "stageReached", "score", "slot", "sectionId", "sectionType",
+                   "kind", "author", "university", "bulletKey", "text"];
+  const bySlot = {};
+  (archive.sections || []).forEach(m => { bySlot[String(m.slot)] = m; });
   const rows = [];
   (archive.rooms || []).forEach(rm => {
     const base = [rm.room, rm.stageReached, rm.score == null ? "" : rm.score];
-    rm.hypotheses.forEach(h => rows.push(base.concat(["hypothesis", h.by, h.university, "", h.text])));
-    rm.answers.moduleA.forEach(e => rows.push(base.concat(["moduleA", e.by, e.university, e.bulletKey, e.text])));
-    rm.answers.moduleB.forEach(e => rows.push(base.concat(["moduleB", e.by, e.university, e.bulletKey, e.text])));
-    if (!rm.hypotheses.length && !rm.answers.moduleA.length && !rm.answers.moduleB.length) {
-      rows.push(base.concat(["(empty)", "", "", "", ""]));
-    }
+    let any = false;
+    Object.keys(rm.sections || {}).forEach(slot => {
+      const m = bySlot[slot] || {};
+      const sBase = base.concat([slot, m.sectionId || "", m.type || ""]);
+      const bucket = rm.sections[slot] || {};
+      (bucket.hypotheses || []).forEach(h => {
+        any = true;
+        rows.push(sBase.concat(["hypothesis", h.by, h.university, "", h.text]));
+      });
+      (bucket.answers || []).forEach(e => {
+        any = true;
+        rows.push(sBase.concat(["answer", e.by, e.university, e.bulletKey, e.text]));
+      });
+    });
+    if (!any) rows.push(base.concat(["", "", "", "(empty)", "", "", "", ""]));
   });
   const head = headers.join(",");
   const body = rows.map(row => row.map(_archiveCsvCell).join(",")).join("\r\n");
@@ -8016,23 +8576,35 @@ function showLateBanner(stage) {
 
 /* one short, plain-language "do this now" line per stage - the single biggest
    help for a stressed second-language student who has lost the thread */
-// De-dup (2026-06-01): Module A (index 1) and Module B (index 2) used to repeat
-// the whole flow here ("ask, examine, investigate — then debate…"), duplicating
-// the localized, state-aware next-step coach that owns "what to do now" inside
-// each module. Those two are now blank so the coach is the single source. Welcome
-// (0) and Wrap-up (3) keep their line — there is no coach on those stages.
-const STAGE_NOW = [
-  "Watch the opening presentation together. While you wait, name your team below.",
-  "",
-  "",
-  "",   // 3 = branched decision case — the case itself carries the instructions
-  "You're finished — open the questionnaire below. Thank you for taking part!"
-];
+// De-dup (2026-06-01): the section stages used to repeat the whole flow here
+// ("ask, examine, investigate — then debate…"), duplicating the localized,
+// state-aware next-step coach that owns "what to do now" inside each module.
+// They are blank so the coach is the single source. Only Welcome and Wrap-up
+// keep a line — there is no coach on those two.
+// S1b: keyed by ROLE, since a section can now sit at any stage number.
+const STAGE_NOW_BY_ROLE = {
+  welcome: "Watch the opening presentation together. While you wait, name your team below.",
+  wrapup: "You're finished — open the questionnaire below. Thank you for taking part!"
+};
+function stageNow(st) {
+  if (st === 0) return STAGE_NOW_BY_ROLE.welcome;
+  if (st === lastStage()) return STAGE_NOW_BY_ROLE.wrapup;
+  return "";
+}
 function renderStage() {
-  for (let i = 0; i < STAGE_COUNT; i++) {
-    const s = el("stage-" + i);
-    if (s) s.classList.toggle("hidden", i !== viewStage);
-  }
+  /* S1a — show the VIEW the current stage resolves to, not the like-numbered
+     node. Identical today (slot k sits at stage k); once slots are positional
+     a roleplay picked first shows the roleplay view on stage 1. Every other
+     view is hidden, including ones no slot uses. */
+  /* S2b-1 — the pointer follows the stage: walking Back into an earlier PBL
+     section must show THAT section's reveals, not the one most recently
+     written. */
+  if (typeof refreshActiveSlotState === "function") refreshActiveSlotState();
+  const activeView = stageViewId(viewStage);
+  allStageViewIds().forEach(id => {
+    const s = el(id);
+    if (s) s.classList.toggle("hidden", id !== activeView);
+  });
   // the mobile bottom tab bar mirrors Module A (stage-1) and must appear /
   // disappear with the on-screen stage — refresh once the stages are toggled.
   if (typeof updateMobileTabbar === "function") updateMobileTabbar();
@@ -8047,13 +8619,13 @@ function renderStage() {
     try { window.scrollTo({ top: 0, behavior: reducedMotion() ? "auto" : "smooth" }); }
     catch (_) { try { window.scrollTo(0, 0); } catch (__) {} }
   }
-  if (viewStage === STAGE_COUNT - 1) renderWrapupSummary();
+  if (viewStage === lastStage()) renderWrapupSummary();
   // in-platform pre-test (Welcome) and post-test (Wrap-up) — both optional
   // and per-scenario. Render functions are no-ops when the scenario does
   // not ship a question bank or when the user is an admin viewing a room.
   if (viewStage === 0) renderPreTest();
-  if (viewStage === STAGE_COUNT - 1) renderPostTest();
-  if (viewStage === STAGE_COUNT - 1) renderSurvey();
+  if (viewStage === lastStage()) renderPostTest();
+  if (viewStage === lastStage()) renderSurvey();
   renderObjectives();   // the objectives panel tracks the module the room is on
   renderDecisions();    // the team-decision cards for Module A and Module B
   // per-stage "chapter" accent + the "do this now" line
@@ -8063,7 +8635,7 @@ function renderStage() {
   if (now) {
     now.textContent = isRoomAdmin
       ? ""
-      : (viewStage < roomStage ? "" : (STAGE_NOW[viewStage] || ""));
+      : (viewStage < roomStage ? "" : stageNow(viewStage));
   }
   // De-dup (2026-06-01): the module name used to be appended here AND shown on
   // the current segment of the #global-stage-progress stepper below — the same
@@ -8114,7 +8686,7 @@ function renderStage() {
   // clicks its disclosure triangle. (It used to force-open at Wrap-up, which
   // read as the page "opening it by itself" when navigating between stages.)
   // a celebration when the room reaches the wrap-up (once)
-  if (!wrapCelebrated && roomStage === STAGE_COUNT - 1 && viewStage === STAGE_COUNT - 1) {
+  if (!wrapCelebrated && roomStage === lastStage() && viewStage === lastStage()) {
     wrapCelebrated = true;
     burst();
     toast("Great work today — thank you for taking part!");
@@ -8143,8 +8715,12 @@ function renderStage() {
   // the bubble misaligns over an empty area.
   if (window.CanamedTour && typeof window.CanamedTour.activeSet === "function") {
     const activeSet = window.CanamedTour.activeSet();
-    // Map of stage-bound tour sets → the stage they belong on.
-    const TOUR_STAGE = { student: 0, studentModA: 1 };
+    /* Map of stage-bound tour sets → the stage they belong on. S1b: the Module
+       A tour is bound to the FIRST PBL section wherever it landed, not to
+       stage 1 — a session that opens with a roleplay would otherwise dismiss
+       the tour the moment it started. */
+    const firstPbl = sectionSlots().find(s => s.type === "pbl");
+    const TOUR_STAGE = { student: 0, studentModA: firstPbl ? firstPbl.stage : -1 };
     if (activeSet && TOUR_STAGE.hasOwnProperty(activeSet) &&
         TOUR_STAGE[activeSet] !== viewStage) {
       try { window.CanamedTour.dismiss(); } catch (e) {}
@@ -10403,7 +10979,7 @@ function updateModBNextStep() {
 }
 
 /* ===================== MODULE B — SYNCED PHASE FLOW (2026-05-27) =============
- * The room moves through the six phases together (rooms/$room/moduleB/phase,
+ * The room moves through its phases together (rooms/$room/sections/$slot/phase,
  * 0..5). A room member can advance it. Only the CURRENT phase's action sections
  * are shown; reference material (SPIKES strip, useful sentences, history,
  * guidelines, recap) stays visible throughout (those sections carry no entry in
@@ -10507,7 +11083,7 @@ const MODULE_PROGRESS = {
    on the shared applyPhaseVisibility + its MODULE_PROGRESS.B config. Kept so the
    ~11 callers/specs that drive applyModBPhaseVisibility stay unchanged. */
 function applyModBPhaseVisibility(phaseKey) {
-  const c = MODULE_PROGRESS.B;
+  const c = modBCfg();   // S1c-3b — authored phases when declared
   applyPhaseVisibility(c.stageId, c.sections, phaseKey, c.columnsSel, c.expandedIn);
 }
 
@@ -10576,11 +11152,11 @@ function _modBT(key, fallback, vars) {
 /* Name-preserving wrapper (module-set M3b): render Module B at its current
    shared phase index via the generic renderModulePhase. */
 function renderModBPhase() {
-  renderModulePhase(MODULE_PROGRESS.B, modBPhase);
+  renderModulePhase(modBCfg(), modBPhase);
 }
 
 function setModBPhase(idx) {
-  const n = Math.max(0, Math.min(MODB_PHASES.length - 1, idx | 0));
+  const n = Math.max(0, Math.min(modBCfg().phases.length - 1, idx | 0));
   if (refModBPhase) refModBPhase.set(n).catch(() => {});
   else { modBPhase = n; renderModBPhase(); }   // LOCAL/solo fallback
 }
@@ -10735,8 +11311,21 @@ function showRoleObjective(role) {
   const panel = el("modB-role-objective");
   if (!panel) return;
   const textEl = el("modB-role-objective-text");
+  /* S1c-1 — an authored section supplies its own private brief; the built-ins
+     keep resolving through i18n, where their translations live. Authored text
+     goes in as textContent (never the sanitised-innerHTML i18n path), because
+     it is facilitator input rather than a shipped string. */
+  const _authored = (typeof roleplayRole === "function") ? roleplayRole(role) : null;
+  if (role && textEl && _authored && _authored.brief) {
+    textEl.removeAttribute("data-i18n");
+    textEl.removeAttribute("data-i18n-html");
+    textEl.textContent = (typeof tc === "function")
+      ? tc(_authored.brief, _curLang()) : String(_authored.brief);
+    panel.classList.remove("hidden");
+    return;
+  }
   if (role && textEl) {
-    const key = "modB.role." + role + ".brief";
+    const key = (_authored && _authored.briefKey) || ("modB.role." + role + ".brief");
     textEl.setAttribute("data-i18n", key);
     textEl.setAttribute("data-i18n-html", "");
     if (typeof window !== "undefined" && typeof window.applyI18n === "function") {
@@ -10753,6 +11342,51 @@ function showRoleObjective(role) {
     }
     panel.classList.add("hidden");
   }
+}
+
+/* S1c-1 — rebuild the chip row from the section's cast.
+   No-ops when the cast already matches the markup, so the built-in roleplays
+   keep their hand-authored chips and i18n attributes untouched; this only
+   rewrites the row for a section that declares its own roles. Built with
+   createElement + textContent, never innerHTML — a role name is
+   facilitator-authored text. */
+function renderRoleChips() {
+  const row = document.querySelector("#modB-role-picker .role-chip-row");
+  if (!row) return;
+  const cast = roleplayRoles();
+  const current = Array.prototype.map.call(
+    row.querySelectorAll(".role-chip"), c => c.getAttribute("data-role"));
+  if (current.join(",") === cast.map(r => r.id).join(",")) return;
+
+  row.textContent = "";
+  cast.forEach(r => {
+    const b = document.createElement("button");
+    b.className = "role-chip";
+    b.type = "button";
+    b.setAttribute("data-role", r.id);
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-checked", "false");
+    const span = document.createElement("span");
+    span.className = "role-chip-name";
+    if (r.name) {
+      span.textContent = (typeof tc === "function") ? tc(r.name, _curLang()) : String(r.name);
+    } else if (r.nameKey) {
+      span.setAttribute("data-i18n", r.nameKey);
+      span.textContent = r.id;
+    } else {
+      span.textContent = r.id;
+    }
+    b.appendChild(span);
+    row.appendChild(b);
+  });
+  if (typeof window !== "undefined" && typeof window.applyI18n === "function") {
+    window.applyI18n(row);
+  }
+  /* The picker wires its listeners once, over the chips that existed then —
+     re-arm it against the new ones. */
+  const picker = el("modB-role-picker");
+  if (picker) picker._wired = false;
+  initRolePicker();
 }
 
 function initRolePicker() {
@@ -10845,7 +11479,24 @@ function initRolePicker() {
    its OWN slot (no cross-writes). Re-tapping reshuffles; solo mode gives this
    device one of the four at random. Grief surface (a skewed mapping) is the
    accepted room-griefing class — each client only writes its own roleChoices. */
-const ASSIGN_ROLE_DECK = ["physician", "patient", "family", "observer"];
+/* S1c-1 — the deck is the SECTION's cast, not a literal. Kept as a function so
+   it re-reads after a scenario switch; the "extras become observers" fallback
+   uses the LAST declared role, which is the observer in every built-in and the
+   natural spectator slot in an authored cast. */
+/* The chunk that owns the cast is loaded with the room and its load failure is
+   deliberately SWALLOWED (a hiccup fetching it must not block the room), so
+   every bare-name call into it has to tolerate absence. Falling back to the
+   four shipped roles keeps a session runnable rather than throwing. */
+const ROLEPLAY_FALLBACK_ROLE_IDS = ["physician", "patient", "family", "observer"];
+/* Same reasoning for the phase config: without the chunk, fall back to the
+   shipped six-phase timetable rather than throwing. */
+function modBCfg() {
+  return (typeof modBProgressCfg === "function") ? modBProgressCfg() : MODULE_PROGRESS.B;
+}
+function assignRoleDeck() {
+  return (typeof roleplayRoleIds === "function")
+    ? roleplayRoleIds() : ROLEPLAY_FALLBACK_ROLE_IDS.slice();
+}
 
 function _fisherYates(arr) {
   // Browser Math.random (client code, not the deterministic workflow sandbox).
@@ -10862,9 +11513,11 @@ function _fisherYates(arr) {
    filled; the shuffle above randomises only WHO gets which. Pure + global so the
    distinctness property is testable. */
 function _roleDeckFor(count) {
+  const cast = assignRoleDeck();
+  const spare = cast[cast.length - 1] || "observer";
   const deck = [];
   for (let i = 0; i < count; i++) {
-    deck.push(i < ASSIGN_ROLE_DECK.length ? ASSIGN_ROLE_DECK[i] : "observer");
+    deck.push(i < cast.length ? cast[i] : spare);
   }
   return deck;
 }
@@ -10872,7 +11525,8 @@ function _roleDeckFor(count) {
 function assignRolesRandomly() {
   // Solo / LOCAL: no shared roster — give THIS device a random role.
   if (MODE !== "shared" || !refRoleAssign) {
-    _applyAssignedRole(ASSIGN_ROLE_DECK[Math.floor(Math.random() * ASSIGN_ROLE_DECK.length)]);
+    const _solo = assignRoleDeck();
+    _applyAssignedRole(_solo[Math.floor(Math.random() * _solo.length)]);
     return;
   }
   const roster = Object.keys(presence || {});
@@ -10895,7 +11549,7 @@ function handleRoleAssign(val) {
   if (at && at <= _lastRoleAssignAt) return;   // already applied this draw
   _lastRoleAssignAt = at;
   const mine = val.assignments[clientId];
-  if (typeof mine === "string" && ASSIGN_ROLE_DECK.indexOf(mine) !== -1) {
+  if (typeof mine === "string" && assignRoleDeck().indexOf(mine) !== -1) {
     _applyAssignedRole(mine);
   }
 }
@@ -10968,7 +11622,11 @@ function renderRoleChoices(map) {
    advances the round (synced via <base>/roleplayRound); each client rotates
    ITS OWN pick only, so no cross-client writes or extra privilege are needed.
    Works in LOCAL/solo mode (no listener — the button applies the bump here). */
-const REPLAY_ROLE_ORDER = ["physician", "patient", "family", "observer"];
+/* S1c-1 — the swap rotation walks the SECTION's cast in declared order. */
+function replayRoleOrder() {
+  return (typeof roleplayRoleIds === "function")
+    ? roleplayRoleIds() : ROLEPLAY_FALLBACK_ROLE_IDS.slice();
+}
 
 function _swapT(key, fallback) {
   if (typeof window !== "undefined" && typeof window.t === "function") {
@@ -10980,10 +11638,11 @@ function _swapT(key, fallback) {
 
 /* Rotate a role by `steps` around the 4-role cycle. Unknown/unpicked → unchanged. */
 function rotateRole(role, steps) {
-  const i = REPLAY_ROLE_ORDER.indexOf(role);
+  const order = replayRoleOrder();
+  const i = order.indexOf(role);
   if (i < 0) return role;
-  const n = REPLAY_ROLE_ORDER.length;
-  return REPLAY_ROLE_ORDER[(i + ((steps % n) + n)) % n];
+  const n = order.length;
+  return order[(i + ((steps % n) + n)) % n];
 }
 
 /* Wire the "Swap roles & replay" button and seed local round state. */
@@ -11002,7 +11661,7 @@ function wireSwapReplay() {
    listener then drives every client's own rotation); LOCAL applies it here. */
 function bumpReplayRound() {
   const next = replayRound + 1;
-  if (next > REPLAY_ROLE_ORDER.length) {
+  if (next > replayRoleOrder().length) {
     if (typeof toast === "function") {
       toast(_swapT("modB.replay.full",
         "Everyone has now played every role — nicely done."));
@@ -11020,7 +11679,7 @@ function bumpReplayRound() {
    ONLY on a real increment after the baseline round is known — a late joiner
    landing straight into round 2 must NOT rotate on arrival. */
 function handleReplayRound(round, fromSync) {
-  round = (typeof round === "number" && round >= 1 && round <= REPLAY_ROLE_ORDER.length)
+  round = (typeof round === "number" && round >= 1 && round <= replayRoleOrder().length)
     ? round : 1;
   const prev = replayRound;
   const wasReady = replayRoundReady;
@@ -13062,16 +13721,13 @@ function wireSplash() {
     }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    // M2 — per-session module narrowing. Pass null when every module is ticked so
-    // an unnarrowed session writes no `modules` field at all (identical to M1);
-    // only a strict subset is recorded. The runtime intersects the selection with
-    // the scenario's own set, so a module the scenario lacks is harmless.
-    const _modPick = MODULE_REGISTRY
-      .filter(m => { const cb = el("splash-create-mod-" + m.id); return !cb || cb.checked; })
-      .map(m => m.id);
-    const _modNarrow = (_modPick.length && _modPick.length < MODULE_REGISTRY.length)
-      ? _modPick : null;
-    createSession(name, label, pass, scenarioId, customJson, scenarioRef, _modNarrow).then(result => {
+    /* S3b — the facilitator's ordered SECTION pick supersedes M2's module
+       narrowing: a section pick IS the module set, at the right granularity.
+       Null when nothing was picked, in which case the session falls back to the
+       chosen scenario's own shape exactly as before S3. */
+    const _sectionCsv = sectionPickCsv();
+    createSession(name, label, pass, scenarioId, customJson, scenarioRef,
+                  null, _sectionCsv).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -13143,6 +13799,11 @@ function wireSplash() {
   // populate the scenario picker from window.CANAMED_SCENARIOS + wire the
   // description line and the "Create new content (advanced)" → textarea toggle
   populateScenarioPicker();
+  /* S3b — the SECTION picker is the primary control now. Wired eagerly (its
+     button ships in the shell); the add-list fills itself once the lazy section
+     library lands. */
+  wireSectionPicker();
+  populateSectionPicker();
   const sel = el("splash-create-scenario");
   if (sel) sel.addEventListener("change", onScenarioChange);
   const tplBtn = el("splash-load-template");
@@ -13292,6 +13953,158 @@ function wireSplash() {
   if (window.CanamedTour && typeof window.CanamedTour.addReopenLink === "function") {
     window.CanamedTour.addReopenLink("splash-tour-reopen", "create");
   }
+}
+
+/* ── S3b — the SECTION PICKER on the create form ──────────────────────────────
+ * Replaces "Scenario (the clinical case for this workshop)" as the primary
+ * control. A session is opening + N independently-picked sections + wrap-up:
+ * sections may come from different clinical cases, the same TYPE may appear
+ * twice, and PICK ORDER IS RUNNING ORDER.
+ *
+ * It also supersedes M2's "Modules to run" tick-row — a section pick IS the
+ * module set, and expressed at the right granularity, so that row is gone.
+ *
+ * The library is a lazily-loaded chunk, so the add-list fills itself once the
+ * chunk lands (same pattern as populateScenarioPicker below). */
+let splashSectionPick = [];
+let _sectionPickerTries = 0;       // ordered section ids the facilitator chose
+/* Type labels go through i18n like the rest of the create form — the picker was
+   the only part of it shipping hardcoded English, so a French facilitator saw a
+   mixed-language form. */
+function sectionTypeLabel(type) {
+  const key = "splash.create.sections-type-" + type;
+  const v = (typeof window !== "undefined" && typeof window.t === "function")
+    ? window.t(key) : "";
+  if (v && v !== key) return v;
+  return { pbl: "PBL", roleplay: "Roleplay", branched: "Branched" }[type] || type;
+}
+
+function sectionLibraryList() {
+  const lib = (typeof window !== "undefined" && window.CANAMED_SECTIONS) || null;
+  if (!lib) return null;
+  return Object.keys(lib).map(id => lib[id]).filter(Boolean);
+}
+function populateSectionPicker() {
+  const add = el("splash-section-add");
+  if (!add) return;
+  const list = sectionLibraryList();
+  if (!list) {
+    /* Not loaded yet — chain onto the same fetch the scenario picker uses and
+       come back. Without this the picker is permanently empty on a cold load.
+
+       BOUNDED: section-registry.js is optional and its load failure is
+       swallowed, so ensureCaseContent() can resolve for ever with the library
+       still absent. An unbounded retry would then recurse without end (the
+       promise is already settled, so each attempt re-fires immediately). Give
+       up after a few tries and leave the picker empty — the session simply
+       falls back to the scenario shape, which is the designed degradation. */
+    _sectionPickerTries += 1;
+    if (_sectionPickerTries > 3) {
+      const add = el("splash-section-add");
+      if (add && !add.options.length) add.disabled = true;
+      return;
+    }
+    if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+      window.CanamedLoader.ensureCaseContent().then(populateSectionPicker);
+    }
+    return;
+  }
+  _sectionPickerTries = 0;
+  const lang = _curLang();
+  add.textContent = "";
+  list.forEach(sec => {
+    const o = document.createElement("option");
+    o.value = sec.id;
+    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, lang) : sec.name.en))
+      || sec.id;
+    o.textContent = sectionTypeLabel(sec.type) + " — " + title;
+    add.appendChild(o);
+  });
+  renderSectionPick();
+}
+function renderSectionPick() {
+  const ol = el("splash-section-list");
+  const empty = el("splash-section-empty");
+  if (!ol) return;
+  const lib = (window.CANAMED_SECTIONS || {});
+  ol.textContent = "";
+  if (empty) empty.classList.toggle("hidden", splashSectionPick.length > 0);
+
+  splashSectionPick.forEach((id, i) => {
+    const sec = lib[id] || { id: id, type: "", name: null };
+    const li = document.createElement("li");
+    li.className = "splash-section-row";
+    li.setAttribute("data-section-id", id);
+
+    const name = document.createElement("span");
+    name.className = "splash-section-name";
+    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, _curLang()) : sec.name.en))
+      || id;
+    /* textContent, never innerHTML — a section title can be facilitator-authored. */
+    /* Reuse the stage label pattern the STUDENT sees, so the facilitator's row
+       and the student's stage read identically in every language. */
+    const pat = (typeof window !== "undefined" && typeof window.t === "function")
+      ? window.t("stage.label.section") : "";
+    const tpl = (pat && pat !== "stage.label.section") ? pat : "Section {n} — {title}";
+    name.textContent = tpl.replace("{n}", String(i + 1)).replace("{title}", title);
+    li.appendChild(name);
+
+    const type = document.createElement("span");
+    type.className = "splash-section-type";
+    type.textContent = sectionTypeLabel(sec.type);
+    li.appendChild(type);
+
+    const mk = (cls, label, disabled, fn) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "splash-link " + cls;
+      b.textContent = label;
+      b.setAttribute("aria-label", label + " " + title);
+      if (disabled) b.disabled = true;
+      else b.addEventListener("click", fn);
+      li.appendChild(b);
+      return b;
+    };
+    mk("splash-section-up", "↑", i === 0, () => moveSectionPick(i, -1));
+    mk("splash-section-down", "↓", i === splashSectionPick.length - 1,
+       () => moveSectionPick(i, 1));
+    mk("splash-section-remove", "×", false, () => {
+      splashSectionPick.splice(i, 1);
+      renderSectionPick();
+    });
+    ol.appendChild(li);
+  });
+}
+function moveSectionPick(i, dir) {
+  const j = i + dir;
+  if (j < 0 || j >= splashSectionPick.length) return;
+  const t = splashSectionPick[i];
+  splashSectionPick[i] = splashSectionPick[j];
+  splashSectionPick[j] = t;
+  renderSectionPick();
+}
+function addSectionPick(id) {
+  if (!id) return;
+  /* Duplicates are ALLOWED — running the same section twice is legitimate (a
+     replay), and the slot model keys state by position, not by section id. The
+     only bound is the physical slot cap the DB rules enforce. */
+  if (splashSectionPick.length >= MAX_SECTION_SLOTS) return;
+  splashSectionPick.push(id);
+  renderSectionPick();
+}
+function wireSectionPicker() {
+  const btn = el("splash-section-add-btn");
+  if (!btn || btn._wired) return;
+  btn._wired = true;
+  btn.addEventListener("click", () => {
+    const sel = el("splash-section-add");
+    addSectionPick(sel && sel.value);
+  });
+}
+/* The CSV written at create, or null when nothing was picked (in which case the
+   session falls back to the scenario's own shape, exactly as before S3). */
+function sectionPickCsv() {
+  return splashSectionPick.length ? splashSectionPick.join(",") : null;
 }
 
 /* fill the scenario dropdown from the SCENARIOS registry + one trailing
@@ -13585,7 +14398,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -13703,6 +14516,10 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
         ? modules.map(m => String(m).trim()).filter(Boolean).join(",")
         : "";
       if (modCsv) writes.push(db.ref(oPath(code, "modules")).set(modCsv));
+      /* S3b — the ordered section pick. Write-once, like `modules`: a session's
+         shape must not shift under participants mid-flight. */
+      if (typeof sections === "string" && sections)
+        writes.push(db.ref(oPath(code, "sections")).set(sections));
       return Promise.all(writes)
         .then(() => hashPassword(password, code))
         .then(h => {

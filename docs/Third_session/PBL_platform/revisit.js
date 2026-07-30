@@ -29,8 +29,19 @@
     var lang = qs("lang") || "en";
     if (["en", "fr", "ja"].indexOf(lang) < 0) lang = "en";
     var sid = qs("s") || "";
+    /* S6 — resolve the id against the SECTION library first, then fall back to
+       the scenario registry.
+       Correction to the plan: this page never read session state, so the
+       section model could not "break" an existing link the way decision 13
+       assumed. It takes an id in ?s= and shows that content's post-test. So the
+       cutover here is ADDITIVE — a section id resolves to that section's own
+       post-test (decision 3), and every previously-shared scenario link keeps
+       working unchanged. */
     var scenarios = window.CANAMED_SCENARIOS || {};
-    var sc = scenarios[sid] || scenarios[Object.keys(scenarios)[0]];
+    var sections = (typeof window.buildSectionRegistry === "function")
+      ? window.buildSectionRegistry(scenarios) : (window.CANAMED_SECTIONS || {});
+    var sc = sections[sid] || scenarios[sid] ||
+             scenarios[Object.keys(scenarios)[0]];
 
     if (!sc || !Array.isArray(sc.postTest) || !sc.postTest.length) {
       var p = document.createElement("p");

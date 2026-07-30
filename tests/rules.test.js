@@ -215,10 +215,12 @@ test("rules: bounded numeric fields stay clamped (no integer overflow tricks)", 
   // roomCount 1..20
   assert.match(session.roomCount[".validate"], /newData\.val\(\) >= 1/);
   assert.match(session.roomCount[".validate"], /newData\.val\(\) <= 20/);
-  // stage 0..4 (M4b lifted the bound from 3: a 5th stage was inserted for the
-  // branched decision case, moving wrap-up 3 → 4)
+  /* stage 0..9 — S1b: a session is Welcome + up to MAX_SECTION_SLOTS (8)
+     sections + Wrap-up, so the bound is the PHYSICAL cap, not the length of any
+     one session's flow. (M4b had lifted it 3 → 4 for the branched stage.)
+     Keep this in lockstep with MAX_SECTION_SLOTS in script.js. */
   assert.match(session.rooms["$roomId"].stage[".validate"], /newData\.val\(\) >= 0/);
-  assert.match(session.rooms["$roomId"].stage[".validate"], /newData\.val\(\) <= 4/);
+  assert.match(session.rooms["$roomId"].stage[".validate"], /newData\.val\(\) <= 9/);
   // manual score points 0..50
   assert.match(session.rooms["$roomId"].score.manual["$pushId"][".validate"], /<= 50/);
   // vote choice 0..9
@@ -621,13 +623,17 @@ test("rules: per-room /observers/$clientId requires auth + closed-session guard"
   assert.match(node[".write"], /closed/);
 });
 
-test("rules: per-room /moduleB/phase is an auth-guarded number 0..5 (synced phase)", () => {
+test("rules: per-room /moduleB/phase is an auth-guarded, bounded phase index", () => {
   assert.ok(ROOM.moduleB && ROOM.moduleB.phase, "rules must declare /rooms/$roomId/moduleB/phase");
   const node = ROOM.moduleB.phase;
   assert.match(node[".write"], /auth != null/);
   assert.match(node[".write"], /closed/);
   assert.match(node[".validate"], /isNumber/, "phase must validate as a number");
-  assert.match(node[".validate"], /<= 5/, "phase must be capped at 5 (six phases, 0..5)");
+  /* S1c-3b — an authored roleplay declares its OWN phase list, so the cap can
+     no longer be the built-in timetable's length: a bound of 5 made phase 7 of
+     an 8-phase roleplay unwritable. It is a generous sanity cap now. Keep it
+     >= any phase count the author UI will allow. */
+  assert.match(node[".validate"], /<= 19/, "phase must stay bounded, but not to the built-in six");
   // M3a: phase was the ONE room-scoped write with no membership gate, so anyone
   // who knew the session code could jump ANOTHER room's roleplay to a different
   // beat. Safe for facilitators: openRoomAsAdmin → enterRoom → startRoom claims

@@ -6,13 +6,13 @@
  * breaking-bad-news roleplay…" — duplicating the localized, state-aware
  * next-step coach that already owns "what to do now" inside each module.
  *
- * Every MODULE slot is blank; Welcome (0) and Wrap-up (last) keep their line
- * (there is no coach on those stages). renderStage() already renders
- * STAGE_NOW[v] || "".
+ * Every SECTION stage is blank; Welcome and Wrap-up keep their line (there is
+ * no coach on those two). renderStage() renders stageNow(viewStage).
  *
- * M4b added a 5th stage — the branched decision case at index 3, moving wrap-up
- * to 4 — so the shape is now [Welcome, "", "", "", Wrap-up]: three blank module
- * slots (A, B, branched).
+ * S1b replaced the index-keyed array with a role-keyed map + stageNow(): a
+ * section can now sit at any stage number, so "index 1 is Module A" stopped
+ * being true. The invariant is unchanged and is now expressed directly —
+ * stageNow() returns "" for everything that is not an end.
  */
 "use strict";
 
@@ -25,17 +25,19 @@ const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platfo
 const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
 
 test("STAGE_NOW blanks every module slot and keeps Welcome + Wrap-up", () => {
-  // Shape: [ <non-empty Welcome>, "", "", "", <non-empty Wrap-up> ]
-  // (comments between entries are tolerated — one annotates the branched slot).
-  const C = "(?:\\s*//[^\\n]*)?";   // optional trailing line comment
-  const re = new RegExp(
-    'const STAGE_NOW = \\[\\s*"[^"]+",' + C +
-    '\\s*"",' + C + '\\s*"",' + C + '\\s*"",' + C +
-    '\\s*"[^"]+",?' + C + '\\s*\\];'
-  );
-  assert.match(SCRIPT, re,
-    "STAGE_NOW[1] (Module A), [2] (Module B) and [3] (branched) must be empty " +
-    "strings, with non-empty Welcome [0] and Wrap-up [4] lines");
+  const i = SCRIPT.indexOf("const STAGE_NOW_BY_ROLE");
+  assert.ok(i > 0, "the role-keyed now-line map must exist");
+  const map = SCRIPT.slice(i, SCRIPT.indexOf("};", i));
+  assert.match(map, /welcome:\s*"[^"]+"/, "Welcome keeps its line");
+  assert.match(map, /wrapup:\s*"[^"]+"/, "Wrap-up keeps its line");
+  assert.equal((map.match(/"/g) || []).length / 2, 2,
+    "ONLY the two ends may carry a line — a section stage must stay blank so " +
+    "the in-module coach remains the single source of 'what to do now'");
+
+  const j = SCRIPT.indexOf("function stageNow(");
+  const fn = SCRIPT.slice(j, SCRIPT.indexOf("\n}", j));
+  assert.match(fn, /return "";/,
+    "stageNow() must return an empty line for every section stage");
 });
 
 test("the old duplicated Module A / Module B STAGE_NOW lines are gone", () => {
