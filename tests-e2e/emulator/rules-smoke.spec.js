@@ -1183,6 +1183,13 @@ test("rules: an authored section body can be snapshotted per slot, write-once", 
   expect(await tryWrite(page, `sessions/${code}/sections`, "chronic-pain-pbl,custom-2"))
     .toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/${code}/sectionBodies/2`, body)).toBe("ALLOWED");
+  /* A body may only be written for a slot the PICK CLAIMS. Slot 1 is a built-in
+     in this CSV, so a body there is an orphan blob and is refused — that is
+     what bounds the storage surface (9 slots x 128 KB per fabricated code) to
+     sessions where a matching pick was also written, and it catches the client
+     bug of snapshotting a body the CSV never asked for. */
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/1`, body),
+    "slot 1 is a built-in in this pick — no body belongs there").not.toBe("ALLOWED");
   expect((await tryRead(page, `sessions/${code}/sectionBodies/2`)).val).toBe(body);
 
   // WRITE-ONCE: a session's content must not change after it is created.
@@ -1196,6 +1203,11 @@ test("rules: sectionBodies bounds the slot key and the payload size", async ({ p
   const code = "secbodyguard-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
+  /* With NO pick at all, no body is writable — the node cannot be used as free
+     storage on a fabricated session code. */
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/1`, "{}"),
+    "no sections CSV ⇒ no bodies").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/sections`, "custom-1")).toBe("ALLOWED");
 
   // Slot key is a single digit 1-9 — same guard as the per-room section nodes,
   // so an unbounded key cannot be used as free storage.

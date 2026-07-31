@@ -293,7 +293,7 @@
   "splash.create.sections-add-label": "セクションを追加",
   "splash.create.sections-add": "+ セクションを追加",
   "splash.create.author-link": "必要なセクションが一覧にない場合は、作成ボードで作れます →",
-  "splash.create.sections-required": "このセッションに少なくとも１つのセクションを追加してください。",
+  "splash.create.sections-required": "このセッションに少なくとも1つのセクションを追加してください。",
   "splash.create.sections-type-pbl": "PBL",
   "splash.create.sections-type-roleplay": "ロールプレイ",
   "splash.create.sections-type-branched": "分岐型",

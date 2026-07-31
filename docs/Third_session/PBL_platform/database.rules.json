@@ -147,7 +147,7 @@
           ".read": "auth != null",
           "$slot": {
             ".write": "auth != null && !data.exists()",
-            ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072"
+            ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072 && newData.parent().parent().child('sections').val().contains('custom-' + $slot)"
           }
         },
         "modules": {
@@ -801,7 +801,7 @@
               ".read": "auth != null",
               "$slot": {
                 ".write": "auth != null && !data.exists()",
-                ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072"
+                ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072 && newData.parent().parent().child('sections').val().contains('custom-' + $slot)"
               }
             },
             "modules": {

@@ -14564,14 +14564,20 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
          Snapshotting also pins the session to the version it was created with,
          exactly as scenarioCustomJson does — a facilitator editing their
          scenario mid-workshop must not change what a running session shows. */
-      if (sectionBodies && typeof sectionBodies === "object") {
-        Object.keys(sectionBodies).forEach(slot => {
+      /* ORDERING MATTERS: a body's rule requires the `sections` CSV to already
+         name `custom-<slot>`, so these cannot ride the same parallel batch as
+         the CSV write — a body landing first would be rejected. Chained after
+         the batch instead. */
+      const _bodyWrites = () => {
+        if (!sectionBodies || typeof sectionBodies !== "object") return Promise.resolve();
+        return Promise.all(Object.keys(sectionBodies).map(slot => {
           const body = sectionBodies[slot];
-          if (typeof body === "string" && body)
-            writes.push(db.ref(oPath(code, "sectionBodies/" + slot)).set(body));
-        });
-      }
+          if (typeof body !== "string" || !body) return Promise.resolve();
+          return db.ref(oPath(code, "sectionBodies/" + slot)).set(body);
+        }));
+      };
       return Promise.all(writes)
+        .then(_bodyWrites)
         .then(() => hashPassword(password, code))
         .then(h => {
           if (useAdminSecrets()) {
