@@ -2063,7 +2063,19 @@ const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" 
 /* Deep-copy a section's decisions with slot-scoped ids, and tag them with the
    module key their stage renders into. Pure — the library entry is never
    mutated, so switching back to a slot re-derives the same graph. */
-function sectionDecisionPrefix(slot) { return "s" + slot.position + "_"; }
+function sectionDecisionPrefix(slot) {
+  /* A STANDALONE branched slot keeps its decision ids RAW. Namespacing exists
+     to stop two same-type sections sharing a vote tally (both built-in workups
+     carry `dec_plan`), and a lone section has nothing to disambiguate. Keeping
+     them raw also means a branched session's vote keys are identical whether it
+     was created before or after the section cutover — a pre-cutover session has
+     no sectionId, so applySectionContent() returns early and its ids stay raw.
+     Prefixing only the new ones would split the same case's votes across two id
+     shapes for no gain, and make revisit/export comparisons across the cutover
+     read as different decisions. */
+  if (slot && slot.standalone) return "";
+  return "s" + slot.position + "_";
+}
 function namespaceDecisions(decisions, slot) {
   const pre = sectionDecisionPrefix(slot);
   /* A STANDALONE branched slot renders through the module-A targets
