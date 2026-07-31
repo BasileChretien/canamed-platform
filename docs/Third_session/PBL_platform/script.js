@@ -13936,6 +13936,17 @@ function wireSplash() {
     if (typeof last.sections === "string" && last.sections) {
       splashSectionPick = last.sections.split(",")
         .map(x => x.trim()).filter(Boolean)
+        /* DROP custom-<slot> tokens. saveLastWorkshop persists the output of
+           sectionPickCsv(), where an authored pick has already become
+           "custom-<slot>" — a token that means "the body stored on THAT
+           session". Restoring it into a NEW pick would write a token whose
+           body no longer accompanies it, giving a session a slot that can
+           never resolve. Worse, it can survive the resolve-check below: if
+           this tab has since joined a session, registerSectionBodies() has put
+           custom-<slot> into CANAMED_SECTIONS, so sectionLibEntry() finds the
+           PREVIOUS session's section and cheerfully keeps it. Authored picks
+           are re-selected by hand; built-ins clone as before. */
+        .filter(id => !/^custom-[1-9]$/.test(id))
         .filter(id => !!sectionLibEntry(id))
         .slice(0, MAX_SECTION_SLOTS);
       renderSectionPick();

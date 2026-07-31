@@ -263,3 +263,15 @@ test("a malformed snapshot degrades to skipping ONE slot, not the session", () =
     "a snapshot with no type cannot become a stage — skip it explicitly");
   assert.match(f, /return;/, "…and skip only that slot");
 });
+
+test("clone-last-workshop cannot revive a custom-<slot> token", () => {
+  /* saveLastWorkshop persists sectionPickCsv()'s output, where an authored pick
+     has ALREADY become "custom-<slot>" — a token meaning "the body stored on
+     THAT session". Restoring it into a new pick would give the new session a
+     slot nothing can resolve. It can even survive the resolve-check: once this
+     tab has joined a session, registerSectionBodies() has put custom-<slot>
+     into CANAMED_SECTIONS, so sectionLibEntry() finds the PREVIOUS session's
+     section and keeps it. */
+  assert.match(SCRIPT, /\.filter\(id => !\/\^custom-\[1-9\]\$\/\.test\(id\)\)/,
+    "the clone restore must drop custom-<slot> tokens before resolving them");
+});
