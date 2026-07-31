@@ -194,7 +194,12 @@ test.describe("Splash — authored scenarios entry points", () => {
       await picker.locator("option").count()
     ).toBeGreaterThan(0);
 
-    // No authored:… options should appear with nothing seeded.
+    /* No authored:… options should appear with nothing seeded. This asserts an
+       ABSENCE, so the authored pass must have RUN — ensureCaseContent() and the
+       built-in options only prove the built-in half landed. Without awaiting it
+       the count is 0 because nothing has looked yet, not because LOCAL mode
+       produced nothing, and the assertion passes vacuously. */
+    await page.evaluate(() => loadAuthoredSectionsIntoPicker());
     const refOptionCount = await picker.locator('option[value^="authored:"]').count();
     expect(refOptionCount).toBe(0);
 

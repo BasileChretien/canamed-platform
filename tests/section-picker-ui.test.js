@@ -253,6 +253,11 @@ test("an oversized authored section is refused BEFORE anything is written", () =
   const iCheck = SCRIPT.indexOf("if (_snapshot.oversized.length) {");
   const iCreating = SCRIPT.indexOf('cHint.textContent = "Creating session…";');
   assert.ok(iCheck > -1, "tryCreate must check for oversized bodies");
+  /* Guard iCreating too. Unguarded it is -1 when that hint string moves or gets
+     localised, which makes the ordering assertion below fail with "the check
+     must precede the create" — pointing at the wrong cause entirely. */
+  assert.ok(iCreating > -1,
+    "the 'Creating session…' marker must exist, or the ordering check is meaningless");
   assert.ok(iCheck < iCreating,
     "the check must precede the create — after it, `created` is already written");
   assert.match(SCRIPT, /splash\.create\.section-too-big/,

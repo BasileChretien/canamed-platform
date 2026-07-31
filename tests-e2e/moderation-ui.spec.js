@@ -98,6 +98,12 @@ async function openCreate(page) {
     const s = document.getElementById("splash-section-add");
     return !!(s && s.options.length > 0);
   });
+  /* …and then the AUTHORED half explicitly. `options.length > 0` is satisfied by
+     the built-ins alone, so it does NOT prove the shared sections have been
+     looked for — which is the half every test here is about. Awaiting the load
+     makes the comment above true instead of aspirational, and it is what lets
+     the tombstone test assert an ABSENCE without it passing vacuously. */
+  await page.evaluate(() => loadAuthoredSectionsIntoPicker());
   /* The picker SEEDS a default section once the library lands, and duplicate
      picks are legal — so adding that same section below would yield two rows
      and a strict-mode violation. These tests are about WHICH rows are
