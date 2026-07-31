@@ -416,6 +416,7 @@
       "splash.create.sections-empty": "No sections yet — add at least one.",
       "splash.create.sections-add-label": "Add a section",
       "splash.create.sections-add": "+ Add section",
+      "splash.create.author-link": "Need a section that isn't listed? Build one on the authoring board →",
       "splash.create.sections-type-pbl": "PBL",
       "splash.create.sections-type-roleplay": "Roleplay",
       "splash.create.sections-type-branched": "Branched",
@@ -1003,7 +1004,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v11";  // consent box C + Microsoft as processor + the section picker's strings
+  const LOCALE_VERSION = "v12";  // consent box C + Microsoft as processor + the section picker's strings
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

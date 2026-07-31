@@ -4932,19 +4932,6 @@ html[data-theme="high-contrast"] :focus-visible {
   margin: 6px 0 0;
 }
 
-/* "Create new content (advanced) ↓" toggle below the scenario picker.
-   Small, left-aligned link styled like the existing splash-link but with
-   a touch more breathing room. */
-.splash-create-advanced-toggle {
-  margin-top: 8px;
-  text-align: left;
-  align-self: flex-start;
-}
-.splash-create-advanced-toggle[aria-expanded="true"]::after {
-  content: " ▲";
-  font-size: 0.8em;
-}
-
 /* Per-cohort live count chips in the waiting-room card. Visible as soon
    as the prestart panel renders; chips are coloured from the COHORTS
    registry (orgs.js) so a Lyon × Tokyo deployment gets two purple/blue

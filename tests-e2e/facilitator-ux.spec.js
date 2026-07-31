@@ -43,31 +43,41 @@ test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
     await expect(page.locator("#splash-create-pass"))
       .toHaveAttribute("aria-describedby", "splash-create-pass-hint");
 
-    // The custom-JSON textarea must be hidden by default
-    await expect(page.locator("#splash-custom-wrap")).toBeHidden();
+    /* S7 CUTOVER — there is NO raw-JSON surface on the create form any more.
+       This block used to drive the "advanced" toggle that revealed a paste-JSON
+       textarea. Content is now authored on the fill-in board
+       (scenario-author.html) and saved to the cloud, after which it appears in
+       the picker under "My scenarios". The assertion inverts: the elements must
+       be GONE, not merely hidden — `toBeHidden()` also passes for an element
+       that does not exist, so it could not have caught a regression here. */
+    await expect(page.locator("#splash-custom-wrap")).toHaveCount(0);
+    await expect(page.locator("#splash-create-custom")).toHaveCount(0);
+    await expect(page.locator("#splash-create-advanced-toggle")).toHaveCount(0);
+    await expect(page.locator("#splash-load-template")).toHaveCount(0);
 
-    // The dropdown must NOT contain a "Create new content (advanced)" option
-    // (that path moved to a separate toggle button below the picker).
+    // Nor may the dropdown carry the option the toggle replaced.
     const optionTexts = await page.locator("#splash-create-scenario option")
       .allTextContents();
     for (const txt of optionTexts) {
       expect(txt.toLowerCase()).not.toContain("create new content");
       expect(txt.toLowerCase()).not.toContain("advanced");
     }
+  });
 
-    // Clicking the toggle reveals the textarea + flips aria-expanded
-    const toggle = page.locator("#splash-create-advanced-toggle");
-    await expect(toggle).toBeVisible();
-    await expect(toggle).toHaveAttribute("aria-expanded", "false");
-    await toggle.click();
-    await expect(page.locator("#splash-custom-wrap")).toBeVisible();
-    await expect(toggle).toHaveAttribute("aria-expanded", "true");
-
-    // Clicking it again hides the textarea and reverts to the first
-    // built-in scenario.
-    await toggle.click();
-    await expect(page.locator("#splash-custom-wrap")).toBeHidden();
-    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  test("the authoring board is reachable WITHOUT signing in first", async ({ page }) => {
+    /* The board is the whole answer to "I don't want to write JSON" — 15 form
+       sections and a PBL/Roleplay/Branched skeleton picker. It existed all
+       along but its only link was `hidden` until a non-anonymous sign-in, so
+       the good path was invisible while the paste-JSON textarea sat in plain
+       sight on the create form. Signing in is prompted when SAVING, not to
+       find the board. If this ever regresses to hidden, the JSON complaint
+       comes straight back. */
+    await page.goto("/");
+    const row = page.locator("#splash-author-row");
+    await expect(row).not.toHaveAttribute("hidden", /.*/);
+    const link = page.locator("#splash-go-author");
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute("href", "scenario-author.html");
   });
 
   test("admin pre-start: Test alerts button + expected-total input + waiting cohort chips", async ({ page, context }) => {

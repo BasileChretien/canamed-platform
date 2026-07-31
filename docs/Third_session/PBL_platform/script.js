@@ -13679,31 +13679,15 @@ function wireSplash() {
     if (!name) { cHint.textContent = "Enter your name."; cHint.className = "splash-hint err"; cName.focus(); return; }
     if (!pass) { cHint.textContent = "Set a session password."; cHint.className = "splash-hint err"; cPass.focus(); return; }
     if (pass.length < 4) { cHint.textContent = "Password should be at least 4 characters."; cHint.className = "splash-hint err"; cPass.focus(); return; }
-    // which content the session will run: a built-in scenario id, or "__custom__"
-    // with a JSON blob the facilitator has pasted in
+    // which content the session will run: a built-in scenario id, or an
+    // authored one as "__ref:<source>:<ownerUid>:<scenarioId>". The pasted-JSON
+    // path was removed in the S7 cutover — content is authored on the form
+    // board (scenario-author.html) and saved to the cloud instead.
     const sel = el("splash-create-scenario");
     let scenarioId = sel ? sel.value : "";
     let customJson = null;
     let scenarioRef = null;
-    if (scenarioId === "__custom__") {
-      const ta = el("splash-create-custom");
-      const text = (ta && ta.value || "").trim();
-      if (!text) {
-        cHint.textContent = "Paste your custom content, or pick a built-in scenario.";
-        cHint.className = "splash-hint err"; if (ta) ta.focus(); return;
-      }
-      if (text.length > 262144) {
-        cHint.textContent = "Custom content is too large (limit 256 KB).";
-        cHint.className = "splash-hint err"; return;
-      }
-      const v = validateScenarioJson(text);
-      if (!v.ok) {
-        cHint.textContent = "Custom content: " + v.msg;
-        cHint.className = "splash-hint err"; if (ta) ta.focus(); return;
-      }
-      customJson = text;
-      scenarioId = null;
-    } else if (typeof scenarioId === "string" && scenarioId.indexOf("__ref:") === 0) {
+    if (typeof scenarioId === "string" && scenarioId.indexOf("__ref:") === 0) {
       // authored scenario: format is __ref:<source>:<ownerUid>:<scenarioId>
       const parts = scenarioId.split(":");
       if (parts.length >= 4 && (parts[1] === "private" || parts[1] === "shared")) {
@@ -13787,7 +13771,6 @@ function wireSplash() {
       // they close the tab without clicking "End session".
       addMySession(code, label || name || "");
       cName.value = ""; cLabel.value = ""; cPass.value = "";
-      const ta = el("splash-create-custom"); if (ta) ta.value = "";
     }).catch(e => {
       console.error("Create failed", e);
       cHint.textContent = "Could not create the session — check your connection and try again.";
@@ -13806,13 +13789,6 @@ function wireSplash() {
   populateSectionPicker();
   const sel = el("splash-create-scenario");
   if (sel) sel.addEventListener("change", onScenarioChange);
-  const tplBtn = el("splash-load-template");
-  if (tplBtn) tplBtn.addEventListener("click", loadScenarioTemplate);
-  // The advanced toggle is independent of case-content.js (it only flips
-  // the <textarea>'s hidden attribute), so wire it eagerly here as well.
-  // populateScenarioPicker() also calls it once case-content has loaded;
-  // wireAdvancedScenarioToggle() is idempotent (dataset.wired guard).
-  wireAdvancedScenarioToggle();
   wireReportScenario();
 
   // "Clone last workshop" row — appears only when a previous create has
@@ -14138,17 +14114,18 @@ function populateScenarioPicker() {
   // forget — if they fail (offline / disabled tree), the picker still
   // shows the built-ins.
   appendAuthoredScenarioOptions(sel, lang);
-  // NOTE: "Create new content (advanced)" used to be an option inside
-  // this dropdown. The simulation report (Step 2) found that first-time
-  // facilitators panicked at the JSON textarea after picking it by
-  // mistake. It is now a separate button below the picker (toggled via
-  // splash-create-advanced-toggle); the dropdown lists ONLY clinical
-  // scenarios. Picking the toggle sets sel.value = "__custom__" so the
-  // existing tryCreate() branch remains unchanged.
+  // HISTORY of the JSON path, kept because it explains why this dropdown is
+  // plainer than it used to be. "Create new content (advanced)" was once an
+  // option here; the Step-2 simulation report found first-time facilitators
+  // picked it by mistake and panicked at the JSON textarea, so it moved to a
+  // separate toggle button. The S7 cutover REMOVED it outright: content is
+  // authored on the fill-in board (scenario-author.html — 15 form sections
+  // plus a PBL/Roleplay/Branched skeleton picker) and saved to the cloud,
+  // after which it appears here under "My scenarios". Do not reintroduce a
+  // paste box. The board was ALSO hidden until sign-in, so the good path was
+  // invisible while the bad one sat in plain sight — fixed in the same pass.
   const firstBuiltIn = Object.keys(scenarios)[0];
   if (firstBuiltIn) sel.value = firstBuiltIn;
-  // Wire the advanced toggle (idempotent — guard with dataset.wired)
-  wireAdvancedScenarioToggle();
   wireReportScenario();
   onScenarioChange();
 }
@@ -14202,55 +14179,6 @@ function appendAuthoredScenarioOptions(sel, lang) {
   }).catch(e => console.warn("appendAuthoredScenarioOptions failed", e));
 }
 
-function wireAdvancedScenarioToggle() {
-  const toggle = el("splash-create-advanced-toggle");
-  if (!toggle || toggle.dataset.wired === "1") return;
-  toggle.dataset.wired = "1";
-  toggle.addEventListener("click", () => {
-    const wrap = el("splash-custom-wrap");
-    const sel = el("splash-create-scenario");
-    const isOpen = wrap && !wrap.hidden;
-    if (isOpen) {
-      // Closing the advanced panel reverts to the first built-in scenario.
-      if (wrap) wrap.hidden = true;
-      toggle.setAttribute("aria-expanded", "false");
-      if (sel) {
-        const scenarios = window.CANAMED_SCENARIOS || {};
-        const firstBuiltIn = Object.keys(scenarios)[0];
-        if (firstBuiltIn) {
-          sel.value = firstBuiltIn;
-          onScenarioChange();
-        }
-      }
-    } else {
-      // Opening: reveal the textarea and tag the picker so tryCreate's
-      // existing branch reads sel.value === "__custom__". We add a
-      // synthetic option for this so even an unloaded case-content
-      // dropdown can carry the flag, then immediately re-call
-      // onScenarioChange to update the description line.
-      if (wrap) wrap.hidden = false;
-      toggle.setAttribute("aria-expanded", "true");
-      if (sel) {
-        const hasCustom = Array.from(sel.options).some(o => o.value === "__custom__");
-        if (!hasCustom) {
-          const opt = document.createElement("option");
-          opt.value = "__custom__";
-          opt.textContent = (window.t ? window.t("splash.create.advanced-toggle") :
-            "Create new content (advanced)");
-          opt.hidden = true;
-          sel.appendChild(opt);
-        }
-        sel.value = "__custom__";
-      }
-      onScenarioChange();
-      const ta = el("splash-create-custom");
-      if (ta) try { ta.focus(); } catch (e) {}
-    }
-  });
-}
-
-/* Wire the "Report this scenario" affordance (idempotent). Visibility is owned
-   by onScenarioChange(). */
 function wireReportScenario() {
   const btn = el("splash-report-scenario");
   if (!btn || btn.dataset.wired === "1") return;
@@ -14298,19 +14226,11 @@ function wireReportScenario() {
 }
 function onScenarioChange() {
   const sel = el("splash-create-scenario");
-  const wrap = el("splash-custom-wrap");
   const desc = el("splash-scenario-desc");
-  const toggle = el("splash-create-advanced-toggle");
   if (!sel) return;
-  const isCustom = sel.value === "__custom__";
   const isRef = typeof sel.value === "string" && sel.value.indexOf("__ref:") === 0;
-  if (wrap) wrap.hidden = !isCustom;
-  if (toggle) toggle.setAttribute("aria-expanded", isCustom ? "true" : "false");
   if (desc) {
-    if (isCustom) {
-      desc.textContent = (window.t ? window.t("splash.create.custom-desc") :
-        "Paste a JSON object describing your case. Use 'Load template' to start from the built-in content.");
-    } else if (isRef) {
+    if (isRef) {
       // For authored scenarios we keep the picker label as the description
       // (the meta summary isn't on the option). Looking it up would require
       // an extra fetch; the user just picked it from a labelled list.
@@ -14333,32 +14253,6 @@ function onScenarioChange() {
     }
   }
 }
-function loadScenarioTemplate() {
-  const ta = el("splash-create-custom");
-  if (!ta) return;
-  const scenarios = window.CANAMED_SCENARIOS || {};
-  const firstId = Object.keys(scenarios)[0];
-  if (!firstId) { ta.value = "{\n  \"name\": \"My new case\",\n  \"case\": { \"history\": [], \"exam\": [], \"labs\": [], \"prompts\": [] },\n  \"scoring\": { \"moduleA\": [], \"moduleB\": [] },\n  \"penalties\": [],\n  \"decisions\": []\n}"; return; }
-  const sc = scenarios[firstId];
-  // include the shape but with a fresh name so the facilitator edits, not copies
-  const template = {
-    name: "My new case",
-    summary: "A one-line description shown on the picker.",
-    moduleAName: sc.moduleAName,
-    moduleBName: sc.moduleBName,
-    synthId: sc.synthId,
-    synthPrereqs: sc.synthPrereqs,
-    case: sc.case,
-    scoring: sc.scoring,
-    penalties: sc.penalties,
-    decisions: sc.decisions
-  };
-  ta.value = JSON.stringify(template, null, 2);
-}
-
-/* Surface the one-time per-session recovery code on the created view. The
-   code is never readable from the DB (it lives in the unreadable /recovery
-   subtree), so this is the ONLY moment the facilitator can record it. */
 function showRecoveryCode(recoveryCode) {
   const wrap = el("splash-recovery-wrap");
   const codeNode = el("splash-recovery-code");
@@ -14543,49 +14437,6 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
   });
   });
 }
-
-/* validate a pasted custom-scenario JSON string. The engine reads case.history,
-   case.exam and case.labs - those are the minimum a scenario must declare. */
-function validateScenarioJson(text) {
-  let obj;
-  try { obj = JSON.parse(text); }
-  catch (e) { return { ok: false, msg: "Invalid JSON (" + e.message + ")." }; }
-  if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-    return { ok: false, msg: "Must be a JSON object." };
-  }
-  if (!obj.case || typeof obj.case !== "object") {
-    return { ok: false, msg: "Missing 'case' object." };
-  }
-  if (!Array.isArray(obj.case.history) || !obj.case.history.length) {
-    return { ok: false, msg: "case.history must be a non-empty array." };
-  }
-  if (!Array.isArray(obj.case.exam) || !Array.isArray(obj.case.labs)) {
-    return { ok: false, msg: "case.exam and case.labs must be arrays." };
-  }
-  return { ok: true, content: obj };
-}
-
-/* ===================== ACCOUNTS, PROFILES, HISTORY =========================
-   Firebase Email/Password auth is optional - the code-only join still works
-   for guests. A signed-in user has a profile (name, university, year, English)
-   that auto-fills the join form, and a history of sessions they have joined.
-
-   Per-user data lives under users/{uid}/{profile, history}; rules in
-   database.rules.json restrict read/write to the matching auth.uid.
-
-   Sign-up flow:
-     splash-enter → "create one" → splash-account-view (sign-up mode)
-       → submit email+password → splash-profile-setup-view
-       → save → back to splash-enter with header chip shown
-   Sign-in flow:
-     splash-enter → "Sign in to your account" → splash-account-view (sign-in mode)
-       → submit email+password → splash-enter with chip + pre-filled identity
-   Forgot password:
-     splash-account-view → "Forgot password?" → enter email → password reset email
-   Account dialog (header chip):
-     edit profile · change password · sign out · delete account · session history */
-
-let _historyListenerRef = null;        // realtime subscription for the dialog
 
 function splashHintErr(node, msg) {
   if (!node) return; node.textContent = msg || ""; node.className = "splash-hint" + (msg ? " err" : "");
@@ -14965,13 +14816,6 @@ function handleAuthStateChange(user) {
       try {
         const sel = el("splash-create-scenario");
         if (sel) appendAuthoredScenarioOptions(sel, _curLang());
-      } catch (_) {}
-      // Reveal the "Author scenarios" splash link now that the user has a
-      // persistent identity. Hidden by default to keep the participant
-      // landing page uncluttered.
-      try {
-        const row = el("splash-author-row");
-        if (row) row.hidden = false;
       } catch (_) {}
       // first sign-in for this identified account → guide them through profile setup
       if (!profile || !profile.name) {

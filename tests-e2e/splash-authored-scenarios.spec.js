@@ -94,13 +94,30 @@ test.describe("Splash — authored scenarios entry points", () => {
       { timeout: 3000 });
   });
 
-  test("'Author scenarios' splash link is hidden until a real user signs in", async ({ page }) => {
+  test("'Author scenarios' splash link is visible WITHOUT signing in (S7 cutover)", async ({ page }) => {
+    /* INVERTED DELIBERATELY. This test used to pin the opposite: the row stayed
+       hidden until a non-anonymous sign-in, "to keep the participant landing
+       page uncluttered". That decision had a consequence nobody had connected
+       to it — the fill-in authoring BOARD (scenario-author.html: 15 form
+       sections, a PBL/Roleplay/Branched skeleton picker) was the hidden thing,
+       while the create form still offered a raw-JSON textarea in plain sight.
+       Facilitators therefore met JSON and never met the board, and reported the
+       platform as "JSON-only" — the board existed the whole time.
+
+       So the gate moved rather than disappeared: the board is now findable by
+       anyone, and signing in is prompted when SAVING to the cloud, which is the
+       only step that actually needs an identity. Reverting this to hidden
+       re-creates the original complaint, which is why the assertion is
+       explicit rather than just deleted. */
     await page.goto("/");
 
-    // In LOCAL mode no user ever becomes non-anonymous, so the row stays hidden.
     const row = page.locator("#splash-author-row");
     await expect(row).toBeAttached();
-    await expect(row).toBeHidden();
+    // LOCAL mode never produces a non-anonymous user, so if visibility still
+    // depended on sign-in this would fail — that is the point of the check.
+    await expect(row).toBeVisible();
+    await expect(page.locator("#splash-go-author"))
+      .toHaveAttribute("href", "scenario-author.html");
   });
 
   test("shared scenarios seeded in LocalDB populate the picker in LOCAL mode", async ({ page }) => {
