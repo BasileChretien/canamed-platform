@@ -363,6 +363,28 @@ test("the eager script keeps NO copy of the picker — the reclaim is real", () 
     "unregistered in LAZY_CHUNKS, an idle-prefetched chunk counts against the budget");
 });
 
+test("the two files declare no name TWICE — a duplicate let would throw on load", () => {
+  /* The chunk is a classic script sharing the global scope with script.js, so a
+     name declared with let/const in BOTH is a redeclaration SyntaxError. It
+     would not surface here or on the splash — only when the create view opens
+     and the chunk evaluates, taking the whole picker down at once. Cheap to
+     reintroduce (re-adding a `let splashSectionPick` to script.js "for
+     clarity"), so pin it. */
+  const declsOf = (src) => {
+    const out = new Set();
+    const re = /^(?:let|const|var|function)\s+([A-Za-z_$][\w$]*)/gm;
+    let m;
+    while ((m = re.exec(src))) out.add(m[1]);
+    return out;
+  };
+  const eager = declsOf(fs.readFileSync(path.join(P, "script.js"), "utf8"));
+  const lazy = declsOf(fs.readFileSync(path.join(P, "section-picker.js"), "utf8"));
+  const dup = [...lazy].filter((n) => eager.has(n));
+  assert.deepEqual(dup, [],
+    "declared in BOTH script.js and section-picker.js: " + dup.join(", "));
+  assert.ok(lazy.size > 10, "the chunk must actually carry the picker declarations");
+});
+
 test("every custom property the picker uses actually EXISTS in tokens.css", () => {
   /* Invented token names do not fail loudly — `var(--space-1)` is simply an
      invalid declaration the browser DROPS, so the rule silently does nothing.
