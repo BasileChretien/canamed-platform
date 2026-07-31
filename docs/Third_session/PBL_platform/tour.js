@@ -67,7 +67,10 @@
       { anchor: "splash-create-label",
         titleKey: "tour.create.1.title", bodyKey: "tour.create.1.body",
         placement: "right" },
-      { anchor: "splash-create-scenario",
+      /* S7 — re-anchored from the deleted Scenario select to the SECTION
+         picker's add control, which is the content choice now. A tour step
+         pointing at a removed id silently does nothing. */
+      { anchor: "splash-section-add",
         titleKey: "tour.create.2.title", bodyKey: "tour.create.2.body",
         placement: "right" },
       { anchor: "splash-create-pass",

@@ -23,6 +23,14 @@ async function openCreate(page) {
     const s = document.getElementById("splash-section-add");
     return !!(s && s.options.length > 0);
   });
+  /* The picker SEEDS a default section once the library lands (the Scenario
+     select it replaced was never empty either). These tests exercise the
+     ARRANGEMENT mechanics, so they start from a known-empty list; the seeding
+     itself is asserted in its own test below. */
+  await page.evaluate(() => {
+    splashSectionPick.length = 0;
+    renderSectionPick();
+  });
 }
 
 const ids = (page) =>
@@ -118,5 +126,45 @@ test.describe("S3b — the section picker", () => {
     await openCreate(page);
     await expect(page.locator("#splash-create-mod-A")).toHaveCount(0);
     await expect(page.locator("#splash-create-mod-B")).toHaveCount(0);
+  });
+});
+
+test.describe("S7 — the picker seeds a default", () => {
+  test("a facilitator who touches nothing still gets a runnable session", async ({ page }) => {
+    /* The Scenario select this replaced ALWAYS had a selection — the first
+       built-in. Shipping an empty picker would have been an accidental
+       behaviour change: a facilitator who fills in only a name and a password,
+       exactly as before, would hit a blocking "add at least one section" error
+       where the old form simply worked. */
+    await page.goto("/");
+    await page.locator("#splash-go-create").click();
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => {
+      const s = document.getElementById("splash-section-add");
+      return !!(s && s.options.length > 0);
+    });
+    const picked = await page.locator("#splash-section-list .splash-section-row").count();
+    expect(picked, "the picker must seed one section").toBe(1);
+    expect(await page.evaluate(() => sectionPickCsv())).toBeTruthy();
+  });
+
+  test("removing the last section is RESPECTED, not instantly re-seeded", async ({ page }) => {
+    /* Seeding is tracked by a flag, not by "is the pick empty" — otherwise
+       clearing the list would fight the facilitator, re-adding a section on
+       every render. Emptying it must stick, and the empty-state must show. */
+    await page.goto("/");
+    await page.locator("#splash-go-create").click();
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => {
+      const s = document.getElementById("splash-section-add");
+      return !!(s && s.options.length > 0);
+    });
+    await page.locator(".splash-section-row").first()
+      .locator(".splash-section-remove").click();
+    await expect(page.locator("#splash-section-list .splash-section-row")).toHaveCount(0);
+    await expect(page.locator("#splash-section-empty")).toBeVisible();
+    // …and it stays empty across a re-render.
+    await page.evaluate(() => populateSectionPicker());
+    await expect(page.locator("#splash-section-list .splash-section-row")).toHaveCount(0);
   });
 });

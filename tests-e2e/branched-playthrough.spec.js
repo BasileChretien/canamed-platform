@@ -87,9 +87,20 @@ test.describe("branched scenario — full playthrough", () => {
     await page.locator("#splash-create-label").fill("Branched run");
     // Selecting the branched scenario from the picker also confirms it is
     // listed there (the picker enumerates CANAMED_SCENARIOS).
-    await page
-      .locator("#splash-create-scenario")
-      .selectOption("ward-escalation-branched");
+    /* S7 — the Scenario select is gone; pick the branched SECTION. Its id is
+       unchanged (the branched case keeps its own id in SECTION_SOURCES, which
+       is what branchedRef composition resolves against). Clear the seeded
+       default first so the session runs this section and nothing else. */
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => {
+      const s = document.getElementById("splash-section-add");
+      return !!(s && s.options.length > 0);
+    });
+    await page.evaluate(() => {
+      splashSectionPick.length = 0;
+      splashSectionPick.push("ward-escalation-branched");
+      renderSectionPick();
+    });
     await page.locator("#splash-create-pass").fill("e2e-pass-2026");
     await page.locator("#splash-create-submit").click();
 

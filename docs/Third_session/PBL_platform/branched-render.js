@@ -378,9 +378,17 @@
     return s.length > n ? s.slice(0, n - 1).replace(/\s+\S*$/, "").trim() + "…" : s;
   }
   function buildRoomChoiceTree(roomData, lang) {
-    if ((root.CURRENT_SCENARIO_FORMAT || "standard") !== "branched") return null;
-    var list = (typeof DECISIONS !== "undefined" ? DECISIONS : []);
-    if (!list.length) return null;
+    /* Resolve the graph from the SESSION, not from this tab's globals. The
+       dashboard never enters a room, so applySectionContent() has not run here
+       and DECISIONS still holds whatever scenario loaded by default — which is
+       why this rendered nothing for a section-picked branched session. The
+       format guard went with it: "does this session HAVE branched nodes" is the
+       real predicate, and unlike the format check it is also true for a MIXED
+       session, whose tree was equally invisible. */
+    var list = (typeof root.sessionBranchedDecisions === "function")
+      ? root.sessionBranchedDecisions()
+      : branchedDecisions();
+    if (!list || !list.length) return null;
     var rt = root.CanamedBranchedRuntime;
     if (!rt || !rt.branchedPath) return null;
     lang = lang || ((typeof _curLang === "function") ? _curLang() : "en");

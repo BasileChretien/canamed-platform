@@ -332,23 +332,56 @@
     return section;
   }
 
+  /* Which section TYPES a scenario yields. A branched case is one section (its
+     content is the node graph, not modules); anything else is a PBL/Roleplay
+     pair, and buildSection() then drops whichever half the case does not
+     actually run.
+
+     Extracted so there is ONE answer to "what sections does this scenario
+     have?". scenario-author.js's splitScenarioIntoSections() re-derives the
+     same thing to split a legacy save on load; the two were written to mirror
+     each other by hand, which is a standing divergence risk — a section
+     authored in the author would behave differently from the same section
+     derived at runtime, and that stays invisible until a session runs. */
+  function sectionTypesFor(scenario) {
+    if (!scenario) return [];
+    return (scenario.format === "branched") ? ["branched"] : ["pbl", "roleplay"];
+  }
+
+  /* Every section ONE scenario yields, in picker order (PBL before Roleplay).
+     Generalised out of buildSectionRegistry so it works for a scenario that is
+     NOT in SECTION_SOURCES — i.e. one a facilitator authored. */
+  function sectionsForScenario(scenario, slug) {
+    if (!scenario) return [];
+    const out = [];
+    sectionTypesFor(scenario).forEach(t => {
+      /* A BRANCHED case keeps its own scenario id as the section id, so it
+         needs no slug — SECTION_SOURCES passes null for it on purpose, and
+         buildSection() ignores the argument for that type. Every other type
+         derives `<slug>-<type>` and cannot be built without one; guarding here
+         rather than requiring a slug up front is what keeps the branched case
+         in the library (a blanket `if (!slug) return []` silently dropped it). */
+      if (t !== "branched" && !slug) return;
+      const sec = buildSection(scenario, slug, t);
+      if (sec) out.push(sec);
+    });
+    return out;
+  }
+
   /* Derive the whole flat library. Order is the SECTION_SOURCES order, PBL
-     before Roleplay within a case — the order the picker will list them in. */
+     before Roleplay within a case — the order the picker lists them in. */
   function buildSectionRegistry(scenarios) {
     const out = {};
     (SECTION_SOURCES).forEach(src => {
       const sc = (scenarios || {})[src.scenarioId];
       if (!sc) return;              // branched-seed.js may not have loaded yet
-      const types = (sc.format === "branched") ? ["branched"] : ["pbl", "roleplay"];
-      types.forEach(t => {
-        const sec = buildSection(sc, src.slug, t);
-        if (sec) out[sec.id] = sec;
-      });
+      sectionsForScenario(sc, src.slug).forEach(sec => { out[sec.id] = sec; });
     });
     return out;
   }
 
   return { SECTION_TYPES, SECTION_SOURCES, TEST_SPLIT, SECTION_SUMMARIES, MODULE_PREFIX,
            stripModulePrefix, byModule, buildSection, buildSectionRegistry,
+           sectionTypesFor, sectionsForScenario,
            unclassifiedTestItems };
 });

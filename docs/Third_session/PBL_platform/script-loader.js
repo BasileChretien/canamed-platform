@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v128";
+  var SHELL_VERSION = "v129";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
@@ -271,6 +271,26 @@
      why (the splash byte budget). Chained here, not in ensureCaseContent, so it
      is guaranteed present BEFORE the room is revealed. */
   function ensureSectionContent() { return loadScript(v("section-content.js")); }
+  /* section-picker.js (S7): the create form's SECTION PICKER. Splash-only but
+     behind a click — the entry view never needs it — so it is loaded when the
+     create view opens rather than shipped in the shell. It needs the section
+     LIBRARY to have anything to list, so chain ensureCaseContent() (which pulls
+     section-registry.js) ahead of it; the picker has its own bounded retry too,
+     but resolving in the right order means the add-list is filled on the first
+     pass instead of the second. */
+  function ensureSectionPicker() {
+    /* IN PARALLEL, not chained. Chaining made the picker wait for the whole
+       case-content bundle (~200 KB gz) before its own ~5 KB chunk even started
+       fetching, which on a mobile connection pushed the authored/shared
+       sections far enough out that they looked absent. The picker needs the
+       section LIBRARY to list anything, so resolve on BOTH — but overlap the
+       two fetches rather than serialising them. case-content failure is
+       swallowed: the picker still lists whatever it can. */
+    return Promise.all([
+      ensureCaseContent().catch(function () {}),
+      loadScript(v("section-picker.js"))
+    ]);
+  }
   function ensureRoomStyles() {
     /* Resolves when BOTH the room stylesheet and the room-only section-content
        chunk are in. Room entry awaits this before revealing the app, so every
@@ -338,6 +358,7 @@
     ensureAdminStyles,
     ensureRoomStyles,
     ensureSectionContent,
+    ensureSectionPicker,
     ensureCaseContent,
     ensureQrcode,
     ensureTour,

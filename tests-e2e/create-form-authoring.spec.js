@@ -100,7 +100,17 @@ test.describe("Create form — authoring entry point, no JSON", () => {
     // The picker's own controls are present and usable.
     await expect(page.locator("#splash-section-add")).toBeVisible();
     await expect(page.locator("#splash-section-add-btn")).toBeVisible();
-    // And the empty-state tells the facilitator what to do.
+    /* And the empty-state tells the facilitator what to do. It is only shown
+       while the pick is EMPTY, and the picker seeds one default section as soon
+       as the lazy library lands — so this must wait for the library and clear
+       the pick, or it is asserting a state that is wrong once the page settles
+       (it passed only by racing the chunk). Same fix as facilitator-ux.spec.js. */
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => {
+      const s = document.getElementById("splash-section-add");
+      return !!(s && s.options.length > 0);
+    });
+    await page.evaluate(() => { splashSectionPick.length = 0; renderSectionPick(); });
     await expect(page.locator("#splash-section-empty")).toBeVisible();
   });
 });

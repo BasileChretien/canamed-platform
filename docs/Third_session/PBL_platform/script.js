@@ -266,13 +266,25 @@ function applyScenario(id, customContent) {
   composeBranchedModule();
   try {
     if (typeof document !== "undefined" && document.body) {
-      document.body.dataset.format = window.CURRENT_SCENARIO_FORMAT;
+      /* S7 — with the Scenario select gone, a session's FORMAT can no longer
+         come only from the applied scenario: a pick of just the branched
+         section applies no scenario at all, so the body would stamp "standard"
+         and the épuré branched layout would never load. Derive it from the
+         PICK when there is one — branched only when EVERY picked section is
+         branched, i.e. a standalone branched session. A mixed pick stays
+         "standard" at the body level and relies on the per-STAGE stamping
+         below, which is what M4a built that stamping for. */
+      var _picked = (typeof pickedSections === "function") ? pickedSections() : null;
+      var _pickFmt = (_picked && _picked.length &&
+                      _picked.every(function (x) { return x && x.type === "branched"; }))
+        ? "branched" : null;
+      document.body.dataset.format = _pickFmt || window.CURRENT_SCENARIO_FORMAT;
       // M4a: ALSO stamp each stage, so the épuré CSS keys off the STAGE
       // (.stage[data-format="branched"]) rather than the whole body. A standalone
       // branched scenario stamps every stage the same as body → byte-identical
       // rendering; a future MIXED session (M4c) stamps ONLY its branched stage,
       // so only that stage goes épuré while the A/B stages keep their chrome.
-      var _fmt = window.CURRENT_SCENARIO_FORMAT || "standard";
+      var _fmt = _pickFmt || window.CURRENT_SCENARIO_FORMAT || "standard";
       var _stages = document.querySelectorAll(".stage");
       for (var _i = 0; _i < _stages.length; _i++) _stages[_i].dataset.format = _fmt;
     }
@@ -281,7 +293,20 @@ function applyScenario(id, customContent) {
   // the earliest point the format is known — so the épuré layout + components
   // are styled before the room paints. Loaded lazily (kept off the splash CSS
   // budget); standard sessions never request it.
-  if (window.CURRENT_SCENARIO_FORMAT === "branched" &&
+  /* S7 — the stylesheet must follow the SAME derivation as the format stamp
+     above, not just the scenario: a pick of only the branched section applies
+     no scenario, so keying on CURRENT_SCENARIO_FORMAT alone left the épuré
+     layout unstyled (the format attribute was right and the CSS never arrived —
+     a genuinely confusing half-broken state). A MIXED pick needs it too, since
+     its branched STAGE is stamped even when the body is not. */
+  var _needsBranchedCss = (window.CURRENT_SCENARIO_FORMAT === "branched");
+  try {
+    var _p = (typeof pickedSections === "function") ? pickedSections() : null;
+    if (_p && _p.some(function (x) { return x && x.type === "branched"; })) {
+      _needsBranchedCss = true;
+    }
+  } catch (_) { /* library not loaded yet — the scenario check still applies */ }
+  if (_needsBranchedCss &&
       window.CanamedLoader && typeof window.CanamedLoader.ensureBranchedStyles === "function") {
     // Fire-and-forget: the stylesheet load is async (the room paints after the
     // lobby, so it has time). Swallow a load failure — the branched UI degrades
@@ -335,7 +360,8 @@ function loadSessionScenario(code) {
     db.ref(oPath(code, "scenarioCustomJson")).once("value"),
     db.ref(oPath(code, "scenarioRef")).once("value"),
     db.ref(oPath(code, "modules")).once("value"),
-    db.ref(oPath(code, "sections")).once("value")
+    db.ref(oPath(code, "sections")).once("value"),
+    db.ref(oPath(code, "sectionBodies")).once("value")
   ])).then(res => {
     const id = res[0] && res[0].val();
     const customJson = res[1] && res[1].val();
@@ -351,6 +377,12 @@ function loadSessionScenario(code) {
        session's first stageFlow() runs the scenario's shape instead of the
        picked one. Resolution needs the lazily-loaded section library, so a pick
        read before that chunk lands simply falls back until it does. */
+    /* S7 — register any AUTHORED section snapshots into the library FIRST.
+       Order matters: setSessionSections() below triggers refreshModuleStages(),
+       which resolves every token against window.CANAMED_SECTIONS. Registering
+       after it would make the session's first stageFlow() drop each
+       custom-<slot> as unresolvable — the stage would simply not exist. */
+    registerSectionBodies(res[5] && res[5].val());
     setSessionSections(res[4] && res[4].val());
     let custom = null;
     if (customJson) {
@@ -413,7 +445,16 @@ function listMyScenarios() {
     .then(snap => {
       const out = [];
       snap.forEach(child => {
-        out.push({ id: child.key, meta: (child.val() || {}).meta || {} });
+        const v = child.val() || {};
+        /* `bodyJson` is FREE here — this read already pulls the whole
+           scenarios/<uid> subtree including it, and the previous version simply
+           discarded it. The SECTION picker needs it: `meta` carries only
+           {id,name,summary,createdAt,updatedAt,version,locale}, with no
+           `modules` and no `format`, so metadata alone cannot tell you whether
+           a scenario yields a PBL section, a Roleplay one, or a branched one.
+           Left unparsed here — the caller parses defensively, so one malformed
+           body cannot take the whole list down. */
+        out.push({ id: child.key, meta: v.meta || {}, bodyJson: v.bodyJson || null });
       });
       return out;
     })
@@ -745,6 +786,30 @@ const WRAPUP_VIEW_ID = "stage-4";
  * before it exists; and a stale pick may name a section that has since been
  * renamed. Either way we fall back to the module-derived slots rather than
  * producing a session with no stages at all. */
+/* S7 — fold a session's AUTHORED section snapshots into the section library so
+   pickedSections() resolves "custom-<slot>" exactly like a built-in id.
+   Each value is a serialised SECTION (already one half of a scenario), written
+   write-once at create, so what is registered here is the version the session
+   was created with — a later edit by the author cannot change a running
+   session. Defensive throughout: one unparseable snapshot must not stop the
+   others, and must not take down a session that also runs built-ins. */
+function registerSectionBodies(bodies) {
+  if (typeof window === "undefined" || !bodies || typeof bodies !== "object") return;
+  if (!window.CANAMED_SECTIONS) window.CANAMED_SECTIONS = {};
+  Object.keys(bodies).forEach(slot => {
+    const raw = bodies[slot];
+    if (typeof raw !== "string" || !raw) return;
+    let sec = null;
+    try { sec = JSON.parse(raw); }
+    catch (e) { console.warn("section snapshot for slot " + slot + " is not JSON", e); return; }
+    if (!sec || typeof sec !== "object" || !sec.type) {
+      console.warn("section snapshot for slot " + slot + " has no type — ignored");
+      return;
+    }
+    const id = "custom-" + slot;
+    window.CANAMED_SECTIONS[id] = Object.assign({}, sec, { id: id });
+  });
+}
 function setSessionSections(csv) {
   if (typeof window === "undefined") return;
   const list = (typeof csv === "string" && csv)
@@ -773,9 +838,22 @@ function sectionSlots() {
      session, and unlike the module set it can name two sections of one type. */
   const picked = pickedSections();
   if (picked) {
+    /* A pick of ONE branched section is a STANDALONE branched session and must
+       use the standalone view (#stage-1), the same as the no-pick fallback in
+       _moduleDerivedSlots(). Not a stylistic choice: #decisions-branched lives
+       in #stage-3 but #branched-final-host — the OSCE diagnosis/management
+       DELIVERABLE a branched case builds toward — exists only in #stage-1. Type
+       -routing this to stage 3 renders the decision tree and then silently
+       loses its ending, which is the worst kind of half-working.
+       A MIXED pick keeps per-type routing: there the branched module is
+       COMPOSED into stage 3 and its deliverable goes to answers/moduleBranched
+       instead (M4c/M4d). */
+    const lone = (picked.length === 1 && picked[0].type === "branched");
     return picked.map((sec, i) => ({
       position: i + 1, stage: i + 1, module: null, type: sec.type,
-      view: STAGE_VIEW_FOR_TYPE[sec.type], sectionId: sec.id
+      view: (lone ? "stage-1" : STAGE_VIEW_FOR_TYPE[sec.type]),
+      standalone: lone || undefined,
+      sectionId: sec.id
     }));
   }
   return _moduleDerivedSlots();
@@ -1959,6 +2037,18 @@ function applySectionContent(slot) {
   if (Array.isArray(c.decisions)) {
     window.DECISIONS = namespaceDecisions(c.decisions, slot);
   }
+  /* S7 — a BRANCHED section carries the rest of its case at the top level of
+     its content (buildSection passes format/finalStep/documents through), and
+     those were never published here. It did not show while the Scenario select
+     existed, because a branched session always ALSO applied the branched
+     scenario, which set these globals on the way past. Picking the branched
+     section with no scenario behind it left the format right, the stylesheet
+     loaded and the decisions panel empty — the half-broken state this fixes. */
+  if (c.format) window.CURRENT_SCENARIO_FORMAT = c.format;
+  if (slot.type === "branched") {
+    window.CURRENT_SCENARIO_FINAL_STEP = c.finalStep || null;
+    window.CURRENT_SCENARIO_DOCUMENTS = c.documents || null;
+  }
   /* The roleplay's authorable content travels with its section. */
   window.CURRENT_SECTION_ROLEPLAY = (sec.roleplay && typeof sec.roleplay === "object")
     ? sec.roleplay : null;
@@ -1970,13 +2060,76 @@ function applySectionContent(slot) {
 /* A slot's TYPE maps back to the module key the scoring/decision engine uses. */
 const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" };
 
+/* ── The branched graph THIS SESSION runs, for a viewer that never entered a
+ * room ────────────────────────────────────────────────────────────────────────
+ *
+ * WHY READING `DECISIONS` IS NOT ENOUGH. applySectionContent() publishes a
+ * section's decisions as the STUDENT walks into its stage — it is driven by
+ * refreshActiveSlotState(), a stage-change path. The facilitator dashboard never
+ * enters a room, so on the admin tab that never runs: CURRENT_SCENARIO_FORMAT
+ * still reads "standard" and DECISIONS still carries the DEFAULT scenario's
+ * nodes, not the picked section's. The per-room choice tree read both and so
+ * rendered nothing at all for a section-picked branched session — the admin-side
+ * half of the cutover that the student-side fixes did not reach.
+ *
+ * Ids go through namespaceDecisions() exactly as applySectionContent() does, so
+ * they match the ids the room actually wrote its votes under: RAW for a
+ * standalone branched pick, s<slot>_ prefixed in a mixed one. Deriving them any
+ * other way yields a graph that looks right and matches no votes.
+ *
+ * Returns [] when this session runs no branched section. */
+function sessionBranchedDecisions() {
+  if (typeof window === "undefined") return [];
+  let slots = null;
+  try { slots = sectionSlots(); } catch (_) { slots = null; }
+  const lib = window.CANAMED_SECTIONS || null;
+  if (lib && Array.isArray(slots) && slots.length) {
+    /* Only a PICKED slot carries a sectionId. _moduleDerivedSlots()' standalone
+       branched slot has none, and falls through to the ambient path below. */
+    const picked = slots.filter(s => s && s.type === "branched" && s.sectionId);
+    if (picked.length) {
+      const out = [];
+      picked.forEach(slot => {
+        const sec = lib[slot.sectionId];
+        const dec = sec && sec.content && sec.content.decisions;
+        if (Array.isArray(dec)) out.push.apply(out, namespaceDecisions(dec, slot));
+      });
+      if (out.length) return out;
+    }
+  }
+  /* No pick to resolve — a pre-cutover session, or one composed via branchedRef.
+     There the ambient globals ARE the session, so mirror what the room renders
+     (branched-render.js branchedDecisions()). */
+  const list = Array.isArray(window.DECISIONS) ? window.DECISIONS : [];
+  if ((window.CURRENT_SCENARIO_FORMAT || "standard") === "branched") return list.slice();
+  return list.filter(d => d && d.module === "branched");
+}
+
 /* Deep-copy a section's decisions with slot-scoped ids, and tag them with the
    module key their stage renders into. Pure — the library entry is never
    mutated, so switching back to a slot re-derives the same graph. */
-function sectionDecisionPrefix(slot) { return "s" + slot.position + "_"; }
+function sectionDecisionPrefix(slot) {
+  /* A STANDALONE branched slot keeps its decision ids RAW. Namespacing exists
+     to stop two same-type sections sharing a vote tally (both built-in workups
+     carry `dec_plan`), and a lone section has nothing to disambiguate. Keeping
+     them raw also means a branched session's vote keys are identical whether it
+     was created before or after the section cutover — a pre-cutover session has
+     no sectionId, so applySectionContent() returns early and its ids stay raw.
+     Prefixing only the new ones would split the same case's votes across two id
+     shapes for no gain, and make revisit/export comparisons across the cutover
+     read as different decisions. */
+  if (slot && slot.standalone) return "";
+  return "s" + slot.position + "_";
+}
 function namespaceDecisions(decisions, slot) {
   const pre = sectionDecisionPrefix(slot);
-  const mod = SECTION_MODULE_FOR_TYPE[slot.type] || "A";
+  /* A STANDALONE branched slot renders through the module-A targets
+     (#decisions-A / #branched-final-host, both in #stage-1), so its decisions
+     must be tagged "A" — tagged "branched" they render into #decisions-branched
+     on a stage this session does not use, and the panel simply stays empty.
+     Same rule the ANSWERS bucket already follows: a standalone branched session
+     aggregates into moduleA, only a COMPOSED one uses the separate bucket. */
+  const mod = slot.standalone ? "A" : (SECTION_MODULE_FOR_TYPE[slot.type] || "A");
   const own = {};
   decisions.forEach(d => { if (d && d.id) own[d.id] = true; });
   /* Only rewrite references to ids INSIDE this section. An edge pointing at
@@ -13219,6 +13372,11 @@ function splashShowView(name) {
   // to the entry view, refresh the link's count.
   if (name === "my-sessions") { try { renderMySessions(); } catch (e) {} }
   if (name === "enter")       { try { paintMySessionsLink(); } catch (e) {} }
+  /* S7 — the create form's section picker is a LAZY chunk (splash-only code
+     behind a click). This is the single choke point every route into the create
+     view passes through, so loading it here covers the button, a deep link and
+     "Create another" alike — one place instead of three that can drift. */
+  if (name === "create")      { try { ensureSectionPicker(); } catch (e) {} }
   // a11y: when the splash swaps to a new view, push focus to that
   // view's main heading (so a screen-reader user hears the section
   // name on transition). The splash uses .splash-label-big paragraphs
@@ -13679,39 +13837,56 @@ function wireSplash() {
     if (!name) { cHint.textContent = "Enter your name."; cHint.className = "splash-hint err"; cName.focus(); return; }
     if (!pass) { cHint.textContent = "Set a session password."; cHint.className = "splash-hint err"; cPass.focus(); return; }
     if (pass.length < 4) { cHint.textContent = "Password should be at least 4 characters."; cHint.className = "splash-hint err"; cPass.focus(); return; }
-    // which content the session will run: a built-in scenario id, or an
-    // authored one as "__ref:<source>:<ownerUid>:<scenarioId>". The pasted-JSON
-    // path was removed in the S7 cutover — content is authored on the form
-    // board (scenario-author.html) and saved to the cloud instead.
-    const sel = el("splash-create-scenario");
-    let scenarioId = sel ? sel.value : "";
-    let customJson = null;
-    let scenarioRef = null;
-    if (typeof scenarioId === "string" && scenarioId.indexOf("__ref:") === 0) {
-      // authored scenario: format is __ref:<source>:<ownerUid>:<scenarioId>
-      const parts = scenarioId.split(":");
-      if (parts.length >= 4 && (parts[1] === "private" || parts[1] === "shared")) {
-        scenarioRef = {
-          source: parts[1],
-          ownerUid: parts[2],
-          // scenarioId may itself contain "-" or "_" but no ":" per validation
-          scenarioId: parts.slice(3).join(":")
-        };
-        scenarioId = null;
-      } else {
-        cHint.textContent = "Invalid scenario selection — pick another.";
-        cHint.className = "splash-hint err"; return;
-      }
+    /* S7 CUTOVER — the SECTION PICK is now the only description of what a
+       session runs. The Scenario select is gone, so there is no longer any
+       shape to fall back to: an empty pick would create a session with no
+       content at all, which used to be masked by the scenario default. Hence
+       the pick is REQUIRED here rather than optional as it was in S3b. */
+    /* The picker is a lazy chunk. Reaching this handler means the create view
+       opened, which triggers the load — but a failed fetch would leave these
+       names undefined, and a bare call would throw an unhandled ReferenceError
+       out of the submit handler. Report it as what it is instead. */
+    if (typeof sectionPickCsv !== "function") {
+      cHint.textContent = "Still loading the section list — try again in a moment.";
+      cHint.className = "splash-hint err";
+      try { ensureSectionPicker(); } catch (_) {}
+      return;
+    }
+    const _sectionCsv = sectionPickCsv();
+    if (!_sectionCsv) {
+      cHint.textContent = (window.t ? window.t("splash.create.sections-required")
+                                    : "Add at least one section to this session.");
+      cHint.className = "splash-hint err";
+      const addBtn = el("splash-section-add");
+      if (addBtn && typeof addBtn.focus === "function") addBtn.focus();
+      return;
+    }
+    /* An authored section too big for the rules' cap must be caught HERE, while
+       nothing has been written yet. Its body is written after `created` and
+       `recovery` (ordering is forced by the rule), so letting it through leaves
+       a half-created session behind and reports the real cause as a connection
+       error. Refuse up front, and name the section so it can be shortened. */
+    const _snapshot = sectionPickBodies();
+    if (_snapshot.oversized.length) {
+      const first = _snapshot.oversized[0];
+      const pat = (window.t ? window.t("splash.create.section-too-big") : "");
+      const tpl = (pat && pat !== "splash.create.section-too-big") ? pat
+        : "“{title}” is too large to attach to a session. Shorten it on the authoring board, then try again.";
+      cHint.textContent = tpl.replace("{title}", first.title);
+      cHint.className = "splash-hint err";
+      console.warn("section body over the " + SECTION_BODY_MAX_LEN + "-char cap",
+        _snapshot.oversized);
+      return;
     }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    /* S3b — the facilitator's ordered SECTION pick supersedes M2's module
-       narrowing: a section pick IS the module set, at the right granularity.
-       Null when nothing was picked, in which case the session falls back to the
-       chosen scenario's own shape exactly as before S3. */
-    const _sectionCsv = sectionPickCsv();
-    createSession(name, label, pass, scenarioId, customJson, scenarioRef,
-                  null, _sectionCsv).then(result => {
+    const _sectionBodies = _snapshot.bodies;
+    /* scenarioId / customJson / scenarioRef are all null now. The PARAMETERS
+       stay on createSession: they still carry legacy sessions through
+       revisit/exports, and scenarioCustomJson remains how a snapshot is pinned.
+       Passing null is what retires the create-time path, not deleting them. */
+    createSession(name, label, pass, null, null, null,
+                  null, _sectionCsv, _sectionBodies).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -13725,9 +13900,12 @@ function wireSplash() {
       // the password or session code — only the user-typed config.
       // customJson is INTENTIONALLY not persisted — see saveLastWorkshop
       // header note (audit finding: shared-machine data-integrity).
+      /* The clone-last-workshop summary keeps the SECTION pick now — a
+         scenarioId no longer describes what ran. Never the password or the
+         session code, only the user-typed config. */
       saveLastWorkshop({
         label: label || null,
-        scenarioId: scenarioId || null,
+        sections: _sectionCsv || null,
         facilitatorName: name || null
       });
       // If the user clicked "Clone last workshop" before submitting, copy
@@ -13779,17 +13957,27 @@ function wireSplash() {
   };
   if (cForm) cForm.addEventListener("submit", e => { e.preventDefault(); tryCreate(); });
 
-  // populate the scenario picker from window.CANAMED_SCENARIOS + wire the
-  // description line and the "Create new content (advanced)" → textarea toggle
-  populateScenarioPicker();
-  /* S3b — the SECTION picker is the primary control now. Wired eagerly (its
-     button ships in the shell); the add-list fills itself once the lazy section
-     library lands. */
-  wireSectionPicker();
-  populateSectionPicker();
-  const sel = el("splash-create-scenario");
-  if (sel) sel.addEventListener("change", onScenarioChange);
-  wireReportScenario();
+  /* S7 — the SECTION picker is the ONLY content control, but it is no longer
+     wired HERE. Its code is the lazy section-picker.js, loaded (and wired, and
+     filled) by splashShowView("create") — so nothing is set up until the create
+     view is actually opened. Wiring it here as well would only force the chunk
+     onto the splash critical path, which is exactly what the split avoids.
+
+     BUT KEEP THE SIDE EFFECT IT USED TO HAVE. populateSectionPicker() ran here
+     eagerly, and on a cold splash its "library not loaded yet" branch called
+     ensureCaseContent() — so wiring the picker was ALSO what pulled
+     case-content.js forward, at splash-wiring time rather than on idle. Nothing
+     said so, and dropping it moved CASE/CANAMED_SCENARIOS measurably later:
+     anything reading them without awaiting the chunk started losing a race it
+     had implicitly won for months. Kick the same fetch off explicitly, so the
+     split changes WHERE the picker lives and nothing about when the case
+     library arrives. It is a lazy chunk either way — this costs the splash
+     budget nothing. */
+  try {
+    if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+      window.CanamedLoader.ensureCaseContent();
+    }
+  } catch (_) {}
 
   // "Clone last workshop" row — appears only when a previous create has
   // populated localStorage with a workshop summary. One click pre-fills
@@ -13830,17 +14018,32 @@ function wireSplash() {
     const last = loadLastWorkshop();
     if (!last) return;
     if (cLabel && last.label) cLabel.value = last.label;
-    const sceSel = el("splash-create-scenario");
-    if (sceSel && last.scenarioId) {
-      // Try to select the saved built-in scenario; if it's no longer
-      // valid (renamed/removed), leave the dropdown at its default.
-      // We intentionally don't persist customJson (audit fix), so the
-      // facilitator re-pastes a custom blob if they want one again.
-      const opt = Array.from(sceSel.options).find(o => o.value === last.scenarioId);
-      if (opt) {
-        sceSel.value = last.scenarioId;
-        onScenarioChange();
-      }
+    /* S7 — restore the SECTION PICK. A saved scenarioId no longer describes
+       what a session runs, and the select it used to drive is gone. Ids that no
+       longer resolve (a shared scenario taken down, or one authored by an
+       account this browser is no longer signed into) are dropped rather than
+       written back as unresolvable tokens. */
+    /* typeof-guarded on the lazy picker chunk: this button lives on the create
+       view, so the chunk is normally in by now, but a failed load must skip the
+       pick restore rather than throw out of the click handler. */
+    if (typeof last.sections === "string" && last.sections &&
+        typeof sectionLibEntry === "function") {
+      splashSectionPick = last.sections.split(",")
+        .map(x => x.trim()).filter(Boolean)
+        /* DROP custom-<slot> tokens. saveLastWorkshop persists the output of
+           sectionPickCsv(), where an authored pick has already become
+           "custom-<slot>" — a token that means "the body stored on THAT
+           session". Restoring it into a NEW pick would write a token whose
+           body no longer accompanies it, giving a session a slot that can
+           never resolve. Worse, it can survive the resolve-check below: if
+           this tab has since joined a session, registerSectionBodies() has put
+           custom-<slot> into CANAMED_SECTIONS, so sectionLibEntry() finds the
+           PREVIOUS session's section and cheerfully keeps it. Authored picks
+           are re-selected by hand; built-ins clone as before. */
+        .filter(id => !/^custom-[1-9]$/.test(id))
+        .filter(id => !!sectionLibEntry(id))
+        .slice(0, MAX_SECTION_SLOTS);
+      renderSectionPick();
     }
     // Stash the post-create writes for tryCreate() to apply once the new
     // session exists. Persisted across the async createSession call.
@@ -13931,327 +14134,42 @@ function wireSplash() {
   }
 }
 
-/* ── S3b — the SECTION PICKER on the create form ──────────────────────────────
+/* ── S3b — the SECTION PICKER on the create form ──────────────────────────
  * Replaces "Scenario (the clinical case for this workshop)" as the primary
  * control. A session is opening + N independently-picked sections + wrap-up:
  * sections may come from different clinical cases, the same TYPE may appear
  * twice, and PICK ORDER IS RUNNING ORDER.
  *
- * It also supersedes M2's "Modules to run" tick-row — a section pick IS the
- * module set, and expressed at the right granularity, so that row is gone.
- *
- * The library is a lazily-loaded chunk, so the add-list fills itself once the
- * chunk lands (same pattern as populateScenarioPicker below). */
-let splashSectionPick = [];
-let _sectionPickerTries = 0;       // ordered section ids the facilitator chose
-/* Type labels go through i18n like the rest of the create form — the picker was
-   the only part of it shipping hardcoded English, so a French facilitator saw a
-   mixed-language form. */
-function sectionTypeLabel(type) {
-  const key = "splash.create.sections-type-" + type;
-  const v = (typeof window !== "undefined" && typeof window.t === "function")
-    ? window.t(key) : "";
-  if (v && v !== key) return v;
-  return { pbl: "PBL", roleplay: "Roleplay", branched: "Branched" }[type] || type;
-}
-
-function sectionLibraryList() {
-  const lib = (typeof window !== "undefined" && window.CANAMED_SECTIONS) || null;
-  if (!lib) return null;
-  return Object.keys(lib).map(id => lib[id]).filter(Boolean);
-}
-function populateSectionPicker() {
-  const add = el("splash-section-add");
-  if (!add) return;
-  const list = sectionLibraryList();
-  if (!list) {
-    /* Not loaded yet — chain onto the same fetch the scenario picker uses and
-       come back. Without this the picker is permanently empty on a cold load.
-
-       BOUNDED: section-registry.js is optional and its load failure is
-       swallowed, so ensureCaseContent() can resolve for ever with the library
-       still absent. An unbounded retry would then recurse without end (the
-       promise is already settled, so each attempt re-fires immediately). Give
-       up after a few tries and leave the picker empty — the session simply
-       falls back to the scenario shape, which is the designed degradation. */
-    _sectionPickerTries += 1;
-    if (_sectionPickerTries > 3) {
-      const add = el("splash-section-add");
-      if (add && !add.options.length) add.disabled = true;
-      return;
-    }
-    if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
-      window.CanamedLoader.ensureCaseContent().then(populateSectionPicker);
-    }
-    return;
-  }
-  _sectionPickerTries = 0;
-  const lang = _curLang();
-  add.textContent = "";
-  list.forEach(sec => {
-    const o = document.createElement("option");
-    o.value = sec.id;
-    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, lang) : sec.name.en))
-      || sec.id;
-    o.textContent = sectionTypeLabel(sec.type) + " — " + title;
-    add.appendChild(o);
+ * THE CODE LIVES IN THE LAZY section-picker.js. It is splash-only and sits
+ * behind a click — the entry view never needs it — so it is off the critical
+ * path, repaying the reclaim the perf budget header has demanded since
+ * 2026-06-28. ensureSectionPicker() loads it the moment the create view opens;
+ * every call site here goes through typeof, because until that load lands the
+ * names genuinely do not exist. See section-picker.js for splashSectionPick,
+ * populateSectionPicker, renderSectionPick, sectionPickCsv, sectionPickBodies
+ * and the authored-section helpers. */
+let _sectionPickerChunk = null;
+/* Load the picker chunk (once) and bring the form up. Idempotent: re-opening
+   the create view re-wires and re-fills, which is also what refreshes an
+   authored list that changed while the facilitator signed in. */
+function ensureSectionPicker() {
+  const start = () => {
+    try {
+      if (typeof wireSectionPicker === "function") wireSectionPicker();
+      if (typeof populateSectionPicker === "function") populateSectionPicker();
+      if (typeof loadAuthoredSectionsIntoPicker === "function") loadAuthoredSectionsIntoPicker();
+    } catch (e) { console.warn("section picker init failed", e); }
+  };
+  if (typeof wireSectionPicker === "function") { start(); return Promise.resolve(); }
+  const L = (typeof window !== "undefined") && window.CanamedLoader;
+  if (!L || typeof L.ensureSectionPicker !== "function") return Promise.resolve();
+  if (!_sectionPickerChunk) _sectionPickerChunk = L.ensureSectionPicker();
+  return _sectionPickerChunk.then(start).catch(e => {
+    /* Keep the cached promise: retrying on every view-open would hammer a
+       failing network. The picker stays empty and create refuses an empty pick,
+       which is the designed degradation. */
+    console.warn("section picker chunk failed to load", e);
   });
-  renderSectionPick();
-}
-function renderSectionPick() {
-  const ol = el("splash-section-list");
-  const empty = el("splash-section-empty");
-  if (!ol) return;
-  const lib = (window.CANAMED_SECTIONS || {});
-  ol.textContent = "";
-  if (empty) empty.classList.toggle("hidden", splashSectionPick.length > 0);
-
-  splashSectionPick.forEach((id, i) => {
-    const sec = lib[id] || { id: id, type: "", name: null };
-    const li = document.createElement("li");
-    li.className = "splash-section-row";
-    li.setAttribute("data-section-id", id);
-
-    const name = document.createElement("span");
-    name.className = "splash-section-name";
-    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, _curLang()) : sec.name.en))
-      || id;
-    /* textContent, never innerHTML — a section title can be facilitator-authored. */
-    /* Reuse the stage label pattern the STUDENT sees, so the facilitator's row
-       and the student's stage read identically in every language. */
-    const pat = (typeof window !== "undefined" && typeof window.t === "function")
-      ? window.t("stage.label.section") : "";
-    const tpl = (pat && pat !== "stage.label.section") ? pat : "Section {n} — {title}";
-    name.textContent = tpl.replace("{n}", String(i + 1)).replace("{title}", title);
-    li.appendChild(name);
-
-    const type = document.createElement("span");
-    type.className = "splash-section-type";
-    type.textContent = sectionTypeLabel(sec.type);
-    li.appendChild(type);
-
-    const mk = (cls, label, disabled, fn) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "splash-link " + cls;
-      b.textContent = label;
-      b.setAttribute("aria-label", label + " " + title);
-      if (disabled) b.disabled = true;
-      else b.addEventListener("click", fn);
-      li.appendChild(b);
-      return b;
-    };
-    mk("splash-section-up", "↑", i === 0, () => moveSectionPick(i, -1));
-    mk("splash-section-down", "↓", i === splashSectionPick.length - 1,
-       () => moveSectionPick(i, 1));
-    mk("splash-section-remove", "×", false, () => {
-      splashSectionPick.splice(i, 1);
-      renderSectionPick();
-    });
-    ol.appendChild(li);
-  });
-}
-function moveSectionPick(i, dir) {
-  const j = i + dir;
-  if (j < 0 || j >= splashSectionPick.length) return;
-  const t = splashSectionPick[i];
-  splashSectionPick[i] = splashSectionPick[j];
-  splashSectionPick[j] = t;
-  renderSectionPick();
-}
-function addSectionPick(id) {
-  if (!id) return;
-  /* Duplicates are ALLOWED — running the same section twice is legitimate (a
-     replay), and the slot model keys state by position, not by section id. The
-     only bound is the physical slot cap the DB rules enforce. */
-  if (splashSectionPick.length >= MAX_SECTION_SLOTS) return;
-  splashSectionPick.push(id);
-  renderSectionPick();
-}
-function wireSectionPicker() {
-  const btn = el("splash-section-add-btn");
-  if (!btn || btn._wired) return;
-  btn._wired = true;
-  btn.addEventListener("click", () => {
-    const sel = el("splash-section-add");
-    addSectionPick(sel && sel.value);
-  });
-}
-/* The CSV written at create, or null when nothing was picked (in which case the
-   session falls back to the scenario's own shape, exactly as before S3). */
-function sectionPickCsv() {
-  return splashSectionPick.length ? splashSectionPick.join(",") : null;
-}
-
-/* fill the scenario dropdown from the SCENARIOS registry + one trailing
-   "Create new content (advanced)" option that reveals the JSON textarea */
-function populateScenarioPicker() {
-  const sel = el("splash-create-scenario");
-  if (!sel) return;
-  // case-content.js is lazy-loaded. If it hasn't landed yet, kick off the
-  // load and re-call ourselves once it has. (The loader's idle-prefetch
-  // usually beats us here, in which case CANAMED_SCENARIOS is already set.)
-  if (!window.CANAMED_SCENARIOS && window.CanamedLoader) {
-    window.CanamedLoader.ensureCaseContent().then(populateScenarioPicker);
-    return;
-  }
-  sel.innerHTML = "";
-  const scenarios = window.CANAMED_SCENARIOS || {};
-  const lang = _curLang();
-  const builtInGroup = document.createElement("optgroup");
-  builtInGroup.label = (window.t ? window.t("splash.create.builtin-group") : "Built-in scenarios");
-  Object.keys(scenarios).forEach(id => {
-    const sc = scenarios[id];
-    const opt = document.createElement("option");
-    opt.value = id;
-    opt.textContent = tc(sc.name, lang) || id;
-    builtInGroup.appendChild(opt);
-  });
-  sel.appendChild(builtInGroup);
-  // Authored scenarios: only available to signed-in users (anonymous uids
-  // can't own scenarios, so the private list is always empty). The shared
-  // list is readable by anyone authenticated. Both fetches are fire-and-
-  // forget — if they fail (offline / disabled tree), the picker still
-  // shows the built-ins.
-  appendAuthoredScenarioOptions(sel, lang);
-  // HISTORY of the JSON path, kept because it explains why this dropdown is
-  // plainer than it used to be. "Create new content (advanced)" was once an
-  // option here; the Step-2 simulation report found first-time facilitators
-  // picked it by mistake and panicked at the JSON textarea, so it moved to a
-  // separate toggle button. The S7 cutover REMOVED it outright: content is
-  // authored on the fill-in board (scenario-author.html — 15 form sections
-  // plus a PBL/Roleplay/Branched skeleton picker) and saved to the cloud,
-  // after which it appears here under "My scenarios". Do not reintroduce a
-  // paste box. The board was ALSO hidden until sign-in, so the good path was
-  // invisible while the bad one sat in plain sight — fixed in the same pass.
-  const firstBuiltIn = Object.keys(scenarios)[0];
-  if (firstBuiltIn) sel.value = firstBuiltIn;
-  wireReportScenario();
-  onScenarioChange();
-}
-/* Inject "My scenarios" and "Shared scenarios" optgroups into the picker
-   when authored scenarios are available. Async — repaints when the data
-   arrives, so the picker stays responsive even if the network is slow.
-   Idempotent: any previous authored optgroups are removed first. */
-function appendAuthoredScenarioOptions(sel, lang) {
-  if (!sel) return;
-  // Drop any previously-injected authored optgroups (re-entry after
-  // sign-in or language change must not stack duplicates).
-  Array.from(sel.querySelectorAll('optgroup[data-authored="1"]'))
-    .forEach(g => g.remove());
-  const isSignedIn = !!(auth && auth.currentUser && !auth.currentUser.isAnonymous);
-  const mineP = isSignedIn ? listMyScenarios() : Promise.resolve([]);
-  const sharedP = listSharedScenarios();
-  Promise.all([mineP, sharedP]).then(res => {
-    const mine = res[0] || [];
-    const shared = res[1] || [];
-    const myUid = (auth && auth.currentUser && auth.currentUser.uid) || null;
-    if (mine.length) {
-      const g = document.createElement("optgroup");
-      g.label = (window.t ? window.t("splash.create.mine-group") : "My scenarios");
-      g.dataset.authored = "1";
-      mine.forEach(s => {
-        const opt = document.createElement("option");
-        opt.value = "__ref:private:" + myUid + ":" + s.id;
-        opt.textContent = (s.meta && s.meta.name) || s.id;
-        g.appendChild(opt);
-      });
-      sel.appendChild(g);
-    }
-    // Exclude the caller's own shared scenarios from the Shared group —
-    // they already appear under "My scenarios" with the private path
-    // (which works for them; reads of their own shared copy would also
-    // succeed but the private one is the source of truth).
-    const externalShared = shared.filter(s => !myUid || s.ownerUid !== myUid);
-    if (externalShared.length) {
-      const g = document.createElement("optgroup");
-      g.label = (window.t ? window.t("splash.create.shared-group") : "Shared scenarios");
-      g.dataset.authored = "1";
-      externalShared.forEach(s => {
-        const opt = document.createElement("option");
-        opt.value = "__ref:shared:" + s.ownerUid + ":" + s.scenarioId;
-        const who = s.ownerName ? " — " + s.ownerName : "";
-        opt.textContent = ((s.meta && s.meta.name) || s.scenarioId) + who;
-        g.appendChild(opt);
-      });
-      sel.appendChild(g);
-    }
-  }).catch(e => console.warn("appendAuthoredScenarioOptions failed", e));
-}
-
-function wireReportScenario() {
-  const btn = el("splash-report-scenario");
-  if (!btn || btn.dataset.wired === "1") return;
-  btn.dataset.wired = "1";
-  const T = (k, f) => (window.t ? window.t(k) : f);
-  btn.addEventListener("click", () => {
-    const sel = el("splash-create-scenario");
-    if (!sel) return;
-    // __ref:<source>:<ownerUid>:<scenarioId>; shared keys are <uid>_<id>.
-    const parts = String(sel.value || "").split(":");
-    if (parts.length < 4 || parts[1] !== "shared") return;
-    const shareId = parts[2] + "_" + parts.slice(3).join(":");
-    const opt = sel.options[sel.selectedIndex];
-    // Needs auth (anonymous suffices). With none — LOCAL mode, or sign-in still
-    // pending — say so rather than faking a "Reported" that wrote nothing.
-    if (!auth || !auth.currentUser) {
-      toast(T("splash.create.report-signin", "Sign in to report"));
-      return;
-    }
-    const done = () => {
-      btn.disabled = true;
-      btn.textContent = T("splash.create.reported", "Reported");
-    };
-    canamedConfirm({
-      title: T("splash.create.report-title", "Report this scenario?"),
-      message: T("splash.create.report-confirm", "Moderators will review it. You can report once."),
-      detail: (opt && opt.textContent) || shareId,
-      okLabel: T("splash.create.report", "Report"),
-      danger: true
-    }).then(ok => {
-      if (!ok) return;
-      btn.disabled = true;
-      return reportSharedScenario(shareId).then(() => {
-        done();
-        toast(T("splash.create.report-sent", "Report sent to the moderators"));
-      }).catch(e => {
-        // Denied = already reported (write-once): terminal, retrying can't help.
-        // Anything else (offline/backend) wrote NOTHING — re-enable, don't lie.
-        if (String((e && (e.code || e.message)) || "").toLowerCase().indexOf("permission") >= 0) return done();
-        btn.disabled = false;
-        toast(T("splash.create.report-failed", "Report failed. Try again."));
-      });
-    }).catch(() => {});
-  });
-}
-function onScenarioChange() {
-  const sel = el("splash-create-scenario");
-  const desc = el("splash-scenario-desc");
-  if (!sel) return;
-  const isRef = typeof sel.value === "string" && sel.value.indexOf("__ref:") === 0;
-  if (desc) {
-    if (isRef) {
-      // For authored scenarios we keep the picker label as the description
-      // (the meta summary isn't on the option). Looking it up would require
-      // an extra fetch; the user just picked it from a labelled list.
-      const opt = sel.options[sel.selectedIndex];
-      desc.textContent = (opt && opt.textContent) || "";
-    } else {
-      const sc = (window.CANAMED_SCENARIOS || {})[sel.value];
-      desc.textContent = tc(sc && sc.summary, _curLang());
-    }
-  }
-  // Only someone else's shared scenario is reportable; reset the label so a
-  // "Reported" state can't leak across picks.
-  const reportBtn = el("splash-report-scenario");
-  if (reportBtn) {
-    const isShared = typeof sel.value === "string" && sel.value.indexOf("__ref:shared:") === 0;
-    reportBtn.hidden = !isShared;
-    if (isShared) {
-      reportBtn.disabled = false;
-      reportBtn.textContent = (window.t ? window.t("splash.create.report") : "Report");
-    }
-  }
 }
 function showRecoveryCode(recoveryCode) {
   const wrap = el("splash-recovery-wrap");
@@ -14292,7 +14210,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections, sectionBodies) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -14414,7 +14332,26 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
          shape must not shift under participants mid-flight. */
       if (typeof sections === "string" && sections)
         writes.push(db.ref(oPath(code, "sections")).set(sections));
+      /* S7 — AUTHORED sections travel as a per-slot SNAPSHOT, not a reference.
+         The CSV can only hold /^[A-Za-z0-9_-]{1,48}$/ tokens (no colons), so an
+         authored pick is written as "custom-<slot>" and its body lands here.
+         Snapshotting also pins the session to the version it was created with,
+         exactly as scenarioCustomJson does — a facilitator editing their
+         scenario mid-workshop must not change what a running session shows. */
+      /* ORDERING MATTERS: a body's rule requires the `sections` CSV to already
+         name `custom-<slot>`, so these cannot ride the same parallel batch as
+         the CSV write — a body landing first would be rejected. Chained after
+         the batch instead. */
+      const _bodyWrites = () => {
+        if (!sectionBodies || typeof sectionBodies !== "object") return Promise.resolve();
+        return Promise.all(Object.keys(sectionBodies).map(slot => {
+          const body = sectionBodies[slot];
+          if (typeof body !== "string" || !body) return Promise.resolve();
+          return db.ref(oPath(code, "sectionBodies/" + slot)).set(body);
+        }));
+      };
       return Promise.all(writes)
+        .then(_bodyWrites)
         .then(() => hashPassword(password, code))
         .then(h => {
           if (useAdminSecrets()) {
@@ -14814,8 +14751,14 @@ function handleAuthStateChange(user) {
       // sign-in. Idempotent + cheap; safe to call even if the picker is
       // not currently on screen.
       try {
-        const sel = el("splash-create-scenario");
-        if (sel) appendAuthoredScenarioOptions(sel, _curLang());
+        /* A user's own scenarios are unreadable until they are signed in, so a
+           picker painted before sign-in lists built-ins only — refresh it.
+           Guarded by typeof: the picker is a lazy chunk now, and signing in
+           without ever opening the create view means it was never loaded (there
+           is then nothing on screen to refresh either). */
+        if (typeof loadAuthoredSectionsIntoPicker === "function") {
+          loadAuthoredSectionsIntoPicker();
+        }
       } catch (_) {}
       // first sign-in for this identified account → guide them through profile setup
       if (!profile || !profile.name) {

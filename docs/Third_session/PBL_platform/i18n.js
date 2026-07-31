@@ -417,6 +417,8 @@
       "splash.create.sections-add-label": "Add a section",
       "splash.create.sections-add": "+ Add section",
       "splash.create.author-link": "Need a section that isn't listed? Build one on the authoring board →",
+      "splash.create.sections-required": "Add at least one section to this session.",
+      "splash.create.section-too-big": "“{title}” is too large to attach to a session. Shorten it on the authoring board, then try again.",
       "splash.create.sections-type-pbl": "PBL",
       "splash.create.sections-type-roleplay": "Roleplay",
       "splash.create.sections-type-branched": "Branched",
@@ -897,8 +899,8 @@
 
       "tour.create.1.title": "Workshop label",
       "tour.create.1.body": "Give this session a friendly name (e.g. \"Caen × Nagoya — June 2026\"). Optional, but it helps later when you clone it for the next cohort.",
-      "tour.create.2.title": "Pick the scenario",
-      "tour.create.2.body": "Choose the clinical content your students will work through. You can also paste a custom scenario as JSON for advanced use.",
+      "tour.create.2.title": "Pick the sections",
+      "tour.create.2.body": "Add the parts this session runs, in the order you want them — they can come from different clinical cases. To build your own, use the authoring board linked below the list.",
       "tour.create.3.title": "Set a session password",
       "tour.create.3.body": "Only the facilitators should know this — you'll need it to re-open the dashboard later. Choose something you can share with your co-facilitators on the day.",
       "tour.create.4.title": "Create and share",
@@ -1004,7 +1006,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v12";  // consent box C + Microsoft as processor + the section picker's strings
+  const LOCALE_VERSION = "v13";  // consent box C + Microsoft as processor + the section picker's strings
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
