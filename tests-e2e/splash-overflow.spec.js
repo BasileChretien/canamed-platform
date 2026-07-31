@@ -63,6 +63,11 @@ async function openCreate(page) {
     const s = document.getElementById("splash-section-add");
     return !!(s && s.options.length > 0);
   });
+  /* The picker SEEDS one default section once the library lands. Clear it, so
+     "+ 3 sections" below means exactly three rows — otherwise the count assert
+     trips on four and the OVERFLOW check, which is the point of this spec,
+     never runs at all. */
+  await page.evaluate(() => { splashSectionPick.length = 0; renderSectionPick(); });
 }
 
 test.describe("Splash fits the viewport", () => {
