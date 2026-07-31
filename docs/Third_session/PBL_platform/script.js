@@ -13961,7 +13961,23 @@ function wireSplash() {
      wired HERE. Its code is the lazy section-picker.js, loaded (and wired, and
      filled) by splashShowView("create") — so nothing is set up until the create
      view is actually opened. Wiring it here as well would only force the chunk
-     onto the splash critical path, which is exactly what the split avoids. */
+     onto the splash critical path, which is exactly what the split avoids.
+
+     BUT KEEP THE SIDE EFFECT IT USED TO HAVE. populateSectionPicker() ran here
+     eagerly, and on a cold splash its "library not loaded yet" branch called
+     ensureCaseContent() — so wiring the picker was ALSO what pulled
+     case-content.js forward, at splash-wiring time rather than on idle. Nothing
+     said so, and dropping it moved CASE/CANAMED_SCENARIOS measurably later:
+     anything reading them without awaiting the chunk started losing a race it
+     had implicitly won for months. Kick the same fetch off explicitly, so the
+     split changes WHERE the picker lives and nothing about when the case
+     library arrives. It is a lazy chunk either way — this costs the splash
+     budget nothing. */
+  try {
+    if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+      window.CanamedLoader.ensureCaseContent();
+    }
+  } catch (_) {}
 
   // "Clone last workshop" row — appears only when a previous create has
   // populated localStorage with a workshop summary. One click pre-fills
