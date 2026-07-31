@@ -27,6 +27,32 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 - E2E runs in LOCAL mode, so it does **not** exercise the Firebase rules. The
   emulator-backed sim is the real validation for `database.rules.json`
   changes — run it locally before merging rules changes.
+- **Re-verify a PR before repeating any "it's green" claim.** (Established
+  2026-07-30, after a near-miss.) A PR's contents DRIFT: keep committing to its
+  branch and the status you checked an hour ago describes a different
+  changeset. Before recommending a merge — or repeating an earlier readiness
+  claim — re-run `gh pr view <n> --json commits,statusCheckRollup,mergeStateStatus`
+  and read the commit LIST, not just the checks. What happened: #263 was
+  reported green and "ready to merge" while it was only the JSON-removal work;
+  five cutover commits were then pushed to the same branch, and acting on the
+  stale claim would have shipped a knowingly-broken branched path. The fix was
+  to split the finished commits onto a fresh branch off `main` (#264) and
+  retitle the original **WIP — DO NOT MERGE**. Same discipline as the
+  STATUS-CLAIM RULE below, applied to PRs instead of docs.
+- **Deleting a long-lived UI control is an AUDIT, not a deletion.** (Established
+  2026-07-30, removing the create form's Scenario select.) Such a control
+  accumulates side effects nobody has catalogued, so the question is not "what
+  does it do" but "what STOPS happening when it is gone". That one select was
+  also setting `body`/`stage` `data-format`, triggering the lazy `branched.css`
+  load, standing in for the `format`/`finalStep`/`documents` that
+  `applySectionContent()` never published, hosting the moderation **Report**
+  button (a safety feature — PRs #227/#228), and supplying a DEFAULT selection:
+  it was never empty, so merely requiring a pick broke 24 e2e specs. Each
+  surfaced as a separate failing assertion AFTER removal; none was findable by
+  reading the call sites. Before deleting one, grep for its id across `*.js`,
+  `*.html`, `tour.js` anchors and every spec; the globals it assigns; and any
+  feature whose UI hangs off its value. Expect the test suite, not the code, to
+  find the remainder.
 
 ## Operational reminders — ACTION REQUIRED (cannot be done in code)
 
