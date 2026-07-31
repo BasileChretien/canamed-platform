@@ -141,3 +141,113 @@ test("each slot's decisions are tagged with the module its stage renders into", 
   const out = ctx({}).api.namespaceDecisions([{ id: "x" }], { position: 1, type: "roleplay" });
   assert.equal(out[0].module, "B");
 });
+
+/* ── The ADMIN side of the same problem ──────────────────────────────────────
+ * applySectionContent() is driven by refreshActiveSlotState(), a STAGE-CHANGE
+ * path — so it runs for a student walking into a slot and never for the
+ * facilitator dashboard, which does not enter a room. Anything on the admin
+ * side that needs the session's content therefore cannot read the globals: on
+ * that tab they still describe whatever scenario loaded by default. That is
+ * what left the per-room choice tree blank for a section-picked branched
+ * session, with DECISIONS holding the default case's nodes and
+ * CURRENT_SCENARIO_FORMAT reading "standard".
+ */
+function loadSessionBranched() {
+  const start = SCRIPT.indexOf("function sessionBranchedDecisions()");
+  assert.ok(start > -1, "sessionBranchedDecisions must exist");
+  const end = SCRIPT.indexOf("\n}", start) + 2;
+  const decStart = SCRIPT.indexOf("function sectionDecisionPrefix");
+  const decEnd = SCRIPT.indexOf("\n}", SCRIPT.indexOf("function namespaceDecisions")) + 2;
+  const src = SCRIPT.slice(start, end) + "\n" + SCRIPT.slice(decStart, decEnd) +
+    "\nreturn sessionBranchedDecisions;";
+  // eslint-disable-next-line no-new-func
+  return new Function("window", "sectionSlots", "SECTION_MODULE_FOR_TYPE", src);
+}
+/* Build it against a fake window + slot list and CALL it — the loader hands back
+   the function, mirroring load()/ctx() above. */
+function runSessionBranched(win, slots) {
+  return loadSessionBranched()(win, () => slots, MODMAP)();
+}
+const BRANCHED = (id, dec) => ({ id, type: "branched", content: { format: "branched", decisions: dec } });
+const NODES = [
+  { id: "b_assess", options: [{ correct: true }] },
+  { id: "b_escalate", unlockWhen: { afterDecision: "b_assess" } }
+];
+const MODMAP = { pbl: "A", roleplay: "B", branched: "branched" };
+
+test("the admin resolves the branched graph from the PICK, not from DECISIONS", () => {
+  /* The globals here are deliberately the WRONG session — exactly the state the
+     dashboard tab is in: a default scenario applied, no section content ever
+     published, format still "standard". */
+  const win = {
+    CANAMED_SECTIONS: { "ward-escalation-branched": BRANCHED("ward-escalation-branched", NODES) },
+    DECISIONS: [{ id: "dec_plan" }, { id: "dec_other" }],
+    CURRENT_SCENARIO_FORMAT: "standard"
+  };
+  const slots = [{ position: 1, stage: 1, type: "branched", standalone: true,
+                   sectionId: "ward-escalation-branched" }];
+  const out = runSessionBranched(win, slots);
+  assert.deepEqual(out.map(d => d.id), ["b_assess", "b_escalate"],
+    "the picked section's nodes, NOT the default scenario's decisions");
+});
+
+test("a STANDALONE branched pick keeps RAW ids — the ones the room voted under", () => {
+  /* The vote keys are the decision ids. Namespacing the admin's copy would
+     produce a graph that looks right and matches nothing in rooms/<r>/votes. */
+  const win = {
+    CANAMED_SECTIONS: { w: BRANCHED("w", NODES) },
+    DECISIONS: [], CURRENT_SCENARIO_FORMAT: "standard"
+  };
+  const slots = [{ position: 1, stage: 1, type: "branched", standalone: true, sectionId: "w" }];
+  const out = runSessionBranched(win, slots);
+  assert.deepEqual(out.map(d => d.id), ["b_assess", "b_escalate"]);
+  assert.equal(out[1].unlockWhen.afterDecision, "b_assess", "edges stay raw in lockstep");
+});
+
+test("a MIXED pick namespaces them, matching what that session's room wrote", () => {
+  const win = {
+    CANAMED_SECTIONS: { a: PBL("a"), w: BRANCHED("w", NODES) },
+    DECISIONS: [], CURRENT_SCENARIO_FORMAT: "standard"
+  };
+  const slots = [
+    { position: 1, stage: 1, type: "pbl", sectionId: "a" },
+    { position: 2, stage: 2, type: "branched", sectionId: "w" }
+  ];
+  const out = runSessionBranched(win, slots);
+  assert.deepEqual(out.map(d => d.id), ["s2_b_assess", "s2_b_escalate"],
+    "prefixed by slot, and ONLY the branched slot's nodes");
+  assert.equal(out[1].unlockWhen.afterDecision, "s2_b_assess");
+});
+
+test("a session with no branched section yields nothing — no tree is drawn", () => {
+  const win = {
+    CANAMED_SECTIONS: { a: PBL("a", [{ id: "dec_plan" }]) },
+    DECISIONS: [{ id: "dec_plan" }], CURRENT_SCENARIO_FORMAT: "standard"
+  };
+  const slots = [{ position: 1, stage: 1, type: "pbl", sectionId: "a" }];
+  assert.deepEqual(runSessionBranched(win, slots), []);
+});
+
+test("a PRE-CUTOVER session still resolves — it has no pick to read", () => {
+  /* A session created before the section model has no sectionId anywhere, so
+     the ambient globals ARE the session. Dropping that fallback would blank the
+     choice tree for every branched session already in flight. */
+  const win = {
+    CANAMED_SECTIONS: null,
+    DECISIONS: [{ id: "b_assess" }, { id: "b_escalate" }],
+    CURRENT_SCENARIO_FORMAT: "branched"
+  };
+  const slots = [{ position: 1, stage: 1, type: "branched", standalone: true }];  // no sectionId
+  assert.deepEqual(runSessionBranched(win, slots).map(d => d.id),
+    ["b_assess", "b_escalate"]);
+});
+
+test("a branchedRef-COMPOSED session takes only its branched-tagged nodes", () => {
+  const win = {
+    CANAMED_SECTIONS: null,
+    DECISIONS: [{ id: "dec_plan", module: "A" }, { id: "br_b_assess", module: "branched" }],
+    CURRENT_SCENARIO_FORMAT: "standard"
+  };
+  assert.deepEqual(runSessionBranched(win, null).map(d => d.id),
+    ["br_b_assess"], "the outer A/B decisions are not part of the tree");
+});

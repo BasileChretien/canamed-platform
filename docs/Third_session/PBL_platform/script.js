@@ -2060,6 +2060,51 @@ function applySectionContent(slot) {
 /* A slot's TYPE maps back to the module key the scoring/decision engine uses. */
 const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" };
 
+/* ── The branched graph THIS SESSION runs, for a viewer that never entered a
+ * room ────────────────────────────────────────────────────────────────────────
+ *
+ * WHY READING `DECISIONS` IS NOT ENOUGH. applySectionContent() publishes a
+ * section's decisions as the STUDENT walks into its stage — it is driven by
+ * refreshActiveSlotState(), a stage-change path. The facilitator dashboard never
+ * enters a room, so on the admin tab that never runs: CURRENT_SCENARIO_FORMAT
+ * still reads "standard" and DECISIONS still carries the DEFAULT scenario's
+ * nodes, not the picked section's. The per-room choice tree read both and so
+ * rendered nothing at all for a section-picked branched session — the admin-side
+ * half of the cutover that the student-side fixes did not reach.
+ *
+ * Ids go through namespaceDecisions() exactly as applySectionContent() does, so
+ * they match the ids the room actually wrote its votes under: RAW for a
+ * standalone branched pick, s<slot>_ prefixed in a mixed one. Deriving them any
+ * other way yields a graph that looks right and matches no votes.
+ *
+ * Returns [] when this session runs no branched section. */
+function sessionBranchedDecisions() {
+  if (typeof window === "undefined") return [];
+  let slots = null;
+  try { slots = sectionSlots(); } catch (_) { slots = null; }
+  const lib = window.CANAMED_SECTIONS || null;
+  if (lib && Array.isArray(slots) && slots.length) {
+    /* Only a PICKED slot carries a sectionId. _moduleDerivedSlots()' standalone
+       branched slot has none, and falls through to the ambient path below. */
+    const picked = slots.filter(s => s && s.type === "branched" && s.sectionId);
+    if (picked.length) {
+      const out = [];
+      picked.forEach(slot => {
+        const sec = lib[slot.sectionId];
+        const dec = sec && sec.content && sec.content.decisions;
+        if (Array.isArray(dec)) out.push.apply(out, namespaceDecisions(dec, slot));
+      });
+      if (out.length) return out;
+    }
+  }
+  /* No pick to resolve — a pre-cutover session, or one composed via branchedRef.
+     There the ambient globals ARE the session, so mirror what the room renders
+     (branched-render.js branchedDecisions()). */
+  const list = Array.isArray(window.DECISIONS) ? window.DECISIONS : [];
+  if ((window.CURRENT_SCENARIO_FORMAT || "standard") === "branched") return list.slice();
+  return list.filter(d => d && d.module === "branched");
+}
+
 /* Deep-copy a section's decisions with slot-scoped ids, and tag them with the
    module key their stage renders into. Pure — the library entry is never
    mutated, so switching back to a slot re-derives the same graph. */
