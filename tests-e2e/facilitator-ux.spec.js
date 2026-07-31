@@ -22,18 +22,21 @@
 const { test, expect } = require("./fixtures.js");
 
 test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
-  test("create form: 'Scenario' label, required markers, password hint, advanced toggle", async ({ page }) => {
+  test("create form: section picker, required markers, password hint, no JSON", async ({ page }) => {
     await page.goto("/");
     await page.locator("#splash-go-create").click();
 
-    // The label text was "Workshop content" — it must now read "Scenario"
-    // (or its translated equivalent). Default lang is en in tests.
-    const scenarioLabel = page.locator('label[for="splash-create-scenario"]');
-    await expect(scenarioLabel).toContainText(/scenario/i);
+    /* S7 CUTOVER — the Scenario select is GONE; the SECTION PICKER is the only
+       content control. This block used to assert the select's label and its
+       aria-required marker. The picker expresses "required" differently: it is
+       a list, not a field, so the requirement is enforced at submit (covered in
+       tests/section-picker-ui.test.js) and signalled by its empty-state. */
+    await expect(page.locator("#splash-create-scenario")).toHaveCount(0);
+    await expect(page.locator("#splash-section-add")).toBeVisible();
+    await expect(page.locator("#splash-section-empty")).toBeVisible();
 
-    // Required markers must be present on the three required fields
+    // Required markers must be present on the remaining required fields
     await expect(page.locator('#splash-create-name')).toHaveAttribute("aria-required", "true");
-    await expect(page.locator('#splash-create-scenario')).toHaveAttribute("aria-required", "true");
     await expect(page.locator('#splash-create-pass')).toHaveAttribute("aria-required", "true");
 
     // Inline password-purpose hint must be visible and aria-described
@@ -55,8 +58,8 @@ test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
     await expect(page.locator("#splash-create-advanced-toggle")).toHaveCount(0);
     await expect(page.locator("#splash-load-template")).toHaveCount(0);
 
-    // Nor may the dropdown carry the option the toggle replaced.
-    const optionTexts = await page.locator("#splash-create-scenario option")
+    // Nor may the SECTION add-list carry the option the toggle replaced.
+    const optionTexts = await page.locator("#splash-section-add option")
       .allTextContents();
     for (const txt of optionTexts) {
       expect(txt.toLowerCase()).not.toContain("create new content");

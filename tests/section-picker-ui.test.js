@@ -31,15 +31,75 @@ function codeOf(name) {
   return fnOf(name).replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 }
 
-test("the picker ships in the shell, above the scenario field", () => {
+test("the picker ships in the shell and is the ONLY content control", () => {
+  /* Was "above the scenario field", ordering the picker against a select that
+     no longer exists. The S7 cutover deleted it, so the assertion becomes the
+     stronger one it was always standing in for. */
   assert.ok(HTML.indexOf('id="splash-section-list"') > -1);
   assert.ok(HTML.indexOf('id="splash-section-add"') > -1);
   assert.ok(HTML.indexOf('id="splash-section-add-btn"') > -1);
-  assert.ok(HTML.indexOf('id="splash-section-field"') === -1 ||
-            HTML.indexOf("splash-sections-field") > -1);
-  assert.ok(HTML.indexOf("splash-sections-field") <
-            HTML.indexOf('for="splash-create-scenario"'),
-    "the section picker is the PRIMARY control now");
+  assert.ok(HTML.indexOf("splash-sections-field") > -1);
+
+  /* The Scenario select and everything that hung off it are GONE from the
+     shell — not hidden. Each of these was a route to content that bypassed the
+     section model. */
+  ["splash-create-scenario", "splash-scenario-desc", "splash-report-scenario",
+   "splash-create-custom", "splash-custom-wrap", "splash-create-advanced-toggle"]
+    .forEach(id => {
+      assert.equal(HTML.indexOf('id="' + id + '"'), -1,
+        id + " must be deleted from index.html, not merely hidden");
+    });
+  assert.equal(SCRIPT.indexOf("splash-create-scenario"), -1,
+    "and no script may still reach for it");
+});
+
+test("a session cannot be created with NO sections", () => {
+  /* Before the cutover an empty pick was legal: the session fell back to the
+     chosen scenario's shape. There is no scenario to fall back to now, so an
+     empty pick would create a session with NO CONTENT — the failure the
+     Scenario select used to mask. */
+  assert.match(SCRIPT, /if \(!_sectionCsv\) \{/,
+    "the submit handler must refuse an empty pick");
+  assert.match(SCRIPT, /splash\.create\.sections-required/,
+    "…with a translated message, not a silent return");
+  const i18n = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+  assert.match(i18n, /"splash\.create\.sections-required":/);
+  ["fr", "ja"].forEach(lang => {
+    const t = fs.readFileSync(path.join(P, "locales", lang + ".js"), "utf8");
+    assert.match(t, /"splash\.create\.sections-required":/,
+      lang + " must carry the key — tests/i18n.test.js enforces core-lang parity");
+  });
+});
+
+test("moderation reporting MOVED with the content — it did not go away", () => {
+  /* Deleting the Scenario select would otherwise have removed the only UI for
+     reporting a shared scenario (PRs #227/#228). A safety feature must not be
+     collateral damage of a layout change. */
+  assert.match(SCRIPT, /function reportAuthoredSection\(/,
+    "reporting must still exist");
+  assert.match(SCRIPT, /entry\.source !== "shared"/,
+    "only SOMEONE ELSE's shared scenario is reportable");
+  assert.match(SCRIPT, /entry\.ownerUid \+ "_" \+ entry\.scenarioId/,
+    "shareId must match sharedScenarios' own key shape");
+  const f = fnOf("renderSectionPick");
+  assert.match(f, /authored\.source === "shared"/,
+    "the row must offer it for a shared authored section");
+  assert.match(SCRIPT, /reportSharedScenario\(shareId\)/,
+    "…and still write the write-once report");
+});
+
+test("the guided tour does not point at the deleted select", () => {
+  /* A tour step anchored to a removed id silently does nothing, and this one
+     ALSO told facilitators they could "paste a custom scenario as JSON" — the
+     exact path the cutover removed. Both had to change together. */
+  const tour = fs.readFileSync(path.join(P, "tour.js"), "utf8");
+  assert.equal(tour.indexOf("splash-create-scenario"), -1);
+  assert.match(tour, /anchor: "splash-section-add"/);
+  const i18n = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+  const body = i18n.match(/"tour\.create\.2\.body": "([^"]*)"/);
+  assert.ok(body, "the tour step must still have a body");
+  assert.ok(!/JSON/i.test(body[1]),
+    "the tour must not advertise a JSON paste path that no longer exists");
 });
 
 test("the superseded module tick-row is gone from the form", () => {
