@@ -416,6 +416,31 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     consent text and the code that renders it — the least appropriate thing
 //     in the bundle to shave — and the reclaim this branch owed was already
 //     spent on the 337 → 345 step above. 348 leaves ~1.2 KB headroom.
+//
+//   2026-07-31: RECLAIM — the create form's SECTION PICKER lazy-split. CAP
+//     UNCHANGED at 348; measured 350.6 → 345.
+//     Why it was needed: that ~1.2 KB of headroom was already gone. The S7
+//     cutover commits took first-party to 349.2 — over cap, and failing before
+//     any of the review-fix work started — and the four fixes on top of them
+//     (picker race, body cap, admin choice tree, cold-load retry) added ~1.4 KB
+//     more. So this was NOT a bump-or-reclaim choice; the branch was red either
+//     way and something had to come out.
+//     What moved: the whole picker block — splashSectionPick, sectionTypeLabel,
+//     populateSectionPicker, renderSectionPick, move/add/wireSectionPicker,
+//     sectionPickCsv, sectionPickBodies, sectionLibEntry/sectionLibraryList and
+//     the authored-section helpers (loadAuthoredSectionsIntoPicker,
+//     authoredSectionsFrom, reportAuthoredSection) — out of the eager script.js
+//     into the LAZY section-picker.js, loaded by splashShowView("create").
+//     script.js keeps no copies, only typeof-guarded call sites, so this is a
+//     genuine removal (script.js 224.6 → 219.2 KB gz) and not a re-shuffle.
+//     Why this block: it is splash code that sits behind a CLICK. The entry
+//     view — the thing ~100% of users hit first, and what this budget exists to
+//     protect — cannot reach any of it. That makes it a better candidate than
+//     the room/Module-B split the older entries keep deferring, and it is the
+//     same shape as the room.css reclaim of 2026-07-23.
+//     The 3 KB this leaves is headroom, not an allowance. The in-room/branched
+//     logic split that entries from 2026-06-28 onward keep recording as owed is
+//     STILL owed — this reclaim was spent on the cutover, not on that debt.
 const FIRST_PARTY_BYTES_LIMIT_KB = 348;
 
 test.describe("Perf budget — splash", () => {
@@ -521,6 +546,11 @@ test.describe("Perf budget — splash", () => {
       // from the scenario registry. Chained after branched-seed.js in
       // ensureCaseContent() — room/author only, never on the splash path.
       "section-registry.js",
+      // section-picker.js (2026-07-31, S7): the create form's SECTION PICKER.
+      // Splash-only, but behind a click — the entry view never needs it — so it
+      // is loaded by splashShowView("create") instead of shipping in the shell.
+      // This is the RECLAIM the header below has demanded since 2026-06-28.
+      "section-picker.js",
       // section-content.js (2026-07-28, S3a): a roleplay section's authorable
       // content renderers, extracted from script.js and chained into
       // ensureRoomStyles(). Room-only, never on the splash path.

@@ -15,7 +15,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* The picker's CODE lives in the lazy section-picker.js since the 2026-07-31
+   perf reclaim, while its call sites (tryCreate, splashShowView, the auth
+   refresh) stay in script.js. Read BOTH — same reason ~11 test files
+   concatenate style.css + room.css after that split. Reading script.js alone
+   silently loses every picker function and turns fnOf() into a hard failure. */
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
+               fs.readFileSync(path.join(P, "section-picker.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8");
 
@@ -309,10 +315,52 @@ test("the add-list fills itself once the lazy library lands", () => {
   assert.match(f, /ensureCaseContent\(\)\.then\(populateSectionPicker\)/);
 });
 
-test("the picker is wired eagerly and only once", () => {
+test("the picker is wired when the CREATE VIEW opens, and only once", () => {
+  /* Was "wired eagerly": the picker shipped in the shell and was wired during
+     splash wiring. Since the 2026-07-31 perf reclaim its code is the lazy
+     section-picker.js, loaded from splashShowView("create") — the single choke
+     point every route into the create form passes through, so the button, a
+     deep link and "Create another" all get it from one place.
+
+     The `_wired` guard matters MORE now, not less: ensureSectionPicker() runs
+     its init on every create-view open (that is what refreshes an authored list
+     after sign-in), so without it the add button would collect a listener per
+     open and add a section several times per click. */
   const f = fnOf("wireSectionPicker");
-  assert.match(f, /if \(!btn \|\| btn\._wired\) return;/);
-  assert.match(SCRIPT, /wireSectionPicker\(\);\s*\n\s*populateSectionPicker\(\);/);
+  assert.match(f, /if \(!btn \|\| btn\._wired\) return;/,
+    "re-entrant init must not stack listeners on the add button");
+  assert.match(fnOf("splashShowView"), /name === "create"[\s\S]{0,80}ensureSectionPicker\(\)/,
+    "opening the create view must load + start the picker");
+  const ens = fnOf("ensureSectionPicker");
+  assert.match(ens, /typeof wireSectionPicker === "function"/,
+    "…and must not call into the chunk before it has landed");
+  assert.match(ens, /L\.ensureSectionPicker\(\)/);
+  assert.match(ens, /if \(!_sectionPickerChunk\)/,
+    "the chunk is fetched once, not on every view-open");
+});
+
+test("the eager script keeps NO copy of the picker — the reclaim is real", () => {
+  /* A split that leaves the code behind reclaims nothing. Assert the picker's
+     definitions are absent from script.js and present in the lazy chunk, so a
+     future edit cannot quietly restore an eager copy and re-inflate the splash
+     budget while every other assertion here still passes (they read the
+     CONCATENATION, which cannot tell the two files apart). */
+  const eager = fs.readFileSync(path.join(P, "script.js"), "utf8");
+  const lazy = fs.readFileSync(path.join(P, "section-picker.js"), "utf8");
+  ["populateSectionPicker", "renderSectionPick", "sectionPickCsv",
+   "sectionPickBodies", "loadAuthoredSectionsIntoPicker", "sectionLibEntry"]
+    .forEach(fn => {
+      assert.ok(eager.indexOf("function " + fn + "(") === -1,
+        fn + "() must NOT be defined in the eager script.js");
+      assert.ok(lazy.indexOf("function " + fn + "(") > -1,
+        fn + "() must be defined in the lazy section-picker.js");
+    });
+  // And the chunk must be registered where the caches + the budget can see it.
+  assert.match(fs.readFileSync(path.join(P, "sw.js"), "utf8"), /"\/section-picker\.js"/,
+    "an unlisted chunk is not precached");
+  assert.match(fs.readFileSync(path.join(__dirname, "..", "tests-e2e", "perf.spec.js"), "utf8"),
+    /"section-picker\.js"/,
+    "unregistered in LAZY_CHUNKS, an idle-prefetched chunk counts against the budget");
 });
 
 test("every custom property the picker uses actually EXISTS in tokens.css", () => {

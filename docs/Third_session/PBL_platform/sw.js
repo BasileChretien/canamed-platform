@@ -62,6 +62,7 @@ const SHELL_ASSETS = [
   "/branched-runtime.js",
   "/section-registry.js",
   "/section-content.js",
+  "/section-picker.js",
   "/branched.css",
   "/admin.css",
   "/room.css",

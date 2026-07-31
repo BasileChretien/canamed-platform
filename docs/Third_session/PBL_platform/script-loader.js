@@ -271,6 +271,18 @@
      why (the splash byte budget). Chained here, not in ensureCaseContent, so it
      is guaranteed present BEFORE the room is revealed. */
   function ensureSectionContent() { return loadScript(v("section-content.js")); }
+  /* section-picker.js (S7): the create form's SECTION PICKER. Splash-only but
+     behind a click — the entry view never needs it — so it is loaded when the
+     create view opens rather than shipped in the shell. It needs the section
+     LIBRARY to have anything to list, so chain ensureCaseContent() (which pulls
+     section-registry.js) ahead of it; the picker has its own bounded retry too,
+     but resolving in the right order means the add-list is filled on the first
+     pass instead of the second. */
+  function ensureSectionPicker() {
+    return ensureCaseContent()
+      .catch(function () {})
+      .then(function () { return loadScript(v("section-picker.js")); });
+  }
   function ensureRoomStyles() {
     /* Resolves when BOTH the room stylesheet and the room-only section-content
        chunk are in. Room entry awaits this before revealing the app, so every
@@ -338,6 +350,7 @@
     ensureAdminStyles,
     ensureRoomStyles,
     ensureSectionContent,
+    ensureSectionPicker,
     ensureCaseContent,
     ensureQrcode,
     ensureTour,
