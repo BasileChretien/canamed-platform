@@ -82,10 +82,53 @@ test("the row is numbered by POSITION, matching the student's stage label", () =
 });
 
 test("an empty pick writes NO sections field — the session falls back", () => {
+  /* This used to pin sectionPickCsv's exact SOURCE TEXT
+     (`splashSectionPick.length ? … : null`), which broke the moment the
+     function legitimately grew the authored-section mapping while keeping the
+     behaviour identical. Assert the BEHAVIOUR: empty pick → null. */
   const f = fnOf("sectionPickCsv");
-  assert.match(f, /splashSectionPick\.length \? splashSectionPick\.join\(","\) : null/);
+  assert.match(f, /if \(!splashSectionPick\.length\) return null;/,
+    "an empty pick must still yield null, not an empty string");
   assert.match(SCRIPT, /if \(typeof sections === "string" && sections\)/,
     "createSession must skip the write when nothing was picked");
+});
+
+test("an AUTHORED pick is written as custom-<slot>, never its synthetic key", () => {
+  /* The one that would only fail in PRODUCTION. The `sections` CSV validator is
+     /^[A-Za-z0-9_-]{1,48}(,...)*$/ — no colons — so writing the in-form key
+     "authored:<uid>:<scenarioId>:<type>" is REJECTED at write time. LOCAL-mode
+     Playwright does not exercise rules, so nothing else in the suite can catch
+     a regression here. */
+  const f = fnOf("sectionPickCsv");
+  assert.match(f, /isAuthoredSectionKey\(id\)/,
+    "the CSV mapper must recognise an authored pick");
+  assert.match(f, /"custom-" \+ \(i \+ 1\)/,
+    "…and emit custom-<slot>, since the slot IS the position");
+
+  // And every token the mapper can emit must satisfy the rule's own regex.
+  const rules = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8"));
+  const v = rules.rules.sessions.$sessionId.sections[".validate"];
+  const m = v.match(/matches\(\/(.+?)\/\)/);
+  assert.ok(m, "the sections validator must carry a regex");
+  const csvRe = new RegExp(m[1]);
+  assert.ok(csvRe.test("custom-1,chronic-pain-pbl,custom-3"),
+    "a mixed built-in/authored pick must satisfy the DB validator");
+  assert.ok(!csvRe.test("authored:abc:my-case:pbl"),
+    "…and the synthetic key must NOT — this is the failure being guarded");
+});
+
+test("authored section bodies are snapshotted per slot, matching the tokens", () => {
+  const f = fnOf("sectionPickBodies");
+  assert.match(f, /String\(i \+ 1\)/, "keyed by slot, like the custom-<slot> token");
+  assert.match(SCRIPT, /oPath\(code, "sectionBodies\/" \+ slot\)\)\.set\(body\)/,
+    "createSession must write each authored body");
+  const rules = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8"));
+  const sb = rules.rules.sessions.$sessionId.sectionBodies;
+  assert.ok(sb, "the sectionBodies node must exist in the sessions tree");
+  assert.equal(sb.$slot[".write"], "auth != null && !data.exists()",
+    "write-once: a session's content must not change after creation");
+  assert.ok(rules.rules.orgs.$orgSlug.sessions.$sessionId.sectionBodies,
+    "…and mirrored in the org tree, or org sessions fail closed");
 });
 
 test("the pick is written write-once, like the module narrowing before it", () => {
@@ -134,4 +177,29 @@ test("the picker styles use tokens, never raw hex or px", () => {
   assert.ok(!/#[0-9a-fA-F]{3,6}\b/.test(block), "no raw hex — tokens.css owns colour");
   assert.ok(!/:\s*\d+px/.test(block.replace(/1px solid/g, "")),
     "no raw px spacing — use the space scale");
+});
+
+test("authored snapshots are registered BEFORE the pick is published", () => {
+  /* Ordering bug with no error message. setSessionSections() triggers
+     refreshModuleStages(), which resolves every token against
+     window.CANAMED_SECTIONS. Register the snapshots after it and each
+     custom-<slot> is simply dropped as unresolvable — the stage does not
+     exist, no exception, no console warning, just a session missing a section.
+     Assert the source order rather than trusting a comment. */
+  const reg = SCRIPT.indexOf("registerSectionBodies(res[5]");
+  const set = SCRIPT.indexOf("setSessionSections(res[4]");
+  assert.ok(reg > -1, "the session load must register authored snapshots");
+  assert.ok(set > -1, "…and publish the pick");
+  assert.ok(reg < set,
+    "registerSectionBodies must run BEFORE setSessionSections, or every " +
+    "custom-<slot> resolves against a library that does not contain it yet");
+});
+
+test("a malformed snapshot degrades to skipping ONE slot, not the session", () => {
+  const f = fnOf("registerSectionBodies");
+  assert.match(f, /try \{ sec = JSON\.parse\(raw\); \}/,
+    "an unparseable snapshot must not throw out of the session load");
+  assert.match(f, /if \(!sec \|\| typeof sec !== "object" \|\| !sec\.type\)/,
+    "a snapshot with no type cannot become a stage — skip it explicitly");
+  assert.match(f, /return;/, "…and skip only that slot");
 });

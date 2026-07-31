@@ -335,7 +335,8 @@ function loadSessionScenario(code) {
     db.ref(oPath(code, "scenarioCustomJson")).once("value"),
     db.ref(oPath(code, "scenarioRef")).once("value"),
     db.ref(oPath(code, "modules")).once("value"),
-    db.ref(oPath(code, "sections")).once("value")
+    db.ref(oPath(code, "sections")).once("value"),
+    db.ref(oPath(code, "sectionBodies")).once("value")
   ])).then(res => {
     const id = res[0] && res[0].val();
     const customJson = res[1] && res[1].val();
@@ -351,6 +352,12 @@ function loadSessionScenario(code) {
        session's first stageFlow() runs the scenario's shape instead of the
        picked one. Resolution needs the lazily-loaded section library, so a pick
        read before that chunk lands simply falls back until it does. */
+    /* S7 — register any AUTHORED section snapshots into the library FIRST.
+       Order matters: setSessionSections() below triggers refreshModuleStages(),
+       which resolves every token against window.CANAMED_SECTIONS. Registering
+       after it would make the session's first stageFlow() drop each
+       custom-<slot> as unresolvable — the stage would simply not exist. */
+    registerSectionBodies(res[5] && res[5].val());
     setSessionSections(res[4] && res[4].val());
     let custom = null;
     if (customJson) {
@@ -413,7 +420,16 @@ function listMyScenarios() {
     .then(snap => {
       const out = [];
       snap.forEach(child => {
-        out.push({ id: child.key, meta: (child.val() || {}).meta || {} });
+        const v = child.val() || {};
+        /* `bodyJson` is FREE here — this read already pulls the whole
+           scenarios/<uid> subtree including it, and the previous version simply
+           discarded it. The SECTION picker needs it: `meta` carries only
+           {id,name,summary,createdAt,updatedAt,version,locale}, with no
+           `modules` and no `format`, so metadata alone cannot tell you whether
+           a scenario yields a PBL section, a Roleplay one, or a branched one.
+           Left unparsed here — the caller parses defensively, so one malformed
+           body cannot take the whole list down. */
+        out.push({ id: child.key, meta: v.meta || {}, bodyJson: v.bodyJson || null });
       });
       return out;
     })
@@ -745,6 +761,30 @@ const WRAPUP_VIEW_ID = "stage-4";
  * before it exists; and a stale pick may name a section that has since been
  * renamed. Either way we fall back to the module-derived slots rather than
  * producing a session with no stages at all. */
+/* S7 — fold a session's AUTHORED section snapshots into the section library so
+   pickedSections() resolves "custom-<slot>" exactly like a built-in id.
+   Each value is a serialised SECTION (already one half of a scenario), written
+   write-once at create, so what is registered here is the version the session
+   was created with — a later edit by the author cannot change a running
+   session. Defensive throughout: one unparseable snapshot must not stop the
+   others, and must not take down a session that also runs built-ins. */
+function registerSectionBodies(bodies) {
+  if (typeof window === "undefined" || !bodies || typeof bodies !== "object") return;
+  if (!window.CANAMED_SECTIONS) window.CANAMED_SECTIONS = {};
+  Object.keys(bodies).forEach(slot => {
+    const raw = bodies[slot];
+    if (typeof raw !== "string" || !raw) return;
+    let sec = null;
+    try { sec = JSON.parse(raw); }
+    catch (e) { console.warn("section snapshot for slot " + slot + " is not JSON", e); return; }
+    if (!sec || typeof sec !== "object" || !sec.type) {
+      console.warn("section snapshot for slot " + slot + " has no type — ignored");
+      return;
+    }
+    const id = "custom-" + slot;
+    window.CANAMED_SECTIONS[id] = Object.assign({}, sec, { id: id });
+  });
+}
 function setSessionSections(csv) {
   if (typeof window === "undefined") return;
   const list = (typeof csv === "string" && csv)
@@ -13710,8 +13750,9 @@ function wireSplash() {
        Null when nothing was picked, in which case the session falls back to the
        chosen scenario's own shape exactly as before S3. */
     const _sectionCsv = sectionPickCsv();
+    const _sectionBodies = sectionPickBodies();
     createSession(name, label, pass, scenarioId, customJson, scenarioRef,
-                  null, _sectionCsv).then(result => {
+                  null, _sectionCsv, _sectionBodies).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -13787,6 +13828,9 @@ function wireSplash() {
      library lands. */
   wireSectionPicker();
   populateSectionPicker();
+  /* S7 — and the AUTHORED ones, asynchronously: they need a DB read, so the
+     picker paints with the built-ins first and fills in. */
+  try { loadAuthoredSectionsIntoPicker(); } catch (_) {}
   const sel = el("splash-create-scenario");
   if (sel) sel.addEventListener("change", onScenarioChange);
   wireReportScenario();
@@ -13955,10 +13999,134 @@ function sectionTypeLabel(type) {
   return { pbl: "PBL", roleplay: "Roleplay", branched: "Branched" }[type] || type;
 }
 
+/* ── S7 — AUTHORED sections in the picker ─────────────────────────────────────
+ * The built-in library is derived from a FIXED list of four cases
+ * (section-registry.js SECTION_SOURCES), so it can never contain a scenario a
+ * facilitator wrote. Until now the only route to those was the Scenario select,
+ * which is why that select could not simply be deleted.
+ *
+ * Two ids are in play here and conflating them is the trap:
+ *   - a SYNTHETIC id ("authored:<uid>:<scenarioId>:<type>") used only inside
+ *     the create form, to identify a pick while the facilitator arranges it;
+ *   - the DB token, which is "custom-<slot>" and is assigned at CREATE time,
+ *     because the slot IS the position in the pick.
+ * The synthetic id must never reach the database: the `sections` CSV validator
+ * is /^[A-Za-z0-9_-]{1,48}(,...)*$/ — no colons — so writing one would be
+ * rejected at write time, and LOCAL-mode e2e would never catch it.
+ */
+let splashAuthoredSections = {};      // synthetic id -> { section, bodyJson, ... }
+
+function authoredSectionKey(ownerUid, scenarioId, type) {
+  return "authored:" + ownerUid + ":" + scenarioId + ":" + type;
+}
+function isAuthoredSectionKey(id) {
+  return typeof id === "string" && id.indexOf("authored:") === 0;
+}
+/* Resolve a picked id against BOTH libraries. Every reader must go through
+   this — reading window.CANAMED_SECTIONS directly silently renders an authored
+   pick as a bare id with no type, which is how the section-model initiative
+   produced "Section k" with no title once already. */
+function sectionLibEntry(id) {
+  if (isAuthoredSectionKey(id)) {
+    const a = splashAuthoredSections[id];
+    return a ? a.section : null;
+  }
+  return (window.CANAMED_SECTIONS || {})[id] || null;
+}
+
+/* Derive the sections an authored scenario yields, via the SAME
+   sectionsForScenario() the built-in library uses — so an authored section
+   behaves identically to a built-in one. Defensive: one malformed body must
+   not take the whole list down. */
+function authoredSectionsFrom(bodyJson, ownerUid, scenarioId, source, ownerName) {
+  if (!bodyJson || typeof window.sectionsForScenario !== "function") return [];
+  let body;
+  try { body = JSON.parse(bodyJson); }
+  catch (e) { console.warn("authored scenario body is not JSON:", scenarioId); return []; }
+  if (!body || typeof body !== "object") return [];
+  /* The slug only shapes the DISPLAY id; the DB token is assigned at create.
+     Kept readable so the picker row is legible while arranging a pick. */
+  const slug = String(scenarioId || "scenario").slice(0, 40);
+  let secs = [];
+  try { secs = window.sectionsForScenario(body, slug) || []; }
+  catch (e) { console.warn("sectionsForScenario failed for", scenarioId, e); return []; }
+  return secs.map(sec => ({
+    key: authoredSectionKey(ownerUid, scenarioId, sec.type),
+    section: sec,
+    bodyJson: bodyJson,
+    source: source,
+    ownerUid: ownerUid,
+    scenarioId: scenarioId,
+    ownerName: ownerName || ""
+  }));
+}
+
+/* Fill splashAuthoredSections from the facilitator's own scenarios and the
+   shared ones, then re-render the picker. Fire-and-forget: a failure leaves the
+   built-in library intact rather than breaking session creation.
+
+   COST ASYMMETRY, and why the two halves differ. listMyScenarios() already
+   reads the whole scenarios/<uid> subtree INCLUDING bodyJson, so your own
+   scenarios cost nothing extra. sharedScenarios/<id> carries only metadata, and
+   `meta` has no `modules`/`format`, so each shared scenario needs its own body
+   read to know what sections it yields. Those are fetched, but CAPPED — and the
+   cap logs what it dropped, because a silently truncated list reads exactly
+   like "you have no shared scenarios". */
+const AUTHORED_SHARED_BODY_CAP = 20;
+
+function loadAuthoredSectionsIntoPicker() {
+  if (typeof window.sectionsForScenario !== "function") return Promise.resolve();
+  const signedIn = !!(auth && auth.currentUser && !auth.currentUser.isAnonymous);
+  const mineP = signedIn ? listMyScenarios() : Promise.resolve([]);
+  const sharedP = listSharedScenarios();
+  const myUid = (auth && auth.currentUser && auth.currentUser.uid) || null;
+
+  return Promise.all([mineP, sharedP]).then(res => {
+    const mine = res[0] || [];
+    const shared = (res[1] || []).filter(x => !myUid || x.ownerUid !== myUid);
+    const next = {};
+
+    mine.forEach(sc => {
+      authoredSectionsFrom(sc.bodyJson, myUid, sc.id, "private", "")
+        .forEach(a => { next[a.key] = a; });
+    });
+
+    const take = shared.slice(0, AUTHORED_SHARED_BODY_CAP);
+    if (shared.length > take.length) {
+      console.warn("section picker: listing only " + take.length + " of " +
+        shared.length + " shared scenarios (body-fetch cap)");
+    }
+    return Promise.all(take.map(sh =>
+      loadScenarioByRef({ source: "shared", ownerUid: sh.ownerUid, scenarioId: sh.scenarioId })
+        .then(body => {
+          if (!body) return;
+          authoredSectionsFrom(JSON.stringify(body), sh.ownerUid, sh.scenarioId,
+                               "shared", sh.ownerName)
+            .forEach(a => { next[a.key] = a; });
+        })
+        .catch(() => {})
+    )).then(() => {
+      splashAuthoredSections = next;
+      /* Drop any pick whose section vanished (signed out, or a shared scenario
+         taken down between renders) — leaving it would write a token at create
+         that nothing can resolve. */
+      splashSectionPick = splashSectionPick.filter(id => !!sectionLibEntry(id));
+      populateSectionPicker();
+    });
+  }).catch(e => { console.warn("loadAuthoredSectionsIntoPicker failed", e); });
+}
+
 function sectionLibraryList() {
   const lib = (typeof window !== "undefined" && window.CANAMED_SECTIONS) || null;
   if (!lib) return null;
-  return Object.keys(lib).map(id => lib[id]).filter(Boolean);
+  const builtIn = Object.keys(lib).map(id => lib[id]).filter(Boolean);
+  /* Authored sections list AFTER the built-ins, each tagged with its own id so
+     the add-list option can carry the synthetic key as its value. */
+  const authored = Object.keys(splashAuthoredSections)
+    .map(k => splashAuthoredSections[k])
+    .filter(Boolean)
+    .map(a => Object.assign({}, a.section, { id: a.key, _authored: a }));
+  return builtIn.concat(authored);
 }
 function populateSectionPicker() {
   const add = el("splash-section-add");
@@ -14002,12 +14170,11 @@ function renderSectionPick() {
   const ol = el("splash-section-list");
   const empty = el("splash-section-empty");
   if (!ol) return;
-  const lib = (window.CANAMED_SECTIONS || {});
   ol.textContent = "";
   if (empty) empty.classList.toggle("hidden", splashSectionPick.length > 0);
 
   splashSectionPick.forEach((id, i) => {
-    const sec = lib[id] || { id: id, type: "", name: null };
+    const sec = sectionLibEntry(id) || { id: id, type: "", name: null };
     const li = document.createElement("li");
     li.className = "splash-section-row";
     li.setAttribute("data-section-id", id);
@@ -14080,7 +14247,38 @@ function wireSectionPicker() {
 /* The CSV written at create, or null when nothing was picked (in which case the
    session falls back to the scenario's own shape, exactly as before S3). */
 function sectionPickCsv() {
-  return splashSectionPick.length ? splashSectionPick.join(",") : null;
+  if (!splashSectionPick.length) return null;
+  /* An AUTHORED pick becomes "custom-<slot>": the slot IS the position, and its
+     body is snapshotted to sessions/<code>/sectionBodies/<slot> at create. The
+     synthetic "authored:<uid>:<id>:<type>" key must never appear here — the CSV
+     validator forbids colons, so it would be refused at write time. */
+  return splashSectionPick
+    .map((id, i) => (isAuthoredSectionKey(id) ? ("custom-" + (i + 1)) : id))
+    .join(",");
+}
+
+/* The authored bodies to snapshot, as { slot -> bodyJson }, matching the
+   custom-<slot> tokens sectionPickCsv() emits. Empty when the pick is all
+   built-ins, which is the common case. */
+function sectionPickBodies() {
+  const out = {};
+  splashSectionPick.forEach((id, i) => {
+    if (!isAuthoredSectionKey(id)) return;
+    const a = splashAuthoredSections[id];
+    if (!a || !a.section) return;
+    /* Snapshot the DERIVED SECTION, not the whole authored scenario. The token
+       "custom-<slot>" says the slot is authored but NOT which half of a
+       two-module scenario it runs — storing the scenario would leave that
+       ambiguous at join. A derived section is already exactly one half, so the
+       runtime can register it as a library entry verbatim with no
+       re-derivation, and it is about half the bytes (which is what the rules'
+       131072 cap was sized for). */
+    try {
+      out[String(i + 1)] = JSON.stringify(
+        Object.assign({}, a.section, { id: "custom-" + (i + 1) }));
+    } catch (e) { console.warn("could not snapshot authored section", id, e); }
+  });
+  return out;
 }
 
 /* fill the scenario dropdown from the SCENARIOS registry + one trailing
@@ -14292,7 +14490,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections, sectionBodies) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -14414,6 +14612,19 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
          shape must not shift under participants mid-flight. */
       if (typeof sections === "string" && sections)
         writes.push(db.ref(oPath(code, "sections")).set(sections));
+      /* S7 — AUTHORED sections travel as a per-slot SNAPSHOT, not a reference.
+         The CSV can only hold /^[A-Za-z0-9_-]{1,48}$/ tokens (no colons), so an
+         authored pick is written as "custom-<slot>" and its body lands here.
+         Snapshotting also pins the session to the version it was created with,
+         exactly as scenarioCustomJson does — a facilitator editing their
+         scenario mid-workshop must not change what a running session shows. */
+      if (sectionBodies && typeof sectionBodies === "object") {
+        Object.keys(sectionBodies).forEach(slot => {
+          const body = sectionBodies[slot];
+          if (typeof body === "string" && body)
+            writes.push(db.ref(oPath(code, "sectionBodies/" + slot)).set(body));
+        });
+      }
       return Promise.all(writes)
         .then(() => hashPassword(password, code))
         .then(h => {
@@ -14816,6 +15027,10 @@ function handleAuthStateChange(user) {
       try {
         const sel = el("splash-create-scenario");
         if (sel) appendAuthoredScenarioOptions(sel, _curLang());
+        /* The SECTION picker needs the same refresh: a user's own scenarios are
+           unreadable until they are signed in, so a picker painted before
+           sign-in lists built-ins only. */
+        loadAuthoredSectionsIntoPicker();
       } catch (_) {}
       // first sign-in for this identified account → guide them through profile setup
       if (!profile || !profile.name) {
