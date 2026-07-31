@@ -279,9 +279,17 @@
      but resolving in the right order means the add-list is filled on the first
      pass instead of the second. */
   function ensureSectionPicker() {
-    return ensureCaseContent()
-      .catch(function () {})
-      .then(function () { return loadScript(v("section-picker.js")); });
+    /* IN PARALLEL, not chained. Chaining made the picker wait for the whole
+       case-content bundle (~200 KB gz) before its own ~5 KB chunk even started
+       fetching, which on a mobile connection pushed the authored/shared
+       sections far enough out that they looked absent. The picker needs the
+       section LIBRARY to list anything, so resolve on BOTH — but overlap the
+       two fetches rather than serialising them. case-content failure is
+       swallowed: the picker still lists whatever it can. */
+    return Promise.all([
+      ensureCaseContent().catch(function () {}),
+      loadScript(v("section-picker.js"))
+    ]);
   }
   function ensureRoomStyles() {
     /* Resolves when BOTH the room stylesheet and the room-only section-content
