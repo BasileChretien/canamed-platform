@@ -194,6 +194,46 @@ test("no two decisions in a case share an id (they become RTDB vote keys)", () =
   });
 });
 
+test("sectionsForScenario is the ONE derivation — and honours a null slug", () => {
+  /* buildSectionRegistry() now delegates to sectionsForScenario() so there is a
+     single answer to "what sections does this scenario have?", reusable for a
+     scenario that is NOT in SECTION_SOURCES (i.e. one a facilitator authored).
+
+     The null-slug branch is the trap, and it bit on the first attempt: the
+     BRANCHED case deliberately carries `slug: null` in SECTION_SOURCES because
+     it keeps its own scenario id, so a blanket `if (!slug) return []` drops it
+     from the library entirely — and `branchedRef` composition then resolves
+     nothing. */
+  const branched = SCENARIOS["ward-escalation-branched"];
+  const fromNull = REG.sectionsForScenario(branched, null);
+  assert.equal(fromNull.length, 1, "a branched case yields one section, slug or not");
+  assert.equal(fromNull[0].id, "ward-escalation-branched", "and keeps its own id");
+
+  /* A non-branched scenario without a slug cannot form `<slug>-<type>` ids, so
+     it yields nothing rather than "null-pbl". */
+  assert.deepEqual(REG.sectionsForScenario(SCENARIOS["chronic-pain-opioids"], null), []);
+
+  const pair = REG.sectionsForScenario(SCENARIOS["chronic-pain-opioids"], "chronic-pain");
+  assert.deepEqual(pair.map(s => s.id), ["chronic-pain-pbl", "chronic-pain-roleplay"],
+    "PBL before Roleplay — picker order");
+
+  assert.deepEqual(REG.sectionTypesFor(branched), ["branched"]);
+  assert.deepEqual(REG.sectionTypesFor(SCENARIOS["chronic-pain-opioids"]), ["pbl", "roleplay"]);
+  assert.deepEqual(REG.sectionsForScenario(null, "x"), [], "no scenario, no sections");
+});
+
+test("the built-in library is exactly what sectionsForScenario yields", () => {
+  /* Guards the delegation itself: if buildSectionRegistry ever stops routing
+     through the shared helper, the two can drift again — which is the whole
+     failure mode this extraction exists to close. */
+  const viaHelper = {};
+  REG.SECTION_SOURCES.forEach(src => {
+    REG.sectionsForScenario(SCENARIOS[src.scenarioId], src.slug)
+      .forEach(sec => { viaHelper[sec.id] = sec; });
+  });
+  assert.deepEqual(Object.keys(viaHelper).sort(), Object.keys(SECTIONS).sort());
+});
+
 test("S0 is inert — no shell tag loads the registry yet", () => {
   const html = fs.readFileSync(path.join(P, "index.html"), "utf8");
   assert.ok(html.indexOf("section-registry.js") === -1,
