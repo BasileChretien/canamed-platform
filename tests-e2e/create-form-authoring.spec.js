@@ -23,7 +23,16 @@
  * surface (CLAUDE.md standing instruction).
  */
 
-const { test, expect } = require("@playwright/test");
+/* MUST import from ./fixtures.js, not @playwright/test: the custom `page`
+   fixture calls forceLocalMode() before use(page), which pins
+   CANAMED_FIREBASE = null (via a defineProperty setter that swallows
+   firebase-config.js's own assignment) so the suite is hermetic.
+   This is not cosmetic here — the sign-in test below argues "LOCAL mode never
+   produces a non-anonymous user, so a still-gated link would fail". That
+   reasoning is only TRUE when LOCAL mode is pinned. Imported bare, the spec
+   passed for the wrong reason: it only inspects DOM presence, which happens
+   not to depend on the backend, so the false premise never surfaced. */
+const { test, expect } = require("./fixtures.js");
 
 async function openCreateForm(page) {
   await page.goto("/");
