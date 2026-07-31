@@ -5,8 +5,12 @@
  *   - Splash account view now offers email/password sign-in alongside Google.
  *   - The "Author scenarios" splash row is hidden by default (revealed only
  *     once a non-anonymous user signs in, which can't happen in LOCAL mode).
- *   - The scenario picker on the create-session view still works in LOCAL
+ *   - The SECTION picker on the create-session view still works in LOCAL
  *     mode — authored scenarios fail-soft to an empty list, built-ins show.
+ *
+ * S7 CUTOVER — the Scenario select (#splash-create-scenario) is gone. A shared
+ * scenario now reaches the facilitator as a SECTION in #splash-section-add,
+ * keyed "authored:<uid>:<scenarioId>:<type>" instead of "__ref:shared:<uid>:<id>".
  *
  * LOCAL mode caveat: forceLocalMode() pins CANAMED_FIREBASE = null, so
  * sign-in attempts deliberately bail with "Sign-in is not available in
@@ -138,7 +142,15 @@ test.describe("Splash — authored scenarios entry points", () => {
             ownerUid: "u_demo",
             scenarioId: "scn",
             ownerName: "Dr. Local",
-            meta: { name: "Locally Shared Scenario" }
+            meta: { name: "Locally Shared Scenario" },
+            /* S7 — the picker derives SECTIONS from the body, so a row carrying
+               only `meta` yields nothing to list. `moduleAName` is the
+               name-first declaration that makes it a PBL section. */
+            bodyJson: JSON.stringify({
+              id: "scn",
+              name: { en: "Locally Shared Scenario", fr: "", ja: "" },
+              moduleAName: { en: "Locally Shared Scenario", fr: "", ja: "" }
+            })
           }
         }
       }));
@@ -147,20 +159,22 @@ test.describe("Splash — authored scenarios entry points", () => {
     await page.goto("/");
     await page.locator("#splash-go-create").click();
 
-    const picker = page.locator("#splash-create-scenario");
+    const picker = page.locator("#splash-section-add");
     await expect(picker).toBeVisible();
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
 
-    // The authored optgroups are appended asynchronously after the
-    // built-ins; poll for the shared entry.
-    const sharedOption = picker.locator('option[value="__ref:shared:u_demo:scn"]');
-    await expect.poll(async () => await sharedOption.count()).toBe(1);
-    await expect(sharedOption).toHaveText(/Locally Shared Scenario — Dr\. Local/);
-    await expect(picker.locator('optgroup[data-authored="1"]')).toHaveCount(1);
+    // The authored sections are appended asynchronously after the built-ins
+    // (they need their own DB read); poll for the shared entry.
+    const sharedOption = picker.locator('option[value="authored:u_demo:scn:pbl"]');
+    await expect.poll(async () => await sharedOption.count(), { timeout: 10_000 }).toBe(1);
+    /* The option is labelled by TYPE — "PBL — <title>" — the same wording the
+       built-ins use, so a shared section is not visually second-class. */
+    await expect(sharedOption).toHaveText(/^PBL — .*Locally Shared Scenario/);
 
     expect(warnings, "listSharedScenarios must not fail in LOCAL mode").toEqual([]);
   });
 
-  test("create-session picker still works when authored scenarios are empty", async ({ page }) => {
+  test("create-session section picker still works when authored scenarios are empty", async ({ page }) => {
     const errors = [];
     page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
     page.on("console", (msg) => {
@@ -170,17 +184,18 @@ test.describe("Splash — authored scenarios entry points", () => {
     await page.goto("/");
     await page.locator("#splash-go-create").click();
 
-    const picker = page.locator("#splash-create-scenario");
+    const picker = page.locator("#splash-section-add");
     await expect(picker).toBeVisible();
 
-    // Built-in scenarios populate inside an optgroup. Wait until the
-    // picker has at least one option (case-content.js is lazy-loaded).
+    // Built-in sections populate the add-list. Wait until the picker has at
+    // least one option (case-content.js + section-registry.js are lazy).
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
     await expect.poll(async () =>
       await picker.locator("option").count()
     ).toBeGreaterThan(0);
 
-    // No __ref:… authored options should appear in LOCAL mode.
-    const refOptionCount = await picker.locator('option[value^="__ref:"]').count();
+    // No authored:… options should appear with nothing seeded.
+    const refOptionCount = await picker.locator('option[value^="authored:"]').count();
     expect(refOptionCount).toBe(0);
 
     // No JS errors from the new picker / storage helpers.

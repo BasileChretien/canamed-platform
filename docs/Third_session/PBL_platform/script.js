@@ -14210,9 +14210,32 @@ const AUTHORED_SHARED_BODY_CAP = 20;
    AND take with them any authored pick they had already arranged (the filter
    below drops what sectionLibEntry can no longer resolve). */
 let _authoredSectionsGen = 0;
+let _authoredSectionsTries = 0;
 
 function loadAuthoredSectionsIntoPicker() {
-  if (typeof window.sectionsForScenario !== "function") return Promise.resolve();
+  if (typeof window.sectionsForScenario !== "function") {
+    /* NOT loaded yet — and this used to give up for good. wireSplash calls this
+       during splash wiring, before the lazy section-registry.js has landed, so
+       the bail fired every time and nothing ever retried: on a cold load NO
+       authored or shared section appeared in the picker at all. That was
+       survivable while the Scenario select existed (it listed shared scenarios
+       itself); with the select deleted the picker is the ONLY route to them, so
+       the S7 cutover turned a slow path into an invisible one — including the
+       moderation filter, which can only hide a shared scenario that lists.
+
+       Same bounded retry populateSectionPicker() already uses for the built-ins:
+       chain onto the fetch and come back, giving up after a few tries so an
+       optional chunk that never loads cannot recurse for ever (its load failure
+       is swallowed, so the promise settles with the library still absent). */
+    _authoredSectionsTries += 1;
+    if (_authoredSectionsTries > 3) return Promise.resolve();
+    if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
+      return window.CanamedLoader.ensureCaseContent()
+        .then(loadAuthoredSectionsIntoPicker);
+    }
+    return Promise.resolve();
+  }
+  _authoredSectionsTries = 0;
   const gen = ++_authoredSectionsGen;
   const signedIn = !!(auth && auth.currentUser && !auth.currentUser.isAnonymous);
   const mineP = signedIn ? listMyScenarios() : Promise.resolve([]);

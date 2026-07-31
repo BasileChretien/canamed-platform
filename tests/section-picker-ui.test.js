@@ -210,6 +210,28 @@ test("a late pre-sign-in picker load cannot overwrite the signed-in one", () => 
   assert.match(SCRIPT, /let _authoredSectionsGen = 0;/);
 });
 
+test("authored sections survive a COLD load — the lazy library lands later", () => {
+  /* The regression the cutover created. loadAuthoredSectionsIntoPicker() runs
+     during splash wiring, BEFORE the lazy section-registry.js has landed, so
+     its `typeof window.sectionsForScenario !== "function"` guard fired every
+     time — and nothing retried. On a cold load no authored or shared section
+     appeared in the picker at all.
+
+     Survivable while the Scenario select existed (it listed shared scenarios
+     itself); with the select deleted the picker is the ONLY route to them, so
+     this also silently disabled the moderation filter — you cannot hide a
+     tombstoned scenario from a list that never renders. */
+  const f = fnOf("loadAuthoredSectionsIntoPicker");
+  assert.match(f, /ensureCaseContent\(\)\s*\n?\s*\.then\(loadAuthoredSectionsIntoPicker\)/,
+    "the not-loaded-yet branch must chain onto the fetch and come back");
+  assert.match(f, /_authoredSectionsTries \+= 1;/);
+  assert.match(f, /if \(_authoredSectionsTries > 3\) return Promise\.resolve\(\);/,
+    "bounded — section-registry.js is optional and its load failure is swallowed, " +
+    "so an unbounded retry would recurse for ever on an already-settled promise");
+  // The same bounded-retry shape the built-in half has always used.
+  assert.match(fnOf("populateSectionPicker"), /ensureCaseContent\(\)\.then\(populateSectionPicker\)/);
+});
+
 test("an oversized authored section is refused BEFORE anything is written", () => {
   /* The bodies are written after `created` and `recovery` — the rule requires
      the CSV to already name custom-<slot>, so they cannot share that batch. A
