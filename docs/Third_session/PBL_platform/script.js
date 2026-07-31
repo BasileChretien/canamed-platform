@@ -838,9 +838,22 @@ function sectionSlots() {
      session, and unlike the module set it can name two sections of one type. */
   const picked = pickedSections();
   if (picked) {
+    /* A pick of ONE branched section is a STANDALONE branched session and must
+       use the standalone view (#stage-1), the same as the no-pick fallback in
+       _moduleDerivedSlots(). Not a stylistic choice: #decisions-branched lives
+       in #stage-3 but #branched-final-host — the OSCE diagnosis/management
+       DELIVERABLE a branched case builds toward — exists only in #stage-1. Type
+       -routing this to stage 3 renders the decision tree and then silently
+       loses its ending, which is the worst kind of half-working.
+       A MIXED pick keeps per-type routing: there the branched module is
+       COMPOSED into stage 3 and its deliverable goes to answers/moduleBranched
+       instead (M4c/M4d). */
+    const lone = (picked.length === 1 && picked[0].type === "branched");
     return picked.map((sec, i) => ({
       position: i + 1, stage: i + 1, module: null, type: sec.type,
-      view: STAGE_VIEW_FOR_TYPE[sec.type], sectionId: sec.id
+      view: (lone ? "stage-1" : STAGE_VIEW_FOR_TYPE[sec.type]),
+      standalone: lone || undefined,
+      sectionId: sec.id
     }));
   }
   return _moduleDerivedSlots();
@@ -2053,7 +2066,13 @@ const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" 
 function sectionDecisionPrefix(slot) { return "s" + slot.position + "_"; }
 function namespaceDecisions(decisions, slot) {
   const pre = sectionDecisionPrefix(slot);
-  const mod = SECTION_MODULE_FOR_TYPE[slot.type] || "A";
+  /* A STANDALONE branched slot renders through the module-A targets
+     (#decisions-A / #branched-final-host, both in #stage-1), so its decisions
+     must be tagged "A" — tagged "branched" they render into #decisions-branched
+     on a stage this session does not use, and the panel simply stays empty.
+     Same rule the ANSWERS bucket already follows: a standalone branched session
+     aggregates into moduleA, only a COMPOSED one uses the separate bucket. */
+  const mod = slot.standalone ? "A" : (SECTION_MODULE_FOR_TYPE[slot.type] || "A");
   const own = {};
   decisions.forEach(d => { if (d && d.id) own[d.id] = true; });
   /* Only rewrite references to ids INSIDE this section. An edge pointing at
