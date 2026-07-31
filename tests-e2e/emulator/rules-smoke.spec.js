@@ -1153,3 +1153,70 @@ test("rules: the session's ordered section pick is write-once and bounded", asyn
   // Two sections of the SAME type is the whole point — it must be accepted.
   expect(await tryWrite(page, other, "chronic-pain-pbl,jaundice-pbl")).toBe("ALLOWED");
 });
+
+/* ── S7 — sectionBodies: an AUTHORED section snapshotted per slot ───────────
+ * The create form is losing its Scenario select, so a session must be able to
+ * carry sections a facilitator authored, mixed freely with built-in ones.
+ *
+ * It cannot do that through the `sections` CSV: that validator is
+ * `^[A-Za-z0-9_-]{1,48}(,...)*$` — no colons, 48 chars max — so the obvious
+ * token `__ref:private:<uid>:<scenarioId>-pbl` is REJECTED at write time (a
+ * Firebase uid alone is 28 chars). LOCAL-mode Playwright never exercises rules,
+ * so that would have surfaced only in production, at session creation. Hence:
+ * the CSV keeps legal placeholder tokens (`custom-1`) and the section's own
+ * JSON is snapshotted here, per slot, at create time.
+ *
+ * Snapshotting (rather than resolving the author's live copy at join) is
+ * deliberate and mirrors scenarioCustomJson: a session renders the version it
+ * was created with, so a facilitator editing their scenario mid-workshop cannot
+ * change what a running session shows. That was PR #221's fix for scenarios.
+ */
+test("rules: an authored section body can be snapshotted per slot, write-once", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "secbody-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const body = JSON.stringify({ id: "my-case-pbl", modules: ["A"], name: { en: "My case" } });
+
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  // The CSV keeps LEGAL tokens; the bodies live alongside it.
+  expect(await tryWrite(page, `sessions/${code}/sections`, "chronic-pain-pbl,custom-2"))
+    .toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/2`, body)).toBe("ALLOWED");
+  expect((await tryRead(page, `sessions/${code}/sectionBodies/2`)).val).toBe(body);
+
+  // WRITE-ONCE: a session's content must not change after it is created.
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/2`,
+    JSON.stringify({ id: "swapped" })), "a body cannot be swapped later").not.toBe("ALLOWED");
+});
+
+test("rules: sectionBodies bounds the slot key and the payload size", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "secbodyguard-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+
+  // Slot key is a single digit 1-9 — same guard as the per-room section nodes,
+  // so an unbounded key cannot be used as free storage.
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/0`, "{}"))
+    .not.toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/12`, "{}"))
+    .not.toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/x`, "{}"))
+    .not.toBe("ALLOWED");
+
+  // A non-string (an object) is rejected: the body is stored serialised, like
+  // scenarioCustomJson, so the rules can bound its SIZE.
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/1`, { id: "obj" }))
+    .not.toBe("ALLOWED");
+
+  // 128 KB cap per SECTION — half of scenarioCustomJson's 256 KB, which covers
+  // a whole two-module scenario. With up to 8 slots this bounds a session's
+  // content at ~1 MB rather than 2 MB; free-tier quota abuse is the stated
+  // threat model for this deployment.
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/1`, "x".repeat(131073)))
+    .not.toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/sectionBodies/1`, "x".repeat(1000)))
+    .toBe("ALLOWED");
+});

@@ -143,6 +143,13 @@
           ".write": "auth != null && !data.exists()",
           ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 400 && newData.val().matches(/^[A-Za-z0-9_-]{1,48}(,[A-Za-z0-9_-]{1,48})*$/))"
         },
+        "sectionBodies": {
+          ".read": "auth != null",
+          "$slot": {
+            ".write": "auth != null && !data.exists()",
+            ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072"
+          }
+        },
         "modules": {
           ".read": "auth != null",
           ".write": "auth != null && !data.exists()",
@@ -789,6 +796,13 @@
               ".read": "auth != null",
               ".write": "auth != null && !data.exists()",
               ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 400 && newData.val().matches(/^[A-Za-z0-9_-]{1,48}(,[A-Za-z0-9_-]{1,48})*$/))"
+            },
+            "sectionBodies": {
+              ".read": "auth != null",
+              "$slot": {
+                ".write": "auth != null && !data.exists()",
+                ".validate": "$slot.matches(/^[1-9]$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 131072"
+              }
             },
             "modules": {
               ".read": "auth != null",
