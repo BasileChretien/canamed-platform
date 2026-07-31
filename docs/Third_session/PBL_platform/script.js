@@ -13801,9 +13801,26 @@ function wireSplash() {
       if (addBtn && typeof addBtn.focus === "function") addBtn.focus();
       return;
     }
+    /* An authored section too big for the rules' cap must be caught HERE, while
+       nothing has been written yet. Its body is written after `created` and
+       `recovery` (ordering is forced by the rule), so letting it through leaves
+       a half-created session behind and reports the real cause as a connection
+       error. Refuse up front, and name the section so it can be shortened. */
+    const _snapshot = sectionPickBodies();
+    if (_snapshot.oversized.length) {
+      const first = _snapshot.oversized[0];
+      const pat = (window.t ? window.t("splash.create.section-too-big") : "");
+      const tpl = (pat && pat !== "splash.create.section-too-big") ? pat
+        : "“{title}” is too large to attach to a session. Shorten it on the authoring board, then try again.";
+      cHint.textContent = tpl.replace("{title}", first.title);
+      cHint.className = "splash-hint err";
+      console.warn("section body over the " + SECTION_BODY_MAX_LEN + "-char cap",
+        _snapshot.oversized);
+      return;
+    }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
-    const _sectionBodies = sectionPickBodies();
+    const _sectionBodies = _snapshot.bodies;
     /* scenarioId / customJson / scenarioRef are all null now. The PARAMETERS
        stay on createSession: they still carry legacy sessions through
        revisit/exports, and scenarioCustomJson remains how a snapshot is pinned.
@@ -14140,8 +14157,18 @@ function authoredSectionsFrom(bodyJson, ownerUid, scenarioId, source, ownerName)
    like "you have no shared scenarios". */
 const AUTHORED_SHARED_BODY_CAP = 20;
 
+/* Two call sites race — wireSplash on load, and the auth-state handler after
+   sign-in — and each does up to CAP independent async reads, so they overlap
+   and finish in an unspecified order. Only the NEWEST call may commit: a
+   pre-sign-in pass landing late would otherwise overwrite the map with the
+   shared-only set, so the facilitator's own scenarios vanish from the picker,
+   AND take with them any authored pick they had already arranged (the filter
+   below drops what sectionLibEntry can no longer resolve). */
+let _authoredSectionsGen = 0;
+
 function loadAuthoredSectionsIntoPicker() {
   if (typeof window.sectionsForScenario !== "function") return Promise.resolve();
+  const gen = ++_authoredSectionsGen;
   const signedIn = !!(auth && auth.currentUser && !auth.currentUser.isAnonymous);
   const mineP = signedIn ? listMyScenarios() : Promise.resolve([]);
   const sharedP = listSharedScenarios();
@@ -14172,6 +14199,7 @@ function loadAuthoredSectionsIntoPicker() {
         })
         .catch(() => {})
     )).then(() => {
+      if (gen !== _authoredSectionsGen) return;   // a newer load superseded us
       splashAuthoredSections = next;
       /* Drop any pick whose section vanished (signed out, or a shared scenario
          taken down between renders) — leaving it would write a token at create
@@ -14344,11 +14372,28 @@ function sectionPickCsv() {
     .join(",");
 }
 
-/* The authored bodies to snapshot, as { slot -> bodyJson }, matching the
-   custom-<slot> tokens sectionPickCsv() emits. Empty when the pick is all
-   built-ins, which is the common case. */
+/* Mirrors the `sectionBodies/$slot` .validate cap in database.rules.json. The
+   rule compares `newData.val().length`, which counts UTF-16 code units exactly
+   as JS `String.length` does — so this check is the same measurement, not an
+   approximation of it. Keep the two in lockstep (a unit test parses the rule
+   and asserts this constant equals it). */
+const SECTION_BODY_MAX_LEN = 131072;
+
+/* The authored bodies to snapshot, matching the custom-<slot> tokens
+   sectionPickCsv() emits, as { bodies: { slot -> json }, oversized: [ … ] }.
+
+   WHY THIS REPORTS oversized INSTEAD OF JUST SKIPPING. The bodies are written
+   AFTER `created` and `recovery` (the rule requires the CSV to already name
+   custom-<slot>, so they cannot ride the same batch). A body over the rule's
+   cap therefore rejects a write that happens once the session half-exists, and
+   tryCreate reports it as a generic "check your connection" — the true cause
+   invisible. Dropping the body instead would be worse still: the CSV would
+   keep claiming custom-<slot> with nothing to resolve it, which is exactly the
+   unresolvable-slot class of bug the clone-last-workshop fix closed. So the
+   caller is told, and refuses to create at all. */
 function sectionPickBodies() {
   const out = {};
+  const oversized = [];
   splashSectionPick.forEach((id, i) => {
     if (!isAuthoredSectionKey(id)) return;
     const a = splashAuthoredSections[id];
@@ -14361,11 +14406,26 @@ function sectionPickBodies() {
        re-derivation, and it is about half the bytes (which is what the rules'
        131072 cap was sized for). */
     try {
-      out[String(i + 1)] = JSON.stringify(
+      const json = JSON.stringify(
         Object.assign({}, a.section, { id: "custom-" + (i + 1) }));
+      if (json.length > SECTION_BODY_MAX_LEN) {
+        oversized.push({ slot: i + 1, title: authoredSectionTitle(a), len: json.length });
+        return;
+      }
+      out[String(i + 1)] = json;
     } catch (e) { console.warn("could not snapshot authored section", id, e); }
   });
-  return out;
+  return { bodies: out, oversized: oversized };
+}
+
+/* The human-readable name of an authored section, for an error a facilitator
+   can act on ("which one do I shorten?"). Never reaches innerHTML — the title
+   is facilitator-authored, so every caller uses textContent. */
+function authoredSectionTitle(a) {
+  const sec = (a && a.section) || null;
+  const nm = sec && sec.name;
+  const title = nm && (typeof tc === "function" ? tc(nm, _curLang()) : nm.en);
+  return title || (sec && sec.id) || "";
 }
 
 /* fill the scenario dropdown from the SCENARIOS registry + one trailing

@@ -418,6 +418,7 @@
       "splash.create.sections-add": "+ Add section",
       "splash.create.author-link": "Need a section that isn't listed? Build one on the authoring board →",
       "splash.create.sections-required": "Add at least one section to this session.",
+      "splash.create.section-too-big": "“{title}” is too large to attach to a session. Shorten it on the authoring board, then try again.",
       "splash.create.sections-type-pbl": "PBL",
       "splash.create.sections-type-roleplay": "Roleplay",
       "splash.create.sections-type-branched": "Branched",

@@ -21,6 +21,17 @@
 // @ts-check
 const { test, expect } = require("./fixtures.js");
 
+/* The section library is a lazy chunk and the picker fills itself once it
+   lands. Anything asserting picker STATE must wait for it rather than race it.
+   Mirrors openCreate() in tests-e2e/section-picker.spec.js. */
+async function waitForSectionLibrary(page) {
+  await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+  await page.waitForFunction(() => {
+    const s = document.getElementById("splash-section-add");
+    return !!(s && s.options.length > 0);
+  });
+}
+
 test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
   test("create form: section picker, required markers, password hint, no JSON", async ({ page }) => {
     await page.goto("/");
@@ -33,6 +44,14 @@ test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
        tests/section-picker-ui.test.js) and signalled by its empty-state. */
     await expect(page.locator("#splash-create-scenario")).toHaveCount(0);
     await expect(page.locator("#splash-section-add")).toBeVisible();
+    /* The add-list fills itself from a LAZY chunk, and the picker then seeds one
+       default section — which HIDES the empty-state. Asserting the empty-state
+       without waiting only passed by racing the chunk: it read the pre-load
+       state, so it was both flaky and testing the wrong moment. Wait for the
+       library, then clear the pick to assert the empty-state deliberately.
+       Same wait pattern as tests-e2e/section-picker.spec.js. */
+    await waitForSectionLibrary(page);
+    await page.evaluate(() => { splashSectionPick.length = 0; renderSectionPick(); });
     await expect(page.locator("#splash-section-empty")).toBeVisible();
 
     // Required markers must be present on the remaining required fields
@@ -58,9 +77,14 @@ test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
     await expect(page.locator("#splash-create-advanced-toggle")).toHaveCount(0);
     await expect(page.locator("#splash-load-template")).toHaveCount(0);
 
-    // Nor may the SECTION add-list carry the option the toggle replaced.
+    /* Nor may the SECTION add-list carry the option the toggle replaced. The
+       list is already loaded (waited for above); assert it is non-empty first,
+       or the loop below has nothing to iterate and passes vacuously. */
     const optionTexts = await page.locator("#splash-section-add option")
       .allTextContents();
+    expect(optionTexts.length,
+      "the add-list must have loaded, or this assertion is vacuous")
+      .toBeGreaterThan(0);
     for (const txt of optionTexts) {
       expect(txt.toLowerCase()).not.toContain("create new content");
       expect(txt.toLowerCase()).not.toContain("advanced");

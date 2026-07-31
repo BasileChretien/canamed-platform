@@ -191,6 +191,87 @@ test("authored section bodies are snapshotted per slot, matching the tokens", ()
     "…and mirrored in the org tree, or org sessions fail closed");
 });
 
+test("a late pre-sign-in picker load cannot overwrite the signed-in one", () => {
+  /* Two call sites invoke loadAuthoredSectionsIntoPicker (wireSplash on load,
+     and the auth-state handler after sign-in), each doing up to CAP async
+     reads. They overlap and settle in an unspecified order, so without a
+     generation guard the LOSER wins: the pre-sign-in pass lands last, replaces
+     the map with the shared-only set, and the filter right below it then drops
+     any authored pick the facilitator had already arranged. */
+  const f = fnOf("loadAuthoredSectionsIntoPicker");
+  assert.match(f, /const gen = \+\+_authoredSectionsGen;/,
+    "each call must claim a generation as it starts");
+  assert.match(f, /if \(gen !== _authoredSectionsGen\) return;/,
+    "…and a superseded call must commit NOTHING");
+  // The guard has to precede the assignment, or it guards nothing.
+  assert.ok(f.indexOf("if (gen !== _authoredSectionsGen) return;") <
+            f.indexOf("splashAuthoredSections = next;"),
+    "the generation check must come BEFORE the assignment it protects");
+  assert.match(SCRIPT, /let _authoredSectionsGen = 0;/);
+});
+
+test("an oversized authored section is refused BEFORE anything is written", () => {
+  /* The bodies are written after `created` and `recovery` — the rule requires
+     the CSV to already name custom-<slot>, so they cannot share that batch. A
+     body over the cap therefore rejected a write once the session half-existed,
+     and tryCreate reported it as "check your connection", hiding the cause. */
+  const body = fnOf("sectionPickBodies");
+  assert.match(body, /json\.length > SECTION_BODY_MAX_LEN/,
+    "the snapshotter must measure each body against the cap");
+  assert.match(body, /return \{ bodies: out, oversized: oversized \};/,
+    "…and report what it refused, rather than silently dropping it");
+
+  // The refusal must happen before the create begins, not inside the catch.
+  const iCheck = SCRIPT.indexOf("if (_snapshot.oversized.length) {");
+  const iCreating = SCRIPT.indexOf('cHint.textContent = "Creating session…";');
+  assert.ok(iCheck > -1, "tryCreate must check for oversized bodies");
+  assert.ok(iCheck < iCreating,
+    "the check must precede the create — after it, `created` is already written");
+  assert.match(SCRIPT, /splash\.create\.section-too-big/,
+    "…with a translated message naming the section, not a generic failure");
+
+  /* An oversized section must be recorded and then SKIPPED — the guard block
+     has to bail before the body assignment, or the create is refused while the
+     over-cap body is still queued for a write that the rules will reject. */
+  assert.match(body, /oversized\.push\([^\n]*\);\s*\n\s*return;\s*\n\s*\}/,
+    "recording an oversized section must be followed immediately by return");
+});
+
+test("the client's body cap is the SAME number the rules enforce", () => {
+  /* Two independent sources of one truth: a client cap looser than the rule
+     lets the rejected write through again, and a stricter one blocks sessions
+     the DB would have accepted. Derive the rule's number, don't restate it. */
+  const m = SCRIPT.match(/const SECTION_BODY_MAX_LEN = (\d+);/);
+  assert.ok(m, "the client cap must exist as a named constant");
+  const clientCap = Number(m[1]);
+
+  const rules = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8"));
+  const trees = [
+    rules.rules.sessions.$sessionId.sectionBodies,
+    rules.rules.orgs.$orgSlug.sessions.$sessionId.sectionBodies
+  ];
+  trees.forEach((sb, i) => {
+    const v = sb.$slot[".validate"];
+    const cap = v.match(/newData\.val\(\)\.length <= (\d+)/);
+    assert.ok(cap, "tree " + i + " must cap the body length");
+    assert.equal(clientCap, Number(cap[1]),
+      "tree " + i + ": the client cap must equal the rule's cap");
+  });
+});
+
+test("the too-big message carries fr + ja, like every user-facing key", () => {
+  const i18n = fs.readFileSync(path.join(P, "i18n.js"), "utf8");
+  assert.match(i18n, /"splash\.create\.section-too-big":/);
+  ["fr", "ja"].forEach(lang => {
+    const t = fs.readFileSync(path.join(P, "locales", lang + ".js"), "utf8");
+    assert.match(t, /"splash\.create\.section-too-big":/,
+      lang + " must carry the key — tests/i18n.test.js enforces core-lang parity");
+  });
+  // The message names the offending section, so the placeholder must survive.
+  assert.match(i18n, /"splash\.create\.section-too-big": "[^"]*\{title\}/);
+  assert.match(SCRIPT, /\.replace\("\{title\}", first\.title\)/);
+});
+
 test("the pick is written write-once, like the module narrowing before it", () => {
   assert.match(SCRIPT, /oPath\(code, "sections"\)\)\.set\(sections\)/);
   const rules = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8"));

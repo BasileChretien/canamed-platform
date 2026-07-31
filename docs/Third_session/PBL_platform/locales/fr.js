@@ -294,6 +294,7 @@
   "splash.create.sections-add": "+ Ajouter une section",
   "splash.create.author-link": "Il vous manque une section ? Créez-la sur le plan de travail →",
   "splash.create.sections-required": "Ajoutez au moins une section à cette session.",
+  "splash.create.section-too-big": "« {title} » est trop volumineuse pour être attachée à une session. Raccourcissez-la sur le plan de travail, puis réessayez.",
   "splash.create.sections-type-pbl": "APP",
   "splash.create.sections-type-roleplay": "Jeu de rôle",
   "splash.create.sections-type-branched": "Cas à décisions",
