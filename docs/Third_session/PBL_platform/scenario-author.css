@@ -488,3 +488,28 @@ input:focus, textarea:focus, select:focus {
 .bn-then select { flex: 1 1 auto; }
 #branched-validation { white-space: pre-line; margin-top: .8rem; }
 #branched-validation:empty { display: none; }
+
+/* ---------- roleplay content (S5) ---------- */
+
+/* The roleplay fieldset holds five distinct parts (scene, cast, framework,
+   phases, panels). <legend> can only name the fieldset, so each part gets a
+   heading that reads as a sub-legend without nesting fieldsets. */
+.sub-legend {
+  margin: 22px 0 4px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.author-section > .sub-legend:first-of-type { border-top: 0; padding-top: 0; }
+
+/* The card tick boxes on a phase: a wrapping row, not a grid — the labels are
+   card KEYS of very uneven width and a grid leaves ragged gaps. */
+.check-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+.check-row .check-cell { margin: 0; }
