@@ -229,7 +229,7 @@
 
         "roomOf": {
           "$uid": {
-            ".read": "auth != null",
+            ".read": "auth != null && (auth.uid == $uid || root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()))",
             ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && ((auth.uid == $uid && !data.exists()) || (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val())))",
             ".validate": "newData.hasChildren(['room','cid']) && newData.child('room').isString() && newData.child('room').val().length <= 30 && newData.child('cid').isString() && newData.child('cid').val().length <= 64",
             "room": { ".validate": "newData.isString() && newData.val().length <= 30" },
@@ -952,7 +952,7 @@
 
             "roomOf": {
               "$uid": {
-                ".read": "auth != null",
+                ".read": "auth != null && (auth.uid == $uid || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val()))",
                 ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && ((auth.uid == $uid && !data.exists()) || (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val())))",
                 ".validate": "newData.hasChildren(['room','cid']) && newData.child('room').isString() && newData.child('room').val().length <= 30 && newData.child('cid').isString() && newData.child('cid').val().length <= 64",
                 "room": { ".validate": "newData.isString() && newData.val().length <= 30" },

@@ -320,6 +320,7 @@
   "room.call.throttle-recall": "Veuillez patienter {seconds}s avant de rappeler un·e encadrant·e.",
   "room.call.throttle-again": "Veuillez patienter {seconds}s avant d'appeler à nouveau un·e encadrant·e.",
   "room.call.sent": "Encadrant·e appelé·e ✓",
+  "room.err.membership": "Nous n'avons pas pu confirmer votre place dans ce groupe. Votre travail risque de ne pas être enregistré — rechargez la page et prévenez votre encadrant si cela persiste.",
   "room.answer.err.edit-failed": "Votre modification n'a pas pu être enregistrée — vérifiez votre connexion. Votre texte : ",
   "room.answer.err.delete-failed": "Ce point n'a pas pu être supprimé — vérifiez votre connexion et réessayez.",
   "room.answer-input-language-hint": "Écrivez dans la langue de votre choix — anglais, français ou japonais. Vous n'êtes pas évalué·e sur votre anglais ; c'est votre raisonnement clinique qui compte.",

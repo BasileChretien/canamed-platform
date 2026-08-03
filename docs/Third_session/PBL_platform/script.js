@@ -4877,15 +4877,32 @@ function startRoom() {
          The facilitator can still reassign; the rule's admin branch overwrites.
          `cid` travels in the value so the rule can tie the claim to a clientId
          you own (RTDB cannot iterate to find one for you). */
-      db.ref(sPath("roomOf/" + uid))
-        .transaction(cur => (cur == null ? { room: myRoom, cid: clientId } : undefined))
-        .catch(e => {
-          /* The promise rejection is NOT caught by the surrounding try/catch.
-             Left unhandled, a denied claim was silent and every per-room write
-             then failed for the rest of the session with no clue why. */
-          console.warn("roomOf claim failed — per-room writes will be denied:",
-            e && (e.code || e.message));
-        });
+      /* The rejection is NOT caught by the surrounding try/catch, and a lost
+         claim is not cosmetic: EVERY later room-scoped write (scoring,
+         hypotheses, phase, votes, answers) is denied for the rest of the
+         session. Silent failure there looks to the participant like the sim
+         simply stopped responding, so distinguish the two cases and say so —
+         same shape as the leaderboard's _onLbErr retry above.
+
+         PERMISSION_DENIED is TERMINAL: with a write-once claim it means this
+         uid already holds a different room, and retrying can never succeed.
+         Anything else wrote nothing, so one retry is worth it. */
+      const _claimRoomOf = (retry) => {
+        db.ref(sPath("roomOf/" + uid))
+          .transaction(cur => (cur == null ? { room: myRoom, cid: clientId } : undefined))
+          .catch(e => {
+            const code = String((e && (e.code || e.message)) || "");
+            const denied = /permission[_ ]denied/i.test(code);
+            console.warn("roomOf claim failed — per-room writes will be denied:", code);
+            if (!denied && retry) { setTimeout(() => _claimRoomOf(false), 1200); return; }
+            try {
+              toast(tFallback("room.err.membership",
+                "We could not confirm your place in this room. Your work may not " +
+                "save — please reload, and tell your facilitator if it continues."));
+            } catch (_) { /* toast not available pre-room */ }
+          });
+      };
+      _claimRoomOf(true);
     }
   } catch (e) { /* LOCAL mode or auth not ready — chat falls back to stub */ }
 
