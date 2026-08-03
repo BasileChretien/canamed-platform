@@ -977,11 +977,19 @@ test("rules: /rooms/$roomId/answersDeleted is append-only + bounded", () => {
     "answersDeleted must be append-only — a withdrawn point can't be rewritten: " + w);
   assert.ok(w.includes("'closed'"),
     "answersDeleted write must be refused once the session is closed: " + w);
-  const v = node[".validate"];
-  assert.match(v, /child\('text'\)\.val\(\)\.length <= 1000/, "deleted body capped at 1000: " + v);
-  assert.ok(v.includes("'module'") && v.includes("'by'") && v.includes("'at'"),
-    "answersDeleted must carry {module, by, at}: " + v);
-  assert.match(v, /child\('at'\)\.val\(\) <= now \+ 5000/, "deleted `at` must be near server now: " + v);
+  /* The shape checks below used to read one inline `.validate` string. That
+     string was split into NAMED CHILD validators when this node was sealed with
+     $other (2026-07-31), so the same guarantees are now asserted where they
+     actually live — which is strictly stronger, because a named validator is
+     enforced per-child even on a partial write, whereas the inline form only
+     ran against whole-entry writes. */
+  assert.match(node[".validate"], /hasChildren\(\['text','by','module','at'\]\)/,
+    "the required field set must still be enforced: " + node[".validate"]);
+  assert.match(node.text[".validate"], /length <= 1000/, "deleted body capped at 1000");
+  for (const f of ["module", "by", "at"]) {
+    assert.ok(node[f], "answersDeleted must carry " + f);
+  }
+  assert.match(node.at[".validate"], /now \+ 5000/, "deleted `at` must be near server now");
 });
 
 test("rules: /orgs /rooms/$roomId/answersDeleted mirrors append-only + org-scoped", () => {
@@ -1244,6 +1252,32 @@ for (const [treeName, tree] of Object.entries(ANS_TREES)) {
           `${treeName}/${mod} must declare '${field}' — the client writes it, so ` +
           "an $other seal without it rejects real answers");
       }
+    }
+  });
+}
+
+/* answersDeleted — the sibling of the answers nodes, hardened in the same pass.
+   Its write-once `!data.exists()` clause reads like a bound but is evaluated PER
+   $pushId, and push ids are client-generated: it stops an existing record being
+   rewritten, not new ones being created. So it never was a substitute for a
+   room gate, and this log feeds the research export. */
+for (const [treeName, room] of Object.entries({
+  sessions: rules.rules.sessions.$sessionId.rooms.$roomId,
+  orgs: rules.rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId
+})) {
+  test(`rules: ${treeName} answersDeleted is room-gated, sealed and still append-only`, () => {
+    const e = room.answersDeleted.$pushId;
+    assert.match(e[".write"], /uidMembers'\)\.child\(auth\.uid\)\.exists\(\)/,
+      `${treeName}: a non-member could otherwise inject fabricated deleted-answer ` +
+      "bodies into any room, and this log is read by the research export");
+    assert.ok(e[".write"].includes("!data.exists()"),
+      `${treeName}: the log must stay APPEND-ONLY — a withdrawn point has to remain ` +
+      "recoverable for analysis");
+    assert.strictEqual(e.$other[".validate"], false,
+      `${treeName}: unknown fields must be rejected`);
+    // Every field deleteAnswer() pushes must be declared, or the seal rejects it.
+    for (const f of ["text", "by", "module", "at", "cid", "bulletKey", "university"]) {
+      assert.ok(e[f], `${treeName}: must declare the client-written field '${f}'`);
     }
   });
 }

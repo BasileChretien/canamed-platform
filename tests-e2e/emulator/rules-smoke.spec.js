@@ -1323,3 +1323,68 @@ for (const mod of ["moduleA", "moduleB"]) {
       "no answers after the session closes").not.toBe("ALLOWED");
   });
 }
+
+/* ── answersDeleted — the sibling of the answers nodes ──────────────────────
+ * Same family, same defect, found while hardening answers/moduleA+B. `.write`
+ * was `auth != null && !closed && !data.exists()` — no room gate, no $other.
+ *
+ * The write-once clause does NOT bound this: `!data.exists()` is evaluated PER
+ * $pushId, and push ids are client-generated, so it prevents overwriting an
+ * existing record while permitting unlimited NEW ones. A non-member could
+ * therefore inject fabricated "deleted answer" bodies into any room — and this
+ * log feeds the research export, so the payload is exactly the kind of free
+ * text a researcher would later read as participant-authored.
+ *
+ * `module` and the write-once clause are KEPT: this log is append-only by
+ * design (a withdrawn point stays recoverable for analysis), which is a
+ * property the answers nodes do not have.
+ */
+test("rules: answersDeleted is room-gated and sealed; write-once does not bound creation", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "adel-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const base = `sessions/${code}/rooms/Room 1/answersDeleted`;
+  /* The REAL deleteAnswer() payload. */
+  const good = { text: "Withdrawn: start broad-spectrum antibiotics.", by: "Emu Student",
+                 module: "moduleA", at: Date.now(), cid: uid,
+                 bulletKey: "dx", university: "Caen" };
+
+  expect(await tryWrite(page, `${base}/d0`, good),
+    "a non-member must not archive a deleted answer").not.toBe("ALLOWED");
+
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
+    .toBe("ALLOWED");
+
+  expect(await tryWrite(page, `${base}/d1`, good),
+    "the client's real delete-archive payload must still be accepted").toBe("ALLOWED");
+
+  // Append-only: the SAME id cannot be rewritten…
+  expect(await tryWrite(page, `${base}/d1`, Object.assign({}, good, { text: "rewritten" })),
+    "an existing archive record must not be overwritten").not.toBe("ALLOWED");
+  // …but a NEW id is fine, which is exactly why write-once was never a gate.
+  expect(await tryWrite(page, `${base}/d2`, good)).toBe("ALLOWED");
+
+  // Seal + schema.
+  expect(await tryWrite(page, `${base}/d3`, Object.assign({}, good, { evil: "x" })),
+    "an unknown field must be rejected").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/d4`, Object.assign({}, good, { text: "x".repeat(1001) })),
+    "over-long text must be rejected").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/d5`, { text: "t", by: "B" }),
+    "a missing required field must be rejected").not.toBe("ALLOWED");
+
+  // CROSS-ROOM injection — the actual hole.
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 2/answersDeleted/d1`, good),
+    "a member of Room 1 must not inject archives into Room 2").not.toBe("ALLOWED");
+
+  // Org parity.
+  const oslug = `o${Math.floor(Math.random() * 1e6)}`;
+  const osid = `s${Math.floor(Math.random() * 1e6)}`;
+  const orgBase = `orgs/${oslug}/sessions/${osid}/rooms/Room 1/answersDeleted`;
+  expect(await tryWrite(page, `${orgBase}/d1`, good),
+    "org tree must gate on membership too").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `orgs/${oslug}/sessions/${osid}/rooms/Room 1/uidMembers/${uid}`, true))
+    .toBe("ALLOWED");
+  expect(await tryWrite(page, `${orgBase}/d1`, good)).toBe("ALLOWED");
+});
