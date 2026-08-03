@@ -60,10 +60,23 @@ directions:
 - **Tight edges** (`name(` call syntax only) report that `enterAdminApp` reaches
   **nothing** — not `renderDashboard`, not `openRoomAsAdmin`. Also wrong.
 
-Both are wrong for the same structural reason: **this app is listener-driven.**
-`enterAdminApp` does not call `renderDashboard`; it registers a Firebase
-`.on("value")` handler that eventually does, and the dashboard's own controls
-are wired with `addEventListener` closures. Neither edge kind models that.
+The two are wrong for *different* reasons, which is why neither can be patched
+into the other:
+
+- The **loose** variant produces FALSE POSITIVES. Its edges are "this token
+  appears somewhere in that function body", so a name mentioned in a string, a
+  property access, or an unrelated local binding manufactures an edge. Closures
+  then inflate until everything reaches everything.
+- The **tight** variant produces FALSE NEGATIVES, and *that* is the
+  listener-driven part: **this app defers almost every real edge through a
+  callback.** `enterAdminApp` does not call `renderDashboard`; it registers a
+  Firebase `.on("value")` handler that eventually does, and the dashboard's own
+  controls are wired with `addEventListener` closures. A `name(` scan sees the
+  registration, never the invocation.
+
+Tightening the loose variant walks it toward the tight one's blindness; loosening
+the tight one walks it back into noise. The information needed simply is not in
+the syntax.
 
 A static analysis that disagrees with itself by 100 KB is not a basis for
 moving security-adjacent code. **Use coverage (§2) to find cold clusters, and
@@ -137,11 +150,21 @@ prize for moving all three.
 
 ## 7. Non-negotiables for every slice
 
-- **Shell version + `LOCALE_VERSION`.** A new or changed lazy chunk REQUIRES the
-  shell bump (`sw.js`, `script-loader.js`, `index.html ?v=`, all three in
-  lockstep). The vendoring spec only checks the three markers AGREE, so a PR
-  that edits a lazy chunk without bumping passes CI and ships undeployable
-  (clients keep the cached old chunk).
+- **Shell version.** Changing ANY precached shell asset requires the bump — not
+  just a lazy chunk. That includes `index.html`, `script.js`, `style.css`,
+  `sw.js` itself, and every chunk loaded through `script-loader.js`. All three
+  `SHELL_VERSION` markers move in lockstep: `sw.js` (`canamed-shell-vNNN`),
+  `script-loader.js` (`SHELL_VERSION = "vNNN"`), and every `?v=vNNN` in
+  `index.html`. `tests-e2e/shell-csp-vendoring.spec.js` only checks the three
+  markers AGREE with each other — it cannot tell that a *changed* asset needed a
+  new number — so a PR that edits a chunk without bumping passes CI and ships
+  undeployable, with clients serving the cached old file.
+- **`LOCALE_VERSION` is a SEPARATE counter** (`i18n.js`, currently `v13`),
+  independent of `SHELL_VERSION`, that cache-busts the `locales/*.js` chunks
+  only. Bump it when a locale file changes. A split that touches no locale text
+  does not need it — but note that both counters have been bumped independently
+  on both sides of a merge before, so after any rebase/merge diff BOTH against
+  BOTH parents, not just against `main`.
 - **Register the chunk in three places** or it is silently wrong:
   `sw.js` precache list, `perf.spec.js` `LAZY_CHUNKS` (unregistered, an
   idle-prefetched chunk still counts against the budget), and — if it has specs —
