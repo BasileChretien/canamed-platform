@@ -2874,6 +2874,20 @@ body.locked > footer { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--card);
+  /* …and CLIP the inline axis, which flex-wrap alone does not cover once the
+     row contains a <select>. A select is sized by its longest <option> and can
+     never wrap, and section titles are long ("Section 1 — Chronic Pain & the
+     clinical case"): `max-width: 100%` on the select clamps its BOX, but WebKit
+     still counts the unclamped min-content in its ANCESTORS' scrollable
+     overflow. So every element's rect fitted while the document measured 525px
+     in a 320px viewport, and the splash scrolled sideways on iPhone/iPad/WebKit
+     while Chromium and Firefox were clean. Same phantom width, same fix, as the
+     author page's `.field-row.select-row` (scenario-author.css) — `clip`, not
+     `hidden`, so the row never becomes a scroll container. No padding-inline
+     dance is needed here: the row's own padding already leaves room for the
+     focus ring on engines without overflow-clip-margin support. */
+  overflow-x: clip;
+  overflow-clip-margin: 4px;
 }
 /* prefix is fixed-width; the section SELECT takes the flexible space. */
 .splash-section-name { flex: 0 0 auto; min-width: 0; white-space: nowrap; }
