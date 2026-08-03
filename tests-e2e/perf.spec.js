@@ -441,6 +441,12 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     The 3 KB this leaves is headroom, not an allowance. The in-room/branched
 //     logic split that entries from 2026-06-28 onward keep recording as owed is
 //     STILL owed — this reclaim was spent on the cutover, not on that debt.
+//     ⇒ That outstanding split is now PLANNED, not just recorded:
+//     ARCHITECTURE/eager-bundle-reclaim-plan.md has the measurements (75.4% of
+//     script.js never executes on the splash), the slice order and per-slice
+//     cost in call sites, and the dead end to avoid (static call-graph analysis
+//     cannot model this listener-driven codebase — it disagrees with itself by
+//     100 KB). Read it before splitting anything out of script.js.
 const FIRST_PARTY_BYTES_LIMIT_KB = 348;
 
 test.describe("Perf budget — splash", () => {
