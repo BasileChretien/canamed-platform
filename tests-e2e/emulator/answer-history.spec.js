@@ -39,6 +39,14 @@ test("rules: answer edit history is appended + bounded (point 4)", async ({ page
   // Join as a member so the membership-gated session .read lets us read back.
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
+  /* …and claim ROOM membership, which answers/moduleA now requires (2026-07-31:
+     it was the last participant-writable node with no room gate). This is not a
+     workaround — it mirrors the client, which claims
+     `rooms/<roomId>/uidMembers/<uid>` on room entry BEFORE any gameplay write,
+     exactly as hypotheses / scoring / votes already required. Without it this
+     spec was proving that a NON-member of the room could write answers. */
+  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
+    .toBe("ALLOWED");
 
   // Create the answer, then append a snapshot of the superseded text.
   expect(await tryWrite(page, entry, { text: "v0", by: "A", cid: "c1", at: Date.now() }))

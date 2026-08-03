@@ -58,12 +58,16 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 
 These are the Round-3 security follow-ups that require the Firebase / GCP
 Console (a human with project access), surfaced 2026-05-20. Items 2, 3, 4, 5
-are complete (see each). **⚠️ One action OUTSTANDING (2026-05-30):** item 1 —
-switch RTDB App Check from *Enforce* back to *Monitor* in the Console, after
-Enforce mode was found to cause intermittent total lockouts (reCAPTCHA
-`grecaptcha.execute()` hangs → no App Check token → Enforce blocks the whole
-DB). Until that Console toggle is flipped, clients still hit "Checking…" →
-"Couldn't reach the session server" whenever reCAPTCHA hiccups. See item 1.
+are complete (see each). **✅ NO ACTION OUTSTANDING — verified in the Console
+2026-07-31.** This banner previously said item 1 (switch RTDB App Check from
+*Enforce* back to *Monitor*) was still owed, which contradicted item 1's own
+body saying it was reverted on 2026-05-30. The contradiction is resolved:
+Firebase Console → App Check → APIs shows **Realtime Database: Monitoring**, so
+the revert was performed and this banner was the stale half. Also observed on
+that page, and worth keeping: RTDB is running at **~5% verified / 95% unverified
+requests**, so re-enabling *Enforce* today would reject the great majority of
+traffic — independent evidence for staying on Monitor, on top of the
+reCAPTCHA-hang reasoning in item 1.
 
 > ⚠️ **STATUS-CLAIM RULE — read before reporting any item here as done /
 > outstanding / dormant.** These hand-maintained labels CAN go stale: an
@@ -455,7 +459,23 @@ consent/DPA text.**
    `grep -c orgs scripts/{cleanup-stale-sessions,backup-sessions,pseudonymise-export}.js`
    = 2/2/2 (was 0/0/0), and all three appear in
    `grep -ln session-trees scripts/*.js`.
-3. **`moduleA/chat` is NOT room-private — UNDECIDED, do NOT treat as accepted.**
+3. ~~**`moduleA/chat` is NOT room-private — UNDECIDED.**~~ **✅ FIXED — label
+   corrected 2026-07-31 after checking the code.** The decision recorded below as
+   open was in fact taken, and it was option (b): the chat moved OUT of the
+   `sessions/$sessionId` read-cascade into a top-level `roomChat/$sessionId/$roomId`
+   tree whose own `.read` is granted per ROOM (plus the facilitator, for debrief),
+   mirroring `adminSecretPath()`. `Verify:` `rules.roomChat` exists in
+   `database.rules.json` and `rooms/$roomId/moduleA/chat` no longer does;
+   `roomChatPath()` is in script.js; the emulator suite carries "roomChat is
+   room-private — a session member in another room cannot read it (gap 3)".
+   The analysis below is KEPT because its reasoning still governs every future
+   node (RTDB `.read` cascades and cannot be revoked at a deeper path, so a
+   deeper `.read` is additive only) — but the gap itself is closed, and the
+   consent text may now rely on the chat being room-private.
+
+   <details><summary>Original entry, superseded</summary>
+
+   **`moduleA/chat` is NOT room-private — UNDECIDED, do NOT treat as accepted.**
    RTDB `.read` **cascades and cannot be revoked at a deeper path**.
    `database.rules.json:93` grants `.read` on the whole `sessions/$sessionId`
    subtree to any session member, so the room-scoped rule on
@@ -471,6 +491,9 @@ consent/DPA text.**
    read-cascade (e.g. a sibling top-level `roomChat/$sessionId/$roomId` tree with
    its own `.read`) — a deeper `.read` alone can never fix this. Only after that
    decision is made may this move to an "accepted" or "fixed" heading.
+
+   </details>
+
 4. **`canamed_stable_id` survives sign-out** holding the signed-out account's uid:
    `accountSignOut()` (script.js ~14342) clears nothing, while the comment at
    script.js ~1300 claims "signOut() removes it". Stale comment, real linkage risk.
@@ -578,21 +601,27 @@ all seven `locales/*.js`, and the hardcoded fallback `<p>` in `index.html`.
   can't set retention indefinitely and defeat GDPR cleanup.
 
 **Round-3 — TRACKED hardening (defense-in-depth, not active exploits):**
-- **`answers/moduleA` + `answers/moduleB` are the weakest participant-writable
-  nodes left** (surfaced 2026-07-27 by a CodeRabbit review of M4d). Their
-  `$entryId .write` is only `auth != null && !closed` — **no `uidMembers`
-  room-membership gate and no `$other` sentinel** — so any authenticated user who
-  knows a session code can write/overwrite an answer in ANY room, with undeclared
-  fields. Every other per-room participant node (hypotheses, scoring/awarded,
-  votes/committed, roomChat) IS membership-gated, so this is an outlier, not the
-  house standard. The new `answers/moduleBranched` (M4d) was deliberately shipped
-  **hardened** (membership gate + named child validators + `$other:false`) rather
-  than cloning the weak contract — use it as the template. Bringing A/B up to it
-  touches LIVE data paths (in-flight sessions writing answers), so it wants its
-  own PR + emulator run, not a drive-by. **Note the ordering trap when you do it:**
-  the client writes `bulletKey` and `university`, which the current `.validate`
-  does not declare — adding `$other:false` without declaring them first would
-  reject legitimate answers.
+- ~~**`answers/moduleA` + `answers/moduleB` are the weakest participant-writable
+  nodes left**~~ **✅ FIXED 2026-07-31.** Their `$entryId .write` was only
+  `auth != null && !closed` — no `uidMembers` room gate, no `$other` sentinel —
+  so any authenticated user who knew a session code could write/overwrite an
+  answer in ANY room, with undeclared fields, while every other per-room
+  participant node was already gated. Both are now **cloned from their own
+  tree's `moduleBranched` block** (the M4d node that shipped hardened), in the
+  `sessions/` and `orgs/` trees alike, so all three modules are byte-identical
+  by construction rather than by careful re-typing.
+  **The ordering trap was real and is now covered:** the client writes
+  `university` and `bulletKey`, which the old `.validate` did not declare, so
+  sealing with `$other:false` before declaring them would have rejected
+  legitimate answers — the node would have looked hardened while silently
+  breaking every session. A unit test asserts every client-written field is
+  declared; the emulator test writes the REAL `addAnswer()` payload, and also
+  covers the two paths the branched test never exercised — the `edits`
+  append-log and the child-only `text` overwrite that inline editing performs
+  (a seal validating only whole entries would pass every other test and still
+  break editing). `Verify:` `tests/rules.test.js` "answers/moduleA+B match
+  moduleBranched exactly" (both trees) + the emulator's
+  "answers/moduleA|moduleB is room-gated and schema-sealed" cases.
 - **`$other:{".validate":false}` sentinels** on participant-writable per-room
   nodes (chat/$turnId, score/auto+penalties/$eventId, scoring/awarded/$familyId,
   hypotheses/$entryId, promptReplies+exchangeReplies/$cid, callForHelp,
