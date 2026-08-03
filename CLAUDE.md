@@ -600,6 +600,55 @@ all seven `locales/*.js`, and the hardcoded fallback `<p>` in `index.html`.
 - `credentials/$certId.retentionUntil` now capped (`<= now + ~5y`) so a client
   can't set retention indefinitely and defeat GDPR cleanup.
 
+### ⚠️ THE ROOM GATE IS SELF-ASSERTABLE — every `uidMembers` rule is a speed bump, not a boundary (found 2026-08-03)
+
+**Do not describe any per-room rule as "room-private" or "cross-room tampering is
+denied" until this is fixed.** `rooms/$roomId/uidMembers/$uid` has
+`.write: auth != null && auth.uid == $uid && !data.exists() && !closed` — a
+participant CLAIMS their own membership, and **nothing checks they were actually
+assigned to that room**. So any authenticated user who knows a session code can
+self-claim any room and then act as a member of it.
+
+Reproduced against the real emulator (with `scripts/sim/build-emulator-rules.js`
+run first — see the trap below):
+
+| step | result |
+| --- | --- |
+| cross-room `answers/moduleA` write BEFORE self-claim | `PERMISSION_DENIED` |
+| self-claim `rooms/Room 2/uidMembers/<uid>` | **ALLOWED** |
+| same cross-room write AFTER the claim | **ALLOWED** |
+| cross-room `answersDeleted` write after the claim | **ALLOWED** |
+| `roomChat` WRITE to another room after the claim | `PERMISSION_DENIED` (extra guard) |
+| **`roomChat` READ of another room after the claim** | **ALLOWED** |
+
+**Scope — everything gated this way since 2026-05-28/30**, not just the newest
+nodes: `moduleA/hypotheses`, `scoring/awarded`, `scoring/auto`, `penalties`,
+`votes/committed`, `promptReplies`, `exchangeReplies`, `answers/moduleA|B|Branched`
+(#266), `answersDeleted` (#267) — **and the `roomChat` READ gate**, which is the
+Phase-4e gap-3 fix. A session member can read another room's LLM conversation.
+That contradicts any "the chat is room-private" claim in the privacy notice.
+
+**#266 and #267 are still worth having** — they stop the *un-claimed* cross-room
+write and seal the entry schema — but neither "closes" the hole, and their
+original descriptions overstated it.
+
+**DECIDED FIX (user, 2026-08-03): bind the claim to the pool assignment.** A
+`uidMembers` claim must MATCH the claimant's own pool entry —
+`pool/<clientId>/room == $roomId` with `clientMapping/<clientId> == auth.uid` —
+so the claim becomes verifiable instead of asserted. This keeps the self-assign
+join flow (`pool/$clientId/room` is deliberately self-assignable, Phase 4a) while
+removing the free-for-all. Needs its own PR: it touches the room-entry path of
+EVERY session, the ordering matters (the pool assignment must land before the
+claim, or entry breaks), and it wants a full emulator run.
+
+**⚠️ EMULATOR TRAP that made the first probe meaningless:** the emulator runs the
+GENERATED `database.rules.emulator.json`, not `database.rules.json`. `npm run
+test:e2e:rules` rebuilds it first; invoking `firebase emulators:exec` directly
+does NOT, so it silently tests whatever was generated last — possibly another
+branch's rules. Always run `node scripts/sim/build-emulator-rules.js` before a
+hand-rolled emulator run, and assert the gate is present in the GENERATED file
+before trusting a result.
+
 **Round-3 — TRACKED hardening (defense-in-depth, not active exploits):**
 - ~~**`answers/moduleA` + `answers/moduleB` are the weakest participant-writable
   nodes left**~~ **✅ FIXED 2026-07-31.** Their `$entryId .write` was only

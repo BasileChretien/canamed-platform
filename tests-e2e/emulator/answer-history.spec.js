@@ -81,6 +81,13 @@ test("rules: deleted answer body is retained append-only in answersDeleted", asy
   const uid = await waitForUid(page);
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
+  /* Claim ROOM membership, which answersDeleted now requires (2026-07-31). As
+     with the edit-history test above this mirrors the client — deleteAnswer()
+     only ever runs from inside a room the participant has entered, and entry
+     claims uidMembers before any gameplay write. Without it this spec was
+     demonstrating that a non-member of the room could archive a body here. */
+  expect(await tryWrite(page, `sessions/${code}/rooms/${room}/uidMembers/${uid}`, true))
+    .toBe("ALLOWED");
 
   // A withdrawn point's body is archived here before the live entry is removed.
   expect(await tryWrite(page, delPath,
