@@ -102,6 +102,26 @@
     if (wasString && !(t.fr || t.ja)) return t.en || "";
     return { en: t.en || "", fr: t.fr || "", ja: t.ja || "" };
   }
+  /* ── roleplay vocabulary (S5) ──────────────────────────────────────────────
+     Declared here, not beside the roleplay editor below, because defaultState()
+     builds an empty roleplay block and `var STATE = defaultState()` runs at load
+     — a `var` read before its assignment is undefined, not a ReferenceError, so
+     placing these lower turned every page load into a silent TypeError.
+     The values mirror section-content.js, which is the authority: ROLEPLAY_CARDS'
+     keys, ROLEPLAY_PANEL_IDS, OBSERVATION_FRAMEWORKS' ids, and its two id
+     patterns (role/phase ids are DOM + RTDB keys; a framework step id is a
+     sessionStorage key). */
+  var ROLEPLAY_CARD_KEYS = ["vignette", "roles", "exchange", "decisions", "swap", "replay", "reflect"];
+  var ROLEPLAY_PANEL_DEFS = [
+    { id: "history",    hint: "Background the team may consult during the scene." },
+    { id: "guidelines", hint: "The guideline or protocol the conversation should respect." },
+    { id: "recap",      hint: "What happened so far — useful when this section follows another." },
+    { id: "useful",     hint: "Sentences to reach for: openings, and what to say in a silence." }
+  ];
+  var OBSERVATION_FRAMEWORK_IDS = ["spikes", "calgary-cambridge", "pause-explore-explain-realign"];
+  var ROLE_ID_RE = /^[a-z][a-z0-9_-]{0,23}$/;
+  var FRAMEWORK_STEP_ID_RE = /^[a-z0-9_-]{1,16}$/i;
+
   function emptyCharacter() {
     return {
       id: "", role: "patient", module: "A", present: "start",
@@ -145,6 +165,7 @@
         moduleAName: emptyTrio(),
         moduleBName: emptyTrio()
       },
+      roleplay: emptyRoleplay(),
       history: [emptyHistoryRow()],
       exam:    [emptyHistoryRow()],
       labs:    [(function () { var r = emptyLabRow(); r.key = true; return r; })()],
@@ -595,6 +616,369 @@
 
       container.appendChild(shell);
     });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* ROLEPLAY CONTENT (S5)                                              */
+  /* ------------------------------------------------------------------ */
+  /* Until now the only authorable roleplay field was its section NAME. The
+   * scene, the cast, the observer's framework and the timing all had to come
+   * from a pasted skeleton — so "author a roleplay" meant "edit JSON by hand",
+   * which is exactly what this tool exists to avoid. The block survived a
+   * round-trip only because `_extra` carried it opaquely; it is modeled here, so
+   * it also LEAVES the `_extra` known-list (same move as M5's `modules` —
+   * leaving it in both would resurrect the old value the moment the author
+   * cleared a field, since mergeExtra only skips keys the export already set).
+   *
+   * The contract is section-content.js's, and every constraint below is ITS
+   * constraint, not a new one invented here:
+   *   - role + phase ids are DOM data- values and RTDB keys, hence
+   *     /^[a-z][a-z0-9_-]{0,23}$/; a malformed or duplicate one is DROPPED at
+   *     runtime, silently. validate() surfaces that here instead.
+   *   - a custom framework step id is a sessionStorage key for the observer's
+   *     private scratchpad, validated a touch more loosely.
+   *   - `shows` names CARDS BY KEY, never by selector — a raw selector from a
+   *     facilitator can be malformed or reach chrome it has no business
+   *     touching. Offered as tick boxes so an unknown key cannot be typed.
+   *
+   * OMISSION IS MEANINGFUL, and it is the trap in this whole block. Declaring
+   * nothing keeps the shipped built-in content; declaring something opts into
+   * FULL control. `roleplayPanels()` returns `rp.panels` whenever it is an
+   * object — and `{}` is an object — so emitting an empty panels bag would hide
+   * all four reference panels AND their toolbar buttons rather than leaving the
+   * shipped ones alone. Hence: a panel is emitted only when ticked on AND
+   * carrying content, and `panels` itself only when at least one panel does.
+   * (`phases: []`, `roles: []` and a blank framework are all safely ignored by
+   * the runtime's own length/falsy checks, so only panels needs the guard.) */
+  /* The vocabulary constants are declared ABOVE defaultState() — `var STATE =
+     defaultState()` runs at load, and a `var` is hoisted as undefined, so
+     emptyRoleplay() mapping ROLEPLAY_PANEL_DEFS from down here threw on every
+     page load. */
+
+  /* The runtime accepts a string OR an array of paragraphs for `vignette` and
+     the panel bodies. One line per paragraph in a textarea is the least
+     surprising editor for that, and it round-trips both shapes. */
+  function linesToText(v) {
+    if (Array.isArray(v)) return v.map(function (x) { return String(x == null ? "" : x); }).join("\n");
+    return v == null ? "" : String(v);
+  }
+  function textToLines(s) {
+    return String(s == null ? "" : s).split("\n")
+      .map(function (x) { return x.trim(); })
+      .filter(function (x) { return !!x; });
+  }
+
+  function emptyRoleplayRole()  { return { id: "", name: "", brief: "", _extra: {} }; }
+  function emptyRoleplayPhase() { return { id: "", label: "", minutes: "", shows: [], expanded: false, _extra: {} }; }
+  function emptyFrameworkStep() { return { id: "", label: "" }; }
+  function emptyRoleplay() {
+    return {
+      title: "", vignette: "", roles: [],
+      framework: "spikes",
+      custom: { label: "", steps: [] },
+      phases: [],
+      panels: ROLEPLAY_PANEL_DEFS.map(function (d) {
+        return { id: d.id, on: false, label: "", paragraphs: "", bullets: "" };
+      }),
+      _extra: {}
+    };
+  }
+
+  function roleplayToState(rp) {
+    var out = emptyRoleplay();
+    if (!rp || typeof rp !== "object") return out;
+    out.title = rp.title || "";
+    out.vignette = linesToText(rp.vignette);
+    out.roles = (Array.isArray(rp.roles) ? rp.roles : []).map(function (r) {
+      r = r || {};
+      return { id: r.id || "", name: r.name || "", brief: r.brief || "",
+               _extra: extraKeys(r, ["id", "name", "brief"]) };
+    });
+    var f = rp.framework;
+    if (typeof f === "string" && OBSERVATION_FRAMEWORK_IDS.indexOf(f) > -1) {
+      out.framework = f;
+    } else if (f && typeof f === "object") {
+      out.framework = "custom";
+      out.custom.label = f.label || "";
+      out.custom.steps = (Array.isArray(f.steps) ? f.steps : []).map(function (st) {
+        st = st || {};
+        return { id: st.id || "", label: st.label || "" };
+      });
+    }
+    out.phases = (Array.isArray(rp.phases) ? rp.phases : []).map(function (ph) {
+      ph = ph || {};
+      return {
+        id: ph.id || "", label: ph.label || "",
+        minutes: (typeof ph.minutes === "number" && ph.minutes > 0) ? String(ph.minutes) : "",
+        shows: (Array.isArray(ph.shows) ? ph.shows : []).filter(function (k) {
+          return ROLEPLAY_CARD_KEYS.indexOf(k) > -1;
+        }),
+        expanded: !!ph.expanded,
+        _extra: extraKeys(ph, ["id", "label", "minutes", "shows", "expanded"])
+      };
+    });
+    if (rp.panels && typeof rp.panels === "object") {
+      out.panels.forEach(function (p) {
+        var spec = rp.panels[p.id];
+        if (!spec || typeof spec !== "object") return;
+        p.on = true;
+        p.label = spec.label || "";
+        p.paragraphs = linesToText(spec.paragraphs);
+        p.bullets = linesToText(spec.bullets);
+      });
+    }
+    out._extra = extraKeys(rp, ["title", "vignette", "roles", "framework", "phases", "panels"]);
+    return out;
+  }
+
+  /* Returns null when nothing is authored, so a PBL scenario never grows an
+     empty `roleplay` key it did not have. */
+  function roleplayToJson() {
+    var rp = STATE.roleplay || emptyRoleplay();
+    var out = {};
+    if (String(rp.title).trim()) out.title = String(rp.title).trim();
+    var vig = textToLines(rp.vignette);
+    if (vig.length) out.vignette = vig;
+
+    var roles = rp.roles.filter(function (r) { return String(r.id).trim(); })
+      .map(function (r) {
+        var o = { id: String(r.id).trim() };
+        if (String(r.name).trim()) o.name = String(r.name).trim();
+        if (String(r.brief).trim()) o.brief = String(r.brief).trim();
+        return mergeExtra(o, r._extra);
+      });
+    if (roles.length) out.roles = roles;
+
+    var phases = rp.phases.filter(function (ph) { return String(ph.id).trim(); })
+      .map(function (ph) {
+        var o = { id: String(ph.id).trim(),
+                  label: String(ph.label || "").trim() || String(ph.id).trim() };
+        var mins = parseInt(ph.minutes, 10);
+        if (mins > 0) o.minutes = mins;
+        o.shows = (ph.shows || []).slice();
+        if (ph.expanded) o.expanded = true;
+        return mergeExtra(o, ph._extra);
+      });
+    if (phases.length) out.phases = phases;
+
+    var panels = {};
+    var anyPanel = false;
+    rp.panels.forEach(function (p) {
+      if (!p.on) return;
+      var spec = {};
+      if (String(p.label).trim()) spec.label = String(p.label).trim();
+      var paras = textToLines(p.paragraphs);
+      if (paras.length) spec.paragraphs = paras;
+      var bl = textToLines(p.bullets);
+      if (bl.length) spec.bullets = bl;
+      /* A ticked-but-empty panel would render as an empty region behind a
+         toolbar button — worse than an absent one. */
+      if (!Object.keys(spec).length) return;
+      panels[p.id] = spec;
+      anyPanel = true;
+    });
+    if (anyPanel) out.panels = panels;
+
+    /* The framework is emitted LAST, and conditionally, because it is the one
+       field with a non-empty default. Writing `framework: "spikes"` from an
+       untouched block would make every PBL scenario sprout a `roleplay` key it
+       never had — which is how the first cut of this failed. So the default is
+       emitted only alongside other authored content (where it is a deliberate,
+       readable statement of the checklist); a NON-default choice is authored
+       content in its own right and always emitted. */
+    if (rp.framework === "custom") {
+      var steps = rp.custom.steps.filter(function (st) { return String(st.id).trim(); })
+        .map(function (st) {
+          return { id: String(st.id).trim(),
+                   label: String(st.label || "").trim() || String(st.id).trim() };
+        });
+      /* A custom framework with no usable step is ignored by the runtime rather
+         than emptying the checklist — so don't write one at all. */
+      if (steps.length) {
+        out.framework = { label: String(rp.custom.label || "").trim() || "Observation", steps: steps };
+      }
+    } else if (rp.framework && (rp.framework !== "spikes" || Object.keys(out).length)) {
+      out.framework = rp.framework;
+    }
+    /* …then put it back in its canonical place. Deciding emission last but
+       emitting last too would move `framework` after `panels`, so every
+       re-export of an unchanged scenario would produce a reordered diff. */
+    if ("framework" in out) {
+      var ordered = {};
+      ["title", "vignette", "roles", "framework", "phases", "panels"].forEach(function (k) {
+        if (Object.prototype.hasOwnProperty.call(out, k)) ordered[k] = out[k];
+      });
+      out = ordered;
+    }
+
+    out = mergeExtra(out, rp._extra);
+    return Object.keys(out).length ? out : null;
+  }
+
+  function renderRoleplay() {
+    var rp = STATE.roleplay || (STATE.roleplay = emptyRoleplay());
+
+    function textField(parent, label, get, set, hint, multiline) {
+      var cell = el("div", { class: "field-row" });
+      cell.appendChild(el("label", { class: "field-label", text: label }));
+      var inp = multiline ? el("textarea", { value: get() }) : el("input", { type: "text", value: get() });
+      inp.addEventListener("input", function () { set(inp.value); refreshOutput(); });
+      cell.appendChild(inp);
+      if (hint) cell.appendChild(el("p", { class: "field-hint", text: hint }));
+      parent.appendChild(cell);
+      return inp;
+    }
+    function idCell(parent, label, obj, key, placeholder, numeric) {
+      var cell = el("div", { class: "field-row" });
+      cell.appendChild(el("label", { class: "field-label", text: label }));
+      var inp = el("input", { type: numeric ? "number" : "text",
+                              value: obj[key] || "", placeholder: placeholder || "" });
+      inp.addEventListener("input", function () { obj[key] = inp.value; refreshOutput(); });
+      cell.appendChild(inp);
+      parent.appendChild(cell);
+    }
+
+    /* ---- the scene ---- */
+    var scene = document.getElementById("rp-scene");
+    if (scene) {
+      scene.innerHTML = "";
+      textField(scene, "Title (shown on the roleplay stage)",
+        function () { return rp.title; }, function (v) { rp.title = v; },
+        "Leave blank to keep the section name.");
+      textField(scene, "Vignette — the situation, read once together",
+        function () { return rp.vignette; }, function (v) { rp.vignette = v; },
+        "One paragraph per line.", true);
+    }
+
+    /* ---- cast ---- */
+    var cast = document.getElementById("list-rp-roles");
+    if (cast) {
+      cast.innerHTML = "";
+      rp.roles.forEach(function (r, i) {
+        var shell = rowShell("role[" + i + "]", function () { rp.roles.splice(i, 1); renderAll(); });
+        var top = el("div", { class: "row-flex" });
+        idCell(top, "id", r, "id", "e.g. physician");
+        idCell(top, "name", r, "name", "Shown to the team");
+        shell.appendChild(top);
+        textField(shell, "Private brief (only this role sees it)",
+          function () { return r.brief; }, function (v) { r.brief = v; }, "", true);
+        cast.appendChild(shell);
+      });
+    }
+
+    /* ---- observation framework ---- */
+    var fwWrap = document.getElementById("rp-framework");
+    if (fwWrap) {
+      fwWrap.innerHTML = "";
+      var row = el("div", { class: "field-row" });
+      row.appendChild(el("label", { class: "field-label", text: "Observer's checklist" }));
+      var sel = el("select", { id: "rp-framework-select" });
+      var LABELS = {
+        spikes: "SPIKES (breaking bad news)",
+        "calgary-cambridge": "Calgary–Cambridge (general consultation)",
+        "pause-explore-explain-realign": "Pause / Explore / Explain / Realign (a difficult request)",
+        custom: "Custom — write your own steps"
+      };
+      OBSERVATION_FRAMEWORK_IDS.concat(["custom"]).forEach(function (id) {
+        var o = el("option", { value: id });
+        o.textContent = LABELS[id];
+        sel.appendChild(o);
+      });
+      sel.value = rp.framework || "spikes";
+      sel.addEventListener("change", function () { rp.framework = sel.value; renderAll(); });
+      row.appendChild(sel);
+      fwWrap.appendChild(row);
+
+      if (rp.framework === "custom") {
+        var customBox = el("div", { class: "dyn-list", id: "list-rp-steps" });
+        textField(customBox, "Checklist heading",
+          function () { return rp.custom.label; }, function (v) { rp.custom.label = v; },
+          "Defaults to “Observation”.");
+        rp.custom.steps.forEach(function (st, i) {
+          var shell = rowShell("step[" + i + "]", function () { rp.custom.steps.splice(i, 1); renderAll(); });
+          var top = el("div", { class: "row-flex" });
+          idCell(top, "id", st, "id", "e.g. cc1");
+          idCell(top, "label", st, "label", "What the observer looks for");
+          shell.appendChild(top);
+          customBox.appendChild(shell);
+        });
+        var addStep = el("button", { type: "button", class: "add-btn", text: "+ Add step" });
+        addStep.addEventListener("click", function () { rp.custom.steps.push(emptyFrameworkStep()); renderAll(); });
+        customBox.appendChild(addStep);
+        fwWrap.appendChild(customBox);
+      }
+    }
+
+    /* ---- phases ---- */
+    var phases = document.getElementById("list-rp-phases");
+    if (phases) {
+      phases.innerHTML = "";
+      rp.phases.forEach(function (ph, i) {
+        var shell = rowShell("phase[" + i + "]", function () { rp.phases.splice(i, 1); renderAll(); });
+        var top = el("div", { class: "row-flex" });
+        idCell(top, "id", ph, "id", "e.g. play");
+        idCell(top, "label", ph, "label", "Shown on the stepper");
+        idCell(top, "minutes", ph, "minutes", "e.g. 12", true);
+        shell.appendChild(top);
+
+        var showsWrap = el("div", { class: "field-row" });
+        showsWrap.appendChild(el("label", { class: "field-label", text: "Cards this phase shows" }));
+        var chips = el("div", { class: "check-row" });
+        ROLEPLAY_CARD_KEYS.forEach(function (key) {
+          var lab = el("label", { class: "check-cell" });
+          var cb = el("input", { type: "checkbox" });
+          cb.checked = ph.shows.indexOf(key) > -1;
+          cb.addEventListener("change", function () {
+            var at = ph.shows.indexOf(key);
+            if (cb.checked && at === -1) ph.shows.push(key);
+            if (!cb.checked && at > -1) ph.shows.splice(at, 1);
+            refreshOutput();
+          });
+          lab.appendChild(cb);
+          lab.appendChild(el("span", { text: key }));
+          chips.appendChild(lab);
+        });
+        showsWrap.appendChild(chips);
+        shell.appendChild(showsWrap);
+
+        var expLab = el("label", { class: "check-cell" });
+        var exp = el("input", { type: "checkbox" });
+        exp.checked = !!ph.expanded;
+        exp.addEventListener("change", function () { ph.expanded = exp.checked; refreshOutput(); });
+        expLab.appendChild(exp);
+        expLab.appendChild(el("span", { text: "start with its cards expanded" }));
+        shell.appendChild(expLab);
+        phases.appendChild(shell);
+      });
+    }
+
+    /* ---- reference panels ---- */
+    var panelBox = document.getElementById("list-rp-panels");
+    if (panelBox) {
+      panelBox.innerHTML = "";
+      rp.panels.forEach(function (p) {
+        var def = ROLEPLAY_PANEL_DEFS.filter(function (d) { return d.id === p.id; })[0] || {};
+        var shell = el("div", { class: "dyn-row" });
+        var head = el("div", { class: "row-header" });
+        var onLab = el("label", { class: "check-cell" });
+        var cb = el("input", { type: "checkbox" });
+        cb.checked = !!p.on;
+        cb.addEventListener("change", function () { p.on = cb.checked; renderAll(); });
+        onLab.appendChild(cb);
+        onLab.appendChild(el("span", { class: "row-title", text: p.id }));
+        head.appendChild(onLab);
+        shell.appendChild(head);
+        shell.appendChild(el("p", { class: "field-hint", text: def.hint || "" }));
+        if (p.on) {
+          textField(shell, "Heading", function () { return p.label; }, function (v) { p.label = v; });
+          textField(shell, "Paragraphs", function () { return p.paragraphs; },
+            function (v) { p.paragraphs = v; }, "One per line.", true);
+          textField(shell, "Bullets", function () { return p.bullets; },
+            function (v) { p.bullets = v; }, "One per line.", true);
+        }
+        panelBox.appendChild(shell);
+      });
+    }
   }
 
   function renderCharacters(listId, arr) {
@@ -1149,6 +1533,10 @@
     if (STATE.postTest && STATE.postTest.length) scenarioOut.postTest = STATE.postTest.map(testQuestionToJson);
     // LLM chat characters — optional; emit only when authored.
     if (STATE.characters && STATE.characters.length) scenarioOut.characters = STATE.characters.map(characterToJson);
+    // S5 — the roleplay scene/cast/framework/phases/panels. Null when nothing
+    // is authored, so a PBL scenario never grows a key it did not have.
+    var rpOut = roleplayToJson();
+    if (rpOut) scenarioOut.roleplay = rpOut;
     return mergeExtra(scenarioOut, STATE._extra);
   }
 
@@ -1257,10 +1645,55 @@
     return errs;
   }
 
+  /* The runtime DROPS a malformed or duplicate role/phase/step id without a
+     word — the roleplay simply runs with a cast or a timetable the author did
+     not write. Surfacing it here is the whole point of validate(). */
+  function validateRoleplay(errs) {
+    var rp = STATE.roleplay;
+    if (!rp) return;
+    function checkIds(rows, what, re, hint) {
+      var seen = {};
+      rows.forEach(function (r, i) {
+        var id = String(r.id || "").trim();
+        if (!id) return;                       // an empty row is simply not emitted
+        if (!re.test(id)) {
+          errs.push(what + " " + (i + 1) + ": id \"" + id + "\" is not usable — " + hint);
+        } else if (seen[id]) {
+          errs.push(what + " " + (i + 1) + ": duplicate id \"" + id + "\" (the second one is ignored)");
+        }
+        seen[id] = true;
+      });
+    }
+    checkIds(rp.roles, "Roleplay role", ROLE_ID_RE,
+             "lower-case, starting with a letter, max 24 chars (it becomes a database key)");
+    checkIds(rp.phases, "Roleplay phase", ROLE_ID_RE,
+             "lower-case, starting with a letter, max 24 chars (it becomes a database key)");
+    if (rp.framework === "custom") {
+      checkIds(rp.custom.steps, "Checklist step", FRAMEWORK_STEP_ID_RE,
+               "letters, digits, - or _, max 16 chars");
+      if (!rp.custom.steps.filter(function (s) { return String(s.id || "").trim(); }).length) {
+        errs.push("Custom observation framework: add at least one step, or pick a library " +
+                  "checklist — a custom framework with no usable step is ignored and the " +
+                  "shipped SPIKES list is shown instead.");
+      }
+    }
+    /* Ticking a panel opts into controlling the SET, so an author who ticks one
+       and writes nothing in it silently hides the other three. */
+    rp.panels.forEach(function (p) {
+      if (!p.on) return;
+      if (!String(p.label).trim() && !textToLines(p.paragraphs).length && !textToLines(p.bullets).length) {
+        errs.push("Reference panel \"" + p.id + "\" is ticked but empty — write something in it " +
+                  "or untick it (an empty panel is dropped, and ticking any panel hides every " +
+                  "panel you did not write).");
+      }
+    });
+  }
+
   function validate() {
     if (isBranched()) return validateBranchedForm();
     var errs = [];
     var json = toScenarioJson();
+    validateRoleplay(errs);
 
     /* S5 — does this section run a PBL module? Everything workup-shaped (the
        case rows, the prompts, the penalties) is meaningless without one, and a
@@ -1751,12 +2184,17 @@
     s.preTest = (obj.preTest || []).map(testQuestionToState);
     s.postTest = (obj.postTest || []).map(testQuestionToState);
     s.characters = (obj.characters || []).map(characterToState);
+    s.roleplay = roleplayToState(obj.roleplay);
     s._extra = extraKeys(obj, [
       "id", "name", "summary", "moduleAName", "moduleBName",
       "case", "scoring", "penalties", "decisions", "synthId", "synthPrereqs",
       "preTest", "postTest", "characters", "format",
       // M5 — modeled by the module tick boxes + the branched-case picker.
-      "modules", "branchedRef"
+      "modules", "branchedRef",
+      // S5 — modeled by the roleplay fieldset (scene, cast, framework,
+      // phases, panels). Leaving it here too would resurrect the loaded value
+      // the moment the author cleared a field.
+      "roleplay"
     ]);
 
     return s;
@@ -1825,6 +2263,7 @@
       renderTests("list-pretest", STATE.preTest);
       renderTests("list-posttest", STATE.postTest);
       renderCharacters("list-characters", STATE.characters);
+      renderRoleplay();
     }
     refreshOutput();
   }
@@ -2559,6 +2998,8 @@
           case "pretest":   STATE.preTest.push(emptyTestQuestion()); break;
           case "posttest":  STATE.postTest.push(emptyTestQuestion()); break;
           case "characters": STATE.characters.push(emptyCharacter()); break;
+          case "rp-roles":  STATE.roleplay.roles.push(emptyRoleplayRole()); break;
+          case "rp-phases": STATE.roleplay.phases.push(emptyRoleplayPhase()); break;
         }
         renderAll();
       });

@@ -235,16 +235,53 @@
         <button type="button" class="add-btn" data-add="scoringAQP">+ Add chat-penalty family</button>
       </fieldset>
 
+      <!-- ============= ROLEPLAY content ============= -->
+      <fieldset class="author-section roleplay-only" id="roleplay-section">
+        <legend>10. ROLEPLAY &mdash; the scene, the cast, the checklist and the timing</legend>
+        <p class="field-hint">Each part below is <strong>optional</strong>, and leaving one blank is
+          meaningful: the section keeps the shipped default for it. Fill in what makes
+          <em>your</em> conversation different and leave the rest alone.</p>
+
+        <div id="rp-scene"></div>
+
+        <h4 class="sub-legend">Cast</h4>
+        <p class="field-hint">Each role gets a <strong>private brief</strong> only that person sees.
+          Ids become DOM and database keys, so: lower-case, starting with a letter
+          (<code>physician</code>, <code>patient</code>, <code>observer</code>). Reuse a default id
+          to rename just that role; add none and the standard cast is used.</p>
+        <div id="list-rp-roles" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="rp-roles">+ Add role</button>
+
+        <h4 class="sub-legend">Observation framework</h4>
+        <p class="field-hint">What the observer ticks off while watching. Pick one from the library
+          or write your own steps &mdash; an antibiotic negotiation should not hand its observer a
+          breaking-bad-news checklist.</p>
+        <div id="rp-framework"></div>
+
+        <h4 class="sub-legend">Phases</h4>
+        <p class="field-hint">The timetable, and <em>which cards each phase shows</em>. Add none to
+          keep the shipped six phases. A card no phase names stays hidden throughout, so tick
+          <code>reflect</code> somewhere if the team is meant to reach it.</p>
+        <div id="list-rp-phases" class="dyn-list"></div>
+        <button type="button" class="add-btn" data-add="rp-phases">+ Add phase</button>
+
+        <h4 class="sub-legend">Reference panels</h4>
+        <p class="field-hint">The four panels behind the roleplay toolbar. Tick one to write it;
+          leave <strong>all four unticked</strong> to keep the shipped panels. Ticking any means you
+          control the set &mdash; the ones you leave unticked are then hidden, button and all.</p>
+        <div id="list-rp-panels" class="dyn-list"></div>
+      </fieldset>
+
       <!-- ============= SCORING.moduleB ============= -->
       <fieldset class="author-section roleplay-only">
-        <legend>10. SCORING.moduleB &mdash; concept families for stage 2</legend>
+        <legend>11. SCORING.moduleB &mdash; concept families for stage 2</legend>
         <div id="list-scoringB" class="dyn-list"></div>
         <button type="button" class="add-btn" data-add="scoringB">+ Add moduleB family</button>
       </fieldset>
 
       <!-- ============= PENALTIES ============= -->
       <fieldset class="author-section pbl-only">
-        <legend>11. PENALTIES &mdash; deductions for revealing the wrong item</legend>
+        <legend>12. PENALTIES &mdash; deductions for revealing the wrong item</legend>
         <p class="field-hint">Each penalty fires when the team reveals the item referenced.
           <code>item</code> takes the form <code>group:index</code>, e.g. <code>labs:4</code>.</p>
         <div id="list-penalties" class="dyn-list"></div>
@@ -253,7 +290,7 @@
 
       <!-- ============= DECISIONS ============= -->
       <fieldset class="author-section">
-        <legend>12. DECISIONS &mdash; team votes</legend>
+        <legend>13. DECISIONS &mdash; team votes</legend>
         <p class="field-hint">Each decision belongs to module A or B, has a prompt, and 2+
           options. Tick the correct option(s). <code>penalty: 0</code> = wrong vote costs
           nothing (useful for low-stakes roleplays).</p>
@@ -263,7 +300,7 @@
 
       <!-- ============= PRE-TEST ============= -->
       <fieldset class="author-section">
-        <legend>13. preTest &mdash; knowledge check before Module A (optional)</legend>
+        <legend>14. preTest &mdash; knowledge check before Module A (optional)</legend>
         <p class="field-hint">Multiple-choice questions shown after Welcome, before Module&nbsp;A.
           Optional &mdash; leave empty to hide the pre-test panel. Each question has a stem, 2+
           options (tick the correct one[s]), and an explanation shown after answering.</p>
@@ -273,7 +310,7 @@
 
       <!-- ============= POST-TEST ============= -->
       <fieldset class="author-section">
-        <legend>14. postTest &mdash; knowledge check during Wrap-up (optional)</legend>
+        <legend>15. postTest &mdash; knowledge check during Wrap-up (optional)</legend>
         <p class="field-hint">Same shape as the pre-test; shown during Wrap-up to measure
           knowledge gain. Optional.</p>
         <div id="list-posttest" class="dyn-list"></div>
@@ -282,7 +319,7 @@
 
       <!-- ============= CHARACTERS (LLM chat) ============= -->
       <fieldset class="author-section">
-        <legend>15. characters &mdash; LLM chat roles (optional)</legend>
+        <legend>16. characters &mdash; LLM chat roles (optional)</legend>
         <p class="field-hint">The Module&nbsp;A patient chat is driven by a character here. Add one
           with <code>role: patient</code> and write its <em>persona</em> (the system prompt: who they
           are, why they&rsquo;re here, how they behave). Leave empty to fall back to a neutral patient
