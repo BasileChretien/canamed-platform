@@ -189,9 +189,12 @@ input:focus, textarea:focus, select:focus {
   margin-bottom: 6px;
   display: block;
 }
+/* One column since the fr/ja cells were removed (2026-08-03 — they were dead
+   input, see buildTrio). Left as a grid rather than collapsed to a plain block
+   so restoring a language needs only the column count back. */
 .trio-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 8px;
 }
 .trio-grid > div {

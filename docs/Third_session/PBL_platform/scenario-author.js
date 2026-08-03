@@ -175,13 +175,38 @@
   /* trio block builder (label + en/fr/ja inputs)                       */
   /* ------------------------------------------------------------------ */
 
+  /* ENGLISH ONLY — the fr/ja cells were removed 2026-08-03.
+   *
+   * They had been dead input since 2026-06-25, when the platform went
+   * English-canonical: script.js `_curLang()` is PINNED to "en" (see its
+   * comment quoting the request — "delete all the French and Japanese inside
+   * the website; keep only the dictionaries"), and EVERY case-content string
+   * renders through `tc(value, _curLang())`. So a facilitator who translated a
+   * whole scenario into French was doing work no learner could ever see, while
+   * the help text promised the opposite ("partial translations are safe").
+   * The only FR/JA left in the product is the hover reading aid, which glosses
+   * ENGLISH words from a shipped dictionary — it does not read these fields.
+   *
+   * The emitted shape is UNCHANGED: values still live under `.en` of an
+   * { en, fr, ja } object, because tc()'s fallback chain, the validators and
+   * every built-in scenario expect that shape. And an imported scenario KEEPS
+   * its fr/ja: `trioObj` is only ever mutated by an input handler, so with no
+   * fr/ja inputs rendered those values pass through import → export untouched
+   * rather than being silently dropped on a round-trip.
+   *
+   * Kept as a trio helper (not renamed/inlined) so re-adding a language later
+   * is a one-line change to LANGS, not a sweep of ~40 call sites. */
+  var TRIO_LANGS = ["en"];
+
   function buildTrio(label, trioObj, onChange, multiline) {
     var wrap = el("div", { class: "trio-block" });
     wrap.appendChild(el("span", { class: "trio-label", text: label }));
     var grid = el("div", { class: "trio-grid" });
-    ["en", "fr", "ja"].forEach(function (lang) {
+    TRIO_LANGS.forEach(function (lang) {
       var cell = el("div");
-      cell.appendChild(el("label", { text: lang.toUpperCase() }));
+      /* The per-cell "EN" tag only ever disambiguated one language from
+         another; with a single column it is noise above every field. */
+      if (TRIO_LANGS.length > 1) cell.appendChild(el("label", { text: lang.toUpperCase() }));
       var input = multiline
         ? el("textarea", { value: trioObj[lang] || "" })
         : el("input", { type: "text", value: trioObj[lang] || "" });
