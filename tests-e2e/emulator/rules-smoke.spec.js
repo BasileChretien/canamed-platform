@@ -1398,47 +1398,48 @@ test("rules: answersDeleted is room-gated and sealed; write-once does not bound 
  * This is the assertion the old suite was missing: it only ever tried the
  * cross-room write BEFORE claiming, which passed while the hole stayed open.
  */
-test("rules: a bare `true` claim is refused, and a room you were not assigned cannot be claimed", async ({ page }) => {
+test("rules: roomOf is ONE room per participant — the pool-rewrite escalation is dead", async ({ page }) => {
+  /* THE ATTACK THIS EXISTS FOR. Binding the claim to `pool/<cid>/room` achieved
+     nothing, because that path is participant-writable by design (self-assign):
+     assign yourself Room 1, claim it, REWRITE your own pool room to Room 2,
+     claim Room 2 — the old marker was write-once PER ROOM, so every room's key
+     was free. Repeat and you are a member of every room. Reproduced on the
+     emulator before this fix.
+
+     roomOf is write-once at SESSION level, so the second claim has nowhere to
+     go and rewriting the pool afterwards changes nothing. */
   await page.goto("/");
   const uid = await waitForUid(page);
-  const code = "gate-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const code = "rof-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const base = `sessions/${code}`;
   const cid = "c" + uid.replace(/[^A-Za-z0-9]/g, "").slice(0, 20);
+  const pool = (room) => ({ name: "A", university: "Caen", year: 4, english: "B2", at: Date.now(), room });
 
   expect(await tryWrite(page, `${base}/members/${uid}`, { at: Date.now() })).toBe("ALLOWED");
   expect(await tryWrite(page, `${base}/clientMapping/${cid}`, uid)).toBe("ALLOWED");
-  /* A WHOLE pool entry — its .validate requires name/university/year/english/at,
-     so a bare `room` write fails the parent validator. Mirrors a real join. */
-  expect(await tryWrite(page, `${base}/pool/${cid}`, {
-    name: "Emu", university: "Caen", year: 4, english: "B2",
-    at: Date.now(), room: "Room 1"
-  })).toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/pool/${cid}`, pool("Room 1"))).toBe("ALLOWED");
 
-  /* 1. The OLD shape is dead: a bare `true` no longer satisfies .validate. */
-  expect(await tryWrite(page, `${base}/rooms/Room 1/uidMembers/${uid}`, true),
-    "a self-asserted `true` claim must be rejected — that was the bypass")
-    .not.toBe("ALLOWED");
-
-  /* 2. Claiming a room you were NOT assigned to is refused, even naming a
-        clientId you genuinely own. This is the actual attack. */
-  expect(await tryWrite(page, `${base}/rooms/Room 2/uidMembers/${uid}`, cid),
-    "a room the pool did not assign must not be claimable").not.toBe("ALLOWED");
-
-  /* 3. Naming someone ELSE's clientId is refused (clientMapping ownership). */
-  const foreign = "cforeign" + Math.floor(Math.random() * 1e6);
-  expect(await tryWrite(page, `${base}/rooms/Room 1/uidMembers/${uid}`, foreign),
-    "a clientId you do not own must not authorise a claim").not.toBe("ALLOWED");
-
-  /* 4. The legitimate claim — own clientId, assigned room — still works, or the
-        fix would simply have broken room entry for everyone. */
-  expect(await tryWrite(page, `${base}/rooms/Room 1/uidMembers/${uid}`, cid),
+  // The legitimate claim works, or this fix would have broken room entry.
+  expect(await tryWrite(page, `${base}/roomOf/${uid}`, { room: "Room 1", cid }),
     "the assigned room must still be claimable").toBe("ALLOWED");
 
-  /* 5. And with the room legitimately claimed, the cross-room write that the
-        self-claim used to unlock is still denied — the property the whole gate
-        exists for. */
-  const good = { by: "S", cid: cid, university: "X", text: "t", at: Date.now() };
-  expect(await tryWrite(page, `${base}/rooms/Room 2/answers/moduleA/e1`, good),
-    "cross-room writes stay denied now that the claim cannot be forged")
+  // A clientId you do not own cannot back a claim.
+  expect(await tryWrite(page, `${base}/roomOf/${uid}`, { room: "Room 1", cid: "cnotmine" }),
+    "a foreign clientId must not back a claim").not.toBe("ALLOWED");
+
+  /* THE ESCALATION: rewrite my own pool assignment, then try to claim the new
+     room. The pool rewrite is still permitted (self-assign is intentional) —
+     what must fail is the second CLAIM. */
+  expect(await tryWrite(page, `${base}/pool/${cid}/room`, "Room 2"),
+    "self-assign remains intentional").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/roomOf/${uid}`, { room: "Room 2", cid }),
+    "a participant gets ONE room per session — the escalation must be dead")
     .not.toBe("ALLOWED");
+
+  // …and the per-room gates still refuse the other room.
+  const good = { by: "A", cid, university: "Caen", text: "injected", at: Date.now() };
+  expect(await tryWrite(page, `${base}/rooms/Room 2/answers/moduleA/e1`, good),
+    "cross-room writes stay denied").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/rooms/Room 1/answers/moduleA/e1`, good),
+    "…while the participant's OWN room still works").toBe("ALLOWED");
 });

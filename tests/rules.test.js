@@ -638,9 +638,9 @@ test("rules: per-room /moduleB/phase is an auth-guarded, bounded phase index", (
   // who knew the session code could jump ANOTHER room's roleplay to a different
   // beat. Safe for facilitators: openRoomAsAdmin → enterRoom → startRoom claims
   // uidMembers on entry, so an admin viewing a room is a member of it.
-  assert.match(node[".write"], /uidMembers/,
+  assert.match(node[".write"], /roomOf/,
     "moduleB/phase must be room-membership gated like every other room-scoped write");
-  assert.match(ORG_ROOM.moduleB.phase[".write"], /uidMembers/,
+  assert.match(ORG_ROOM.moduleB.phase[".write"], /roomOf/,
     "…in the org tree too");
 });
 
@@ -1230,7 +1230,7 @@ for (const [treeName, tree] of Object.entries(ANS_TREES)) {
   test(`rules: ${treeName} answers modules are room-gated and sealed`, () => {
     for (const mod of ["moduleA", "moduleB", "moduleBranched"]) {
       const e = tree[mod].$entryId;
-      assert.match(e[".write"], /uidMembers'\)\.child\(auth\.uid\)\.exists\(\)/,
+      assert.match(e[".write"], /roomOf'\)\.child\(auth\.uid\)\.child\('room'\)\.val\(\) == \$roomId/,
         `${treeName}/${mod} must require room membership — without it a member of ` +
         "ANY room can overwrite ANY other room's answers");
       assert.strictEqual(e.$other[".validate"], false,
@@ -1267,7 +1267,7 @@ for (const [treeName, room] of Object.entries({
 })) {
   test(`rules: ${treeName} answersDeleted is room-gated, sealed and still append-only`, () => {
     const e = room.answersDeleted.$pushId;
-    assert.match(e[".write"], /uidMembers'\)\.child\(auth\.uid\)\.exists\(\)/,
+    assert.match(e[".write"], /roomOf'\)\.child\(auth\.uid\)\.child\('room'\)\.val\(\) == \$roomId/,
       `${treeName}: a non-member could otherwise inject fabricated deleted-answer ` +
       "bodies into any room, and this log is read by the research export");
     assert.ok(e[".write"].includes("!data.exists()"),
@@ -1282,48 +1282,66 @@ for (const [treeName, room] of Object.entries({
   });
 }
 
-/* ── The room-membership claim is BOUND to the pool assignment (2026-08-03) ──
- * Until this fix `uidMembers/$uid` was `auth.uid == $uid && !data.exists()`: the
- * participant CLAIMED membership and nothing verified they had been assigned to
- * that room, so every per-room gate could be walked past by self-claiming the
- * target room first (proven on the emulator; it also defeated the roomChat READ
- * gate). The claim's VALUE is now the claimant's clientId so the rule can check
- * ownership and assignment. Behavioural proof lives in the emulator spec; this
- * is the cheap structural lock against a weakening edit.
+/* ── ONE room per participant per session: `roomOf` (2026-08-03) ────────────
+ * The per-room `uidMembers` marker could not be made safe. Binding it to
+ * `pool/<cid>/room` achieved nothing, because that path is participant-writable
+ * by design (self-assign): rewrite your own assignment, claim the next room —
+ * the marker was write-once PER ROOM, so every room's key was free, and a
+ * participant could accumulate membership of every room. Proven on the emulator.
+ *
+ * `roomOf/$uid` is write-once at SESSION level, so a participant gets exactly
+ * one room identity and rewriting the pool afterwards changes nothing. The
+ * facilitator can still reassign via the admin branch. Behavioural proof lives
+ * in the emulator spec; this is the structural lock.
  */
-for (const [treeName, room, root] of [
-  ["sessions", rules.rules.sessions.$sessionId.rooms.$roomId,
-   "root.child('sessions').child($sessionId)"],
-  ["orgs", rules.rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId,
-   "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)"]
+for (const [treeName, session, root, sec] of [
+  ["sessions", rules.rules.sessions.$sessionId,
+   "root.child('sessions').child($sessionId)", ".child($sessionId)"],
+  ["orgs", rules.rules.orgs.$orgSlug.sessions.$sessionId,
+   "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)",
+   ".child('orgs').child($orgSlug).child($sessionId)"]
 ]) {
-  test(`rules: ${treeName} uidMembers claim is bound to the pool assignment`, () => {
-    const v = room.uidMembers.$uid[".validate"];
-    assert.ok(!/newData\.val\(\) === true/.test(v),
-      `${treeName}: a bare \`true\` must no longer satisfy the claim — that WAS the bypass`);
-    assert.ok(v.includes(root + ".child('clientMapping').child(newData.val()).val() == auth.uid"),
-      `${treeName}: the claim must name a clientId the claimant OWNS: ` + v);
-    assert.ok(v.includes(root + ".child('pool').child(newData.val()).child('room').val() == $roomId"),
-      `${treeName}: …and one the pool assigned to THIS room: ` + v);
-    // Still self-keyed and write-once.
-    const w = room.uidMembers.$uid[".write"];
-    assert.ok(w.includes("auth.uid == $uid"), `${treeName}: still self-keyed`);
-    assert.ok(w.includes("!data.exists()"), `${treeName}: still write-once`);
+  test(`rules: ${treeName} roomOf is write-once per SESSION, with an admin override`, () => {
+    const n = session.roomOf.$uid;
+    assert.ok(n, `${treeName}: roomOf must exist`);
+    assert.ok(n[".write"].includes("auth.uid == $uid && !data.exists()"),
+      `${treeName}: the participant's own claim must be write-once — that is the ` +
+      "whole fix; per-room write-once let them collect every room");
+    assert.ok(n[".write"].includes("creatorUid"),
+      `${treeName}: the facilitator must still be able to REASSIGN a participant`);
+    /* The admin branch must be guarded by hash.exists(): with no adminSecrets a
+       bare proof==hash comparison is null == null, which is TRUE, and would hand
+       the override to any authenticated user. Caught by the emulator test. */
+    assert.ok(n[".write"].includes("child('hash').exists()"),
+      `${treeName}: the admin branch must require adminSecrets to EXIST, or ` +
+      "null == null grants it to everyone");
+    assert.strictEqual(n.$other[".validate"], false,
+      `${treeName}: unknown fields must be rejected`);
+    assert.ok(n.cid[".validate"].includes("clientMapping"),
+      `${treeName}: the cid must be one the claimant owns`);
   });
 }
 
-test("rules: the client writes its clientId as the claim value, not `true`", () => {
-  /* The rule and the client have to agree, and nothing else links them: if the
-     client still wrote `true` every room entry would silently lose membership
-     and every gameplay write would be denied mid-session. */
+test("rules: every per-room gate resolves through roomOf, not a per-room marker", () => {
+  /* If even one gate still read the old marker it would be the weak link — the
+     bypass only needs a single un-migrated node. */
+  const raw = fs.readFileSync(RULES_PATH, "utf8");
+  assert.ok(!raw.includes("child('uidMembers')"),
+    "no rule may still gate on the per-room uidMembers marker");
+  const hits = (raw.match(/child\('roomOf'\)\.child\(auth\.uid\)\.child\('room'\)\.val\(\) == \$roomId/g) || []).length;
+  assert.ok(hits >= 36,
+    "expected the 36 per-room gates to resolve through roomOf, found " + hits);
+});
+
+test("rules: the client claims roomOf with {room, cid}, matching what the rule reads", () => {
   const script = fs.readFileSync(
     path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "script.js"), "utf8");
-  const i = script.indexOf('"/uidMembers/" + uid');
-  assert.ok(i > -1, "the room-entry claim site must still exist");
-  const claim = script.slice(i, i + 240);
-  assert.match(claim, /cur == null \? clientId : undefined/,
-    "the claim must write clientId, which is what the rule dereferences: " + claim.slice(0, 160));
-  assert.ok(!/cur == null \? true : undefined/.test(claim),
-    "writing `true` would be rejected by the new rule — every room entry would " +
-    "silently lose membership and every gameplay write would be denied");
+  const i = script.indexOf('sPath("roomOf/" + uid)');
+  assert.ok(i > -1, "the room-entry claim must target roomOf");
+  const claim = script.slice(i, i + 320);
+  assert.match(claim, /room: myRoom, cid: clientId/,
+    "the claim must carry the room AND the clientId the rule dereferences");
+  assert.match(claim, /\.catch\(/,
+    "the transaction's rejection must be handled — try/catch does not catch it, " +
+    "so a denied claim was silent and every later per-room write failed unexplained");
 });

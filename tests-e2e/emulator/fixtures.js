@@ -95,8 +95,11 @@ async function claimRoom(page, sessionBase, roomId, uid, clientId) {
     at: Date.now(), room: roomId
   });
   if (pool !== "ALLOWED") throw new Error("claimRoom: pool entry write denied: " + pool);
-  const claim = await w(`${sessionBase}/rooms/${roomId}/uidMembers/${uid}`, cid);
-  if (claim !== "ALLOWED") throw new Error("claimRoom: uidMembers claim denied: " + claim);
+  /* SESSION-level and write-once: one room per participant for the whole
+     session. The old per-room marker was write-once PER ROOM, so a participant
+     could rewrite their own pool assignment and claim each room in turn. */
+  const claim = await w(`${sessionBase}/roomOf/${uid}`, { room: roomId, cid });
+  if (claim !== "ALLOWED") throw new Error("claimRoom: roomOf claim denied: " + claim);
   return cid;
 }
 

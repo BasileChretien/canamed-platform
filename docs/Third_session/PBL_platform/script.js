@@ -4867,9 +4867,25 @@ function startRoom() {
   try {
     const auth = (typeof firebase !== "undefined" && firebase.auth) ? firebase.auth() : null;
     const uid = auth && auth.currentUser && auth.currentUser.uid;
-    if (uid && clientId) {
-      db.ref(base + "/uidMembers/" + uid)
-        .transaction(cur => (cur == null ? clientId : undefined));
+    if (uid && clientId && typeof myRoom === "string" && myRoom) {
+      /* SESSION-level and write-once, so a participant has exactly ONE room for
+         the whole session. Binding the old per-room marker to pool/<cid>/room
+         achieved nothing, because that path is participant-writable too (the
+         self-assign flow): you could rewrite your own assignment and claim each
+         room in turn, since the marker was write-once PER ROOM. Fixed here at
+         session level — rewriting the pool afterwards changes nothing.
+         The facilitator can still reassign; the rule's admin branch overwrites.
+         `cid` travels in the value so the rule can tie the claim to a clientId
+         you own (RTDB cannot iterate to find one for you). */
+      db.ref(sPath("roomOf/" + uid))
+        .transaction(cur => (cur == null ? { room: myRoom, cid: clientId } : undefined))
+        .catch(e => {
+          /* The promise rejection is NOT caught by the surrounding try/catch.
+             Left unhandled, a denied claim was silent and every per-room write
+             then failed for the rest of the session with no clue why. */
+          console.warn("roomOf claim failed — per-room writes will be denied:",
+            e && (e.code || e.message));
+        });
     }
   } catch (e) { /* LOCAL mode or auth not ready — chat falls back to stub */ }
 

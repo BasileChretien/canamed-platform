@@ -47,7 +47,7 @@ test("roomChat is a TOP-LEVEL tree, so no session .read reaches it", () => {
 
 test("roomChat read is gated on ROOM membership, not session membership", () => {
   const r = RULES.roomChat.$sessionId.$roomId[".read"];
-  assert.match(r, /rooms'\)\.child\(\$roomId\)\.child\('uidMembers'\)\.child\(auth\.uid\)\.exists\(\)/,
+  assert.match(r, /roomOf'\)\.child\(auth\.uid\)\.child\('room'\)\.val\(\) == \$roomId/,
     "read must require membership of THAT room");
   assert.ok(!/child\('members'\)\.hasChild\(auth\.uid\)/.test(r),
     "read must NOT fall back to session-wide membership — that is the bug");
@@ -64,7 +64,7 @@ test("the facilitator keeps read access (needed for debrief)", () => {
 test("org-scoped roomChat has the same gating, scoped to the org tree", () => {
   const r = RULES.roomChat.orgs.$orgSlug.$sessionId.$roomId[".read"];
   assert.match(r, /child\('orgs'\)\.child\(\$orgSlug\)/, "must resolve inside the org tree");
-  assert.match(r, /child\(\$roomId\)\.child\('uidMembers'\)\.child\(auth\.uid\)\.exists\(\)/,
+  assert.match(r, /roomOf'\)\.child\(auth\.uid\)\.child\('room'\)\.val\(\) == \$roomId/,
     "org read must require membership of THAT room");
   assert.ok(!/child\('members'\)\.hasChild\(auth\.uid\)/.test(r),
     "org read must not fall back to session-wide membership either");
@@ -77,7 +77,7 @@ test("write stays room-scoped, write-once and closed-session-blocked", () => {
   ]) {
     assert.match(node[".write"], /!data\.exists\(\)/, label + ": turns must be write-once");
     assert.match(node[".write"], /'closed'\)\.exists\(\)/, label + ": no writes to a closed session");
-    assert.match(node[".write"], /uidMembers'\)\.child\(auth\.uid\)\.exists\(\)/,
+    assert.match(node[".write"], /roomOf'\)\.child\(auth\.uid\)\.child\('room'\)\.val\(\) == \$roomId/,
       label + ": only members of that room may write");
   }
 });
