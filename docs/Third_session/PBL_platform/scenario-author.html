@@ -37,14 +37,15 @@
       <p class="meta">
         <a href="index.html">&larr; Back to the platform</a>
         &nbsp;&middot;&nbsp;
-        Tool UI in English; the scenarios it produces have <code>{ en, fr, ja }</code> fields.
+        Write in English &mdash; that is the language learners read.
       </p>
       <details class="author-help">
         <summary>How to use this tool</summary>
         <ol>
-          <li>Fill in the form below. Every text field that the platform shows to learners
-            is split into <strong>English / French / Japanese</strong> — English is the
-            canonical fallback when fr/ja are empty, so partial translations are safe.</li>
+          <li>Fill in the form below, <strong>in English</strong>. The platform shows
+            case content to learners in English only; the French and Japanese help is a
+            hover dictionary that glosses the English words you write, so there is
+            nothing to translate here.</li>
           <li>Use the <em>Add row</em> buttons to grow the history / exam / labs / prompts
             / scoring / penalties / decisions lists. Use the &times; on each row to remove.</li>
           <li>The <strong>Live JSON preview</strong> updates as you type. Click
@@ -67,12 +68,16 @@
         <div class="field-row select-row">
           <label class="field-label" for="meta-format">Scenario format</label>
           <select id="meta-format" name="meta.format">
-            <option value="standard">Standard &mdash; PBL workup + roleplay</option>
+            <option value="pbl">PBL workup &mdash; clinical reasoning on a case</option>
+            <option value="roleplay">Roleplay &mdash; a conversation to rehearse</option>
             <option value="branched">Branched &mdash; &eacute;pur&eacute; decision tree (English-only)</option>
           </select>
-          <p class="field-hint">A <strong>branched</strong> scenario is a clean, one-decision-at-a-time fork:
-            the team votes, locks in, sees what happens, then the case moves on. English-only &mdash;
-            the in-app reader supplies French / Japanese at read-time.</p>
+          <p class="field-hint">A section is one of three things. <strong>PBL workup</strong> is
+            reveal-and-reason on a clinical case. <strong>Roleplay</strong> is a conversation with
+            private role briefs and an observer. <strong>Branched</strong> is a clean
+            one-decision-at-a-time fork: the team votes, locks in, sees what happens, then the case
+            moves on. Each authors ONE section &mdash; a session is composed by picking sections on
+            the create form, so a scenario no longer has to bundle a workup and a roleplay together.</p>
         </div>
         <div class="field-row">
           <label class="field-label" for="meta-id">Scenario id <span class="required">*</span></label>
@@ -85,26 +90,29 @@
         <div class="trio-block" data-trio="meta.name" data-label="Display name"></div>
         <div class="trio-block" data-trio="meta.summary" data-label="Summary (1&ndash;2 sentences)" data-multiline="true"></div>
         <p class="field-hint">
-          <strong>Naming a module is what switches it on.</strong> Fill in both to
-          run the full Module&nbsp;A&nbsp;+&nbsp;B session, or name just one for a
-          single-module session &mdash; the session then skips the other module's
-          stage entirely. At least one is required.
+          This is the name a facilitator sees for the section in the create-form
+          picker, and the one students see on its stage. The <strong>format</strong>
+          above decides which of these you fill in &mdash; one scenario authors one
+          section.
         </p>
-        <div class="trio-block" data-trio="meta.moduleAName" data-label="Module A name"></div>
-        <div class="trio-block" data-trio="meta.moduleBName" data-label="Module B name"></div>
+        <div class="trio-block pbl-only" data-trio="meta.moduleAName" data-label="Section name (PBL workup)"></div>
+        <div class="trio-block roleplay-only" data-trio="meta.moduleBName" data-label="Section name (Roleplay)"></div>
 
         <!-- M5 — the module set this scenario runs. A and B are normally implied
              by the names above; the tick boxes let you override that, and they
              are the ONLY way to add a branched decision case, which the runtime
              cannot infer (it has no name field and no scoring family). -->
         <div class="field-row standard-only" id="modules-row">
-          <span class="field-label" id="modules-label">Modules this scenario runs</span>
+          <span class="field-label" id="modules-label">Also run a branched decision case</span>
           <div class="row-flex" id="modules-toggle" role="group" aria-labelledby="modules-label">
-            <div class="check-cell">
+            <!-- A / B are no longer ticked here: the FORMAT above says which one this
+                 scenario authors. They stay in the DOM (hidden) because the legacy
+                 combined shape still round-trips both and the state model reads them. -->
+            <div class="check-cell hidden">
               <input type="checkbox" id="mod-A" />
               <label for="mod-A">Module A &mdash; clinical reasoning</label>
             </div>
-            <div class="check-cell">
+            <div class="check-cell hidden">
               <input type="checkbox" id="mod-B" />
               <label for="mod-B">Module B &mdash; roleplay</label>
             </div>
@@ -113,11 +121,10 @@
               <label for="mod-branched">Branched decision case</label>
             </div>
           </div>
-          <p class="field-hint">Ticking A / B normally just mirrors the module names above, so an
-            explicit <code>modules</code> list is written only when your pick differs from them.
-            A <strong>branched</strong> module can never be inferred, so ticking it always writes
-            the list &mdash; plus the <code>branchedRef</code> below. It runs as its own stage,
-            <em>after</em> Modules A and B.</p>
+          <p class="field-hint">Optional, and independent of the format above: a scenario may ALSO
+            reference an existing branched case, which then runs as its own stage after this
+            section. A branched module can never be inferred, so ticking it always writes an
+            explicit <code>modules</code> list plus the <code>branchedRef</code> below.</p>
         </div>
         <div class="field-row select-row standard-only hidden" id="branched-ref-row">
           <label class="field-label" for="branched-ref">Branched case to run <span class="required">*</span></label>
@@ -145,7 +152,7 @@
       </section>
 
       <!-- ============= CASE.history ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>2. CASE.history &mdash; questions the team can ask the patient</legend>
         <p class="field-hint">Each row is a clickable button (q) revealing the patient&rsquo;s answer (a).
           Order matters: index 0 is shown first. Indices are referenced by <code>synthPrereqs</code>
@@ -155,7 +162,7 @@
       </fieldset>
 
       <!-- ============= CASE.exam ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>3. CASE.exam &mdash; physical examination items</legend>
         <p class="field-hint">Same shape as history. Referenced as <code>exam:N</code>.</p>
         <div id="list-exam" class="dyn-list"></div>
@@ -163,7 +170,7 @@
       </fieldset>
 
       <!-- ============= CASE.labs ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>4. CASE.labs &mdash; investigations &amp; clinical synthesis</legend>
         <p class="field-hint">Tick the <strong>key</strong> box on exactly one row &mdash; that
           is the gated synthesis item. Its index becomes <code>synthId = "labs:N"</code>
@@ -173,14 +180,14 @@
       </fieldset>
 
       <!-- ============= CASE.prompts ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>5. CASE.prompts &mdash; discussion questions revealed after synthesis</legend>
         <div id="list-prompts" class="dyn-list"></div>
         <button type="button" class="add-btn" data-add="prompts">+ Add prompt</button>
       </fieldset>
 
       <!-- ============= Synthesis gate ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>6. Synthesis gate</legend>
         <div class="field-row">
           <label class="field-label" for="synth-id">synthId <span class="required">*</span></label>
@@ -200,7 +207,7 @@
       </fieldset>
 
       <!-- ============= SCORING.moduleA ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>7. SCORING.moduleA &mdash; concept families for stage 1</legend>
         <p class="field-hint">For each family pick EITHER <em>any</em> keyword stems (English
           only; comma-separated) OR tick <em>cohorts</em> for the &ldquo;named two partner
@@ -210,7 +217,7 @@
       </fieldset>
 
       <!-- ============= SCORING.moduleA_questions (LLM chat) ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>8. SCORING.moduleA_questions &mdash; LLM chat consultation scoring</legend>
         <p class="field-hint">Points earned for good history-taking questions typed into the
           Module&nbsp;A patient chat. Same shape as moduleA families &mdash; <em>any</em> stems
@@ -220,7 +227,7 @@
       </fieldset>
 
       <!-- ======= SCORING.moduleA_question_penalties (LLM chat) ======= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>9. SCORING.moduleA_question_penalties &mdash; chat deductions</legend>
         <p class="field-hint">Deductions for harmful or opioid-seeking prompts typed into the
           Module&nbsp;A patient chat (e.g. demanding a prescription on demand). Optional.</p>
@@ -229,14 +236,14 @@
       </fieldset>
 
       <!-- ============= SCORING.moduleB ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section roleplay-only">
         <legend>10. SCORING.moduleB &mdash; concept families for stage 2</legend>
         <div id="list-scoringB" class="dyn-list"></div>
         <button type="button" class="add-btn" data-add="scoringB">+ Add moduleB family</button>
       </fieldset>
 
       <!-- ============= PENALTIES ============= -->
-      <fieldset class="author-section">
+      <fieldset class="author-section pbl-only">
         <legend>11. PENALTIES &mdash; deductions for revealing the wrong item</legend>
         <p class="field-hint">Each penalty fires when the team reveals the item referenced.
           <code>item</code> takes the form <code>group:index</code>, e.g. <code>labs:4</code>.</p>

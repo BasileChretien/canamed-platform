@@ -385,7 +385,14 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
     expect(errors, "toggling the branched module must not throw").toEqual([]);
   });
 
-  test("unticking a named PBL module writes the explicit modules override", async ({ page }) => {
+  test("narrowing a two-module scenario writes the explicit modules override", async ({ page }) => {
+    /* SAME guarantee, new mechanism. This used to untick #mod-B directly. Since
+       the format split (PBL / Roleplay / Branched are separate formats), the
+       FORMAT owns the A/B selection — the ticks are hidden precisely so the two
+       controls cannot disagree — so narrowing is now "choose PBL workup". What
+       is being pinned is unchanged: narrowing writes an explicit `modules` list
+       (the module is still NAMED, so the list is what makes the session skip its
+       stage) and does not throw. */
     const errors = [];
     page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
     page.on("dialog", (d) => d.accept());
@@ -395,7 +402,8 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
     await page.locator("#skeleton-picker").getByRole("button", { name: /^Two-module scenario \(legacy\)$/ }).click();
 
     // The skeleton's only decision is Module A, so dropping B stays valid.
-    await page.locator("#mod-B").uncheck();
+    await expect(page.locator("#meta-format")).toHaveValue("combined");
+    await page.selectOption("#meta-format", "pbl");
     const preview = page.locator("#json-preview");
     await expect
       .poll(async () => (await preview.inputValue()).includes('"modules"'))

@@ -132,7 +132,7 @@
 
   function defaultState() {
     return {
-      format: "standard",
+      format: "pbl",
       branchedNodes: [emptyBranchedNode()],
       // A fresh form offers both PBL modules (both name fields are on screen);
       // ticking/unticking is what overrides the name-based inference.
@@ -175,13 +175,38 @@
   /* trio block builder (label + en/fr/ja inputs)                       */
   /* ------------------------------------------------------------------ */
 
+  /* ENGLISH ONLY — the fr/ja cells were removed 2026-08-03.
+   *
+   * They had been dead input since 2026-06-25, when the platform went
+   * English-canonical: script.js `_curLang()` is PINNED to "en" (see its
+   * comment quoting the request — "delete all the French and Japanese inside
+   * the website; keep only the dictionaries"), and EVERY case-content string
+   * renders through `tc(value, _curLang())`. So a facilitator who translated a
+   * whole scenario into French was doing work no learner could ever see, while
+   * the help text promised the opposite ("partial translations are safe").
+   * The only FR/JA left in the product is the hover reading aid, which glosses
+   * ENGLISH words from a shipped dictionary — it does not read these fields.
+   *
+   * The emitted shape is UNCHANGED: values still live under `.en` of an
+   * { en, fr, ja } object, because tc()'s fallback chain, the validators and
+   * every built-in scenario expect that shape. And an imported scenario KEEPS
+   * its fr/ja: `trioObj` is only ever mutated by an input handler, so with no
+   * fr/ja inputs rendered those values pass through import → export untouched
+   * rather than being silently dropped on a round-trip.
+   *
+   * Kept as a trio helper (not renamed/inlined) so re-adding a language later
+   * is a one-line change to LANGS, not a sweep of ~40 call sites. */
+  var TRIO_LANGS = ["en"];
+
   function buildTrio(label, trioObj, onChange, multiline) {
     var wrap = el("div", { class: "trio-block" });
     wrap.appendChild(el("span", { class: "trio-label", text: label }));
     var grid = el("div", { class: "trio-grid" });
-    ["en", "fr", "ja"].forEach(function (lang) {
+    TRIO_LANGS.forEach(function (lang) {
       var cell = el("div");
-      cell.appendChild(el("label", { text: lang.toUpperCase() }));
+      /* The per-cell "EN" tag only ever disambiguated one language from
+         another; with a single column it is noise above every field. */
+      if (TRIO_LANGS.length > 1) cell.appendChild(el("label", { text: lang.toUpperCase() }));
       var input = multiline
         ? el("textarea", { value: trioObj[lang] || "" })
         : el("input", { type: "text", value: trioObj[lang] || "" });
@@ -607,7 +632,7 @@
   /* branched-format editor (English-only node graph)                   */
   /* ------------------------------------------------------------------ */
 
-  function isBranched() { return (STATE.format || "standard") === "branched"; }
+  function isBranched() { return (STATE.format || "pbl") === "branched"; }
 
   // small single-input field (English) — label + input/textarea, live onInput.
   function enField(label, value, multiline, onInput) {
@@ -833,8 +858,22 @@
     // on every renderAll never stacks duplicate handlers.
     var fmtSel = document.getElementById("meta-format");
     if (fmtSel) {
-      fmtSel.value = STATE.format || "standard";
-      fmtSel.onchange = function () { STATE.format = fmtSel.value; renderAll(); };
+      /* "combined" is the LEGACY both-modules shape. It is not offered as a
+         choice — you cannot newly author one, because a session composes
+         sections instead — but a scenario that already has both must still load
+         and round-trip, so the option is added only when the state is in it. */
+      if (STATE.format === "combined" && !fmtSel.querySelector('option[value="combined"]')) {
+        var legacy = document.createElement("option");
+        legacy.value = "combined";
+        legacy.textContent = "PBL workup + roleplay (combined — legacy)";
+        fmtSel.appendChild(legacy);
+      }
+      fmtSel.value = STATE.format || "pbl";
+      fmtSel.onchange = function () {
+        STATE.format = fmtSel.value;
+        applyFormatToModules();
+        renderAll();
+      };
     }
 
     // M5 — module-set tick boxes. Same onchange-assignment discipline as the
@@ -963,6 +1002,29 @@
   function branchedSelected() { return declaredModules().indexOf(BRANCHED_MODULE) !== -1; }
 
   /* What the runtime would infer for A/B from this scenario body alone. */
+  /* The FORMAT is the single statement of which section this scenario authors,
+     so it owns the A/B module selection rather than leaving two controls that
+     can disagree. The branched TICK is untouched: that is the M4c composition
+     (a standard scenario referencing a branched case), which is orthogonal to
+     which of A/B this scenario is. */
+  function applyFormatToModules() {
+    if (!STATE.modules) STATE.modules = emptyModuleSelection();
+    var f = STATE.format;
+    if (f === "branched") return;                 // the branched EDITOR, not a module set
+    STATE.modules.A = (f === "pbl" || f === "combined");
+    STATE.modules.B = (f === "roleplay" || f === "combined");
+  }
+  /* Which format a PARSED scenario is, so an existing one opens in the right
+     shape instead of defaulting to PBL and appearing to have lost its roleplay. */
+  function formatForParsed(body) {
+    if (body && body.format === "branched") return "branched";
+    var mods = (body && Array.isArray(body.modules) && body.modules.length)
+      ? body.modules : inferredABModules(body || {});
+    var hasA = mods.indexOf("A") > -1, hasB = mods.indexOf("B") > -1;
+    if (hasA && hasB) return "combined";
+    if (hasB) return "roleplay";
+    return "pbl";
+  }
   function inferredABModules(body) {
     var names = ["A", "B"].filter(function (id) {
       var t = body[id === "A" ? "moduleAName" : "moduleBName"];
@@ -1593,6 +1655,7 @@
   function scenarioJsonToState(obj) {
     if (obj && obj.format === "branched") return branchedJsonToState(obj);
     var s = defaultState();
+    s.format = formatForParsed(obj);
     s.meta.id = obj.id || "";
     s.meta.name        = asTrio(obj.name);
     s.meta.summary     = asTrio(obj.summary);
@@ -1744,7 +1807,7 @@
 
   function renderAll() {
     var form = document.getElementById("author-form");
-    if (form) form.dataset.format = STATE.format || "standard";
+    if (form) form.dataset.format = STATE.format || "pbl";
     bindMeta();
     if (isBranched()) {
       renderBranchedNodes();
