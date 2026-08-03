@@ -1281,3 +1281,49 @@ for (const [treeName, room] of Object.entries({
     }
   });
 }
+
+/* ── The room-membership claim is BOUND to the pool assignment (2026-08-03) ──
+ * Until this fix `uidMembers/$uid` was `auth.uid == $uid && !data.exists()`: the
+ * participant CLAIMED membership and nothing verified they had been assigned to
+ * that room, so every per-room gate could be walked past by self-claiming the
+ * target room first (proven on the emulator; it also defeated the roomChat READ
+ * gate). The claim's VALUE is now the claimant's clientId so the rule can check
+ * ownership and assignment. Behavioural proof lives in the emulator spec; this
+ * is the cheap structural lock against a weakening edit.
+ */
+for (const [treeName, room, root] of [
+  ["sessions", rules.rules.sessions.$sessionId.rooms.$roomId,
+   "root.child('sessions').child($sessionId)"],
+  ["orgs", rules.rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId,
+   "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)"]
+]) {
+  test(`rules: ${treeName} uidMembers claim is bound to the pool assignment`, () => {
+    const v = room.uidMembers.$uid[".validate"];
+    assert.ok(!/newData\.val\(\) === true/.test(v),
+      `${treeName}: a bare \`true\` must no longer satisfy the claim — that WAS the bypass`);
+    assert.ok(v.includes(root + ".child('clientMapping').child(newData.val()).val() == auth.uid"),
+      `${treeName}: the claim must name a clientId the claimant OWNS: ` + v);
+    assert.ok(v.includes(root + ".child('pool').child(newData.val()).child('room').val() == $roomId"),
+      `${treeName}: …and one the pool assigned to THIS room: ` + v);
+    // Still self-keyed and write-once.
+    const w = room.uidMembers.$uid[".write"];
+    assert.ok(w.includes("auth.uid == $uid"), `${treeName}: still self-keyed`);
+    assert.ok(w.includes("!data.exists()"), `${treeName}: still write-once`);
+  });
+}
+
+test("rules: the client writes its clientId as the claim value, not `true`", () => {
+  /* The rule and the client have to agree, and nothing else links them: if the
+     client still wrote `true` every room entry would silently lose membership
+     and every gameplay write would be denied mid-session. */
+  const script = fs.readFileSync(
+    path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "script.js"), "utf8");
+  const i = script.indexOf('"/uidMembers/" + uid');
+  assert.ok(i > -1, "the room-entry claim site must still exist");
+  const claim = script.slice(i, i + 240);
+  assert.match(claim, /cur == null \? clientId : undefined/,
+    "the claim must write clientId, which is what the rule dereferences: " + claim.slice(0, 160));
+  assert.ok(!/cur == null \? true : undefined/.test(claim),
+    "writing `true` would be rejected by the new rule — every room entry would " +
+    "silently lose membership and every gameplay write would be denied");
+});
