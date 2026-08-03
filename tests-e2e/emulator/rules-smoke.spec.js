@@ -1232,3 +1232,94 @@ test("rules: sectionBodies bounds the slot key and the payload size", async ({ p
   expect(await tryWrite(page, `sessions/${code}/sectionBodies/1`, "x".repeat(1000)))
     .toBe("ALLOWED");
 });
+
+/* ── answers/moduleA + moduleB — brought up to the moduleBranched contract ──
+ * These were the weakest participant-writable nodes left: `.write` was only
+ * `auth != null && !closed`, with NO room-membership gate and NO $other
+ * sentinel — so any authenticated user who knew a session code could write or
+ * overwrite an answer in ANY room, carrying undeclared fields. Every other
+ * per-room participant node (hypotheses, scoring/awarded, votes/committed,
+ * roomChat) was already membership-gated, so this was an outlier rather than
+ * the house standard, and moduleBranched (M4d) had already shipped hardened.
+ *
+ * The rules are now CLONED from each tree's own moduleBranched block, so the
+ * three modules and the two trees cannot drift. What this test pins is the
+ * behaviour that clone is supposed to produce — including the two things the
+ * branched test never exercised, because branched answers are written once by
+ * the deliverable rather than edited: the `edits` append-log and the
+ * child-only `text` overwrite that inline editing performs.
+ */
+for (const mod of ["moduleA", "moduleB"]) {
+  test(`rules: answers/${mod} is room-gated and schema-sealed, and editing still works`, async ({ page }) => {
+    await page.goto("/");
+    const uid = await waitForUid(page);
+    const code = "ans-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+    const base = `sessions/${code}/rooms/Room 1/answers/${mod}`;
+    /* The REAL client payload (addAnswer): by, cid, university, text, at, plus
+       bulletKey for the structured form. If the seal rejected any of these the
+       node would look hardened while silently breaking every session — which is
+       the ordering trap this change had to avoid. */
+    const good = { by: "Emu Student", cid: uid, university: "Caen",
+                   text: "Ascending cholangitis — start antibiotics now.",
+                   at: Date.now(), bulletKey: "dx" };
+
+    // Gate: a non-member cannot write, even knowing the code.
+    expect(await tryWrite(page, `${base}/e0`, good),
+      "a non-member must not write answers").not.toBe("ALLOWED");
+
+    expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+      .toBe("ALLOWED");
+    expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
+      .toBe("ALLOWED");
+
+    // The full real payload is ACCEPTED — university and bulletKey included.
+    expect(await tryWrite(page, `${base}/e1`, good),
+      "the client's real payload must still be accepted").toBe("ALLOWED");
+
+    // Seal: an undeclared field is refused.
+    expect(await tryWrite(page, `${base}/e2`, Object.assign({}, good, { evil: "x" })),
+      "an unknown entry field must be rejected").not.toBe("ALLOWED");
+    // Schema still enforced.
+    expect(await tryWrite(page, `${base}/e3`, Object.assign({}, good, { text: "" })),
+      "empty text must be rejected").not.toBe("ALLOWED");
+    expect(await tryWrite(page, `${base}/e4`, Object.assign({}, good, { text: "x".repeat(1001) })),
+      "over-long text must be rejected").not.toBe("ALLOWED");
+
+    /* THE EDIT PATH, which branched never exercised. editAnswer() appends the
+       prior text to `edits` and then overwrites `text` ALONE — a child write,
+       not a whole-entry write. A seal that only validated whole entries would
+       pass the tests above and still break every inline edit in production. */
+    expect(await tryWrite(page, `${base}/e1/edits/ed1`,
+      { text: "Ascending cholangitis.", by: "Emu Student", at: Date.now() }),
+      "the edits append-log must accept a prior-text record").toBe("ALLOWED");
+    expect(await tryWrite(page, `${base}/e1/text`, "Ascending cholangitis — ERCP within 24h."),
+      "an inline edit overwrites text alone and must still be allowed").toBe("ALLOWED");
+
+    // CROSS-ROOM: membership in Room 1 must not authorise Room 2 — the hole.
+    expect(await tryWrite(page, `sessions/${code}/rooms/Room 2/answers/${mod}/e1`, good),
+      "cross-room answer tampering must be denied").not.toBe("ALLOWED");
+
+    // Still readable (the answer lists render from it) and clearable.
+    const back = await tryRead(page, `${base}/e1`);
+    expect(back.ok).toBe(true);
+    expect(back.val && back.val.bulletKey).toBe("dx");
+    expect(await tryWrite(page, `${base}/e1`, null)).toBe("ALLOWED");
+
+    // Org-tree parity — same gate, same seal.
+    const oslug = `o${Math.floor(Math.random() * 1e6)}`;
+    const osid = `s${Math.floor(Math.random() * 1e6)}`;
+    const orgBase = `orgs/${oslug}/sessions/${osid}/rooms/Room 1/answers/${mod}`;
+    expect(await tryWrite(page, `${orgBase}/e1`, good),
+      "org tree must gate on membership too").not.toBe("ALLOWED");
+    expect(await tryWrite(page, `orgs/${oslug}/sessions/${osid}/rooms/Room 1/uidMembers/${uid}`, true))
+      .toBe("ALLOWED");
+    expect(await tryWrite(page, `${orgBase}/e1`, good)).toBe("ALLOWED");
+    expect(await tryWrite(page, `${orgBase}/e2`, Object.assign({}, good, { evil: "x" })),
+      "org tree must seal unknown fields too").not.toBe("ALLOWED");
+
+    // Closed session: no further contributions.
+    await adminPut(`sessions/${code}/closed`, { at: Date.now() });
+    expect(await tryWrite(page, `${base}/e9`, good),
+      "no answers after the session closes").not.toBe("ALLOWED");
+  });
+}

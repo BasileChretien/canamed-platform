@@ -1190,3 +1190,60 @@ test("rules: Phase 4d moderation — reports write-own/once, moderators admin-on
   const tomb = r.moderation.removed.$shareId[".write"];
   assert.match(tomb, /moderators'\)\.child\(auth\.uid\)\.val\(\) == true/, "tombstone write must require a moderator: " + tomb);
 });
+
+/* ── answers/moduleA + moduleB brought up to the moduleBranched contract ─────
+ * These were the weakest participant-writable nodes left: `.write` was only
+ * `auth != null && !closed` — no room-membership gate, no `$other` sentinel —
+ * so any authenticated user who knew a session code could write or overwrite an
+ * answer in ANY room, with undeclared fields. Every other per-room participant
+ * node was already gated, and moduleBranched shipped hardened in M4d, so the
+ * two were the outlier rather than the standard.
+ *
+ * The fix CLONES each tree's own moduleBranched block. These tests assert the
+ * property that makes the clone durable — the three modules are IDENTICAL, in
+ * both trees — rather than re-typing the expected rule text, which is exactly
+ * how the two drifted apart in the first place.
+ */
+const ANS_TREES = {
+  sessions: rules.rules.sessions.$sessionId.rooms.$roomId.answers,
+  orgs: rules.rules.orgs.$orgSlug.sessions.$sessionId.rooms.$roomId.answers
+};
+
+for (const [treeName, tree] of Object.entries(ANS_TREES)) {
+  test(`rules: ${treeName} answers/moduleA+B match moduleBranched exactly`, () => {
+    const ref = JSON.stringify(tree.moduleBranched.$entryId);
+    for (const mod of ["moduleA", "moduleB"]) {
+      assert.strictEqual(JSON.stringify(tree[mod].$entryId), ref,
+        `${treeName}/${mod} must be byte-identical to moduleBranched — if these ` +
+        "diverge, one module is weaker than the others and nothing else notices");
+    }
+  });
+
+  test(`rules: ${treeName} answers modules are room-gated and sealed`, () => {
+    for (const mod of ["moduleA", "moduleB", "moduleBranched"]) {
+      const e = tree[mod].$entryId;
+      assert.match(e[".write"], /uidMembers'\)\.child\(auth\.uid\)\.exists\(\)/,
+        `${treeName}/${mod} must require room membership — without it a member of ` +
+        "ANY room can overwrite ANY other room's answers");
+      assert.strictEqual(e.$other[".validate"], false,
+        `${treeName}/${mod} must seal unknown entry fields`);
+      assert.ok(e[".write"].includes("'closed'"),
+        `${treeName}/${mod} must still refuse writes to a closed session`);
+    }
+  });
+
+  test(`rules: ${treeName} answers still declare every field the CLIENT writes`, () => {
+    /* THE ORDERING TRAP. addAnswer() sends by/cid/university/text/at plus
+       bulletKey; editAnswer() appends to `edits`. Sealing with $other BEFORE
+       declaring those would reject legitimate answers — the node would look
+       hardened while silently breaking every session. */
+    for (const mod of ["moduleA", "moduleB", "moduleBranched"]) {
+      const e = tree[mod].$entryId;
+      for (const field of ["text", "by", "cid", "at", "university", "bulletKey", "edits"]) {
+        assert.ok(e[field],
+          `${treeName}/${mod} must declare '${field}' — the client writes it, so ` +
+          "an $other seal without it rejects real answers");
+      }
+    }
+  });
+}

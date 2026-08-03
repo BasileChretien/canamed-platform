@@ -254,17 +254,25 @@ test("M4d: answers/moduleBranched is declared in BOTH trees and HARDENED", () =>
       assert.ok(e[f], label + ": must declare the client-written field " + f);
     });
     assert.match(e.text[".validate"], /length <= 1000/, label + ": text bounded");
-    /* Strictly stronger than moduleA — shown POSITIVELY, by the conjunct
-       moduleA lacks, rather than by a notStrictEqual that any difference would
-       satisfy. If moduleA is ever hardened too (tracked in CLAUDE.md), this
-       flips to both having the gate, and the assertion below should be updated
-       deliberately rather than deleted. */
-    const modA = ans.moduleA.$entryId[".write"];
-    assert.ok(!/uidMembers/.test(modA),
-      label + ": moduleA is still the un-gated legacy contract (update this test " +
-      "when moduleA is hardened)");
-    assert.ok(/uidMembers/.test(e[".write"]),
-      label + ": moduleBranched adds the membership conjunct moduleA lacks");
+    /* UPDATED DELIBERATELY, as this block instructed. It used to assert that
+       moduleA was still the un-gated legacy contract, and that moduleBranched
+       was strictly stronger by the conjunct moduleA lacked. moduleA and moduleB
+       have since been brought up to this same contract (they were the last
+       participant-writable nodes without a room gate), so the correct assertion
+       is no longer "branched is stronger" but "all three are IDENTICAL" — which
+       is a stronger guarantee and the one that stops them drifting again.
+       Deleting the check would have been the wrong move; inverting it is the
+       right one. */
+    const modA = ans.moduleA.$entryId;
+    const modB = ans.moduleB.$entryId;
+    assert.ok(/uidMembers/.test(modA[".write"]),
+      label + ": moduleA must now carry the room-membership gate too");
+    assert.ok(/uidMembers/.test(modB[".write"]),
+      label + ": moduleB must now carry the room-membership gate too");
+    assert.strictEqual(JSON.stringify(modA), JSON.stringify(e),
+      label + ": moduleA must be byte-identical to moduleBranched");
+    assert.strictEqual(JSON.stringify(modB), JSON.stringify(e),
+      label + ": moduleB must be byte-identical to moduleBranched");
   });
   // The two trees are NOT interchangeable: each must gate on its OWN root, or an
   // org session would be checked against the default tree (and vice versa).
