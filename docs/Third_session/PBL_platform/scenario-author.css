@@ -468,6 +468,12 @@ input:focus, textarea:focus, select:focus {
    referenced branched case) make no sense for a WHOLE-scenario branched file,
    which is one tree and declares no module list. */
 .author-form[data-format="branched"] .standard-only { display: none; }
+/* A scenario authors ONE section type, so the sections that do not apply are
+   hidden rather than left for the author to scroll past. "combined" is the
+   legacy both-modules shape: it shows both, so an existing scenario still
+   round-trips instead of silently losing half its content. */
+.author-form:not([data-format="pbl"]):not([data-format="combined"]) .pbl-only { display: none; }
+.author-form:not([data-format="roleplay"]):not([data-format="combined"]) .roleplay-only { display: none; }
 
 /* M5 — module-set tick boxes + the branched-case reference. */
 #modules-toggle { flex-wrap: wrap; gap: 1rem; margin: .3rem 0 .2rem; }
