@@ -12,7 +12,7 @@
  */
 
 // @ts-check
-const { test, expect, useEmulator } = require("./fixtures.js");
+const { test, expect, useEmulator, claimRoom } = require("./fixtures.js");
 
 async function waitForUid(page) {
   await page.waitForFunction(() => {
@@ -45,8 +45,7 @@ test("rules: answer edit history is appended + bounded (point 4)", async ({ page
      `rooms/<roomId>/uidMembers/<uid>` on room entry BEFORE any gameplay write,
      exactly as hypotheses / scoring / votes already required. Without it this
      spec was proving that a NON-member of the room could write answers. */
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
-    .toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   // Create the answer, then append a snapshot of the superseded text.
   expect(await tryWrite(page, entry, { text: "v0", by: "A", cid: "c1", at: Date.now() }))
@@ -86,8 +85,7 @@ test("rules: deleted answer body is retained append-only in answersDeleted", asy
      only ever runs from inside a room the participant has entered, and entry
      claims uidMembers before any gameplay write. Without it this spec was
      demonstrating that a non-member of the room could archive a body here. */
-  expect(await tryWrite(page, `sessions/${code}/rooms/${room}/uidMembers/${uid}`, true))
-    .toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, room, uid);
 
   // A withdrawn point's body is archived here before the live entry is removed.
   expect(await tryWrite(page, delPath,

@@ -456,6 +456,7 @@
       "room.call.throttle-again": "Please wait {seconds}s before calling a facilitator again.",
       "room.call.sent": "Facilitator called ✓",
       // group-answer edit / delete error alerts (network failures)
+      "room.err.membership": "We could not confirm your place in this room. Your work may not save — please reload, and tell your facilitator if it continues.",
       "room.answer.err.edit-failed": "Your edit could not be saved — check your connection. Your text: ",
       "room.answer.err.delete-failed": "That point could not be deleted — check your connection and try again.",
       // language hint + placeholder shown above each answers box

@@ -320,6 +320,7 @@
   "room.call.throttle-recall": "ファシリテーターを再度呼ぶまで{seconds}秒お待ちください。",
   "room.call.throttle-again": "ファシリテーターを再度呼ぶまで{seconds}秒お待ちください。",
   "room.call.sent": "ファシリテーターを呼びました ✓",
+  "room.err.membership": "この部屋への参加を確認できませんでした。作業が保存されない可能性があります — ページを再読み込みし、続く場合はファシリテーターにお知らせください。",
   "room.answer.err.edit-failed": "編集を保存できませんでした — 接続を確認してください。入力内容: ",
   "room.answer.err.delete-failed": "この項目を削除できませんでした — 接続を確認してもう一度お試しください。",
   "room.answer-input-language-hint": "好きな言語で書いてください — 英語・フランス語・日本語のいずれでも。英語の上手さは評価しません。評価するのは臨床的な考え方です。",

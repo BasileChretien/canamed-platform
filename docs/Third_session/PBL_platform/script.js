@@ -4838,21 +4838,71 @@ function startRoom() {
     }).catch(e => console.error("Stage init failed", e));
   }
 
-  // Per-room uid membership claim (introduced 2026-05-28 with the LLM-patient
-  // pilot; the set of rules depending on it was EXPANDED 2026-05-30). Write-once
-  // `rooms/<roomId>/uidMembers/<uid> = true`, claimed here on room entry BEFORE
-  // any gameplay write. The per-room write rules now require this entry for:
-  // LLM chat, scoring (awarded/auto/penalties), moduleA hypotheses + prompt
-  // replies, moduleB exchange replies, and votes/committed — so a session
-  // member who is NOT in this room can neither read its chat nor tamper with
-  // its gameplay/score (cross-room tampering, 2026-05-30 review). The
-  // transaction is idempotent; on a rare transient failure those room writes
-  // are denied until it is re-claimed on the next room entry.
+  /* Per-room uid membership claim (introduced 2026-05-28 with the LLM-patient
+     pilot; the set of rules depending on it was EXPANDED 2026-05-30). Claimed
+     here on room entry BEFORE any gameplay write. The per-room rules require
+     this entry for: LLM chat, scoring (awarded/auto/penalties), moduleA
+     hypotheses + prompt replies, moduleB exchange replies, votes/committed and
+     the answers nodes.
+
+     THE VALUE IS THE CLIENT ID, NOT `true` (changed 2026-08-03). Until then the
+     claim was self-asserted — the rule only checked `auth.uid == $uid`, so any
+     authenticated user who knew a session code could claim membership of ANY
+     room and then write there, or read its LLM chat. Proven on the emulator: a
+     cross-room write was denied before the claim and allowed after it.
+
+     Writing the clientId lets the rule verify what it previously took on trust:
+     `clientMapping/<cid> == auth.uid` (you own this clientId, write-once) and
+     `pool/<cid>/room == $roomId` (it is assigned to THIS room). The claim
+     becomes checkable rather than asserted, while the deliberate self-assign
+     join flow keeps working — a participant may still choose their room, they
+     just cannot claim one they were not placed in.
+
+     It has to be the VALUE because RTDB rules cannot iterate: there is no way to
+     ask "does SOME clientId owned by me map to this room". Safe to repurpose —
+     all 36 rule references test `.exists()` only, never the value.
+
+     The transaction stays idempotent; on a transient failure those room writes
+     are denied until it is re-claimed on the next room entry. */
   try {
     const auth = (typeof firebase !== "undefined" && firebase.auth) ? firebase.auth() : null;
     const uid = auth && auth.currentUser && auth.currentUser.uid;
-    if (uid) {
-      db.ref(base + "/uidMembers/" + uid).transaction(cur => (cur == null ? true : undefined));
+    if (uid && clientId && typeof myRoom === "string" && myRoom) {
+      /* SESSION-level and write-once, so a participant has exactly ONE room for
+         the whole session. Binding the old per-room marker to pool/<cid>/room
+         achieved nothing, because that path is participant-writable too (the
+         self-assign flow): you could rewrite your own assignment and claim each
+         room in turn, since the marker was write-once PER ROOM. Fixed here at
+         session level — rewriting the pool afterwards changes nothing.
+         The facilitator can still reassign; the rule's admin branch overwrites.
+         `cid` travels in the value so the rule can tie the claim to a clientId
+         you own (RTDB cannot iterate to find one for you). */
+      /* The rejection is NOT caught by the surrounding try/catch, and a lost
+         claim is not cosmetic: EVERY later room-scoped write (scoring,
+         hypotheses, phase, votes, answers) is denied for the rest of the
+         session. Silent failure there looks to the participant like the sim
+         simply stopped responding, so distinguish the two cases and say so —
+         same shape as the leaderboard's _onLbErr retry above.
+
+         PERMISSION_DENIED is TERMINAL: with a write-once claim it means this
+         uid already holds a different room, and retrying can never succeed.
+         Anything else wrote nothing, so one retry is worth it. */
+      const _claimRoomOf = (retry) => {
+        db.ref(sPath("roomOf/" + uid))
+          .transaction(cur => (cur == null ? { room: myRoom, cid: clientId } : undefined))
+          .catch(e => {
+            const code = String((e && (e.code || e.message)) || "");
+            const denied = /permission[_ ]denied/i.test(code);
+            console.warn("roomOf claim failed — per-room writes will be denied:", code);
+            if (!denied && retry) { setTimeout(() => _claimRoomOf(false), 1200); return; }
+            try {
+              toast(tFallback("room.err.membership",
+                "We could not confirm your place in this room. Your work may not " +
+                "save — please reload, and tell your facilitator if it continues."));
+            } catch (_) { /* toast not available pre-room */ }
+          });
+      };
+      _claimRoomOf(true);
     }
   } catch (e) { /* LOCAL mode or auth not ready — chat falls back to stub */ }
 

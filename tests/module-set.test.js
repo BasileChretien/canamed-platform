@@ -244,7 +244,7 @@ test("M4d: answers/moduleBranched is declared in BOTH trees and HARDENED", () =>
     assert.strictEqual(
       e[".write"],
       "auth != null && !" + root + ".child('closed').exists() && " +
-      root + ".child('rooms').child($roomId).child('uidMembers').child(auth.uid).exists()",
+      root + ".child('roomOf').child(auth.uid).child('room').val() == $roomId",
       label + ": exact write predicate (authed AND not closed AND a member of THIS room)");
     assert.strictEqual(e.$other[".validate"], false,
       label + ": unknown entry fields must be rejected ($other sentinel)");
@@ -265,9 +265,9 @@ test("M4d: answers/moduleBranched is declared in BOTH trees and HARDENED", () =>
        right one. */
     const modA = ans.moduleA.$entryId;
     const modB = ans.moduleB.$entryId;
-    assert.ok(/uidMembers/.test(modA[".write"]),
+    assert.ok(/roomOf/.test(modA[".write"]),
       label + ": moduleA must now carry the room-membership gate too");
-    assert.ok(/uidMembers/.test(modB[".write"]),
+    assert.ok(/roomOf/.test(modB[".write"]),
       label + ": moduleB must now carry the room-membership gate too");
     assert.strictEqual(JSON.stringify(modA), JSON.stringify(e),
       label + ": moduleA must be byte-identical to moduleBranched");

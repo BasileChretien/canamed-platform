@@ -63,4 +63,44 @@ const test = base.extend({
   }
 });
 
-module.exports = { test, expect, useEmulator, PROJECT };
+/* Claim per-room membership the way the CLIENT does, in one place.
+ *
+ * Since 2026-08-03 a `uidMembers` claim is no longer self-asserted: its VALUE
+ * must be a clientId the claimant owns (`clientMapping/<cid> == auth.uid`) and
+ * that is assigned to this room (`pool/<cid>/room == $roomId`). Writing a bare
+ * `true` is now REJECTED — which is the whole point, since that was the
+ * self-claim bypass.
+ *
+ * `sessionBase` is the session subtree, e.g. `sessions/<code>` or
+ * `orgs/<slug>/sessions/<id>`. Returns the clientId used, so a caller can
+ * assert against it. Deliberately NOT tolerant of failure: if any of the three
+ * writes is denied the test should fail loudly here rather than at some later
+ * assertion that looks unrelated.
+ */
+async function claimRoom(page, sessionBase, roomId, uid, clientId) {
+  const cid = clientId || ("c" + String(uid).replace(/[^A-Za-z0-9]/g, "").slice(0, 24));
+  const w = (p, v) => page.evaluate(async ({ p, v }) => {
+    try { await firebase.database().ref(p).set(v); return "ALLOWED"; }
+    catch (e) { return (e && (e.code || e.message)) || "DENIED"; }
+  }, { p, v });
+
+  const map = await w(`${sessionBase}/clientMapping/${cid}`, uid);
+  if (map !== "ALLOWED") throw new Error("claimRoom: clientMapping write denied: " + map);
+  /* A WHOLE pool entry, not just `room`: the `pool/$clientId` .validate requires
+     hasChildren(['name','university','year','english','at']), so writing `room`
+     alone fails the parent validator. This mirrors a real join, which is the
+     point — the room assignment only means something as part of one. */
+  const pool = await w(`${sessionBase}/pool/${cid}`, {
+    name: "Emu Member", university: "Caen", year: 4, english: "B2",
+    at: Date.now(), room: roomId
+  });
+  if (pool !== "ALLOWED") throw new Error("claimRoom: pool entry write denied: " + pool);
+  /* SESSION-level and write-once: one room per participant for the whole
+     session. The old per-room marker was write-once PER ROOM, so a participant
+     could rewrite their own pool assignment and claim each room in turn. */
+  const claim = await w(`${sessionBase}/roomOf/${uid}`, { room: roomId, cid });
+  if (claim !== "ALLOWED") throw new Error("claimRoom: roomOf claim denied: " + claim);
+  return cid;
+}
+
+module.exports = { test, expect, useEmulator, PROJECT, claimRoom };

@@ -18,7 +18,7 @@
  */
 
 // @ts-check
-const { test, expect, useEmulator } = require("./fixtures.js");
+const { test, expect, useEmulator, claimRoom } = require("./fixtures.js");
 
 // Auto-accept the in-page confirm modal that Start/Advance open.
 async function installModalAutoAccept(page) {
@@ -221,7 +221,7 @@ test("rules: the dormant prompt/exchange nodes are now DENIED at the DB (M3a)", 
   const room = `sessions/${code}/rooms/Room 1`;
 
   // Claim membership first, so a denial can't be blamed on the uidMembers gate.
-  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   const reply = { text: "note", by: "Emu", cid: uid, at: Date.now() };
   const dead = [
@@ -253,7 +253,7 @@ test("rules: roleAssign (random role assignment) is member-gated and validates r
 
   // Claim Room 1 membership (as a participant entering the room does), then a
   // well-formed distinct-role draw is allowed.
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
   expect(await tryWrite(page, path, {
     assignments: { c1: "physician", c2: "patient", c3: "family", c4: "observer" },
     by: uid, at: Date.now()
@@ -290,7 +290,7 @@ test("rules: /moduleB/phase accepts an authored phase list, bounded", async ({ p
   // M3a added the uidMembers gate to phase (it was the one room-scoped write
   // without it), so claim membership first — exactly as enterRoom/startRoom does
   // for participants AND for a facilitator opening the room as admin.
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
   /* S1c-3b — an authored roleplay declares its own phase list, so a bound of 5
      (the built-in six-phase timetable) would have made phase 7 of an 8-phase
      roleplay unwritable. Second defect of the same class as the role-id enum:
@@ -315,7 +315,7 @@ test("rules: per-room write gating — a Room 1 member cannot write into Room 2 
   const code = "xroom-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
 
   // Become a member of Room 1 only.
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   // Writing into Room 1 (own room) is allowed for every gated path...
   const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
@@ -390,7 +390,7 @@ test("rules: org per-room gating — moduleA/B writes allowed in own org room, d
   const base = `orgs/${slug}/sessions/${code}`;
 
   // Member of Room 1 only.
-  expect(await tryWrite(page, `${base}/rooms/Room 1/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, base, "Room 1", uid);
 
   // Own room: the org-tree paths added for parity (2026-05-30 R2) accept writes.
   const own = (p, v) => tryWrite(page, `${base}/rooms/Room 1/${p}`, v);
@@ -825,7 +825,7 @@ test("rules: roomChat is room-private — a session member in another room canno
   await page.goto("/");
   const uidA = await waitForUid(page);
   expect(await tryWrite(page, `sessions/${code}/members/${uidA}`, { at: Date.now() })).toBe("ALLOWED");
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uidA}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uidA);
   expect(await tryWrite(page, `roomChat/${code}/Room 1/t1`, turn)).toBe("ALLOWED");
 
   // A can read its OWN room's chat back.
@@ -843,7 +843,7 @@ test("rules: roomChat is room-private — a session member in another room canno
   const uidB = await waitForUid(pageB);
   expect(uidB).not.toBe(uidA);
   expect(await tryWrite(pageB, `sessions/${code}/members/${uidB}`, { at: Date.now() })).toBe("ALLOWED");
-  expect(await tryWrite(pageB, `sessions/${code}/rooms/Room 2/uidMembers/${uidB}`, true)).toBe("ALLOWED");
+  await claimRoom(pageB, `sessions/${code}`, "Room 2", uidB);
 
   // THE FIX: B is a fully-fledged session member, and the session-wide .read
   // still cascades over the session subtree — but roomChat lives OUTSIDE it,
@@ -1007,8 +1007,7 @@ test("rules: answers/moduleBranched accepts a composed branched deliverable (M4d
   // Join the session + claim room membership, exactly as enterRoom/startRoom do.
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
-    .toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   expect(await tryWrite(page, `${base}/e1`, good)).toBe("ALLOWED");
 
@@ -1042,8 +1041,7 @@ test("rules: answers/moduleBranched accepts a composed branched deliverable (M4d
   const orgBase = `orgs/${oslug}/sessions/${osid}/rooms/Room 1/answers/moduleBranched`;
   expect(await tryWrite(page, `${orgBase}/e1`, good),
     "org tree must gate on membership too").not.toBe("ALLOWED");
-  expect(await tryWrite(page, `orgs/${oslug}/sessions/${osid}/rooms/Room 1/uidMembers/${uid}`, true))
-    .toBe("ALLOWED");
+  await claimRoom(page, `orgs/${oslug}/sessions/${osid}`, "Room 1", uid);
   expect(await tryWrite(page, `${orgBase}/e1`, good)).toBe("ALLOWED");
   expect(await tryWrite(page, `${orgBase}/e2`, Object.assign({}, good, { evil: "x" })),
     "org tree must seal unknown fields too").not.toBe("ALLOWED");
@@ -1077,7 +1075,7 @@ test("rules: per-slot section state is accepted, and slots are independent", asy
      working, not a bug. */
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
-  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   // Two PBL sections in one session: slot 1 and slot 3 keep separate boards.
   expect(await tryWrite(page, `${room}/sections/1/revealed/history:0`,
@@ -1098,7 +1096,7 @@ test("rules: the slot key is bounded, and unknown children are rejected", async 
   const uid = await waitForUid(page);
   const code = "slotguard-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const room = `sessions/${code}/rooms/Room 1`;
-  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   /* MAX_SECTION_SLOTS is 8 and stage 0 is Welcome, so 1..9 is the accepted
      range. A slot key outside it — or one that is not a slot at all — must not
@@ -1116,7 +1114,7 @@ test("rules: per-slot answers validate exactly like the module-scoped ones", asy
   const uid = await waitForUid(page);
   const code = "slotans-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const room = `sessions/${code}/rooms/Room 1`;
-  expect(await tryWrite(page, `${room}/uidMembers/${uid}`, true)).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   const path = `${room}/answers/sections/2/plan`;
   expect(await tryWrite(page, path,
@@ -1269,8 +1267,7 @@ for (const mod of ["moduleA", "moduleB"]) {
 
     expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
       .toBe("ALLOWED");
-    expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
-      .toBe("ALLOWED");
+    await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
     // The full real payload is ACCEPTED — university and bulletKey included.
     expect(await tryWrite(page, `${base}/e1`, good),
@@ -1311,8 +1308,7 @@ for (const mod of ["moduleA", "moduleB"]) {
     const orgBase = `orgs/${oslug}/sessions/${osid}/rooms/Room 1/answers/${mod}`;
     expect(await tryWrite(page, `${orgBase}/e1`, good),
       "org tree must gate on membership too").not.toBe("ALLOWED");
-    expect(await tryWrite(page, `orgs/${oslug}/sessions/${osid}/rooms/Room 1/uidMembers/${uid}`, true))
-      .toBe("ALLOWED");
+    await claimRoom(page, `orgs/${oslug}/sessions/${osid}`, "Room 1", uid);
     expect(await tryWrite(page, `${orgBase}/e1`, good)).toBe("ALLOWED");
     expect(await tryWrite(page, `${orgBase}/e2`, Object.assign({}, good, { evil: "x" })),
       "org tree must seal unknown fields too").not.toBe("ALLOWED");
@@ -1354,8 +1350,7 @@ test("rules: answersDeleted is room-gated and sealed; write-once does not bound 
 
   expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
     .toBe("ALLOWED");
-  expect(await tryWrite(page, `sessions/${code}/rooms/Room 1/uidMembers/${uid}`, true))
-    .toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
 
   expect(await tryWrite(page, `${base}/d1`, good),
     "the client's real delete-archive payload must still be accepted").toBe("ALLOWED");
@@ -1384,7 +1379,67 @@ test("rules: answersDeleted is room-gated and sealed; write-once does not bound 
   const orgBase = `orgs/${oslug}/sessions/${osid}/rooms/Room 1/answersDeleted`;
   expect(await tryWrite(page, `${orgBase}/d1`, good),
     "org tree must gate on membership too").not.toBe("ALLOWED");
-  expect(await tryWrite(page, `orgs/${oslug}/sessions/${osid}/rooms/Room 1/uidMembers/${uid}`, true))
-    .toBe("ALLOWED");
+  await claimRoom(page, `orgs/${oslug}/sessions/${osid}`, "Room 1", uid);
   expect(await tryWrite(page, `${orgBase}/d1`, good)).toBe("ALLOWED");
+});
+
+/* ── The room gate is no longer SELF-ASSERTABLE (2026-08-03) ────────────────
+ * Until this fix, `uidMembers/$uid` was `auth.uid == $uid && !data.exists()`:
+ * a participant CLAIMED membership and nothing checked they had been assigned
+ * to that room. Every per-room gate was therefore a speed bump — self-claim the
+ * target room, then write. It also defeated the roomChat READ gate.
+ *
+ * The claim's VALUE is now the claimant's clientId, so the rule can verify what
+ * it used to assume: you own that clientId (`clientMapping/<cid> == auth.uid`,
+ * write-once) and it is assigned to THIS room (`pool/<cid>/room == $roomId`).
+ * It has to travel in the value because RTDB rules cannot iterate — there is no
+ * way to ask "does SOME clientId owned by me map to this room".
+ *
+ * This is the assertion the old suite was missing: it only ever tried the
+ * cross-room write BEFORE claiming, which passed while the hole stayed open.
+ */
+test("rules: roomOf is ONE room per participant — the pool-rewrite escalation is dead", async ({ page }) => {
+  /* THE ATTACK THIS EXISTS FOR. Binding the claim to `pool/<cid>/room` achieved
+     nothing, because that path is participant-writable by design (self-assign):
+     assign yourself Room 1, claim it, REWRITE your own pool room to Room 2,
+     claim Room 2 — the old marker was write-once PER ROOM, so every room's key
+     was free. Repeat and you are a member of every room. Reproduced on the
+     emulator before this fix.
+
+     roomOf is write-once at SESSION level, so the second claim has nowhere to
+     go and rewriting the pool afterwards changes nothing. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "rof-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const base = `sessions/${code}`;
+  const cid = "c" + uid.replace(/[^A-Za-z0-9]/g, "").slice(0, 20);
+  const pool = (room) => ({ name: "A", university: "Caen", year: 4, english: "B2", at: Date.now(), room });
+
+  expect(await tryWrite(page, `${base}/members/${uid}`, { at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/clientMapping/${cid}`, uid)).toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/pool/${cid}`, pool("Room 1"))).toBe("ALLOWED");
+
+  // The legitimate claim works, or this fix would have broken room entry.
+  expect(await tryWrite(page, `${base}/roomOf/${uid}`, { room: "Room 1", cid }),
+    "the assigned room must still be claimable").toBe("ALLOWED");
+
+  // A clientId you do not own cannot back a claim.
+  expect(await tryWrite(page, `${base}/roomOf/${uid}`, { room: "Room 1", cid: "cnotmine" }),
+    "a foreign clientId must not back a claim").not.toBe("ALLOWED");
+
+  /* THE ESCALATION: rewrite my own pool assignment, then try to claim the new
+     room. The pool rewrite is still permitted (self-assign is intentional) —
+     what must fail is the second CLAIM. */
+  expect(await tryWrite(page, `${base}/pool/${cid}/room`, "Room 2"),
+    "self-assign remains intentional").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/roomOf/${uid}`, { room: "Room 2", cid }),
+    "a participant gets ONE room per session — the escalation must be dead")
+    .not.toBe("ALLOWED");
+
+  // …and the per-room gates still refuse the other room.
+  const good = { by: "A", cid, university: "Caen", text: "injected", at: Date.now() };
+  expect(await tryWrite(page, `${base}/rooms/Room 2/answers/moduleA/e1`, good),
+    "cross-room writes stay denied").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/rooms/Room 1/answers/moduleA/e1`, good),
+    "…while the participant's OWN room still works").toBe("ALLOWED");
 });
