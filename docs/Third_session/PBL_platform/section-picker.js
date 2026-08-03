@@ -271,18 +271,65 @@ function renderSectionPick() {
     li.className = "splash-section-row";
     li.setAttribute("data-section-id", id);
 
-    const name = document.createElement("span");
-    name.className = "splash-section-name";
     const title = (sec.name && (typeof tc === "function" ? tc(sec.name, _curLang()) : sec.name.en))
       || id;
-    /* textContent, never innerHTML — a section title can be facilitator-authored. */
     /* Reuse the stage label pattern the STUDENT sees, so the facilitator's row
        and the student's stage read identically in every language. */
     const pat = (typeof window !== "undefined" && typeof window.t === "function")
       ? window.t("stage.label.section") : "";
     const tpl = (pat && pat !== "stage.label.section") ? pat : "Section {n} — {title}";
-    name.textContent = tpl.replace("{n}", String(i + 1)).replace("{title}", title);
-    li.appendChild(name);
+
+    /* THE SECTION IS A SELECT, so a slot can be changed IN PLACE. It used to be
+       a static span, which meant the seeded default could only be replaced by
+       noticing the small ×, removing it, and then adding — the facilitator's
+       reasonable reading was that section 1 simply could not be changed.
+
+       The label is SPLIT around {title} rather than interpolated, so the select
+       sits exactly where the title sits in the pattern. Interpolating would have
+       forced the position prefix to lead in every language, which the i18n
+       pattern exists precisely to avoid. */
+    const parts = tpl.split("{title}");
+    const pre = document.createElement("span");
+    pre.className = "splash-section-name";
+    /* textContent, never innerHTML — a section title can be facilitator-authored. */
+    pre.textContent = (parts[0] || "").replace("{n}", String(i + 1));
+    li.appendChild(pre);
+
+    const pick = document.createElement("select");
+    pick.className = "splash-section-pick";
+    pick.setAttribute("aria-label",
+      (window.t ? window.t("splash.create.sections-change") : "Change this section"));
+    const lib = sectionLibraryList() || [];
+    /* If the current id is not in the library (an authored section whose owner
+       signed out, or a taken-down shared one), keep it as its own option rather
+       than letting the select silently snap to the first entry — that would
+       change the facilitator's pick behind their back. */
+    if (!lib.some(s => s && s.id === id)) {
+      const keep = document.createElement("option");
+      keep.value = id;
+      keep.textContent = title;
+      pick.appendChild(keep);
+    }
+    lib.forEach(s => {
+      const o = document.createElement("option");
+      o.value = s.id;
+      const t2 = (s.name && (typeof tc === "function" ? tc(s.name, _curLang()) : s.name.en)) || s.id;
+      o.textContent = sectionTypeLabel(s.type) + " — " + t2;
+      pick.appendChild(o);
+    });
+    pick.value = id;
+    pick.addEventListener("change", () => {
+      splashSectionPick[i] = pick.value;
+      renderSectionPick();   // re-render: the type chip and Report button follow the new section
+    });
+    li.appendChild(pick);
+
+    if (parts[1]) {
+      const post = document.createElement("span");
+      post.className = "splash-section-name";
+      post.textContent = parts[1].replace("{n}", String(i + 1));
+      li.appendChild(post);
+    }
 
     const type = document.createElement("span");
     type.className = "splash-section-type";

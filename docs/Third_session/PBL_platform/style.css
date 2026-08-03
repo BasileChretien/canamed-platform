@@ -2874,8 +2874,30 @@ body.locked > footer { display: none !important; }
   border: 1px solid var(--line);
   border-radius: var(--r-sm);
   background: var(--card);
+  /* …and CLIP the inline axis, which flex-wrap alone does not cover once the
+     row contains a <select>. A select is sized by its longest <option> and can
+     never wrap, and section titles are long ("Section 1 — Chronic Pain & the
+     clinical case"): `max-width: 100%` on the select clamps its BOX, but WebKit
+     still counts the unclamped min-content in its ANCESTORS' scrollable
+     overflow. So every element's rect fitted while the document measured 525px
+     in a 320px viewport, and the splash scrolled sideways on iPhone/iPad/WebKit
+     while Chromium and Firefox were clean. Same phantom width, same fix, as the
+     author page's `.field-row.select-row` (scenario-author.css) — `clip`, not
+     `hidden`, so the row never becomes a scroll container.
+
+     No `overflow-clip-margin` and no padding-inline dance, which the author
+     page needed only because its rows have no padding of their own: the clip
+     edge is the PADDING box, and this row already carries `padding: var(--s-2)`
+     — more than the 3px a focus ring needs — so the ring survives on engines
+     that do not support overflow-clip-margin. (It also has to be omitted rather
+     than tokenised: a raw px here fails the picker's no-raw-px style test, and
+     the space scale has no value that MEANS "focus-ring clearance".) */
+  overflow-x: clip;
 }
-.splash-section-name { flex: 1 1 12ch; min-width: 0; }
+/* prefix is fixed-width; the section SELECT takes the flexible space. */
+.splash-section-name { flex: 0 0 auto; min-width: 0; white-space: nowrap; }
+/* min-width:0 + max-width stop a long option label overflowing a phone. */
+.splash-section-pick { flex: 1 1 8ch; min-width: 0; max-width: 100%; }
 .splash-section-type {
   flex: 0 0 auto;
   white-space: nowrap;

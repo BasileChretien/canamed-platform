@@ -348,7 +348,13 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   reclaim is DONE — 384 room-only rules (58.9 KB raw) moved into a lazily
   `<link>`ed `room.css` (`CanamedLoader.ensureRoomStyles()`, same pattern as
   admin.css/branched.css), taking the splash budget **337 → 325 KB gz**. The cap
-  stays 337, so that is ~12 KB of banked headroom, not a licence to grow. See the
+  stayed 337 at the time, so that was ~12 KB of banked headroom, not a licence to
+  grow. **⚠️ SUPERSEDED — the cap is now 348** (`FIRST_PARTY_BYTES_LIMIT_KB`,
+  `tests-e2e/perf.spec.js`): it rose 337 → 345 → 348 across the section-model
+  work, each step logged in that file's header. Quote the CONSTANT, never this
+  paragraph — a reviewer citing the stale 337 raised a spurious
+  budget-exceeded finding on PR #271 while the perf check was green.
+  `Verify:` `grep FIRST_PARTY_BYTES_LIMIT_KB tests-e2e/perf.spec.js`. See the
   dated entry in `tests-e2e/perf.spec.js` for the triple guard used to make the
   split safe, and `tests-e2e/room-css-lazy.spec.js` for the contract that keeps
   room.css off the splash. **Note for CSS work:** room styles now live in

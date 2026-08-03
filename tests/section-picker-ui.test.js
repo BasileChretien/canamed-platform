@@ -136,15 +136,32 @@ test("section titles are rendered as TEXT — they can be facilitator-authored",
      otherwise-translated form. */
   assert.match(f, /window\.t\("stage\.label\.section"\)/,
     "the row must reuse the student's stage-label pattern");
-  assert.match(f, /tpl\.replace\("\{n\}", String\(i \+ 1\)\)/,
+  assert.match(f, /replace\("\{n\}", String\(i \+ 1\)\)/,
     "…numbered by position");
+  /* The TITLE now reaches the DOM as the SELECT's option text rather than being
+     interpolated into the row's own textContent, because a slot became
+     changeable in place. The property guarded here is unchanged and is still
+     the point: an authored title is set as TEXT, never markup — which is what
+     the no-innerHTML assertion above enforces. */
+  assert.match(f, /pre\.textContent =/, "the position prefix is set as text");
+  assert.match(f, /o\.textContent = sectionTypeLabel/,
+    "each option's label is set as text, never markup");
+  assert.match(f, /keep\.textContent = title/,
+    "…including the fallback option for a section no longer in the library");
 });
 
 test("the row is numbered by POSITION, matching the student's stage label", () => {
   const f = fnOf("renderSectionPick");
   assert.match(f, /window\.t\("stage\.label\.section"\)/,
     "same pattern the student sees on the stage");
-  assert.match(f, /replace\("\{title\}", title\)/);
+  /* SPLIT around {title} rather than interpolated, since the title is now a
+     SELECT sitting inside the label. Splitting is what keeps the pattern's word
+     ORDER intact — interpolating would have forced the position prefix to lead
+     in every language, which is exactly what the i18n pattern exists to avoid. */
+  assert.match(f, /tpl\.split\("\{title\}"\)/,
+    "the label must be split around the title, not rebuilt in a fixed order");
+  assert.match(f, /parts\[0\]/, "…prefix before the select");
+  assert.match(f, /parts\[1\]/, "…and any suffix after it");
 });
 
 test("an empty pick writes NO sections field — the session falls back", () => {
