@@ -564,29 +564,98 @@ test("validate() still accepts a gate inside one module", () => {
 
 /* The check compares module SETS and passes when they intersect, not when they
    match, because section-registry.js byModule() publishes a `module: ["A","B"]`
-   decision into BOTH sections — so it genuinely shares a section with each. The
-   author cannot currently produce one (its form has a single module select, and
-   the round-trip collapses ["A","B"] to "A"), so that path is pinned in
-   tests/section-content-apply.test.js against namespaceDecisions() instead,
-   where the array survives. This test pins the collapse itself, so the day the
-   author does model multi-module the intersection rule is already correct. */
-test("the author collapses a multi-module decision to a single module", () => {
-  const api = loadAuthor();
-  const scenario = {
+   decision into BOTH sections — so it genuinely shares a section with each.
+   That array used to die in the author: the form read only its first id and
+   wrote a single string back, so loading, tweaking and re-exporting such a
+   scenario silently dropped the decision from the roleplay section. The set is
+   now modelled end to end (a third "A + B" pick on the module select), and
+   these tests pin the survival — the runtime half stays pinned in
+   tests/section-content-apply.test.js against namespaceDecisions(). */
+function multiModuleScenario(module, extra) {
+  return Object.assign({
     id: "m", name: T("N", "", ""), summary: T("s", "", ""),
     moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
     case: { history: [], exam: [], labs: [], prompts: [] },
     scoring: { moduleA: [], moduleB: [] }, penalties: [],
-    decisions: [{ id: "shared", module: ["A", "B"], prompt: T("p", "", ""),
+    decisions: [{ id: "shared", module: module, prompt: T("p", "", ""),
       options: [{ text: T("x", "", ""), why: T("w", "", ""), correct: true },
                 { text: T("y", "", ""), why: T("w", "", ""), correct: false }] }]
-  };
-  const st = api.fromJson(scenario);
-  const live = api.getState();
-  Object.keys(live).forEach((k) => { delete live[k]; });
-  Object.assign(live, st);
-  assert.equal(api.toJson().decisions[0].module, "A",
-    "documents today's behaviour — the module set reaching validate() is a single id");
+  }, extra || {});
+}
+
+test("a multi-module decision survives the round-trip", () => {
+  const api = loadAuthor();
+  const out = roundTrip(api, multiModuleScenario(["A", "B"]));
+  assert.deepEqual(out.decisions[0].module, ["A", "B"],
+    "the set that puts this decision in BOTH sections must not collapse to one id");
+});
+
+test("…and the exported array is a copy, not the live editing state", () => {
+  const api = loadAuthor();
+  const out = roundTrip(api, multiModuleScenario(["A", "B"]));
+  out.decisions[0].module.push("B");
+  assert.deepEqual(api.toJson().decisions[0].module, ["A", "B"],
+    "mutating the exported JSON must not reach back into STATE");
+});
+
+test("a single-id array is preserved as authored, not rewritten to a string", () => {
+  const api = loadAuthor();
+  const out = roundTrip(api, multiModuleScenario(["B"], { modules: ["B"] }));
+  assert.deepEqual(out.decisions[0].module, ["B"],
+    "the round-trip must not respell a field it was not asked to edit");
+});
+
+test("a plain string module still round-trips as a string", () => {
+  const api = loadAuthor();
+  const out = roundTrip(api, multiModuleScenario("B", { modules: ["B"] }));
+  assert.equal(out.decisions[0].module, "B",
+    "the single-module path — every existing scenario — must be untouched");
+});
+
+test("validate() accepts a decision declared in both modules", () => {
+  const errs = validateScenario([{ id: "shared", module: ["A", "B"] }]);
+  assert.equal(errs.filter((e) => /shared/.test(e) && /module/.test(e)).length, 0,
+    "a legal multi-module decision must not be reported: " + JSON.stringify(errs));
+});
+
+/* The half a legacy two-module save is split into: byModule() copies a
+   ["A","B"] decision into BOTH halves, and the roleplay half declares
+   modules:["B"]. Its module set still INTERSECTS what the section runs, so the
+   decision is reachable and must not be reported as stranded on a stage the
+   session never visits. */
+test("validate() keeps a multi-module decision in a single-module section", () => {
+  const errs = validateScenario([{ id: "shared", module: ["A", "B"] }],
+    { modules: ["B"], moduleAName: undefined });
+  assert.equal(errs.filter((e) => /only runs/.test(e)).length, 0,
+    "a decision sharing a module with the section is reachable: " + JSON.stringify(errs));
+});
+
+test("validate() still rejects a decision no section would run", () => {
+  const errs = validateScenario([{ id: "stranded", module: ["A"] }],
+    { modules: ["B"], moduleAName: undefined });
+  assert.ok(errs.some((e) => /stranded/.test(e) && /only runs/.test(e)),
+    "an array must not become a way to smuggle an unreachable decision past the check");
+});
+
+test("validate() rejects a module id that is neither A nor B", () => {
+  const errs = validateScenario([{ id: "bogus", module: ["A", "C"] }]);
+  assert.ok(errs.some((e) => /bogus/.test(e) && /must be 'A' or 'B'/.test(e)),
+    "an unknown id is preserved rather than silently coerced, so validate() is what reports it: " +
+    JSON.stringify(errs));
+});
+
+/* The form half of the same fix. Rendering needs a real DOM (boot() is
+   deliberately never fired in this harness), so the select's contract is
+   pinned at the source: three picks, and the multi pick stores an ARRAY. A
+   select offering only A/B would silently show "A" over a stored ["A","B"] —
+   a form lying about its own value, which is how the drop went unnoticed. */
+test("the module select models the both-sections pick", () => {
+  assert.match(JS, /var MULTI_MODULE_VALUE\s*=\s*"A,B"/,
+    "the multi-module select value must be declared once");
+  assert.match(JS, /\["A", "A"\], \["B", "B"\], \[MULTI_MODULE_VALUE, "A \+ B"\]/,
+    "the decision module select must offer A, B and A + B");
+  assert.match(JS, /dec\.module = \(sel\.value === MULTI_MODULE_VALUE\) \? \["A", "B"\] : sel\.value/,
+    "picking A + B must store the module SET, not the sentinel string");
 });
 
 /* The runtime has always accepted { id, option } as well as a bare id — it is

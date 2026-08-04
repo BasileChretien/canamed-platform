@@ -85,6 +85,33 @@
       options: [emptyOption(), emptyOption()]
     };
   }
+  /* ── a decision's MODULE SET ───────────────────────────────────────────────
+     `module` names ONE module ("A") or SEVERAL (["A","B"]). The array form is
+     not decoration: section-registry.js byModule() publishes such a decision
+     into BOTH derived sections, so it genuinely runs on two stages — and the
+     author's own byModule() copies it into both halves of a split legacy save.
+     The form used to read only the first id of the array and write a single
+     string back, so loading, tweaking and re-exporting such a scenario dropped
+     the decision from the OTHER section without a word — the same class as the
+     fields the section split used to destroy (#275, #279).
+     Every module value is read through here, so the select, the export and the
+     validator cannot disagree on "which sections is this decision in". */
+  var MULTI_MODULE_VALUE = "A,B";
+  function decisionModuleSet(d) {
+    var m = d && d.module;
+    if (Array.isArray(m)) return m.slice();
+    return (m == null || m === "") ? [] : [m];
+  }
+  /* Which of the select's three options a stored value displays as. Both ids
+     present is the "A + B" pick; anything else falls back to a single id so an
+     unexpected value still renders an editable control — validate() is what
+     reports it, and the value itself is preserved until the author edits it. */
+  function moduleSelectValue(mod) {
+    var set = decisionModuleSet({ module: mod });
+    if (set.indexOf("A") !== -1 && set.indexOf("B") !== -1) return MULTI_MODULE_VALUE;
+    return set.indexOf("B") !== -1 ? "B" : "A";
+  }
+
   function emptyTestOption() { return { text: emptyTrio(), correct: false }; }
   function emptyTestQuestion() {
     return { id: "", q: emptyTrio(), options: [emptyTestOption(), emptyTestOption()], explanation: emptyTrio() };
@@ -464,12 +491,20 @@
       var modCell = el("div", { class: "field-row narrow" });
       modCell.appendChild(el("label", { class: "field-label", text: "module" }));
       var sel = el("select", { class: "module-select" });
-      ["A", "B"].forEach(function (m) {
-        var opt = el("option", { value: m, text: m });
-        if (dec.module === m) opt.selected = true;
+      /* Three picks, not two: a decision may run in BOTH sections (see
+         decisionModuleSet). The option is offered rather than merely preserved
+         because a select showing "A" over a stored ["A","B"] would be a form
+         that lies about its own value — and an author who loads such a scenario
+         must be able to see, keep or deliberately collapse the pair. */
+      [["A", "A"], ["B", "B"], [MULTI_MODULE_VALUE, "A + B"]].forEach(function (pair) {
+        var opt = el("option", { value: pair[0], text: pair[1] });
+        if (moduleSelectValue(dec.module) === pair[0]) opt.selected = true;
         sel.appendChild(opt);
       });
-      sel.addEventListener("change", function () { dec.module = sel.value; refreshOutput(); });
+      sel.addEventListener("change", function () {
+        dec.module = (sel.value === MULTI_MODULE_VALUE) ? ["A", "B"] : sel.value;
+        refreshOutput();
+      });
       modCell.appendChild(sel);
       top.appendChild(modCell);
 
@@ -1593,7 +1628,11 @@
     });
     var decisions = STATE.decisions.map(function (d) {
       var dOut = {
-        id: d.id, module: d.module, points: d.points, penalty: d.penalty,
+        // A multi-module set is emitted as its own array, never the live state
+        // one, so the exported JSON cannot be mutated by later editing.
+        id: d.id,
+        module: Array.isArray(d.module) ? d.module.slice() : d.module,
+        points: d.points, penalty: d.penalty,
         prompt: d.prompt,
         options: d.options.map(function (o) {
           var oOut = { text: o.text, correct: !!o.correct, why: o.why };
@@ -2095,14 +2134,20 @@
 
     // decisions
     json.decisions.forEach(function (d, i) {
-      if (d.module !== "A" && d.module !== "B")
-        errs.push("decisions[" + i + "] (id='" + d.id + "') module must be 'A' or 'B'.");
+      /* A decision may declare several modules, and then runs in each of their
+         sections — so the check is over the SET, and an unreachable decision is
+         one that shares NO module with what the scenario runs. */
+      var dMods = decisionModuleSet(d);
+      var dBad = dMods.filter(function (m) { return m !== "A" && m !== "B"; });
+      if (!dMods.length || dBad.length)
+        errs.push("decisions[" + i + "] (id='" + d.id + "') module must be 'A' or 'B'" +
+          " — or a list of them, e.g. [\"A\",\"B\"] to run it in both sections.");
       // M1 — a decision in a module this scenario does NOT run would render into
       // a stage the session never visits, so it would be silently unreachable.
       // M5 — a branched-only scenario runs NO PBL module, so every A/B decision
       // there is unreachable too (hence `declared.length`, not modsPresent's).
-      else if (declared.length && modsPresent.indexOf(d.module) === -1)
-        errs.push("decisions[" + i + "] (id='" + d.id + "') is module '" + d.module +
+      else if (declared.length && !dMods.some(function (m) { return modsPresent.indexOf(m) !== -1; }))
+        errs.push("decisions[" + i + "] (id='" + d.id + "') is module '" + dMods.join("/") +
           "', but this scenario only runs " + (modsPresent.length
             ? "Module " + modsPresent.join(" + Module ")
             : "a branched decision case") +
@@ -2150,13 +2195,9 @@
     };
     /* Which sections can a decision appear in? The section model splits a
        scenario's decisions by MODULE onto separate stages, so a decision's
-       module set is exactly the set of sections that publish it. `module` may
-       be an array, and such a decision really does land in both sections. */
-    var moduleSetOf = function (d) {
-      var m = d && d.module;
-      if (Array.isArray(m)) return m.slice();
-      return m == null ? [] : [m];
-    };
+       module set is exactly the set of sections that publish it —
+       decisionModuleSet() is the one reader of that, shared with the form and
+       the export so an array cannot mean different things in three places. */
     json.decisions.forEach(function (d, i) {
       var uw = d.unlockWhen;
       if (!uw || typeof uw !== "object") return;
@@ -2182,8 +2223,8 @@
              Modules INTERSECT rather than match, because a decision declaring
              module ["A","B"] is published in both sections — so it can legally
              gate, or be gated by, either one. */
-          var mine = moduleSetOf(d);
-          var theirs = moduleSetOf(decisionById[dep]);
+          var mine = decisionModuleSet(d);
+          var theirs = decisionModuleSet(decisionById[dep]);
           var shared = mine.filter(function (m) { return theirs.indexOf(m) !== -1; });
           if (mine.length && theirs.length && !shared.length)
             errs.push("decisions[" + i + "] (id='" + d.id + "') is module '" + mine.join("/") +
@@ -2292,7 +2333,10 @@
     json.decisions.forEach(function (d) {
       var card = el("div", { class: "preview-decision" });
       card.appendChild(el("p", { class: "preview-dec-prompt",
-        text: "[" + (d.module || "?") + "] " + ((d.prompt && d.prompt.en) || "(no prompt)") }));
+        // "A/B" for a decision that runs in both sections — an array would
+        // otherwise render as the bare "A,B" of an implicit toString().
+        text: "[" + (decisionModuleSet(d).join("/") || "?") + "] " +
+          ((d.prompt && d.prompt.en) || "(no prompt)") }));
       var ul = el("ul");
       (d.options || []).forEach(function (o) {
         var li = el("li", { text: (o.text && o.text.en) || "(no text)" });
@@ -2397,7 +2441,9 @@
     s.decisions = (obj.decisions || []).map(function (d) {
       return {
         id: d.id || "",
-        module: (d.module === "B" ? "B" : "A"),
+        /* A declared module SET survives as an array (it is what puts the
+           decision in both sections); a single value keeps the old coercion. */
+        module: Array.isArray(d.module) ? d.module.slice() : (d.module === "B" ? "B" : "A"),
         points: d.points || 0,
         penalty: d.penalty || 0,
         prompt: asTrio(d.prompt),

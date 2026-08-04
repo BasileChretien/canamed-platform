@@ -314,13 +314,22 @@ test("M5: the decisions[].module whitelist stays A|B — branched is never inlin
   s.decisions[0].module = "branched";
   install(api, s);
   const errs = api.validate();
-  // fromJson coerces an unknown module to "A", so the invariant to pin is the
-  // source rule: composition means no branched node ever enters decisions[].
+  // fromJson coerces an unknown SCALAR module to "A", so that path pins the
+  // invariant through the export: composition means no branched node ever
+  // enters decisions[].
   assert.equal(api.toJson().decisions[0].module, "A",
     "a branched node is REFERENCED, never inlined into decisions[]");
-  assert.match(JS, /d\.module !== "A" && d\.module !== "B"/,
-    "the decision-module whitelist must stay A|B");
   assert.deepStrictEqual(errs, []);
+
+  /* A declared module SET is now preserved verbatim — that array is what puts a
+     decision in BOTH sections, so it can no longer be collapsed on load. The
+     whitelist therefore has to hold in validate() rather than in the coercion:
+     "branched" written as a set must be REJECTED, not quietly accepted. */
+  const s2 = mixedScenario(api);
+  s2.decisions[0].module = ["branched"];
+  install(api, s2);
+  assert.ok(api.validate().some((e) => /must be 'A' or 'B'/.test(e)),
+    "a branched id in decisions[] must be reported, not treated as a module");
 });
 
 /* ── the pickable-case list ───────────────────────────────────────────────── */
