@@ -2259,7 +2259,11 @@ function namespaceDecisions(decisions, slot) {
      Same rule the ANSWERS bucket already follows: a standalone branched session
      aggregates into moduleA, only a COMPOSED one uses the separate bucket. */
   const mod = slot.standalone ? "A" : (SECTION_MODULE_FOR_TYPE[slot.type] || "A");
-  const own = {};
+  /* NULL-PROTOTYPE: keyed by AUTHORED ids, so a plain {} reports inherited
+     names (toString, __proto__…) as decisions that exist — a gate on an absent
+     one was rewritten into the permanently-locked dead end this prevents — and
+     never registers one truly named __proto__. As the pseudonymiser. */
+  const own = Object.create(null);
   decisions.forEach(d => { if (d && d.id) own[d.id] = true; });
 
   return decisions.map(d => {
@@ -2269,22 +2273,17 @@ function namespaceDecisions(decisions, slot) {
     const uw = copy.unlockWhen;
     if (uw && uw.afterDecision != null) {
       /* An UNRESOLVABLE gate is DROPPED, not left dangling. The split puts a
-         scenario's decisions on separate stages by module, so a gate written
-         across that boundary names an id this stage never publishes (ids here
-         are `s<slot>_`-prefixed; a raw one matches nothing in roomVotes).
-         decisionUnlocked() then reads it as permanently unmet and the decision
-         is locked all session — invisible outright under `hideWhenLocked`.
-         Dropping degrades it to "available" instead: a gate is an ORDERING
-         constraint, and the stage boundary already orders the sections, so a
-         kept gate destroys the decision while a dropped one costs only what the
-         stages now enforce anyway. It warns, because it does change meaning.
-         Nothing resolvable is lost: a prefix is empty only for a STANDALONE
-         slot, which sectionSlots() sets only when it is the session's ONLY slot,
-         so raw ids are never published beside prefixed ones.
-         Cross-SECTION unlocking is out of scope by design — this sees one
-         section and one slot, so it cannot know which slot holds the target, or
-         whether it even precedes this one. validate() rejects it at authoring
-         time instead, which is the real fix. */
+         scenario's decisions on separate stages by module, so a gate across
+         that boundary names an id this stage never publishes: decisionUnlocked()
+         reads it as permanently unmet and the decision stays locked all session
+         — invisible outright under `hideWhenLocked`. Dropping costs only the
+         ORDERING the stage boundary already imposes; keeping it destroys the
+         decision. It warns, because it does change authored meaning. Nothing
+         resolvable is lost: an empty prefix belongs only to a STANDALONE slot,
+         which is by definition the session's ONLY one. Cross-SECTION unlocking
+         is out of scope — this sees one section and one slot, so it cannot know
+         which slot holds the target. validate() rejects it at authoring time,
+         which is the real fix. */
       const tgt = (typeof uw.afterDecision === "string")
         ? uw.afterDecision
         : (uw.afterDecision && uw.afterDecision.id);
@@ -2297,9 +2296,10 @@ function namespaceDecisions(decisions, slot) {
         delete uw.afterDecision;
         if (!Object.keys(uw).length) delete copy.unlockWhen;
         if (typeof console !== "undefined" && console.warn) {
+          /* Says only what was REMOVED: a retained count gate may still lock it. */
           console.warn("[sections] decision '" + copy.id + "' was gated on '" +
             tgt + "', which is not in this section — a gate only works inside " +
-            "one section, so it has been dropped and the decision is available.");
+            "one section, so its afterDecision gate has been dropped.");
         }
       }
     }

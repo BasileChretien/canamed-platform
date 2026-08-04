@@ -2128,8 +2128,11 @@
     // unlockWhen gates must resolve: afterDecision → an existing decision id
     // (never itself); count gates can't exceed the available case items — a typo
     // or self-reference otherwise yields a decision that can never unlock.
-    var decisionIds = {};
-    var decisionById = {};
+    /* NULL-PROTOTYPE: keyed by AUTHORED ids, so a plain {} would report
+       inherited names (toString, constructor, valueOf, __proto__…) as existing
+       decisions and wave a gate on an absent one straight through. */
+    var decisionIds = Object.create(null);
+    var decisionById = Object.create(null);
     json.decisions.forEach(function (d) {
       if (d.id) { decisionIds[d.id] = true; decisionById[d.id] = d; }
     });

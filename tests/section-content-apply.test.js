@@ -176,6 +176,43 @@ test("a RESOLVABLE gate is still rewritten, and never warns", () => {
   assert.deepEqual(r.warnings, [], "the working case must stay quiet");
 });
 
+/* The lookup map is keyed by AUTHORED ids, so on a plain `{}` every
+   Object.prototype name reads as an existing decision. A gate on an ABSENT
+   "toString" was therefore rewritten to `s<slot>_toString` — manufacturing
+   exactly the permanently-locked decision this function exists to prevent. */
+["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"].forEach((name) => {
+  test("a gate on the absent inherited name '" + name + "' is dropped, not rewritten", () => {
+    const r = captureWarn(() => ctx({}).api.namespaceDecisions(
+      [{ id: "only", unlockWhen: { afterDecision: name } }],
+      { position: 2, type: "roleplay" }));
+    assert.equal(r.out[0].unlockWhen, undefined,
+      "no decision named '" + name + "' exists, so the gate must go");
+  });
+});
+
+test("a decision genuinely NAMED an inherited key still resolves in-section", () => {
+  /* The mirror: `own["__proto__"] = true` on a plain object sets the prototype
+     instead of adding a key, so this only ever resolved by accident. */
+  const r = captureWarn(() => ctx({}).api.namespaceDecisions(
+    [{ id: "__proto__" }, { id: "d2", unlockWhen: { afterDecision: "__proto__" } }],
+    { position: 1, type: "pbl" }));
+  assert.equal(r.out[1].unlockWhen.afterDecision, "s1___proto__");
+  assert.deepEqual(r.warnings, [], "a real in-section gate must not warn");
+});
+
+test("the warning never claims the decision is available", () => {
+  /* A co-declared count gate can still hold it locked, so saying "available"
+     would be false. Report only what was removed. */
+  const r = captureWarn(() => ctx({}).api.namespaceDecisions(
+    [{ id: "only", unlockWhen: { afterDecision: "elsewhere", hypotheses: 2 } }],
+    { position: 1, type: "pbl" }));
+  assert.equal(r.out[0].unlockWhen.hypotheses, 2, "the count gate still locks it");
+  assert.ok(r.warnings.length === 1, "one warning");
+  assert.ok(!/available/.test(r.warnings[0]),
+    "must not claim availability while another gate remains: " + r.warnings[0]);
+  assert.match(r.warnings[0], /afterDecision gate has been dropped/);
+});
+
 test("a decision published in BOTH sections keeps the gate pointing at it", () => {
   /* section-registry.js byModule() puts a `module: ["A","B"]` decision into
      BOTH sections, so inside the roleplay section the gate's target IS present

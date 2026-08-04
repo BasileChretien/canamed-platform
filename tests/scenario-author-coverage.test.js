@@ -546,6 +546,22 @@ test("validate() still accepts a gate inside one module", () => {
     "the working, shipped pattern must keep validating: " + JSON.stringify(errs));
 });
 
+/* The id maps are keyed by AUTHORED ids, so on a plain `{}` every
+   Object.prototype name reads as an existing decision and a gate on an absent
+   one sailed through validation — then the runtime rewrote it into a
+   permanently-locked decision. */
+["toString", "constructor", "valueOf", "__proto__"].forEach((name) => {
+  test("validate() rejects a gate on the absent inherited name '" + name + "'", () => {
+    const errs = validateScenario([
+      { id: "d_a1", module: "A" },
+      { id: "d_b1", module: "B", unlockWhen: { afterDecision: name } }
+    ]);
+    const hit = errs.find((e) => /afterDecision/.test(e));
+    assert.ok(hit && /is not an existing decision id/.test(hit),
+      "'" + name + "' is not a decision: " + JSON.stringify(errs));
+  });
+});
+
 /* The check compares module SETS and passes when they intersect, not when they
    match, because section-registry.js byModule() publishes a `module: ["A","B"]`
    decision into BOTH sections — so it genuinely shares a section with each. The
