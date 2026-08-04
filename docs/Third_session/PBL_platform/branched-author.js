@@ -12,8 +12,10 @@
  *   - a node no option points to is the ENTRY (no gate);
  *   - a node reached from a SINGLE option of one parent → afterDecision
  *     { id: parent, option: k } (only that choice opens it);
- *   - a node reached from SEVERAL options of the SAME parent → afterDecision
- *     "parent" (id-only: any of that parent's choices converge here);
+ *   - a node reached from a SUBSET of one parent's options → afterDecision
+ *     { id: parent, option: [k…] } (any of those choices, and only those);
+ *   - a node reached from EVERY option of the same parent → afterDecision
+ *     "parent" (id-only: whatever they pick, the case converges here);
  *   - a node reached from MORE THAN ONE parent cannot be expressed by the
  *     single-gate model — it is gated on the first incoming edge and reported
  *     in `warnings` (the UI should steer authors away from cross-parent merges).
@@ -22,14 +24,54 @@
  * dependency-free: emits the object; callers run validateBranchedGraph on it.
  *
  * buildBranchedScenario(meta, nodes) -> { scenario, warnings:[…] }
- *   meta  = { id, name, summary, title? }
- *   nodes = [{ id, stem, points?, penalty?,
- *              options:[{ text, correct?, consequence?, next? }] }]
+ *   meta  = { id, name, summary, title?, shell?, extra? }
+ *   nodes = [{ id, stem, points?, penalty?, why?, hideWhenLocked?,
+ *              unlockWhenExtra?, extra?,
+ *              options:[{ text, correct?, consequence?, why?, next?,
+ *                         branchExtra?, extra? }] }]
+ *
+ * PASSTHROUGH (`shell` / `extra` / `unlockWhenExtra` / `branchExtra`) — the
+ * branched editor models a small slice of the branched shape, and everything it
+ * did not model used to be DESTROYED the moment a case was loaded and
+ * re-exported: the real shipped ward-escalation case lost all 5 evidence
+ * `documents` panels, all 16 option `why` rationales and one whole gate (41% of
+ * its bytes), silently. The standard editor solved this years ago with an
+ * `_extra` bag; these fields are the same idea for the branched path. Unmodeled
+ * content round-trips byte-for-byte while staying uneditable, which is the
+ * honest contract: the editor may not show a field, but it must never eat one.
  */
 (function (root) {
   "use strict";
 
   const en = (s) => ({ en: typeof s === "string" ? s : "" });
+
+  /* The non-graph half of a branched scenario. A case LOADED into the editor
+     re-emits exactly the shell it arrived with (including the ABSENCE of a
+     key); a scenario authored from scratch gets the empty stand-ins that keep
+     case-derived runtime code from choking on a pure decision flow. */
+  const SHELL_KEYS = ["moduleBName", "case", "scoring", "penalties", "synthPrereqs"];
+  const DEFAULT_SHELL = () => ({
+    // A branched scenario is pure decision flow — empty clinical stand-ins
+    // keep case-derived code from choking (mirrors branched-seed.js).
+    case: { history: [], exam: [], labs: [] },
+    scoring: {},
+    penalties: [],
+    synthPrereqs: [],
+  });
+
+  // Re-emit captured-but-unmodeled keys without clobbering anything the editor
+  // actually set (same contract as scenario-author.js's mergeExtra).
+  function mergeExtra(base, extra) {
+    if (extra && typeof extra === "object" && !Array.isArray(extra)) {
+      Object.keys(extra).forEach((k) => {
+        if (!(k in base)) base[k] = extra[k];
+      });
+    }
+    return base;
+  }
+  function hasKeys(o) {
+    return !!(o && typeof o === "object" && !Array.isArray(o) && Object.keys(o).length);
+  }
 
   function buildBranchedScenario(meta, nodes) {
     meta = meta || {};
@@ -83,31 +125,80 @@
       }
       const p = parents[0];
       const fromP = edges.filter((e) => e.parent === p);
-      // Several distinct options of the same parent → "any option" (id-only).
-      const distinctOpts = Array.from(new Set(fromP.map((e) => e.opt)));
-      return distinctOpts.length > 1 ? p : { id: p, option: distinctOpts[0] };
+      const distinctOpts = Array.from(new Set(fromP.map((e) => e.opt)))
+        .sort((a, b) => a - b);
+      if (distinctOpts.length === 1) return { id: p, option: distinctOpts[0] };
+      /* SEVERAL options of the same parent. "Any option" (the id-only gate) is
+         only true when EVERY one of the parent's choices lands here — the old
+         code emitted it for any convergence, so a node reached from 3 of a
+         parent's 4 choices also opened after the 4th. The runtime and the graph
+         validator both accept an option ARRAY, which says exactly what the
+         author drew; use it whenever the convergence is a subset. */
+      const parent = nodes.filter((n) => n && n.id === p)[0];
+      const parentOptCount = (parent && Array.isArray(parent.options))
+        ? parent.options.length : 0;
+      if (parentOptCount && distinctOpts.length >= parentOptCount) return p;
+      return { id: p, option: distinctOpts };
     }
 
     const decisions = nodes.map((n) => {
       const gate = gateFor(n.id);
       const d = {
         id: n.id,
-        module: "A",
+        /* A branched case is a single-stage decision flow, so the editor only
+           ever AUTHORS module "A" (branched-seed.js: every node renders in
+           stage 1's decision column). But "A" is not an invariant of the DATA —
+           composeBranchedModule() stamps `module:"branched"` on the nodes it
+           merges into a mixed session, and branched-render.js routes the graph
+           filter and the answers bucket off that value — so a loaded node keeps
+           the module it arrived with. */
+        module: (typeof n.module === "string" && n.module) ? n.module : "A",
         points: typeof n.points === "number" ? n.points : 10,
         penalty: typeof n.penalty === "number" ? n.penalty : 5,
         prompt: en(n.stem),
         options: (Array.isArray(n.options) ? n.options : []).map((o) => {
-          const opt = { text: en(o && o.text), correct: !!(o && o.correct) };
-          if (o && o.consequence) opt.branch = { reveal: en(o.consequence) };
-          if (o && o.why) opt.why = en(o.why);
-          return opt;
+          o = o || {};
+          const opt = { text: en(o.text), correct: !!o.correct };
+          // `branch` carries the consequence narrative AND any unmodeled fork
+          // keys (a group vote, a future reveal variant) captured on load.
+          if (o.consequence || hasKeys(o.branchExtra)) {
+            opt.branch = {};
+            if (o.consequence) opt.branch.reveal = en(o.consequence);
+            mergeExtra(opt.branch, o.branchExtra);
+          }
+          if (o.why) opt.why = en(o.why);
+          return mergeExtra(opt, o.extra);
         }),
       };
-      if (gate != null) {
-        d.unlockWhen = { afterDecision: gate };
-        d.hideWhenLocked = true; // a follow-up lands as a surprise fork
+      /* unlockWhen is DERIVED from the forward edges, but a loaded gate may
+         also carry conditions the editor has no arrow for (hypotheses,
+         historyRevealed…). Emit the derived afterDecision alongside those. */
+      const gateExtra = hasKeys(n.unlockWhenExtra) ? n.unlockWhenExtra : null;
+      if (gate != null || gateExtra) {
+        d.unlockWhen = {};
+        if (gate != null) d.unlockWhen.afterDecision = gate;
+        mergeExtra(d.unlockWhen, gateExtra);
       }
-      return d;
+      /* A gate the forward-edge model cannot hold (two nodes opening on the
+         same choice, a dangling parent, an out-of-range index) is preserved
+         verbatim by the loader instead of being destroyed. It is re-emitted
+         exactly as written — but it has no arrow in the editor, so say so:
+         otherwise the author sees a node with no visible "Then →" pointing at
+         it and may "fix" a link that is in fact already correct. */
+      if (gateExtra && gate == null && gateExtra.afterDecision != null) {
+        warnings.push(
+          'Node "' + n.id + '" keeps the gate it was loaded with (' +
+            JSON.stringify(gateExtra.afterDecision) + "), because this editor " +
+            "draws one arrow per choice and that gate needs more. It is exported " +
+            "unchanged; edit it in the JSON if you need to change it.",
+        );
+      }
+      /* A gated follow-up lands as a surprise fork, so it hides while locked —
+         unless the loaded case said otherwise, which is a decision the author
+         made and the editor must not overwrite. */
+      if (typeof n.hideWhenLocked === "boolean") d.hideWhenLocked = n.hideWhenLocked;
+      else if (gate != null) d.hideWhenLocked = true;
+      return mergeExtra(d, n.extra);
     });
 
     const scenario = {
@@ -116,17 +207,15 @@
       name: en(meta.name || meta.title),
       summary: en(meta.summary),
       moduleAName: en(meta.title || meta.name),
-      moduleBName: en("Reflection"),
-      // A branched scenario is pure decision flow — empty clinical stand-ins
-      // keep case-derived code from choking (mirrors branched-seed.js).
-      case: { history: [], exam: [], labs: [] },
-      scoring: {},
-      penalties: [],
-      synthPrereqs: [],
-      decisions,
     };
+    const shell = (meta.shell && typeof meta.shell === "object" && !Array.isArray(meta.shell))
+      ? meta.shell : DEFAULT_SHELL();
+    SHELL_KEYS.forEach((k) => {
+      if (Object.prototype.hasOwnProperty.call(shell, k)) scenario[k] = shell[k];
+    });
+    scenario.decisions = decisions;
 
-    return { scenario, warnings };
+    return { scenario: mergeExtra(scenario, meta.extra), warnings };
   }
 
   const api = { buildBranchedScenario };
