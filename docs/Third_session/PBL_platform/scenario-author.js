@@ -2129,15 +2129,66 @@
     // (never itself); count gates can't exceed the available case items — a typo
     // or self-reference otherwise yields a decision that can never unlock.
     var decisionIds = {};
-    json.decisions.forEach(function (d) { if (d.id) decisionIds[d.id] = true; });
+    var decisionById = {};
+    json.decisions.forEach(function (d) {
+      if (d.id) { decisionIds[d.id] = true; decisionById[d.id] = d; }
+    });
+    /* The runtime accepts TWO spellings of the same gate — a bare id ("any
+       committed option opens it") and { id, option } ("only these options do",
+       which is what the branch editor's gateFor() emits). Read the id out of
+       whichever was written, so both are checked the same way. Comparing the
+       raw value used to stringify the object form to "[object Object]": a valid
+       { id, option } gate on a standard scenario was reported as a dangling id,
+       and a genuinely dangling one produced the same useless message. */
+    var gateTargetId = function (spec) {
+      if (typeof spec === "string") return spec;
+      if (spec && typeof spec === "object" && typeof spec.id === "string") return spec.id;
+      return null;
+    };
+    /* Which sections can a decision appear in? The section model splits a
+       scenario's decisions by MODULE onto separate stages, so a decision's
+       module set is exactly the set of sections that publish it. `module` may
+       be an array, and such a decision really does land in both sections. */
+    var moduleSetOf = function (d) {
+      var m = d && d.module;
+      if (Array.isArray(m)) return m.slice();
+      return m == null ? [] : [m];
+    };
     json.decisions.forEach(function (d, i) {
       var uw = d.unlockWhen;
       if (!uw || typeof uw !== "object") return;
       if (uw.afterDecision != null && uw.afterDecision !== "") {
-        if (uw.afterDecision === d.id)
+        var dep = gateTargetId(uw.afterDecision);
+        if (dep == null)
+          errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision must be a decision id, or { id, option } naming one.");
+        else if (dep === d.id)
           errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision refers to itself.");
-        else if (!decisionIds[uw.afterDecision])
-          errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision '" + uw.afterDecision + "' is not an existing decision id.");
+        else if (!decisionIds[dep])
+          errs.push("decisions[" + i + "] (id='" + d.id + "') unlockWhen.afterDecision '" + dep + "' is not an existing decision id.");
+        else {
+          /* CROSS-MODULE GATE — accepted here until now, and dead at runtime.
+             A session is built from independently picked SECTIONS, and a
+             scenario's decisions are split across them by module. Decision ids
+             are namespaced per section (they become RTDB vote keys, and two
+             sections routinely carry the same ids), so a gate can only ever see
+             the decisions of its OWN section. Written across modules it names
+             an id that stage never publishes: the decision stays locked for the
+             whole session, and `hideWhenLocked` hides it entirely. Nothing
+             warned, at authoring time or at runtime.
+
+             Modules INTERSECT rather than match, because a decision declaring
+             module ["A","B"] is published in both sections — so it can legally
+             gate, or be gated by, either one. */
+          var mine = moduleSetOf(d);
+          var theirs = moduleSetOf(decisionById[dep]);
+          var shared = mine.filter(function (m) { return theirs.indexOf(m) !== -1; });
+          if (mine.length && theirs.length && !shared.length)
+            errs.push("decisions[" + i + "] (id='" + d.id + "') is module '" + mine.join("/") +
+              "' but unlockWhen.afterDecision names '" + dep + "', which is module '" +
+              theirs.join("/") + "'. Those run as SEPARATE sections on separate stages, and a " +
+              "gate only works inside one section — so this decision would never unlock. " +
+              "Gate it on a decision in module '" + mine.join("/") + "', or move one of them.");
+        }
       }
       if (typeof uw.historyRevealed === "number" && uw.historyRevealed > groupLen.history)
         errs.push("decisions[" + i + "] unlockWhen.historyRevealed (" + uw.historyRevealed + ") exceeds the " + groupLen.history + " history item(s).");

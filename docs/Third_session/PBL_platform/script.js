@@ -2261,9 +2261,6 @@ function namespaceDecisions(decisions, slot) {
   const mod = slot.standalone ? "A" : (SECTION_MODULE_FOR_TYPE[slot.type] || "A");
   const own = {};
   decisions.forEach(d => { if (d && d.id) own[d.id] = true; });
-  /* Only rewrite references to ids INSIDE this section. An edge pointing at
-     something else is already broken; renaming it would hide that. */
-  const nsId = id => (own[id] ? pre + id : id);
 
   return decisions.map(d => {
     const copy = JSON.parse(JSON.stringify(d));
@@ -2271,8 +2268,40 @@ function namespaceDecisions(decisions, slot) {
     copy.module = mod;
     const uw = copy.unlockWhen;
     if (uw && uw.afterDecision != null) {
-      if (typeof uw.afterDecision === "string") uw.afterDecision = nsId(uw.afterDecision);
-      else if (uw.afterDecision.id) uw.afterDecision.id = nsId(uw.afterDecision.id);
+      /* An UNRESOLVABLE gate is DROPPED, not left dangling. The split puts a
+         scenario's decisions on separate stages by module, so a gate written
+         across that boundary names an id this stage never publishes (ids here
+         are `s<slot>_`-prefixed; a raw one matches nothing in roomVotes).
+         decisionUnlocked() then reads it as permanently unmet and the decision
+         is locked all session — invisible outright under `hideWhenLocked`.
+         Dropping degrades it to "available" instead: a gate is an ORDERING
+         constraint, and the stage boundary already orders the sections, so a
+         kept gate destroys the decision while a dropped one costs only what the
+         stages now enforce anyway. It warns, because it does change meaning.
+         Nothing resolvable is lost: a prefix is empty only for a STANDALONE
+         slot, which sectionSlots() sets only when it is the session's ONLY slot,
+         so raw ids are never published beside prefixed ones.
+         Cross-SECTION unlocking is out of scope by design — this sees one
+         section and one slot, so it cannot know which slot holds the target, or
+         whether it even precedes this one. validate() rejects it at authoring
+         time instead, which is the real fix. */
+      const tgt = (typeof uw.afterDecision === "string")
+        ? uw.afterDecision
+        : (uw.afterDecision && uw.afterDecision.id);
+      if (own[tgt]) {
+        if (typeof uw.afterDecision === "string") uw.afterDecision = pre + tgt;
+        else uw.afterDecision.id = pre + tgt;
+      } else {
+        /* Only the dead reference goes; co-declared count gates (hypotheses,
+           historyRevealed…) are still satisfiable and stay. */
+        delete uw.afterDecision;
+        if (!Object.keys(uw).length) delete copy.unlockWhen;
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[sections] decision '" + copy.id + "' was gated on '" +
+            tgt + "', which is not in this section — a gate only works inside " +
+            "one section, so it has been dropped and the decision is available.");
+        }
+      }
     }
     return copy;
   });

@@ -121,12 +121,91 @@ test("graph edges are rewritten in lockstep, or the unlock silently breaks", () 
   assert.equal(out[2].unlockWhen.afterDecision.option, 2, "the option must survive");
 });
 
-test("an edge pointing OUTSIDE the section is left alone, not silently renamed", () => {
-  const out = ctx({}).api.namespaceDecisions(
+/* ── An UNRESOLVABLE gate is dropped, not left dangling ──────────────────────
+ * This block previously asserted the opposite ("left alone, not silently
+ * renamed"), on the reasoning that an edge pointing outside the section is
+ * already broken and renaming it would hide that. Leaving it alone hid it just
+ * as thoroughly, and cost more: the section split puts a scenario's decisions
+ * on separate stages BY MODULE, so an entirely reasonable authored gate ("this
+ * Module B decision opens once the team commits that Module A one") becomes an
+ * outside-the-section edge. Left raw it matches no vote key, decisionUnlocked()
+ * reports it permanently unmet, and the decision is locked for the whole
+ * session — invisible outright when `hideWhenLocked` is set. No error anywhere.
+ *
+ * So the gate is dropped and the decision is available, with a warning. The
+ * authoring-time check in scenario-author.js validate() is the real fix; this
+ * is the safety net for scenarios already written. */
+function captureWarn(fn) {
+  const orig = console.warn;
+  const seen = [];
+  console.warn = (...a) => seen.push(a.join(" "));
+  try { return { out: fn(), warnings: seen }; } finally { console.warn = orig; }
+}
+
+test("a gate pointing OUTSIDE the section is DROPPED, so the decision still opens", () => {
+  const r = captureWarn(() => ctx({}).api.namespaceDecisions(
     [{ id: "only", unlockWhen: { afterDecision: "elsewhere" } }],
-    { position: 1, type: "pbl" });
-  assert.equal(out[0].unlockWhen.afterDecision, "elsewhere",
-    "it is already broken — renaming it would hide that");
+    { position: 1, type: "pbl" }));
+  assert.equal(r.out[0].unlockWhen, undefined,
+    "an unlockWhen holding only the dead gate goes with it — the decision reads as ungated");
+  assert.ok(r.warnings.some(w => /elsewhere/.test(w) && /not in this section/.test(w)),
+    "dropping it must not be silent — it changes authored meaning");
+});
+
+test("the object form { id, option } is dropped too — same dead reference", () => {
+  const r = captureWarn(() => ctx({}).api.namespaceDecisions(
+    [{ id: "only", unlockWhen: { afterDecision: { id: "elsewhere", option: 2 } } }],
+    { position: 1, type: "pbl" }));
+  assert.equal(r.out[0].unlockWhen, undefined);
+});
+
+test("dropping the dead gate keeps the COUNT gates declared beside it", () => {
+  const r = captureWarn(() => ctx({}).api.namespaceDecisions(
+    [{ id: "only", unlockWhen: { afterDecision: "elsewhere", hypotheses: 2 } }],
+    { position: 1, type: "pbl" }));
+  assert.equal(r.out[0].unlockWhen.afterDecision, undefined, "only the dead reference goes");
+  assert.equal(r.out[0].unlockWhen.hypotheses, 2,
+    "a co-declared count gate is still satisfiable — dropping it would ungate more than necessary");
+});
+
+test("a RESOLVABLE gate is still rewritten, and never warns", () => {
+  const r = captureWarn(() => ctx({}).api.namespaceDecisions(
+    [{ id: "a" }, { id: "b", unlockWhen: { afterDecision: "a" } }],
+    { position: 2, type: "pbl" }));
+  assert.equal(r.out[1].unlockWhen.afterDecision, "s2_a");
+  assert.deepEqual(r.warnings, [], "the working case must stay quiet");
+});
+
+test("a decision published in BOTH sections keeps the gate pointing at it", () => {
+  /* section-registry.js byModule() puts a `module: ["A","B"]` decision into
+     BOTH sections, so inside the roleplay section the gate's target IS present
+     and must be rewritten, not dropped. The drop keys off what this section
+     actually carries, which is exactly why it gets this right. */
+  const r = captureWarn(() => ctx({}).api.namespaceDecisions(
+    [{ id: "shared", module: ["A", "B"] },
+     { id: "b_only", module: "B", unlockWhen: { afterDecision: "shared" } }],
+    { position: 2, type: "roleplay" }));
+  assert.equal(r.out[1].unlockWhen.afterDecision, "s2_shared",
+    "the shared decision travels with this section, so the gate still resolves");
+  assert.deepEqual(r.warnings, []);
+});
+
+test("the cross-module gate the section split broke: B gated on A", () => {
+  /* The end-to-end shape of the defect. The scenario's decisions are split by
+     module, so the two ids never meet in one section — and the id the gate
+     names is not the id slot 1 published. */
+  const r = captureWarn(() => {
+    const a = ctx({}).api.namespaceDecisions(
+      [{ id: "dec_a1" }], { position: 1, type: "pbl" });
+    const b = ctx({}).api.namespaceDecisions(
+      [{ id: "dec_b1", unlockWhen: { afterDecision: "dec_a1" } }],
+      { position: 2, type: "roleplay" });
+    return { a, b };
+  });
+  assert.equal(r.out.a[0].id, "s1_dec_a1");
+  assert.equal(r.out.b[0].id, "s2_dec_b1");
+  assert.equal(r.out.b[0].unlockWhen, undefined,
+    "raw 'dec_a1' matches no published id, so the student would never see this decision");
 });
 
 test("namespacing is pure: the library entry is never mutated", () => {
