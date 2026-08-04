@@ -486,6 +486,141 @@ test("Phase 3 (review): validate() resolves unlockWhen.afterDecision + flags dup
   assert.ok(errs.some((e) => /preTest has duplicate id 'q1'/.test(e)), "duplicate preTest id flagged");
 });
 
+/* ── A gate may not cross a module boundary ──────────────────────────────────
+ * `unlockWhen.afterDecision` holds a decision until another one is committed.
+ * The section model splits a scenario's decisions across independently picked
+ * SECTIONS by module, and namespaceDecisions() prefixes each section's ids per
+ * slot (they become RTDB vote keys, and two sections routinely carry the same
+ * ids). A gate can therefore only ever see its OWN section's decisions.
+ *
+ * Written across modules it named an id its stage never publishes, so the
+ * decision stayed locked for the entire session — invisible when
+ * `hideWhenLocked` is set. validate() accepted it, because it checked the
+ * target existed across ALL decisions rather than within the same module, so
+ * neither the author nor the student was told anything. */
+function validateScenario(decisions, extra) {
+  const api = loadAuthor();
+  const mkOpt = (t, c) => ({ text: T(t, "", ""), correct: c, why: T(t + "-why", "", "") });
+  const scenario = Object.assign({
+    id: "gate", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    synthId: "labs:0", synthPrereqs: [],
+    case: {
+      history: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      exam: [{ q: T("q", "", ""), a: T("a", "", "") }],
+      labs: [{ key: true, q: T("q", "", ""), a: T("a", "", "") }],
+      prompts: [T("p", "", "")]
+    },
+    scoring: { moduleA: [{ id: "fa", points: 5, label: T("l", "", ""), any: ["x"] }],
+               moduleB: [{ id: "fb", points: 5, label: T("l", "", ""), any: ["x"] }] },
+    penalties: [],
+    decisions: decisions.map((d) => Object.assign({
+      points: 10, penalty: 5, prompt: T("p", "", ""),
+      options: [mkOpt("o", true), mkOpt("o2", false)]
+    }, d))
+  }, extra || {});
+  const st = api.fromJson(scenario);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  return api.validate();
+}
+
+test("validate() rejects a gate whose target is in ANOTHER module", () => {
+  const errs = validateScenario([
+    { id: "d_a1", module: "A" },
+    { id: "d_b1", module: "B", unlockWhen: { afterDecision: "d_a1" } }
+  ]);
+  const hit = errs.find((e) => /d_b1/.test(e) && /afterDecision/.test(e));
+  assert.ok(hit, "a cross-module gate must be reported: " + JSON.stringify(errs));
+  assert.match(hit, /d_a1/, "the message must name the TARGET decision");
+  assert.match(hit, /separate sections/i, "…and say why a cross-module gate cannot work");
+});
+
+test("validate() still accepts a gate inside one module", () => {
+  const errs = validateScenario([
+    { id: "d_a1", module: "A" },
+    { id: "d_a2", module: "A", unlockWhen: { afterDecision: "d_a1" } }
+  ]);
+  assert.equal(errs.filter((e) => /afterDecision/.test(e)).length, 0,
+    "the working, shipped pattern must keep validating: " + JSON.stringify(errs));
+});
+
+/* The id maps are keyed by AUTHORED ids, so on a plain `{}` every
+   Object.prototype name reads as an existing decision and a gate on an absent
+   one sailed through validation — then the runtime rewrote it into a
+   permanently-locked decision. */
+["toString", "constructor", "valueOf", "__proto__"].forEach((name) => {
+  test("validate() rejects a gate on the absent inherited name '" + name + "'", () => {
+    const errs = validateScenario([
+      { id: "d_a1", module: "A" },
+      { id: "d_b1", module: "B", unlockWhen: { afterDecision: name } }
+    ]);
+    const hit = errs.find((e) => /afterDecision/.test(e));
+    assert.ok(hit && /is not an existing decision id/.test(hit),
+      "'" + name + "' is not a decision: " + JSON.stringify(errs));
+  });
+});
+
+/* The check compares module SETS and passes when they intersect, not when they
+   match, because section-registry.js byModule() publishes a `module: ["A","B"]`
+   decision into BOTH sections — so it genuinely shares a section with each. The
+   author cannot currently produce one (its form has a single module select, and
+   the round-trip collapses ["A","B"] to "A"), so that path is pinned in
+   tests/section-content-apply.test.js against namespaceDecisions() instead,
+   where the array survives. This test pins the collapse itself, so the day the
+   author does model multi-module the intersection rule is already correct. */
+test("the author collapses a multi-module decision to a single module", () => {
+  const api = loadAuthor();
+  const scenario = {
+    id: "m", name: T("N", "", ""), summary: T("s", "", ""),
+    moduleAName: T("A", "", ""), moduleBName: T("B", "", ""),
+    case: { history: [], exam: [], labs: [], prompts: [] },
+    scoring: { moduleA: [], moduleB: [] }, penalties: [],
+    decisions: [{ id: "shared", module: ["A", "B"], prompt: T("p", "", ""),
+      options: [{ text: T("x", "", ""), why: T("w", "", ""), correct: true },
+                { text: T("y", "", ""), why: T("w", "", ""), correct: false }] }]
+  };
+  const st = api.fromJson(scenario);
+  const live = api.getState();
+  Object.keys(live).forEach((k) => { delete live[k]; });
+  Object.assign(live, st);
+  assert.equal(api.toJson().decisions[0].module, "A",
+    "documents today's behaviour — the module set reaching validate() is a single id");
+});
+
+/* The runtime has always accepted { id, option } as well as a bare id — it is
+   what the branch editor's own gateFor() emits. validate() compared the raw
+   value, so the object stringified to "[object Object]": a VALID gate was
+   reported as a dangling id, and a genuinely dangling one gave the same
+   useless message. Both forms now read through the same id. */
+test("validate() understands the { id, option } gate form", () => {
+  const ok = validateScenario([
+    { id: "d_a1", module: "A" },
+    { id: "d_a2", module: "A", unlockWhen: { afterDecision: { id: "d_a1", option: 0 } } }
+  ]);
+  assert.equal(ok.filter((e) => /afterDecision/.test(e)).length, 0,
+    "a valid object-form gate must not be reported: " + JSON.stringify(ok));
+
+  const bad = validateScenario([
+    { id: "d_a1", module: "A" },
+    { id: "d_a2", module: "A", unlockWhen: { afterDecision: { id: "ghost", option: 0 } } }
+  ]);
+  const hit = bad.find((e) => /afterDecision/.test(e));
+  assert.ok(hit && /'ghost'/.test(hit),
+    "a dangling object-form gate must name the real id, not [object Object]: " + hit);
+  assert.ok(!/\[object Object\]/.test(hit), "…and never stringify the object");
+});
+
+test("validate() flags a cross-module gate written in the object form too", () => {
+  const errs = validateScenario([
+    { id: "d_a1", module: "A" },
+    { id: "d_b1", module: "B", unlockWhen: { afterDecision: { id: "d_a1", option: 1 } } }
+  ]);
+  assert.ok(errs.some((e) => /d_b1/.test(e) && /separate sections/i.test(e)),
+    "the module check must not be reachable only via the string form");
+});
+
 test("the passthrough helpers are wired into (de)serialisation", () => {
   assert.match(JS, /function extraKeys\(/, "extraKeys helper must exist");
   assert.match(JS, /function mergeExtra\(/, "mergeExtra helper must exist");

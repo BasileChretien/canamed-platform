@@ -2259,11 +2259,12 @@ function namespaceDecisions(decisions, slot) {
      Same rule the ANSWERS bucket already follows: a standalone branched session
      aggregates into moduleA, only a COMPOSED one uses the separate bucket. */
   const mod = slot.standalone ? "A" : (SECTION_MODULE_FOR_TYPE[slot.type] || "A");
-  const own = {};
+  /* NULL-PROTOTYPE: keyed by AUTHORED ids, so a plain {} reports inherited
+     names (toString, __proto__…) as decisions that exist — a gate on an absent
+     one was rewritten into the permanently-locked dead end this prevents — and
+     never registers one truly named __proto__. As the pseudonymiser. */
+  const own = Object.create(null);
   decisions.forEach(d => { if (d && d.id) own[d.id] = true; });
-  /* Only rewrite references to ids INSIDE this section. An edge pointing at
-     something else is already broken; renaming it would hide that. */
-  const nsId = id => (own[id] ? pre + id : id);
 
   return decisions.map(d => {
     const copy = JSON.parse(JSON.stringify(d));
@@ -2271,8 +2272,36 @@ function namespaceDecisions(decisions, slot) {
     copy.module = mod;
     const uw = copy.unlockWhen;
     if (uw && uw.afterDecision != null) {
-      if (typeof uw.afterDecision === "string") uw.afterDecision = nsId(uw.afterDecision);
-      else if (uw.afterDecision.id) uw.afterDecision.id = nsId(uw.afterDecision.id);
+      /* An UNRESOLVABLE gate is DROPPED, not left dangling. The split puts a
+         scenario's decisions on separate stages by module, so a gate across
+         that boundary names an id this stage never publishes: decisionUnlocked()
+         reads it as permanently unmet and the decision stays locked all session
+         — invisible outright under `hideWhenLocked`. Dropping costs only the
+         ORDERING the stage boundary already imposes; keeping it destroys the
+         decision. It warns, because it does change authored meaning. Nothing
+         resolvable is lost: an empty prefix belongs only to a STANDALONE slot,
+         which is by definition the session's ONLY one. Cross-SECTION unlocking
+         is out of scope — this sees one section and one slot, so it cannot know
+         which slot holds the target. validate() rejects it at authoring time,
+         which is the real fix. */
+      const tgt = (typeof uw.afterDecision === "string")
+        ? uw.afterDecision
+        : (uw.afterDecision && uw.afterDecision.id);
+      if (own[tgt]) {
+        if (typeof uw.afterDecision === "string") uw.afterDecision = pre + tgt;
+        else uw.afterDecision.id = pre + tgt;
+      } else {
+        /* Only the dead reference goes; co-declared count gates (hypotheses,
+           historyRevealed…) are still satisfiable and stay. */
+        delete uw.afterDecision;
+        if (!Object.keys(uw).length) delete copy.unlockWhen;
+        if (typeof console !== "undefined" && console.warn) {
+          /* Says only what was REMOVED: a retained count gate may still lock it. */
+          console.warn("[sections] decision '" + copy.id + "' was gated on '" +
+            tgt + "', which is not in this section — a gate only works inside " +
+            "one section, so its afterDecision gate has been dropped.");
+        }
+      }
     }
     return copy;
   });
