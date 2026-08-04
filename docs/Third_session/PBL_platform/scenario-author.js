@@ -134,11 +134,17 @@
   // Branched-format editor state: English-only, FORWARD edges (option.next is a
   // target node id; "" = ends the case). buildBranchedScenario translates these
   // to the runtime's reverse unlockWhen.afterDecision gates.
+  /* `why`/`branchExtra`/`extra` are the branched editor's passthrough bag — the
+     branched twin of the standard editor's `_extra` (see extraKeys/mergeExtra).
+     The editor has no control for them; they exist so a loaded case is not
+     destroyed on re-export. */
   function emptyBranchedOption() {
-    return { text: "", consequence: "", correct: false, next: "" };
+    return { text: "", consequence: "", correct: false, next: "",
+      why: "", branchExtra: {}, extra: {} };
   }
   function emptyBranchedNode() {
     return { id: "", stem: "", points: 20, penalty: 15,
+      hideWhenLocked: null, unlockWhenExtra: {}, extra: {},
       options: [emptyBranchedOption(), emptyBranchedOption()] };
   }
   /* M5 — the module ids a STANDARD scenario may declare, in the runtime's stage
@@ -154,6 +160,15 @@
     return {
       format: "pbl",
       branchedNodes: [emptyBranchedNode()],
+      /* Branched passthrough. `branchedShell` is the non-graph half of a LOADED
+         branched case (case/scoring/penalties/synthPrereqs/moduleBName) re-emitted
+         verbatim — null means "authored here", so buildBranchedScenario supplies
+         its own empty stand-ins. `branchedExtra` is every OTHER top-level key the
+         branch editor does not model (finalStep, characters, documents, preTest…).
+         Kept separate from the standard editor's `_extra` so switching format
+         cannot leak a branched case's keys into a PBL export. */
+      branchedShell: null,
+      branchedExtra: {},
       // A fresh form offers both PBL modules (both name fields are on screen);
       // ticking/unticking is what overrides the name-based inference.
       modules: { A: true, B: true, branched: false },
@@ -997,9 +1012,18 @@
       }
       top.appendChild(txtCell("id", "id", "e.g. patient"));
       top.appendChild(txtCell("role", "role", "patient / relative / colleague"));
-      top.appendChild(txtCell("module", "module", "A, B"));
+      top.appendChild(txtCell("module", "module", defaultCharacterModules().join(", ")));
       top.appendChild(txtCell("present", "present", "e.g. start"));
       shell.appendChild(top);
+      /* `module` decides which section this character reaches, and a value that
+         matches none drops them without a word (the chat then invents a generic
+         patient). Say what the vocabulary is, and what an empty box means. */
+      shell.appendChild(el("p", { class: "field-hint",
+        text: "module = which section this character appears in: A (PBL workup), " +
+              "B (roleplay), or a comma list such as “A, B”. Leave it empty and it " +
+              "follows this scenario's own module (" +
+              defaultCharacterModules().join(", ") + "). Anything else matches no " +
+              "section — Validate will tell you rather than let the character vanish." }));
       shell.appendChild(buildTrio("Name (shown in the chat header)", ch.name, refreshOutput));
       shell.appendChild(buildTrio("Blurb (one-line description)", ch.blurb, refreshOutput));
       shell.appendChild(el("p", { class: "field-hint",
@@ -1127,7 +1151,10 @@
       id: m.id,
       name: (m.name && m.name.en) || "",
       summary: (m.summary && m.summary.en) || "",
-      title: (m.moduleAName && m.moduleAName.en) || (m.name && m.name.en) || ""
+      title: (m.moduleAName && m.moduleAName.en) || (m.name && m.name.en) || "",
+      // Round-trip fidelity for everything the branch editor does not model.
+      shell: STATE.branchedShell || null,
+      extra: STATE.branchedExtra || null
     };
   }
   function buildBranched() {
@@ -1159,8 +1186,18 @@
     box.textContent = msgs.length ? msgs.join("\n") : "✓ Valid branch tree — ready to copy.";
   }
 
-  // Reverse buildBranchedScenario (afterDecision gates → forward next) so a
-  // branched scenario round-trips back into the editor via Load JSON.
+  /* Reverse buildBranchedScenario (afterDecision gates → forward next) so a
+     branched scenario round-trips back into the editor via Load JSON.
+
+     EVERYTHING the node/option/scenario model does not name is captured into a
+     passthrough bag here and re-emitted by buildBranchedScenario. Without it,
+     loading the shipped ward-escalation case and re-exporting it DESTROYED 41%
+     of the file — all five evidence `documents` panels, all sixteen option
+     `why` rationales and one whole gate — with validate() reporting nothing,
+     because "this node has no documents" is a legitimate state. */
+  var BRANCHED_SHELL_KEYS = ["moduleBName", "case", "scoring", "penalties", "synthPrereqs"];
+  var BRANCHED_TOP_KEYS = ["id", "format", "name", "summary", "moduleAName", "decisions"]
+    .concat(BRANCHED_SHELL_KEYS);
   function branchedJsonToState(json) {
     var st = defaultState();
     st.format = "branched";
@@ -1169,35 +1206,72 @@
     st.meta.summary = asTrio(json.summary);
     st.meta.moduleAName = asTrio(json.moduleAName);
     st.meta.moduleBName = asTrio(json.moduleBName);
+    /* The non-graph shell, captured verbatim INCLUDING which keys were absent —
+       a case with no `moduleBName` must not grow one, and one with a real
+       workup must not have it replaced by an empty stand-in. */
+    st.branchedShell = {};
+    BRANCHED_SHELL_KEYS.forEach(function (k) {
+      if (Object.prototype.hasOwnProperty.call(json, k)) st.branchedShell[k] = json[k];
+    });
+    st.branchedExtra = extraKeys(json, BRANCHED_TOP_KEYS);
     var decisions = Array.isArray(json.decisions) ? json.decisions : [];
     st.branchedNodes = decisions.map(function (d) {
+      var w = d.unlockWhen;
       return {
         id: d.id || "",
         stem: (d.prompt && d.prompt.en) || "",
         points: typeof d.points === "number" ? d.points : 20,
         penalty: typeof d.penalty === "number" ? d.penalty : 15,
+        // Modeled so a case that deliberately keeps a gated node VISIBLE while
+        // locked is not silently flipped back to hidden on export.
+        hideWhenLocked: (typeof d.hideWhenLocked === "boolean") ? d.hideWhenLocked : null,
+        // Gate conditions with no arrow in this editor (hypotheses, …).
+        unlockWhenExtra: extraKeys(w, ["afterDecision"]),
+        extra: extraKeys(d, ["id", "module", "points", "penalty", "prompt",
+          "options", "unlockWhen", "hideWhenLocked"]),
         options: (Array.isArray(d.options) ? d.options : []).map(function (o) {
+          o = o || {};
           return {
             text: (o.text && o.text.en) || "",
             consequence: (o.branch && o.branch.reveal && o.branch.reveal.en) || "",
             correct: !!o.correct,
-            next: ""
+            next: "",
+            // Emitted by buildBranchedScenario since day one but never READ
+            // back, so every rationale died on the first round-trip.
+            why: (o.why && o.why.en) || "",
+            branchExtra: extraKeys(o.branch, ["reveal"]),
+            extra: extraKeys(o, ["text", "correct", "why", "branch"])
           };
         })
       };
     });
     var byId = {};
     st.branchedNodes.forEach(function (n) { byId[n.id] = n; });
-    decisions.forEach(function (d) {
+    /* Two passes, explicit option indices FIRST: an option can hold only one
+       forward edge, so an "any option of X" gate must not claim an option that
+       a precise { id, option } gate owns. */
+    function edgesFor(d) {
       var w = d.unlockWhen && d.unlockWhen.afterDecision;
-      if (!w) return;
-      if (typeof w === "string") {
-        var any = byId[w];
-        if (any) any.options.forEach(function (o) { if (!o.next) o.next = d.id; });
-      } else if (w && w.id) {
-        var p = byId[w.id];
-        if (p && p.options[w.option]) p.options[w.option].next = d.id;
+      if (!w) return null;
+      if (typeof w === "string") return { parent: w, opts: null };
+      if (w && w.id) {
+        if (w.option == null) return { parent: w.id, opts: null };
+        return { parent: w.id, opts: Array.isArray(w.option) ? w.option : [w.option] };
       }
+      return null;
+    }
+    decisions.forEach(function (d) {
+      var e = edgesFor(d);
+      if (!e || !e.opts) return;
+      var p = byId[e.parent];
+      if (!p) return;
+      e.opts.forEach(function (k) { if (p.options[k]) p.options[k].next = d.id; });
+    });
+    decisions.forEach(function (d) {
+      var e = edgesFor(d);
+      if (!e || e.opts) return;
+      var p = byId[e.parent];
+      if (p) p.options.forEach(function (o) { if (!o.next) o.next = d.id; });
     });
     if (!st.branchedNodes.length) st.branchedNodes = [emptyBranchedNode()];
     return st;
@@ -1600,12 +1674,53 @@
     }, qq._extra);
   }
 
+  /* ── the character `module` field ─────────────────────────────────────────
+     `module` is the ONLY thing that decides which section a character reaches:
+     section-registry.js byModule() does an EXACT string match, and a character
+     that matches nothing is dropped everywhere — the Module A chat then falls
+     back to a GENERIC patient, with no error at authoring time and none at run
+     time, because "this section declares no character" is a legitimate state.
+     The box was free text, so "", "a" and "branched" all silently emptied the
+     cast of a roleplay section whose whole point is its persona.
+
+     Two guards, both needed:
+      - canonicalCharacterModule() folds CASE ("a" → "A"). The vocabulary is
+        three ids that differ by more than case, so a case-only difference is
+        unambiguous — repairing it is strictly better than rejecting the author
+        over a shift key. A token that is not a module at all returns null and
+        is REPORTED by validate() rather than repaired, because there is no
+        single obvious thing the author meant.
+      - defaultCharacterModules() gives a BLANK box the section's own module, so
+        clearing the field means "this section" instead of "nowhere". */
+  function canonicalCharacterModule(tok) {
+    var t = String(tok == null ? "" : tok).trim();
+    if (!t) return "";
+    for (var i = 0; i < AUTHOR_MODULE_IDS.length; i++) {
+      if (AUTHOR_MODULE_IDS[i].toLowerCase() === t.toLowerCase()) return AUTHOR_MODULE_IDS[i];
+    }
+    return null; // not a module — validate() reports it
+  }
+  /* Which module a character with an EMPTY module box belongs to: whatever this
+     scenario itself runs (pbl → A, roleplay → B, legacy combined → both, which
+     keeps the character reachable from either half of the auto-split). The
+     A-only fallback is for the transient "nothing ticked" state, which
+     validate() already reports on its own line. */
+  function defaultCharacterModules() {
+    var mods = declaredModules().filter(function (id) { return id !== BRANCHED_MODULE; });
+    return mods.length ? mods : ["A"];
+  }
+
   /* Serialise one chat character, modeling id/role/module/present/name/blurb/
      persona/example and preserving any unmodeled keys (e.g. a future
      schemaVersion:2 secrets/contradicts) via the per-character passthrough. */
   function characterToJson(ch) {
     var out = { id: ch.id, role: ch.role };
-    var mods = parseStems(ch.module);
+    /* Unrecognised tokens are emitted VERBATIM, not quietly dropped: the JSON
+       preview must show exactly what would ship, and validate() blocks it. */
+    var mods = parseStems(ch.module).map(function (t) {
+      return canonicalCharacterModule(t) || t;
+    });
+    if (!mods.length) mods = defaultCharacterModules();
     if (mods.length) out.module = mods;
     if (ch.present) out.present = ch.present;
     out.name = ch.name;
@@ -1689,11 +1804,44 @@
     });
   }
 
+  /* A character whose `module` reaches no section is dropped in silence and the
+     chat falls back to a generic patient — the same class of failure as a
+     malformed roleplay id above, and the reason validate() has to say it. The
+     defaulting in characterToJson() covers a BLANK box; this covers the two
+     cases that cannot be repaired without guessing. */
+  function validateCharacters(errs) {
+    var runs = declaredModules().filter(function (id) { return id !== BRANCHED_MODULE; });
+    var runsLabel = runs.length ? runs.join(" and ") : "no module yet";
+    (STATE.characters || []).forEach(function (ch, i) {
+      var label = "Character " + (i + 1) + (ch.id ? " (" + ch.id + ")" : "");
+      parseStems(ch.module).forEach(function (tok) {
+        var canon = canonicalCharacterModule(tok);
+        if (canon === null) {
+          errs.push(label + ": module \"" + tok + "\" is not a module. Write A, B, " +
+            "or a comma list like \"A, B\" — anything else matches no section, so " +
+            "the character never appears and the chat silently uses a generic patient. " +
+            "Leave the box empty to follow this scenario's own module (" +
+            defaultCharacterModules().join(", ") + ").");
+        } else if (canon === BRANCHED_MODULE) {
+          errs.push(label + ": module \"branched\" only applies to a scenario whose " +
+            "own format is branched — those carry their whole cast, so the field is " +
+            "not read there. This scenario runs " + runsLabel + ", where \"branched\" " +
+            "matches nothing and the character is dropped. Use A and/or B.");
+        } else if (runs.indexOf(canon) === -1) {
+          errs.push(label + ": module \"" + canon + "\" is not a module this scenario " +
+            "runs (" + runsLabel + "), so the character would be dropped. Tick Module " +
+            canon + ", or point the character at " + runsLabel + ".");
+        }
+      });
+    });
+  }
+
   function validate() {
     if (isBranched()) return validateBranchedForm();
     var errs = [];
     var json = toScenarioJson();
     validateRoleplay(errs);
+    validateCharacters(errs);
 
     /* S5 — does this section run a PBL module? Everything workup-shaped (the
        case rows, the prompts, the penalties) is meaningless without one, and a
