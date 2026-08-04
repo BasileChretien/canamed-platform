@@ -71,7 +71,8 @@ test("CONTENT PRESERVATION: the must-not-miss safety-net + decisions survive (FR
 });
 
 test("the stage-4 take-home export renders the synthesis aParts (labelled + localised)", () => {
-  const start = SCRIPT.indexOf("function downloadMyRoomAnswers(");
+  /* Extracted from downloadMyRoomAnswers into buildRoomTakeawayMarkdown (#275). */
+  const start = SCRIPT.indexOf("function buildRoomTakeawayMarkdown(");
   const dl = SCRIPT.slice(start, start + 4000);
   assert.match(dl, /itemById\(SYNTH_ID\)/, "the export pulls the SYNTH_ID case item");
   assert.match(dl, /synItem\.aParts/, "the export iterates the labelled aParts");

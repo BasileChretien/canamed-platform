@@ -739,6 +739,111 @@ function refreshModuleStages() {
      the shell, which is exactly the bug M4b's CANAMED_LAST_STAGE fixed. */
   window.CANAMED_MODULE_STAGES = sectionSlots().map(s => s.stage);
   window.CANAMED_LAST_STAGE = lastStage();
+  /* S7 — the pick also decides two SESSION-level things. Republished from this
+     same seam because every path that can change the pick funnels through here
+     (setSessionSections, setSessionModules, applyScenario), and because
+     applyScenario() sets its own PRETEST / CURRENT_SCENARIO_NAME EARLIER in its
+     body than it calls this — so a picked session's values win, and a session
+     with no pick keeps applyScenario's untouched. */
+  publishSectionTests();
+  publishSectionIdentity();
+}
+
+/* ── S7 — the pre/post knowledge banks belong to the SESSION, not to a slot ────
+ * buildSection() has always computed section.preTest / .postTest and NOTHING
+ * read them: only applyScenario() published PRETEST / POSTTEST, and _testBank()
+ * reads only those globals. A post-S7 session pins no scenarioId, so
+ * loadSessionScenario() falls through to applyDefaultScenario() and every picked
+ * session showed the chronic-pain bank — un-split, i.e. including the items
+ * TEST_SPLIT assigns to the half the session does not run. Silent, as always in
+ * this class: "this section has no knowledge check" is a legitimate state.
+ *
+ * COMBINED across the picked sections (user decision, 2026-08-04): the pre-test
+ * is shown ONCE before Module A and the post-test ONCE at wrap-up, so these are
+ * session-level surfaces and cannot be derived from the active slot. Order is
+ * pick order. DEDUPLICATED by item id, first occurrence winning — two sections
+ * of one case legitimately carry the same id (a case ships one bank that
+ * TEST_SPLIT divides; an authored one is not split at all) and a student must
+ * never be asked the same question twice. An id-less item is dropped: it could
+ * not be stored either, since the answer path keys on the id. */
+function mergeSectionTestBanks(sections, key) {
+  const out = [];
+  const seen = Object.create(null);
+  (sections || []).forEach(sec => {
+    const bank = sec && sec[key];
+    if (!Array.isArray(bank)) return;
+    bank.forEach(item => {
+      if (!item || item.id == null || item.id === "") return;
+      const id = String(item.id);
+      if (seen[id]) return;
+      seen[id] = true;
+      out.push(item);
+    });
+  });
+  return out;
+}
+function publishSectionTests() {
+  if (typeof window === "undefined") return;
+  let picked = null;
+  try { picked = pickedSections(); } catch (_) { picked = null; }
+  /* NO pick ⇒ leave applyScenario's banks exactly as they are. A non-section
+     session (and the pre-library window before section-registry.js lands) must
+     keep working precisely as today. */
+  if (!picked || !picked.length) return;
+  window.PRETEST = mergeSectionTestBanks(picked, "preTest");
+  window.POSTTEST = mergeSectionTestBanks(picked, "postTest");
+}
+
+/* ── S7 — the session's IDENTITY comes from the pick too ───────────────────────
+ * applySectionContent() re-points the CONTENT globals per slot but publishes
+ * none of the identity ones, which only applyScenario() ever set. With no
+ * scenario pinned, the lobby line, the welcome agenda, the session history entry
+ * and — worst — the facilitator ARCHIVE all labelled every picked session
+ * "Chronic Pain & the Opioid Request". An export naming a case the session never
+ * ran is a research-data-integrity defect, not a cosmetic one.
+ *
+ * MULTI-SECTION POLICY, decided here: the lobby line describes the SESSION, so
+ * the NAME lists every picked section joined by " + " rather than silently
+ * showing only the first. The SUMMARY is published only for a ONE-section
+ * session — the blurbs are three-sentence case descriptions and two of them
+ * concatenated make an unreadable one-line header; for a multi-section pick the
+ * agenda below (renderLobbyStructure) carries each section's own blurb instead.
+ *
+ * CURRENT_SCENARIO_MODULE_A/B_NAME are deliberately NOT overwritten:
+ * scenarioModuleSet() INFERS the module set from them (name-first, M1), so
+ * writing section titles there would change which modules a no-pick session
+ * believes it runs. renderLobbyStructure() is made section-aware instead. */
+function joinSectionField(sections, key, sep) {
+  const langs = ["en", "fr", "ja"];
+  const out = {};
+  const resolve = (typeof tc === "function") ? tc : null;
+  langs.forEach(lang => {
+    const parts = [];
+    sections.forEach(sec => {
+      const raw = sec && sec[key];
+      const v = resolve ? resolve(raw, lang)
+                        : ((typeof raw === "string") ? raw : (raw && (raw[lang] || raw.en)) || "");
+      if (v) parts.push(v);
+    });
+    if (parts.length) out[lang] = parts.join(sep);
+  });
+  return Object.keys(out).length ? out : "";
+}
+function publishSectionIdentity() {
+  if (typeof window === "undefined") return;
+  let picked = null;
+  try { picked = pickedSections(); } catch (_) { picked = null; }
+  if (!picked || !picked.length) return;
+  window.CURRENT_SCENARIO_NAME = joinSectionField(picked, "name", " + ") ||
+                                 window.CURRENT_SCENARIO_NAME || "";
+  window.CURRENT_SCENARIO_SUMMARY = (picked.length === 1)
+    ? (joinSectionField(picked, "summary", " ") || "")
+    : "";
+  /* The archive/self-export dispatch key. It reported the FALLBACK scenario's id
+     — a flatly wrong claim about what the session ran. Section ids are stable
+     kebab-case too, so a pipeline keeps a stable key; it now names the sections
+     rather than a case nobody opened. */
+  window.CURRENT_SCENARIO_ID = picked.map(s => s.id).join("+");
 }
 
 /* ── S1a — SLOTS: a stage is a POSITION, the DOM is a per-TYPE view ───────────
@@ -832,6 +937,16 @@ function pickedSections() {
     if (sec && STAGE_VIEW_FOR_TYPE[sec.type]) out.push(sec);
   });
   return out.length ? out : null;              // every id unknown ⇒ no pick
+}
+/* Does this session run any WORKUP (PBL) section? Answers the question "may the
+   ambient CASE / SYNTH_ID globals be quoted as this session's content?" — they
+   are only ever set by a PBL section (or by the fallback scenario, which is the
+   trap). TRUE when there is no pick, so a pre-section session is unaffected. */
+function sessionRunsCaseWork() {
+  let picked = null;
+  try { picked = pickedSections(); } catch (_) { picked = null; }
+  if (!picked || !picked.length) return true;
+  return picked.some(s => s && s.type === "pbl");
 }
 function sectionSlots() {
   /* An explicit pick wins: it is the facilitator's write-once choice for this
@@ -8601,33 +8716,45 @@ function downloadStudyBookletPdf() {
     .then(() => { if (btn) btn.disabled = false; });
 }
 
-function downloadMyRoomAnswers() {
-  if (!db || !myRoom) return;
-  db.ref(sPath("rooms/" + myRoom)).once("value").then(snap => {
-    const data = snap.val() || {};
-    const lang = (typeof _curLang === "function") ? _curLang() : "en";
-    const ans = data.answers || {};
-    const reveals = (data.moduleA || {}).revealed || {};
-    const hyps = (data.moduleA || {}).hypotheses || data.hypotheses || {};
-    const votes = data.votes || {};
-    const me = (typeof myName === "string" && myName) ? myName : "";
-    const decList = []
-      .concat((typeof window !== "undefined" && Array.isArray(window.DECISIONS)) ? window.DECISIONS
-        : (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [])
-      .concat((typeof DECISIONS_B !== "undefined" && Array.isArray(DECISIONS_B)) ? DECISIONS_B : []);
-    const decById = {};
-    decList.forEach(d => { if (d && d.id) decById[d.id] = d; });
-    const decPrompt = (dec, id) => _mdEsc(dec && dec.prompt ? tc(dec.prompt, lang) : id);
+/* The take-home markdown itself, extracted from the download plumbing so the
+   document a student actually receives can be asserted in a test without a
+   live room. Reads the same room `data` snapshot the download path reads, and
+   the same ambient globals (clientId, myRoom, sessionNum, myName, the score
+   helpers) it always did. */
+function buildRoomTakeawayMarkdown(data) {
+  data = data || {};
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  const ans = data.answers || {};
+  const reveals = (data.moduleA || {}).revealed || {};
+  const hyps = (data.moduleA || {}).hypotheses || data.hypotheses || {};
+  const votes = data.votes || {};
+  const me = (typeof myName === "string" && myName) ? myName : "";
+  const decList = []
+    .concat((typeof window !== "undefined" && Array.isArray(window.DECISIONS)) ? window.DECISIONS
+      : (typeof DECISIONS !== "undefined" && Array.isArray(DECISIONS)) ? DECISIONS : [])
+    .concat((typeof DECISIONS_B !== "undefined" && Array.isArray(DECISIONS_B)) ? DECISIONS_B : []);
+  const decById = {};
+  decList.forEach(d => { if (d && d.id) decById[d.id] = d; });
+  const decPrompt = (dec, id) => _mdEsc(dec && dec.prompt ? tc(dec.prompt, lang) : id);
 
-    const lines = [];
-    lines.push("# CaNaMED — my session takeaway");
-    lines.push("");
-    lines.push("- **Session:** " + _mdEsc(sessionNum));
-    lines.push("- **Room / team:** " + _mdEsc(myRoom) + (data.teamName ? " — " + _mdEsc(data.teamName) : ""));
-    if (me) lines.push("- **Name:** " + _mdEsc(me));
-    lines.push("- **Exported:** " + new Date().toLocaleString());
-    lines.push("");
+  const lines = [];
+  lines.push("# CaNaMED — my session takeaway");
+  lines.push("");
+  lines.push("- **Session:** " + _mdEsc(sessionNum));
+  lines.push("- **Room / team:** " + _mdEsc(myRoom) + (data.teamName ? " — " + _mdEsc(data.teamName) : ""));
+  if (me) lines.push("- **Name:** " + _mdEsc(me));
+  lines.push("- **Exported:** " + new Date().toLocaleString());
+  lines.push("");
 
+  /* S7 — sections 1, 1b and 2 below all read the ambient CASE / SYNTH_ID
+     globals, which a session with no PBL section never sets:
+     applySectionContent() deliberately skips `c.case` when a section has none
+     (blanking CASE would strip the board a PBL slot next door still needs), so
+     they keep applyDefaultScenario()'s chronic-pain values. No roleplay stage
+     renders a workup, so the screen never showed it — but the TAKE-HOME did,
+     handing every roleplay-only student a chronic-pain model synthesis and
+     chronic-pain discussion prompts for a case they never opened. */
+  if (sessionRunsCaseWork()) {
     // 1. Historical context — the clinical information the team gathered, in
     //    the order it was opened.
     lines.push("## The case — clinical information gathered");
@@ -8671,94 +8798,101 @@ function downloadMyRoomAnswers() {
       prompts.forEach(p => lines.push("- " + _mdEsc(tc(p, lang))));
       lines.push("");
     }
+  }
 
-    // 3. The team's committed decisions (group common responses) + teaching points.
-    const decIds = Object.keys(votes);
-    if (decIds.length) {
-      lines.push("## Your team's decisions");
-      lines.push("");
-      lines.push("| Decision | Team's choice | Safest? |");
-      lines.push("| --- | --- | --- |");
-      decIds.forEach(decId => {
-        const dec = decById[decId] || {};
-        const v = votes[decId] || {};
-        const ci = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
-        const opt = (ci != null && dec.options) ? dec.options[ci] : null;
-        lines.push("| " + decPrompt(dec, decId) + " | " + _mdEsc(opt ? tc(opt.text, lang) : "—") +
-          " | " + (opt ? (opt.correct ? "yes" : "no") : "—") + " |");
-      });
-      lines.push("");
-      const teaching = [];
-      decIds.forEach(decId => {
-        const dec = decById[decId] || {};
-        const v = votes[decId] || {};
-        const ci = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
-        const opt = (ci != null && dec.options) ? dec.options[ci] : null;
-        const why = (opt && opt.why) ? tc(opt.why, lang) : (dec.why ? tc(dec.why, lang) : "");
-        if (why) teaching.push("- **" + decPrompt(dec, decId) + ":** " + _mdEsc(why));
-      });
-      if (teaching.length) { lines.push("### Teaching points"); teaching.forEach(t => lines.push(t)); lines.push(""); }
-    }
-
-    // 4. The student's OWN responses.
-    lines.push("## My responses");
-    let mineAny = false;
-    [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
-      const mine = entriesSorted(ans[pair[0]]).filter(e => e.cid === clientId);
-      if (mine.length) {
-        mineAny = true;
-        lines.push("### " + pair[1] + " — my answers");
-        mine.forEach(e => lines.push("- " + _mdEsc(e.text)));
-      }
-    });
-    const myHyps = Object.keys(hyps).map(k => hyps[k]).filter(h => h && h.cid === clientId);
-    if (myHyps.length) {
-      mineAny = true;
-      lines.push("### My hypotheses");
-      myHyps.forEach(h => lines.push("- " + _mdEsc(h.text)));
-    }
-    const myVotes = [];
+  // 3. The team's committed decisions (group common responses) + teaching points.
+  const decIds = Object.keys(votes);
+  if (decIds.length) {
+    lines.push("## Your team's decisions");
+    lines.push("");
+    lines.push("| Decision | Team's choice | Safest? |");
+    lines.push("| --- | --- | --- |");
     decIds.forEach(decId => {
       const dec = decById[decId] || {};
-      const b = ((votes[decId] || {}).ballots || {})[clientId];
-      if (b && typeof b.choice === "number" && dec.options) {
-        const opt = dec.options[b.choice];
-        myVotes.push("- **" + decPrompt(dec, decId) + ":** " + _mdEsc(opt ? tc(opt.text, lang) : "?") +
-          (opt && opt.correct ? " (safest)" : ""));
-      }
+      const v = votes[decId] || {};
+      const ci = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
+      const opt = (ci != null && dec.options) ? dec.options[ci] : null;
+      lines.push("| " + decPrompt(dec, decId) + " | " + _mdEsc(opt ? tc(opt.text, lang) : "—") +
+        " | " + (opt ? (opt.correct ? "yes" : "no") : "—") + " |");
     });
-    if (myVotes.length) { mineAny = true; lines.push("### My votes"); myVotes.forEach(l => lines.push(l)); }
-    if (!mineAny) lines.push("_(no individual responses recorded)_");
     lines.push("");
-
-    // 5. The whole group's answers (everyone in the room).
-    lines.push("## Group answers (everyone in the room)");
-    [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
-      lines.push("### " + pair[1]);
-      const entries = entriesSorted(ans[pair[0]]);
-      if (!entries.length) lines.push("_(no points recorded)_");
-      else entries.forEach(e => lines.push("- **" + _mdEsc(e.by || "?") +
-        (e.university ? " / " + _mdEsc(e.university) : "") + ":** " + _mdEsc(e.text)));
-      lines.push("");
+    const teaching = [];
+    decIds.forEach(decId => {
+      const dec = decById[decId] || {};
+      const v = votes[decId] || {};
+      const ci = (v.committed && typeof v.committed.choice === "number") ? v.committed.choice : null;
+      const opt = (ci != null && dec.options) ? dec.options[ci] : null;
+      const why = (opt && opt.why) ? tc(opt.why, lang) : (dec.why ? tc(dec.why, lang) : "");
+      if (why) teaching.push("- **" + decPrompt(dec, decId) + ":** " + _mdEsc(why));
     });
+    if (teaching.length) { lines.push("### Teaching points"); teaching.forEach(t => lines.push(t)); lines.push(""); }
+  }
 
-    // 6. Recap — the team's score, what went well, what to remember.
-    lines.push("## Recap");
-    try {
-      const sc = data.score || (typeof roomScore !== "undefined" ? roomScore : null) || {};
-      lines.push("- **Team score:** " + scoreTotal({ score: sc }) + " points");
-      const wins = Object.keys(sc.auto || {}).map(scoreEventMeta)
-        .filter(m => m && m.tier !== "micro").map(m => m.title);
-      if (wins.length) { lines.push("- **What your team did well:**"); wins.forEach(w => lines.push("  - " + _mdEsc(w))); }
-      const lessons = Object.keys(sc.penalties || {}).map(penaltyMeta).filter(Boolean);
-      if (lessons.length) {
-        lines.push("- **Worth remembering for next time:**");
-        lessons.forEach(m => lines.push("  - " + _mdEsc(m.title) + (m.why ? " — " + _mdEsc(m.why) : "")));
-      }
-    } catch (_) { /* recap is best-effort — never block the download */ }
+  // 4. The student's OWN responses.
+  lines.push("## My responses");
+  let mineAny = false;
+  [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
+    const mine = entriesSorted(ans[pair[0]]).filter(e => e.cid === clientId);
+    if (mine.length) {
+      mineAny = true;
+      lines.push("### " + pair[1] + " — my answers");
+      mine.forEach(e => lines.push("- " + _mdEsc(e.text)));
+    }
+  });
+  const myHyps = Object.keys(hyps).map(k => hyps[k]).filter(h => h && h.cid === clientId);
+  if (myHyps.length) {
+    mineAny = true;
+    lines.push("### My hypotheses");
+    myHyps.forEach(h => lines.push("- " + _mdEsc(h.text)));
+  }
+  const myVotes = [];
+  decIds.forEach(decId => {
+    const dec = decById[decId] || {};
+    const b = ((votes[decId] || {}).ballots || {})[clientId];
+    if (b && typeof b.choice === "number" && dec.options) {
+      const opt = dec.options[b.choice];
+      myVotes.push("- **" + decPrompt(dec, decId) + ":** " + _mdEsc(opt ? tc(opt.text, lang) : "?") +
+        (opt && opt.correct ? " (safest)" : ""));
+    }
+  });
+  if (myVotes.length) { mineAny = true; lines.push("### My votes"); myVotes.forEach(l => lines.push(l)); }
+  if (!mineAny) lines.push("_(no individual responses recorded)_");
+  lines.push("");
+
+  // 5. The whole group's answers (everyone in the room).
+  lines.push("## Group answers (everyone in the room)");
+  [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
+    lines.push("### " + pair[1]);
+    const entries = entriesSorted(ans[pair[0]]);
+    if (!entries.length) lines.push("_(no points recorded)_");
+    else entries.forEach(e => lines.push("- **" + _mdEsc(e.by || "?") +
+      (e.university ? " / " + _mdEsc(e.university) : "") + ":** " + _mdEsc(e.text)));
     lines.push("");
+  });
 
-    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+  // 6. Recap — the team's score, what went well, what to remember.
+  lines.push("## Recap");
+  try {
+    const sc = data.score || (typeof roomScore !== "undefined" ? roomScore : null) || {};
+    lines.push("- **Team score:** " + scoreTotal({ score: sc }) + " points");
+    const wins = Object.keys(sc.auto || {}).map(scoreEventMeta)
+      .filter(m => m && m.tier !== "micro").map(m => m.title);
+    if (wins.length) { lines.push("- **What your team did well:**"); wins.forEach(w => lines.push("  - " + _mdEsc(w))); }
+    const lessons = Object.keys(sc.penalties || {}).map(penaltyMeta).filter(Boolean);
+    if (lessons.length) {
+      lines.push("- **Worth remembering for next time:**");
+      lessons.forEach(m => lines.push("  - " + _mdEsc(m.title) + (m.why ? " — " + _mdEsc(m.why) : "")));
+    }
+  } catch (_) { /* recap is best-effort — never block the download */ }
+  lines.push("");
+  return lines.join("\n");
+}
+
+function downloadMyRoomAnswers() {
+  if (!db || !myRoom) return;
+  db.ref(sPath("rooms/" + myRoom)).once("value").then(snap => {
+    const text = buildRoomTakeawayMarkdown(snap.val() || {});
+    const blob = new Blob([text], { type: "text/markdown;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
     a.download = "CaNaMED_" + myRoom + "_my-takeaway.md";
@@ -9793,6 +9927,10 @@ if (typeof window !== "undefined") {
   // under tests-e2e/sim-recommendations.spec.js. Production code never
   // calls these; they're inert outside test runs.
   window._test_setClientId      = function (c) { clientId = String(c || ""); };
+  /* The pre/post knowledge-check cards hide themselves outside a room
+     (`!myRoom` ⇒ hidden), so asserting what a student actually READS in them
+     needs this binding set. */
+  window._test_setMyRoom        = function (r) { myRoom = String(r || ""); };
   window._test_setSessionNum    = function (n) { sessionNum = String(n || ""); };
   window._test_setRoomCount     = function (n) { roomCount = parseInt(n, 10) || 1; };
   window._test_setAllRooms      = function (m) { allRooms = m || {}; };
@@ -13531,11 +13669,57 @@ function lobbyShowLockedSession() {
  * run the whole case in Stage 1 and use Stage 2 as a reflection/debrief, so
  * their wording differs. Built with textContent (never innerHTML) because the
  * names can be facilitator-authored. */
+/* The per-type sentence that follows a section's title in the agenda, used only
+   when the section carries no blurb of its own. */
+const LOBBY_STRUCT_TAIL = {
+  pbl: ", worked through here on the platform.",
+  roleplay: ", a cross-cultural roleplay.",
+  branched: " — a guided decision case: your team works through it together, " +
+            "one decision at a time, then commits a final diagnosis and plan."
+};
 function renderLobbyStructure() {
   const liA = el("lobby-struct-modA");
   const liB = el("lobby-struct-modB");
   if (!liA || !liB) return;
   const lang = _curLang();
+  /* S7 — a session built from PICKED sections has an agenda of its own length,
+     and its rows are the sections, not "Module A / Module B". The two shipped
+     <li> nodes cannot express that: a three-section session needs three rows,
+     and a roleplay-only session needs one that is not called Module A. So the
+     rows are generated per pick and the two static ones are hidden.
+
+     Generated rows are rebuilt from scratch on every call (this runs again on a
+     language switch and on every lobby paint), and inserted BEFORE the static
+     Module-A row so they land between "Opening presentation" and "Wrap-up". */
+  const parent = liA.parentNode;
+  if (parent) {
+    Array.prototype.slice.call(parent.querySelectorAll("li[data-sec-slot]"))
+      .forEach(n => { n.parentNode.removeChild(n); });
+  }
+  let picked = null;
+  try { picked = pickedSections(); } catch (_) { picked = null; }
+  if (parent && picked && picked.length) {
+    liA.hidden = true;
+    liB.hidden = true;
+    picked.forEach((sec, i) => {
+      const li = document.createElement("li");
+      li.setAttribute("data-sec-slot", String(i + 1));
+      const title = tc(sec.name, lang) ||
+                    (STAGE_LABELS[sec.type] || "Section " + (i + 1));
+      const s = document.createElement("strong");
+      s.textContent = String(title).replace(STAGE_TITLE_PREFIX, "");
+      li.appendChild(s);
+      /* The section's OWN blurb when it has one — this is where the per-section
+         summaries live for a multi-section session, since the one-line lobby
+         header cannot carry three of them (publishSectionIdentity). */
+      const blurb = tc(sec.summary, lang);
+      li.appendChild(document.createTextNode(
+        blurb ? " — " + blurb : (LOBBY_STRUCT_TAIL[sec.type] || ".")));
+      parent.insertBefore(li, liA);
+    });
+    return;
+  }
+  liA.hidden = false;
   const branched = (window.CURRENT_SCENARIO_FORMAT === "branched");
   // Branched scenarios have no Module-B / Reflection step — the agenda lists
   // only the case (between the Welcome and Wrap-up rows). Hide the second item.
@@ -13549,13 +13733,11 @@ function renderLobbyStructure() {
     li.appendChild(s);
     li.appendChild(document.createTextNode(tail));
   };
-  fill(liA, aName, branched
-    ? " — a guided decision case: your team works through it together, one decision at a time, then commits a final diagnosis and plan."
-    : ", worked through here on the platform.");
+  fill(liA, aName, branched ? LOBBY_STRUCT_TAIL.branched : LOBBY_STRUCT_TAIL.pbl);
   if (!branched) {
     const bName = tc(window.CURRENT_SCENARIO_MODULE_B_NAME, lang)
       || "Module B — Breaking Bad News";
-    fill(liB, bName, ", a cross-cultural roleplay.");
+    fill(liB, bName, LOBBY_STRUCT_TAIL.roleplay);
   }
 }
 
