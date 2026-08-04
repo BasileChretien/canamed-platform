@@ -1225,6 +1225,19 @@
         // Modeled so a case that deliberately keeps a gated node VISIBLE while
         // locked is not silently flipped back to hidden on export.
         hideWhenLocked: (typeof d.hideWhenLocked === "boolean") ? d.hideWhenLocked : null,
+        /* The stage the node renders in. The branched editor only ever AUTHORS
+           module "A" — a branched case is a single-stage decision flow, which
+           is why branched-seed.js puts every node in stage 1's decision column
+           — but "A" is not an invariant of the DATA: script.js's
+           composeBranchedModule() stamps `module:"branched"` on the nodes it
+           merges into a mixed session, and branched-render.js keys two
+           behaviours off exactly that value (`branchedDecisions()` filters the
+           graph by it, and `branchedAnswerBucket()` routes deliverables to
+           answers/moduleBranched instead of answers/moduleA). Hardcoding "A" on
+           export therefore silently re-routed a composed case's answers. So the
+           value is MODELLED and preserved; "A" is only the default for a node
+           that arrives without one. */
+        module: (typeof d.module === "string" && d.module) ? d.module : "A",
         // Gate conditions with no arrow in this editor (hypotheses, …).
         unlockWhenExtra: extraKeys(w, ["afterDecision"]),
         extra: extraKeys(d, ["id", "module", "points", "penalty", "prompt",
@@ -1247,9 +1260,6 @@
     });
     var byId = {};
     st.branchedNodes.forEach(function (n) { byId[n.id] = n; });
-    /* Two passes, explicit option indices FIRST: an option can hold only one
-       forward edge, so an "any option of X" gate must not claim an option that
-       a precise { id, option } gate owns. */
     function edgesFor(d) {
       var w = d.unlockWhen && d.unlockWhen.afterDecision;
       if (!w) return null;
@@ -1260,18 +1270,55 @@
       }
       return null;
     }
+    /* ── gates → forward edges, ALL-OR-NOTHING ────────────────────────────────
+       An option carries exactly ONE forward edge, but the gate model it reverses
+       is strictly richer: branched-validate.js's childrenOf() returns EVERY node
+       whose afterDecision matches a parent+option, so two nodes may legally open
+       on the same choice. The forward model simply cannot hold that, and neither
+       can it hold a gate whose parent id does not resolve or whose option index
+       is out of range.
+
+       Every one of those used to be dropped in silence, and the result was worse
+       than a lost field: a graph validateBranchedGraph() ACCEPTS went in and one
+       it REJECTS came out ("Multiple entry nodes"), so the editor broke the case
+       and the panel then blamed the author for it.
+
+       So a gate is drawn only when it can be drawn IN FULL — every option it
+       names exists and is still free. Anything else is kept verbatim in
+       `unlockWhenExtra`, which buildBranchedScenario re-emits unchanged. Partial
+       drawing is deliberately NOT an option: claiming a subset would make
+       gateFor() derive a NARROWER gate than the author wrote (an "any option"
+       gate whose parent is half-claimed would come back as `option:[1,2]`,
+       quietly dropping choice 0) — a silent semantic change, which is the exact
+       class of defect this whole path is being fixed for.
+
+       Indexed gates run FIRST so a precise { id, option } gate owns its slot
+       before an "any option of X" gate is considered. */
+    function keepGate(d) {
+      var n = byId[d.id];
+      if (n && d.unlockWhen) n.unlockWhenExtra.afterDecision = d.unlockWhen.afterDecision;
+    }
     decisions.forEach(function (d) {
       var e = edgesFor(d);
       if (!e || !e.opts) return;
       var p = byId[e.parent];
-      if (!p) return;
-      e.opts.forEach(function (k) { if (p.options[k]) p.options[k].next = d.id; });
+      var canDraw = !!p && e.opts.length > 0 && e.opts.every(function (k) {
+        return p.options[k] && !p.options[k].next;
+      });
+      if (canDraw) e.opts.forEach(function (k) { p.options[k].next = d.id; });
+      else keepGate(d);
     });
     decisions.forEach(function (d) {
       var e = edgesFor(d);
       if (!e || e.opts) return;
       var p = byId[e.parent];
-      if (p) p.options.forEach(function (o) { if (!o.next) o.next = d.id; });
+      // "Any option" means EVERY option, so a parent with even one option
+      // already spoken for cannot express this gate as forward edges.
+      var canDraw = !!p && p.options.length > 0 && p.options.every(function (o) {
+        return !o.next;
+      });
+      if (canDraw) p.options.forEach(function (o) { o.next = d.id; });
+      else keepGate(d);
     });
     if (!st.branchedNodes.length) st.branchedNodes = [emptyBranchedNode()];
     return st;

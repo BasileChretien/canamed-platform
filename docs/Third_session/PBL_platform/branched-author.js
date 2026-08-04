@@ -145,7 +145,14 @@
       const gate = gateFor(n.id);
       const d = {
         id: n.id,
-        module: "A",
+        /* A branched case is a single-stage decision flow, so the editor only
+           ever AUTHORS module "A" (branched-seed.js: every node renders in
+           stage 1's decision column). But "A" is not an invariant of the DATA —
+           composeBranchedModule() stamps `module:"branched"` on the nodes it
+           merges into a mixed session, and branched-render.js routes the graph
+           filter and the answers bucket off that value — so a loaded node keeps
+           the module it arrived with. */
+        module: (typeof n.module === "string" && n.module) ? n.module : "A",
         points: typeof n.points === "number" ? n.points : 10,
         penalty: typeof n.penalty === "number" ? n.penalty : 5,
         prompt: en(n.stem),
@@ -171,6 +178,20 @@
         d.unlockWhen = {};
         if (gate != null) d.unlockWhen.afterDecision = gate;
         mergeExtra(d.unlockWhen, gateExtra);
+      }
+      /* A gate the forward-edge model cannot hold (two nodes opening on the
+         same choice, a dangling parent, an out-of-range index) is preserved
+         verbatim by the loader instead of being destroyed. It is re-emitted
+         exactly as written — but it has no arrow in the editor, so say so:
+         otherwise the author sees a node with no visible "Then →" pointing at
+         it and may "fix" a link that is in fact already correct. */
+      if (gateExtra && gate == null && gateExtra.afterDecision != null) {
+        warnings.push(
+          'Node "' + n.id + '" keeps the gate it was loaded with (' +
+            JSON.stringify(gateExtra.afterDecision) + "), because this editor " +
+            "draws one arrow per choice and that gate needs more. It is exported " +
+            "unchanged; edit it in the JSON if you need to change it.",
+        );
       }
       /* A gated follow-up lands as a surprise fork, so it hides while locked —
          unless the loaded case said otherwise, which is a decision the author

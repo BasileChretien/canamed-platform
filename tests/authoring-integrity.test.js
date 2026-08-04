@@ -205,6 +205,135 @@ test("a SUBSET of a parent's choices becomes an option-array gate, not any-optio
   assert.strictEqual(r.ok, true, "errors: " + JSON.stringify(r.errors));
 });
 
+/* ------------------------------------------------------------------ */
+/* DEFECT A (round 2) — gates the forward-edge model cannot hold      */
+/* ------------------------------------------------------------------ */
+
+/* An option carries ONE forward edge; the gate model it reverses is richer
+   (branched-validate.js childrenOf() returns EVERY node whose afterDecision
+   matches a parent+option). Each of these gates used to be dropped in silence,
+   and the node then exported with no unlockWhen at all — becoming a second
+   entry node, i.e. a graph the validator ACCEPTS turned into one it REJECTS. */
+function branchedCase(id, decisions) {
+  return {
+    id: id, format: "branched",
+    name: { en: id }, summary: { en: "s" }, moduleAName: { en: id },
+    case: { history: [], exam: [], labs: [] },
+    scoring: {}, penalties: [], synthPrereqs: [],
+    decisions: decisions,
+  };
+}
+function bnode(id, texts, extra) {
+  return Object.assign({
+    id: id, module: "A", points: 10, penalty: 5,
+    prompt: { en: id + "?" },
+    options: texts.map((t, i) => ({
+      text: { en: t }, correct: i === 0,
+      branch: { reveal: { en: t + " happens" } },
+    })),
+  }, extra || {});
+}
+const gated = (spec) => ({ unlockWhen: { afterDecision: spec }, hideWhenLocked: true });
+
+test("two decisions gating on the SAME parent option both keep their gate", () => {
+  const api = loadAuthor();
+  const twin = branchedCase("twin-gate", [
+    bnode("n0", ["go", "stop"]),
+    bnode("twinA", ["end a", "stop a"], gated({ id: "n0", option: 0 })),
+    bnode("twinB", ["end b", "stop b"], gated({ id: "n0", option: 0 })),
+  ]);
+  // The SOURCE is a graph the runtime validator accepts — this is legal data.
+  assert.strictEqual(validateBranchedGraph(twin).ok, true,
+    "fixture must be legal: " + JSON.stringify(validateBranchedGraph(twin).errors));
+
+  const out = roundTrip(api, twin);
+  assert.deepStrictEqual(out, twin);
+  // The specific failure: twinA lost its gate and became a second entry node,
+  // so the output was INVALID even though the input was valid.
+  const r = validateBranchedGraph(out);
+  assert.strictEqual(r.ok, true, "errors: " + JSON.stringify(r.errors));
+  assert.ok(!r.errors.some((e) => /Multiple entry nodes/.test(e)),
+    "the editor must not manufacture a second entry node");
+});
+
+test("a gate the editor cannot draw is kept verbatim, and the author is told", () => {
+  const api = loadAuthor();
+  const cases = {
+    // option index outside the parent's options
+    "out-of-range": [
+      bnode("n0", ["go", "stop"]),
+      bnode("child", ["end", "stop"], gated({ id: "n0", option: 7 })),
+    ],
+    // parent id that resolves to no node
+    dangling: [
+      bnode("n0", ["go", "stop"]),
+      bnode("child", ["end", "stop"], gated({ id: "nope", option: 0 })),
+    ],
+    // an "any option" gate whose parent's options are all already claimed
+    starved: [
+      bnode("n0", ["a", "b"]),
+      bnode("byIndex0", ["end", "stop"], gated({ id: "n0", option: 0 })),
+      bnode("byIndex1", ["end", "stop"], gated({ id: "n0", option: 1 })),
+      bnode("anyOpt", ["end", "stop"], gated("n0")),
+    ],
+  };
+  Object.keys(cases).forEach((label) => {
+    const src = branchedCase(label, cases[label]);
+    assert.deepStrictEqual(roundTrip(api, src), src, label + " must round-trip intact");
+  });
+
+  // And it is SURFACED, not silently preserved: the author sees no arrow for
+  // that node and would otherwise "fix" a link that is already correct.
+  const { buildBranchedScenario } = require(path.join(P, "branched-author.js"));
+  const st = api.fromJson(branchedCase("dangling", cases.dangling));
+  const { warnings } = buildBranchedScenario(
+    { id: "dangling", name: "dangling", shell: st.branchedShell, extra: st.branchedExtra },
+    st.branchedNodes,
+  );
+  assert.ok(warnings.some((w) => /keeps the gate it was loaded with/.test(w) && /child/.test(w)),
+    "expected a warning naming the node; got " + JSON.stringify(warnings));
+});
+
+test("a PARTIAL claim is never drawn — it would narrow the author's gate", () => {
+  const api = loadAuthor();
+  /* n0 has 3 choices. `precise` owns choice 0; `any` opens on ANY choice.
+     Drawing `any` on the two free options would derive `option:[1,2]` on
+     export — quietly dropping choice 0 from a gate the author wrote as
+     "whatever they pick". */
+  const src = branchedCase("partial", [
+    bnode("n0", ["a", "b", "c"]),
+    bnode("precise", ["end", "stop"], gated({ id: "n0", option: 0 })),
+    bnode("any", ["end", "stop"], gated("n0")),
+  ]);
+  const out = roundTrip(api, src);
+  assert.deepStrictEqual(out.decisions.find((d) => d.id === "any").unlockWhen,
+    { afterDecision: "n0" }, "the any-option gate must not narrow to a subset");
+  assert.deepStrictEqual(out, src);
+});
+
+test("a branched node's module is preserved, not hardcoded to A", () => {
+  const api = loadAuthor();
+  /* composeBranchedModule() stamps module:"branched" on merged nodes, and
+     branched-render.js routes the answers bucket off exactly that value —
+     rewriting it to "A" silently re-routes a composed case's deliverables. */
+  const src = branchedCase("mod-preserved", [
+    bnode("n0", ["go", "stop"]),
+    Object.assign(bnode("nB", ["end", "stop"], gated({ id: "n0", option: 0 })),
+      { module: "branched" }),
+  ]);
+  const out = roundTrip(api, src);
+  assert.strictEqual(out.decisions[1].module, "branched");
+  assert.deepStrictEqual(out, src);
+});
+
+test("a node authored from scratch still defaults to module A", () => {
+  const { buildBranchedScenario } = require(path.join(P, "branched-author.js"));
+  const { scenario } = buildBranchedScenario({ id: "fresh" }, [
+    { id: "n0", stem: "s", options: [{ text: "a", correct: true }] },
+  ]);
+  assert.strictEqual(scenario.decisions[0].module, "A");
+});
+
 test("EVERY choice of a parent converging still becomes the id-only gate", () => {
   const { buildBranchedScenario } = require(path.join(P, "branched-author.js"));
   const nodes = [
