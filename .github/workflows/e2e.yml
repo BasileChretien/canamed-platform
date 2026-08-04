@@ -35,7 +35,16 @@ jobs:
   e2e:
     name: Playwright (${{ matrix.project }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 35, not 20. The firefox project takes ~19.7 min for its 437 tests, so a
+    # 20-min cap sat INSIDE the run's normal variance: the suite printed
+    # "437 passed" and was then cancelled 13 s later for exceeding the cap,
+    # which surfaces as a CANCELLED required check and a BLOCKED merge on a PR
+    # whose tests all passed (seen on #275). A cancellation is indistinguishable
+    # from a real failure in the checks UI, so this wasted a merge cycle rather
+    # than catching anything. The cap exists to stop a HUNG job burning runner
+    # minutes, not to police a healthy suite's growth — 35 restores that margin
+    # for every project in the matrix while still bounding a hang.
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
