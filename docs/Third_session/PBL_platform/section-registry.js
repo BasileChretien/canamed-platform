@@ -258,6 +258,37 @@
     });
   }
 
+  /* Does this scenario have content for this section type? Name-first
+     precedence, the same one scenarioModuleSet() uses (module-set-design M1),
+     so a section library derived here runs the same modules the scenario does.
+
+     Extracted so buildSection() and unsplitTestOwner() cannot drift: "which
+     sections does this scenario yield" must have exactly ONE answer, and the
+     two were about to have two. Branched is not a module and never answers
+     yes here — buildSection handles it on its own path. */
+  function sectionYields(scenario, typeId) {
+    const type = SECTION_TYPES.find(t => t.id === typeId);
+    if (!scenario || !type || typeId === "branched") return false;
+    const mod = type.fromModule;
+    const name = stripModulePrefix(scenario["module" + mod + "Name"]);
+    const scoring = (scenario.scoring || {})["module" + mod] || [];
+    const decisions = byModule(scenario.decisions, mod);
+    return !!((name && name.en) || scoring.length || decisions.length);
+  }
+
+  /* Which section owns a pre/post bank that TEST_SPLIT does not classify — i.e.
+     an authored scenario's. The FIRST type that yields a section, so a legacy
+     combined scenario puts them on its PBL half rather than duplicating them
+     onto both stages. Null when nothing yields (or for a branched case, which
+     carries no module-scoped tests). */
+  function unsplitTestOwner(scenario) {
+    const types = sectionTypesFor(scenario).filter(t => t !== "branched");
+    for (let i = 0; i < types.length; i++) {
+      if (sectionYields(scenario, types[i])) return types[i];
+    }
+    return null;
+  }
+
   /* Build ONE section from a scenario + a type. Returns null when the scenario
      has no content for that type (so a single-module scenario yields one
      section, not an empty second one). */
@@ -294,11 +325,10 @@
     const name = stripModulePrefix(scenario["module" + mod + "Name"]);
     const scoring = (scenario.scoring || {})["module" + mod] || [];
     const decisions = byModule(scenario.decisions, mod);
-    /* A section exists when the case names it OR gives it content — the same
-       name-first precedence scenarioModuleSet() uses (module-set-design M1), so
-       a section library derived here runs the same modules the scenario does. */
-    const named = !!(name && name.en);
-    if (!named && !scoring.length && !decisions.length) return null;
+    /* A section exists when the case names it OR gives it content — see
+       sectionYields(), which is the single answer both this and the
+       unsplit-test owner ask. */
+    if (!sectionYields(scenario, typeId)) return null;
 
     const id = slug + "-" + typeId;
     const section = {
@@ -341,12 +371,45 @@
       section.content.penalties = scenario.penalties || [];
       section.content.synthId = scenario.synthId || null;
       section.content.synthPrereqs = scenario.synthPrereqs || [];
+      /* The LLM-chat consultation scoring, which the author can write
+         (scoringAQ / scoringAQP) and the engine reads as
+         SCORING.moduleA_questions / .moduleA_question_penalties. Only
+         `scoring.moduleA` was ever carried onto a section, so an authored
+         section's chat scoring was dropped and the engine kept whatever the
+         PREVIOUS scenario left in the global — awarding another case's points
+         for this case's questions. Same silent-wrong-content shape as the
+         roleplay block. Emitted only when non-empty, so a section that scores
+         no chat questions publishes nothing and changes nothing. */
+      const sc = scenario.scoring || {};
+      if (Array.isArray(sc.moduleA_questions) && sc.moduleA_questions.length) {
+        section.content.scoringQuestions = sc.moduleA_questions;
+      }
+      if (Array.isArray(sc.moduleA_question_penalties) && sc.moduleA_question_penalties.length) {
+        section.content.scoringQuestionPenalties = sc.moduleA_question_penalties;
+      }
     }
 
+    /* TEST_SPLIT exists because a BUILT-IN case's single pre/post bank is shared
+       between its PBL and roleplay halves, so every item has to be assigned to
+       one of them by hand. It is keyed by built-in scenario id — which means an
+       AUTHORED scenario matched nothing, testItemsFor() returned null, and the
+       facilitator's pre/post questions were silently emptied. Same failure shape
+       as the roleplay block: "this section has no knowledge check" is a
+       legitimate state (both are optional), so nothing looked wrong.
+
+       Nothing needs splitting when there is no split to make: an authored
+       scenario declares ONE format since #272, so it yields one section and its
+       items belong to that section. A legacy COMBINED scenario still yields two,
+       and there the items go to the first section that exists rather than being
+       duplicated — asking the student the same questions on two stages is worse
+       than putting them on one. */
     const pre = testItemsFor(scenario.id, "pre", typeId);
     const post = testItemsFor(scenario.id, "post", typeId);
-    section.preTest = pre ? pre(scenario.preTest) : [];
-    section.postTest = post ? post(scenario.postTest) : [];
+    const ownsUnsplit = !pre && !post && unsplitTestOwner(scenario) === typeId;
+    section.preTest = pre ? pre(scenario.preTest)
+                          : (ownsUnsplit && Array.isArray(scenario.preTest) ? scenario.preTest : []);
+    section.postTest = post ? post(scenario.postTest)
+                            : (ownsUnsplit && Array.isArray(scenario.postTest) ? scenario.postTest : []);
     return section;
   }
 

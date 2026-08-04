@@ -234,3 +234,114 @@ test.describe("An authored roleplay, end to end", () => {
     await expect(page.locator("#refB-btn-history")).not.toHaveClass(/hidden/);
   });
 });
+
+/* ── The same gap, found twice more ───────────────────────────────────────────
+ * The roleplay block was not the only authored content dropped between the form
+ * and the stage. A systematic diff of "what the author emits" against "what
+ * survives buildSection()" turned up two more of the identical shape — content
+ * silently replaced by a default, with no error and nothing visibly wrong:
+ *
+ *   1. pre/post knowledge tests. TEST_SPLIT assigns a BUILT-IN case's shared
+ *      bank to its PBL or roleplay half, and is keyed by built-in scenario id —
+ *      so an authored scenario matched nothing and its questions were emptied.
+ *   2. the LLM-chat consultation scoring (scoring.moduleA_questions /
+ *      .moduleA_question_penalties). Only `scoring.moduleA` was carried, so an
+ *      authored section's chat scoring never reached the engine, which kept
+ *      whatever the PREVIOUS scenario left in the global — scoring this case's
+ *      conversation against another case's questions.
+ */
+test.describe("Authored content that is NOT the roleplay block", () => {
+  /* Take a skeleton straight from the tool and merge PLAIN DATA into it. The
+     patch crosses the boundary as JSON, never as a serialised function, so this
+     needs no dynamic code execution — which this repo deliberately removed from
+     the author (the Function() sink, round-3 review). */
+  async function derive(page, kind, patch) {
+    await page.goto("/scenario-author.html");
+    await page.waitForFunction(() => !!window.__scenarioAuthor, { timeout: 20_000 });
+    const json = await page.evaluate(({ kind, patch }) => {
+      const A = window.__scenarioAuthor;
+      const sc = (kind === "roleplay") ? A.roleplaySkeleton() : A.skeleton();
+      Object.keys(patch).forEach(k => {
+        sc[k] = (k === "scoring") ? Object.assign({}, sc.scoring || {}, patch[k]) : patch[k];
+      });
+      return JSON.stringify(sc);
+    }, { kind, patch });
+    await page.goto("/");
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => !!window.sectionsForScenario);
+    return { json };
+  }
+  const QUESTION = (id, q) => ({ id, q: { en: q }, options: [{ text: { en: "a" }, correct: true }] });
+
+  test("an authored scenario keeps its pre/post knowledge tests", async ({ page }) => {
+    const { json } = await derive(page, "pbl",
+      { preTest: [QUESTION("p1", "Before?")], postTest: [QUESTION("s1", "After?")] });
+    const secs = await page.evaluate(j =>
+      window.sectionsForScenario(JSON.parse(j), "probe")
+        .map(s => ({ type: s.type, pre: s.preTest.length, post: s.postTest.length })), json);
+    const pbl = secs.find(s => s.type === "pbl");
+    expect(pbl, "the skeleton must yield a PBL section").toBeTruthy();
+    expect([pbl.pre, pbl.post],
+      "authored tests are dropped when TEST_SPLIT has no entry for the id").toEqual([1, 1]);
+    /* Never DUPLICATED onto a second section: asking the student the same
+       questions on two stages is worse than the drop it replaces. */
+    const other = secs.find(s => s.type !== "pbl");
+    if (other) expect([other.pre, other.post]).toEqual([0, 0]);
+  });
+
+  test("an authored roleplay keeps its tests too — the owner is not hardcoded to PBL", async ({ page }) => {
+    const { json } = await derive(page, "roleplay", { preTest: [QUESTION("p1", "Before?")] });
+    const secs = await page.evaluate(j =>
+      window.sectionsForScenario(JSON.parse(j), "probe")
+        .map(s => ({ type: s.type, pre: s.preTest.length })), json);
+    expect(secs).toEqual([{ type: "roleplay", pre: 1 }]);
+  });
+
+  test("authored LLM-chat scoring reaches the engine, and a section without it clears the global", async ({ page }) => {
+    const { json } = await derive(page, "pbl", { scoring: {
+      moduleA_questions: [{ id: "q-good", points: 2, label: { en: "Asked about red flags" } }],
+      moduleA_question_penalties: [{ id: "q-bad", points: -1, label: { en: "Leading question" } }]
+    } });
+    const r = await page.evaluate((j) => {
+      const sec = window.sectionsForScenario(JSON.parse(j), "probe").find(s => s.type === "pbl");
+      window.registerSectionBodies({ "1": JSON.stringify(sec) });
+      window.setSessionSections("custom-1");
+      window._test_setViewStage(1); window.renderStage();
+      const withScoring = {
+        q: (window.SCORING.moduleA_questions || []).map(x => x.id),
+        qp: (window.SCORING.moduleA_question_penalties || []).map(x => x.id)
+      };
+      /* Now run a section that declares NO chat scoring. The global must be
+         CLEARED, not left holding the previous section's rows — a stale global
+         is the bug, so silence has to mean "none", never "keep the last one". */
+      const bare = JSON.parse(JSON.stringify(sec));
+      delete bare.content.scoringQuestions;
+      delete bare.content.scoringQuestionPenalties;
+      window.registerSectionBodies({ "2": JSON.stringify(bare) });
+      window.setSessionSections("custom-2");
+      window._test_setViewStage(1); window.renderStage();
+      return { withScoring, after: (window.SCORING.moduleA_questions || []).map(x => x.id) };
+    }, json);
+    expect(r.withScoring).toEqual({ q: ["q-good"], qp: ["q-bad"] });
+    expect(r.after, "a section with no chat scoring must not inherit the previous one's").toEqual([]);
+  });
+
+  test("a BUILT-IN case still gets its split tests and its own chat scoring", async ({ page }) => {
+    /* The regression risk in both fixes: TEST_SPLIT must keep classifying the
+       shipped banks, and clearing the chat-scoring global must not blank the
+       one built-in case that has any. */
+    await page.goto("/");
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => !!window.CANAMED_SECTIONS);
+    const r = await page.evaluate(() => {
+      const s = window.CANAMED_SECTIONS["chronic-pain-pbl"];
+      return { pre: s.preTest.length, post: s.postTest.length,
+               q: (s.content.scoringQuestions || []).length,
+               qp: (s.content.scoringQuestionPenalties || []).length };
+    });
+    expect(r.pre).toBeGreaterThan(0);
+    expect(r.post).toBeGreaterThan(0);
+    expect(r.q, "chronic-pain is the built-in that HAS chat scoring").toBeGreaterThan(0);
+    expect(r.qp).toBeGreaterThan(0);
+  });
+});

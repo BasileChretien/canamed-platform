@@ -2027,6 +2027,20 @@ function applySectionContent(slot) {
       window.SCORING["module" + mod] = c.scoring;
     }
   }
+  /* The LLM-chat consultation scoring travels with a PBL section too. It is a
+     SEPARATE pair of keys, not part of the flat family list above, so publishing
+     only `scoring` left the engine reading whatever the previous scenario put in
+     the global — i.e. scoring this case's chat against another case's questions.
+     Cleared when the section declares none, because a stale global is exactly
+     the bug: silence here has to mean "no chat scoring", not "keep the last
+     one's". */
+  if (slot.type === "pbl") {
+    window.SCORING = window.SCORING || {};
+    window.SCORING.moduleA_questions =
+      Array.isArray(c.scoringQuestions) ? c.scoringQuestions : [];
+    window.SCORING.moduleA_question_penalties =
+      Array.isArray(c.scoringQuestionPenalties) ? c.scoringQuestionPenalties : [];
+  }
   /* DECISIONS are namespaced PER SLOT before they are published, because a
      decision id becomes an RTDB vote key (votes/$voteId). Two PBL sections in
      one session routinely carry the same ids — both built-in workups have a
