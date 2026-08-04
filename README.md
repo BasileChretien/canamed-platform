@@ -1,8 +1,34 @@
 # CaNaMED Platform
 
+[![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)](#status-alpha)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 [![Code of Conduct](https://img.shields.io/badge/code%20of%20conduct-Contributor%20Covenant%202.1-blue.svg)](CODE_OF_CONDUCT.md)
+
+> ## Status: alpha
+>
+> **This platform is in alpha.** It runs real workshops and the reference
+> deployment is live, but it is actively developed, and things change.
+> Concretely, if you are considering adopting it:
+>
+> - **Interfaces are not stable.** The session/content model is still moving —
+>   the scenario format was recently replaced by independently-picked
+>   *sections*, and authored-content shapes may change again without a
+>   migration path.
+> - **Expect defects in newer surfaces.** The facilitator authoring tool and the
+>   section model are the least settled parts. Recent fixes addressed authored
+>   content being silently replaced by built-in defaults — a failure mode that
+>   produces no error, so verify a scenario end to end before teaching with it.
+> - **You are the data controller.** If you run your own deployment for real
+>   participants, the privacy notice, consent flow, retention jobs and ethics
+>   approval are yours to review and operate — see [`docs/Third_session/PBL_platform/legal/`](docs/Third_session/PBL_platform/legal/)
+>   and the retention workflows in [`.github/workflows/`](.github/workflows/).
+>   Some operational items (App Check enforcement, API-key restrictions) are
+>   console settings this repo cannot carry for you.
+> - **No stability or support guarantee** beyond the MIT licence. Pin a commit
+>   rather than tracking `main` if you need reproducibility for a cohort.
+>
+> Issues and PRs are welcome — alpha is exactly when feedback is worth most.
 
 Open-source single-page web platform for running **cross-cultural,
 problem-based-learning (PBL) workshops in clinical communication**. Pairs
