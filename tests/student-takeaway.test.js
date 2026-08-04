@@ -19,9 +19,16 @@ const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
 
 function takeawayFn() {
-  const start = SCRIPT.indexOf("function downloadMyRoomAnswers");
-  assert.ok(start >= 0, "downloadMyRoomAnswers must exist");
-  return SCRIPT.slice(start, start + 8000);
+  /* The markdown itself lives in buildRoomTakeawayMarkdown since #275;
+     downloadMyRoomAnswers is now only the blob/anchor plumbing around it. */
+  const start = SCRIPT.indexOf("function buildRoomTakeawayMarkdown");
+  assert.ok(start >= 0, "buildRoomTakeawayMarkdown must exist");
+  /* Bounded by the NEXT function rather than a byte count: a fixed window
+     silently truncates the tail as comments grow, turning the last assertions
+     into false failures (or, worse, into vacuous passes if inverted). */
+  const end = SCRIPT.indexOf("function downloadMyRoomAnswers", start);
+  assert.ok(end > start, "downloadMyRoomAnswers must follow the builder");
+  return SCRIPT.slice(start, end);
 }
 
 test("helpers resolve case content + escape markdown", () => {

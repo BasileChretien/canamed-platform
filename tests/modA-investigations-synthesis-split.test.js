@@ -55,7 +55,10 @@ test("phaseGateOpen() is the ≥1-hypothesis gate and drives the Debate", () => 
 });
 
 test("the stage-4 take-home export carries the clinical-synthesis write-up", () => {
-  const start = SCRIPT.indexOf("function downloadMyRoomAnswers(");
+  /* The markdown builder was extracted from the download plumbing (#275) so the
+     document a student receives can be asserted directly in an e2e test — the
+     body these assertions describe now lives in buildRoomTakeawayMarkdown. */
+  const start = SCRIPT.indexOf("function buildRoomTakeawayMarkdown(");
   const dl = SCRIPT.slice(start, start + 4000);
   assert.match(dl, /Clinical synthesis \(model summary\)/,
     "the export has a Clinical synthesis section heading");
