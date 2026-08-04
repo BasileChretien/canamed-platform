@@ -36,7 +36,7 @@
 // string changes. Use a build-time injection if you ever want this automated;
 // for now, bump manually when shipping a deploy that should invalidate
 // the shell cache.
-const SHELL_VERSION = "canamed-shell-v133";
+const SHELL_VERSION = "canamed-shell-v134";
 
 const SHELL_ASSETS = [
   "/",
@@ -63,6 +63,7 @@ const SHELL_ASSETS = [
   "/section-registry.js",
   "/section-content.js",
   "/section-picker.js",
+  "/takehome.js",
   "/branched.css",
   "/admin.css",
   "/room.css",

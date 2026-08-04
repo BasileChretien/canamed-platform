@@ -102,7 +102,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v133";
+  var SHELL_VERSION = "v134";
   function v(src) { return src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
@@ -179,6 +179,16 @@
   // student-pdf.js — our certificate + study-booklet generators. Version-
   // suffixed (it changes with deploys). Caller must ensurePdfmake() first.
   function ensureStudentPdf() { return loadScript(v("student-pdf.js")); }
+  /* takehome.js (2026-08-04) — the wrap-up take-home block: the takeaway
+     Markdown builder + its download, the certificate PDF and the study
+     booklet. Split out of the eager script.js because all of it sits at the
+     wrap-up stage behind a download click, so the splash can never reach it.
+     Loaded from initEndPoll()'s three click handlers, NOT on room entry: the
+     two PDF paths already pull ~2.2 MB of pdfmake on click, so a 3 KB chunk in
+     front of them is free, and a student who never downloads never fetches it.
+     Classic script — see its header for why that matters (it reads script.js
+     top-level `let`s under their bare names). */
+  function ensureTakeHome() { return loadScript(v("takehome.js")); }
 
   // Module A LLM-patient pilot scripts (2026-05-28). LAZY-SPLIT out of the
   // eager splash bundle (2026-06-01) to reclaim critical-path JS: the four
@@ -368,6 +378,7 @@
     ensureAdminTools,
     ensurePdfmake,
     ensureStudentPdf,
+    ensureTakeHome,
     modALLMFlagOn,
     ensureModALlm
   };

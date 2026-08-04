@@ -22,7 +22,9 @@ const cov = require("../scripts/i18n-coverage-report.js");
 
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCENARIOS = cov.loadScenarios(path.join(PLATFORM, "case-content.js"));
-const SCRIPT = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
+/* The take-home export moved out of script.js into the lazy takehome.js
+   (perf reclaim, 2026-08-04). */
+const TAKEHOME = fs.readFileSync(path.join(PLATFORM, "takehome.js"), "utf8");
 
 const synth = SCENARIOS["chronic-pain-opioids"].case.labs[0];
 
@@ -72,8 +74,8 @@ test("CONTENT PRESERVATION: the must-not-miss safety-net + decisions survive (FR
 
 test("the stage-4 take-home export renders the synthesis aParts (labelled + localised)", () => {
   /* Extracted from downloadMyRoomAnswers into buildRoomTakeawayMarkdown (#275). */
-  const start = SCRIPT.indexOf("function buildRoomTakeawayMarkdown(");
-  const dl = SCRIPT.slice(start, start + 4000);
+  const start = TAKEHOME.indexOf("function buildRoomTakeawayMarkdown(");
+  const dl = TAKEHOME.slice(start, start + 4000);
   assert.match(dl, /itemById\(SYNTH_ID\)/, "the export pulls the SYNTH_ID case item");
   assert.match(dl, /synItem\.aParts/, "the export iterates the labelled aParts");
   assert.match(dl, /tc\(part\.label, lang\)/, "aParts labels localised via tc()");

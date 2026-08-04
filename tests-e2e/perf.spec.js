@@ -475,7 +475,48 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     The eager-bundle reclaim plan below is the right home for that work, and
 //     this entry does not discharge it: the debt recorded since 2026-06-28 is
 //     still owed, and is now 5 KB larger.
-const FIRST_PARTY_BYTES_LIMIT_KB = 353;
+//
+//   2026-08-04: RECLAIM — the wrap-up TAKE-HOME lazy-split. CAP LOWERED
+//     353 -> 347; measured 352.4 -> 346.3 locally (350.8 -> 344.8 LF-normalised,
+//     the number CI reads). Both numbers are stated because the working tree is
+//     CRLF on Windows and CI normalises to LF, so the same commit measures
+//     ~1.5 KB apart on the two machines; the cap is set from the LOCAL number,
+//     as the entry above established, so the check is meaningful on a dev box.
+//     This is the reclaim the entry above deferred, and it is slice 1
+//     ("Take-out") of ARCHITECTURE/eager-bundle-reclaim-plan.md, done to that
+//     plan's §5 shape.
+//     What moved into the new LAZY takehome.js: buildRoomTakeawayMarkdown +
+//     downloadMyRoomAnswers (the student's takeaway Markdown), _mdEsc /
+//     _caseItemById, downloadCertificatePdf + _verifyUrl (the certificate of
+//     attendance), and _textWithLinks / _bookletBlocks /
+//     _collectBookletSections / _bookletTeamData / downloadStudyBookletPdf (the
+//     study booklet). script.js 225.2 -> 218.9 KB gz; it keeps no copies, only
+//     the _wireTakeHomeButton shim, so this is a genuine removal.
+//     What loads it: CanamedLoader.ensureTakeHome(), from initEndPoll()'s three
+//     click handlers — the one place the wrap-up download buttons are wired.
+//     ON CLICK, not on room entry: the two PDF paths already pull ~2.2 MB of
+//     pdfmake at that same moment, so a 3 KB chunk in front of them is free,
+//     and a student who never downloads never fetches it.
+//     Why this block: it is the plan's designated rehearsal slice — four entry
+//     points, all behind an explicit download click, at the LAST stage of a
+//     session. The splash cannot reach any of it.
+//     THE OBSTACLE THAT STOPPED THE PREVIOUS ATTEMPT (see the 2026-08-04 entry
+//     above, "-- a refactor with its own regression surface"): the block reads
+//     eleven script.js top-level bindings that are not on window. That turned
+//     out to be a NON-problem, and the previous attempt's inference was simply
+//     wrong. takehome.js is a CLASSIC script, and classic scripts SHARE the
+//     global script scope — a top-level `let` in script.js is visible in the
+//     chunk under its bare name, exactly as it was before the move (this is
+//     documented in script-loader.js's own header, and is the same mechanism
+//     section-picker.js relies on). So no context object was invented, nothing
+//     was rewritten to window.*, and the five unit tests were repointed at
+//     takehome.js rather than rewritten. The bindings sit in their TDZ until
+//     script.js evaluates; the chunk only ever loads from a wrap-up click.
+//     ⇒ This DISCHARGES SLICE 1 ONLY. The debt recorded since 2026-06-28 — the
+//     in-room / Module-B / admin engine split — is slices 2 and 3 of the same
+//     plan and remains OWED. The ~1 KB of local headroom this leaves is
+//     headroom, not an allowance.
+const FIRST_PARTY_BYTES_LIMIT_KB = 347;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -585,6 +626,11 @@ test.describe("Perf budget — splash", () => {
       // is loaded by splashShowView("create") instead of shipping in the shell.
       // This is the RECLAIM the header below has demanded since 2026-06-28.
       "section-picker.js",
+      // takehome.js (2026-08-04): the wrap-up TAKE-HOME block — the takeaway
+      // Markdown, the certificate PDF and the study booklet. Loaded on click
+      // from initEndPoll(), so the splash never fetches it at all; listed here
+      // so that stays true even if it is ever prefetched.
+      "takehome.js",
       // section-content.js (2026-07-28, S3a): a roleplay section's authorable
       // content renderers, extracted from script.js and chained into
       // ensureRoomStyles(). Room-only, never on the splash path.
