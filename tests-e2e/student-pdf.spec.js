@@ -153,6 +153,8 @@ test.describe("Student PDFs — study booklet", () => {
     await page.goto("/");
     const info = await page.evaluate(async () => {
       await window.CanamedLoader.ensureStudentPdf();
+      // _collectBookletSections moved into the lazy takehome.js (2026-08-04).
+      await window.CanamedLoader.ensureTakeHome();
       return {
         btn: !!document.getElementById("wrapup-booklet-btn"),
         builder: !!(window.CanamedPdf && typeof window.CanamedPdf.buildBookletDocDefinition === "function"),
@@ -166,6 +168,7 @@ test.describe("Student PDFs — study booklet", () => {
 
   test("the live session reference cards are collected into booklet sections", async ({ page }) => {
     await page.goto("/");
+    await page.evaluate(() => window.CanamedLoader.ensureTakeHome());
     const out = await page.evaluate(() => {
       const secs = window._collectBookletSections();
       return { n: secs.length, hasTitles: secs.every(s => typeof s.title === "string"),

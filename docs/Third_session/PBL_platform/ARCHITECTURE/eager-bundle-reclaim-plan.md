@@ -1,10 +1,38 @@
 # Eager-bundle reclaim — the plan for splitting the room/admin engine out of `script.js`
 
-**Status: PLAN ONLY. No code has moved.** Written 2026-07-31, immediately after the
-S7 cutover shipped (#263). Nothing here is urgent: the splash budget currently
-**passes at 345 / 348 KB gz**. This document exists so the reclaim the perf
+**Status: SLICE 1 DONE (2026-08-04). Slices 2 and 3 not started.** Written
+2026-07-31, immediately after the S7 cutover shipped (#263); slice 1 executed
+2026-08-04. The splash budget **passes at 346.3 / 347 KB gz** locally (344.8 on
+CI, which normalises CRLF to LF). This document exists so the reclaim the perf
 budget header has recorded as owed since **2026-06-28** can be executed
 deliberately rather than improvised under pressure the next time the cap bites.
+
+> **Slice 1 result (2026-08-04) — `takehome.js`.** The wrap-up take-home block
+> (`buildRoomTakeawayMarkdown` + `downloadMyRoomAnswers`, `_mdEsc`,
+> `_caseItemById`, `downloadCertificatePdf` + `_verifyUrl`, and the five booklet
+> functions) moved out of the eager `script.js` into a lazy chunk loaded by
+> `CanamedLoader.ensureTakeHome()` from `initEndPoll()`'s three click handlers.
+> `script.js` 225.2 → 218.9 KB gz; splash first-party **352.4 → 346.3** local
+> (350.8 → 344.8 LF), cap **353 → 347**. `_mountSurveyForm` and `downloadMyData`
+> were left in place, and neither for a byte reason: `_mountSurveyForm` is called
+> from `renderSurvey()`, a RENDER path (including its facilitator-preview
+> branch), not from behind a click — so moving it means making a currently
+> synchronous call site async; and `downloadMyData` is wired in the WAITING room
+> at join time (the Art. 15 self-export button), nowhere near wrap-up, so it
+> needs its own choke point rather than riding `initEndPoll()`. Both remain
+> movable; they just are not the same one-click shape, and folding them into the
+> rehearsal slice would have widened its blast radius for ~1 KB.
+>
+> **§4's premise held, and one recorded obstacle turned out to be false.** The
+> perf header's 2026-08-04 entry had rejected this same split because the block
+> "reads eleven `script.js` top-level bindings … none of which is on `window`, so
+> moving it means inventing a context object and rewiring five unit tests". That
+> inference was wrong, and §5.2 below already said why: a CLASSIC script shares
+> the global script scope, so a top-level `let` in `script.js` is visible in the
+> chunk under its bare name. No context object was invented; the five unit tests
+> were **repointed** at `takehome.js` rather than rewritten. If a future slice
+> hits the same "it reads module-scope state" objection, check §5.2 first — the
+> objection is only real for state held inside a *closure*, not at top level.
 
 Read this before touching `script.js` with a split in mind. In particular read
 **§2 (what was measured)** and **§3 (why the obvious method does not work here)** —
@@ -124,11 +152,16 @@ used the same shape. Follow it:
 
 ## 6. Proposed slice order
 
-**Slice 1 — Take-out (exports / certificate PDF / survey mount).**
+**Slice 1 — Take-out (exports / certificate PDF / survey mount). ✅ DONE
+2026-08-04 as `takehome.js` (the survey mount and `downloadMyData` were left
+behind — see the status note at the top for why).**
 2 eager call sites, leaf-ish, already adjacent to lazy `student-pdf.js` and
 `pdfmake`. Every entry is behind an explicit download/submit click. This is the
 rehearsal: it proves the loader wiring and the test strategy at low blast
 radius. **Do this one first even though it is the smallest.**
+`Verify:` `ls docs/Third_session/PBL_platform/takehome.js`; `grep -c
+ensureTakeHome docs/Third_session/PBL_platform/script-loader.js` > 0; `node
+--test tests/takehome-lazy-split.test.js`.
 
 **Slice 2 — Admin dashboard.**
 Largest single win and the closest analogue to the picker split: a whole surface

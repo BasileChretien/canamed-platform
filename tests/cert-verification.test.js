@@ -23,7 +23,9 @@ const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const pure = require(path.join(P, "pure-utils.js"));
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* downloadCertificatePdf + _verifyUrl moved out of script.js into the lazy
+   takehome.js (perf reclaim, 2026-08-04) — wrap-up-only code behind a click. */
+const SCRIPT = fs.readFileSync(path.join(P, "takehome.js"), "utf8");
 const STUDENT_PDF = fs.readFileSync(path.join(P, "student-pdf.js"), "utf8");
 const ADMIN = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 

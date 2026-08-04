@@ -17,6 +17,9 @@ const path = require("node:path");
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const INDEX  = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* downloadMyRoomAnswers moved out of script.js into the lazy takehome.js
+   (perf reclaim, 2026-08-04); script.js keeps only the wiring. */
+const TAKEHOME = fs.readFileSync(path.join(P, "takehome.js"), "utf8");
 const CSS    = fs.readFileSync(path.join(P, "style.css"), "utf8");
 const I18N   = require("./_i18n_source.js").readI18nSource();
 
@@ -43,13 +46,15 @@ test("wrap-up offers a student-facing room-answers export", () => {
 });
 
 test("downloadMyRoomAnswers exports only the student's own room + is wired student-only", () => {
-  assert.match(SCRIPT, /function downloadMyRoomAnswers\(/, "downloadMyRoomAnswers must exist");
-  const fn = SCRIPT.slice(SCRIPT.indexOf("function downloadMyRoomAnswers"),
-    SCRIPT.indexOf("function downloadMyRoomAnswers") + 8000);
+  assert.match(TAKEHOME, /function downloadMyRoomAnswers\(/, "downloadMyRoomAnswers must exist");
+  const fn = TAKEHOME.slice(TAKEHOME.indexOf("function downloadMyRoomAnswers"),
+    TAKEHOME.indexOf("function downloadMyRoomAnswers") + 8000);
   assert.match(fn, /rooms\/"\s*\+\s*myRoom/, "must read the participant's OWN room only");
   assert.match(fn, /text\/markdown/, "must produce a Markdown blob");
   // wired in initEndPoll (student path); hidden for admins
-  assert.match(SCRIPT, /wrapup-download-btn[\s\S]{0,160}?addEventListener\("click", downloadMyRoomAnswers\)/,
+  /* Wiring is now the lazy-chunk shim: initEndPoll names the button + the
+     handler, _wireTakeHomeButton loads takehome.js on click and dispatches. */
+  assert.match(SCRIPT, /_wireTakeHomeButton\("wrapup-download-btn", "downloadMyRoomAnswers"\)/,
     "the export button must be wired to downloadMyRoomAnswers in the student wrap-up");
   assert.match(SCRIPT, /isRoomAdmin[\s\S]{0,160}?wrapup-download-btn[\s\S]{0,40}?add\("hidden"\)/,
     "the student export must be hidden for admins (who have their own export)");

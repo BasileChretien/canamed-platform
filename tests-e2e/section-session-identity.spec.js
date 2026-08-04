@@ -49,6 +49,10 @@ async function pickSections(page, ids) {
   await page.goto("/");
   await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
   await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+  /* buildRoomTakeawayMarkdown moved into the lazy takehome.js (perf reclaim,
+     2026-08-04). In the app it arrives with the first wrap-up download click;
+     this spec calls it directly, so pull the chunk in explicitly. */
+  await page.evaluate(() => window.CanamedLoader.ensureTakeHome());
   await page.waitForFunction(() => !!window.CANAMED_SECTIONS);
   await page.evaluate((csv) => {
     window.setSessionSections(csv);

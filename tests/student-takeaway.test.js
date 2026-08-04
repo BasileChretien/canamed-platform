@@ -16,26 +16,32 @@ const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* The take-home block moved OUT of script.js into the lazy takehome.js
+   (perf reclaim, 2026-08-04). These assertions follow it there, deliberately
+   reading takehome.js ALONE rather than a concatenation of both files — a
+   concatenation cannot tell an eager copy from a moved one, which is exactly
+   what tests/takehome-lazy-split.test.js exists to catch. */
+const TAKEHOME = fs.readFileSync(path.join(P, "takehome.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
 
 function takeawayFn() {
   /* The markdown itself lives in buildRoomTakeawayMarkdown since #275;
      downloadMyRoomAnswers is now only the blob/anchor plumbing around it. */
-  const start = SCRIPT.indexOf("function buildRoomTakeawayMarkdown");
+  const start = TAKEHOME.indexOf("function buildRoomTakeawayMarkdown");
   assert.ok(start >= 0, "buildRoomTakeawayMarkdown must exist");
   /* Bounded by the NEXT function rather than a byte count: a fixed window
      silently truncates the tail as comments grow, turning the last assertions
      into false failures (or, worse, into vacuous passes if inverted). */
-  const end = SCRIPT.indexOf("function downloadMyRoomAnswers", start);
+  const end = TAKEHOME.indexOf("function downloadMyRoomAnswers", start);
   assert.ok(end > start, "downloadMyRoomAnswers must follow the builder");
-  return SCRIPT.slice(start, end);
+  return TAKEHOME.slice(start, end);
 }
 
 test("helpers resolve case content + escape markdown", () => {
-  assert.match(SCRIPT, /function _mdEsc\(/, "_mdEsc markdown-escaper must exist");
-  assert.match(SCRIPT, /function _caseItemById\(/, "_caseItemById resolver must exist");
-  const resolver = SCRIPT.slice(SCRIPT.indexOf("function _caseItemById"),
-    SCRIPT.indexOf("function _caseItemById") + 500);
+  assert.match(TAKEHOME, /function _mdEsc\(/, "_mdEsc markdown-escaper must exist");
+  assert.match(TAKEHOME, /function _caseItemById\(/, "_caseItemById resolver must exist");
+  const resolver = TAKEHOME.slice(TAKEHOME.indexOf("function _caseItemById"),
+    TAKEHOME.indexOf("function _caseItemById") + 500);
   assert.match(resolver, /CASE\[/, "must look the revealed item up in CASE");
   assert.match(resolver, /tc\(item\.q/, "must translate the item label via tc()");
 });
