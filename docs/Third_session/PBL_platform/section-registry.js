@@ -316,6 +316,24 @@
       postTest: []
     };
 
+    /* S5 — the roleplay's authored CONTENT travels with its section.
+       applySectionContent() publishes `sec.roleplay` to
+       CURRENT_SECTION_ROLEPLAY, which is what section-content.js renders the
+       scene, cast, observer checklist, phases and reference panels from. Without
+       this line the block is dropped the moment a scenario becomes a section, so
+       a facilitator could author a whole roleplay, see it round-trip through the
+       form and land in `sectionBodies`, and still watch the session run the
+       SHIPPED breaking-bad-news content — silently, because "no roleplay block"
+       is a legitimate state meaning "keep the built-in".
+
+       At the TOP level, not under `content`: applySectionContent reads
+       `sec.roleplay`, while `content` is the scoring/decisions/case bag. Nothing
+       is written for a scenario that has no roleplay block, so built-in sections
+       keep the shipped markup exactly as before. */
+    if (typeId === "roleplay" && scenario.roleplay && typeof scenario.roleplay === "object") {
+      section.roleplay = scenario.roleplay;
+    }
+
     /* The workup items, their penalties and the synthesis gate belong to the
        PBL section only — a roleplay has no history/exam/investigation board. */
     if (typeId === "pbl") {
