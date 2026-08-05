@@ -132,7 +132,16 @@ let execArg = playwright;
 if (process.platform === "win32") {
   tempScript = path.join(os.tmpdir(), "canamed-rules-e2e-" + process.pid + ".cmd");
   fs.writeFileSync(tempScript,
-    "@echo off\r\n" + playwright.replace(/%/g, "%%") + "\r\n", "utf8");
+    "@echo off\r\n" +
+    /* The file is written UTF-8, but cmd.exe reads a batch file in the OEM
+       codepage — so a non-ASCII argument arrives mangled. Observed: a
+       `--grep` containing an arrow became "Ôåæ" and matched no tests, which
+       presents as "No tests found" (i.e. "there is no such test") rather than
+       "your argument was corrupted". cmd re-reads the file line by line, so
+       switching the codepage here governs every later line. Verified against
+       a mangling repro, not assumed. */
+    "chcp 65001 >nul\r\n" +
+    playwright.replace(/%/g, "%%") + "\r\n", "utf8");
   execArg = '"' + tempScript + '"';
 }
 function dropTempScript() {
