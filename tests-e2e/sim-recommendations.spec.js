@@ -120,6 +120,12 @@ test.describe("Session archive export (CSV / JSON)", () => {
   // Capture the Blob the export builds (the code revokes the blob URL the moment
   // click() returns, so stub createObjectURL to grab it synchronously).
   async function captureArchive(page, format) {
+    /* downloadSessionArchive moved into the lazy script-admin.js (perf reclaim
+       2026-08-05); in production the facilitator login loads it long before the
+       export button exists. These tests reach the global directly from the
+       splash, so load the chunk first — exactly like the ensureRoomStyles()
+       calls above, and for the same reason. */
+    await page.evaluate(() => window.CanamedLoader.ensureAdminApp());
     return page.evaluate((fmt) => {
       if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
       if (window._test_setRoomCount)  window._test_setRoomCount(1);
@@ -186,6 +192,8 @@ test.describe("Session archive export (CSV / JSON)", () => {
     // this spec surfaces the room synthetically, so load it explicitly (same
     // convention as branched-format.spec.js awaiting ensureBranchedStyles).
     await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
+    // …and the dashboard chunk that owns downloadSessionArchive (see above).
+    await page.evaluate(() => window.CanamedLoader.ensureAdminApp());
     const text = await page.evaluate(() => {
       if (window._test_setSessionNum) window._test_setSessionNum("TEST-CODE");
       if (window._test_setRoomCount)  window._test_setRoomCount(1);

@@ -18,6 +18,14 @@ test.describe("Impact report", () => {
     await page.goto("/");
     await page.waitForSelector(".splash", { state: "visible" });
 
+    /* generateImpactReport moved into the lazy script-admin.js (perf reclaim
+       2026-08-05). In production the facilitator login loads that chunk before
+       the report button exists; this spec reaches the generator directly from
+       the splash, so it must load the chunk explicitly — same convention as
+       sim-recommendations.spec.js awaiting ensureRoomStyles() before driving a
+       synthetically-surfaced room. */
+    await page.evaluate(() => window.CanamedLoader.ensureAdminApp());
+
     // generateImpactReport is a classic-script global; invoking it opens the
     // report in a new tab. Capture the popup and assert its content.
     const [popup] = await Promise.all([

@@ -25,7 +25,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* The FACILITATOR DASHBOARD block moved OUT of script.js into the lazy
+   script-admin.js (perf reclaim 2026-08-05 — slice 2 of
+   ARCHITECTURE/eager-bundle-reclaim-plan.md). Read BOTH, for the same reason
+   ~11 test files concatenate style.css + room.css after the room.css split:
+   reading script.js alone would silently stop seeing the dashboard code. */
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
+  fs.readFileSync(path.join(P, "script-admin.js"), "utf8");
 const SECTION_CONTENT = fs.readFileSync(path.join(P, "section-content.js"), "utf8");
 /* S3a — the roleplay content (cast, panels, framework, phases) lives in the
    room-only section-content.js chunk now. These assertions are about the

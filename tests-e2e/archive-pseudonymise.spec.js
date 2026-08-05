@@ -65,6 +65,11 @@ test.describe("R2-23: archive pseudonymisation honours the admin toggle", () => 
 
     // Wait for lib.js to attach pseudonymiseTree (defer-loaded, but very fast).
     await page.waitForFunction(() => typeof window.pseudonymiseTree === "function");
+    /* downloadFullArchive moved into the lazy script-admin.js (perf reclaim
+       2026-08-05). This spec calls it directly from the splash rather than
+       through the facilitator close-session flow, so it must load the chunk
+       itself — the production path loads it at admin login. */
+    await page.evaluate(() => window.CanamedLoader.ensureAdminApp());
 
     const result = await page.evaluate((tree) => {
       // Simulate the admin having ticked the checkbox: build a hidden
@@ -129,6 +134,11 @@ test.describe("R2-23: archive pseudonymisation honours the admin toggle", () => 
   test("OFF: archive contains raw names (sanity — toggle is the gate)", async ({ page }) => {
     await page.goto("/");
     await page.waitForFunction(() => typeof window.pseudonymiseTree === "function");
+    /* downloadFullArchive moved into the lazy script-admin.js (perf reclaim
+       2026-08-05). This spec calls it directly from the splash rather than
+       through the facilitator close-session flow, so it must load the chunk
+       itself — the production path loads it at admin login. */
+    await page.evaluate(() => window.CanamedLoader.ensureAdminApp());
 
     const result = await page.evaluate((tree) => {
       let toggle = document.getElementById("anon-export");

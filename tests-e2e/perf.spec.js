@@ -516,7 +516,75 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     in-room / Module-B / admin engine split — is slices 2 and 3 of the same
 //     plan and remains OWED. The ~1 KB of local headroom this leaves is
 //     headroom, not an allowance.
-const FIRST_PARTY_BYTES_LIMIT_KB = 347;
+//
+//   2026-08-05: RECLAIM — the FACILITATOR DASHBOARD lazy-split. CAP LOWERED
+//     347 -> 316; measured 346.98 -> 312.88 KB gz locally (script.js alone
+//     218.5 -> 185.0). That is 34.0 KB reclaimed in one move — the largest
+//     single reclaim this budget has ever taken, and ~13 KB more than the
+//     plan's indicative ~21 KB, because the move followed the CALL GRAPH out
+//     to its closure rather than a line range: 61 functions and 20 top-level
+//     bindings, 2645 lines, all of them reachable only from behind the
+//     facilitator password. This is slice 2 ("Admin dashboard") of
+//     ARCHITECTURE/eager-bundle-reclaim-plan.md, done to that plan's §5 shape.
+//     What moved into the new LAZY script-admin.js: the admin shell
+//     (enterAdminApp / startAdmin / renderPrestart / renderSidebar), the
+//     dashboard (renderDashboard + its filter, points panel, session signal,
+//     roomProgress / roomParticipation / gini), stage control (startSession,
+//     setRoomStage, logAdminAction, stageMinutes), help-call alerting (beep,
+//     checkCallAlerts, helpCallChime/Notify, maybeAlertHelpCall, the mute
+//     prefs), the facilitator debrief (_debrief*Section + renderDebrief +
+//     toggleDebrief), openRoomAsAdmin / backToDashboard, closeSession +
+//     downloadFullArchive + recordProgramSession, the impact report
+//     (_knowledgeGain / _impactMetrics / _impactEsc / generateImpactReport)
+//     and the session archive (_sessionArchiveData / …ToCSV /
+//     downloadSessionArchive). script.js keeps NO copies — only a shim and
+//     three typeof guards — so this is a genuine removal, pinned by
+//     tests/admin-lazy-split.test.js.
+//     What loads it: CanamedLoader.ensureAdminApp(), from _enterAdminAppLazy()
+//     — the ONE shim both admin routes (joinAdmin, joinSuperAdmin) now pass
+//     through, replacing the duplicated `enterAdminApp(); startAdmin();` pair.
+//     Both routes were ALREADY inside a promise chain at that point, so no
+//     synchronous call site became asynchronous. In joinAdmin the fetch joins
+//     the existing Promise.all with qrcode + case-content (§5.5: parallel,
+//     never chained — a ~26 KB chunk must not queue behind ~200 KB).
+//     Why this block: it is a whole SURFACE behind one password gate, with
+//     admin.css and admin-tools.js already lazy siblings on the same path.
+//     WHAT WAS DELIBERATELY LEFT EAGER, against the plan's own entry-point
+//     list: renderLeaderboard (the plan names it, but its callers are
+//     startRoom / renderScore / renderButtons / buildDecision — it is a ROOM
+//     renderer the dashboard also calls) and closeMySession (reached from
+//     renderMySessions, i.e. the splash "My sessions" list — a different
+//     surface behind a different click, which would have meant a second choke
+//     point). Also left eager because they are genuinely shared with the room
+//     or splash: getTheme/setTheme, logEvent, roomSlotBuckets, _debriefT,
+//     _debriefBucket, renderStudentDebrief, renderClosedState, downloadMyData,
+//     showLateBanner, stageNow. A smaller correct reclaim beats a larger
+//     broken one, and 34 KB was already well past what the slice needed.
+//     ⇒ SLICES 1 AND 2 ARE NOW DISCHARGED. Slice 3 (the room engine) remains
+//     OWED but is deliberately NOT SCHEDULED (user decision 2026-08-05): the
+//     budget passes, no UI work is blocked, and the plan's own §6/§8 stopping
+//     rules both say stop.
+//     WHY 316 AND NOT 313. The measurement is 312.88 KB gz on a local CRLF
+//     working tree and 311.46 LF-normalised (the number CI reads). Every
+//     previous reclaim here set the cap to the local measurement rounded up,
+//     which would give 313 — and 313 would leave 0.12 KB of local headroom,
+//     i.e. it would recreate, 34 KB lower down, exactly the zero-headroom
+//     budget this slice was commissioned to fix. That state is not
+//     theoretical: it is why two PRs on 2026-08-04/05 had to trim comment
+//     PROSE to land, and why this reclaim was ordered in the first place. A
+//     budget with no room to move stops being a guardrail and becomes a tax on
+//     every subsequent PR. So the cap is deliberately set 3 KB above the
+//     measurement.
+//     THE RECLAIM IS STILL BANKED, NOT SPENT: 347 -> 316 hands back 31 of the
+//     34 KB, and the ~3 KB left under the cap is WORKING MARGIN, NOT AN
+//     ALLOWANCE — enough for a normal feature's incidental growth, nowhere
+//     near enough to absorb a new eager asset. The next entry here should
+//     still be another reclaim or a justified bump.
+//     Cross-checked two ways: gzip of the served responses in this spec
+//     (reports 313 rounded) and gzip of the git blobs for the same 15 assets,
+//     which LF-normalised reads 345.4 -> 311.5 across main -> this branch —
+//     the same -34.0 KB from a completely independent measurement path.
+const FIRST_PARTY_BYTES_LIMIT_KB = 316;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -647,7 +715,16 @@ test.describe("Perf budget — splash", () => {
       "qrcode.js",
       "tour.js",
       "scenario-author.js",
+      // script-room.js is still a PLACEHOLDER name here (slice 3 of the
+      // eager-bundle reclaim plan is not written yet); listing it costs
+      // nothing and means the entry is already correct when it lands.
       "script-room.js",
+      // script-admin.js (2026-08-05): the FACILITATOR DASHBOARD engine — the
+      // admin shell, the dashboard/prestart/sidebar renderers, stage control,
+      // the debrief, the impact report and the archive/close flow. Loaded by
+      // CanamedLoader.ensureAdminApp() from _enterAdminAppLazy(), i.e. only
+      // after a facilitator password check, so the splash never fetches it.
+      // This is slice 2 of ARCHITECTURE/eager-bundle-reclaim-plan.md.
       "script-admin.js",
       // Module A LLM-patient pilot — lazy-split out of the eager bundle
       // 2026-06-01 (gated behind ?llm=1; loaded on room entry only for pilot

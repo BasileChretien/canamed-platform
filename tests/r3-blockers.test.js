@@ -24,7 +24,13 @@ const lib  = require("../docs/Third_session/PBL_platform/lib.js");
 const i18n = require("../docs/Third_session/PBL_platform/i18n.js");
 
 const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT_JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8");
+/* The FACILITATOR DASHBOARD block moved OUT of script.js into the lazy
+   script-admin.js (perf reclaim 2026-08-05 — slice 2 of
+   ARCHITECTURE/eager-bundle-reclaim-plan.md). Read BOTH, for the same reason
+   ~11 test files concatenate style.css + room.css after the room.css split:
+   reading script.js alone would silently stop seeing the dashboard code. */
+const SCRIPT_JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8") + "\n" +
+  fs.readFileSync(path.join(PLATFORM, "script-admin.js"), "utf8");
 // roomNames() was extracted into pure-utils.js (bestRoomFor in script.js still
 // depends on it), so the sandbox below pulls its source from there.
 const PURE_UTILS = fs.readFileSync(path.join(PLATFORM, "pure-utils.js"), "utf8");

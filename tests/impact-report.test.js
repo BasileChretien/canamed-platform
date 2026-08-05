@@ -17,7 +17,13 @@ const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* The FACILITATOR DASHBOARD block moved OUT of script.js into the lazy
+   script-admin.js (perf reclaim 2026-08-05 — slice 2 of
+   ARCHITECTURE/eager-bundle-reclaim-plan.md). Read BOTH, for the same reason
+   ~11 test files concatenate style.css + room.css after the room.css split:
+   reading script.js alone would silently stop seeing the dashboard code. */
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
+  fs.readFileSync(path.join(P, "script-admin.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
 
 test("the Impact report generator is defined (kept in code; removed from the lean menu 2026-06-25)", () => {
