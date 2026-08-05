@@ -1,8 +1,9 @@
 /* tests/emulator-run-hygiene.test.js
  *
- * The rules-exercising E2E run (`npm run test:e2e:rules`) is the ONLY thing in
- * this repo that validates database.rules.json — the LOCAL Playwright suite
- * does not touch rules at all. Three infrastructure defects made it unreliable
+ * The rules-exercising E2E run (`npm run test:e2e:rules`) is one of only two
+ * things in this repo that validate database.rules.json — the other is the
+ * emulator-backed sim (`npm run sim:emulator`). The LOCAL Playwright suite does
+ * not touch rules at all. Three infrastructure defects made it unreliable
  * in ways that each present as something other than what they are (all
  * observed 2026-08-05):
  *
@@ -116,8 +117,10 @@ test("the runner sweeps survivors on every exit path", () => {
     "a normal exit must sweep");
   assert.match(RUNNER, /child\.on\("error"[\s\S]{0,120}?sweep\(\)/,
     "a failure to start must sweep");
-  assert.match(RUNNER, /process\.on\("SIGINT"[\s\S]{0,60}?sweep\(\)/,
-    "Ctrl-C must sweep — an interrupted run is the commonest way to orphan one");
+  assert.match(RUNNER, /process\.on\("SIGINT", \(\) => stop\("SIGINT", 130\)\)/,
+    "Ctrl-C must reach stop() — an interrupted run is the commonest way to " +
+    "orphan one — and stop() forwards to the child, waits, THEN sweeps");
+  assert.match(RUNNER, /process\.on\("SIGTERM", \(\) => stop\("SIGTERM", 143\)\)/);
   assert.match(RUNNER, /let swept = false/,
     "the sweep must be idempotent; several paths can reach it");
 });
@@ -130,7 +133,7 @@ test("the runner propagates the suite's exit code (a swept run is not a pass)", 
 test("the sweep is scoped to the emulator ports and runs only after the child", () => {
   /* Sweeping the WEB port would kill a server Playwright owns; sweeping before
      the child exits would kill the emulator mid-suite. */
-  assert.match(RUNNER, /ports\.free\(EMU_PORTS\)/);
+  assert.match(RUNNER, /ports\.free\(EMU_PORTS, \{ onlyPids: ownedPids \}\)/);
   assert.doesNotMatch(RUNNER, /ports\.free\(\[[^\]]*WEB_PORT/);
 });
 
@@ -168,10 +171,13 @@ test("the playwright command reaches emulators:exec as ONE argument", () => {
      as five arguments and emulators:exec would run only `npx`, i.e. the suite
      would silently not run. The npm one-liner this replaced had to escape the
      same quotes. */
-  assert.match(RUNNER, /process\.platform === "win32" \? '"' \+ playwright \+ '"' : playwright/,
-    "the command must be quoted on Windows and NOT quoted elsewhere");
+  assert.match(RUNNER, /^let execArg = playwright;$/m,
+    "off Windows argv is passed literally — an added quote would become part " +
+    "of the command");
+  assert.match(RUNNER, /if \(process\.platform === "win32"\) \{\r?\n\s*tempScript =/,
+    "only Windows needs the wrapper (see the temp-script test below)");
   assert.match(RUNNER, /^\s*execArg\s*$/m,
-    "the quoted form, not the bare join, must be what is spawned");
+    "the wrapped form, not the bare join, must be what is spawned");
 });
 
 /* ── the sim launcher gets the same two guards ────────────────────── */
@@ -192,8 +198,141 @@ test("sim-with-emulator sweeps by port after its tree-kill", () => {
   const at = SIM.indexOf("function cleanup()");
   assert.ok(at > 0);
   const body = SIM.slice(at, SIM.indexOf("process.on(\"SIGINT\"", at));
-  assert.match(body, /emulatorPorts\.free\(\[DB_PORT, AUTH_PORT\]\)/,
-    "taskkill /T only reaches the tree we own; the RTDB emulator survived it");
+  assert.match(body, /emulatorPorts\.free\(\[DB_PORT, AUTH_PORT\], \{ onlyPids: ownedPids \}\)/,
+    "taskkill /T only reaches the tree we own; the RTDB emulator survived it — " +
+    "but the backstop sweep must still prove ownership before killing");
   assert.match(body, /taskkill/,
     "the port sweep is a BACKSTOP — the tree-kill must still run first");
+});
+
+/* ── the review round: fail closed, kill once, prove ownership ────── */
+
+test("port inspection FAILS CLOSED when the tool is missing (never 'free')", () => {
+  /* Returning [] on any error made 'netstat/lsof is absent' indistinguishable
+     from 'the port is free', so a machine without the tool would wave a stale
+     emulator straight through — the exact failure this module prevents. */
+  const cli = read("scripts", "ops", "emulator-ports.js");
+  assert.match(cli, /if \(!IS_WIN && e && e\.status === 1\) return \[\];/,
+    "lsof's documented exit-1-no-match is the ONLY silent-empty case");
+  assert.match(cli, /e\.code === "ENOENT"/, "a missing tool must be named");
+  assert.match(cli, /throw new Error\(\s*\n?\s*"cannot determine who is listening/,
+    "every other inspection failure must propagate, not read as 'free'");
+});
+
+test("a missing inspection tool surfaces to the caller rather than reporting free", () => {
+  const orig = process.env.PATH;
+  try {
+    process.env.PATH = path.join(ROOT, "no-such-dir-for-tests");
+    delete require.cache[require.resolve("../scripts/ops/emulator-ports.js")];
+    const fresh = require("../scripts/ops/emulator-ports.js");
+    let threw = null;
+    try { fresh.survey([9000]); } catch (e) { threw = e; }
+    assert.ok(threw, "survey must throw when it cannot inspect the port");
+    assert.match(String(threw.message), /cannot determine who is listening on :9000/);
+  } finally {
+    process.env.PATH = orig;
+    delete require.cache[require.resolve("../scripts/ops/emulator-ports.js")];
+    require("../scripts/ops/emulator-ports.js");
+  }
+});
+
+test("one process on BOTH ports is killed once, not twice", async () => {
+  /* The second kill of an already-dead PID reports ESRCH / a taskkill failure,
+     and the CLI would exit non-zero having actually released every listener. */
+  const http2 = require("node:http");
+  const a = http2.createServer(() => {});
+  const b = http2.createServer(() => {});
+  await new Promise((r) => a.listen(0, "127.0.0.1", r));
+  await new Promise((r) => b.listen(0, "127.0.0.1", r));
+  const ports2 = [a.address().port, b.address().port];
+  try {
+    const rows = ports.survey(ports2);
+    assert.strictEqual(rows.length, 2, "both ports must be seen");
+    assert.strictEqual(rows[0].pid, rows[1].pid, "same process holds both");
+    // Do not actually kill this test process — assert the grouping instead.
+    const cli = read("scripts", "ops", "emulator-ports.js");
+    assert.match(cli, /const byPid = new Map\(\)/,
+      "free() must group rows by PID before terminating");
+    assert.match(cli, /if \(error\) for \(const row of group\) row\.error = error;/,
+      "one outcome must be shared across every row for that PID");
+  } finally {
+    await new Promise((r) => a.close(r));
+    await new Promise((r) => b.close(r));
+  }
+});
+
+test("free() honours an ownership restriction and skips unproven listeners", async () => {
+  const http2 = require("node:http");
+  const s = http2.createServer(() => {});
+  await new Promise((r) => s.listen(0, "127.0.0.1", r));
+  const port = s.address().port;
+  try {
+    // onlyPids that excludes the real holder ⇒ nothing acted on, nothing killed.
+    const acted = ports.free([port], { onlyPids: new Set(["999999"]) });
+    assert.deepStrictEqual(acted, [],
+      "a listener whose ownership is not established must be skipped entirely");
+    assert.strictEqual(ports.survey([port]).length, 1,
+      "and it must still be alive");
+  } finally {
+    await new Promise((r) => s.close(r));
+  }
+});
+
+test("automatic sweeps are ownership-scoped; only `emulator:free` is unrestricted", () => {
+  const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
+  const SIM = read("scripts", "sim", "sim-with-emulator.js");
+  const cli = read("scripts", "ops", "emulator-ports.js");
+  for (const [name, src] of [["run-rules-e2e", RUNNER2], ["sim-with-emulator", SIM]]) {
+    assert.match(src, /onlyPids: ownedPids/,
+      name + " must restrict its automatic sweep to PIDs it established");
+    assert.match(src, /were NOT started by this run, so/,
+      name + " must REPORT a stranger on the port, not kill it");
+  }
+  assert.match(cli, /const killed = free\(ports\);/,
+    "the explicit `free` verb stays unrestricted — there the operator decides");
+});
+
+test("a signal to the runner forwards to the child and waits before sweeping", () => {
+  /* Sweeping straight away would force-kill the emulator ports while
+     emulators:exec was still running against them. */
+  const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
+  assert.match(RUNNER2, /function stop\(signal, exitCode\)/);
+  assert.match(RUNNER2, /taskkill[\s\S]{0,80}?String\(child\.pid\)/,
+    "the child TREE must be signalled on Windows");
+  assert.match(RUNNER2, /while \(child\.exitCode === null && child\.signalCode === null && Date\.now\(\) < deadline\)/,
+    "the wait must be bounded — a wedged child must not hang the shell");
+  const stopAt = RUNNER2.indexOf("function stop(");
+  const body = RUNNER2.slice(stopAt, RUNNER2.indexOf("process.on(\"SIGINT\"", stopAt));
+  assert.ok(body.indexOf("deadline") < body.indexOf("sweep()"),
+    "the wait must come BEFORE the sweep");
+});
+
+test("forwarded playwright arguments survive the shell emulators:exec runs", () => {
+  /* `--grep "roomOf peer"` joined bare would split into two tokens and the
+     filter would silently match nothing. */
+  const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
+  assert.match(RUNNER2, /function shQuote\(tok\)/);
+  assert.match(RUNNER2, /\.map\(shQuote\)\.join\(" "\)/,
+    "every token must be quoted individually, not the joined string");
+  assert.match(RUNNER2, /\^\[A-Za-z0-9_@%\+=:,\.\/~-\]\+\$/,
+    "only plainly-safe tokens may pass through unquoted");
+});
+
+test("on Windows the nested command goes via a temp script, not nested quotes", () => {
+  /* Wrapping the joined command in quotes is required on Windows (Node does not
+     quote argv when shelling out), but cmd.exe has no escape for a double quote
+     inside a double-quoted string — so the moment a forwarded argument was
+     itself quoted, firebase reported "Too many arguments". Observed running
+     `--grep "roomOf peer-write denial"`, not theorised. A temp .cmd file makes
+     it one token with no nesting at all. */
+  const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
+  assert.match(RUNNER2, /tempScript = path\.join\(os\.tmpdir\(\)/);
+  assert.match(RUNNER2, /playwright\.replace\(\/%\/g, "%%"\)/,
+    "% is the one character cmd expands inside a batch file");
+  assert.match(RUNNER2, /execArg = '"' \+ tempScript \+ '"'/,
+    "emulators:exec must receive the PATH, quoted once");
+  assert.match(RUNNER2, /function dropTempScript\(\)/);
+  const sweepAt = RUNNER2.indexOf("swept = true;");
+  assert.ok(RUNNER2.slice(sweepAt, sweepAt + 120).includes("dropTempScript()"),
+    "the temp script must be removed on the same path that sweeps");
 });

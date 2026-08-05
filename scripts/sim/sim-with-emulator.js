@@ -101,6 +101,17 @@ async function waitForPort(port, label, deadlineMs) {
 
 let firebaseProc = null;
 let serveProc    = null;
+/* PIDs seen listening on the emulator ports while THIS run owned them — the
+   evidence the cleanup sweep needs before it may kill anything. Filled in once
+   the emulator comes up, and topped up as the run proceeds. */
+const ownedPids = new Set();
+function noteOwnedPids() {
+  try {
+    for (const row of emulatorPorts.survey([DB_PORT, AUTH_PORT])) {
+      ownedPids.add(String(row.pid));
+    }
+  } catch (_) { /* transient; the sweep reports what it cannot prove */ }
+}
 function cleanup() {
   for (const p of [firebaseProc, serveProc]) {
     if (!p || p.killed) continue;
@@ -120,15 +131,31 @@ function cleanup() {
      after a clean exit, three runs for three. A leftover listener makes the
      NEXT run's waitForPort() succeed instantly against the STALE emulator, so
      the sim runs against the previous run's rules — or falls back to LocalDB
-     and validates nothing at all. Sweep by PORT as a backstop. */
+     and validates nothing at all. Sweep by PORT as a backstop.
+     OWNERSHIP-SCOPED: only PIDs seen listening on the emulator ports while THIS
+     run held them are killed. The preflight proves the port state at one
+     instant; a process that bound the port afterwards is not ours to kill, so
+     it is reported with a manual command instead. */
   try {
-    const killed = emulatorPorts.free([DB_PORT, AUTH_PORT]);
-    if (killed.length) {
+    const survivors = emulatorPorts.survey([DB_PORT, AUTH_PORT]);
+    const mine = survivors.filter(r => ownedPids.has(String(r.pid)));
+    const strangers = survivors.filter(r => !ownedPids.has(String(r.pid)));
+    if (mine.length) {
+      const killed = emulatorPorts.free([DB_PORT, AUTH_PORT], { onlyPids: ownedPids });
       console.log("Sim/emu: swept " + killed.length +
         " emulator listener(s) the tree-kill missed:\n" +
         emulatorPorts.describe(killed));
     }
-  } catch (_) {}
+    if (strangers.length) {
+      console.warn("Sim/emu: these listeners were NOT started by this run, so " +
+        "they were left alone:\n" + emulatorPorts.describe(strangers) +
+        "\nClear them yourself if they are stale:\n  " +
+        emulatorPorts.clearCommand(strangers));
+    }
+  } catch (e) {
+    console.warn("Sim/emu: could not inspect the emulator ports at exit (" +
+      ((e && e.message) || e) + ") — check by hand: npm run emulator:ports");
+  }
 }
 process.on("SIGINT",  () => { cleanup(); cleanupEmulatorRules(); process.exit(130); });
 process.on("SIGTERM", () => { cleanup(); cleanupEmulatorRules(); process.exit(143); });
@@ -243,6 +270,12 @@ function check(cmd, args, label) {
   // deadline is generous.
   await waitForPort(DB_PORT,   "RTDB emulator",  120_000);
   await waitForPort(AUTH_PORT, "Auth emulator",  60_000);
+  /* The ports were verified FREE in the preflight, and we started what is on
+     them now — so whatever is listening at this moment is ours, and that is the
+     evidence cleanup() needs before it may kill by port number. */
+  noteOwnedPids();
+  const ownershipPoll = setInterval(noteOwnedPids, 5000);
+  ownershipPoll.unref();
   console.log("Sim/emu: emulator is up — RTDB on :" + DB_PORT +
     ", Auth on :" + AUTH_PORT);
 

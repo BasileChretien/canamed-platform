@@ -8,16 +8,17 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 - `npm run test` — unit tests (`node --test tests/*.test.js`).
 - `npm run emulator` — Firebase RTDB+Auth emulator (needs Java on PATH).
 - `npm run sim:emulator` — headless cross-tab persona sim against the emulator
-  (`scripts/sim/sim-with-emulator.js`). Kill stale emulators first if ports
-  9000/9099 are taken, or it silently falls back to LocalDB — `npm run
-  emulator:ports` names the squatter, `npm run emulator:free` clears it. The
-  sim's report now states which backend it ACTUALLY got, so a fallback run is
-  labelled instead of masquerading as a rules validation
-  (`scripts/sim/report-mode.js`).
-- `npm run test:e2e:rules` — the emulator-backed Playwright suite, the only
-  thing here that exercises `database.rules.json`. Goes through
-  `scripts/ops/run-rules-e2e.js`, which preflights the ports and sweeps any
-  emulator `emulators:exec` failed to reap.
+  (`scripts/sim/sim-with-emulator.js`). If 9000/9099 are already taken it now
+  **exits during preflight** naming the listener, rather than starting against
+  a stale emulator; `npm run emulator:ports` names the squatter and `npm run
+  emulator:free` clears it. Should a run start and then fall back to LocalDB,
+  the report says so — it states the backend it ACTUALLY got instead of
+  claiming LOCAL unconditionally (`scripts/sim/report-mode.js`).
+- `npm run test:e2e:rules` — the emulator-backed Playwright rules suite. Goes
+  through `scripts/ops/run-rules-e2e.js`, which preflights the ports and sweeps
+  any emulator `emulators:exec` failed to reap. Together with `sim:emulator`
+  these are the two ways `database.rules.json` is actually exercised; the LOCAL
+  Playwright suite never touches it.
 - `npx playwright test` — E2E suite (`tests-e2e/`), runs in LOCAL mode
   (hermetic, no real Firebase). Projects: chromium/firefox/webkit + perf +
   a11y + mobile-iphone/ipad/android.

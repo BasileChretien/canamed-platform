@@ -25,9 +25,13 @@
  *      like a rules failure.
  *
  * So: check first (naming any squatter and refusing to guess), run, and free
- * the emulator ports in a `finally` whatever the outcome. The port sweep is
- * scoped to the ports this run owns, and only ever runs AFTER the child has
- * exited — it is a survivor sweep, not a kill switch.
+ * the emulator ports whatever the outcome. The sweep is OWNERSHIP-SCOPED — it
+ * kills only PIDs observed listening on the emulator ports while our own child
+ * was running, because a preflight proves the port state at one instant and an
+ * unrelated process could bind :9000 afterwards; anything else on those ports
+ * is reported with a manual command, never killed. It also only ever runs
+ * AFTER the child has exited (a signal to this runner forwards to the child
+ * and waits first) — it is a survivor sweep, not a kill switch.
  *
  * Usage:  node scripts/ops/run-rules-e2e.js [extra playwright args...]
  *         PORT=8771 node scripts/ops/run-rules-e2e.js
@@ -36,6 +40,8 @@
 
 const { spawn, spawnSync } = require("child_process");
 const path = require("path");
+const fs = require("fs");
+const os = require("os");
 
 const ports = require("./emulator-ports.js");
 
@@ -51,7 +57,14 @@ function fatal(msg) {
 }
 
 /* ── 1. Preflight ─────────────────────────────────────────────────── */
-const held = ports.survey([...EMU_PORTS, WEB_PORT]);
+let held;
+try {
+  held = ports.survey([...EMU_PORTS, WEB_PORT]);
+} catch (e) {
+  /* Fail CLOSED. If we cannot see who holds the ports we must not assume they
+     are free — that is how a stale emulator gets waved through. */
+  fatal("rules-e2e: FATAL — " + (e && e.message || e));
+}
 if (held.length) {
   fatal(
     "rules-e2e: FATAL — a port this run needs is already in use:\n" +
@@ -77,17 +90,56 @@ const build = spawnSync(process.execPath,
 if (build.status !== 0) fatal("rules-e2e: build-emulator-rules.js failed.");
 
 /* ── 3. Run under emulators:exec ──────────────────────────────────── */
+/* emulators:exec runs its command through a SHELL, so the nested command has to
+   survive one round of shell tokenisation. A bare join(" ") does not: forwarded
+   arguments like `--grep "roomOf peer"` would be split back into two tokens and
+   the filter would silently match nothing. Quote any token that is not plainly
+   safe, per platform. */
+function shQuote(tok) {
+  const s = String(tok);
+  if (/^[A-Za-z0-9_@%+=:,./~-]+$/.test(s)) return s;      // nothing a shell reads
+  if (process.platform === "win32") {
+    // cmd.exe: double quotes, and "" escapes an embedded double quote.
+    return '"' + s.replace(/"/g, '""') + '"';
+  }
+  // POSIX sh: single quotes are literal; close/escape/reopen for an embedded '.
+  return "'" + s.replace(/'/g, "'\\''") + "'";
+}
 const playwright = ["npx", "playwright", "test",
-  "--config=playwright.emulator.config.js", ...process.argv.slice(2)].join(" ");
+  "--config=playwright.emulator.config.js", ...process.argv.slice(2)]
+  .map(shQuote).join(" ");
 
-/* emulators:exec takes the whole command as ONE argument. On Windows we spawn
-   through cmd.exe (shell:true, for npx.cmd), and Node does NOT quote argv when
-   shelling out — it joins with spaces — so this string would arrive as five
-   separate arguments and emulators:exec would run only `npx`. Quote it here,
-   exactly as the npm one-liner this replaced had to. Off Windows, shell is
-   false and argv is passed literally, where an added quote would become part
-   of the command. */
-const execArg = process.platform === "win32" ? '"' + playwright + '"' : playwright;
+/* emulators:exec takes the whole command as ONE argument, and getting that one
+   argument to it differs sharply by platform.
+ *
+ * POSIX: shell is false, so argv reaches emulators:exec literally. Pass the
+ * command string as-is; an added quote would become part of the command.
+ *
+ * WINDOWS: we must go through cmd.exe (npx is npx.cmd), and Node does not quote
+ * argv when shelling out — it joins with spaces — so an unwrapped string
+ * arrives as five separate arguments and emulators:exec runs only `npx`.
+ * Wrapping it in quotes fixes THAT, but breaks the moment a forwarded argument
+ * is itself quoted (`--grep "roomOf peer"`): cmd.exe has no escape for a double
+ * quote inside a double-quoted string, so the nesting mis-parses and firebase
+ * reports "Too many arguments". Observed, not theorised.
+ *
+ * So on Windows the command goes into a temp .cmd file and emulators:exec is
+ * handed the PATH — one token, quoted once, with no nested quotes anywhere.
+ * Whatever the arguments contain, they are written verbatim into the script.
+ * (`%` is doubled: it is the only character cmd expands inside a batch file.) */
+let tempScript = null;
+let execArg = playwright;
+if (process.platform === "win32") {
+  tempScript = path.join(os.tmpdir(), "canamed-rules-e2e-" + process.pid + ".cmd");
+  fs.writeFileSync(tempScript,
+    "@echo off\r\n" + playwright.replace(/%/g, "%%") + "\r\n", "utf8");
+  execArg = '"' + tempScript + '"';
+}
+function dropTempScript() {
+  if (!tempScript) return;
+  try { fs.unlinkSync(tempScript); } catch (e) { /* already gone */ }
+  tempScript = null;
+}
 
 console.log("rules-e2e: starting emulators (database + auth) and running the suite…");
 const child = spawn("npx", [
@@ -103,19 +155,71 @@ const child = spawn("npx", [
   env: Object.assign({}, process.env, { PORT: String(WEB_PORT) })
 });
 
-/* ── 4. Survivor sweep, whatever happened ─────────────────────────── */
+/* ── 4. Establish OWNERSHIP while the run is live ─────────────────── */
+/* The preflight proves the port state at one instant. Between then and the
+   sweep an unrelated process could bind :9000, and a sweep that went by port
+   number alone would kill a stranger. So record every PID seen listening on
+   the emulator ports WHILE our child is running: those are the ones this run
+   caused. A survivor not in this set is reported, never killed. */
+const ownedPids = new Set();
+const ownershipPoll = setInterval(() => {
+  try {
+    for (const row of ports.survey(EMU_PORTS)) ownedPids.add(String(row.pid));
+  } catch (e) { /* transient; the sweep reports what it cannot prove */ }
+}, 2000);
+ownershipPoll.unref();
+
+/* ── 5. Survivor sweep, whatever happened ─────────────────────────── */
 let swept = false;
 function sweep() {
   if (swept) return;
   swept = true;
-  const killed = ports.free(EMU_PORTS);
-  if (killed.length) {
+  dropTempScript();
+  clearInterval(ownershipPoll);
+  let survivors;
+  try {
+    survivors = ports.survey(EMU_PORTS);
+  } catch (e) {
+    console.warn("rules-e2e: could not inspect the emulator ports at exit (" +
+      (e && e.message || e) + ") — check them by hand: npm run emulator:ports");
+    return;
+  }
+  if (!survivors.length) return;
+  const strangers = survivors.filter((r) => !ownedPids.has(String(r.pid)));
+  const mine = survivors.filter((r) => ownedPids.has(String(r.pid)));
+  if (mine.length) {
+    const killed = ports.free(EMU_PORTS, { onlyPids: ownedPids });
     console.log("rules-e2e: emulators:exec left " + killed.length +
       " listener(s) behind; freed them:\n" + ports.describe(killed));
   }
+  if (strangers.length) {
+    console.warn("rules-e2e: these listeners were NOT started by this run, so " +
+      "they were left alone:\n" + ports.describe(strangers) +
+      "\nClear them yourself if they are stale:\n  " + ports.clearCommand(strangers));
+  }
 }
-process.on("SIGINT", () => { sweep(); process.exit(130); });
-process.on("SIGTERM", () => { sweep(); process.exit(143); });
+
+/* A signal to the RUNNER must not race the child. Sweeping immediately would
+   force-kill the emulator ports while emulators:exec is still running against
+   them. Forward the signal, wait (bounded — a wedged child must not hang the
+   shell forever), then sweep. */
+function stop(signal, exitCode) {
+  try {
+    if (process.platform === "win32") {
+      spawnSync("taskkill", ["/F", "/T", "/PID", String(child.pid)], { stdio: "ignore" });
+    } else {
+      child.kill(signal);
+    }
+  } catch (e) { /* already gone */ }
+  const deadline = Date.now() + 10000;
+  while (child.exitCode === null && child.signalCode === null && Date.now() < deadline) {
+    spawnSync(process.execPath, ["-e", "setTimeout(()=>{},150)"], { stdio: "ignore" });
+  }
+  sweep();
+  process.exit(exitCode);
+}
+process.on("SIGINT", () => stop("SIGINT", 130));
+process.on("SIGTERM", () => stop("SIGTERM", 143));
 
 child.on("exit", (code, signal) => {
   sweep();

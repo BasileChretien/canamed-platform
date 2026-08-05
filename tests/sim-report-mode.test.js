@@ -77,7 +77,7 @@ test("THE CASE THAT MATTERS: emulator requested but LocalDB actually used", () =
     "the warning must name the port whose stale emulator caused this");
 });
 
-test("emulator requested and MODE is shared but nothing was pinned ⇒ not the emulator", () => {
+test("MODE is shared but nothing was pinned ⇒ a live project, not the emulator", () => {
   const d = describeBackend({
     requestedEmulator: false, observedMode: "shared", emulatorPinned: false,
     host: "127.0.0.1", dbPort: 9000, probeError: null
