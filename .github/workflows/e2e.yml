@@ -59,12 +59,41 @@ jobs:
     # A cancellation is indistinguishable from a real failure in the checks UI,
     # so each of these cost a merge cycle and diagnosis time while catching
     # nothing. The cap exists to bound a HUNG job, not to police a healthy
-    # suite: 55 leaves room for a cache-miss install (~16 min) plus the slowest
-    # project (~20 min) plus CI retries, and still kills a genuine hang.
+    # suite, and still kills a genuine hang.
     #
-    # If this bites again the fix is to make the browser cache hit reliably --
-    # NOT another bump justified by test duration alone.
+    # ⚠ CORRECTION (2026-08-05, #286). The line that used to close this block —
+    # "the fix is to make the browser cache hit reliably" — was WRONG, and the
+    # entry above misreads its own evidence. Reading the #284 log line by line:
+    #
+    #     03:22:54  Installing dependencies...        <- apt starts
+    #     03:38:46  Downloading WebKit ...            <- apt ends, 15 m 52 s
+    #     03:38:50  WebKit downloaded                 <- browser took 4 SECONDS
+    #     "Fetched 114 MB in 15min 31s (123 kB/s)"    <- a degraded apt mirror
+    #
+    # The browser download was never the cost. apt was — and apt runs on BOTH
+    # paths, because the cache-hit path still calls `playwright install-deps`.
+    # A perfect cache hit would have saved ~5 seconds, not ~16 minutes.
+    #
+    # Proof, from #286's own CI: a webkit job whose browser cache HIT (install
+    # step skipped) still died at this 55-minute cap, because its apt step took
+    # 2411 s = 40 m 11 s. Across 64 samples that step is normally 20 s median /
+    # 44 s p90 — so azure.archive.ubuntu.com has a 60-120x tail that no timeout
+    # can absorb while still bounding a real hang.
+    #
+    # THE FIX IS THEREFORE TO NOT RUN apt AT ALL — see the `container:` below,
+    # which ships the browsers and their system libraries preinstalled. The cap
+    # stays 55 deliberately: a cap costs nothing when it is not hit, and it
+    # should only be lowered once the container has a track record here.
     timeout-minutes: 55
+    # The official Playwright image, which carries every browser AND its system
+    # libraries at /ms-playwright — so this job needs no `playwright install`,
+    # no `--with-deps` apt, and no ~/.cache/ms-playwright cache at all.
+    #
+    # ⚠ THE TAG MUST MATCH @playwright/test IN package-lock.json. A drifted tag
+    # runs the suite against browsers built for a different Playwright, which
+    # fails confusingly at launch. `tests/e2e-container-version.test.js` pins
+    # the two together so drift fails a fast unit test instead of the matrix.
+    container: mcr.microsoft.com/playwright:v1.62.1-noble
     strategy:
       fail-fast: false
       matrix:
@@ -73,38 +102,15 @@ jobs:
         # project (snapshot diffs, chromium only) is wired up but skipped
         # in CI by default — see tests-e2e/visual.spec.js for the
         # RUN_VISUAL=1 escape hatch used after baselines are committed.
+        # Each entry is a Playwright PROJECT (see playwright.config.js), which
+        # already declares its own engine via the device descriptor:
+        # mobile-iphone/mobile-ipad ride webkit, mobile-android/a11y/perf ride
+        # chromium. There used to be a parallel `browser:` include mapping here
+        # purely to pick which engine to `playwright install` and to scope the
+        # browser cache key. The container ships all three engines, so both the
+        # installs and the cache are gone and that mapping became dead config —
+        # removed rather than left to rot into another stale claim.
         project: [chromium, firefox, webkit, mobile-iphone, mobile-ipad, mobile-android, a11y, perf]
-        include:
-          - project: chromium
-            browser: chromium
-          - project: firefox
-            browser: firefox
-          - project: webkit
-            browser: webkit
-          # iPhone/iPad device descriptors in Playwright default to webkit
-          # (mobile Safari), not mobile chromium. Install the webkit browser
-          # so the launcher can find it.
-          - project: mobile-iphone
-            browser: webkit
-          - project: mobile-ipad
-            browser: webkit
-          # Pixel 7 emulates Android Chrome, so this project runs on the
-          # chromium engine (shares the chromium browser cache above).
-          - project: mobile-android
-            browser: chromium
-          # axe-core accessibility suite runs against Desktop Chrome
-          # (Chromium engine). Asserts zero serious/critical WCAG 2.1 AA
-          # violations; moderate/minor are surfaced as annotations only.
-          - project: a11y
-            browser: chromium
-          # Performance budget — splash FCP/TTI and first-party JS+CSS
-          # bytes. Runs as its own job so a regression here is a distinct
-          # red dot in the PR Checks tab (rather than being mixed in with
-          # functional failures). See tests-e2e/perf.spec.js for the
-          # thresholds — the CI thresholds intentionally relax the local
-          # ones because the ubuntu-latest runner is a 2-core 7 GB VM.
-          - project: perf
-            browser: chromium
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -125,25 +131,10 @@ jobs:
         # silently resolving a different version than the other jobs got.
         run: npm ci --no-audit --no-fund
 
-      - name: Cache Playwright browsers
-        id: pw-cache
-        uses: actions/cache@v6
-        with:
-          path: ~/.cache/ms-playwright
-          # cache key bumps automatically when @playwright/test version changes
-          # and is scoped per BROWSER engine so a chromium cache hit doesn't
-          # claim to satisfy firefox/webkit. matrix.browser is the actual
-          # Playwright browser engine (chromium for mobile-* projects too,
-          # since iPhone/iPad emulate via mobile chromium).
-          key: pw-${{ runner.os }}-${{ matrix.browser }}-${{ hashFiles('package.json', 'package-lock.json') }}
-
-      - name: Install Playwright browser (${{ matrix.browser }})
-        if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps ${{ matrix.browser }}
-
-      - name: Install Playwright system deps (cache hit path)
-        if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps ${{ matrix.browser }}
+      # NOTE: there is deliberately no browser install and no browser cache
+      # here. The container already has them. Re-adding `playwright install`
+      # would put the apt step — and its 15-40 minute tail — back on the
+      # critical path, which is the entire bug this job was rebuilt to escape.
 
       - name: Run E2E suite (${{ matrix.project }})
         run: npx playwright test --project=${{ matrix.project }}
