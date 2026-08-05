@@ -367,3 +367,62 @@ test("a branchedRef-COMPOSED session takes only its branched-tagged nodes", () =
   assert.deepEqual(runSessionBranched(win, null).map(d => d.id),
     ["br_b_assess"], "the outer A/B decisions are not part of the tree");
 });
+
+/* ── The fallback must not fire for a session that HAS a pick ────────────────
+ * The ambient path below the pick exists for sessions with nothing to resolve —
+ * a pre-cutover session, or a branchedRef composition. It used to be entered
+ * whenever the pick produced an EMPTY list (`if (out.length) return out;`),
+ * which conflates "this session's branched section declares no graph" with
+ * "this session has no branched section to read". On a dashboard tab the two
+ * have very different consequences: the ambient globals are another case, so
+ * the second reading renders that case's tree — including a node marked
+ * "deciding now" — for a room that never saw it. Probed live 2026-08-05.
+ */
+test("a PICK that resolves to an empty graph yields nothing, never the ambient case's", () => {
+  const win = {
+    /* The picked section is real and typed branched — it simply declares no
+       decisions (an authored section saved without a graph, or a registry entry
+       whose scenario carried none). */
+    CANAMED_SECTIONS: { w: { id: "w", type: "branched", content: { format: "branched", decisions: [] } } },
+    /* …and this tab happens to hold ANOTHER case's composed branched nodes,
+       which is exactly the dashboard's state for a session whose scenario was
+       applied alongside the pick. */
+    DECISIONS: [{ id: "br_b_assess", module: "branched" },
+                { id: "br_b_escalate", module: "branched" }],
+    CURRENT_SCENARIO_FORMAT: "standard"
+  };
+  const slots = [{ position: 1, stage: 1, type: "branched", standalone: true, sectionId: "w" }];
+  assert.deepEqual(runSessionBranched(win, slots), [],
+    "the pick is authoritative — an empty graph is an answer, not a missing one");
+});
+
+test("…and the same holds when the ambient tab claims the branched FORMAT", () => {
+  /* The other fallback branch: format "branched" returns the WHOLE ambient list,
+     so this path substituted every decision the tab held — A/B nodes included. */
+  const win = {
+    CANAMED_SECTIONS: { w: { id: "w", type: "branched", content: { decisions: [] } } },
+    DECISIONS: [{ id: "b_assess" }, { id: "dec_plan" }],
+    CURRENT_SCENARIO_FORMAT: "branched"
+  };
+  const slots = [{ position: 1, stage: 1, type: "branched", standalone: true, sectionId: "w" }];
+  assert.deepEqual(runSessionBranched(win, slots), []);
+});
+
+test("a mixed pick where ONE branched section has a graph keeps just that one", () => {
+  /* The regression guard for the two tests above: dropping the fall-through
+     must not drop a pick that DOES resolve. */
+  const win = {
+    CANAMED_SECTIONS: {
+      empty: { id: "empty", type: "branched", content: { decisions: [] } },
+      w: BRANCHED("w", NODES)
+    },
+    DECISIONS: [{ id: "br_x", module: "branched" }],
+    CURRENT_SCENARIO_FORMAT: "standard"
+  };
+  const slots = [
+    { position: 1, stage: 1, type: "branched", sectionId: "empty" },
+    { position: 2, stage: 2, type: "branched", sectionId: "w" }
+  ];
+  assert.deepEqual(runSessionBranched(win, slots).map(d => d.id),
+    ["s2_b_assess", "s2_b_escalate"]);
+});

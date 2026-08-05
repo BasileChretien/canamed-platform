@@ -48,9 +48,16 @@ test("helpers resolve case content + escape markdown", () => {
 
 test("the takeaway carries the historical context (reveals, in order)", () => {
   const fn = takeawayFn();
-  assert.match(fn, /\.revealed/, "must read the moduleA.revealed log");
+  /* S6 — the reveal log is per SLOT (rooms/<room>/sections/<slot>/revealed) and
+     is resolved through roomEntries(), the address helper every other snapshot
+     reader shares. The old assertion named `.revealed` on the retired
+     moduleA node, which is precisely the address that made this section print
+     "(nothing was opened)" for every section-model session. */
+  assert.match(fn, /_flat\("revealed"\)/, "must read the reveal log per slot");
   assert.match(fn, /\.sort\(\(a, b\) => a\.at - b\.at\)/, "reveals must be ordered by time opened");
   assert.match(fn, /_caseItemById/, "must render each revealed item's clinical content");
+  assert.match(TAKEHOME, /roomEntries\(data, k\)/,
+    "…through the shared resolver, so the next path move cannot miss this reader");
 });
 
 test("the takeaway carries the guidelines (prompts) and the team's committed decisions", () => {

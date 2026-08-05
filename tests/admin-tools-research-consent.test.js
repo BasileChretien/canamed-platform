@@ -22,6 +22,11 @@ const vm = require("node:vm");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
+/* The exports resolve room addresses through the shared per-slot helpers that
+   live in script.js (roomSlotBuckets / roomEntries). Run the REAL ones in the
+   sandbox rather than stubbing them: a stub would let the exports keep reading
+   an address nothing writes and still pass. */
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 
 function extractFn(src, name) {
   const start = src.indexOf("function " + name + "(");
@@ -46,6 +51,9 @@ function sandbox() {
       c2: { name: "No-Person", consent: NO },
       c3: { name: "Legacy-Person" }
     },
+    /* S6 shape: a room's work lives PER SLOT. Written this way on purpose —
+       with the old module-literal fixture these tests kept passing against
+       exports that read an address no live session writes. */
     allRooms: {
       "Room 1": {
         presence: {
@@ -54,20 +62,24 @@ function sandbox() {
           c3: { name: "Legacy-Person" }
         },
         answers: {
-          moduleA: {
-            a1: { cid: "c1", text: "consented text" },
-            a2: { cid: "c2", text: "declined text" },
-            a3: { cid: "c3", text: "legacy text" }
+          sections: {
+            1: {
+              a1: { cid: "c1", text: "consented text" },
+              a2: { cid: "c2", text: "declined text" },
+              a3: { cid: "c3", text: "legacy text" }
+            }
           }
         },
-        moduleA: {
-          hypotheses: {
-            h1: { cid: "c1", text: "consented hypothesis" },
-            h2: { cid: "c2", text: "declined hypothesis" }
-          },
-          revealed: {
-            item1: { by: "Yes-Person", at: 1 },
-            item2: { by: "No-Person", at: 2 }
+        sections: {
+          1: {
+            hypotheses: {
+              h1: { cid: "c1", text: "consented hypothesis" },
+              h2: { cid: "c2", text: "declined hypothesis" }
+            },
+            revealed: {
+              item1: { by: "Yes-Person", at: 1 },
+              item2: { by: "No-Person", at: 2 }
+            }
           }
         },
         votes: {
@@ -77,11 +89,17 @@ function sandbox() {
     },
     DECISIONS: [{ id: "d1", module: "A", options: [{ correct: false }, { correct: true }] }],
     _sess: () => "S1",
-    activeRooms: () => ["Room 1"]
+    activeRooms: () => ["Room 1"],
+    /* One PBL section at slot 1 — what roomSlotBuckets() walks. */
+    sectionSlots: () => [{ position: 1, stage: 1, type: "pbl", sectionId: "s" }],
+    LEGACY_SLOT_KEY: { pbl: "moduleA", roleplay: "moduleB", branched: "moduleBranched" }
   };
   vm.createContext(s);
   vm.runInContext(
+    extractFn(SCRIPT, "roomSlotBuckets") + "\n" +
+    extractFn(SCRIPT, "roomEntries") + "\n" +
     extractFn(TOOLS, "_hasResearchConsent") + "\n" +
+    extractFn(TOOLS, "_tallyByCid") + "\n" +
     extractFn(TOOLS, "_participantIndex") + "\n" +
     extractFn(TOOLS, "_revealRows") + "\n" +
     extractFn(TOOLS, "_voteRows") + "\n" +
@@ -137,6 +155,24 @@ test("ballots and reveals from a non-consenting participant are not exported", (
   for (const r of votes.concat(reveals)) {
     assert.ok(r.participant && r.participant !== "", "no blank-participant rows");
   }
+});
+
+/* ── The address the export reads ─────────────────────────────────────────────
+ * Separate from consent, but it belongs on this harness because this is the one
+ * place the research exports are EXECUTED. Every row above comes from the
+ * per-slot fixture, so a reader that went back to answers/moduleA would return
+ * nothing and the consent assertions would pass vacuously ("the decliner's text
+ * is absent" is trivially true of an empty file). Assert the consenting
+ * participant's words ARE there, tagged with the slot that produced them.
+ */
+test("free-text rows come from the per-slot address and carry their slot", () => {
+  const s = sandbox();
+  const rows = vm.runInContext("_freetextRows(_participantIndex())", s);
+  const answer = rows.find(r => r.text === "consented text");
+  assert.ok(answer, "the per-slot answer must reach the export at all");
+  assert.strictEqual(answer.type, "slot1-answer",
+    "the row names the SLOT — 'moduleA' cannot identify which of two PBL sections");
+  assert.ok(rows.some(r => r.text === "consented hypothesis" && r.type === "hypothesis"));
 });
 
 test("the pid numbering cannot desync between the summary and detail files", () => {

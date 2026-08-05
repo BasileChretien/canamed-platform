@@ -61,8 +61,12 @@ test("the stage-4 take-home export carries the clinical-synthesis write-up", () 
   /* The markdown builder was extracted from the download plumbing (#275) so the
      document a student receives can be asserted directly in an e2e test — the
      body these assertions describe now lives in buildRoomTakeawayMarkdown. */
+  /* Bounded by the NEXT function rather than a byte count — a fixed window
+     truncates as the body's comments grow (see synthesis-chunked.test.js). */
   const start = TAKEHOME.indexOf("function buildRoomTakeawayMarkdown(");
-  const dl = TAKEHOME.slice(start, start + 4000);
+  const end = TAKEHOME.indexOf("function downloadMyRoomAnswers", start);
+  assert.ok(end > start, "downloadMyRoomAnswers must follow the builder");
+  const dl = TAKEHOME.slice(start, end);
   assert.match(dl, /Clinical synthesis \(model summary\)/,
     "the export has a Clinical synthesis section heading");
   assert.match(dl, /itemById\(SYNTH_ID\)/, "the export pulls the SYNTH_ID case item");

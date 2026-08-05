@@ -222,8 +222,30 @@ gainBlock +
     URL.revokeObjectURL(a.href);
   }
 
+  /* Per-cid answer count, university and hypothesis count for one room.
+   *
+   * S6 — a room's work lives at rooms/<room>/answers/sections/<slot> and
+   * rooms/<room>/sections/<slot>/hypotheses. Three separate exports here still
+   * addressed `d.answers.moduleA` / `d.answers.moduleB` and the pre-S2b
+   * top-level `d.hypotheses`; none of them throws on a missing node, so every
+   * research CSV reported "0 answers, 0 hypotheses, contributed=0" for every
+   * participant of every section-model session — a dataset that looks complete
+   * and says the opposite of what happened. One resolver, three call sites. */
+  function _tallyByCid(d, contribByCid, uniByCid, hypByCid) {
+    roomEntries(d, "answers").forEach(function (a) {
+      const e = a.entry, cid = e && e.cid;
+      if (!cid) return;
+      contribByCid[cid] = (contribByCid[cid] || 0) + 1;
+      if (e.university && !uniByCid[cid]) uniByCid[cid] = e.university;
+    });
+    roomEntries(d, "hypotheses").forEach(function (h) {
+      const cid = h.entry && h.entry.cid;
+      if (cid) hypByCid[cid] = (hypByCid[cid] || 0) + 1;
+    });
+  }
+
   /* Per-participant rows derived from the live room data. Contribution counts
-     are keyed by clientId (cid) across both modules + hypotheses; university is
+     are keyed by clientId (cid) across every slot + hypotheses; university is
      recovered from the participant's own answer entries (presence carries only
      name + timestamp). Names ARE included here — callers decide whether to keep
      them (attestations) or drop them (research export). */
@@ -234,21 +256,8 @@ gainBlock +
     rooms.forEach(function (r) {
       const d = allRooms[r] || {};
       const pres = d.presence || {};
-      const ans = d.answers || {};
-      const contribByCid = {}, uniByCid = {};
-      ["moduleA", "moduleB"].forEach(function (mk) {
-        const m = ans[mk] || {};
-        Object.keys(m).forEach(function (k) {
-          const e = m[k]; const cid = e && e.cid;
-          if (!cid) return;
-          contribByCid[cid] = (contribByCid[cid] || 0) + 1;
-          if (e.university && !uniByCid[cid]) uniByCid[cid] = e.university;
-        });
-      });
-      const hyp = d.hypotheses || {}, hypByCid = {};
-      Object.keys(hyp).forEach(function (k) {
-        const cid = hyp[k] && hyp[k].cid; if (cid) hypByCid[cid] = (hypByCid[cid] || 0) + 1;
-      });
+      const contribByCid = {}, uniByCid = {}, hypByCid = {};
+      _tallyByCid(d, contribByCid, uniByCid, hypByCid);
       Object.keys(pres).forEach(function (cid) {
         pid++;
         const p = pres[cid] || {};
@@ -441,24 +450,11 @@ gainBlock +
     rooms.forEach(function (r) {
       const d = allRooms[r] || {};
       const pres = d.presence || {};
-      const ans = d.answers || {};
       const tnode = d.tests || {};
       const snode = d.survey || {};
       // contribution + university by cid (same derivation as participantRows)
-      const contribByCid = {}, uniByCid = {};
-      ["moduleA", "moduleB"].forEach(function (mk) {
-        const m = ans[mk] || {};
-        Object.keys(m).forEach(function (k) {
-          const e = m[k]; const cid = e && e.cid;
-          if (!cid) return;
-          contribByCid[cid] = (contribByCid[cid] || 0) + 1;
-          if (e.university && !uniByCid[cid]) uniByCid[cid] = e.university;
-        });
-      });
-      const hyp = d.hypotheses || {}, hypByCid = {};
-      Object.keys(hyp).forEach(function (k) {
-        const cid = hyp[k] && hyp[k].cid; if (cid) hypByCid[cid] = (hypByCid[cid] || 0) + 1;
-      });
+      const contribByCid = {}, uniByCid = {}, hypByCid = {};
+      _tallyByCid(d, contribByCid, uniByCid, hypByCid);
       Object.keys(pres).forEach(function (cid) {
         // Research-consent gate: a participant who declined (or has no record)
         // never enters a research_*.csv. Skipped BEFORE pid++ so the pids are
@@ -538,9 +534,10 @@ gainBlock +
   function _revealRows(idx) {
     const rows = [];
     activeRooms().forEach(function (r) {
-      const node = (((allRooms[r] || {}).moduleA) || {}).revealed || {};
-      const seq = Object.keys(node).map(function (item) {
-        return { item: item, by: (node[item] || {}).by || "", at: (node[item] || {}).at || 0 };
+      /* S6 — reveals are per slot (rooms/<room>/sections/<slot>/revealed). The
+         retired moduleA node made this the empty clinical-action log. */
+      const seq = roomEntries(allRooms[r] || {}, "revealed").map(function (rv) {
+        return { item: rv.key, by: (rv.entry || {}).by || "", at: (rv.entry || {}).at || 0 };
       }).sort(function (a, b) { return a.at - b.at; });
       seq.forEach(function (e, i) {
         // No pid ⇒ no research consent ⇒ the row does not belong in a
@@ -590,29 +587,31 @@ gainBlock +
     const rows = [];
     activeRooms().forEach(function (r) {
       const d = allRooms[r] || {};
-      ["moduleA", "moduleB"].forEach(function (mk) {
-        const m = (d.answers || {})[mk] || {};
-        Object.keys(m).forEach(function (k) {
-          const e = m[k] || {}; const text = (e.text != null) ? e.text : (e.value != null ? e.value : "");
-          if (text === "") return;
-          // Free text is the highest-risk field here (it can embed a name), so
-          // the no-consent skip matters most on this path.
-          const p = (idx.pidByRoomCid[r] || {})[e.cid];
-          if (!p) return;
-          rows.push({ session: _sess(), room: r,
-            participant: p,
-            type: mk + "-answer", key: k, text: text });
-        });
+      /* S6 — per-slot addresses, and the row now names the SLOT it came from
+         ("slot2-answer") rather than a module key: a session can run two PBL
+         sections, so "moduleA-answer" no longer identifies which case the words
+         were written about. Under the retired address this whole file was
+         empty — the research export's only free-text table. */
+      roomEntries(d, "answers").forEach(function (a) {
+        const e = a.entry || {};
+        const text = (e.text != null) ? e.text : (e.value != null ? e.value : "");
+        if (text === "") return;
+        // Free text is the highest-risk field here (it can embed a name), so
+        // the no-consent skip matters most on this path.
+        const p = (idx.pidByRoomCid[r] || {})[e.cid];
+        if (!p) return;
+        rows.push({ session: _sess(), room: r,
+          participant: p,
+          type: "slot" + a.slot + "-answer", key: a.key, text: text });
       });
-      const hyp = (d.moduleA || {}).hypotheses || d.hypotheses || {};
-      Object.keys(hyp).forEach(function (k) {
-        const e = hyp[k] || {}; const text = (e.text != null) ? e.text : "";
+      roomEntries(d, "hypotheses").forEach(function (h) {
+        const e = h.entry || {}; const text = (e.text != null) ? e.text : "";
         if (text === "") return;
         const p = (idx.pidByRoomCid[r] || {})[e.cid];
         if (!p) return;   // no research consent
         rows.push({ session: _sess(), room: r,
           participant: p,
-          type: "hypothesis", key: k, text: text });
+          type: "hypothesis", key: h.key, text: text });
       });
     });
     return rows;
@@ -927,17 +926,10 @@ esc(when.toLocaleString()) + "</p>" +
     const byUni = {};
     rooms.forEach(function (r) {
       const d = allRooms[r] || {};
-      const ans = d.answers || {};
+      /* S6 — per-slot addresses. With the retired ones every cohort bucket was
+         empty, so the university comparison had no rows at all. */
       const uniByCid = {}, ansByCid = {};
-      ["moduleA", "moduleB"].forEach(function (mk) {
-        const m = ans[mk] || {};
-        Object.keys(m).forEach(function (k) {
-          const e = m[k]; const cid = e && e.cid;
-          if (!cid) return;
-          ansByCid[cid] = (ansByCid[cid] || 0) + 1;
-          if (e.university && !uniByCid[cid]) uniByCid[cid] = e.university;
-        });
-      });
+      _tallyByCid(d, ansByCid, uniByCid, {});
       const tests = d.tests || {};
       Object.keys(ansByCid).forEach(function (cid) {
         const uni = uniByCid[cid] || "unknown";
@@ -1094,6 +1086,13 @@ esc(when.toLocaleString()) + "</p>" +
   window.CanamedAdminTools.generateResearchExport = generateResearchExport;
   window.CanamedAdminTools.generateResearchExportCSV = generateResearchExportCSV;
   window.CanamedAdminTools.researchCsvParticipantRows = researchCsvParticipantRows; // for tests
+  /* for tests — the detail rows of the research export. Asserted directly
+     rather than through generateResearchExportCSV(): that fires five blob
+     downloads back to back and WebKit delivers only the first, so a
+     download-based assertion is unrunnable on the iPhone/iPad projects. */
+  window.CanamedAdminTools._participantIndex = _participantIndex;
+  window.CanamedAdminTools._freetextRows = _freetextRows;
+  window.CanamedAdminTools._revealRows = _revealRows;
   window.CanamedAdminTools.generateAttestations = generateAttestations;
   window.CanamedAdminTools.removeVerificationEntry = removeVerificationEntry;
   window.CanamedAdminTools._credentialConsoleUrl = _credentialConsoleUrl;   // for tests

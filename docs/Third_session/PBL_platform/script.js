@@ -2223,7 +2223,17 @@ function sessionBranchedDecisions() {
         const dec = sec && sec.content && sec.content.decisions;
         if (Array.isArray(dec)) out.push.apply(out, namespaceDecisions(dec, slot));
       });
-      if (out.length) return out;
+      /* A PICK IS AUTHORITATIVE — INCLUDING WHEN IT RESOLVES TO NOTHING.
+         This used to read `if (out.length) return out;`, so a picked branched
+         section that declared an empty graph fell through to the ambient
+         globals below. Probed 2026-08-05 on a dashboard tab holding another
+         case's composed nodes: the tree then rendered THAT case's graph for
+         this room, complete with a ▶ "deciding now" step the room had never
+         seen — not stale data but fabricated live state, and the facilitator
+         has no way to tell. Same silent-substitution family as #275.
+         "This session's branched section has no graph" is an ANSWER; the
+         ambient fallback below is for a session with no pick to read at all. */
+      return out;
     }
   }
   /* No pick to resolve — a pre-cutover session, or one composed via branchedRef.
@@ -5437,6 +5447,25 @@ function roomSlotBuckets(data) {
              revealed: state.revealed || {}, hypotheses: state.hypotheses || {},
              answers: ans };
   });
+}
+/* Every `answers` / `hypotheses` / `revealed` entry a room produced, flattened
+   across its slots and tagged with the slot it came from. `key` is one of those
+   three; each row keeps its child key (an entryId, or an ITEM id for reveals)
+   for callers that need the identity (_caseItemById, the free-text CSV).
+   roomSlotBuckets() fixed the ADDRESS; the counters and attributers still spelt
+   it `data.answers.moduleA|moduleB`, read undefined, and reported a confident
+   zero — the take-home, the debrief funnel, the impact KPIs and all three
+   research CSVs were empty for every section-model session (2026-08-05). */
+function roomEntries(data, key) {
+  const out = [];
+  roomSlotBuckets(data).forEach(b => {
+    const m = b[key] || {};
+    Object.keys(m).forEach(k => {
+      if (m[k]) out.push({ slot: b.slot, type: b.type, sectionId: b.sectionId,
+                           key: k, entry: m[k] });
+    });
+  });
+  return out;
 }
 
 const THEME_KEY = "canamed_theme";

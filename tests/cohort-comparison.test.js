@@ -20,7 +20,14 @@ test("cohortRows splits by university with per-cohort gain", () => {
   assert.match(TOOLS, /function cohortRows\(\)/, "cohortRows must exist");
   const fn = TOOLS.slice(TOOLS.indexOf("function cohortRows"),
     TOOLS.indexOf("function generateCohortComparison"));
-  assert.match(fn, /e\.university/, "must read university from answer entries");
+  /* The per-cid derivation is shared with participantRows + the research CSV
+     (_tallyByCid) since all three were reading the retired answers/moduleA
+     address; the university still comes from the participant's own entries. */
+  assert.match(fn, /_tallyByCid\(d, ansByCid, uniByCid, \{\}\)/,
+    "must derive the per-cid tally through the shared per-slot helper");
+  const tally = TOOLS.slice(TOOLS.indexOf("function _tallyByCid"),
+    TOOLS.indexOf("function participantRows"));
+  assert.match(tally, /e\.university/, "must read university from answer entries");
   assert.match(fn, /byUni/, "must bucket by university");
   assert.match(fn, /\(postPct - prePct\) \/ \(100 - prePct\)/, "must compute paired gain per cohort");
   assert.match(fn, /nPaired/, "must track the per-cohort paired N");
