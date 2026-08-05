@@ -34,6 +34,7 @@ const { spawn } = require("child_process");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
+const emulatorPorts = require("../ops/emulator-ports.js");
 
 const PLATFORM_DIR = path.resolve(__dirname, "..", "..",
   "docs", "Third_session", "PBL_platform");
@@ -114,6 +115,20 @@ function cleanup() {
       }
     } catch (_) {}
   }
+  /* Tree-kill only reaches the tree we own, and it did not reliably reap the
+     RTDB emulator: observed 2026-08-05 leaving a java.exe listening on :9000
+     after a clean exit, three runs for three. A leftover listener makes the
+     NEXT run's waitForPort() succeed instantly against the STALE emulator, so
+     the sim runs against the previous run's rules — or falls back to LocalDB
+     and validates nothing at all. Sweep by PORT as a backstop. */
+  try {
+    const killed = emulatorPorts.free([DB_PORT, AUTH_PORT]);
+    if (killed.length) {
+      console.log("Sim/emu: swept " + killed.length +
+        " emulator listener(s) the tree-kill missed:\n" +
+        emulatorPorts.describe(killed));
+    }
+  } catch (_) {}
 }
 process.on("SIGINT",  () => { cleanup(); cleanupEmulatorRules(); process.exit(130); });
 process.on("SIGTERM", () => { cleanup(); cleanupEmulatorRules(); process.exit(143); });
@@ -153,6 +168,25 @@ function check(cmd, args, label) {
     process.exit(1);
   }
   console.log("Sim/emu: firebase-tools " + fbV + " · java OK");
+
+  /* A STALE emulator is worse than none. waitForPort() below only checks that
+     something is listening, so an orphan from a previous run (see cleanup())
+     makes the readiness probe pass instantly and the sim then runs against
+     THAT emulator — carrying the previous run's rules — or falls back to
+     LocalDB and validates nothing. Fail loudly instead, the same way the
+     :8765 check below already does. */
+  const squatters = emulatorPorts.survey([DB_PORT, AUTH_PORT]);
+  if (squatters.length) {
+    console.error("FATAL: the emulator ports are already in use:\n" +
+      emulatorPorts.describe(squatters) + "\n\n" +
+      "A stale emulator would make this run silently validate the PREVIOUS\n" +
+      "run's rules, or fall back to LocalDB and validate nothing. Clear it:\n" +
+      "  npm run emulator:free\n" +
+      "or, directly:\n  " + emulatorPorts.clearCommand(squatters) + "\n\n" +
+      "If this is an emulator you started on purpose (`npm run emulator`),\n" +
+      "stop it first — the sim must own its own instance.");
+    process.exit(1);
+  }
 
   if (!fs.existsSync(FIREBASE_CONFIG)) {
     console.error("FATAL: " + FIREBASE_CONFIG + " not found.");

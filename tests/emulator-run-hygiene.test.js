@@ -173,3 +173,27 @@ test("the playwright command reaches emulators:exec as ONE argument", () => {
   assert.match(RUNNER, /^\s*execArg\s*$/m,
     "the quoted form, not the bare join, must be what is spawned");
 });
+
+/* ── the sim launcher gets the same two guards ────────────────────── */
+
+test("sim-with-emulator preflights the emulator ports (waitForPort cannot)", () => {
+  const SIM = read("scripts", "sim", "sim-with-emulator.js");
+  assert.match(SIM, /emulatorPorts\.survey\(\[DB_PORT, AUTH_PORT\]\)/,
+    "waitForPort only proves SOMETHING is listening — a stale emulator makes " +
+    "it pass instantly and the sim then validates the previous run's rules");
+  const surveyAt = SIM.indexOf("emulatorPorts.survey([DB_PORT, AUTH_PORT])");
+  const startAt = SIM.indexOf('"emulators:start"');
+  assert.ok(surveyAt > 0 && surveyAt < startAt,
+    "the check must precede the emulator spawn");
+});
+
+test("sim-with-emulator sweeps by port after its tree-kill", () => {
+  const SIM = read("scripts", "sim", "sim-with-emulator.js");
+  const at = SIM.indexOf("function cleanup()");
+  assert.ok(at > 0);
+  const body = SIM.slice(at, SIM.indexOf("process.on(\"SIGINT\"", at));
+  assert.match(body, /emulatorPorts\.free\(\[DB_PORT, AUTH_PORT\]\)/,
+    "taskkill /T only reaches the tree we own; the RTDB emulator survived it");
+  assert.match(body, /taskkill/,
+    "the port sweep is a BACKSTOP — the tree-kill must still run first");
+});
