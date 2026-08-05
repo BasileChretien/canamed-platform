@@ -561,9 +561,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     showLateBanner, stageNow. A smaller correct reclaim beats a larger
 //     broken one, and 34 KB was already well past what the slice needed.
 //     ⇒ SLICES 1 AND 2 ARE NOW DISCHARGED. Slice 3 (the room engine) remains
-//     OWED. The ~34 KB of headroom this opens is headroom, not an allowance —
-//     the cap moves down with the measurement, as it did on 2026-07-23 and
-//     2026-08-04.
+//     OWED but is deliberately NOT SCHEDULED (user decision 2026-08-05): the
+//     budget passes, no UI work is blocked, and the plan's own §6/§8 stopping
+//     rules both say stop. THE RECLAIM IS BANKED, NOT SPENT — the cap moves
+//     down with the measurement (347 -> 313), as it did on 2026-07-23 and
+//     2026-08-04. What is left under 313 is HEADROOM, NOT AN ALLOWANCE: the
+//     next entry here should be another reclaim or a justified bump, not a
+//     silent 30 KB of growth into space this PR paid for.
+//     Cross-checked two ways: gzip of the served responses in this spec
+//     (313 rounded) and gzip of the git blobs for the same 15 assets, which
+//     LF-normalised reads 345.4 -> 311.5 on main -> this branch, i.e. the same
+//     -34.0 KB from a completely independent measurement path.
 const FIRST_PARTY_BYTES_LIMIT_KB = 313;
 
 test.describe("Perf budget — splash", () => {

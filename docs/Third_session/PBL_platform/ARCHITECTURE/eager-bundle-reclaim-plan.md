@@ -1,6 +1,8 @@
 # Eager-bundle reclaim — the plan for splitting the room/admin engine out of `script.js`
 
-**Status: SLICES 1 AND 2 DONE (2026-08-04, 2026-08-05). Slice 3 not started.**
+**Status: SLICES 1 AND 2 DONE (2026-08-04, 2026-08-05). SLICE 3 IS NOT
+SCHEDULED — still owed, deliberately not next (user decision 2026-08-05); see
+its section for why and for what a future attempt must not assume.**
 Written 2026-07-31, immediately after the S7 cutover shipped (#263); slice 1
 executed 2026-08-04, slice 2 on 2026-08-05. The splash budget **passes at
 312.88 / 313 KB gz** locally (~311.4 on CI, which normalises CRLF to LF).
@@ -229,7 +231,16 @@ different file — and the emulator ports were in use by another agent at the
 time. Run `npm run test:e2e:rules` before relying on this slice in a rules-
 adjacent change.
 
-**Slice 3 — Room engine.**
+**Slice 3 — Room engine. ⛔ NOT SCHEDULED (user decision, 2026-08-05). Still
+owed; deliberately not next.** Slices 1 and 2 banked 40 KB between them
+(353 → 313) and the budget passes with no UI work blocked, so both of this
+plan's own stopping rules apply: §6's *"Stop after any slice that gets the
+budget where it needs to be. There is no prize for moving all three"* and §8's
+*"If the budget is passing and no UI work is blocked, leave it."* The trigger to
+revisit is unchanged and is stated in §8 — a PR that needs headroom and cannot
+get it any other way. **Do not read the rest of this section as a queued task;
+read it as the brief for whoever eventually pulls that trigger.**
+
 28 guards but the highest coupling: stage rendering, decisions, scoring and the
 branched engine interlock, and `applySectionContent()` / `refreshActiveSlotState()`
 sit on the hot path between them. Do this last, and only if slices 1–2 have not
@@ -243,9 +254,9 @@ loads), but when the room engine moves they become chunk → chunk and the LOAD
 ORDER starts to matter — `script-admin.js` can be resident while
 `script-room.js` is not.
 
-**⇒ Slices 1 and 2 have bought 40 KB between them (353 → 313). Per §8, the
-trigger to start slice 3 is a PR that needs headroom and cannot get it any other
-way. That is not today.**
+**⇒ Slices 1 and 2 have bought 40 KB between them (353 → 313), and slice 3 is
+NOT scheduled (see the heading above). Per §8, the trigger to start it is a PR
+that needs headroom and cannot get it any other way. That is not today.**
 
 Stop after any slice that gets the budget where it needs to be. There is no
 prize for moving all three.
