@@ -674,6 +674,62 @@ branch's rules. Always run `node scripts/sim/build-emulator-rules.js` before a
 hand-rolled emulator run, and assert the gate is present in the GENERATED file
 before trusting a result.
 
+### 2026-08-05 — an org session was driven end to end for the FIRST time
+
+Everything about the `orgs/` subtree had been verified by inspection and by unit
+tests on path *derivation*; no test had ever loaded an org URL, because none
+could. `scripts/serve-platform.js` had no `/o/**` route (`/o/caen-nagoya/` →
+404), and `orgs.js` registers exactly ONE org — `caen-nagoya` — which IS
+`CANAMED_DEFAULT_ORG`, so `canamedSessionPrefix()` maps it back to the legacy
+`sessions/` prefix and **no shipped client can produce an `orgs/…` path at all.**
+`tests-e2e/org-session-e2e.spec.js` now drives a real two-section session at
+`/o/e2e-org/` (a test-only tenant injected by an augmenting `CANAMED_ORGS`
+accessor — orgs.js stays production config).
+
+**What the run PROVED (LOCAL mode, so paths only — never rule behaviour):**
+org routing holds. Every write landed under
+`orgs/e2e-org/sessions/<code>/…`, `sessions/<code>` read back `null`, and the
+raw LocalDB store's top-level `sessions` key set was empty. Both sections
+routed to their own `answers/sections/<slot>`, and the take-home the student
+downloads carried both back.
+
+**⚠️ `/o/<slug>/` IS BROKEN IN PRODUCTION — asset resolution, not data.**
+index.html has no `<base>` and references every asset relatively, while
+firebase.json rewrites `/o/**` → `/index.html`. Measured against the live
+deploy 2026-08-05:
+
+| request | result |
+| --- | --- |
+| `GET /theme-init.js` | 200 `text/javascript`, 1 579 B |
+| `GET /o/caen-nagoya/theme-init.js` | 200 **`text/html`, 221 781 B** (index.html) |
+
+So every script/stylesheet/font/manifest an org page asks for comes back as the
+HTML shell, which `X-Content-Type-Options: nosniff` then refuses to execute.
+`navigator.serviceWorker.register("sw.js")` fails the same way. **An org URL
+loads a dead page today.** Fixing it is a product decision (root-absolute asset
+URLs + a shell bump, vs. a capture-based hosting rule that can only be verified
+against real Hosting) and was deliberately NOT attempted in the test PR. The
+dev server resolves org-prefixed assets so the code path is testable — that is
+parity with what production must become, not with what it is. `Verify:`
+`curl -sI https://canamed-69785.web.app/o/caen-nagoya/theme-init.js | grep -i content-type`.
+
+**Two NEW rule-parity gaps, found by diffing the two rule subtrees. Neither was
+observed — LOCAL mode models no rules — so these are static findings:**
+- **`rosters` org branch is mis-nested by one level.** The client writes
+  `"rosters/" + sPath(uid)` → `rosters/orgs/<slug>/sessions/<code>/<uid>`, but
+  the rule sits at `rosters/**sessions**/orgs/$orgSlug/sessions/$sessionId/$uid`.
+  `rosters` declares no `orgs` child and no wildcard, so the participant email
+  capture **and** the facilitator roster export are fail-closed for every org
+  session — silently, because both call sites `.catch()` and continue.
+  `tests/facilitator-email-roster.test.js` checks the client path and the rule
+  tree separately and so cannot see the mismatch.
+- **`audit` is org-only — the DEFAULT tree has no rule for it.**
+  `logAdminAction()` writes `sPath("audit")` for both trees, but `audit` is
+  declared only under `orgs/$orgSlug/sessions/$sessionId`, and
+  `sessions/$sessionId` has no `.write` to cascade and no `$other`. So the
+  facilitator audit log has never worked on the default org (best-effort write,
+  warning only).
+
 **Round-3 — TRACKED hardening (defense-in-depth, not active exploits):**
 - ~~**`answers/moduleA` + `answers/moduleB` are the weakest participant-writable
   nodes left**~~ **✅ FIXED 2026-07-31.** Their `$entryId .write` was only
@@ -707,6 +763,12 @@ before trusting a result.
 - **Org parity (remaining)**: `poll/$clientId`, `rooms/$roomId/answerReplies`,
   `rooms/$roomId/observers` are still `sessions/`-only (fail-closed in org —
   denied, not a hole). Mirror into the org tree before any org go-live.
+  ✅ **Re-verified 2026-08-05** by diffing the two rule subtrees mechanically —
+  those three, and only those three, are `sessions/`-only. The same diff turned
+  up **two gaps in the OTHER direction, both new** (see the 2026-08-05 org
+  section below): `audit` exists ONLY under `orgs/`, and `rosters`'s org branch
+  is mis-nested. `Verify:` diff the key sets of `rules.sessions.$sessionId` and
+  `rules.orgs.$orgSlug.sessions.$sessionId` in `database.rules.json`.
 - `summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
   low value); `answers/.../edits/$editId` has no explicit owner check (possible
   collaborative-edit by design — decide + document).

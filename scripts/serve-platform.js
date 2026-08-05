@@ -10,6 +10,12 @@
  * Usage:
  *   node scripts/serve-platform.js                # http://localhost:8765
  *   PORT=3000 node scripts/serve-platform.js      # custom port
+ *
+ * ROUTING — see REWRITES / ORG_PREFIX_RE below. This server used to do
+ * nothing but map pathname -> file, so `/o/<slug>/` (the multi-tenant org
+ * entry point that firebase.json rewrites to index.html) returned a bare
+ * 404 and no E2E test could ever load an org URL. That is why the whole
+ * `orgs/` database subtree had never been driven end to end.
  */
 
 const http = require("http");
@@ -53,14 +59,94 @@ const MIME = {
   ".webmanifest": "application/manifest+json; charset=utf-8"
 };
 
-const server = http.createServer((req, res) => {
-  let urlPath = decodeURIComponent(url.parse(req.url).pathname);
-  if (urlPath === "/" || urlPath === "") urlPath = "/index.html";
-  // strict: deny anything that escapes ROOT
+/* ---------------------------------------------------------------------------
+ * Routing — kept in lockstep with docs/Third_session/PBL_platform/firebase.json
+ * `hosting.rewrites`. tests/serve-platform-routing.test.js READS that file and
+ * asserts this server honours every rewrite in it, so the two cannot drift.
+ *
+ * Firebase Hosting resolves a request as: real file first, then the rewrite
+ * table in order. `resolveRequest()` below does the same.
+ * ------------------------------------------------------------------------- */
+const REWRITES = [
+  // { "source": "/o/**", "destination": "/index.html" }
+  { source: "/o/**", match: (p) => /^\/o\/[^/]+(?:\/|$)/.test(p), destination: "/index.html" },
+  // { "source": "/v", "destination": "/verify.html" }
+  { source: "/v", match: (p) => p === "/v", destination: "/verify.html" }
+];
+
+/* An org URL is `/o/<slug>/…`. The slug charset matches
+   canamedParseOrgFromPath() in orgs.js (lowercase alnum + hyphens). */
+const ORG_PREFIX_RE = /^\/o\/[a-z0-9-]+(?=\/|$)/;
+
+/* Resolve a pathname to an absolute file under ROOT, or null. */
+function fileUnderRoot(urlPath) {
   const filePath = path.normalize(path.join(ROOT, urlPath));
-  if (!filePath.startsWith(ROOT)) {
+  if (!filePath.startsWith(ROOT)) return undefined;   // traversal → 403
+  try {
+    return fs.statSync(filePath).isFile() ? filePath : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/* Map a request pathname to the file this server should send.
+ *
+ * Returns { file } to serve, { forbidden: true } for a traversal attempt, or
+ * null for a genuine 404. Exported so the routing test can exercise it
+ * directly as well as over HTTP.
+ */
+function resolveRequest(urlPath) {
+  if (urlPath === "" || urlPath === "/") urlPath = "/index.html";
+
+  // 1. A real file always wins, exactly as on Firebase Hosting.
+  let hit = fileUnderRoot(urlPath);
+  if (hit === undefined) return { forbidden: true };
+  if (hit) return { file: hit };
+
+  /* 2. ORG ASSET RESOLUTION — strip the `/o/<slug>` prefix and retry.
+   *
+   * index.html references every asset RELATIVELY (`script.js`,
+   * `tokens.css`, `fonts/…`), and there is no <base> tag, so a shell served
+   * at `/o/<slug>/` asks for `/o/<slug>/script.js`. Without this branch the
+   * org page loads and then dies with zero scripts.
+   *
+   * ⚠ PRODUCTION DOES NOT DO THIS — measured against the live deploy on
+   * 2026-08-05:
+   *     GET /theme-init.js              -> 200 text/javascript (1 579 B)
+   *     GET /o/caen-nagoya/theme-init.js -> 200 text/html      (221 781 B)
+   * i.e. the `/o/**` rewrite swallows every org-prefixed asset and hands
+   * back index.html, which `X-Content-Type-Options: nosniff` then refuses to
+   * execute as a script. So org URLs are asset-broken on Firebase Hosting
+   * today. Fixing THAT needs a hosting/product decision (root-absolute asset
+   * URLs, or a capture-based hosting rule verified against real Hosting) and
+   * is deliberately NOT attempted here; this branch exists so the org code
+   * path can be tested at all. Do not read it as parity with production —
+   * it is parity with what production must become.
+   */
+  if (ORG_PREFIX_RE.test(urlPath)) {
+    const stripped = urlPath.replace(ORG_PREFIX_RE, "") || "/";
+    hit = fileUnderRoot(stripped === "/" ? "/index.html" : stripped);
+    if (hit === undefined) return { forbidden: true };
+    if (hit) return { file: hit };
+  }
+
+  // 3. The firebase.json rewrite table, in order.
+  for (const rw of REWRITES) {
+    if (!rw.match(urlPath)) continue;
+    hit = fileUnderRoot(rw.destination);
+    if (hit) return { file: hit };
+  }
+  return null;
+}
+
+const server = http.createServer((req, res) => {
+  const urlPath = decodeURIComponent(url.parse(req.url).pathname);
+  const resolved = resolveRequest(urlPath);
+  if (resolved && resolved.forbidden) {
     res.writeHead(403); res.end("Forbidden"); return;
   }
+  if (!resolved) { res.writeHead(404); res.end("Not Found: " + urlPath); return; }
+  const filePath = resolved.file;
   fs.readFile(filePath, (err, body) => {
     if (err) { res.writeHead(404); res.end("Not Found: " + urlPath); return; }
     const ext = path.extname(filePath).toLowerCase();
@@ -91,6 +177,12 @@ const server = http.createServer((req, res) => {
   });
 });
 
-server.listen(PORT, "127.0.0.1", () => {
-  console.log("CaNaMED platform listening on http://127.0.0.1:" + PORT);
-});
+/* Only listen when run as a script — the routing test requires this file and
+   drives `server` on an ephemeral port of its own. */
+if (require.main === module) {
+  server.listen(PORT, "127.0.0.1", () => {
+    console.log("CaNaMED platform listening on http://127.0.0.1:" + PORT);
+  });
+}
+
+module.exports = { server, resolveRequest, REWRITES, ROOT, SECURITY_HEADERS };
