@@ -419,6 +419,88 @@ test.describe("Scenario author — M5 mixed A/B + branched module", () => {
   });
 });
 
+/* A decision may run in BOTH sections — `module: ["A","B"]`, which
+   section-registry.js byModule() publishes into the PBL section AND the
+   Roleplay one. The form modelled a single id: it read the first of the array
+   and wrote a string back, so a facilitator who LOADED such a scenario, changed
+   anything, and re-exported it silently dropped the decision from the roleplay
+   section. Nothing failed — the decision simply stopped appearing on a stage it
+   used to appear on. These drive the real page (the select is what the author
+   sees) on desktop + the three emulated devices. */
+test.describe("Scenario author — a decision that runs in both sections", () => {
+  /** A two-module body whose only decision declares BOTH modules. */
+  const bothModulesScenario = () => JSON.stringify({
+    id: "shared-decision-case",
+    name: { en: "Shared decision case", fr: "", ja: "" },
+    summary: { en: "s", fr: "", ja: "" },
+    moduleAName: { en: "Workup", fr: "", ja: "" },
+    moduleBName: { en: "Conversation", fr: "", ja: "" },
+    case: { history: [], exam: [], labs: [], prompts: [] },
+    scoring: { moduleA: [], moduleB: [] },
+    penalties: [],
+    decisions: [{
+      id: "shared", module: ["A", "B"], points: 10, penalty: 5,
+      prompt: { en: "Agree the plan", fr: "", ja: "" },
+      options: [
+        { text: { en: "Yes", fr: "", ja: "" }, correct: true, why: { en: "w", fr: "", ja: "" } },
+        { text: { en: "No", fr: "", ja: "" }, correct: false, why: { en: "w", fr: "", ja: "" } }
+      ]
+    }]
+  });
+
+  test("the module select offers A + B, and the pick reaches the JSON", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-skeleton").click();
+    await page.locator("#skeleton-picker").getByRole("button", { name: /^Two-module scenario \(legacy\)$/ }).click();
+
+    const sel = page.locator("#list-decisions .module-select").first();
+    await expect(sel).toHaveValue("A");
+    await sel.selectOption("A,B");
+
+    const preview = page.locator("#json-preview");
+    await expect
+      .poll(async () => JSON.parse(await preview.inputValue()).decisions[0].module)
+      .toEqual(["A", "B"]);
+
+    // A decision in both sections is legal authoring, not a validation error.
+    await page.locator("#btn-validate").click();
+    await expect(page.locator("#validation-output")).toHaveClass(/success/);
+
+    expect(errors, "authoring a both-sections decision must not throw").toEqual([]);
+  });
+
+  test("load → export keeps the decision in both sections (the reported repro)", async ({ page }) => {
+    const errors = [];
+    page.on("pageerror", (err) => errors.push(`pageerror: ${err.message}`));
+    page.on("dialog", (d) => d.accept());
+
+    await page.goto("/scenario-author.html");
+    await page.locator("#btn-load").click();
+    await page.locator("#load-textarea").fill(bothModulesScenario());
+    await page.locator("#btn-load-apply").click();
+    await expect(page.locator("#load-modal")).toHaveClass(/hidden/);
+
+    // The form SHOWS what it holds: a select reading "A" over a stored
+    // ["A","B"] is how the drop went unnoticed for a whole release.
+    await expect(page.locator("#list-decisions .module-select").first()).toHaveValue("A,B");
+    await expect
+      .poll(async () => JSON.parse(await page.locator("#json-preview").inputValue()).decisions[0].module)
+      .toEqual(["A", "B"]);
+
+    // Collapsing to one section stays available — deliberately, from the form.
+    await page.locator("#list-decisions .module-select").first().selectOption("B");
+    await expect
+      .poll(async () => JSON.parse(await page.locator("#json-preview").inputValue()).decisions[0].module)
+      .toBe("B");
+
+    expect(errors, "loading a both-sections decision must not throw").toEqual([]);
+  });
+});
+
 /* ── No horizontal scroll on a phone ───────────────────────────────────────
  * Regression guard for a long-standing (pre-M5) defect: at 375x812 the page
  * measured documentElement.scrollWidth 409 vs clientWidth 375 — a 34px

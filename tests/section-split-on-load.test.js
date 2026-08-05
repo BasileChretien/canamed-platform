@@ -72,6 +72,22 @@ test("scoring, decisions and characters are filtered by module", () => {
     "the roleplay's own characters must travel with it");
 });
 
+/* A decision declaring BOTH modules belongs to both sections — byModule() puts
+   it in each half, exactly as section-registry.js does at runtime. It reaches
+   the form with its set intact (the form used to keep only the first id, which
+   deleted the decision from the roleplay half on the next export), so what each
+   half must carry is the ARRAY, not a per-half rewrite. */
+test("a decision declared in both modules travels with BOTH halves", () => {
+  const [pbl, rp] = split(Object.assign({}, WHOLE, {
+    decisions: [{ id: "dA", module: "A" }, { id: "shared", module: ["A", "B"] }]
+  }));
+  assert.deepEqual(pbl.decisions.map(d => d.id), ["dA", "shared"]);
+  assert.deepEqual(rp.decisions.map(d => d.id), ["shared"],
+    "the roleplay half is where a collapsed module set would delete it");
+  assert.deepEqual(rp.decisions[0].module, ["A", "B"],
+    "…and its module set must survive the split unchanged");
+});
+
 test("each half gets its OWN id, so saving cannot overwrite the original", () => {
   const [pbl, rp] = split(WHOLE);
   assert.equal(pbl.id, "my-workshop-pbl");
