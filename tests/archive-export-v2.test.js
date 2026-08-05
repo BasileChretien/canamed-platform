@@ -30,22 +30,59 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
    reading script.js alone would silently stop seeing the dashboard code. */
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
   fs.readFileSync(path.join(P, "script-admin.js"), "utf8");
+/* The take-home and the research CSVs are snapshot readers too, and both live
+   in lazy chunks of their own — they were the readers this guard did not name,
+   and both had drifted onto the retired module-literal address. */
+const TAKEHOME = fs.readFileSync(path.join(P, "takehome.js"), "utf8");
+const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const { convertArchive } = require("../scripts/convert-archive-v2.js");
 
 /* ── the live export ──────────────────────────────────────────────────────── */
+
+/* One function's source, bounded by the next function at the SAME indent — the
+   lazy chunks nest their functions inside an IIFE, so a top-level `\nfunction `
+   boundary would swallow the rest of the file and make every assertion below
+   vacuous. */
+function fnSource(src, name) {
+  const i = src.indexOf("function " + name + "(");
+  assert.ok(i > -1, name + " must exist");
+  const lineStart = src.lastIndexOf("\n", i) + 1;
+  const indent = src.slice(lineStart, i);
+  const next = src.indexOf("\n" + indent + "function ", i + 1);
+  return src.slice(i, next > -1 ? next : src.length);
+}
+/* CODE only. The negative assertion below looks for a retired address, and
+   these functions now carry comments that NAME the retired address to explain
+   why they moved off it — the guard would otherwise fire on its own tombstone. */
+function codeOnly(s) {
+  return s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/[^\n]*/g, "$1");
+}
 
 test("EVERY snapshot reader resolves addresses through ONE helper", () => {
   /* The guard that actually matters. THREE times in this initiative a path move
      fixed one reader and silently zeroed another — the export's hypotheses, the
      export's answers, and the dashboard's "findings N/M", which had been
      reporting 0 for every room since S2b-2. Funnelling every snapshot reader
-     through roomSlotBuckets() gives the next move one place to change. */
-  ["_sessionArchiveData", "roomProgress", "roomParticipation"].forEach(name => {
-    const i = SCRIPT.indexOf("function " + name + "(");
-    assert.ok(i > -1, name + " must exist");
-    const fn = SCRIPT.slice(i, SCRIPT.indexOf("\nfunction ", i + 1));
-    assert.match(fn, /roomSlotBuckets\(/, name + " must resolve through the helper");
-    assert.ok(!/data\.moduleA|answers\.moduleA/.test(fn),
+     through roomSlotBuckets()/roomEntries() gives the next move one place to
+     change.
+     ⚠️ A FOURTH, FIFTH and SIXTH round of exactly that was found on 2026-08-05,
+     in readers this list did not name: the student's take-home (both "My
+     responses" and "Group answers" printed their empty placeholder), the
+     dashboard's participation funnel + impact KPIs, and all three research
+     CSVs. They are named here now — a reader missing from this list is a reader
+     nothing protects. */
+  const READERS = [
+    [SCRIPT, "_sessionArchiveData"], [SCRIPT, "roomProgress"], [SCRIPT, "roomParticipation"],
+    [SCRIPT, "downloadMyData"],
+    [SCRIPT, "_debriefFunnelSection"], [SCRIPT, "_impactMetrics"],
+    [TAKEHOME, "buildRoomTakeawayMarkdown"],
+    [TOOLS, "_tallyByCid"], [TOOLS, "_revealRows"], [TOOLS, "_freetextRows"]
+  ];
+  READERS.forEach(([src, name]) => {
+    const fn = codeOnly(fnSource(src, name));
+    assert.match(fn, /room(SlotBuckets|Entries)\(/,
+      name + " must resolve through the helper");
+    assert.ok(!/\bdata\.moduleA\b|answers\.moduleA|answers\.moduleB|\["moduleA", "moduleB"\]/.test(fn),
       name + " must not reach a module-literal node directly");
   });
 });

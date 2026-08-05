@@ -333,6 +333,41 @@ function downloadStudyBookletPdf() {
     .then(() => { if (btn) btn.disabled = false; });
 }
 
+/* ── Slot-scoped presentation for the take-home ───────────────────────────────
+ * Every list in the document is grouped by the SLOT the work was done in. Two
+ * sections of the same TYPE are supported (two PBL sections is the ordinary
+ * case), so grouping by module key would merge two different patients' answers
+ * under one "Module A" heading and lose which case each belonged to — the same
+ * reason the archive export is keyed by slot.
+ *
+ * The heading is the stage label the student already read at the top of that
+ * stage ("Section 2 — Jaundice"), so the take-home names the section the same
+ * way the session did. */
+function _slotLabel(slot) {
+  try {
+    const sl = (typeof sectionSlots === "function" ? sectionSlots() : [])
+      .find(s => s && s.position === slot);
+    if (sl && typeof stageLabel === "function") {
+      const lbl = stageLabel(sl.stage);
+      if (lbl) return lbl;
+    }
+  } catch (_) { /* fall through to the positional label */ }
+  return "Section " + slot;
+}
+/* The slots that actually produced something, in running order. */
+function _slotOrder(rows) {
+  const seen = [];
+  rows.forEach(r => { if (seen.indexOf(r.slot) < 0) seen.push(r.slot); });
+  return seen.sort((a, b) => a - b);
+}
+/* One slot's entries, oldest first — entriesSorted() wants the raw keyed map,
+   so rebuild it from the flattened rows rather than re-reading the snapshot. */
+function _rowsForSlot(rows, slot) {
+  const m = {};
+  rows.forEach(r => { if (r.slot === slot) m[r.key] = r.entry; });
+  return entriesSorted(m);
+}
+
 /* The take-home markdown itself, extracted from the download plumbing so the
    document a student actually receives can be asserted in a test without a
    live room. Reads the same room `data` snapshot the download path reads, and
@@ -341,9 +376,15 @@ function downloadStudyBookletPdf() {
 function buildRoomTakeawayMarkdown(data) {
   data = data || {};
   const lang = (typeof _curLang === "function") ? _curLang() : "en";
-  const ans = data.answers || {};
-  const reveals = (data.moduleA || {}).revealed || {};
-  const hyps = (data.moduleA || {}).hypotheses || data.hypotheses || {};
+  /* S6 — a room's work lives PER SLOT (rooms/<room>/sections/<slot> and
+     answers/sections/<slot>), never on the module-literal nodes this used to
+     address. Reading `data.answers.moduleA` here did not fail: it read
+     `undefined`, so "My responses" and "Group answers" both printed their empty
+     placeholder while the student's answers sat on screen beside the download
+     button. Resolve through roomEntries()/roomSlotBuckets(), the address
+     resolver the dashboard, the archive and the GDPR export already share. */
+  const _flat = (k) => (typeof roomEntries === "function") ? roomEntries(data, k) : [];
+  const ansRows = _flat("answers");
   const votes = data.votes || {};
   const me = (typeof myName === "string" && myName) ? myName : "";
   const decList = []
@@ -375,8 +416,8 @@ function buildRoomTakeawayMarkdown(data) {
     // 1. Historical context — the clinical information the team gathered, in
     //    the order it was opened.
     lines.push("## The case — clinical information gathered");
-    const revealSeq = Object.keys(reveals)
-      .map(id => ({ id: id, by: (reveals[id] || {}).by || "", at: (reveals[id] || {}).at || 0 }))
+    const revealSeq = _flat("revealed")
+      .map(r => ({ id: r.key, by: (r.entry || {}).by || "", at: (r.entry || {}).at || 0 }))
       .sort((a, b) => a.at - b.at);
     if (!revealSeq.length) {
       lines.push("_(nothing was opened)_");
@@ -448,15 +489,18 @@ function buildRoomTakeawayMarkdown(data) {
   // 4. The student's OWN responses.
   lines.push("## My responses");
   let mineAny = false;
-  [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
-    const mine = entriesSorted(ans[pair[0]]).filter(e => e.cid === clientId);
+  /* Grouped by SLOT, not by module key: a session can run two PBL sections, and
+     "Module A" would silently merge two different patients' work into one list.
+     The stage label is the same "Section N — <case>" heading the student saw. */
+  _slotOrder(ansRows).forEach(slot => {
+    const mine = _rowsForSlot(ansRows, slot).filter(e => e.cid === clientId);
     if (mine.length) {
       mineAny = true;
-      lines.push("### " + pair[1] + " — my answers");
+      lines.push("### " + _slotLabel(slot) + " — my answers");
       mine.forEach(e => lines.push("- " + _mdEsc(e.text)));
     }
   });
-  const myHyps = Object.keys(hyps).map(k => hyps[k]).filter(h => h && h.cid === clientId);
+  const myHyps = _flat("hypotheses").map(r => r.entry).filter(h => h && h.cid === clientId);
   if (myHyps.length) {
     mineAny = true;
     lines.push("### My hypotheses");
@@ -478,9 +522,14 @@ function buildRoomTakeawayMarkdown(data) {
 
   // 5. The whole group's answers (everyone in the room).
   lines.push("## Group answers (everyone in the room)");
-  [["moduleA", "Module A"], ["moduleB", "Module B"]].forEach(pair => {
-    lines.push("### " + pair[1]);
-    const entries = entriesSorted(ans[pair[0]]);
+  const _groupSlots = _slotOrder(ansRows);
+  if (!_groupSlots.length) {
+    lines.push("_(no points recorded)_");
+    lines.push("");
+  }
+  _groupSlots.forEach(slot => {
+    lines.push("### " + _slotLabel(slot));
+    const entries = _rowsForSlot(ansRows, slot);
     if (!entries.length) lines.push("_(no points recorded)_");
     else entries.forEach(e => lines.push("- **" + _mdEsc(e.by || "?") +
       (e.university ? " / " + _mdEsc(e.university) : "") + ":** " + _mdEsc(e.text)));

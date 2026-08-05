@@ -16,11 +16,29 @@ const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
 const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
 
+/* Bounded slice of ONE function body. A bare TOOLS.indexOf(end) returns -1 when
+   the end anchor is renamed, and slice(start, -1) then hands back almost the
+   whole file — so the assertions below would pass against unrelated source
+   instead of failing. Assert both anchors, and their order. */
+function fnBody(src, name, endName) {
+  const a = src.indexOf("function " + name);
+  const b = src.indexOf("function " + endName);
+  assert.ok(a > -1, name + " must exist");
+  assert.ok(b > a, endName + " must exist AFTER " + name + " (it bounds the slice)");
+  return src.slice(a, b);
+}
+
 test("cohortRows splits by university with per-cohort gain", () => {
   assert.match(TOOLS, /function cohortRows\(\)/, "cohortRows must exist");
   const fn = TOOLS.slice(TOOLS.indexOf("function cohortRows"),
     TOOLS.indexOf("function generateCohortComparison"));
-  assert.match(fn, /e\.university/, "must read university from answer entries");
+  /* The per-cid derivation is shared with participantRows + the research CSV
+     (_tallyByCid) since all three were reading the retired answers/moduleA
+     address; the university still comes from the participant's own entries. */
+  assert.match(fn, /_tallyByCid\(d, ansByCid, uniByCid, \{\}\)/,
+    "must derive the per-cid tally through the shared per-slot helper");
+  const tally = fnBody(TOOLS, "_tallyByCid", "participantRows");
+  assert.match(tally, /e\.university/, "must read university from answer entries");
   assert.match(fn, /byUni/, "must bucket by university");
   assert.match(fn, /\(postPct - prePct\) \/ \(100 - prePct\)/, "must compute paired gain per cohort");
   assert.match(fn, /nPaired/, "must track the per-cohort paired N");

@@ -21,6 +21,18 @@ const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
   fs.readFileSync(path.join(P, "script-admin.js"), "utf8");
 const I18N = require("./_i18n_source.js").readI18nSource();
 
+/* Bounded slice of ONE function body. A bare TOOLS.indexOf(end) returns -1 when
+   the end anchor is renamed, and slice(start, -1) then hands back almost the
+   whole file — so the assertions below would pass against unrelated source
+   instead of failing. Assert both anchors, and their order. */
+function fnBody(src, name, endName) {
+  const a = src.indexOf("function " + name);
+  const b = src.indexOf("function " + endName);
+  assert.ok(a > -1, name + " must exist");
+  assert.ok(b > a, endName + " must exist AFTER " + name + " (it bounds the slice)");
+  return src.slice(a, b);
+}
+
 test("admin-tools.js still parses with the new tools", () => {
   assert.doesNotThrow(() => new Function(TOOLS));
 });
@@ -30,9 +42,19 @@ test("participantRows derives per-cid contributions + university from the live d
   const fn = TOOLS.slice(TOOLS.indexOf("function participantRows"),
     TOOLS.indexOf("function participantRows") + 1400);
   assert.match(fn, /presence/, "must read presence for the participant set");
-  assert.match(fn, /\.cid/, "contributions are keyed by clientId");
   assert.match(fn, /uniByCid/, "must recover university from answer entries");
   assert.match(fn, /contributed/, "must flag whether the participant contributed");
+  /* The per-cid derivation moved into _tallyByCid, shared with the research CSV
+     and the cohort report — three copies of it were each reading the retired
+     answers/moduleA address. Follow it there rather than dropping the
+     assertion. */
+  assert.match(fn, /_tallyByCid\(d, contribByCid, uniByCid, hypByCid\)/,
+    "must derive contributions through the shared per-slot tally");
+  const tally = fnBody(TOOLS, "_tallyByCid", "participantRows");
+  assert.match(tally, /\.cid/, "contributions are keyed by clientId");
+  assert.match(tally, /roomEntries\(d, "answers"\)/,
+    "…resolved through the per-slot helper, not a module-literal node");
+  assert.match(tally, /roomEntries\(d, "hypotheses"\)/);
 });
 
 test("research export is identifiable (per consent), SAP-aligned JSON for the R pipeline", () => {

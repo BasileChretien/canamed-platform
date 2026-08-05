@@ -365,11 +365,14 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `<link>`ed `room.css` (`CanamedLoader.ensureRoomStyles()`, same pattern as
   admin.css/branched.css), taking the splash budget **337 → 325 KB gz**. The cap
   stayed 337 at the time, so that was ~12 KB of banked headroom, not a licence to
-  grow. **⚠️ SUPERSEDED — the cap is now 348** (`FIRST_PARTY_BYTES_LIMIT_KB`,
+  grow. **⚠️ SUPERSEDED — the cap is now 316** (`FIRST_PARTY_BYTES_LIMIT_KB`,
   `tests-e2e/perf.spec.js`): it rose 337 → 345 → 348 across the section-model
-  work, each step logged in that file's header. Quote the CONSTANT, never this
-  paragraph — a reviewer citing the stale 337 raised a spurious
-  budget-exceeded finding on PR #271 while the perf check was green.
+  work, then FELL to 316 when #285 lazy-split the facilitator dashboard out of
+  `script.js`; each step is logged in that file's header. (This paragraph said
+  348 until 2026-08-05 — exactly the drift it warns about, and in the more
+  dangerous direction: a stale HIGH cap reads as headroom that does not exist.)
+  Quote the CONSTANT, never this paragraph — a reviewer citing the stale 337
+  raised a spurious budget-exceeded finding on PR #271 while the check was green.
   `Verify:` `grep FIRST_PARTY_BYTES_LIMIT_KB tests-e2e/perf.spec.js`. See the
   dated entry in `tests-e2e/perf.spec.js` for the triple guard used to make the
   split safe, and `tests-e2e/room-css-lazy.spec.js` for the contract that keeps

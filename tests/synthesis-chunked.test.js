@@ -73,9 +73,17 @@ test("CONTENT PRESERVATION: the must-not-miss safety-net + decisions survive (FR
 });
 
 test("the stage-4 take-home export renders the synthesis aParts (labelled + localised)", () => {
-  /* Extracted from downloadMyRoomAnswers into buildRoomTakeawayMarkdown (#275). */
+  /* Extracted from downloadMyRoomAnswers into buildRoomTakeawayMarkdown (#275).
+     Bounded by the NEXT function, not by a byte count: a fixed window silently
+     truncates the tail as comments grow, so the last assertions start failing
+     (or, if ever inverted, passing vacuously) for a reason unrelated to the
+     behaviour they describe. That is exactly what a 4000-char window did here
+     when the slot-resolution comment landed. Same fix student-takeaway.test.js
+     already carries. */
   const start = TAKEHOME.indexOf("function buildRoomTakeawayMarkdown(");
-  const dl = TAKEHOME.slice(start, start + 4000);
+  const end = TAKEHOME.indexOf("function downloadMyRoomAnswers", start);
+  assert.ok(end > start, "downloadMyRoomAnswers must follow the builder");
+  const dl = TAKEHOME.slice(start, end);
   assert.match(dl, /itemById\(SYNTH_ID\)/, "the export pulls the SYNTH_ID case item");
   assert.match(dl, /synItem\.aParts/, "the export iterates the labelled aParts");
   assert.match(dl, /tc\(part\.label, lang\)/, "aParts labels localised via tc()");

@@ -1860,13 +1860,11 @@ function _debriefFunnelSection() {
   const votedCids = {};
   _debriefRoomList().forEach(r => {
     const room = allRooms[r] || {};
-    const ans = room.answers || {};
-    ["moduleA", "moduleB"].forEach(mk => {
-      const entries = ans[mk] || {};
-      Object.keys(entries).forEach(eid => {
-        const e = entries[eid] || {};
-        if (e.cid) answeredCids[e.cid] = true;
-      });
+    /* S6 — every SLOT's answers count as a contribution. Addressing
+       answers/moduleA|moduleB counted zero for every section-model session, so
+       the funnel showed a cliff at "answered ≥1" that had not happened. */
+    roomEntries(room, "answers").forEach(a => {
+      if (a.entry && a.entry.cid) answeredCids[a.entry.cid] = true;
     });
     const votes = room.votes || {};
     Object.keys(votes).forEach(vid => {
@@ -2376,11 +2374,12 @@ function _impactMetrics() {
     }
     if ((part.present || 0) >= 2 && (part.contributing || 0) < (part.present || 0)) unevenRooms++;
 
-    const ans = d.answers || {};
-    let roomAnswers = 0;
-    ["moduleA", "moduleB"].forEach(mk => { roomAnswers += Object.keys(ans[mk] || {}).length; });
+    /* S6 — count through the slot resolver. `answers.moduleA|moduleB` and the
+       top-level `hypotheses` are both pre-S2b addresses nothing writes, so both
+       KPIs read a confident zero for every section-model session. */
+    const roomAnswers = roomEntries(d, "answers").length;
     answers += roomAnswers;
-    hypotheses += Object.keys(d.hypotheses || {}).length;
+    hypotheses += roomEntries(d, "hypotheses").length;
 
     const votes = d.votes || {};
     let roomCommitted = 0;
