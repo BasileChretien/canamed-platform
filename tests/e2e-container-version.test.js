@@ -100,6 +100,20 @@ test("the e2e job runs in a container and installs no browsers", () => {
   );
 });
 
+test("the e2e suite step sets HOME=/root (firefox will not launch without it)", () => {
+  // Found the hard way on this PR's first CI run: the container runs as root
+  // while Actions sets HOME=/github/home, owned by the image's `pwuser`, and
+  // firefox refuses to start under a $HOME it does not own. Chromium and
+  // WebKit do not check, so losing this line fails firefox ALONE — one red job
+  // out of eight, every test dying in 3 ms at browserType.launch, which looks
+  // like a firefox regression rather than a missing env var.
+  assert.match(
+    config,
+    /HOME:\s*\/root/,
+    "e2e.yml must set HOME=/root on the suite step, or firefox dies at launch in the container"
+  );
+});
+
 test("no stale browser-cache config survives in the e2e job", () => {
   // The ~/.cache/ms-playwright cache and the `browser:` matrix include existed
   // only to serve the removed install steps. Leaving either behind is dead

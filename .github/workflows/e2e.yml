@@ -140,6 +140,20 @@ jobs:
         run: npx playwright test --project=${{ matrix.project }}
         env:
           CI: "1"
+          # ⚠ HOME=/root is REQUIRED for firefox and is not optional tuning.
+          # The container runs as root, but Actions overrides HOME to
+          # /github/home, which the image owns as `pwuser`. Firefox refuses to
+          # start under a $HOME it does not own and dies before the first test:
+          #   "Running Nightly as root in a regular user's session is not
+          #    supported. ($HOME is /github/home which is owned by pwuser.)"
+          # Playwright prints this exact workaround in the failure box.
+          #
+          # Chromium and WebKit have no such check, so dropping this breaks
+          # firefox ALONE — 1 red job out of 8, every test failing in 3 ms at
+          # browserType.launch, which reads like a firefox regression rather
+          # than a workflow env problem. Asserted by
+          # tests/e2e-container-version.test.js so it cannot be quietly lost.
+          HOME: /root
 
       - name: Upload Playwright report on failure
         if: failure()
