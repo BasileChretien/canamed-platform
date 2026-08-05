@@ -8,11 +8,27 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 - `npm run test` — unit tests (`node --test tests/*.test.js`).
 - `npm run emulator` — Firebase RTDB+Auth emulator (needs Java on PATH).
 - `npm run sim:emulator` — headless cross-tab persona sim against the emulator
-  (`scripts/sim/sim-with-emulator.js`). Kill stale emulators first if ports
-  9000/9099 are taken, or it silently falls back to LocalDB.
+  (`scripts/sim/sim-with-emulator.js`). If 9000/9099 are already taken it now
+  **exits during preflight** naming the listener, rather than starting against
+  a stale emulator; `npm run emulator:ports` names the squatter and `npm run
+  emulator:free` clears it. Should a run start and then fall back to LocalDB,
+  the report says so — it states the backend it ACTUALLY got instead of
+  claiming LOCAL unconditionally (`scripts/sim/report-mode.js`).
+- `npm run test:e2e:rules` — the emulator-backed Playwright rules suite. Goes
+  through `scripts/ops/run-rules-e2e.js`, which preflights the ports and sweeps
+  any emulator `emulators:exec` failed to reap. Together with `sim:emulator`
+  these are the two ways `database.rules.json` is actually exercised; the LOCAL
+  Playwright suite never touches it.
 - `npx playwright test` — E2E suite (`tests-e2e/`), runs in LOCAL mode
   (hermetic, no real Firebase). Projects: chromium/firefox/webkit + perf +
   a11y + mobile-iphone/ipad/android.
+  - Pass an explicit `PORT=` (e.g. `PORT=8771`): the default 8765 is
+    AnkiConnect's port on this machine, and `reuseExistingServer` then latches
+    onto Anki so every test fails on the splash.
+  - **The three WebKit-family projects — `webkit`, `mobile-iphone`,
+    `mobile-ipad` — hang at `--workers=2`. Run each with `--workers=1`.**
+    (Corrected 2026-08-05: the earlier advice to single out only iPad was
+    insufficient; all three hang.)
 
 ## Layout
 - Platform: `docs/Third_session/PBL_platform/` (`index.html`, `script.js`,

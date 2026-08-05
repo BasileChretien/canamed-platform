@@ -11,8 +11,13 @@
 # rejected), so rules regressions are caught at PR time.
 #
 # Requires Java (RTDB emulator) + the Chromium Playwright browser. The
-# orchestration lives in `npm run test:e2e:rules`:
-#   build-emulator-rules.js  →  firebase emulators:exec "playwright test"
+# orchestration lives in `npm run test:e2e:rules`, i.e.
+# scripts/ops/run-rules-e2e.js:
+#   preflight the ports  →  build-emulator-rules.js
+#   →  firebase emulators:exec "playwright test"  →  sweep any survivor
+# The preflight + sweep exist because emulators:exec does not reliably reap
+# the RTDB emulator (a Java grandchild), and a leftover listener makes the
+# NEXT run validate the PREVIOUS run's rules — or hang — rather than fail.
 
 name: Rules E2E
 

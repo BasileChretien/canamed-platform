@@ -2,10 +2,15 @@
 /* scripts/sim/simulate-session.js
  *
  * Headless simulation of a full CaNaMED workshop:
- *   - 2 facilitators (lead creates the session, co joins the admin dashboard)
- *   - 8 students (4 per room, mix of Caen & Nagoya, varied English levels
- *     and personality traits)
+ *   - FACILITATORS (the lead creates the session, the co-facilitators join
+ *     the admin dashboard) — currently 4
+ *   - STUDENTS spread over SIM_ROOM_COUNT rooms, a mix of Caen & Nagoya with
+ *     varied English levels and personality traits — currently 24 over 6 rooms,
+ *     both overridable via SIM_STUDENTS / SIM_ROOM_COUNT
  *   - 4 stages: Welcome → Module A → Module B → Wrap-up
+ *
+ * These counts are knobs, so the REPORT derives its cohort line from the
+ * actual arrays rather than repeating a number from this comment.
  *
  * For each persona, the script captures detailed observations at every
  * stage: console errors, visible buttons, button-count overload, scroll
@@ -13,13 +18,18 @@
  * observer reports different friction than an active leader). All
  * observations roll up into a markdown feedback report.
  *
- * Mode: LOCAL — CANAMED_FIREBASE pinned null so the platform uses
- * LocalDB (localStorage-backed pseudo-Firebase that syncs across tabs
- * in the same browser context). No real Firebase traffic.
+ * Mode: EITHER. Run bare and CANAMED_FIREBASE is pinned null, so the platform
+ * uses LocalDB (a localStorage-backed pseudo-Firebase that syncs across tabs
+ * in one browser context) and NO database rule is exercised. Run under
+ * sim-with-emulator.js (SIM_EMULATOR_MODE=1) and the tabs talk to a real RTDB
+ * emulator with database.rules.json loaded. The report says which one actually
+ * happened — probed from a live tab, not assumed from the env var, because a
+ * requested emulator run can fall back to LocalDB. See report-mode.js.
  *
  * Usage:
  *   node scripts/serve-platform.js &           # in another shell
- *   node scripts/sim/simulate-session.js       # this script
+ *   node scripts/sim/simulate-session.js       # this script (LocalDB)
+ *   node scripts/sim/sim-with-emulator.js      # emulator-backed, rules enforced
  *
  * Output:
  *   sim-output/feedback-<timestamp>.md         # markdown report
@@ -32,6 +42,7 @@ const { chromium } = require("playwright");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const { describeBackend, describeCohort } = require("./report-mode.js");
 
 const BASE_URL = process.env.SIM_BASE_URL || "http://127.0.0.1:8765";
 const OUT_DIR = path.resolve(__dirname, "..", "..", "sim-output");
@@ -129,6 +140,47 @@ const STUDENTS = STUDENTS_FULL.slice(0, Math.max(1, SIM_STUDENT_COUNT));
 const observations = [];
 function obs(persona, step, data) {
   observations.push(Object.assign({ persona, step, ts: Date.now() }, data));
+}
+
+/* ====================== backend probe ======================
+ *
+ * What this report is allowed to CLAIM about the run's backend. The header
+ * used to hardcode "LOCAL (LocalDB, no real Firebase)" on every run, which
+ * made an EMULATOR run (database.rules.json enforced) indistinguishable from
+ * a LocalDB one (rules never exercised) — and, worse, indistinguishable from
+ * an emulator run that silently fell back to LocalDB. See report-mode.js.
+ *
+ * `requestedEmulator` is the INTENT and only ever serves to make a mismatch
+ * loud; `observedMode` / `emulatorPinned` are filled in by probeBackend()
+ * from a REAL tab, so the claim describes what happened, not what was asked. */
+const backendProbe = {
+  requestedEmulator: process.env.SIM_EMULATOR_MODE === "1",
+  observedMode: null,
+  emulatorPinned: false,
+  host: process.env.SIM_EMULATOR_HOST || "127.0.0.1",
+  dbPort: parseInt(process.env.SIM_DB_PORT || "9000", 10),
+  probeError: "the probe never ran"
+};
+
+/* Read the app's own MODE const + the emulator descriptor out of a live tab.
+   MODE is a top-level `const` in script.js, so page.evaluate reaches it by
+   bare name — the same trick the createSession debug dump below already uses. */
+async function probeBackend(page) {
+  try {
+    const seen = await page.evaluate(() => ({
+      mode: typeof MODE !== "undefined" ? MODE : null,
+      emu: !!window.CANAMED_EMULATOR
+    }));
+    backendProbe.observedMode = seen.mode;
+    backendProbe.emulatorPinned = !!seen.emu;
+    backendProbe.probeError = seen.mode ? null : "the page exposed no MODE";
+  } catch (e) {
+    backendProbe.probeError = String((e && e.message) || e);
+  }
+  const d = describeBackend(backendProbe);
+  console.log("Sim: backend = " + d.label);
+  if (d.warning) console.warn("Sim: WARNING — " + d.warning);
+  return d;
 }
 
 /* ====================== helpers ====================== */
@@ -797,6 +849,11 @@ function buildRecommendations(perPersonaReflections) {
   console.log("Sim: lead facilitator (" + F1.name + ") creating session…");
   const tStart = Date.now();
   await pageF1.goto(BASE_URL + "/");
+  /* Before anything else: establish which backend this run ACTUALLY got, so
+     the report describes reality rather than the launcher's intent. Done on
+     the very first loaded tab, so even a run that dies during createSession
+     still reports its backend honestly instead of defaulting to "LOCAL". */
+  await probeBackend(pageF1);
   await pageF1.locator("#splash-go-create").click();
   await pageF1.locator("#splash-create-name").fill(F1.name);
   await pageF1.locator("#splash-create-label").fill(F1.label);
@@ -1165,9 +1222,26 @@ function writeReport(extra) {
   lines.push("# CaNaMED — full-session simulation feedback");
   lines.push("");
   lines.push("**Generated:** " + new Date().toISOString());
-  lines.push("**Cohort:** 2 facilitators + 8 students (4 per room, Caen × Nagoya).");
-  lines.push("**Mode:** LOCAL (LocalDB, no real Firebase).");
+  /* DERIVED, not hardcoded. Both of these lines used to be fixed strings that
+     went stale the moment the cohort grew and that could not tell an emulator
+     run from a LocalDB one — see report-mode.js for why that mattered. */
+  lines.push("**Cohort:** " + describeCohort({
+    facilitators: FACILITATORS.length,
+    students: STUDENTS.length,
+    rooms: SIM_ROOM_COUNT,
+    universities: STUDENTS.map((s) => s.uni)
+  }));
+  const backend = describeBackend(backendProbe);
+  lines.push("**Mode:** " + backend.label);
+  lines.push("**Database rules exercised:** " + (
+    backend.rulesExercised === true ? "yes — this run enforced database.rules.json."
+      : backend.rulesExercised === false ? "no — nothing here validates database.rules.json."
+      : "unknown — do not treat this run as rule validation."));
   lines.push("**Screenshots:** `" + path.relative(path.dirname(REPORT_PATH), SCREEN_DIR) + "/`");
+  if (backend.warning) {
+    lines.push("");
+    lines.push("> ⚠ **" + backend.warning + "**");
+  }
   if (extra.fatalError) {
     lines.push("");
     lines.push("> **FATAL:** simulation aborted — `" + extra.fatalError + "`");

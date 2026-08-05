@@ -34,6 +34,7 @@ const { spawn } = require("child_process");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
+const emulatorPorts = require("../ops/emulator-ports.js");
 
 const PLATFORM_DIR = path.resolve(__dirname, "..", "..",
   "docs", "Third_session", "PBL_platform");
@@ -100,6 +101,17 @@ async function waitForPort(port, label, deadlineMs) {
 
 let firebaseProc = null;
 let serveProc    = null;
+/* PIDs seen listening on the emulator ports while THIS run owned them — the
+   evidence the cleanup sweep needs before it may kill anything. Filled in once
+   the emulator comes up, and topped up as the run proceeds. */
+const ownedPids = new Set();
+function noteOwnedPids() {
+  try {
+    for (const row of emulatorPorts.survey([DB_PORT, AUTH_PORT])) {
+      ownedPids.add(String(row.pid));
+    }
+  } catch (_) { /* transient; the sweep reports what it cannot prove */ }
+}
 function cleanup() {
   for (const p of [firebaseProc, serveProc]) {
     if (!p || p.killed) continue;
@@ -113,6 +125,36 @@ function cleanup() {
         p.kill("SIGTERM");
       }
     } catch (_) {}
+  }
+  /* Tree-kill only reaches the tree we own, and it did not reliably reap the
+     RTDB emulator: observed 2026-08-05 leaving a java.exe listening on :9000
+     after a clean exit, three runs for three. A leftover listener makes the
+     NEXT run's waitForPort() succeed instantly against the STALE emulator, so
+     the sim runs against the previous run's rules — or falls back to LocalDB
+     and validates nothing at all. Sweep by PORT as a backstop.
+     OWNERSHIP-SCOPED: only PIDs seen listening on the emulator ports while THIS
+     run held them are killed. The preflight proves the port state at one
+     instant; a process that bound the port afterwards is not ours to kill, so
+     it is reported with a manual command instead. */
+  try {
+    const survivors = emulatorPorts.survey([DB_PORT, AUTH_PORT]);
+    const mine = survivors.filter(r => ownedPids.has(String(r.pid)));
+    const strangers = survivors.filter(r => !ownedPids.has(String(r.pid)));
+    if (mine.length) {
+      const killed = emulatorPorts.free([DB_PORT, AUTH_PORT], { onlyPids: ownedPids });
+      console.log("Sim/emu: swept " + killed.length +
+        " emulator listener(s) the tree-kill missed:\n" +
+        emulatorPorts.describe(killed));
+    }
+    if (strangers.length) {
+      console.warn("Sim/emu: these listeners were NOT started by this run, so " +
+        "they were left alone:\n" + emulatorPorts.describe(strangers) +
+        "\nClear them yourself if they are stale:\n  " +
+        emulatorPorts.clearCommand(strangers));
+    }
+  } catch (e) {
+    console.warn("Sim/emu: could not inspect the emulator ports at exit (" +
+      ((e && e.message) || e) + ") — check by hand: npm run emulator:ports");
   }
 }
 process.on("SIGINT",  () => { cleanup(); cleanupEmulatorRules(); process.exit(130); });
@@ -153,6 +195,25 @@ function check(cmd, args, label) {
     process.exit(1);
   }
   console.log("Sim/emu: firebase-tools " + fbV + " · java OK");
+
+  /* A STALE emulator is worse than none. waitForPort() below only checks that
+     something is listening, so an orphan from a previous run (see cleanup())
+     makes the readiness probe pass instantly and the sim then runs against
+     THAT emulator — carrying the previous run's rules — or falls back to
+     LocalDB and validates nothing. Fail loudly instead, the same way the
+     :8765 check below already does. */
+  const squatters = emulatorPorts.survey([DB_PORT, AUTH_PORT]);
+  if (squatters.length) {
+    console.error("FATAL: the emulator ports are already in use:\n" +
+      emulatorPorts.describe(squatters) + "\n\n" +
+      "A stale emulator would make this run silently validate the PREVIOUS\n" +
+      "run's rules, or fall back to LocalDB and validate nothing. Clear it:\n" +
+      "  npm run emulator:free\n" +
+      "or, directly:\n  " + emulatorPorts.clearCommand(squatters) + "\n\n" +
+      "If this is an emulator you started on purpose (`npm run emulator`),\n" +
+      "stop it first — the sim must own its own instance.");
+    process.exit(1);
+  }
 
   if (!fs.existsSync(FIREBASE_CONFIG)) {
     console.error("FATAL: " + FIREBASE_CONFIG + " not found.");
@@ -209,6 +270,12 @@ function check(cmd, args, label) {
   // deadline is generous.
   await waitForPort(DB_PORT,   "RTDB emulator",  120_000);
   await waitForPort(AUTH_PORT, "Auth emulator",  60_000);
+  /* The ports were verified FREE in the preflight, and we started what is on
+     them now — so whatever is listening at this moment is ours, and that is the
+     evidence cleanup() needs before it may kill by port number. */
+  noteOwnedPids();
+  const ownershipPoll = setInterval(noteOwnedPids, 5000);
+  ownershipPoll.unref();
   console.log("Sim/emu: emulator is up — RTDB on :" + DB_PORT +
     ", Auth on :" + AUTH_PORT);
 

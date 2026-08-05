@@ -21,11 +21,18 @@
 // @ts-check
 const { defineConfig, devices } = require("@playwright/test");
 
-const PORT = 8765;
+/* Overridable, like playwright.config.js — 8765 is also AnkiConnect's port on
+   some dev machines, and a hardcoded number there turns into a full-suite
+   failure on the splash. scripts/ops/run-rules-e2e.js passes PORT through. */
+const PORT = parseInt(process.env.PORT || "8765", 10);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 module.exports = defineConfig({
   testDir: "./tests-e2e/emulator",
+  /* NOT the default test-results/ — that directory is shared with the LOCAL
+     suite (playwright.config.js), and Playwright CLEARS its output dir at
+     start-up, so a concurrent LOCAL run aborts this one with ENOTEMPTY. */
+  outputDir: "./test-results-emulator",
   // The first emulator round-trip (anon auth + RTDB WebSocket handshake)
   // is slower than LocalDB — give it room.
   timeout: 60_000,
@@ -51,7 +58,14 @@ module.exports = defineConfig({
     command: "node scripts/serve-platform.js",
     port: PORT,
     timeout: 15_000,
-    reuseExistingServer: !process.env.CI,
+    /* NEVER reuse. The emulator-CSP relaxation lives in serve-platform.js's
+       SIM_EMULATOR_MODE branch, so adopting a server started without it means
+       the page is forbidden to reach 127.0.0.1:9000 and EVERY test fails on a
+       CSP violation that reads as a rules failure. sim-with-emulator.js
+       already treats a pre-existing :8765 as fatal for the same reason; this
+       config used to silently adopt it. run-rules-e2e.js preflights the port
+       and names the squatter, so the failure here is diagnosable. */
+    reuseExistingServer: false,
     env: { SIM_EMULATOR_MODE: "1" },
     stdout: "ignore",
     stderr: "pipe"

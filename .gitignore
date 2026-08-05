@@ -11,6 +11,10 @@ firebase-debug.log
 node_modules/
 playwright-report/
 test-results/
+# The emulator suite writes here instead of test-results/ — Playwright clears
+# its output dir at start-up, so sharing one let a concurrent LOCAL run abort
+# the rules run with ENOTEMPTY. See playwright.emulator.config.js.
+test-results-emulator/
 playwright/.cache/
 
 # c8 coverage output (npm run test:coverage) — local artefact, never tracked
