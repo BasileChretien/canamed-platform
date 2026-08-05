@@ -518,7 +518,7 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     headroom, not an allowance.
 //
 //   2026-08-05: RECLAIM — the FACILITATOR DASHBOARD lazy-split. CAP LOWERED
-//     347 -> 313; measured 346.98 -> 312.88 KB gz locally (script.js alone
+//     347 -> 316; measured 346.98 -> 312.88 KB gz locally (script.js alone
 //     218.5 -> 185.0). That is 34.0 KB reclaimed in one move — the largest
 //     single reclaim this budget has ever taken, and ~13 KB more than the
 //     plan's indicative ~21 KB, because the move followed the CALL GRAPH out
@@ -563,16 +563,28 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     ⇒ SLICES 1 AND 2 ARE NOW DISCHARGED. Slice 3 (the room engine) remains
 //     OWED but is deliberately NOT SCHEDULED (user decision 2026-08-05): the
 //     budget passes, no UI work is blocked, and the plan's own §6/§8 stopping
-//     rules both say stop. THE RECLAIM IS BANKED, NOT SPENT — the cap moves
-//     down with the measurement (347 -> 313), as it did on 2026-07-23 and
-//     2026-08-04. What is left under 313 is HEADROOM, NOT AN ALLOWANCE: the
-//     next entry here should be another reclaim or a justified bump, not a
-//     silent 30 KB of growth into space this PR paid for.
+//     rules both say stop.
+//     WHY 316 AND NOT 313. The measurement is 312.88 KB gz on a local CRLF
+//     working tree and 311.46 LF-normalised (the number CI reads). Every
+//     previous reclaim here set the cap to the local measurement rounded up,
+//     which would give 313 — and 313 would leave 0.12 KB of local headroom,
+//     i.e. it would recreate, 34 KB lower down, exactly the zero-headroom
+//     budget this slice was commissioned to fix. That state is not
+//     theoretical: it is why two PRs on 2026-08-04/05 had to trim comment
+//     PROSE to land, and why this reclaim was ordered in the first place. A
+//     budget with no room to move stops being a guardrail and becomes a tax on
+//     every subsequent PR. So the cap is deliberately set 3 KB above the
+//     measurement.
+//     THE RECLAIM IS STILL BANKED, NOT SPENT: 347 -> 316 hands back 31 of the
+//     34 KB, and the ~3 KB left under the cap is WORKING MARGIN, NOT AN
+//     ALLOWANCE — enough for a normal feature's incidental growth, nowhere
+//     near enough to absorb a new eager asset. The next entry here should
+//     still be another reclaim or a justified bump.
 //     Cross-checked two ways: gzip of the served responses in this spec
-//     (313 rounded) and gzip of the git blobs for the same 15 assets, which
-//     LF-normalised reads 345.4 -> 311.5 on main -> this branch, i.e. the same
-//     -34.0 KB from a completely independent measurement path.
-const FIRST_PARTY_BYTES_LIMIT_KB = 313;
+//     (reports 313 rounded) and gzip of the git blobs for the same 15 assets,
+//     which LF-normalised reads 345.4 -> 311.5 across main -> this branch —
+//     the same -34.0 KB from a completely independent measurement path.
+const FIRST_PARTY_BYTES_LIMIT_KB = 316;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

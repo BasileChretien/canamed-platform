@@ -9,7 +9,7 @@
  * CanamedLoader.ensureAdminApp() from _enterAdminAppLazy(). That is slice 2
  * ("Admin dashboard") of ARCHITECTURE/eager-bundle-reclaim-plan.md and it took
  * the splash first-party budget from 346.98 to 312.88 KB gz locally
- * (script.js alone 218.5 → 185.0), cap 347 → 313.
+ * (script.js alone 218.5 → 185.0), cap 347 → 316.
  *
  * These are the guards the reclaim plan's §7 calls non-negotiable — the same
  * set tests/takehome-lazy-split.test.js pins for slice 1:

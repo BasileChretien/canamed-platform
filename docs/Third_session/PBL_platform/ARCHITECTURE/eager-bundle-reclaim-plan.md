@@ -5,7 +5,7 @@ SCHEDULED — still owed, deliberately not next (user decision 2026-08-05); see
 its section for why and for what a future attempt must not assume.**
 Written 2026-07-31, immediately after the S7 cutover shipped (#263); slice 1
 executed 2026-08-04, slice 2 on 2026-08-05. The splash budget **passes at
-312.88 / 313 KB gz** locally (~311.4 on CI, which normalises CRLF to LF).
+312.88 / 316 KB gz** locally (311.46 on CI, which normalises CRLF to LF).
 This document exists so the reclaim the perf
 budget header has recorded as owed since **2026-06-28** can be executed
 deliberately rather than improvised under pressure the next time the cap bites.
@@ -16,12 +16,21 @@ deliberately rather than improvised under pressure the next time the cap bites.
 > `CanamedLoader.ensureAdminApp()` from `_enterAdminAppLazy()`, the single shim
 > both admin routes (`joinAdmin`, `joinSuperAdmin`) now pass through.
 > `script.js` **218.5 → 185.0 KB gz**; splash first-party **346.98 → 312.88**,
-> cap **347 → 313**. That is **34.0 KB in one move**, ~13 KB more than §4's
-> indicative ~21 KB. (Both numbers measured CRLF, on a Windows working tree,
-> against `main` @ `c191cf3`; CI normalises to LF and reads ~1.6 KB lower —
-> 345.4 → ~311.3 — so the 313 cap has ~1.7 KB of real headroom in CI and 0.12
-> locally, deliberately: the cap is set from the LOCAL number so the check
-> means something on a dev box, as the 2026-08-04 entries established.)
+> cap **347 → 316**. That is **34.0 KB in one move**, ~13 KB more than §4's
+> indicative ~21 KB. (Measured CRLF on a Windows working tree, against `main`;
+> CI normalises to LF and reads ~1.4 KB lower — 345.41 → 311.46.)
+>
+> **The cap is 316, not the 312.88-rounded-up 313, and that is a deliberate
+> break with the previous three entries.** Every earlier reclaim set the cap to
+> the local measurement rounded up. Doing that here would have left 0.12 KB of
+> local headroom — i.e. it would have recreated, 34 KB lower down, the exact
+> zero-headroom budget this slice was commissioned to fix, on the same day two
+> PRs had to trim comment PROSE to land. A budget with no room to move stops
+> being a guardrail and becomes a tax on every later PR. 347 → 316 still hands
+> back **31 of the 34 KB**; the ~3 KB left is WORKING MARGIN, not an allowance —
+> enough for a feature's incidental growth, nowhere near enough for a new eager
+> asset. **If you find yourself editing this cap upward, you owe a reclaim or an
+> argument, not a rounding.**
 >
 > **§4's call-site price was 29; the real number was 6.** Not because the table
 > was wrong, but because it prices a slice *before* you know its closure. Moving
