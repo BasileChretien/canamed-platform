@@ -32,14 +32,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 20
+          # Keyed on the ROOT lock only — the repo also has
+          # docs/Third_session/PBL_platform/functions/package-lock.json
+          # (functions-ci.yml), which must not evict this cache.
+          cache: npm
+          cache-dependency-path: package-lock.json
       - name: Show node + npm versions
         run: |
           node --version
           npm --version
       - name: Install dev dependencies (c8 for coverage)
-        # No package-lock.json yet → npm install. Switch to `npm ci` once
-        # a lock is committed.
-        run: npm install --no-audit --no-fund
+        # npm ci, not npm install: c8's version must match the lock so a
+        # coverage number here is reproducible from the committed tree.
+        run: npm ci --no-audit --no-fund
       - name: Syntax-check every JS / JSON config file
         run: |
           node --check docs/Third_session/PBL_platform/lib.js

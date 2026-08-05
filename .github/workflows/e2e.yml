@@ -110,14 +110,20 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 20
-          # cache: npm requires a committed package-lock.json. We don't
-          # commit a lock yet to keep the diff lean; the
-          # ~/.cache/ms-playwright cache below covers the heavy artefact.
+          # package-lock.json has been committed since the initial commit and
+          # is Dependabot-maintained, so the npm cache has a real lock to key
+          # off. Pinned to the ROOT lock explicitly: the repo also carries
+          # docs/Third_session/PBL_platform/functions/package-lock.json (used
+          # by functions-ci.yml), and letting both into one key would evict
+          # this cache every time the unrelated Functions deps move.
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install npm dependencies
-        # No package-lock.json yet → use npm install. Once we commit a lock,
-        # switch to `npm ci` and re-enable cache: npm above.
-        run: npm install --no-audit --no-fund
+        # npm ci, not npm install: it installs the locked tree exactly, and
+        # fails loudly if the lock has drifted from package.json rather than
+        # silently resolving a different version than the other jobs got.
+        run: npm ci --no-audit --no-fund
 
       - name: Cache Playwright browsers
         id: pw-cache
