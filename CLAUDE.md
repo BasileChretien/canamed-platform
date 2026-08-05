@@ -40,6 +40,40 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 - **Per-device tests for every UI change.** When touching the platform UI,
   add Playwright coverage for mobile-iphone, mobile-ipad, mobile-android, and
   desktop viewports. (Established 2026-05-18.)
+- **In the emulator e2e suite, a second PAGE is not a second USER.** (Established
+  2026-08-05, after `rules-smoke.spec.js`'s create→join→advance test was written
+  off as flake three times by two sessions — including on unmodified `main`.)
+  `context.newPage()` shares storage with the first page, so a "participant" tab
+  reuses the facilitator's persisted **anonymous session** *and* its
+  `localStorage`. That single artefact produced two unrelated-looking
+  intermittent failures:
+  **(a)** the participant carried the CREATOR's uid, so the admin-only
+  `rooms/$roomId/stage` was writable from participant code — a vestigial
+  `refStage.set(0)` in `startRoom()` (legal before Phase 4a / PR #223 made the
+  node admin-only, never removed after) then RACED the facilitator's Advance and
+  rolled the room back a stage. Tell-tale end state: `stageAt` and the `stage`
+  event both record `from:0 → to:1` while `stage` itself sits at **0**, with no
+  writer left to correct it. Measured margin between the two writes: **180 ms**.
+  **(b)** the lobby's `canamed_name` prefill restored the FACILITATOR's name over
+  the student's *after* the test typed it, so the join never reached `#waiting`.
+  Use `browser.newContext()` for any second participant — the FINDING-01 test
+  already did, deliberately — and **assert the two uids differ**, or the test
+  quietly covers half of what it claims.
+  Fixed: the participant no longer writes `stage` at all (guard:
+  `tests/room-stage-single-writer.test.js`, which pins the single-writer
+  invariant in the client *and* the rules).
+- **Assert the DB value, then the DOM — never the DOM alone** in the emulator
+  suite. `dbReadAsOwner()` (`tests-e2e/emulator/fixtures.js`) reads a node with
+  the emulator's owner bypass, so a failure distinguishes "the write was
+  rejected" from "it landed and was overwritten" from "it arrived and never
+  rendered". All three used to surface as the same `expected Stage 2, got
+  "Stage 1 of 3"`, which is precisely why the bug above read as flake. The
+  bypass is for OBSERVATION only — the writes under test still go through the
+  real rules; never settle an allow/deny verdict with it.
+- **A conditional around an assertion is a green test that tests nothing.** The
+  same test guarded its only advance assertion with `if (await adv().count())`,
+  so a run where the dashboard had not yet rendered its room rows passed without
+  exercising the advance at all.
 - E2E runs in LOCAL mode, so it does **not** exercise the Firebase rules. The
   emulator-backed sim is the real validation for `database.rules.json`
   changes — run it locally before merging rules changes.
