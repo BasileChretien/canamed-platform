@@ -336,3 +336,23 @@ test("on Windows the nested command goes via a temp script, not nested quotes", 
   assert.ok(RUNNER2.slice(sweepAt, sweepAt + 120).includes("dropTempScript()"),
     "the temp script must be removed on the same path that sweeps");
 });
+
+test("the temp script switches to UTF-8, so a non-ASCII argument survives cmd", () => {
+  /* The .cmd is written UTF-8 but cmd.exe reads batch files in the OEM
+     codepage, so `--grep "create → join"` arrived as "create Ôåæ join" and
+     matched nothing. That surfaces as "No tests found" — indistinguishable
+     from "there is no such test" — which is the worst kind of failure: it
+     looks like an answer. cmd re-reads the file line by line, so the codepage
+     switch must come BEFORE the command line it governs. */
+  const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
+  /* Plain substring, not a regex. The escape sequence is LITERAL text in the
+     source — "chcp 65001 >nul" then backslash-r backslash-n — so a regex
+     written \r\n would look for a real CRLF and never match. (It didn't: this
+     assertion failed on its first run for exactly that reason.) */
+  assert.ok(RUNNER2.includes('"chcp 65001 >nul' + String.raw`\r\n` + '"'),
+    "the temp script must switch cmd to UTF-8");
+  const chcpAt = RUNNER2.indexOf('"chcp 65001 >nul');
+  const cmdAt = RUNNER2.indexOf('playwright.replace(/%/g, "%%")');
+  assert.ok(chcpAt > 0 && chcpAt < cmdAt,
+    "the codepage switch must precede the command it governs");
+});
