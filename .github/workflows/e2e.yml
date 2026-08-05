@@ -35,16 +35,34 @@ jobs:
   e2e:
     name: Playwright (${{ matrix.project }})
     runs-on: ubuntu-latest
-    # 35, not 20. The firefox project takes ~19.7 min for its 437 tests, so a
-    # 20-min cap sat INSIDE the run's normal variance: the suite printed
-    # "437 passed" and was then cancelled 13 s later for exceeding the cap,
-    # which surfaces as a CANCELLED required check and a BLOCKED merge on a PR
-    # whose tests all passed (seen on #275). A cancellation is indistinguishable
-    # from a real failure in the checks UI, so this wasted a merge cycle rather
-    # than catching anything. The cap exists to stop a HUNG job burning runner
-    # minutes, not to police a healthy suite's growth — 35 restores that margin
-    # for every project in the matrix while still bounding a hang.
-    timeout-minutes: 35
+    # 55, not 35, and not 20. This cap has now been set twice from the WRONG
+    # measurement, so read the whole reasoning before touching it again.
+    #
+    # timeout-minutes is measured from JOB START — it covers checkout, npm ci
+    # and the Playwright browser install as well as the suite. Both previous
+    # values were justified purely by TEST duration, which is why both failed
+    # the same way:
+    #
+    #   - 20 was set against firefox's ~19.7 min for 437 tests. The suite
+    #     printed "437 passed" and was cancelled 13 s later (#275).
+    #   - 35 was set the same way, and broke identically on 2026-08-05:
+    #       03:22:53  Install Playwright browser (webkit)   -+ 15 min 58 s
+    #       03:38:51  Run E2E suite (webkit)                -+
+    #       03:57:55  460 passed (19.1m)         <- every test green
+    #       03:57:56  job cancelled              <- 35 min 12 s from JOB start
+    #     Setup, not the suite, ate the margin: `playwright install --with-deps`
+    #     apt-installs webkit's system libraries on a cache miss and took
+    #     ~16 min. 16 + 19 > 35, with nothing wrong anywhere.
+    #
+    # A cancellation is indistinguishable from a real failure in the checks UI,
+    # so each of these cost a merge cycle and diagnosis time while catching
+    # nothing. The cap exists to bound a HUNG job, not to police a healthy
+    # suite: 55 leaves room for a cache-miss install (~16 min) plus the slowest
+    # project (~20 min) plus CI retries, and still kills a genuine hang.
+    #
+    # If this bites again the fix is to make the browser cache hit reliably --
+    # NOT another bump justified by test duration alone.
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
