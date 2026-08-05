@@ -12,7 +12,9 @@
     "i18n:coverage": "node scripts/i18n-coverage-report.js",
     "emulator": "npx firebase emulators:start --only=database,auth --config docs/Third_session/PBL_platform/firebase.json --project canamed-sim",
     "sim:emulator": "node scripts/sim/sim-with-emulator.js",
-    "test:e2e:rules": "node scripts/sim/build-emulator-rules.js && npx firebase emulators:exec --only database,auth --config docs/Third_session/PBL_platform/firebase.emulator.json --project canamed-sim \"npx playwright test --config=playwright.emulator.config.js\""
+    "test:e2e:rules": "node scripts/ops/run-rules-e2e.js",
+    "emulator:ports": "node scripts/ops/emulator-ports.js check",
+    "emulator:free": "node scripts/ops/emulator-ports.js free"
   },
   "engines": {
     "node": ">=22.13.0"
