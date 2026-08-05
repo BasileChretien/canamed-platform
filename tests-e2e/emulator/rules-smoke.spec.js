@@ -1443,3 +1443,197 @@ test("rules: roomOf is ONE room per participant — the pool-rewrite escalation 
   expect(await tryWrite(page, `${base}/rooms/Room 1/answers/moduleA/e1`, good),
     "…while the participant's OWN room still works").toBe("ALLOWED");
 });
+
+/* ── roomOf/$uid — the three-way disjunction, all branches ─────────────────
+ * `roomOf/$uid` is the predicate for ~20 per-room `.write` rules AND the
+ * `roomChat` read gate: it IS the per-room security boundary. Its `.write` is
+ *
+ *   auth != null && !<session>/closed
+ *   && (   (auth.uid == $uid && !data.exists())          // A self-claim, ONCE
+ *       ||  <session>/creatorUid == auth.uid             // B session creator
+ *       || (adminSecrets/<…>/hash exists &&              // C admin proof-write
+ *           adminSecrets/<…>/proof/<auth.uid> == adminSecrets/<…>/hash) )
+ *
+ * Until now every emulator test wrote its OWN uid, so only branch A was ever
+ * exercised, and only in its allowed direction. That leaves the whole rule's
+ * reason for existing untested: if the disjunction were refactored so that any
+ * authenticated user could write ANOTHER uid's slot, the per-room boundary
+ * would collapse for the entire platform — chat privacy included — and the
+ * suite would still report every test green. These two tests pin:
+ *
+ *   A (denied)  a peer writing someone else's slot, both CREATE and OVERWRITE
+ *   A (denied)  the owner REWRITING its own slot (the `!data.exists()` clause)
+ *   B (allowed) the session creator reassigning a participant
+ *   C (allowed) an admin who holds a fresh password proof doing the same
+ *
+ * ISOLATION — read this before editing. `roomOf/$uid` also carries a `.validate`
+ * (`hasChildren(['room','cid'])`, room ≤ 30, and a `cid` whose owner must be the
+ * writer or the creator/admin). A denial caused by `.validate` would look exactly
+ * like a `.write` denial and would make the test a FALSE PASS. So every denial
+ * below re-uses a payload that is PROVEN valid at that same path, either because
+ * the same writer already wrote it to a sibling `$uid` (validate never looks at
+ * $uid), or because a privileged caller lands it immediately afterwards.
+ */
+test("rules: roomOf/$uid is peer-proof — self-claim is write-ONCE; only the creator or an admin proof may reassign", async ({ page, browser }) => {
+  const code = "rofw-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const base = `sessions/${code}`;
+  const REAL_HASH = "d".repeat(64);
+
+  // ---- A: the facilitator who creates the session (branch B identity) ----
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  expect(await tryWrite(page, `${base}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+  expect(await tryWrite(page, `adminSecrets/${code}/hash`, REAL_HASH)).toBe("ALLOWED");
+
+  // ---- B: a participant. A FRESH context, so it is a DISTINCT anonymous uid
+  // (context.newPage() would reuse A's persisted anonymous session). ----
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+
+  const cidB = "cidB" + Math.floor(Math.random() * 1e9);
+  const entry = (room) => ({ name: "Bee", university: "Caen", year: 4, english: "B2", at: Date.now(), room });
+  expect(await tryWrite(tabB, `${base}/members/${uidB}`, { at: Date.now() })).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `${base}/clientMapping/${cidB}`, uidB)).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `${base}/pool/${cidB}`, entry("Room 1"))).toBe("ALLOWED");
+
+  // BRANCH A, allowed direction — B claims its own slot. This write is also the
+  // validity certificate for `claim`: the SAME writer landing the SAME payload
+  // means every later denial of `claim` is a .write denial, never a .validate one.
+  const claim = { room: "Room 1", cid: cidB };
+  expect(await tryWrite(tabB, `${base}/roomOf/${uidB}`, claim),
+    "a participant must still be able to claim its assigned room").toBe("ALLOWED");
+
+  // ---- BRANCH A is write-ONCE: even an IDENTICAL re-write is denied --------
+  // Nothing pinned `!data.exists()` on its own before. The existing
+  // "ONE room per participant" test only rewrites a DIFFERENT room, so a rule
+  // that allowed idempotent re-writes would pass it and fail here. An
+  // owner-rewritable slot re-opens the escalation: rewrite pool, rewrite roomOf.
+  const selfRewrite = await tryWrite(tabB, `${base}/roomOf/${uidB}`, claim);
+  expect(selfRewrite, "the self-claim must be write-ONCE, even for the same value")
+    .not.toBe("ALLOWED");
+  expect(String(selfRewrite)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+
+  // ---- THE SECURITY NEGATIVE, case 1: peer CREATE (target slot absent) -----
+  // `roomOf/${uidA}` does not exist yet. B sends the byte-identical payload it
+  // just wrote successfully one path over — `.validate` cannot see `$uid`, so
+  // the ONLY thing that changed is the `auth.uid == $uid` conjunct.
+  const peerCreate = await tryWrite(tabB, `${base}/roomOf/${uidA}`, claim);
+  expect(peerCreate, "an authenticated peer must NOT be able to create another uid's roomOf")
+    .not.toBe("ALLOWED");
+  expect(String(peerCreate)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+
+  // …and the privileged caller lands that very payload, so the denial above
+  // cannot be blamed on the payload.
+  expect(await tryWrite(page, `${base}/roomOf/${uidA}`, claim),
+    "the creator must be able to write the same payload B was denied").toBe("ALLOWED");
+
+  // ---- THE SECURITY NEGATIVE, case 2: peer OVERWRITE (target slot present) --
+  const moved = { room: "Room 2", cid: cidB };
+  const peerOverwrite = await tryWrite(tabB, `${base}/roomOf/${uidA}`, moved);
+  expect(peerOverwrite, "an authenticated peer must NOT be able to overwrite another uid's roomOf")
+    .not.toBe("ALLOWED");
+  expect(String(peerOverwrite)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+  expect(await tryWrite(page, `${base}/roomOf/${uidA}`, moved),
+    "…while the same overwrite from the creator is fine").toBe("ALLOWED");
+
+  // ---- BRANCH B: the session creator reassigns a participant ---------------
+  expect(await tryWrite(page, `${base}/roomOf/${uidB}`, moved),
+    "the creator must be able to move a participant to another room").toBe("ALLOWED");
+  const afterCreator = await tryRead(page, `${base}/roomOf/${uidB}`);
+  expect(afterCreator.ok, "the creator may read the slot it just wrote").toBeTruthy();
+  expect(afterCreator.val && afterCreator.val.room,
+    "the reassignment must actually LAND, not merely be permitted").toBe("Room 2");
+
+  // ---- BRANCH C: an admin who holds a fresh password proof ------------------
+  // C is a co-facilitator on another browser: a third anonymous uid, neither
+  // the creator nor the slot owner. It registers a clientId it OWNS so the
+  // `cid` .validate passes on its own merits — leaving the proof-write as the
+  // single variable between the denial and the success below.
+  const ctxC = await browser.newContext();
+  const tabC = await ctxC.newPage();
+  await useEmulator(tabC);
+  await tabC.goto("/");
+  const uidC = await waitForUid(tabC);
+  expect(uidC).not.toBe(uidA);
+  expect(uidC).not.toBe(uidB);
+
+  const cidC = "cidC" + Math.floor(Math.random() * 1e9);
+  expect(await tryWrite(tabC, `${base}/clientMapping/${cidC}`, uidC)).toBe("ALLOWED");
+  const adminMove = { room: "Room 3", cid: cidC };
+
+  const beforeProof = await tryWrite(tabC, `${base}/roomOf/${uidB}`, adminMove);
+  expect(beforeProof, "without a proof, a third party must not reassign anyone")
+    .not.toBe("ALLOWED");
+  expect(String(beforeProof)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+
+  // The FINDING-07 proof-write: the candidate hash is compared server-side
+  // against the unreadable adminSecrets/<code>/hash.
+  expect(await tryWrite(tabC, `adminSecrets/${code}/proof/${uidC}`, REAL_HASH)).toBe("ALLOWED");
+
+  // Identical payload, identical writer, identical path — only the proof is new.
+  expect(await tryWrite(tabC, `${base}/roomOf/${uidB}`, adminMove),
+    "an admin holding a fresh password proof must be able to reassign").toBe("ALLOWED");
+  const afterAdmin = await tryRead(tabC, `${base}/roomOf/${uidB}`);
+  expect(afterAdmin.ok, "the proof-holder may read the slot").toBeTruthy();
+  expect(afterAdmin.val && afterAdmin.val.room,
+    "the admin reassignment must actually LAND").toBe("Room 3");
+
+  await ctxB.close();
+  await ctxC.close();
+});
+
+/* The org tree carries its own copy of the same rule (different root paths for
+   `closed`, `creatorUid` and `adminSecrets`), so a refactor can break one tree
+   and leave the other intact. Branches A-denied and B-allowed are mirrored here;
+   branch C is covered on the default tree above and by the org adminSecrets
+   test ("D1"), so it is not repeated. */
+test("rules: roomOf peer-write denial + creator reassignment hold in the org tree too", async ({ page, browser }) => {
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const sid = "s" + Math.floor(Math.random() * 1e6);
+  const base = `orgs/${slug}/sessions/${sid}`;
+
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  expect(await tryWrite(page, `${base}/creatorUid`, uidA)).toBe("ALLOWED");
+
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+
+  // A real org-room join (clientMapping + pool + roomOf), via the shared helper.
+  const cidB = await claimRoom(tabB, base, "Room 1", uidB);
+  const claim = { room: "Room 1", cid: cidB };
+
+  // Write-ONCE: the owner cannot re-write its own slot.
+  expect(await tryWrite(tabB, `${base}/roomOf/${uidB}`, claim),
+    "the org self-claim must be write-ONCE too").not.toBe("ALLOWED");
+
+  // Peer CREATE and peer OVERWRITE of another uid's slot, each with the same
+  // payload proven valid by the privileged caller landing it right after.
+  const peerCreate = await tryWrite(tabB, `${base}/roomOf/${uidA}`, claim);
+  expect(peerCreate, "org: a peer must not create another uid's roomOf").not.toBe("ALLOWED");
+  expect(String(peerCreate)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+  expect(await tryWrite(page, `${base}/roomOf/${uidA}`, claim),
+    "org: the creator lands the payload B was denied").toBe("ALLOWED");
+
+  const moved = { room: "Room 2", cid: cidB };
+  const peerOverwrite = await tryWrite(tabB, `${base}/roomOf/${uidA}`, moved);
+  expect(peerOverwrite, "org: a peer must not overwrite another uid's roomOf").not.toBe("ALLOWED");
+  expect(String(peerOverwrite)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+
+  // Branch B: the org session's creator reassigns the participant, and it lands.
+  expect(await tryWrite(page, `${base}/roomOf/${uidB}`, moved)).toBe("ALLOWED");
+  const after = await tryRead(page, `${base}/roomOf/${uidB}`);
+  expect(after.ok).toBeTruthy();
+  expect(after.val && after.val.room).toBe("Room 2");
+
+  await ctxB.close();
+});
