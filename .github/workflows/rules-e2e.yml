@@ -46,6 +46,13 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 20
+          # Keyed on the ROOT lock only — the repo also has
+          # docs/Third_session/PBL_platform/functions/package-lock.json
+          # (functions-ci.yml), which must not evict this cache. The cached
+          # ~/.npm also serves the firebase-tools install below, which is by
+          # far the heaviest download in this job.
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       # The RTDB emulator is a Java process. firebase-tools requires a JDK
       # at version 21+ (it dropped support for older runtimes), so pin 21.
@@ -55,9 +62,21 @@ jobs:
           java-version: "21"
 
       - name: Install npm dependencies
-        run: npm install --no-audit --no-fund
+        # npm ci, not npm install — installs the locked tree exactly.
+        # ⚠ ORDER IS LOAD-BEARING: `npm ci` DELETES node_modules before it
+        # installs, which `npm install` did not. The firebase-tools step must
+        # stay BELOW this one; hoist it above and it is silently wiped, and
+        # the failure surfaces much later as a missing `firebase` binary.
+        run: npm ci --no-audit --no-fund
 
       - name: Install firebase-tools
+        # Kept out of package.json deliberately: --no-save keeps this CLI out
+        # of the committed lock so it cannot perturb the app's dependency tree.
+        # NB it therefore floats on the registry `latest` tag and is NOT
+        # pinned — an unlocked CLI release can change what this job validates
+        # against. Accepted for now (it only drives the emulator, never ships);
+        # pinning it is tracked separately from this PR's scope.
+        # Must run AFTER `npm ci` above — see the ordering warning.
         run: npm install --no-save firebase-tools
 
       - name: Cache Playwright browsers

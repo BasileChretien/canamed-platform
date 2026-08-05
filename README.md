@@ -127,9 +127,10 @@ The whole app is in `docs/Third_session/PBL_platform/` — `index.html`,
 app itself, no build step. Run the tests with:
 
 ```
-npm install
-npm test                # unit + rules
-npm run e2e             # Playwright (set up browsers first: npx playwright install)
+npm ci                  # exact locked tree, same as CI
+npm test                # unit tests only (node --test tests/*.test.js)
+npm run test:e2e        # Playwright (set up browsers first: npx playwright install)
+npm run test:e2e:rules  # database.rules.json against the emulator (needs Java)
 ```
 
 Local dev server: `node scripts/serve-platform.js` then open

@@ -30,11 +30,20 @@ If anything below is unclear, please open a discussion or an issue.
 ```bash
 git clone https://github.com/<your-fork>/CANAMED.git
 cd CANAMED
-npm install
+npm ci
 npx playwright install --with-deps
 ```
 
-`npm install` pulls only dev-dependencies (Playwright, axe-core, c8 coverage).
+`npm ci`, not `npm install` — that is what every workflow runs. `npm ci`
+deletes `node_modules` and rebuilds it from `package-lock.json` exactly, and
+aborts if the lock has drifted from `package.json`. `npm install` reconciles
+against the lock too, but it is permissive: it will leave an existing
+`node_modules` in place, so a checkout that predates a Dependabot bump keeps
+serving the OLD Playwright until someone reinstalls. That tree then fails at
+`browserType.launch` with a browser-revision mismatch which reads as a bug in
+your branch. **Re-run `npm ci` after any pull that touches the lockfile.**
+
+`npm ci` pulls only dev-dependencies (Playwright, axe-core, c8 coverage).
 The platform itself has **no runtime npm dependencies** — it is vanilla
 HTML/CSS/JS served as static files. The npm setup is purely for testing.
 
