@@ -184,7 +184,11 @@ async function writeModuleAAnswer(stu, hypothesis, text) {
   await expect(stu.locator("#hypothesis-list")).toContainText(hypothesis, { timeout: 10_000 });
   await expect(stu.locator("#hypothesis-list")).toBeVisible();
   await expect(stu.locator("#rcol-tab-answers")).toBeVisible({ timeout: 15_000 });
-  await stu.locator("#rcol-tab-answers").click();
+  /* dispatchEvent, not a geometric click: the right-column tab chips
+
+     hit-test unreliably on iPad, and this spec runs on mobile-ipad. */
+
+  await stu.locator("#rcol-tab-answers").dispatchEvent("click");
   await submitInto(stu, "#answer-input-moduleA-diagnosis", text);
   /* What the student SEES — the entry is in the visible list, not merely in
      some object a test could read. */
@@ -254,7 +258,21 @@ test.describe("answers bucket routing — a section's work lands in its own slot
        address that resolves to nothing empties both at once. */
     expect(md, "the take-home must carry section 1's answer").toContain(A_TEXT);
     expect(md, "the take-home must carry section 2's answer").toContain(B_TEXT);
-    const mine = md.slice(md.indexOf("## My responses"), md.indexOf("## Group answers"));
+    /* Bound the slice on ASSERTED indices. A missing heading makes indexOf
+
+       return -1, and the toContain failures below would then blame the answer
+
+       text for what is actually a missing section. */
+
+    const mineStart = md.indexOf("## My responses");
+
+    const groupStart = md.indexOf("## Group answers");
+
+    expect(mineStart, "the take-home must have a 'My responses' section").toBeGreaterThan(-1);
+
+    expect(groupStart, "...followed by 'Group answers'").toBeGreaterThan(mineStart);
+
+    const mine = md.slice(mineStart, groupStart);
     expect(mine, "the student's OWN responses must list what they wrote").toContain(A_TEXT);
     expect(mine, "…including the roleplay section's").toContain(B_TEXT);
     expect(mine, "and their working hypothesis").toContain("mechanical low back pain");
