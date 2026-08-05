@@ -34,6 +34,12 @@ npm install
 npx playwright install --with-deps
 ```
 
+Use `npm ci` instead of `npm install` to reproduce CI exactly — that is what
+every workflow runs. `npm install` is free to resolve a *newer* version than
+`package-lock.json` pins, and a checkout left on a stale Playwright then fails
+at `browserType.launch` with a browser-revision mismatch that looks like a bug
+in your branch.
+
 `npm install` pulls only dev-dependencies (Playwright, axe-core, c8 coverage).
 The platform itself has **no runtime npm dependencies** — it is vanilla
 HTML/CSS/JS served as static files. The npm setup is purely for testing.
