@@ -70,8 +70,13 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Install firebase-tools
-        # Deliberately not in package.json: pinned-latest CLI, and --no-save
-        # keeps it out of the committed lock. Must run AFTER `npm ci` above.
+        # Kept out of package.json deliberately: --no-save keeps this CLI out
+        # of the committed lock so it cannot perturb the app's dependency tree.
+        # NB it therefore floats on the registry `latest` tag and is NOT
+        # pinned — an unlocked CLI release can change what this job validates
+        # against. Accepted for now (it only drives the emulator, never ships);
+        # pinning it is tracked separately from this PR's scope.
+        # Must run AFTER `npm ci` above — see the ordering warning.
         run: npm install --no-save firebase-tools
 
       - name: Cache Playwright browsers
