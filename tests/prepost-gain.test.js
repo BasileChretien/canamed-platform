@@ -14,7 +14,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* The FACILITATOR DASHBOARD block moved OUT of script.js into the lazy
+   script-admin.js (perf reclaim 2026-08-05 — slice 2 of
+   ARCHITECTURE/eager-bundle-reclaim-plan.md). Read BOTH, for the same reason
+   ~11 test files concatenate style.css + room.css after the room.css split:
+   reading script.js alone would silently stop seeing the dashboard code. */
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
+  fs.readFileSync(path.join(P, "script-admin.js"), "utf8");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 
 test("_knowledgeGain pairs pre/post by cid and uses Hake's normalized gain", () => {

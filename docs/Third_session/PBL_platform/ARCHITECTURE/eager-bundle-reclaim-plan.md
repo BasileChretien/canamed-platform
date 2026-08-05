@@ -1,11 +1,55 @@
 # Eager-bundle reclaim — the plan for splitting the room/admin engine out of `script.js`
 
-**Status: SLICE 1 DONE (2026-08-04). Slices 2 and 3 not started.** Written
-2026-07-31, immediately after the S7 cutover shipped (#263); slice 1 executed
-2026-08-04. The splash budget **passes at 346.3 / 347 KB gz** locally (344.8 on
-CI, which normalises CRLF to LF). This document exists so the reclaim the perf
+**Status: SLICES 1 AND 2 DONE (2026-08-04, 2026-08-05). Slice 3 not started.**
+Written 2026-07-31, immediately after the S7 cutover shipped (#263); slice 1
+executed 2026-08-04, slice 2 on 2026-08-05. The splash budget **passes at
+312.96 / 313 KB gz** locally. This document exists so the reclaim the perf
 budget header has recorded as owed since **2026-06-28** can be executed
 deliberately rather than improvised under pressure the next time the cap bites.
+
+> **Slice 2 result (2026-08-05) — `script-admin.js`.** The facilitator
+> DASHBOARD engine — 61 functions and 20 top-level bindings, 2645 lines —
+> moved out of the eager `script.js` into a lazy chunk loaded by
+> `CanamedLoader.ensureAdminApp()` from `_enterAdminAppLazy()`, the single shim
+> both admin routes (`joinAdmin`, `joinSuperAdmin`) now pass through.
+> `script.js` **219.5 → 185.0 KB gz**; splash first-party **346.97 → 312.96**,
+> cap **347 → 313**. That is **34.0 KB in one move**, ~13 KB more than §4's
+> indicative ~21 KB.
+>
+> **§4's call-site price was 29; the real number was 6.** Not because the table
+> was wrong, but because it prices a slice *before* you know its closure. Moving
+> the whole transitive cluster turns almost every predicted guard into an
+> INTERNAL edge: of the ~29, all but six ended up chunk→chunk. The six that
+> remained are `enterAdminApp` + `startAdmin` in each of the two routes (folded
+> into one shim), `setRoomStage` ×2 in `initStageNav`, and `backToDashboard` in
+> `initLeave`. **Read the call-site column as an upper bound, not a forecast.**
+>
+> **The plan's own entry-point list contained two non-members**, and reading
+> call sites (as §4 insists, not line ranges) is what caught them:
+> `renderLeaderboard` is called by `startRoom` / `renderScore` /
+> `renderButtons` / `buildDecision` — a ROOM renderer the dashboard also uses —
+> and `closeMySession` hangs off `renderMySessions`, i.e. the splash's "My
+> sessions" list, a different surface behind a different click. Both were left
+> eager. So were `getTheme`/`setTheme`, `logEvent`, `roomSlotBuckets`,
+> `_debriefT`, `_debriefBucket`, `renderStudentDebrief`, `renderClosedState`,
+> `downloadMyData`, `showLateBanner` and `stageNow`, all genuinely shared.
+>
+> **What the move actually cost was the TEST surface, exactly as §6 predicted.**
+> 14 unit files that read `script.js` as text had to be repointed at the
+> concatenation of both files, and four e2e specs reached moved globals straight
+> from the splash and had to load the chunk explicitly (the convention
+> `sim-recommendations.spec.js` already uses for `ensureRoomStyles`). One of
+> those four — `mixed-session-e2e.spec.js` — would have **silently skipped**
+> (`if (archive === null) test.skip(...)`), so it was changed to assert instead.
+> `tests/edge-cases.test.js`'s R2-01 assertions had to be INVERTED: they pinned
+> "the loader must not reference script-admin.js", which was correct while it
+> was an empty placeholder and is the opposite of correct now.
+>
+> **One trap worth recording for slice 3:** a `page.route()` abort cannot
+> simulate a missing chunk while the service worker is registered — sw.js is
+> cache-first and a SW-issued fetch is not intercepted, so the "chunk fails"
+> test passed vacuously until it was given `test.use({ serviceWorkers:
+> "block" })`.
 
 > **Slice 1 result (2026-08-04) — `takehome.js`.** The wrap-up take-home block
 > (`buildRoomTakeawayMarkdown` + `downloadMyRoomAnswers`, `_mdEsc`,
@@ -163,12 +207,22 @@ radius. **Do this one first even though it is the smallest.**
 ensureTakeHome docs/Third_session/PBL_platform/script-loader.js` > 0; `node
 --test tests/takehome-lazy-split.test.js`.
 
-**Slice 2 — Admin dashboard.**
+**Slice 2 — Admin dashboard. ✅ DONE 2026-08-05 as `script-admin.js`** (see the
+status note at the top for what it actually cost and what was left behind).
 Largest single win and the closest analogue to the picker split: a whole surface
 behind `#splash-go-admin`, with `admin.css` and `admin-tools.js` already lazy
-siblings. 29 guards. Risk is the test surface, not the code — dozens of specs
-drive the dashboard, so budget a full per-viewport sweep plus the emulator run
-(the dashboard writes admin-gated nodes, and LOCAL e2e does not exercise rules).
+siblings. ~~29 guards~~ — **6 in the event**, see the status note. The prediction
+"risk is the test surface, not the code" was exactly right: no production code
+needed rewriting, while 14 unit files and 4 e2e specs did.
+`Verify:` `ls docs/Third_session/PBL_platform/script-admin.js`; `grep -c
+ensureAdminApp docs/Third_session/PBL_platform/script-loader.js` > 0; `node
+--test tests/admin-lazy-split.test.js`; `npx playwright test
+tests-e2e/admin-lazy.spec.js`.
+**Not done: the emulator run.** This slice moves no rule-touching logic — the
+dashboard writes the same admin-gated nodes from the same functions, only from a
+different file — and the emulator ports were in use by another agent at the
+time. Run `npm run test:e2e:rules` before relying on this slice in a rules-
+adjacent change.
 
 **Slice 3 — Room engine.**
 28 guards but the highest coupling: stage rendering, decisions, scoring and the
@@ -176,7 +230,17 @@ branched engine interlock, and `applySectionContent()` / `refreshActiveSlotState
 sit on the hot path between them. Do this last, and only if slices 1–2 have not
 already bought enough headroom. **Note the admin/room entanglement:** the admin
 "Open room" control enters the room engine, so slice 3 must not assume slice 2
-made the room unreachable.
+made the room unreachable. **Concretely, after slice 2:** `openRoomAsAdmin` →
+`enterRoom` → `startRoom` → `renderStage`, and `closeSession` →
+`renderClosedState` → `renderStudentDebrief`, are now chunk → eager edges. They
+need no guard today (script.js has fully evaluated before `script-admin.js`
+loads), but when the room engine moves they become chunk → chunk and the LOAD
+ORDER starts to matter — `script-admin.js` can be resident while
+`script-room.js` is not.
+
+**⇒ Slices 1 and 2 have bought 40 KB between them (353 → 313). Per §8, the
+trigger to start slice 3 is a PR that needs headroom and cannot get it any other
+way. That is not today.**
 
 Stop after any slice that gets the budget where it needs to be. There is no
 prize for moving all three.

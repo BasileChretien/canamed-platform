@@ -18,7 +18,13 @@ const path = require("node:path");
 const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const HTML = fs.readFileSync(path.join(P, "index.html"), "utf8");
-const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8");
+/* The FACILITATOR DASHBOARD block moved OUT of script.js into the lazy
+   script-admin.js (perf reclaim 2026-08-05 — slice 2 of
+   ARCHITECTURE/eager-bundle-reclaim-plan.md). Read BOTH, for the same reason
+   ~11 test files concatenate style.css + room.css after the room.css split:
+   reading script.js alone would silently stop seeing the dashboard code. */
+const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
+  fs.readFileSync(path.join(P, "script-admin.js"), "utf8");
 const LOADER = fs.readFileSync(path.join(P, "script-loader.js"), "utf8");
 const PERF = fs.readFileSync(path.join(P, "..", "..", "..", "tests-e2e", "perf.spec.js"), "utf8");
 const SW = fs.readFileSync(path.join(P, "sw.js"), "utf8");

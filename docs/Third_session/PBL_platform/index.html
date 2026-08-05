@@ -2877,7 +2877,9 @@
                snapshot of the live session (rooms → participants, hypotheses, the
                two Module A answers, scores, votes) in the facilitator's choice of
                CSV or JSON. Honours the "Pseudonymise names" toggle below. Wired by
-               downloadSessionArchive() — no lazy chunk, always available. -->
+               downloadSessionArchive(), which since 2026-08-05 lives in the lazy
+               script-admin.js — loaded at facilitator login, i.e. always present
+               by the time this control is on screen (it is inside #admin-app). -->
           <span class="admin-archive" role="group" aria-label="Download session archive">
             <span class="admin-archive-label" data-i18n="admin.archive.label">Download archive:</span>
             <button id="admin-archive-csv-btn" type="button"

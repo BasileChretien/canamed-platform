@@ -14,10 +14,12 @@
  * Lazy-loaded:
  *   - case-content.js             (loaded BEFORE a session is joined or admin enters)
  *   - qrcode.js                   (loaded when an admin enters the dashboard)
+ *   - script-admin.js             (the facilitator dashboard engine, on admin login)
  *   - tour.js                     (loaded after splash is interactive, idle window)
  *   - scenario-author.js          (loaded when scenario-author form opens)
  *
- * Previously planned but dropped (R2-01 — SIMULATION_ROUND2.md):
+ * Previously planned but dropped (R2-01 — SIMULATION_ROUND2.md), and the
+ * half of it that has since been DONE:
  *   - script-room.js / script-admin.js were empty placeholder files paired
  *     with ensureRoomRuntime() / ensureAdminRuntime() helpers. The intended
  *     migration of room-/admin-only code out of script.js never landed
@@ -26,6 +28,12 @@
  *     were removed to cut a redundant HTTP round-trip per join and reduce
  *     maintenance burden. Re-introducing them is fine if/when the actual
  *     extraction PR is ready — see ARCHITECTURE/script-js-map.md.
+ *   - ⇒ script-admin.js IS that extraction, landed 2026-08-05 (slice 2 of
+ *     ARCHITECTURE/eager-bundle-reclaim-plan.md): a real ~26 KB gz chunk, not
+ *     a placeholder, loaded by ensureAdminApp(). The "shared mutable state"
+ *     objection turned out to need no plumbing at all — see the invariant
+ *     below about classic scripts sharing the global script-scope.
+ *     script-room.js remains unwritten (that is slice 3).
  *
  * Globals exposed by this file (under window.CanamedLoader):
  *   loadScript(src)               → Promise<void>, idempotent (de-duped by src)
@@ -33,6 +41,7 @@
  *   ensureQrcode()                → Promise<void>
  *   ensureTour()                  → Promise<void>
  *   ensureScenarioAuthor()        → Promise<void>
+ *   ensureAdminApp()              → Promise<void>  (facilitator dashboard)
  *
  * Cleanliness invariants:
  *   - Each script loads at most once, even under concurrent ensure*() calls
@@ -189,6 +198,18 @@
      Classic script — see its header for why that matters (it reads script.js
      top-level `let`s under their bare names). */
   function ensureTakeHome() { return loadScript(v("takehome.js")); }
+  /* script-admin.js (2026-08-05) — the FACILITATOR DASHBOARD engine, split out
+     of the eager script.js as slice 2 of
+     ARCHITECTURE/eager-bundle-reclaim-plan.md. This is the extraction the
+     R2-01 note above deferred ("Re-introducing them is fine if/when the actual
+     extraction PR is ready"); what made it tractable is that the shared mutable
+     state R2-01 balked at needs NO plumbing — a classic script shares the
+     global script scope, so `pool` / `allRooms` / `roomStage` are visible in
+     the chunk under their bare names, exactly as before the move.
+     Loaded from _enterAdminAppLazy() in script.js, the single shim both admin
+     routes pass through, and IN PARALLEL with the qrcode/case-content fetch
+     rather than chained behind it. A student never fetches it. */
+  function ensureAdminApp() { return loadScript(v("script-admin.js")); }
 
   // Module A LLM-patient pilot scripts (2026-05-28). LAZY-SPLIT out of the
   // eager splash bundle (2026-06-01) to reclaim critical-path JS: the four
@@ -379,6 +400,7 @@
     ensurePdfmake,
     ensureStudentPdf,
     ensureTakeHome,
+    ensureAdminApp,
     modALLMFlagOn,
     ensureModALlm
   };

@@ -19,7 +19,13 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const ROOT = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
-const SCRIPT = fs.readFileSync(path.join(ROOT, "script.js"), "utf8");
+/* The FACILITATOR DASHBOARD block moved OUT of script.js into the lazy
+   script-admin.js (perf reclaim 2026-08-05 — slice 2 of
+   ARCHITECTURE/eager-bundle-reclaim-plan.md). Read BOTH, for the same reason
+   ~11 test files concatenate style.css + room.css after the room.css split:
+   reading script.js alone would silently stop seeing the dashboard code. */
+const SCRIPT = fs.readFileSync(path.join(ROOT, "script.js"), "utf8") + "\n" +
+  fs.readFileSync(path.join(ROOT, "script-admin.js"), "utf8");
 const INDEX = fs.readFileSync(path.join(ROOT, "index.html"), "utf8");
 const LOADER = fs.readFileSync(path.join(ROOT, "script-loader.js"), "utf8");
 
@@ -133,6 +139,18 @@ test("script-loader.js: lazy-loaded chunks also carry ?v= cache-buster", () => {
 // with ensureRoomRuntime() / ensureAdminRuntime() helpers that
 // added a redundant HTTP round-trip per join with zero benefit
 // because the would-be extracted code still lives in script.js.
+//
+// ⚠ HALF OF THIS IS NOW HISTORY (2026-08-05). script-admin.js is a REAL
+// chunk again — ~26 KB gz of facilitator-dashboard engine, loaded by
+// CanamedLoader.ensureAdminApp() (slice 2 of
+// ARCHITECTURE/eager-bundle-reclaim-plan.md). That is not a regression of
+// R2-01: R2-01 removed EMPTY PLACEHOLDERS whose round-trip bought nothing,
+// and its own note said "Re-introducing them is fine if/when the actual
+// extraction PR is ready". This is that PR. The assertions below therefore
+// split in two: the PLACEHOLDER-era helper NAMES stay banned (a stale branch
+// re-introducing ensureAdminRuntime would be a genuine regression), while
+// script-admin.js is now REQUIRED to be loaded. script-room.js is still
+// unwritten (slice 3), so it stays banned outright.
 // =============================================================
 test("loader: ensureRoomRuntime / ensureAdminRuntime are gone (R2-01)", () => {
   // Strip block comments before inspecting — the loader header may
@@ -145,11 +163,16 @@ test("loader: ensureRoomRuntime / ensureAdminRuntime are gone (R2-01)", () => {
     "ensureRoomRuntime() helper must be removed from live loader code — see SIMULATION_ROUND2.md R2-01");
   assert.ok(!code.includes("ensureAdminRuntime"),
     "ensureAdminRuntime() helper must be removed from live loader code — see SIMULATION_ROUND2.md R2-01");
-  // The literal chunk filenames must not appear in loadScript() calls.
+  // script-room.js does not exist yet (reclaim slice 3), so nothing may load it.
   assert.ok(!/loadScript\([^)]*script-room/.test(code),
     "script-room.js must not be referenced by the loader anymore");
-  assert.ok(!/loadScript\([^)]*script-admin/.test(code),
-    "script-admin.js must not be referenced by the loader anymore");
+  // script-admin.js, by contrast, MUST be loaded — through ensureAdminApp().
+  // Without this the whole reclaim is dead code: the chunk would sit on disk
+  // and in the precache while the dashboard silently never loaded it.
+  assert.match(code, /function ensureAdminApp\(\)\s*\{\s*return loadScript\(v\("script-admin\.js"\)\)/,
+    "ensureAdminApp() must load the version-suffixed script-admin.js");
+  assert.match(code, /^\s*ensureAdminApp,\s*$/m,
+    "ensureAdminApp must be on the public CanamedLoader namespace");
 });
 
 test("loader: the four surviving ensure helpers are still exposed", () => {
@@ -182,8 +205,17 @@ test("placeholder chunks are physically removed from the platform folder", () =>
   };
   assert.ok(!fileExists("script-room.js"),
     "script-room.js placeholder must be deleted from disk (R2-01)");
-  assert.ok(!fileExists("script-admin.js"),
-    "script-admin.js placeholder must be deleted from disk (R2-01)");
+  // script-admin.js is no longer a placeholder — it is the real dashboard
+  // chunk (2026-08-05). Assert it is SUBSTANTIAL, so a future edit that
+  // guts it back to a stub is caught here rather than at a facilitator login.
+  assert.ok(fileExists("script-admin.js"),
+    "script-admin.js must exist — it is the facilitator dashboard chunk, not a placeholder");
+  const admin = fs.readFileSync(path.join(ROOT, "script-admin.js"), "utf8");
+  assert.ok(admin.length > 50000,
+    "script-admin.js must carry the real dashboard engine, not a stub (got " +
+    admin.length + " bytes)");
+  assert.match(admin, /^function enterAdminApp\(/m,
+    "script-admin.js must define enterAdminApp at top level");
 });
 
 // =============================================================

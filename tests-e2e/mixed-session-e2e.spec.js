@@ -131,6 +131,12 @@ test.describe("A mixed session, end to end", () => {
 
   test("the export carries a section manifest and per-slot buckets", async ({ page }) => {
     await mixedSession(page);
+    /* _sessionArchiveData moved into the lazy script-admin.js (perf reclaim
+       2026-08-05). WITHOUT this load the evaluate below returns null and the
+       `test.skip` underneath would swallow the whole assertion set silently —
+       a green run proving nothing. Load the chunk, then assert it is really
+       there rather than skipping on absence. */
+    await page.evaluate(() => window.CanamedLoader.ensureAdminApp());
     const archive = await page.evaluate(() => {
       window._test_setSessionNum("MIX-1");
       window._test_setRoomCount(1);
@@ -141,7 +147,8 @@ test.describe("A mixed session, end to end", () => {
       });
       return window._sessionArchiveData ? window._sessionArchiveData(false) : null;
     });
-    if (archive === null) test.skip(true, "archive builder not exposed in this build");
+    expect(archive, "_sessionArchiveData must be defined once script-admin.js is loaded")
+      .not.toBeNull();
     expect(archive.exportVersion).toBe(2);
     expect(archive.sections.map((s) => s.sectionId)).toEqual(PICK);
     /* Each slot's work lands under ITS OWN slot — the whole point of S2/S4. */
