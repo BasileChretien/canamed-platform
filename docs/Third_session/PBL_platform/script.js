@@ -5167,20 +5167,16 @@ function joinAdmin() {
       }
       joined = true;
       role = "admin";
-      // Lazy-load qrcode + case-content together — the dashboard
-      // immediately renders the QR for joining, debrief panel, and
-      // download-archive buttons, all of which live in chunks the splash
-      // bundle does not ship. Resolving in parallel keeps the
-      // dashboard-paint latency low. The dashboard ENGINE itself is now a
-      // chunk too (script-admin.js, the 2026-08-05 reclaim — R2-01's
-      // placeholder is gone, this is the real extraction it deferred), so it
-      // joins the same Promise.all rather than chaining behind case-content:
-      // ~200 KB in front of a ~25 KB chunk is exactly the serialisation the
-      // reclaim plan's §5.5 warns about.
+      // qrcode + case-content + the dashboard engine (script-admin.js), all in
+      // PARALLEL — starting script-admin.js only after this settles would queue
+      // ~26 KB behind ~200 KB (reclaim plan §5.5). loadScript de-dupes, so the
+      // shim's own ensureAdminApp() joins this in-flight fetch; its failure is
+      // swallowed here so the shim, not this generic catch, owns the message.
       const loader = window.CanamedLoader;
       const adminChunks = loader ? Promise.all([
         loader.ensureQrcode(),
-        loader.ensureCaseContent()
+        loader.ensureCaseContent(),
+        (loader.ensureAdminApp ? loader.ensureAdminApp().catch(() => {}) : Promise.resolve())
       ]) : Promise.resolve();
       // R2-09: claim membership before installing read listeners, so the
       // narrowed session-level .read predicate is satisfied by the time

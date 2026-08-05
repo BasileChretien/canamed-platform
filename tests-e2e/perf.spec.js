@@ -518,8 +518,8 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     headroom, not an allowance.
 //
 //   2026-08-05: RECLAIM — the FACILITATOR DASHBOARD lazy-split. CAP LOWERED
-//     347 -> 313; measured 346.97 -> 312.96 KB gz locally (script.js alone
-//     219.5 -> 185.0). That is 34.0 KB reclaimed in one move — the largest
+//     347 -> 313; measured 346.98 -> 312.88 KB gz locally (script.js alone
+//     218.5 -> 185.0). That is 34.0 KB reclaimed in one move — the largest
 //     single reclaim this budget has ever taken, and ~13 KB more than the
 //     plan's indicative ~21 KB, because the move followed the CALL GRAPH out
 //     to its closure rather than a line range: 61 functions and 20 top-level
