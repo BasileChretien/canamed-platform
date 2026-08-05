@@ -265,21 +265,46 @@ if (typeof window === "undefined") { var window = globalThis; }
       return result;
     }
 
-    function _getPatientReply(userText) {
+    /* The mutable context this ONE request must be answered against.
+     *
+     * `W.CASE` and `cfg` are per-active-slot globals: `applySectionContent()`
+     * republishes W.CASE when the session moves to another section, and
+     * `bridge.setLang()` fires from modA-llm-init's canamed:langchange handler
+     * whenever the participant switches language. A patient reply can land
+     * seconds after either, so reading them when the promise RESOLVES answers
+     * the student's question out of whatever content is on screen by then —
+     * a fallback stub sourced from a different case, or sanitised for a
+     * different language than it was asked in. Nothing errors; the answer is
+     * simply attributed to the wrong section. That is the same defect family
+     * as #275 (authored content silently replaced by a default).
+     *
+     * So the request captures its context ONCE, here, and every continuation
+     * below uses the capture rather than re-reading the global. */
+    function _captureRequestContext() {
+      return {
+        caseObj: W.CASE,
+        lang: cfg.lang,
+        maxReplyLen: cfg.maxReplyLen,
+        charName: _characterName(cfg.lang)
+      };
+    }
+
+    function _getPatientReply(userText, req) {
+      req = req || _captureRequestContext();
       // Build messages even when stubbing — keeps the contract identical
       // across stub and real endpoint, so the stub catches prompt bugs too.
       var msgs = (W.modALLMPrompts && W.modALLMPrompts.buildChatMessages)
-        ? W.modALLMPrompts.buildChatMessages(cfg.lang, transcript, userText)
+        ? W.modALLMPrompts.buildChatMessages(req.lang, transcript, userText)
         : [{ role: "user", content: userText }];
       // Sent so the server strips "<Name>:" prefixes it cannot otherwise know.
-      var charName = _characterName(cfg.lang);
+      var charName = req.charName;
 
       if (callable) {
         // Firebase HTTPS callable path. The SDK injects the App Check token,
         // and the Function enforces it server-side. Replies arrive as
         // { data: { reply, state, error? } }; we accept both that shape and
         // a bare { reply } for portability.
-        return Promise.resolve(callable({ messages: msgs, lang: cfg.lang, characterName: charName }))
+        return Promise.resolve(callable({ messages: msgs, lang: req.lang, characterName: charName }))
           .then(function (result) {
             var payload = (result && result.data) ? result.data : result;
             if (!payload || typeof payload.reply !== "string") {
@@ -292,29 +317,29 @@ if (typeof window === "undefined") { var window = globalThis; }
             }
             return payload.reply;
           })
-          .then(function (raw) { return _sanitiseReply(raw, cfg.maxReplyLen, charName); })
+          .then(function (raw) { return _sanitiseReply(raw, req.maxReplyLen, charName); })
           .then(function (clean) {
             if (!clean) {
               if (typeof hooks.logError === "function") hooks.logError(new Error("empty reply"));
-              return _stubReply(userText, W.CASE, cfg.lang);
+              return _stubReply(userText, req.caseObj, req.lang);
             }
             return clean;
           });
       }
 
       if (!cfg.endpointUrl) {
-        return Promise.resolve(_stubReply(userText, W.CASE, cfg.lang));
+        return Promise.resolve(_stubReply(userText, req.caseObj, req.lang));
       }
       return _callEndpoint(cfg.endpointUrl, cfg.endpointHeaders,
-                           { messages: msgs, lang: cfg.lang, characterName: charName },
+                           { messages: msgs, lang: req.lang, characterName: charName },
                            cfg.timeoutMs)
-        .then(function (raw) { return _sanitiseReply(raw, cfg.maxReplyLen, charName); })
+        .then(function (raw) { return _sanitiseReply(raw, req.maxReplyLen, charName); })
         .then(function (clean) {
           // Empty/JSON-shaped reply → fall back to stub so the lesson can
           // continue. Host logs the error.
           if (!clean) {
             if (typeof hooks.logError === "function") hooks.logError(new Error("empty reply"));
-            return _stubReply(userText, W.CASE, cfg.lang);
+            return _stubReply(userText, req.caseObj, req.lang);
           }
           return clean;
         });
@@ -335,6 +360,14 @@ if (typeof window === "undefined") { var window = globalThis; }
       if (!clean) return Promise.resolve(null);
       if (clean.length > cfg.maxInputLen) clean = clean.slice(0, cfg.maxInputLen);
 
+      /* Capture the content context for THIS turn before anything awaits.
+         _runScoring already runs synchronously here — it reads window.SCORING
+         at submit time, so scoring was never exposed to the race — but the
+         patient reply resolves later, and its fallback paths must answer out
+         of the case and language the student actually asked in. See
+         _captureRequestContext. */
+      var req = _captureRequestContext();
+
       var score = _runScoring(clean);
       if (typeof hooks.persistTurn === "function") {
         try { hooks.persistTurn("user", clean); }
@@ -346,7 +379,7 @@ if (typeof window === "undefined") { var window = globalThis; }
       // payload. We update the local ring once the reply lands so the
       // NEXT submit() sees the full history.
 
-      return _getPatientReply(clean).then(function (reply) {
+      return _getPatientReply(clean, req).then(function (reply) {
         if (typeof hooks.persistTurn === "function") {
           try { hooks.persistTurn("assistant", reply); }
           catch (e) { if (typeof hooks.logError === "function") hooks.logError(e); }
@@ -362,7 +395,7 @@ if (typeof window === "undefined") { var window = globalThis; }
         if (typeof hooks.logError === "function") hooks.logError(err);
         // Network/timeout failure: emit a stub reply locally so the team
         // can keep going. The host UI surfaces the fallback notice.
-        var reply = _stubReply(clean, W.CASE, cfg.lang);
+        var reply = _stubReply(clean, req.caseObj, req.lang);
         if (typeof hooks.persistTurn === "function") {
           try { hooks.persistTurn("assistant", reply); } catch (e) { /* ignore */ }
         }
