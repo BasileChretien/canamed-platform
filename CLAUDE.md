@@ -475,6 +475,23 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   read-verify (no rules). See `verifyAdminPassword`,
   `useAdminSecrets`, the create/recovery flows, and `tests/rules.test.js` +
   `tests-e2e/emulator/rules-smoke.spec.js` (FINDING-07).
+  - **The pre-adminSecrets fallback is still load-bearing — until 2026-08-22.**
+    `verifyAdminPassword()` keeps a `legacyVerify()` path for "an older session
+    that predates adminSecrets", and that legacy shape (`adminPasswordHash`
+    present, `adminSecrets/<code>/hash` ABSENT) is exactly what made the
+    null-equality admin-gate bypass exploitable (#297). Settled from dates, not
+    by querying production: adminSecrets shipped **2026-05-24** (`ee9fc22`), and
+    `scripts/cleanup-stale-sessions.js` purges abandoned-open sessions at **90
+    days** — so on 2026-08-06 the oldest surviving session dates to 2026-05-08,
+    leaving a **16-day window (2026-05-08 → 2026-05-24) in which a legacy
+    session can still exist**. The last possible one expires **2026-08-22**.
+    That is also why #297 was worth fixing rather than dismissing as
+    unreachable.
+    `Verify:` recompute from `ee9fc22`'s date + `CLEANUP_RETENTION_OPEN_DAYS`
+    (default 90). Do NOT query production data to answer this.
+    **On/after 2026-08-22** `legacyVerify()` is provably dead and can be removed
+    with its create/recovery branches. Removing it sooner would lock a real
+    facilitator out of a live legacy session.
 - ~~`pool/$clientId/room` is intentionally writable by any authenticated user
   (admin room-assignment + self-assign); residual room-griefing is accepted
   until a cryptographic admin identity exists.~~ **CLOSED — Phase 4a (2026-07-22).**
