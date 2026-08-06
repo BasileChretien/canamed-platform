@@ -161,6 +161,7 @@ test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
       try {
         localStorage.removeItem("canamed_session");
         localStorage.removeItem("canamed_resume");
+        localStorage.removeItem("canamed_name");
       } catch (e) {}
     });
     await tab2.goto("/");

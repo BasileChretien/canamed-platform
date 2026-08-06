@@ -45,6 +45,7 @@ async function pinLocal(p) {
       localStorage.setItem("canamed_tour_student_moda_done", "v1");
       localStorage.removeItem("canamed_session");
       localStorage.removeItem("canamed_resume");
+      localStorage.removeItem("canamed_name");
     } catch (e) {}
     // Auto-accept the in-page confirm modal (Start / Advance use it).
     window.confirm = () => true;

@@ -280,6 +280,7 @@ test.describe("Accessibility (axe-core)", () => {
         try {
           localStorage.removeItem("canamed_session");
           localStorage.removeItem("canamed_resume");
+          localStorage.removeItem("canamed_name");
           // Suppress the student tour the participant gets on room entry — axe
           // would otherwise scan it mid fade-in (blended low-opacity colours
           // that fail contrast though it passes at full opacity). We want axe

@@ -132,6 +132,7 @@ test.describe("My open sessions — reaper for abandoned sessions", () => {
       try {
         localStorage.removeItem("canamed_session");
         localStorage.removeItem("canamed_resume");
+        localStorage.removeItem("canamed_name");
       } catch (e) {}
     });
     await page.reload();
@@ -191,6 +192,7 @@ test.describe("My open sessions — reaper for abandoned sessions", () => {
       try {
         localStorage.removeItem("canamed_session");
         localStorage.removeItem("canamed_resume");
+        localStorage.removeItem("canamed_name");
       } catch (e) {}
     });
     await page.reload();

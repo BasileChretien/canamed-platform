@@ -52,6 +52,14 @@ async function useEmulator(page) {
       localStorage.setItem("canamed_tour_student_moda_done", "v1");
       localStorage.removeItem("canamed_session");
       localStorage.removeItem("canamed_resume");
+      /* `canamed_name` too, and it is not cosmetic. A facilitator's admin join
+         runs readName(), which PERSISTS the creator's name under this key; the
+         lobby then prefills #name-input from it. A participant tab sharing that
+         storage therefore gets the FACILITATOR's name written into the field —
+         and if that prefill lands after the test typed the student's name, the
+         join proceeds as the wrong person or stalls short of #waiting. Observed
+         as an intermittent failure in rules-smoke's create → join → advance. */
+      localStorage.removeItem("canamed_name");
     } catch (e) {}
   }, { host: EMU_HOST, dbPort: EMU_DB_PORT, authPort: EMU_AUTH_PORT, project: PROJECT, ns: DB_NAMESPACE });
 }
