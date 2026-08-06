@@ -104,7 +104,7 @@ test.describe("Facilitator UX — SIMULATION_FACILITATOR.md fixes", () => {
     await expect(row).not.toHaveAttribute("hidden", /.*/);
     const link = page.locator("#splash-go-author");
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "scenario-author.html");
+    await expect(link).toHaveAttribute("href", "/scenario-author.html");
   });
 
   test("admin pre-start: Test alerts button + expected-total input + waiting cohort chips", async ({ page, context }) => {

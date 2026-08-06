@@ -359,12 +359,19 @@ test("i18n: privacy.lang-not-available links use ?lang= query param, not legacy 
 
 // ----- R3 deep-i18n: localizedHref('privacy', lang) now returns
 // privacy.html?lang=<x> rather than the legacy per-language stub.
-test("i18n: localizedHref('privacy') returns the canonical ?lang= URL (R3 deep-i18n)", () => {
-  assert.equal(i18n.localizedHref("privacy", "en"), "privacy.html");
-  assert.equal(i18n.localizedHref("privacy", "fr"), "privacy.html?lang=fr");
-  assert.equal(i18n.localizedHref("privacy", "ja"), "privacy.html?lang=ja");
-  assert.equal(i18n.localizedHref("privacy", "de"), "privacy.html?lang=de");
-  assert.equal(i18n.localizedHref("privacy", "es"), "privacy.html?lang=es");
+//
+// ROOT-ABSOLUTE since 2026-08-06. This is the value that OVERWRITES the href of
+// every `data-i18n-href="privacy"` link — including the ones embedded inside
+// the translated `lobby.privacy.p5/p6` HTML in all eight locales — so a
+// relative value here would put the org page's privacy link back under
+// /o/<slug>/privacy.html, which firebase.json answers with index.html. Fixing
+// index.html's own three links is NOT enough; applyI18n() runs after them.
+test("i18n: localizedHref('privacy') returns the canonical ROOT-ABSOLUTE ?lang= URL", () => {
+  assert.equal(i18n.localizedHref("privacy", "en"), "/privacy.html");
+  assert.equal(i18n.localizedHref("privacy", "fr"), "/privacy.html?lang=fr");
+  assert.equal(i18n.localizedHref("privacy", "ja"), "/privacy.html?lang=ja");
+  assert.equal(i18n.localizedHref("privacy", "de"), "/privacy.html?lang=de");
+  assert.equal(i18n.localizedHref("privacy", "es"), "/privacy.html?lang=es");
 });
 
 // ── Phase 3: English-canonical UI ───────────────────────────────────────────

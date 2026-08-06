@@ -74,10 +74,6 @@ const REWRITES = [
   { source: "/v", match: (p) => p === "/v", destination: "/verify.html" }
 ];
 
-/* An org URL is `/o/<slug>/…`. The slug charset matches
-   canamedParseOrgFromPath() in orgs.js (lowercase alnum + hyphens). */
-const ORG_PREFIX_RE = /^\/o\/[a-z0-9-]+(?=\/|$)/;
-
 /* Resolve a pathname to an absolute file under ROOT, or null. */
 function fileUnderRoot(urlPath) {
   const filePath = path.normalize(path.join(ROOT, urlPath));
@@ -103,34 +99,31 @@ function resolveRequest(urlPath) {
   if (hit === undefined) return { forbidden: true };
   if (hit) return { file: hit };
 
-  /* 2. ORG ASSET RESOLUTION — strip the `/o/<slug>` prefix and retry.
+  /* 2. The firebase.json rewrite table, in order.
    *
-   * index.html references every asset RELATIVELY (`script.js`,
-   * `tokens.css`, `fonts/…`), and there is no <base> tag, so a shell served
-   * at `/o/<slug>/` asks for `/o/<slug>/script.js`. Without this branch the
-   * org page loads and then dies with zero scripts.
+   * ⚠ THERE IS DELIBERATELY NO ORG-ASSET FALLBACK HERE. An earlier version of
+   * this server stripped a leading `/o/<slug>` and retried, because index.html
+   * addressed every asset RELATIVELY and a shell served at `/o/<slug>/` asked
+   * for `/o/<slug>/script.js`. That crutch had to go the moment the app moved
+   * to ROOT-ABSOLUTE asset URLs (2026-08-06), for two reasons:
    *
-   * ⚠ PRODUCTION DOES NOT DO THIS — measured against the live deploy on
-   * 2026-08-05:
-   *     GET /theme-init.js              -> 200 text/javascript (1 579 B)
-   *     GET /o/caen-nagoya/theme-init.js -> 200 text/html      (221 781 B)
-   * i.e. the `/o/**` rewrite swallows every org-prefixed asset and hands
-   * back index.html, which `X-Content-Type-Options: nosniff` then refuses to
-   * execute as a script. So org URLs are asset-broken on Firebase Hosting
-   * today. Fixing THAT needs a hosting/product decision (root-absolute asset
-   * URLs, or a capture-based hosting rule verified against real Hosting) and
-   * is deliberately NOT attempted here; this branch exists so the org code
-   * path can be tested at all. Do not read it as parity with production —
-   * it is parity with what production must become.
+   *   1. It is not what Hosting does. Measured against the live deploy
+   *      2026-08-05, BEFORE the root-absolute fix:
+   *          GET /theme-init.js               -> 200 text/javascript (1 579 B)
+   *          GET /o/caen-nagoya/theme-init.js -> 200 text/html     (221 781 B)
+   *      i.e. the `/o/**` rewrite swallows every org-prefixed asset and hands
+   *      back index.html, which `X-Content-Type-Options: nosniff` then refuses
+   *      to execute. Keeping the crutch means the dev server is KINDER than
+   *      production, which is the one direction a test server must never be.
+   *   2. It would MASK the very regression the fix exists to prevent. With the
+   *      strip in place, a relative asset ref still resolves locally, so
+   *      org-URL tests pass whether or not the app is addressing correctly.
+   *      Without it, a single relative ref comes back as the SPA shell and the
+   *      org e2e spec fails — which is exactly the control run recorded in
+   *      tests-e2e/org-session-e2e.spec.js.
+   *
+   * So: real file, then rewrites. Same as Hosting, no more and no less.
    */
-  if (ORG_PREFIX_RE.test(urlPath)) {
-    const stripped = urlPath.replace(ORG_PREFIX_RE, "") || "/";
-    hit = fileUnderRoot(stripped === "/" ? "/index.html" : stripped);
-    if (hit === undefined) return { forbidden: true };
-    if (hit) return { file: hit };
-  }
-
-  // 3. The firebase.json rewrite table, in order.
   for (const rw of REWRITES) {
     if (!rw.match(urlPath)) continue;
     hit = fileUnderRoot(rw.destination);

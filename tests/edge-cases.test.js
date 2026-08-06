@@ -113,10 +113,13 @@ test("index.html: every first-party script tag carries a ?v= cache-buster", () =
 });
 
 test("index.html: style.css and theme-init.js carry the cache-buster", () => {
-  assert.match(INDEX, /href="style\.css\?v=[^"]+"/,
-    "style.css must carry ?v= cache-buster");
-  assert.match(INDEX, /src="theme-init\.js\?v=[^"]+"/,
-    "theme-init.js must carry ?v= cache-buster");
+  /* Root-absolute since 2026-08-06 — see tests/serve-platform-routing.test.js
+     "the shell addresses every asset root-absolutely" for why the leading
+     slash is required, not cosmetic. */
+  assert.match(INDEX, /href="\/style\.css\?v=[^"]+"/,
+    "style.css must be root-absolute and carry a ?v= cache-buster");
+  assert.match(INDEX, /src="\/theme-init\.js\?v=[^"]+"/,
+    "theme-init.js must be root-absolute and carry a ?v= cache-buster");
 });
 
 test("script-loader.js: lazy-loaded chunks also carry ?v= cache-buster", () => {

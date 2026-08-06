@@ -36,27 +36,27 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v141" below to the matching new string.
+         2. Update every "?v=v142" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via their version
        segment in the URL (10.12.5) so they don't need a query string. -->
-  <script src="theme-init.js?v=v141"></script>
+  <script src="/theme-init.js?v=v142"></script>
   <!-- Design tokens + self-hosted variable fonts (Clinical Editorial).
        tokens.css MUST precede style.css: it is the single source of truth
        for every custom property style.css consumes. Fonts are same-origin
        (CSP default-src 'self'); preload the two latin files that paint
        first — crossorigin is required for font preloads even same-origin. -->
-  <link rel="preload" href="fonts/source-sans-3-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="preload" href="fonts/source-serif-4-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="tokens.css?v=v141" />
-  <link rel="stylesheet" href="style.css?v=v141" />
+  <link rel="preload" href="/fonts/source-sans-3-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="/fonts/source-serif-4-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="/tokens.css?v=v142" />
+  <link rel="stylesheet" href="/style.css?v=v142" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
-  <link rel="manifest" href="manifest.webmanifest?v=v141" />
+  <link rel="manifest" href="/manifest.webmanifest?v=v142" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="sw-register.js?v=v141" defer></script>
+  <script src="/sw-register.js?v=v142" defer></script>
 </head>
 <body class="locked">
   <!-- ============ INLINE SVG ICON SPRITE (2026-07-17) ============
@@ -372,7 +372,7 @@
              backwards. Signing in is now prompted when SAVING, not required to
              find the board. -->
         <p class="splash-foot splash-author-foot" id="splash-author-row">
-          <a href="scenario-author.html" target="_blank" rel="noopener"
+          <a href="/scenario-author.html" target="_blank" rel="noopener"
              class="splash-link" id="splash-go-author"
              data-i18n="splash.enter.go-author">
             Author or edit your own scenarios &rarr;
@@ -645,7 +645,7 @@
                  belongs next to the section picker, where the question
                  "the section I want isn't listed" actually arises. -->
             <p class="splash-sublabel">
-              <a href="scenario-author.html" target="_blank" rel="noopener"
+              <a href="/scenario-author.html" target="_blank" rel="noopener"
                  class="splash-link" id="splash-create-author-link"
                  data-i18n="splash.create.author-link">
                 Need a section that isn't listed? Build one on the authoring board &rarr;
@@ -1011,9 +1011,9 @@
           deletion, portability, restriction, objection, withdrawal,
           complaint), contact your facilitator or write to
           <strong><a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a></strong>
-          (see the <a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener">full
+          (see the <a href="/privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener">full
           privacy policy</a> for the stable mailbox).</p>
-        <p data-i18n-html="lobby.privacy.p6">The <a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener">full
+        <p data-i18n-html="lobby.privacy.p6">The <a href="/privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener">full
           privacy policy</a> lists the controllers' identities, the legal
           bases, the joint-use items, the international-transfer safeguards,
           retention periods, your rights with response times, and the
@@ -1116,7 +1116,7 @@
             </span>
           </label>
           <p class="lobby-hint consent-version" id="consent-version">
-            <span data-i18n="lobby.consent-version">Notice version PIS v3 &middot; 2026-07. Full </span><a href="privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
+            <span data-i18n="lobby.consent-version">Notice version PIS v3 &middot; 2026-07. Full </span><a href="/privacy.html" data-i18n-href="privacy" target="_blank" rel="noopener" data-i18n="lobby.consent-version-link">privacy policy</a><span data-i18n="lobby.consent-version-suffix">.</span>
           </p>
         </div>
 
@@ -2940,9 +2940,9 @@
                       data-i18n="admin.report-bug"
                       title="Open mail to report a bug with session + browser context">Report a bug</button>
               <!-- Self-service facilitator kit + compliance statement. -->
-              <a class="admin-doc-link" href="facilitator-guide.html" target="_blank" rel="noopener"
+              <a class="admin-doc-link" href="/facilitator-guide.html" target="_blank" rel="noopener"
                  role="menuitem"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-book"/></svg> <span data-i18n="impact.guide">Facilitator guide</span></a>
-              <a class="admin-doc-link" href="compliance.html" target="_blank" rel="noopener"
+              <a class="admin-doc-link" href="/compliance.html" target="_blank" rel="noopener"
                  role="menuitem"><svg class="ic" aria-hidden="true" focusable="false"><use href="#ic-shield"/></svg> <span data-i18n="impact.compliance">Compliance &amp; accessibility</span></a>
             </div>
           </div>
@@ -3278,46 +3278,46 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="firebase-config.js?v=v141" defer></script>
+  <script src="/firebase-config.js?v=v142" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="orgs.js?v=v141" defer></script>
+  <script src="/orgs.js?v=v142" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="platform-config.js?v=v141" defer></script>
+  <script src="/platform-config.js?v=v142" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="telemetry.js?v=v141" defer></script>
+  <script src="/telemetry.js?v=v142" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="purify.min.js?v=v141" defer></script>
+  <script src="/purify.min.js?v=v142" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. -->
-  <script src="i18n.js?v=v141" defer></script>
+  <script src="/i18n.js?v=v142" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="localdb.js?v=v141" defer></script>
+  <script src="/localdb.js?v=v142" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
        so the function names are available as globals. -->
-  <script src="lib.js?v=v141" defer></script>
+  <script src="/lib.js?v=v142" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="pure-utils.js?v=v141" defer></script>
+  <script src="/pure-utils.js?v=v142" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3328,7 +3328,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="script-loader.js?v=v141" defer></script>
+  <script src="/script-loader.js?v=v142" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3338,7 +3338,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="script.js?v=v141" defer></script>
+  <script src="/script.js?v=v142" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the

@@ -234,7 +234,153 @@ async function writeModuleAAnswer(stu, hypothesis, text) {
   await expect(stu.locator("#answers-list-moduleA-diagnosis")).toBeVisible();
 }
 
+/* Record every SAME-ORIGIN asset response, with the content-type the server
+   really returned. The org-asset defect is invisible to "does the page
+   render" — under it the shell still paints, it is the SCRIPTS that come back
+   as HTML — so the proof has to be read off the network. */
+function trackAssets(p) {
+  const all = [];
+  const cspErrors = [];
+  p.on("response", (r) => {
+    let u;
+    try { u = new URL(r.url()); } catch (_) { return; }
+    if (u.protocol !== "http:" && u.protocol !== "https:") return;
+    if (!/\.(?:js|css|woff2|webmanifest)$/.test(u.pathname)) return;
+    all.push({
+      host: u.host,
+      path: u.pathname,
+      status: r.status(),
+      ctype: (r.headers()["content-type"] || "")
+    });
+  });
+  p.on("console", (m) => {
+    if (m.type() === "error" && /content security policy/i.test(m.text())) {
+      cspErrors.push(m.text());
+    }
+  });
+  /* Same-origin only, resolved from the page's OWN url after navigation —
+     no private config API, and correct whatever PORT the run uses. */
+  const firstParty = () => {
+    const host = new URL(p.url()).host;
+    return all.filter((a) => a.host === host);
+  };
+  return { firstParty, cspErrors };
+}
+
 test.describe("org-scoped session — /o/<slug>/ end to end", () => {
+  /* THE PRODUCTION DEFECT THIS PINS (measured on the live deploy 2026-08-05):
+   *     GET /theme-init.js               -> 200 text/javascript (1 579 B)
+   *     GET /o/caen-nagoya/theme-init.js -> 200 text/html     (221 781 B)
+   * index.html addressed every asset RELATIVELY, so a shell served under the
+   * `/o/**` -> /index.html rewrite asked for /o/<slug>/<asset> and Hosting
+   * handed back the SPA shell, which nosniff then refused to execute.
+   *
+   * TWO INDEPENDENT HALVES, asserted separately on purpose:
+   *   (a) the STATIC shell — index.html's own src/href refs;
+   *   (b) the LAZY chunks — script-loader.js's v(), which returned a BARE
+   *       filename and so re-created the bug for ~30 chunks the static shell
+   *       never mentions. (a) passing proves nothing about (b), which is why
+   *       the control run in the PR reverts v() alone and watches ONLY the
+   *       lazy assertion go red. */
+  test("every asset the org shell fetches is served from the site ROOT as JS/CSS, never swallowed by the /o/** rewrite", async ({
+    page
+  }) => {
+    await pinLocalOrg(page);
+    const { firstParty, cspErrors } = trackAssets(page);
+    const failures = [];
+    page.on("requestfailed", (r) => failures.push(r.url()));
+    await page.goto(ORG_URL);
+
+    /* Interactive, not merely painted: the splash is live and script.js ran. */
+    await expect(page.locator("#splash-go-create")).toBeVisible({ timeout: 15_000 });
+    expect(failures, "no asset may fail to load under the org prefix").toEqual([]);
+
+    // ── (a) THE STATIC SHELL — index.html's own src/href refs ───────────────
+    /* Scoped to the EAGER assets by name. Deliberately not a sweep over
+       everything fetched: a sweep would also catch the lazy chunks, and then
+       the control run could not tell the two halves apart. */
+    const at = (p) => firstParty().find((a) => a.path === p);
+    for (const name of ["/theme-init.js", "/script.js", "/script-loader.js",
+                        "/i18n.js", "/localdb.js", "/purify.min.js"]) {
+      const hit = at(name);
+      expect(hit, `${name} must be fetched at the site ROOT, not under /o/<slug>/`).toBeTruthy();
+      expect(hit.status, `${name} must be served, not rewritten`).toBe(200);
+      expect(
+        hit.ctype,
+        `${name} came back as "${hit.ctype}" — an asset served as text/html IS ` +
+        `the bug: the /o/** rewrite returned the SPA shell and nosniff refuses it`
+      ).toMatch(/javascript|ecmascript/);
+    }
+    for (const name of ["/style.css", "/tokens.css"]) {
+      const hit = at(name);
+      expect(hit, `${name} must be fetched at the site ROOT`).toBeTruthy();
+      expect(hit.ctype, `${name} must arrive as CSS, not the SPA shell`).toMatch(/text\/css/);
+    }
+
+    // ── (b) THE LAZY CHUNKS — script-loader.js's v() ────────────────────────
+    /* The half the static shell cannot cover: v() built a BARE filename, so
+       every chunk resolved under /o/<slug>/ no matter how index.html was
+       written. case-content.js is idle-PREFETCHED, so the request may already
+       have happened — read it off the recorded responses rather than waiting
+       for a new one. The call is fired without awaiting its promise: when the
+       chunk arrives as HTML the script errors and the promise rejects, and the
+       NETWORK evidence is what matters here, not that exception. */
+    await page.evaluate(() => {
+      window.CanamedLoader.ensureCaseContent().catch(() => {});
+    });
+    const chunkName = /case-content\.js$/;
+    await expect
+      .poll(() => firstParty().filter((a) => chunkName.test(a.path)).length, {
+        timeout: 20_000
+      })
+      .toBeGreaterThan(0);
+
+    for (const hit of firstParty().filter((a) => chunkName.test(a.path))) {
+      expect(
+        hit.path,
+        "a LAZY chunk must be addressed at the site root too — script-loader's " +
+        "v() returning a bare filename re-creates the bug for ~30 chunks"
+      ).toBe("/case-content.js");
+      expect(
+        hit.ctype,
+        `the lazy chunk came back as "${hit.ctype}" — nosniff will refuse to execute it`
+      ).toMatch(/javascript|ecmascript/);
+    }
+
+    /* Fetched AND executed — a chunk refused by nosniff never builds its
+       registry, so this is the consequence, not a restatement of the header. */
+    await expect
+      .poll(() => page.evaluate(() => !!window.CANAMED_SCENARIOS), { timeout: 15_000 })
+      .toBe(true);
+
+    // ── The user-visible consequence ────────────────────────────────────────
+    /* The create view needs a SECOND lazy chunk (section-picker.js) plus the
+       registry above to populate its picker. A populated control is what "the
+       org page works" means to a facilitator. */
+    await page.locator("#splash-go-create").click();
+    const sectionAdd = page.locator("#splash-section-add");
+    await expect(sectionAdd).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(() => sectionAdd.evaluate((n) => n.options.length), { timeout: 15_000 })
+      .toBeGreaterThan(0);
+
+    // ── (c) THE COMBINED INVARIANT ──────────────────────────────────────────
+    /* Now that both halves have been exercised, nothing at all may have been
+       requested under the org prefix or served as the SPA shell. */
+    expect(
+      firstParty().filter((a) => a.path.startsWith("/o/")),
+      "no asset may be requested under the org prefix — on Firebase Hosting " +
+      "that path only ever resolves to index.html"
+    ).toEqual([]);
+    expect(
+      firstParty().filter((a) => /text\/html/.test(a.ctype)),
+      "no asset may be served as text/html"
+    ).toEqual([]);
+
+    expect(cspErrors, "root-absolute same-origin URLs must not trip script-src 'self'")
+      .toEqual([]);
+  });
+
   test("the org shell boots at /o/<slug>/ and paints the tenant's own identity", async ({
     page
   }) => {

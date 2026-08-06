@@ -19,7 +19,7 @@
 (function () {
   "use strict";
 
-  var FILES = { fr: "dict/en-fr.txt.gz", ja: "dict/en-ja.txt.gz" };
+  var FILES = { fr: "/dict/en-fr.txt.gz", ja: "/dict/en-ja.txt.gz" };
   var cache = {};   // lang -> Map | Promise<Map|null>
 
   // Cache-bust in lockstep with the shell version (script-loader owns it).

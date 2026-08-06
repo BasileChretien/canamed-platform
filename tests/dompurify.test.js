@@ -58,16 +58,18 @@ test("purify.min.js contains the DOMPurify marker", () => {
 // ============================================================
 
 test("index.html references purify.min.js with a cache-bust ?v= token", () => {
-  assert.match(INDEX_HTML, /<script[^>]*src="purify\.min\.js\?v=[^"]+"/,
-    "index.html must load purify.min.js with the same ?v= cache-bust scheme as the other local scripts");
+  // Root-absolute since 2026-08-06 so the /o/** org rewrite cannot swallow it
+  // (see tests/serve-platform-routing.test.js).
+  assert.match(INDEX_HTML, /<script[^>]*src="\/purify\.min\.js\?v=[^"]+"/,
+    "index.html must load purify.min.js root-absolutely, with the same ?v= cache-bust scheme as the other local scripts");
 });
 
 test("index.html loads purify.min.js BEFORE i18n.js", () => {
   // Both are <script src="...?v=..."> tags; DOMPurify must be defined before
   // i18n.js runs so the data-i18n-html sinks can sanitise. Compare the byte
   // offset of each tag in the document (regex is CRLF-agnostic).
-  const purifyIdx = INDEX_HTML.search(/<script[^>]*src="purify\.min\.js\?v=/);
-  const i18nIdx = INDEX_HTML.search(/<script[^>]*src="i18n\.js\?v=/);
+  const purifyIdx = INDEX_HTML.search(/<script[^>]*src="\/purify\.min\.js\?v=/);
+  const i18nIdx = INDEX_HTML.search(/<script[^>]*src="\/i18n\.js\?v=/);
   assert.ok(purifyIdx >= 0, "purify.min.js <script> tag not found in index.html");
   assert.ok(i18nIdx >= 0, "i18n.js <script> tag not found in index.html");
   assert.ok(purifyIdx < i18nIdx,

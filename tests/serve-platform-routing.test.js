@@ -18,8 +18,16 @@
  *      same destination. Add a rewrite to firebase.json and forget the dev
  *      server, and this fails.
  *   2. FUNCTIONAL — the server, over real HTTP, serves what those rewrites
- *      promise, still resolves org-prefixed assets, and still refuses to
- *      escape its root.
+ *      promise, swallows org-prefixed assets exactly as Hosting does, and
+ *      still refuses to escape its root.
+ *
+ * UPDATED 2026-08-06 (root-absolute assets). This file used to assert that
+ * org-prefixed assets "resolve to the real file" — the dev server stripped the
+ * `/o/<slug>` prefix as a crutch for index.html's relative refs. Firebase
+ * Hosting has never done that, so the crutch made the dev server kinder than
+ * production AND hid the defect. Both halves of the real contract are pinned
+ * instead: the server swallows those paths like Hosting, and the shell never
+ * asks for them because it addresses assets root-absolutely.
  */
 
 "use strict";
@@ -92,24 +100,59 @@ test("dev server routing over HTTP", async (t) => {
     }
   });
 
-  await t.test("org-prefixed assets resolve to the real file", async () => {
-    /* index.html has no <base> and references assets relatively, so the
-       shell served at /o/<slug>/ asks for them under that prefix. If these
-       come back as text/html the page boots with zero scripts. */
-    const cases = [
-      ["/o/e2e-org/orgs.js", /javascript/],
-      ["/o/e2e-org/style.css", /text\/css/],
-      ["/o/e2e-org/manifest.webmanifest", /manifest\+json/]
-    ];
-    for (const [p, ctype] of cases) {
+  await t.test("org-prefixed assets are SWALLOWED by the rewrite, exactly as Hosting does", async () => {
+    /* This is the production behaviour the root-absolute fix exists to work
+       WITH, measured on the live deploy 2026-08-05:
+           GET /theme-init.js               -> 200 text/javascript (1 579 B)
+           GET /o/caen-nagoya/theme-init.js -> 200 text/html     (221 781 B)
+       `/o/**` rewrites to index.html, so anything asked for under an org
+       prefix comes back as the SPA shell and nosniff refuses to execute it.
+
+       This server used to strip the prefix and serve the real file. That made
+       it KINDER than Hosting and, worse, masked the bug: a relative asset ref
+       resolved locally, so an org-URL test passed either way. The app now
+       addresses assets root-absolutely and never asks for these paths at all;
+       pinning the swallow keeps the dev server honest, so a regression to
+       relative addressing FAILS locally instead of only in production. */
+    for (const p of ["/o/e2e-org/orgs.js", "/o/e2e-org/style.css",
+                     "/o/e2e-org/manifest.webmanifest"]) {
       const res = await get(p);
       assert.equal(res.status, 200, p);
-      assert.match(res.headers.get("content-type"), ctype, p);
+      assert.match(
+        res.headers.get("content-type"), /text\/html/,
+        `${p} must come back as the SPA shell, like Firebase Hosting`
+      );
+      assert.match(await res.text(), /id="splash"/, p);
     }
-    /* Byte-identical to the un-prefixed file — not a lookalike. */
-    const a = await (await get("/orgs.js")).text();
-    const b = await (await get("/o/e2e-org/orgs.js")).text();
-    assert.equal(b, a);
+    /* And the un-prefixed path still serves the real script — the whole point
+       of root-absolute addressing is that THIS is what the org page requests. */
+    const real = await get("/orgs.js");
+    assert.equal(real.status, 200);
+    assert.match(real.headers.get("content-type"), /javascript/);
+  });
+
+  await t.test("the shell addresses every asset root-absolutely", async () => {
+    /* The other half of the same contract, asserted at the source rather than
+       over the wire: if index.html regains a relative src/href, the org page
+       goes back to requesting /o/<slug>/<asset> — which the test above proves
+       returns HTML. Fragment refs (#ic-* SVG <use>, the skip link) MUST stay
+       relative, which is why this allowlists `#` and why <base href="/"> was
+       rejected as the fix. */
+    const html = fs.readFileSync(
+      path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "index.html"),
+      "utf8"
+    );
+    /* `\s` before the attribute name is load-bearing: without it this also
+       matches the tail of `data-i18n-href="privacy"`, whose value is an i18n
+       KEY (resolved by localizedHref()), not a URL. */
+    const relative = [...html.matchAll(/\s(?:src|href)="([^"#][^"]*)"/g)]
+      .map((m) => m[1])
+      .filter((u) => !/^(?:https?:|data:|mailto:|\/\/|\/)/.test(u));
+    assert.deepEqual(
+      relative, [],
+      "index.html must address assets and in-app pages root-absolutely, so the " +
+      "/o/** rewrite cannot swallow them"
+    );
   });
 
   await t.test("/v serves the verification page", async () => {
