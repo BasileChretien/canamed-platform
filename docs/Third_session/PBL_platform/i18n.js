@@ -1042,7 +1042,7 @@
     if (typeof document === "undefined") return Promise.resolve(T.en);
     const p = new Promise((resolve, reject) => {
       const s = document.createElement("script");
-      s.src = "locales/" + lang + ".js?v=" + LOCALE_VERSION;
+      s.src = "/locales/" + lang + ".js?v=" + LOCALE_VERSION;
       s.async = true;
       s.addEventListener("load", () => resolve(T[lang] || T.en));
       s.addEventListener("error", () => {
@@ -1202,7 +1202,7 @@
     if (name === "privacy") {
       // Always return the canonical URL; pass ?lang only when needed so
       // that an EN user lands on a clean URL.
-      return l && l !== "en" ? "privacy.html?lang=" + l : "privacy.html";
+      return l && l !== "en" ? "/privacy.html?lang=" + l : "/privacy.html";
     }
     return null;
   }

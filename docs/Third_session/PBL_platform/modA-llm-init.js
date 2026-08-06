@@ -129,6 +129,20 @@
         ALLOWED_TAGS: ["strong", "em", "b", "i", "a", "br", "span"],
         ALLOWED_ATTR: ["href", "target", "rel", "data-i18n-href"]
       });
+      /* The translation ships `<a href="privacy.html" data-i18n-href="privacy">`
+       * and DOMPurify is told to KEEP data-i18n-href — but this node is built by
+       * hand, so applyI18n() never walked it and the attribute did nothing. Run
+       * the href pass over it now. Two things follow: the link becomes
+       * language-aware like every other privacy link (it never was), and it
+       * becomes ROOT-ABSOLUTE — without which, on `/o/<slug>/`, it would resolve
+       * to /o/<slug>/privacy.html, which firebase.json answers with index.html.
+       * Guarded: i18n.js is a separate chunk and this must not throw if the
+       * disclosure renders before it. */
+      try {
+        if (window.CanamedI18n && typeof window.CanamedI18n.applyI18n === "function") {
+          window.CanamedI18n.applyI18n(notice);
+        }
+      } catch (_) { /* the notice text still renders; only the href stays raw */ }
     } else {
       notice.textContent = disclosure.replace(/<[^>]*>/g, "");
     }

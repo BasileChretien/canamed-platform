@@ -121,7 +121,7 @@ test.describe("Splash — authored scenarios entry points", () => {
     // depended on sign-in this would fail — that is the point of the check.
     await expect(row).toBeVisible();
     await expect(page.locator("#splash-go-author"))
-      .toHaveAttribute("href", "scenario-author.html");
+      .toHaveAttribute("href", "/scenario-author.html");
   });
 
   test("shared scenarios seeded in LocalDB populate the picker in LOCAL mode", async ({ page }) => {

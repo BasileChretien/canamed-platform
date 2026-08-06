@@ -35,7 +35,7 @@
 
   // Register on window.load so the SW install doesn't race the first paint.
   window.addEventListener("load", function () {
-    navigator.serviceWorker.register("sw.js")
+    navigator.serviceWorker.register("/sw.js", { scope: "/" })
       .then(function (reg) {
         // Periodically check for a new SW. When one installs it activates
         // (skipWaiting) and the controllerchange handler above auto-reloads

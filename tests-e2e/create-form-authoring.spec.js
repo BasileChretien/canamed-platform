@@ -62,7 +62,7 @@ test.describe("Create form — authoring entry point, no JSON", () => {
     await openCreateForm(page);
     const link = page.locator("#splash-create-author-link");
     await expect(link).toBeVisible();
-    await expect(link).toHaveAttribute("href", "scenario-author.html");
+    await expect(link).toHaveAttribute("href", "/scenario-author.html");
     // Opening in a new tab must not hand the board window.opener access.
     await expect(link).toHaveAttribute("rel", /noopener/);
 

@@ -111,8 +111,21 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v141";
-  function v(src) { return src + "?v=" + SHELL_VERSION; }
+  var SHELL_VERSION = "v142";
+  // ROOT-ABSOLUTE, and the leading "/" is load-bearing (2026-08-06).
+  // firebase.json rewrites `/o/**` -> /index.html for the multi-tenant org
+  // entry point, so on a page served at /o/<slug>/ a BARE filename resolves to
+  // /o/<slug>/<chunk> — which that same rewrite answers with index.html.
+  // `X-Content-Type-Options: nosniff` then refuses to execute the HTML as a
+  // script, so the chunk silently never loads. Measured on the live deploy
+  // 2026-08-05: GET /o/caen-nagoya/theme-init.js -> 200 text/html, 221 781 B.
+  // This ONE function addresses every lazy chunk (~30 of them: case-content,
+  // script-admin, takehome, section-*, branched-*, modA-llm-*, reader-*,
+  // admin.css, room.css, branched.css …), none of which index.html mentions —
+  // so fixing index.html alone would leave the whole lazy half broken.
+  // Pinned by tests-e2e/org-session-e2e.spec.js, whose lazy-chunk assertion
+  // fails on its own if this "/" is dropped.
+  function v(src) { return "/" + src + "?v=" + SHELL_VERSION; }
   // case-content.js builds window.CANAMED_SCENARIOS; branched-seed.js then
   // merges the branched-format scenario into it. Chained (not parallel) so the
   // merge always runs after the registry exists.
@@ -182,8 +195,12 @@
   // the vendored bundle is immutable, so the browser caches it across deploys
   // (a ?v= bump would force a pointless 2 MB re-download). vfs_fonts.js MUST
   // load after pdfmake.min.js (it assigns window.pdfMake.vfs).
+  // Root-absolute like every other chunk (2026-08-06) — these two bypass v(),
+  // so they need their own leading "/" or they break on `/o/<slug>/` exactly
+  // as the versioned chunks did. They still carry NO ?v=, which is the point
+  // of the exemption; the slash is about WHERE, the suffix about WHEN.
   function ensurePdfmake() {
-    return loadScript("pdfmake.min.js").then(function () { return loadScript("vfs_fonts.js"); });
+    return loadScript("/pdfmake.min.js").then(function () { return loadScript("/vfs_fonts.js"); });
   }
   // student-pdf.js — our certificate + study-booklet generators. Version-
   // suffixed (it changes with deploys). Caller must ensurePdfmake() first.

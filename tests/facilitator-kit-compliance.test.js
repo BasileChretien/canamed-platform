@@ -52,8 +52,13 @@ test("facilitator-guide.html is a printable 5-step quick-start", () => {
 });
 
 test("both pages are discoverable from the admin chrome + precached for offline", () => {
-  assert.match(HTML, /href="facilitator-guide\.html"/, "admin chrome must link the facilitator guide");
-  assert.match(HTML, /href="compliance\.html"/, "admin chrome must link the compliance statement");
+  /* Root-absolute since 2026-08-06: index.html is also served under the
+     `/o/<slug>/` org rewrite, where a relative link would resolve to
+     /o/<slug>/facilitator-guide.html and come back as the SPA shell. The two
+     target PAGES keep their own relative refs — they are never served under
+     the org prefix (only index.html is). */
+  assert.match(HTML, /href="\/facilitator-guide\.html"/, "admin chrome must link the facilitator guide root-absolutely");
+  assert.match(HTML, /href="\/compliance\.html"/, "admin chrome must link the compliance statement root-absolutely");
   assert.match(SW, /"\/facilitator-guide\.html"/, "sw.js must precache the facilitator guide");
   assert.match(SW, /"\/compliance\.html"/, "sw.js must precache the compliance statement");
 });

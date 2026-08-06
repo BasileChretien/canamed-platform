@@ -727,8 +727,9 @@ raw LocalDB store's top-level `sessions` key set was empty. Both sections
 routed to their own `answers/sections/<slot>`, and the take-home the student
 downloads carried both back.
 
-**⚠️ `/o/<slug>/` IS BROKEN IN PRODUCTION — asset resolution, not data.**
-index.html has no `<base>` and references every asset relatively, while
+**⚠️ `/o/<slug>/` WAS BROKEN IN PRODUCTION — asset resolution, not data.
+FIXED IN CODE 2026-08-06 (shell v142); NOT YET CONFIRMED ON THE LIVE SITE.**
+index.html had no `<base>` and referenced every asset relatively, while
 firebase.json rewrites `/o/**` → `/index.html`. Measured against the live
 deploy 2026-08-05:
 
@@ -737,15 +738,34 @@ deploy 2026-08-05:
 | `GET /theme-init.js` | 200 `text/javascript`, 1 579 B |
 | `GET /o/caen-nagoya/theme-init.js` | 200 **`text/html`, 221 781 B** (index.html) |
 
-So every script/stylesheet/font/manifest an org page asks for comes back as the
+So every script/stylesheet/font/manifest an org page asked for came back as the
 HTML shell, which `X-Content-Type-Options: nosniff` then refuses to execute.
-`navigator.serviceWorker.register("sw.js")` fails the same way. **An org URL
-loads a dead page today.** Fixing it is a product decision (root-absolute asset
-URLs + a shell bump, vs. a capture-based hosting rule that can only be verified
-against real Hosting) and was deliberately NOT attempted in the test PR. The
-dev server resolves org-prefixed assets so the code path is testable — that is
-parity with what production must become, not with what it is. `Verify:`
-`curl -sI https://canamed-69785.web.app/o/caen-nagoya/theme-init.js | grep -i content-type`.
+`navigator.serviceWorker.register("sw.js")` failed the same way. An org URL
+loaded a dead page.
+
+**The fix (root-absolute asset URLs, chosen over a Hosting capture rule):**
+every `src`/`href` in index.html, the `v()` helper in script-loader.js (which
+addresses ~30 LAZY chunks the shell never mentions — the half most likely to be
+missed), `ensurePdfmake()`'s two un-versioned vendored bundles, the SW
+registration (`/sw.js` + explicit `{scope:"/"}`), `i18n.js`'s locale chunks and
+its `localizedHref()`, and `reader-dict.js`'s dictionaries. `<base href="/">`
+was rejected: it would break the ~32 same-document `#ic-*` SVG `<use>` refs and
+the `href="#"` skip link. **`scripts/serve-platform.js` lost its org-asset
+prefix-stripping crutch in the same change** — it made the dev server kinder
+than Hosting and masked the defect; it now resolves real-file-then-rewrite,
+exactly like Hosting.
+
+⚠️ **STATUS — the code is fixed and locally proven; PRODUCTION IS UNVERIFIED
+until this is deployed.** The whole defect is a Hosting-rewrite behaviour, and
+nothing local can prove Firebase Hosting's response. After the deploy lands,
+run the `Verify:` below and only then may this be called fixed in production.
+`Verify:` `curl -sI https://canamed-69785.web.app/o/caen-nagoya/theme-init.js | grep -i content-type`
+must report `text/javascript` (it reported `text/html` before the fix). Also
+`curl -s https://canamed-69785.web.app/sw.js | grep canamed-shell-v` should show
+`v142` or later, confirming the shell carrying the fix is actually live.
+Regression cover: `tests-e2e/org-session-e2e.spec.js` asserts on the real
+network responses at `/o/e2e-org/` — separately for the static shell and for a
+LAZY chunk, because the first passing proves nothing about the second.
 
 **Two NEW rule-parity gaps, found by diffing the two rule subtrees. Neither was
 observed — LOCAL mode models no rules — so these are static findings:**
