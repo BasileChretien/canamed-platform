@@ -18,7 +18,7 @@
  */
 
 // @ts-check
-const { test, expect, useEmulator, claimRoom } = require("./fixtures.js");
+const { test, expect, useEmulator, claimRoom, dbReadAsOwner } = require("./fixtures.js");
 
 // Auto-accept the in-page confirm modal that Start/Advance open.
 async function installModalAutoAccept(page) {
@@ -39,7 +39,7 @@ async function installModalAutoAccept(page) {
   });
 }
 
-test("rules: create → join → advance round-trips through the real emulator", async ({ page, context }) => {
+test("rules: create → join → advance round-trips through the real emulator", async ({ page, browser }) => {
   page.on("dialog", d => { try { d.accept(); } catch (_) {} });
   await installModalAutoAccept(page);
 
@@ -57,7 +57,25 @@ test("rules: create → join → advance round-trips through the real emulator",
   await expect(page.locator("#admin-app")).toBeVisible({ timeout: 15_000 });
 
   // ---- Participant: join in a second tab (writes members + clientMapping + pool) ----
-  const tab2 = await context.newPage();
+  /* A fresh CONTEXT, not context.newPage(). A second page in the facilitator's
+     context shares its storage, and that is not a participant — it is the
+     facilitator again, which broke this test in two separate ways:
+       - it reuses the facilitator's persisted ANONYMOUS SESSION, so every
+         "participant" write carries the CREATOR's uid. Participant-side rules
+         are then evaluated against the creator's carve-out instead of against
+         a participant, and admin-only nodes become writable from this tab —
+         which is how a stray `stage = 0` in startRoom() could overwrite the
+         Advance below. (That write is gone from script.js, but the test should
+         not be able to reach an admin-only node from the participant tab at
+         all.)
+       - it inherits localStorage `canamed_name`, and the lobby prefills the
+         name field from it. Under load that prefill lands AFTER the fill()
+         below, restoring the FACILITATOR's name into the join form; the join
+         then never reaches #waiting.
+     The FINDING-01 test below isolates its second identity for the same
+     reason. */
+  const participantCtx = await browser.newContext();
+  const tab2 = await participantCtx.newPage();
   await useEmulator(tab2);
   tab2.on("dialog", d => { try { d.accept(); } catch (_) {} });
   await tab2.goto("/");
@@ -73,6 +91,15 @@ test("rules: create → join → advance round-trips through the real emulator",
   await joinBtn.click();
   await expect(tab2.locator("#waiting")).toBeVisible({ timeout: 15_000 });
 
+  /* The isolation above must actually have produced a second identity. Without
+     this, a regression to a shared context would silently turn every
+     participant-side assertion below into a second facilitator assertion — the
+     test would stay green while covering half of what it claims. */
+  const uidFacilitator = await page.evaluate(() => firebase.auth().currentUser.uid);
+  const uidParticipant = await tab2.evaluate(() => firebase.auth().currentUser.uid);
+  expect(uidParticipant, "the participant must be a DISTINCT anonymous user")
+    .not.toBe(uidFacilitator);
+
   // ---- Admin sees the participant (real cross-tab read of pool under rules) ----
   await expect(page.locator("#admin-prestart")).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("#prestart-count")).not.toHaveText("0", { timeout: 15_000 });
@@ -81,12 +108,40 @@ test("rules: create → join → advance round-trips through the real emulator",
   await page.locator("#start-session-btn").click();
   await expect(tab2.locator("#app")).toBeVisible({ timeout: 20_000 });
 
-  const adv = () => page.getByRole("button", { name: /^Advance\s*→?$/ }).first();
-  if (await adv().count()) {
-    await adv().click();
-    await expect(tab2.locator("#stage-indicator")).toContainText(/Stage 2/i, { timeout: 15_000 });
-  }
+  /* The Advance control must EXIST. This used to be `if (await adv().count())`,
+     so a run where the dashboard had not yet rendered its room rows skipped the
+     entire rules-gated advance and still reported green — the one assertion
+     this test exists for, made optional. */
+  const adv = page.getByRole("button", { name: /^Advance\s*→?$/ }).first();
+  await expect(adv).toBeEnabled({ timeout: 15_000 });
+  await adv.click();
+
+  /* Assert the WRITE, then the RENDER — in that order, and never the render
+     alone. `stage` is the admin-gated node this test is about; the indicator is
+     downstream of it. Checking only the DOM cannot tell a rejected write from a
+     write that landed and was overwritten from a write that arrived and never
+     rendered, and all three read as `expected Stage 2, got "Stage 1 of 3"`.
+     (That ambiguity is not hypothetical: it hid a participant-side `stage = 0`
+     write racing this advance — see tests/room-stage-single-writer.test.js.) */
+  await expect.poll(
+    async () => (await dbReadAsOwner(`sessions/${code.toLowerCase()}/rooms`)) || {},
+    { message: "the facilitator's advance should have written stage = 1",
+      timeout: 15_000 }
+  ).toMatchObject({ [await participantRoom(tab2)]: { stage: 1 } });
+
+  await expect(tab2.locator("#stage-indicator")).toContainText(/Stage 2/i, { timeout: 15_000 });
+
+  await participantCtx.close();
 });
+
+/* The room this participant was assigned to. Read from the page rather than
+   assumed to be "Room 1": assignRooms() decides it, and hardcoding the name
+   would turn a room-assignment change into a confusing stage failure.
+   `myRoom` is a top-level `let` in script.js, i.e. a script-scope global — it
+   resolves as a bare identifier but is deliberately NOT `window.myRoom`. */
+async function participantRoom(page) {
+  return page.evaluate(() => myRoom);
+}
 
 /* Wait until the app has finished its anonymous sign-in so a write carries
    an auth.uid. Returns the signed-in uid. */

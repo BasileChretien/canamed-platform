@@ -63,6 +63,27 @@ const test = base.extend({
   }
 });
 
+/* Read a path as the emulator OWNER (rules bypassed), from Node — not through
+ * a page.
+ *
+ * This is for OBSERVING what a rules-gated write actually did. Checking a write
+ * through the UI conflates three different failures — the write was rejected,
+ * the write never fired, the write landed but never rendered — into one
+ * "expected Stage 2, got Stage 1". Reading the node directly separates them.
+ *
+ * Deliberately NOT a substitute for the rules-gated assertions: the WRITES under
+ * test still go through the client and the real rules. Only the observation is
+ * privileged. Never assert an ALLOW/DENY verdict with this — that would bypass
+ * the very thing the suite exists to check.
+ */
+async function dbReadAsOwner(path) {
+  const url = "http://" + EMU_HOST + ":" + EMU_DB_PORT + "/" +
+    String(path).replace(/^\/+/, "") + ".json?ns=" + DB_NAMESPACE;
+  const res = await fetch(url, { headers: { Authorization: "Bearer owner" } });
+  if (!res.ok) throw new Error("dbReadAsOwner(" + path + ") → HTTP " + res.status);
+  return res.json();
+}
+
 /* Claim per-room membership the way the CLIENT does, in one place.
  *
  * Since 2026-08-03 a `uidMembers` claim is no longer self-asserted: its VALUE
@@ -103,4 +124,4 @@ async function claimRoom(page, sessionBase, roomId, uid, clientId) {
   return cid;
 }
 
-module.exports = { test, expect, useEmulator, PROJECT, claimRoom };
+module.exports = { test, expect, useEmulator, PROJECT, claimRoom, dbReadAsOwner };

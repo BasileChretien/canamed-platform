@@ -5000,11 +5000,10 @@ function startRoom() {
     refLeaderboard.on("value", _onLb, _onLbErr);
   }
 
-  if (!isRoomAdmin) {
-    refStage.once("value").then(snap => {
-      if (typeof snap.val() !== "number") return refStage.set(0);
-    }).catch(e => console.error("Stage init failed", e));
-  }
+  /* NO participant-side stage initialiser here — deliberately. A room's stage
+     has ONE writer, setRoomStage() in script-admin.js; a write of 0 from here
+     raced it and rolled the room back a stage. Every reader already defaults a
+     missing stage to 0. See tests/room-stage-single-writer.test.js. */
 
   /* Per-room uid membership claim (introduced 2026-05-28 with the LLM-patient
      pilot; the set of rules depending on it was EXPANDED 2026-05-30). Claimed
