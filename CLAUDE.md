@@ -108,12 +108,25 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
   markers still all read vN and `shell-csp-vendoring.spec.js` still passes —
   it only checks the three agree — so you are left with a modified `script.js`
   and NO version increment. That is undeployable-but-green: returning browsers
-  keep serving the cached vN bundle, without the change. The check that catches
-  it is `git diff origin/main --stat -- .../sw.js .../script-loader.js
-  .../index.html` — an EMPTY diff after a rebase that touched shell files means
-  your bump was absorbed; re-bump to vN+1. Verify the shipped result against the
-  live site, not the deploy's exit code:
-  `curl -s https://canamed-69785.web.app/sw.js | grep SHELL_VERSION`.
+  keep serving the cached vN bundle, without the change. An EMPTY diff below,
+  after a rebase that touched shell files, means your bump was absorbed —
+  re-bump to vN+1. Then verify what actually SHIPPED against the live site, not
+  the deploy's exit code (`grep SHELL_VERSION` alone only prints whatever is
+  live; assert the value you expect, or it will "pass" on the stale one):
+
+  ```bash
+  git fetch origin
+  P=docs/Third_session/PBL_platform
+  git diff --stat origin/main...HEAD -- $P/sw.js $P/script-loader.js $P/index.html
+  expected=v141   # the version THIS change ships
+  curl --fail --silent --show-error https://canamed-69785.web.app/sw.js \
+    | grep -F "canamed-shell-$expected"
+  ```
+
+  The paths are NOT at the repo root — everything served lives under
+  `docs/Third_session/PBL_platform/`. A root-relative pathspec silently matches
+  nothing, and an empty diff is exactly this check's failure signal, so getting
+  it wrong reports the bug on every run.
 - **Deleting a long-lived UI control is an AUDIT, not a deletion.** (Established
   2026-07-30, removing the create form's Scenario select.) Such a control
   accumulates side effects nobody has catalogued, so the question is not "what
