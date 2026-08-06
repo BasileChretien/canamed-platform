@@ -540,28 +540,39 @@ test("rules: mail queue is admin-gated — an admin CAN enqueue, a non-admin CAN
   const REAL_HASH = "d".repeat(64);
   const code = "mail-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
 
-  /* One payload, reused for every leg, so identity is the ONLY variable.
+  /* One payload MATERIALISED ONCE per job id, so identity is the ONLY variable
+     across an allow/deny pair. A factory would re-stamp `at` on every call, and
+     then a payload-sensitive rule change (the `pool` node already bounds `at`
+     for freshness) could flip an allow and a denial apart for a reason that has
+     nothing to do with the gate — while the test still read as an identity
+     test. That is this PR's own subject, so it must not recur here.
+
      Deliberately plain ASCII: the emulator's rules are a strictly TIGHTER
      variant of production's (`[!-~]` vs `[^\s]`, see build-emulator-rules.js),
      so a verdict on an ASCII address holds for production too, while one on a
      non-ASCII address would not. */
-  const job = (id) => ({ to: "facilitator@example.test", subject: "Debrief " + id, at: Date.now() });
+  const mkJob = (id) => ({ to: "facilitator@example.test", subject: "Debrief " + id, at: Date.now() });
+  const jobM0 = mkJob("m0"), jobM2 = mkJob("m2");
 
   // ── 1. Unconfigured session: nobody is an admin yet, so nobody may enqueue ──
-  const early = await tryWrite(page, `sessions/${code}/mail/m0`, job("m0"));
+  const early = await tryWrite(page, `sessions/${code}/mail/m0`, jobM0);
   expect(early, "no admin is established yet — the queue must be shut").not.toBe("ALLOWED");
   expect(String(early)).toMatch(/permission_denied|denied/i);
 
-  // ── 2. Creator A establishes the session, then CAN enqueue (positive control) ──
+  // ── 2. Creator A establishes the session — then the IDENTICAL write lands ──
+  /* Same uid, same path, same object: only the session's admin configuration
+     changed between the denial above and the allow below. Using a different
+     job id here would have left leg 1's denial resting on a node this test
+     never proved writable. */
   expect(await tryWrite(page, `sessions/${code}/creatorUid`, uidA)).toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
   expect(await tryWrite(page, `adminSecrets/${code}/hash`, REAL_HASH)).toBe("ALLOWED");
-  expect(await tryWrite(page, `sessions/${code}/mail/m1`, job("m1")),
+  expect(await tryWrite(page, `sessions/${code}/mail/m0`, jobM0),
     "the session's creator must be able to enqueue a well-formed job — if this " +
-    "denies, every denial below is meaningless").toBe("ALLOWED");
+    "denies, every denial in this test is meaningless").toBe("ALLOWED");
 
   // Write-once: the same job id cannot be rewritten, even by the creator.
-  const rewrite = await tryWrite(page, `sessions/${code}/mail/m1`, job("m1"));
+  const rewrite = await tryWrite(page, `sessions/${code}/mail/m0`, jobM0);
   expect(rewrite, "mail jobs are write-once (!data.exists())").not.toBe("ALLOWED");
 
   // ── 3. Student B knows the code but is neither creator nor proof-holder ──
@@ -572,7 +583,7 @@ test("rules: mail queue is admin-gated — an admin CAN enqueue, a non-admin CAN
   const uidB = await waitForUid(tabB);
   expect(uidB).not.toBe(uidA);
 
-  const grief = await tryWrite(tabB, `sessions/${code}/mail/m2`, job("m2"));
+  const grief = await tryWrite(tabB, `sessions/${code}/mail/m2`, jobM2);
   expect(grief, "a non-admin who knows the code must not enqueue mail").not.toBe("ALLOWED");
   expect(String(grief)).toMatch(/permission_denied|denied/i);
 
@@ -580,7 +591,7 @@ test("rules: mail queue is admin-gated — an admin CAN enqueue, a non-admin CAN
   /* This is what makes leg 3 a statement about the GATE rather than about the
      payload: only the identity changed between the two. */
   expect(await tryWrite(tabB, `adminSecrets/${code}/proof/${uidB}`, REAL_HASH)).toBe("ALLOWED");
-  expect(await tryWrite(tabB, `sessions/${code}/mail/m2`, job("m2")),
+  expect(await tryWrite(tabB, `sessions/${code}/mail/m2`, jobM2),
     "a co-facilitator holding a valid password proof is an admin").toBe("ALLOWED");
   await ctxB.close();
 
@@ -604,8 +615,8 @@ test("rules: mail queue is admin-gated — an admin CAN enqueue, a non-admin CAN
      through the real rules. */
   const queue = await dbReadAsOwner(`sessions/${code}/mail`);
   expect(Object.keys(queue || {}).sort(),
-    "only the two admin-authored jobs may exist").toEqual(["m1", "m2"]);
-  expect(queue.m1.to).toBe("facilitator@example.test");
+    "only the two admin-authored jobs may exist").toEqual(["m0", "m2"]);
+  expect(queue.m0.to).toBe("facilitator@example.test");
 });
 
 test("rules: the three session links are admin-gated and https-validated", async ({ page, browser }) => {
@@ -630,11 +641,17 @@ test("rules: the three session links are admin-gated and https-validated", async
   expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
   expect(await tryWrite(page, `adminSecrets/${code}/hash`, REAL_HASH)).toBe("ALLOWED");
 
+  /* ONE url for both the admin allow and the participant denial, so the only
+     difference between those two writes is who made them. A different URL on
+     each side would let a payload-specific rule change pass this test while
+     the identity gate was gone. */
+  const GOOD_URL = "https://teams.example.test/meet?id=42";
+
   for (const field of LINKS) {
     const p = `sessions/${code}/${field}`;
     // Positive control: a real https URL from the admin must be ACCEPTED. If
     // this denies, every denial below proves nothing.
-    expect(await tryWrite(page, p, "https://teams.example.test/meet?id=42"), field).toBe("ALLOWED");
+    expect(await tryWrite(page, p, GOOD_URL), field).toBe("ALLOWED");
     // Clearing to "" is explicitly allowed by the validator.
     expect(await tryWrite(page, p, ""), field).toBe("ALLOWED");
     // …and the whitespace exclusion actually bites.
@@ -644,7 +661,9 @@ test("rules: the three session links are admin-gated and https-validated", async
     expect(await tryWrite(page, p, "javascript:alert(1)"), field).not.toBe("ALLOWED");
   }
 
-  // A participant who knows the code cannot publish a link to the class.
+  // A participant who knows the code cannot publish a link to the class —
+  // attempting the very URL the admin just published successfully, so identity
+  // is the only variable.
   const ctxB = await browser.newContext();
   const tabB = await ctxB.newPage();
   await useEmulator(tabB);
@@ -652,7 +671,7 @@ test("rules: the three session links are admin-gated and https-validated", async
   const uidB = await waitForUid(tabB);
   expect(uidB).not.toBe(uidA);
   for (const field of LINKS) {
-    const r = await tryWrite(tabB, `sessions/${code}/${field}`, "https://evil.test/redirect");
+    const r = await tryWrite(tabB, `sessions/${code}/${field}`, GOOD_URL);
     expect(r, field).not.toBe("ALLOWED");
     expect(String(r)).toMatch(/permission_denied|denied/i);
   }
@@ -844,9 +863,12 @@ test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", 
     "the creator must be able to set roomCount before the session starts")
     .toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/${code}/started`, true)).toBe("ALLOWED");
-  // …and after `started`, roomCount closes for the creator too (not an identity
-  // denial — a lifecycle one; asserting it keeps the two reasons distinguishable).
-  expect(await tryWrite(page, `sessions/${code}/roomCount`, 4),
+  /* …and after `started`, roomCount closes for the creator too — not an identity
+     denial, a lifecycle one; asserting it keeps the two reasons distinguishable.
+     The SAME value 3 as the allowed write above, so `started` is the only thing
+     that changed. A different number would leave a payload-sensitive rule able
+     to produce this denial without the lifecycle clause existing at all. */
+  expect(await tryWrite(page, `sessions/${code}/roomCount`, 3),
     "roomCount is frozen once the session has started").not.toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/${code}/rooms/r1/stage`, 2)).toBe("ALLOWED");
 

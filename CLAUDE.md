@@ -780,7 +780,11 @@ tell "the gate held" from "nothing could ever be written here".
 
 How this bit: `build-emulator-rules.js` rewrote `\s` (which the emulator rejects
 at rules-LOAD time, `Illegal regular expression, 'whitespacechar' not found`) to
-`\t\n\r `. That LOADS, so it looked fine for months. But **the emulator's regex
+`\t\n\r` followed by a literal ASCII space — the trailing space is part of the
+replacement, and is spelled out here because inside a code span it is invisible
+(and trips markdownlint MD038), which is not a good property for a note whose
+whole subject is which characters a class contains.
+That LOADS, so it looked fine for months. But **the emulator's regex
 parser does not honour backslash escapes inside a character class — it drops the
 backslash.** Probed directly:
 
