@@ -833,7 +833,21 @@ test("rules: admin-write nodes + pool/room are creator/proof-bound (Phase 4a)", 
   expect(String(await tryWrite(tabB, `sessions/${code}/pool/cidV/room`, "Room 9"))).toMatch(/denied/i);
   // …but the creator can (admin-assign path), and can do the other admin writes.
   expect(await tryWrite(page, `sessions/${code}/pool/cidV/room`, "Room 1")).toBe("ALLOWED");
+  /* roomCount BEFORE started, and this ordering is load-bearing: its .write
+     alone among these nodes also requires `started != true` (and no `closed`),
+     so once the session has started even the creator is legitimately denied.
+     Until now roomCount was DENIED for B and never once ALLOWED for anyone
+     anywhere in the suite, so B's denial could not be told apart from the node
+     being unwritable — the same shape as the open-relay defect, on an admin
+     node. This is that missing positive control. */
+  expect(await tryWrite(page, `sessions/${code}/roomCount`, 3),
+    "the creator must be able to set roomCount before the session starts")
+    .toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/${code}/started`, true)).toBe("ALLOWED");
+  // …and after `started`, roomCount closes for the creator too (not an identity
+  // denial — a lifecycle one; asserting it keeps the two reasons distinguishable).
+  expect(await tryWrite(page, `sessions/${code}/roomCount`, 4),
+    "roomCount is frozen once the session has started").not.toBe("ALLOWED");
   expect(await tryWrite(page, `sessions/${code}/rooms/r1/stage`, 2)).toBe("ALLOWED");
 
   // B CAN self-assign its OWN room (owns cidB via clientMapping).
