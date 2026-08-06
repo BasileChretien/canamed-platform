@@ -81,6 +81,7 @@ async function setupSessionAndJoin(page, context, opts) {
       try {
         localStorage.removeItem("canamed_session");
         localStorage.removeItem("canamed_resume");
+        localStorage.removeItem("canamed_name");
       } catch (e) {}
     }
     function pin(name, value) {

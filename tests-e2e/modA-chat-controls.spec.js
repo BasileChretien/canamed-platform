@@ -37,6 +37,7 @@ async function reachStage1(page, context) {
     try {
       localStorage.removeItem("canamed_session");
       localStorage.removeItem("canamed_resume");
+      localStorage.removeItem("canamed_name");
       localStorage.setItem("canamed_tour_done", "v1");
       localStorage.setItem("canamed_tour_admin_done", "v1");
       localStorage.setItem("canamed_tour_student_done", "v1");
