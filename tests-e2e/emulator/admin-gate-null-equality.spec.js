@@ -76,28 +76,41 @@ async function legacySession(page, uid, prefix) {
 
 /* A second PRINCIPAL, not merely a second page: the emulator pinning rides the
    `page` fixture, so a bare browser.newPage() reaches no Firebase at all. */
-async function peerPage(browser) {
+async function peerPage(browser, primaryUid) {
   const ctx = await browser.newContext();
   const p = await ctx.newPage();
   await useEmulator(p);
   const uid = await signedInUid(p);
+  /* PROVE it is a different principal. A fresh context should mint a new
+     anonymous uid, but if it ever did not, this "peer" would BE the creator
+     and every denial below would pass through the creator branch rather than
+     the branch under test — a false pass that looks like a clean run. */
+  expect(uid, "the peer must be a DIFFERENT principal from the creator")
+    .not.toBe(primaryUid);
   return { ctx, page: p, uid };
+}
+
+/* A denial must be a PERMISSION denial. tryWrite() reports any error, so a
+   bare .not.toBe("ALLOWED") also passes on a transport or config failure —
+   i.e. it would go green in an environment where nothing was tested at all. */
+function expectDenied(result, why) {
+  expect(result, why).not.toBe("ALLOWED");
+  expect(String(result), why + " (and denied for PERMISSION, not by a transport error)")
+    .toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
 }
 
 test("rules: a peer cannot CLOSE a session that predates adminSecrets", async ({ page, browser }) => {
   const uid = await signedInUid(page);
   const code = await legacySession(page, uid, "legacy-close-");
 
-  const peer = await peerPage(browser);
-  expect(peer.uid, "the peer must be a different principal").not.toBe(uid);
+  const peer = await peerPage(browser, uid);
   try {
     const closed = await tryWrite(peer.page, "sessions/" + code + "/closed",
       { by: "Attacker", at: Date.now() });
-    expect(closed,
+    expectDenied(closed,
       "closing is write-once and unrecoverable — a participant must not be " +
       "able to end the session for everyone just because the session predates " +
-      "the adminSecrets scheme").not.toBe("ALLOWED");
-    expect(String(closed)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+      "the adminSecrets scheme");
   } finally { await peer.ctx.close(); }
 
   /* The creator must STILL be able to close it — the guard must not lock the
@@ -114,13 +127,12 @@ test("rules: a peer cannot ENQUEUE MAIL on a session that predates adminSecrets"
   const uid = await signedInUid(page);
   const code = await legacySession(page, uid, "legacy-mail-");
 
-  const peer = await peerPage(browser);
+  const peer = await peerPage(browser, uid);
   try {
     const enqueued = await tryWrite(peer.page, "sessions/" + code + "/mail/m1",
       { to: "victim@example.test", subject: "spam", text: "spam", at: Date.now() });
-    expect(enqueued,
-      "the mail queue must stay admin-gated — sendQueuedMail re-checks nothing, " +
-      "so a bypass here is an open relay").not.toBe("ALLOWED");
+    expectDenied(enqueued,
+      "the mail queue must stay admin-gated — sendQueuedMail re-checks nothing");
   } finally { await peer.ctx.close(); }
 });
 
@@ -143,13 +155,13 @@ test("rules: a peer cannot REASSIGN a room on a session that predates adminSecre
     });
   }, ["sessions/" + code, cid, uid]);
 
-  const peer = await peerPage(browser);
+  const peer = await peerPage(browser, uid);
   try {
     const moved = await tryWrite(peer.page,
       "sessions/" + code + "/pool/" + cid + "/room", "Room 2");
-    expect(moved,
+    expectDenied(moved,
       "room assignment is admin-gated; the null-equality bypass made it open " +
-      "on any pre-adminSecrets session").not.toBe("ALLOWED");
+      "on any pre-adminSecrets session");
   } finally { await peer.ctx.close(); }
 });
 
@@ -168,13 +180,12 @@ test("rules: the ORG tree carries the same guard", async ({ page, browser }) => 
   }, [base, uid]);
   expect(seeded).toBe("OK");
 
-  const peer = await peerPage(browser);
+  const peer = await peerPage(browser, uid);
   try {
     const closed = await tryWrite(peer.page, base + "/closed",
       { by: "Attacker", at: Date.now() });
-    expect(closed, "the org mirror must be guarded too — fixing only the " +
-      "default tree would leave the same hole one namespace over")
-      .not.toBe("ALLOWED");
+    expectDenied(closed, "the org mirror must be guarded too — fixing only " +
+      "the default tree would leave the same hole one namespace over");
   } finally { await peer.ctx.close(); }
 });
 
@@ -199,6 +210,10 @@ test("rules: a REAL admin proof still opens the gate (the guard must not break l
   const op = await other.newPage();
   await useEmulator(op);
   const otherUid = await signedInUid(op);
+  /* If this were the creator, the summary write below would succeed via the
+     creator branch and prove nothing whatsoever about proofs. */
+  expect(otherUid, "the proof-holder must NOT be the creator, or this test " +
+    "passes through the wrong branch").not.toBe(uid);
   try {
     expect(await tryWrite(op, "adminSecrets/" + code + "/proof/" + otherUid, realHash))
       .toBe("ALLOWED");
