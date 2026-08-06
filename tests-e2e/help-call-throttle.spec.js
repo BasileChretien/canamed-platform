@@ -85,6 +85,7 @@ async function spawnParticipant(context, code) {
     try {
       localStorage.removeItem("canamed_session");
       localStorage.removeItem("canamed_resume");
+      localStorage.removeItem("canamed_name");
     } catch (e) {}
     function pin(name, value) {
       Object.defineProperty(window, name, {

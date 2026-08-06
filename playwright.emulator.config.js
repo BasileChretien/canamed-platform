@@ -40,6 +40,19 @@ module.exports = defineConfig({
   fullyParallel: false,       // cross-tab sync needs a single shared context
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  /* The retry above buys tolerance for genuine infrastructure noise (a slow
+     emulator boot, a dropped socket). It must NOT buy tolerance for a flaky
+     RULE. Without this flag a test that fails then passes on retry exits 0 and
+     appears only as "1 flaky" in a report nobody opens — so a real defect in
+     database.rules.json, or in the client's use of it, reads as green.
+     That is not hypothetical: the create → join → advance test failed ~15% of
+     full runs for weeks on a genuine single-writer bug (a participant write
+     racing the facilitator's Advance, fixed in #292). Both attempts failing is
+     ~2% at that rate, so CI essentially never surfaced it, and it was written
+     off as flake three times locally instead.
+     Keep the retry, but make a flaky result FAIL the run: the retry is then a
+     diagnostic (it says "this is intermittent"), not a silencer. */
+  failOnFlakyTests: true,
   workers: 1,
   reporter: process.env.CI ? [["github"], ["list"]] : "list",
   use: {

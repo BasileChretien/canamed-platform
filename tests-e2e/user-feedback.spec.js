@@ -89,6 +89,7 @@ test.describe("Bug 1 — single-room workshops", () => {
       try {
         localStorage.removeItem("canamed_session");
         localStorage.removeItem("canamed_resume");
+        localStorage.removeItem("canamed_name");
       } catch (e) {}
       function pin(name, value) {
         Object.defineProperty(window, name, {

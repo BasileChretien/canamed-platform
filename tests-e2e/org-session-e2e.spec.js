@@ -118,6 +118,7 @@ async function pinLocalOrg(p) {
       localStorage.setItem("canamed_tour_student_moda_done", "v1");
       localStorage.removeItem("canamed_session");
       localStorage.removeItem("canamed_resume");
+      localStorage.removeItem("canamed_name");
     } catch (e) {}
     window.confirm = () => true;
     const tryAccept = () => {

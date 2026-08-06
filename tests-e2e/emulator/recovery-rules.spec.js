@@ -65,17 +65,32 @@ function sessionPath(code) {
   return "sessions/" + code.toLowerCase();
 }
 
-test("rules: a non-creator cannot reset the password without the recovery code, but CAN with it", async ({ page, context, browser }) => {
+test("rules: a non-creator cannot reset the password without the recovery code, but CAN with it", async ({ page, browser }) => {
   // ---- SETUP: facilitator creates the session (writes recovery + hash) ----
   const { code, recovery } = await createSessionUI(page);
   expect(recovery).toMatch(/^[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/);
 
   // ---- A second, independent client (a participant who knows only the code) ----
-  const attacker = await context.newPage();
+  /* A fresh CONTEXT, not context.newPage() — the same reason the racer below
+     already uses one, applied to the client this test is actually about.
+     Firebase Auth persists the anonymous user PER CONTEXT, so a same-context
+     page reuses the CREATOR's uid and the "attacker" is the facilitator. Then
+     neither half of this test means what its title says: the denials would be
+     denials against the creator, and the positive reset at the end would prove
+     only that the CREATOR can recover with the code — never a non-creator,
+     which is the whole point of the recovery path (a facilitator who lost the
+     password, typically on another device). */
+  const attackerCtx = await browser.newContext();
+  const attacker = await attackerCtx.newPage();
   await useEmulator(attacker);
   attacker.on("dialog", (d) => { try { d.accept(); } catch (_) {} });
   await attacker.goto("/");
   await waitForAuth(attacker);
+
+  const creatorUid = await page.evaluate(() => firebase.auth().currentUser.uid);
+  expect(await attacker.evaluate(() => firebase.auth().currentUser.uid),
+    "the attacker must be a DISTINCT anonymous user, or this test is the " +
+    "creator testing itself").not.toBe(creatorUid);
 
   const sPath = sessionPath(code);
 
@@ -159,5 +174,5 @@ test("rules: a non-creator cannot reset the password without the recovery code, 
     "v2$100000$abcdef0123456789");
   expect(goodHash, "adminPasswordHash overwrite by the reset initiator must be ALLOWED: " + goodHash).toBe("ALLOWED");
 
-  await attacker.close();
+  await attackerCtx.close();
 });
