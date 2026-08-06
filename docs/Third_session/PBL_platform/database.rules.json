@@ -57,20 +57,20 @@
             "at":         { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 7200000" },
             "$other":     { ".validate": false }
           }
-        },
-        "orgs": {
-          "$orgSlug": {
-            "sessions": {
-              "$sessionId": {
-                ".read": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() === auth.uid",
-                "$uid": {
-                  ".write": "auth != null && (auth.uid === $uid || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() === auth.uid) && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
-                  "email":      { ".validate": "newData.isString() && newData.val().length <= 254" },
-                  "name":       { ".validate": "newData.isString() && newData.val().length <= 120" },
-                  "university": { ".validate": "newData.isString() && newData.val().length <= 120" },
-                  "at":         { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 7200000" },
-                  "$other":     { ".validate": false }
-                }
+        }
+      },
+      "orgs": {
+        "$orgSlug": {
+          "sessions": {
+            "$sessionId": {
+              ".read": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() === auth.uid",
+              "$uid": {
+                ".write": "auth != null && (auth.uid === $uid || root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() === auth.uid) && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
+                "email":      { ".validate": "newData.isString() && newData.val().length <= 254" },
+                "name":       { ".validate": "newData.isString() && newData.val().length <= 120" },
+                "university": { ".validate": "newData.isString() && newData.val().length <= 120" },
+                "at":         { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 7200000" },
+                "$other":     { ".validate": false }
               }
             }
           }
@@ -174,6 +174,12 @@
           ".read": "auth != null",
           ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && !data.exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val())",
           ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+        },
+        "audit": {
+          "$entryId": {
+            ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()) && !data.exists()",
+            ".validate": "newData.hasChildren(['kind','by','at']) && newData.child('kind').isString() && newData.child('kind').val().length > 0 && newData.child('kind').val().length <= 30 && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber() && newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 60000 && (!newData.hasChild('payload') || (newData.child('payload').isString() && newData.child('payload').val().length <= 500))"
+          }
         },
         "summary": {
           ".read": "auth != null",
