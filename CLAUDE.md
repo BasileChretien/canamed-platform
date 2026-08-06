@@ -772,6 +772,44 @@ branch's rules. Always run `node scripts/sim/build-emulator-rules.js` before a
 hand-rolled emulator run, and assert the gate is present in the GENERATED file
 before trusting a result.
 
+### ⚠️ A DENIAL IS NOT EVIDENCE OF A GATE — the emulator's regex parser drops backslashes (found 2026-08-06)
+
+**Never let an emulator test rest on a denial alone.** Pair every denial with an
+ALLOW of the *same payload* by an authorised identity — otherwise the test cannot
+tell "the gate held" from "nothing could ever be written here".
+
+How this bit: `build-emulator-rules.js` rewrote `\s` (which the emulator rejects
+at rules-LOAD time, `Illegal regular expression, 'whitespacechar' not found`) to
+`\t\n\r `. That LOADS, so it looked fine for months. But **the emulator's regex
+parser does not honour backslash escapes inside a character class — it drops the
+backslash.** Probed directly:
+
+| regex | value | result |
+| --- | --- | --- |
+| `/^[^\t]+$/` | `"ttt"` | **deny** — the LETTER t is excluded |
+| `/^[^\t]+$/` | `"a<TAB>b"` | **ALLOW** — a real TAB is not |
+| `/^[^\x09]+$/` | `"v@example.test"` | deny — `\x` is likewise x, 0, 9 |
+
+So `[^@\t\n\r ]` meant "not @, t, n, r, space": it banned t/n/r from every email
+address and admitted real tabs and newlines. `sessions/$id/mail/$mailId` became
+unsatisfiable under the emulator, so the open-relay security test passed on a
+denial that had nothing to do with the admin gate — **it would have passed with
+the gate deleted.** `sendQueuedMail` does no authorisation of its own, so that
+rule is the only gate on the relay. The three `*Link` validators (six more `\s`
+sites) were equally un-exercisable and had never been asserted on at all.
+
+Fixed: whole-CLASS substitutions probed against a live emulator (`[^@\s]` →
+`[!-?A-~]`, `[^\s]` → `[!-~]` — printable-ASCII ranges, the only forms that both
+load and are honoured), plus `assertEmulatorSafe()`, which now FAILS the build on
+any surviving backslash escape rather than mistranslating the next one. The
+emulator variant is deliberately **strictly tighter** than production, so an
+emulator ALLOW is sound evidence about production while a denial on a *non-ASCII*
+payload is not — keep emulator test payloads ASCII. `sim-with-emulator.js` had a
+second inline copy of the transform; it now delegates.
+`Verify:` `node --test tests/emulator-rules-transform.test.js`, and in the
+emulator suite "mail queue is admin-gated" + "the three session links are
+admin-gated" — both now carry ALLOW legs as positive controls.
+
 ### 2026-08-05 — an org session was driven end to end for the FIRST time
 
 Everything about the `orgs/` subtree had been verified by inspection and by unit

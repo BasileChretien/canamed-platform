@@ -518,18 +518,150 @@ test("rules: roleChoices is owner-bound — a peer cannot overwrite another part
   await ctxB.close();
 });
 
-test("rules: mail queue is admin-gated — a non-admin cannot enqueue mail (open-relay guard)", async ({ page }) => {
+test("rules: mail queue is admin-gated — an admin CAN enqueue, a non-admin CANNOT (open-relay guard)", async ({ page, browser }) => {
+  /* `sendQueuedMail` (functions/index.js) performs NO authorisation of its own
+     — it trusts whatever appears at sessions/{code}/mail/{id} — so this rule is
+     the only thing standing between the deployed function and an open relay.
+     The feature is dormant (EMAIL_ENABLED defaults false) but the function IS
+     deployed and listening.
+
+     THIS TEST USED TO BE VACUOUS. It asserted a single denial on a fresh,
+     unconfigured session — and under the emulator EVERY mail write was denied
+     regardless of the gate, because the `to` validator's regex could not be
+     satisfied at all (build-emulator-rules.js mistranslated `\s`, see its
+     header). It would have passed with the admin gate deleted outright.
+
+     So the shape below is: the same payload, the same node, the same uid,
+     ALLOWED once the identity is right and DENIED when it is not. The
+     ALLOWED legs are the positive control — if the validator ever becomes
+     unsatisfiable again, this test fails instead of passing for free. */
   await page.goto("/");
-  await waitForUid(page);
-  // A fresh code has no adminPasswordHash, so the existence-based admin gate
-  // fails: a participant who merely knows a code cannot turn the queue into an
-  // open relay. A well-formed mail job is still denied.
+  const uidA = await waitForUid(page);
+  const REAL_HASH = "d".repeat(64);
   const code = "mail-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
-  const res = await tryWrite(page, `sessions/${code}/mail/m1`, {
-    to: "victim@example.com", subject: "phish", at: Date.now()
+
+  /* One payload, reused for every leg, so identity is the ONLY variable.
+     Deliberately plain ASCII: the emulator's rules are a strictly TIGHTER
+     variant of production's (`[!-~]` vs `[^\s]`, see build-emulator-rules.js),
+     so a verdict on an ASCII address holds for production too, while one on a
+     non-ASCII address would not. */
+  const job = (id) => ({ to: "facilitator@example.test", subject: "Debrief " + id, at: Date.now() });
+
+  // ── 1. Unconfigured session: nobody is an admin yet, so nobody may enqueue ──
+  const early = await tryWrite(page, `sessions/${code}/mail/m0`, job("m0"));
+  expect(early, "no admin is established yet — the queue must be shut").not.toBe("ALLOWED");
+  expect(String(early)).toMatch(/permission_denied|denied/i);
+
+  // ── 2. Creator A establishes the session, then CAN enqueue (positive control) ──
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+  expect(await tryWrite(page, `adminSecrets/${code}/hash`, REAL_HASH)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/mail/m1`, job("m1")),
+    "the session's creator must be able to enqueue a well-formed job — if this " +
+    "denies, every denial below is meaningless").toBe("ALLOWED");
+
+  // Write-once: the same job id cannot be rewritten, even by the creator.
+  const rewrite = await tryWrite(page, `sessions/${code}/mail/m1`, job("m1"));
+  expect(rewrite, "mail jobs are write-once (!data.exists())").not.toBe("ALLOWED");
+
+  // ── 3. Student B knows the code but is neither creator nor proof-holder ──
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+
+  const grief = await tryWrite(tabB, `sessions/${code}/mail/m2`, job("m2"));
+  expect(grief, "a non-admin who knows the code must not enqueue mail").not.toBe("ALLOWED");
+  expect(String(grief)).toMatch(/permission_denied|denied/i);
+
+  // ── 4. …and the SAME uid, SAME payload, is allowed once it proves admin ──
+  /* This is what makes leg 3 a statement about the GATE rather than about the
+     payload: only the identity changed between the two. */
+  expect(await tryWrite(tabB, `adminSecrets/${code}/proof/${uidB}`, REAL_HASH)).toBe("ALLOWED");
+  expect(await tryWrite(tabB, `sessions/${code}/mail/m2`, job("m2")),
+    "a co-facilitator holding a valid password proof is an admin").toBe("ALLOWED");
+  await ctxB.close();
+
+  // ── 5. The `to` validator is the second half of the guard, now exercisable ──
+  /* Both payloads are rejected by production's `[^@\s]` too — the header
+     injection carries whitespace, the other has no `@` — so these denials are
+     sound for production, unlike a denial on a non-ASCII address would be. */
+  const inject = await tryWrite(page, `sessions/${code}/mail/m3`, {
+    to: "facilitator@example.test\nBcc: attacker@evil.test",
+    subject: "header injection", at: Date.now()
   });
-  expect(res).not.toBe("ALLOWED");
-  expect(String(res)).toMatch(/permission_denied|denied/i);
+  expect(inject, "a `to` carrying a newline is an SMTP header injection").not.toBe("ALLOWED");
+  const notAnAddress = await tryWrite(page, `sessions/${code}/mail/m4`, {
+    to: "not-an-address", subject: "x", at: Date.now()
+  });
+  expect(notAnAddress).not.toBe("ALLOWED");
+
+  // ── 6. Observe what actually LANDED — a denial and a silent success differ ──
+  /* Per the suite's standing rule: assert the DB value, never the verdict
+     alone. The owner read is for OBSERVATION only; every write above went
+     through the real rules. */
+  const queue = await dbReadAsOwner(`sessions/${code}/mail`);
+  expect(Object.keys(queue || {}).sort(),
+    "only the two admin-authored jobs may exist").toEqual(["m1", "m2"]);
+  expect(queue.m1.to).toBe("facilitator@example.test");
+});
+
+test("rules: the three session links are admin-gated and https-validated", async ({ page, browser }) => {
+  /* teamsLink / questionnaireLink / preQuestionnaireLink are the OTHER six
+     places database.rules.json used `\s` (`^https:[/][/][^\s]+$`), so until
+     2026-08-06 they were un-exercisable for exactly the same reason as the
+     mail queue: the emulator mistranslated the class and no valid URL could
+     satisfy the validator. Nothing had ever asserted on them. They are
+     participant-visible links a facilitator publishes, so an ungated write
+     would let anyone redirect a class to a URL of their choosing.
+
+     Values are plain ASCII on purpose — the emulator's `[!-~]` is a strictly
+     tighter variant of production's `[^\s]`, so ASCII verdicts carry over and
+     non-ASCII ones would not. */
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const REAL_HASH = "e".repeat(64);
+  const code = "link-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const LINKS = ["teamsLink", "questionnaireLink", "preQuestionnaireLink"];
+
+  expect(await tryWrite(page, `sessions/${code}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `sessions/${code}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+  expect(await tryWrite(page, `adminSecrets/${code}/hash`, REAL_HASH)).toBe("ALLOWED");
+
+  for (const field of LINKS) {
+    const p = `sessions/${code}/${field}`;
+    // Positive control: a real https URL from the admin must be ACCEPTED. If
+    // this denies, every denial below proves nothing.
+    expect(await tryWrite(page, p, "https://teams.example.test/meet?id=42"), field).toBe("ALLOWED");
+    // Clearing to "" is explicitly allowed by the validator.
+    expect(await tryWrite(page, p, ""), field).toBe("ALLOWED");
+    // …and the whitespace exclusion actually bites.
+    expect(await tryWrite(page, p, "https://teams.example.test/a b"), field).not.toBe("ALLOWED");
+    expect(await tryWrite(page, p, "https://teams.example.test/a\nb"), field).not.toBe("ALLOWED");
+    expect(await tryWrite(page, p, "http://teams.example.test/x"), field).not.toBe("ALLOWED");
+    expect(await tryWrite(page, p, "javascript:alert(1)"), field).not.toBe("ALLOWED");
+  }
+
+  // A participant who knows the code cannot publish a link to the class.
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+  for (const field of LINKS) {
+    const r = await tryWrite(tabB, `sessions/${code}/${field}`, "https://evil.test/redirect");
+    expect(r, field).not.toBe("ALLOWED");
+    expect(String(r)).toMatch(/permission_denied|denied/i);
+  }
+  await ctxB.close();
+
+  // Observe the stored values: the denials must not have landed.
+  for (const field of LINKS) {
+    expect(await dbReadAsOwner(`sessions/${code}/${field}`), field).toBe("");
+  }
 });
 
 test("rules: /credentials/$id — public read by exact id; listing denied; write-once enforced; bad payload denied", async ({ page }) => {

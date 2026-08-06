@@ -35,36 +35,27 @@ const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const emulatorPorts = require("../ops/emulator-ports.js");
+/* The emulator needs its own copy of database.rules.json — its regex parser
+ * rejects `\s` outright and MIS-PARSES every other backslash escape. The whole
+ * transform, and the empirical evidence behind each substitution, lives in
+ * build-emulator-rules.js.
+ *
+ * This file used to carry an inline SECOND COPY of that transform. The two
+ * would have drifted the moment either was touched: build-emulator-rules.js was
+ * fixed on 2026-08-06 and this copy would not have been, so `npm run
+ * sim:emulator` would have kept running the broken rules while `npm run
+ * test:e2e:rules` ran the fixed ones — two suites disagreeing about what the
+ * rules say, with no signal that they did. Delegate, don't duplicate. */
+const { buildEmulatorRules } = require("./build-emulator-rules.js");
 
 const PLATFORM_DIR = path.resolve(__dirname, "..", "..",
   "docs", "Third_session", "PBL_platform");
 const FIREBASE_CONFIG = path.join(PLATFORM_DIR, "firebase.json");
-const RULES_PROD = path.join(PLATFORM_DIR, "database.rules.json");
 const RULES_EMU  = path.join(PLATFORM_DIR, "database.rules.emulator.json");
 const FIREBASE_CONFIG_EMU = path.join(PLATFORM_DIR, "firebase.emulator.json");
 const SERVE_PLATFORM = path.resolve(__dirname, "..", "serve-platform.js");
 const SIM_SCRIPT     = path.resolve(__dirname, "simulate-session.js");
 
-/* The production database.rules.json uses `\\s` inside RegExp literals
- * (`[^\\s]+` for "non-whitespace"). Real Firebase RTDB accepts this;
- * the local emulator's stricter regex parser rejects it with
- * "Illegal regular expression, 'whitespacechar' not found". Workaround:
- * write an emulator-only copy that swaps `\\s` for an explicit
- * whitespace class. Production rules are NOT modified. */
-function buildEmulatorRules() {
-  // Swap the JSON-escaped \s (which the file stores as the two-char
-  // sequence \\s, displayed in od as `\ \ s`) for the JSON-escaped
-  // explicit whitespace class \t\n\r and a literal space (each
-  // metachar is two backslashes in JSON). The function-form replace
-  // keeps the literal string intact regardless of shell quoting.
-  const src = fs.readFileSync(RULES_PROD, "utf8");
-  const patched = src.replace(/\\\\s/g, () => "\\\\t\\\\n\\\\r ");
-  fs.writeFileSync(RULES_EMU, patched, "utf8");
-  // Companion firebase.json that points at the patched rules.
-  const cfgSrc = JSON.parse(fs.readFileSync(FIREBASE_CONFIG, "utf8"));
-  if (cfgSrc.database) cfgSrc.database.rules = "database.rules.emulator.json";
-  fs.writeFileSync(FIREBASE_CONFIG_EMU, JSON.stringify(cfgSrc, null, 2), "utf8");
-}
 function cleanupEmulatorRules() {
   for (const p of [RULES_EMU, FIREBASE_CONFIG_EMU]) {
     try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch (_) {}
