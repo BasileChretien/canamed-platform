@@ -89,6 +89,44 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
   to split the finished commits onto a fresh branch off `main` (#264) and
   retitle the original **WIP — DO NOT MERGE**. Same discipline as the
   STATUS-CLAIM RULE below, applied to PRs instead of docs.
+- **A failed `gh pr merge` is NOT evidence the merge failed.** (Established
+  2026-08-06 on #292.) This repo is worked through several worktrees, and `main`
+  is usually checked out in one of them. `gh pr merge` merges on GitHub FIRST,
+  then tries to update the local checkout — and that second half dies with
+  `fatal: 'main' is already used by worktree at C:/R_git/canamed-platform-<x>`.
+  The command exits non-zero having already merged. Two consequences:
+  1. **Never retry on the error text.** Check the actual state first —
+     `gh pr view <n> --json state,mergeCommit,mergedAt`. Retrying blind is how a
+     merged PR gets re-merged or a fresh branch gets cut from a stale base.
+  2. **`--delete-branch` silently does not run**, because it is part of the same
+     local half. Delete it yourself: `git push origin --delete <branch>`, and
+     confirm with `git ls-remote --heads origin <branch>` (empty = gone).
+- **After ANY rebase, re-read the shell version against `origin/main` — not in
+  place.** (Established 2026-08-06 on #292; the mechanism was already known, this
+  is the second sighting.) Bump to vN, rebase onto a `main` that also bumped to
+  vN, and git resolves your identical hunk as already-upstream and DROPS it. The
+  markers still all read vN and `shell-csp-vendoring.spec.js` still passes —
+  it only checks the three agree — so you are left with a modified `script.js`
+  and NO version increment. That is undeployable-but-green: returning browsers
+  keep serving the cached vN bundle, without the change. An EMPTY diff below,
+  after a rebase that touched shell files, means your bump was absorbed —
+  re-bump to vN+1. Then verify what actually SHIPPED against the live site, not
+  the deploy's exit code (`grep SHELL_VERSION` alone only prints whatever is
+  live; assert the value you expect, or it will "pass" on the stale one):
+
+  ```bash
+  git fetch origin
+  P=docs/Third_session/PBL_platform
+  git diff --stat origin/main...HEAD -- $P/sw.js $P/script-loader.js $P/index.html
+  expected=v141   # the version THIS change ships
+  curl --fail --silent --show-error https://canamed-69785.web.app/sw.js \
+    | grep -F "canamed-shell-$expected"
+  ```
+
+  The paths are NOT at the repo root — everything served lives under
+  `docs/Third_session/PBL_platform/`. A root-relative pathspec silently matches
+  nothing, and an empty diff is exactly this check's failure signal, so getting
+  it wrong reports the bug on every run.
 - **Deleting a long-lived UI control is an AUDIT, not a deletion.** (Established
   2026-07-30, removing the create form's Scenario select.) Such a control
   accumulates side effects nobody has catalogued, so the question is not "what
