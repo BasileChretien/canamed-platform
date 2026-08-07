@@ -306,8 +306,12 @@ test("any served file that is neither precached nor ?v=-referenced is network-fi
 // 5. behaviour: which copy actually comes back
 // ==========================================================================
 
-/** A cache stub whose contents and calls the test can inspect. */
-function fakeCaches(seed = {}) {
+/**
+ * A cache stub whose contents and calls the test can inspect.
+ * `put` behaviour is pluggable so a test can hold the write PENDING or make it
+ * reject, which is the whole point of the lifetime tests further down.
+ */
+function fakeCaches(seed = {}, putBehaviour) {
   const store = new Map(Object.entries(seed));
   const calls = { put: [] };
   global.caches = {
@@ -318,8 +322,10 @@ function fakeCaches(seed = {}) {
     open() {
       return Promise.resolve({
         put(req, resp) {
-          calls.put.push(req.url ? req.url.replace(ORIGIN, "") : String(req));
-          return Promise.resolve();
+          const key = req.url ? req.url.replace(ORIGIN, "") : String(req);
+          calls.put.push(key);
+          store.set(key, resp);
+          return putBehaviour ? putBehaviour(key, resp) : Promise.resolve();
         }
       });
     }
@@ -334,14 +340,38 @@ function body(text, ok = true) {
 
 const request = (p, extra = {}) => ({ url: ORIGIN + p, mode: "no-cors", ...extra });
 
+/**
+ * A FetchEvent-alike. `waitUntil` collects the promises the SW asks to be kept
+ * alive; `settled()` awaits them, which is how a test observes a write that the
+ * handler deliberately does NOT await.
+ */
+function fakeEvent(req) {
+  const kept = [];
+  const responses = [];
+  return {
+    request: req,
+    kept,
+    responses,
+    waitUntil(p) { kept.push(p); },
+    respondWith(p) { responses.push(p); },
+    settled() { return Promise.all(kept); }
+  };
+}
+
+/** Let every already-queued microtask AND macrotask run. */
+const drain = () => new Promise((resolve) => setImmediate(resolve));
+
 test("network-first returns the NETWORK copy even when a stale copy is cached", async () => {
   // The actual bug: privacy.html sat in the cache reading the pre-correction
   // Art. 13 wording, and the fixed copy on the server was never consulted.
   const { calls } = fakeCaches({ "/privacy.html": body("STALE notice") });
   global.fetch = () => Promise.resolve(body("FRESH notice"));
 
-  const resp = await handleSameOrigin(request("/privacy.html", { mode: "navigate" }));
+  const req = request("/privacy.html", { mode: "navigate" });
+  const ev = fakeEvent(req);
+  const resp = await handleSameOrigin(req, ev);
   assert.strictEqual(resp._text, "FRESH notice");
+  await ev.settled();
   assert.deepStrictEqual(calls.put, ["/privacy.html"], "the fresh copy must replace the cached one");
 });
 
@@ -351,7 +381,8 @@ test("network-first falls back to the CACHED copy when the network throws", asyn
   fakeCaches({ "/healthcheck.html": body("cached gate") });
   global.fetch = () => Promise.reject(new Error("offline"));
 
-  const resp = await handleSameOrigin(request("/healthcheck.html"));
+  const req = request("/healthcheck.html");
+  const resp = await handleSameOrigin(req, fakeEvent(req));
   assert.strictEqual(resp._text, "cached gate");
 });
 
@@ -359,10 +390,12 @@ test("network-first offline with nothing cached: navigations get index.html, oth
   fakeCaches({ "/index.html": body("<shell/>") });
   global.fetch = () => Promise.reject(new Error("offline"));
 
-  const nav = await handleSameOrigin(request("/scenario-author.html", { mode: "navigate" }));
+  const navReq = request("/scenario-author.html", { mode: "navigate" });
+  const nav = await handleSameOrigin(navReq, fakeEvent(navReq));
   assert.strictEqual(nav._text, "<shell/>", "a navigation still gets the offline shell");
 
-  const sub = await handleSameOrigin(request("/healthcheck.css"));
+  const subReq = request("/healthcheck.css");
+  const sub = await handleSameOrigin(subReq, fakeEvent(subReq));
   assert.strictEqual(sub.status, 504, "a sub-resource gets the 504 the caller expects");
 });
 
@@ -371,13 +404,15 @@ test("cache-first answers from cache WITHOUT touching the network", async () => 
   let fetched = 0;
   global.fetch = () => { fetched++; return Promise.resolve(body("network js")); };
 
-  const resp = await handleSameOrigin(request("/script.js"));
+  const req = request("/script.js");
+  const resp = await handleSameOrigin(req, fakeEvent(req));
   assert.strictEqual(resp._text, "cached shell js");
   assert.strictEqual(fetched, 0, "a precached shell asset must not cost a network round-trip");
 
   // Same for a ?v=-busted lazy chunk.
   fakeCaches({ "/admin-tools.js?v=v143": body("cached chunk") });
-  const chunk = await handleSameOrigin(request("/admin-tools.js?v=v143"));
+  const chunkReq = request("/admin-tools.js?v=v143");
+  const chunk = await handleSameOrigin(chunkReq, fakeEvent(chunkReq));
   assert.strictEqual(chunk._text, "cached chunk");
   assert.strictEqual(fetched, 0);
 });
@@ -385,15 +420,139 @@ test("cache-first answers from cache WITHOUT touching the network", async () => 
 test("cache-first on a MISS still fetches and caches", async () => {
   const { calls } = fakeCaches({});
   global.fetch = () => Promise.resolve(body("fetched chunk"));
-  const resp = await handleSameOrigin(request("/room.css"));
+  const req = request("/room.css");
+  const ev = fakeEvent(req);
+  const resp = await handleSameOrigin(req, ev);
   assert.strictEqual(resp._text, "fetched chunk");
+  await ev.settled();
   assert.deepStrictEqual(calls.put, ["/room.css"]);
 });
 
 test("a non-2xx network response is returned as-is, not masked by the cache", async () => {
   const { calls } = fakeCaches({ "/privacy.html": body("STALE notice") });
   global.fetch = () => Promise.resolve(body("<h1>Not found</h1>", false));
-  const resp = await handleSameOrigin(request("/privacy.html"));
+  const req = request("/privacy.html");
+  const ev = fakeEvent(req);
+  const resp = await handleSameOrigin(req, ev);
   assert.strictEqual(resp.ok, false, "a real 404 is information — do not answer it from a stale copy");
+  await ev.settled();
   assert.deepStrictEqual(calls.put, [], "a non-2xx must never overwrite the cached copy");
+});
+
+// ==========================================================================
+// 6. the cache write must outlive the response (CodeRabbit, #305)
+// ==========================================================================
+//
+// A service worker may be terminated as soon as its event handlers settle. A
+// fire-and-forget `cache.put(...)` can therefore be killed mid-write, and the
+// entry is missing exactly when it is needed — offline. The fix is
+// event.waitUntil, NOT await: awaiting would charge every network-first fetch
+// the cache-write latency before the page sees a byte. These tests pin both
+// halves — the write is protected AND the response is not delayed by it.
+
+test("the cache write is handed to waitUntil while still PENDING, and the response is NOT delayed by it", { timeout: 10000 }, async () => {
+  // The put is held open for the whole test, so an implementation that AWAITS
+  // it can never produce a response here. Deliberately not awaited directly:
+  // `await handleSameOrigin(...)` against an awaiting implementation would hang
+  // forever rather than fail, and a hang is not a test result.
+  let releasePut;
+  const putGate = new Promise((resolve) => { releasePut = resolve; });
+  const { calls } = fakeCaches({}, () => putGate);
+  global.fetch = () => Promise.resolve(body("FRESH notice"));
+
+  const req = request("/privacy.html", { mode: "navigate" });
+  const ev = fakeEvent(req);
+  const pending = handleSameOrigin(req, ev);
+  let responded = null;
+  pending.then((r) => { responded = r; }, () => {});
+  await drain();
+
+  // (a) the page already has its response, while the write is still in flight.
+  //     This is the assertion that fails for option (1), `await cache.put(...)`.
+  assert.ok(responded, "the response must arrive BEFORE the cache write completes — an awaited put would block here");
+  assert.strictEqual(responded._text, "FRESH notice");
+  // (b) the write really was started…
+  assert.deepStrictEqual(calls.put, ["/privacy.html"]);
+  // (c) …and handed over exactly once. This is the assertion that fails for a
+  //     fire-and-forget write: nothing is handed over at all, so the SW may be
+  //     terminated mid-write and the entry is missing when offline needs it.
+  assert.strictEqual(ev.kept.length, 1, "the cache write must be handed to event.waitUntil");
+
+  let settled = false;
+  ev.kept[0].then(() => { settled = true; }, () => { settled = true; });
+  await drain();
+  assert.strictEqual(settled, false, "the kept promise is the PENDING write, not an already-resolved placeholder");
+
+  releasePut();
+  await ev.settled();
+  await drain();
+  assert.strictEqual(settled, true, "the kept promise resolves once the write completes");
+  await pending;
+});
+
+test("the fetch listener threads its FetchEvent through to the cache write", async () => {
+  // End-to-end through the REAL registered listener: a fix that teaches
+  // fromNetwork about waitUntil but forgets to pass `event` down from
+  // event.respondWith(handleSameOrigin(req)) would pass every test above.
+  fakeCaches({});
+  global.fetch = () => Promise.resolve(body("FRESH notice"));
+
+  const req = request("/privacy.html", { mode: "navigate", method: "GET" });
+  const ev = fakeEvent(req);
+  swListeners.fetch(ev);
+
+  assert.strictEqual(ev.responses.length, 1, "the listener must respondWith a promise");
+  const resp = await ev.responses[0];
+  assert.strictEqual(resp._text, "FRESH notice");
+  assert.strictEqual(ev.kept.length, 1, "the FetchEvent must reach the cache write — otherwise it is fire-and-forget");
+  await ev.settled();
+});
+
+test("cache-first also lifetime-protects the write it makes on a MISS", async () => {
+  fakeCaches({});
+  global.fetch = () => Promise.resolve(body("fetched chunk"));
+  const req = request("/room.css");
+  const ev = fakeEvent(req);
+  await handleSameOrigin(req, ev);
+  assert.strictEqual(ev.kept.length, 1, "the immutable path's cache write needs the same protection");
+  await ev.settled();
+});
+
+test("a cache write that REJECTS never rejects the kept promise or breaks the response", async () => {
+  // Quota exceeded, an opaque body, or the cache deleted mid-write. The old
+  // code swallowed these with .catch(); handing a REJECTING promise to
+  // waitUntil would instead surface an unhandled rejection in the SW.
+  for (const failure of [
+    () => Promise.reject(new Error("QuotaExceededError")),
+    () => { throw new Error("synchronous put failure"); }
+  ]) {
+    fakeCaches({}, failure);
+    global.fetch = () => Promise.resolve(body("FRESH notice"));
+    const req = request("/privacy.html");
+    const ev = fakeEvent(req);
+    const resp = await handleSameOrigin(req, ev);
+    assert.strictEqual(resp._text, "FRESH notice", "a failed cache write must not break the response");
+    assert.strictEqual(ev.kept.length, 1);
+    await assert.doesNotReject(() => ev.kept[0], "the kept promise must never reject");
+  }
+
+  // …and the same when caches.open itself fails.
+  global.caches = { match: () => Promise.resolve(undefined), open: () => Promise.reject(new Error("no cache")) };
+  global.fetch = () => Promise.resolve(body("FRESH notice"));
+  const req = request("/privacy.html");
+  const ev = fakeEvent(req);
+  const resp = await handleSameOrigin(req, ev);
+  assert.strictEqual(resp._text, "FRESH notice");
+  await assert.doesNotReject(() => ev.kept[0]);
+});
+
+test("handleSameOrigin still works when called with no event at all", async () => {
+  // Defensive: keepAlive must not throw on a missing/!waitUntil event, and the
+  // unprotected write must still not produce an unhandled rejection.
+  const { calls } = fakeCaches({}, () => Promise.reject(new Error("QuotaExceededError")));
+  global.fetch = () => Promise.resolve(body("FRESH notice"));
+  const resp = await handleSameOrigin(request("/privacy.html"));
+  assert.strictEqual(resp._text, "FRESH notice");
+  await drain();
+  assert.deepStrictEqual(calls.put, ["/privacy.html"]);
 });

@@ -214,26 +214,28 @@ self.addEventListener("fetch", (event) => {
   if (url.origin === self.location.origin && url.pathname.startsWith("/__/")) return; // Firebase Auth reserved paths: never cache/intercept
 
   // Same-origin: cache-first for the immutable shell, network-first otherwise.
+  // `event` rides along so the cache write can outlive the response — see
+  // keepAlive(). Dropping it silently reverts the write to fire-and-forget.
   if (url.origin === self.location.origin) {
-    event.respondWith(handleSameOrigin(req));
+    event.respondWith(handleSameOrigin(req, event));
     return;
   }
   // Cross-origin GET (e.g. icon): network-only, no cache layer.
 });
 
 /** Route a same-origin GET by whether its URL pins its content. */
-async function handleSameOrigin(req) {
+async function handleSameOrigin(req, event) {
   return isImmutableRequest(new URL(req.url))
-    ? cacheFirst(req)
-    : networkFirst(req);
+    ? cacheFirst(req, event)
+    : networkFirst(req, event);
 }
 
 /** Immutable URL: answer from cache; only touch the network on a miss. */
-async function cacheFirst(req) {
+async function cacheFirst(req, event) {
   const cached = await caches.match(req, { ignoreSearch: false });
   if (cached) return cached;
   try {
-    return await fromNetwork(req);
+    return await fromNetwork(req, event);
   } catch (e) {
     return offlineFallback(req);
   }
@@ -245,9 +247,9 @@ async function cacheFirst(req) {
  * returned as-is: a real 404/500 is information, and masking it with a stale
  * copy is the very behaviour this split exists to remove.
  */
-async function networkFirst(req) {
+async function networkFirst(req, event) {
   try {
-    return await fromNetwork(req);
+    return await fromNetwork(req, event);
   } catch (e) {
     const cached = await caches.match(req, { ignoreSearch: false });
     if (cached) return cached;
@@ -256,13 +258,43 @@ async function networkFirst(req) {
 }
 
 /** Fetch, and keep a copy of a cacheable 200 so the page survives offline. */
-async function fromNetwork(req) {
+async function fromNetwork(req, event) {
   const resp = await fetch(req);
   if (resp.ok && (resp.type === "basic" || resp.type === "default")) {
-    const cache = await caches.open(SHELL_VERSION);
-    cache.put(req, resp.clone()).catch(() => { /* quota / opaque */ });
+    keepAlive(event, storeInCache(req, resp.clone()));
   }
   return resp;
+}
+
+/** Put a response in the shell cache. Never rejects — quota/opaque are fine. */
+async function storeInCache(req, resp) {
+  try {
+    const cache = await caches.open(SHELL_VERSION);
+    await cache.put(req, resp);
+  } catch (e) { /* quota exceeded, opaque body, cache deleted mid-write */ }
+}
+
+/**
+ * Hold the fetch event open until `promise` settles, WITHOUT delaying the
+ * response the page is waiting on.
+ *
+ * A service worker may be terminated as soon as its handlers settle, so a
+ * fire-and-forget `cache.put(...)` can be killed mid-write — and the entry is
+ * then missing exactly when it is needed, offline. (CodeRabbit, #305; the
+ * pre-existing code had the same shape.) `await`ing the put instead would also
+ * be correct, but it charges EVERY network-first fetch the cost of the cache
+ * write before the page sees a byte — on the path this change just made
+ * network-first. waitUntil extends the event's lifetime rather than the
+ * response's latency, which is what it is for.
+ */
+function keepAlive(event, promise) {
+  // Called before the respondWith promise settles, so the event is still
+  // active. The guard covers a direct call with no event (unit tests) and the
+  // InvalidStateError a strict host could raise on a late call; storeInCache
+  // never rejects, so an un-protected promise can still not go unhandled.
+  try {
+    if (event && typeof event.waitUntil === "function") event.waitUntil(promise);
+  } catch (e) { /* the write still runs, it just isn't lifetime-protected */ }
 }
 
 /**
