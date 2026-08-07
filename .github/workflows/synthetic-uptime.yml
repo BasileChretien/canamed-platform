@@ -123,11 +123,13 @@ jobs:
     # is the same one: bound the WORK at the step, and leave the job cap
     # loose enough that infrastructure cannot consume it.
     #
-    # 5 on the step is above the probe's worst case: 3 checks x (3 attempts
-    # x 15 s request timeout + 2 s + 5 s backoff) = 2 m 36 s. A healthy run
-    # is ~1 s. `tests/synthetic-uptime.test.js` pins step < job and
-    # worst-case < step, so retuning either one without the other fails a
-    # fast unit test rather than a scheduled run at 03:00.
+    # 6 on the step is above the probe's worst case: 3 HTML checks x (3
+    # attempts x 15 s + 7 s backoff) + 2 backend checks x (3 attempts x 10 s
+    # + 7 s backoff) = 3 m 50 s. A healthy run is ~1 s.
+    # `tests/synthetic-uptime.test.js` pins step < job and worst-case < step
+    # using the script's OWN arithmetic, so retuning the retry budget without
+    # the cap (or vice versa) fails a fast unit test rather than a scheduled
+    # run at 03:00.
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
@@ -135,7 +137,7 @@ jobs:
         with:
           node-version: 20
       - name: Run synthetic probe
-        timeout-minutes: 5
+        timeout-minutes: 6
         run: node scripts/synthetic-uptime-check.js
         env:
           PROBE_URL: https://canamed-69785.web.app
