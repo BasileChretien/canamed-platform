@@ -29,6 +29,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # Full history, NOT the default depth-1 shallow fetch.
+          # tests/shell-version-bump.test.js diffs this branch against its
+          # merge base with origin/main to prove that any change to a
+          # precached / lazily-loaded chunk came with a SHELL_VERSION bump.
+          # At depth 1 there is no origin/main and no merge base, so that
+          # test would SKIP on every PR — silently, which is exactly the
+          # failure mode it exists to prevent.
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 20

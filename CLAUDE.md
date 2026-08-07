@@ -127,6 +127,26 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
   `docs/Third_session/PBL_platform/`. A root-relative pathspec silently matches
   nothing, and an empty diff is exactly this check's failure signal, so getting
   it wrong reports the bug on every run.
+  **Now partly GUARDED (2026-08-07):** `tests/shell-version-bump.test.js` (unit
+  suite) diffs the branch against its merge base with `origin/main` and FAILS if
+  any file the cache-version machinery addresses changed while `SHELL_VERSION`
+  did not — the absorbed-bump state above is exactly that state. It derives the
+  watched set from the enforcing sources (sw.js `SHELL_ASSETS`, every
+  `v("…")` / `loadScript("/…")` in script-loader.js, every `?v=` in index.html,
+  reader-dict.js's dictionaries) rather than a hand-copied list, and puts
+  `LOCALE_VERSION` × `locales/*.js` under the same contract. It SKIPS when there
+  is no merge base, so it is a backstop, not a replacement for the manual check
+  above — and `.github/workflows/test.yml` must keep `fetch-depth: 0` or it
+  skips in CI silently (a companion test asserts exactly that).
+  It watches DELETIONS too — the watched set is the UNION of the derivation
+  at the merge base and at HEAD, because deleting an asset also removes it
+  from the manifest, and a working-tree-only derivation then cannot see it.
+  And the version must move **FORWARD**, not merely differ: sw.js's
+  `activate` drops every cache whose name `!== SHELL_VERSION`, so a
+  re-install is triggered by the name CHANGING — a client that never saw
+  v143 sees no change at all across v142 → v143 → v142 and keeps serving its
+  stale v142 cache forever. Never reuse a number; a revert bumps FORWARD,
+  carrying the reverted content.
 - **Deleting a long-lived UI control is an AUDIT, not a deletion.** (Established
   2026-07-30, removing the create form's Scenario select.) Such a control
   accumulates side effects nobody has catalogued, so the question is not "what
