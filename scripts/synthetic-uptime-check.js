@@ -68,8 +68,15 @@
  * the NOMINAL cadence (~2.9k/month against a 2M/month free tier, returning 64
  * bytes) — inside the tier the $1 budget alert guards. The real figure is far
  * lower: measured across the last 100 scheduled runs (2026-07-29..08-07) only
- * 13% of ticks actually fired, median gap 107 min, because GitHub drops
- * scheduled runs on public repos under load.
+ * 13% of ticks actually fired, a median of 107 min between probes, because
+ * GitHub drops scheduled runs on public repos under load.
+ *
+ * That 107 min is an INTERVAL BETWEEN RUNS, not a detection latency — nothing
+ * here was sampled against a known outage. It bounds when the backends are
+ * LOOKED AT, and the gap it leaves is not merely "noticed late": an outage
+ * shorter than the current interval can begin and end between two probes and
+ * never be observed at all. Which is the other reason healthcheck.html above
+ * is the pre-session gate and this is not.
  *
  * ── WHY THERE IS A RETRY (2026-08-07) ────────────────────────────────────
  * An alert is only worth having if a red run means "the site is down". Over
