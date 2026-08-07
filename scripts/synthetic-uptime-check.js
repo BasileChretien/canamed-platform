@@ -7,14 +7,76 @@
  * OAuth/Hosting outages we'd otherwise discover at session-start.
  *
  * Checks:
- *   1. GET https://canamed-69785.web.app/                       (splash)
- *   2. GET https://canamed-69785.web.app/privacy.html           (privacy)
- *   3. GET https://canamed-69785.web.app/healthcheck.html       (smoke page; tolerated 404 if not yet shipped)
+ *   1. GET  https://canamed-69785.web.app/                      (splash)
+ *   2. GET  https://canamed-69785.web.app/privacy.html          (privacy)
+ *   3. GET  https://canamed-69785.web.app/healthcheck.html      (smoke page; tolerated 404 if not yet shipped)
+ *   4. GET  <rtdb>/.json                                        (database reachable + rules loaded)
+ *   5. POST <fn>/hfPatient                                      (LLM-patient callable reachable)
  *
- * For each: must return HTTP 200, must include the brand mark text, must
- * include the platform's <title> tag. If any check fails, the script exits
- * with code 1 — the GitHub Actions job goes red and the operator gets an
- * email.
+ * 1-3 must return HTTP 200 and contain the brand mark and title. 4 and 5 must
+ * return 401 with a SPECIFIC body — see below. If any check fails, the script
+ * exits 1, the GitHub Actions job goes red and the operator gets an email.
+ *
+ * ── WHY CHECKS 4 AND 5 EXIST (2026-08-07) ────────────────────────────────
+ * Checks 1-3 only prove Firebase Hosting is serving files. Hosting has never
+ * failed. Both production outages this platform has actually had were in its
+ * DEPENDENCIES, and this probe was green through both of them:
+ *
+ *   2026-05-30  RTDB App Check switched to Enforce. reCAPTCHA's
+ *               grecaptcha.execute() intermittently hangs, so no App Check
+ *               token mints, so the DB rejected ALL access, realtime and
+ *               REST. Every client hung on "Checking…" and then "Couldn't
+ *               reach the session server". The HTML still served perfectly.
+ *   2026-06-03  hfPatient App Check likewise. The chat fell back to the stub
+ *               patient on EVERY message — silently, because the bridge
+ *               treats any failure as "backend unavailable". Again the HTML
+ *               served perfectly.
+ *
+ * So a facilitator could open a green dashboard and still be unable to run a
+ * session. Both new checks are unauthenticated, which is what makes them
+ * usable from CI, and in both cases A REJECTION IS THE HEALTHY ANSWER:
+ *
+ *   rtdb       401 {"error":"Permission denied"}   <- root is `.read: false`,
+ *              so this proves DNS + TLS + the database instance + a loaded
+ *              ruleset. Verified live 2026-08-07: 401 in 0.6 s.
+ *   hfPatient  401 {"error":{"message":"auth required",
+ *                            "status":"UNAUTHENTICATED"}}
+ *              <- `auth required` is the HANDLER's own message, so getting it
+ *              proves the request reached the function: deployed, right
+ *              region, and NOT rejected by an App Check layer in front of it.
+ *              Verified live 2026-08-07.
+ *
+ * That last clause is the point, and it is not a side effect. CLAUDE.md
+ * already names this exact tokenless POST as the only CLI-verifiable way to
+ * know whether App Check is enforcing on hfPatient, because `.env` is
+ * git-ignored and the setting cannot be read from the repo. It is currently a
+ * manual step in a document that has gone stale before — which is what the
+ * file's own STATUS-CLAIM RULE was written about. Running it every 15 minutes
+ * means re-enabling Enforce cannot happen silently: the probe goes red, and
+ * the operator either reverts or updates this check in the same change.
+ *
+ * NOT THE ONLY BACKEND COVERAGE, and deliberately not a replacement for it:
+ * healthcheck.html is an on-demand pre-session page ("open it ~30 minutes
+ * before each live session") whose `firebase-db` and `app-check` rows probe
+ * these same dependencies FROM THE BROWSER, with real auth. That is the
+ * richer signal and the one a facilitator should act on. What it cannot be is
+ * continuous — it only runs when a human opens it. These checks are the
+ * unattended, credential-free half, watching between sessions from outside
+ * Google's network. Note healthcheck.html does not cover hfPatient at all.
+ *
+ * NB these checks cost ~96 RTDB denials and ~96 function invocations a day at
+ * the NOMINAL cadence (~2.9k/month against a 2M/month free tier, returning 64
+ * bytes) — inside the tier the $1 budget alert guards. The real figure is far
+ * lower: measured across the last 100 scheduled runs (2026-07-29..08-07) only
+ * 13% of ticks actually fired, a median of 107 min between probes, because
+ * GitHub drops scheduled runs on public repos under load.
+ *
+ * That 107 min is an INTERVAL BETWEEN RUNS, not a detection latency — nothing
+ * here was sampled against a known outage. It bounds when the backends are
+ * LOOKED AT, and the gap it leaves is not merely "noticed late": an outage
+ * shorter than the current interval can begin and end between two probes and
+ * never be observed at all. Which is the other reason healthcheck.html above
+ * is the pre-session gate and this is not.
  *
  * ── WHY THERE IS A RETRY (2026-08-07) ────────────────────────────────────
  * An alert is only worth having if a red run means "the site is down". Over
@@ -76,7 +138,20 @@ const TIMEOUT_MS = 15_000;
 const ATTEMPTS = 3;
 const BACKOFF_MS = [2_000, 5_000];
 
-function buildChecks(base) {
+// The two backends the platform cannot run without. They answer in well under
+// a second, so they get a tighter per-request timeout than the HTML pages.
+// `tests/synthetic-uptime.test.js` pins both URLs to the config that the app
+// itself resolves, so a region or project change fails a unit test rather than
+// leaving the probe watching an endpoint nothing uses.
+const RTDB_URL = (process.env.PROBE_RTDB_URL ||
+  "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app").replace(/\/$/, "");
+const FN_BASE = (process.env.PROBE_FN_URL ||
+  "https://europe-west1-canamed-69785.cloudfunctions.net").replace(/\/$/, "");
+const DEP_TIMEOUT_MS = 10_000;
+
+function buildChecks(base, rtdb, fnBase) {
+  const db = (rtdb || RTDB_URL).replace(/\/$/, "");
+  const fn = (fnBase || FN_BASE).replace(/\/$/, "");
   return [
     {
       url: base + "/",
@@ -96,12 +171,39 @@ function buildChecks(base) {
       url: base + "/healthcheck.html",
       label: "healthcheck.html",
       expectStatuses: [200, 404],
+      tolerate: [404],
       mustContain: []
+    },
+    {
+      // A DENIAL IS THE HEALTHY ANSWER. Root is `.read: false`, so an
+      // unauthenticated REST read must come back 401 "Permission denied" —
+      // which proves DNS, TLS, the database instance and a loaded ruleset all
+      // at once. An unreachable or rule-less database answers differently
+      // (5xx, a timeout, or — the interesting one — data).
+      url: db + "/.json",
+      label: "rtdb",
+      expectStatuses: [401],
+      mustContain: ["Permission denied"],
+      timeoutMs: DEP_TIMEOUT_MS
+    },
+    {
+      // Likewise: `auth required` is the HANDLER's own error, so receiving it
+      // proves the request reached the function — right region, deployed, not
+      // rejected by a layer in front of it. See the header for why that last
+      // clause is the point.
+      url: fn + "/hfPatient",
+      label: "hfPatient",
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ data: {} }),
+      expectStatuses: [401],
+      mustContain: ["auth required", "UNAUTHENTICATED"],
+      timeoutMs: DEP_TIMEOUT_MS
     }
   ];
 }
 
-const CHECKS = buildChecks(BASE);
+const CHECKS = buildChecks(BASE, RTDB_URL, FN_BASE);
 
 /* Longest the probe can possibly take, used to size the workflow's step cap.
  * This arithmetic is only sound because fetchUrl enforces a WALL-CLOCK
@@ -122,7 +224,11 @@ function transportFor(url) {
 
 function fetchUrl(url, opts) {
   const o = opts || {};
+  const method = o.method || "GET";
+  const payload = o.body || null;
   const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : TIMEOUT_MS;
+  const headers = Object.assign({ "User-Agent": "canamed-synthetic-probe" }, o.headers || {});
+  if (payload) headers["Content-Length"] = Buffer.byteLength(payload);
 
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
@@ -135,20 +241,16 @@ function fetchUrl(url, opts) {
       fn(arg);
     };
 
-    const req = transportFor(url).get(
-      url,
-      { headers: { "User-Agent": "canamed-synthetic-probe" } },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk) => { body += chunk; });
-        res.on("end", () => finish(resolve, {
-          status: res.statusCode,
-          body,
-          ms: Date.now() - startedAt,
-          headers: res.headers
-        }));
-      }
-    );
+    const req = transportFor(url).request(url, { method, headers }, (res) => {
+      let body = "";
+      res.on("data", (chunk) => { body += chunk; });
+      res.on("end", () => finish(resolve, {
+        status: res.statusCode,
+        body,
+        ms: Date.now() - startedAt,
+        headers: res.headers
+      }));
+    });
     req.on("error", (e) => finish(reject, e));
 
     // TWO timers, because they bound different things and only one of them
@@ -173,6 +275,9 @@ function fetchUrl(url, opts) {
     req.setTimeout(timeoutMs, () => {
       req.destroy(new Error("Request timed out after " + timeoutMs + "ms"));
     });
+
+    if (payload) req.write(payload);
+    req.end();
   });
 }
 
@@ -185,11 +290,22 @@ function sleep(ms) {
 async function attemptOne(check, fetchImpl) {
   const startedAt = Date.now();
   try {
-    const r = await fetchImpl(check.url, { timeoutMs: check.timeoutMs });
+    const r = await fetchImpl(check.url, {
+      method: check.method,
+      body: check.body,
+      headers: check.headers,
+      timeoutMs: check.timeoutMs
+    });
     const statusOk = check.expectStatuses.indexOf(r.status) >= 0;
     const body = typeof r.body === "string" ? r.body : "";
     const contentOk = check.mustContain.every(s => body.indexOf(s) >= 0);
-    const pass = statusOk && (r.status !== 200 || contentOk);
+    // `tolerate` is an EXPLICIT list of statuses that skip the body assertion
+    // (the not-yet-shipped healthcheck page's 404). It replaces the old
+    // implicit rule "any status other than 200 skips the body", which would
+    // have made the 401 backend checks below vacuous — they assert on the
+    // body, and a 401 is their healthy answer.
+    const tolerated = Array.isArray(check.tolerate) && check.tolerate.indexOf(r.status) >= 0;
+    const pass = statusOk && (tolerated || contentOk);
     return {
       label: check.label,
       url: check.url,
@@ -197,8 +313,7 @@ async function attemptOne(check, fetchImpl) {
       status: r.status,
       ms: typeof r.ms === "number" ? r.ms : Date.now() - startedAt,
       missing: contentOk ? [] : check.mustContain.filter(s => body.indexOf(s) < 0),
-      // not-fatal mark for the 404 case on shippable-later pages
-      tolerated: r.status !== 200 && check.expectStatuses.indexOf(r.status) >= 0
+      tolerated: tolerated
     };
   } catch (e) {
     return {
@@ -273,6 +388,9 @@ module.exports = {
   ATTEMPTS,
   BACKOFF_MS,
   TIMEOUT_MS,
+  DEP_TIMEOUT_MS,
+  RTDB_URL,
+  FN_BASE,
   buildChecks,
   worstCaseMs,
   attemptOne,

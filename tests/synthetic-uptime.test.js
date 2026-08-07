@@ -227,6 +227,159 @@ test("main() exits 0 when a check recovers and 1 when it does not", async () => 
   assert.strictEqual(badCode, 1, "an unrecoverable check must still exit 1");
 });
 
+/* ── the backend checks ───────────────────────────────────────────────── */
+/*
+ * Checks 1-3 only prove Firebase Hosting is serving files, and Hosting has
+ * never failed. Both production outages this platform has actually had were
+ * in its dependencies, and the probe was GREEN through both:
+ *
+ *   2026-05-30  RTDB App Check -> Enforce; grecaptcha.execute() hangs, no
+ *               token mints, the DB rejects all access. Clients hang on
+ *               "Checking…" then "Couldn't reach the session server".
+ *   2026-06-03  hfPatient App Check likewise; the chat fell back to the stub
+ *               patient on every message, silently.
+ *
+ * In both cases the HTML served perfectly. So the useful signal is not "is
+ * Hosting up" but "do the backends answer" — and for an unauthenticated
+ * prober, a REJECTION is the healthy answer. Both bodies below were verified
+ * against production on 2026-08-07.
+ */
+
+const DEP = (label) => {
+  const c = probe.buildChecks("https://example.invalid").find(x => x.label === label);
+  assert.ok(c, `no ${label} check in buildChecks()`);
+  return c;
+};
+
+test("the rtdb check demands the denial BODY, not just a 401", async () => {
+  const rtdb = DEP("rtdb");
+  assert.deepStrictEqual(rtdb.expectStatuses, [401]);
+  assert.deepStrictEqual(rtdb.mustContain, ["Permission denied"]);
+
+  // The failure that matters: a 401 from something OTHER than a live ruleset
+  // (a proxy, a parked domain, a Google error page) must not read as healthy.
+  const wrong = async () => ({ status: 401, body: "<html>401 Unauthorized</html>", ms: 5 });
+  const bad = await probe.runOne(rtdb, { fetchUrl: wrong, sleep: noSleep });
+  assert.strictEqual(bad.pass, false, "a 401 with the wrong body must fail");
+
+  const right = async () => ({ status: 401, body: "{\n  \"error\" : \"Permission denied\"\n}", ms: 607 });
+  const ok = await probe.runOne(rtdb, { fetchUrl: right, sleep: noSleep });
+  assert.strictEqual(ok.pass, true, "the real production response must pass");
+});
+
+test("the hfPatient check POSTs and demands the handler's own error", async () => {
+  const fn = DEP("hfPatient");
+  assert.strictEqual(fn.method, "POST", "a GET does not reach a callable's handler");
+  assert.deepStrictEqual(fn.expectStatuses, [401]);
+  // `auth required` is the HANDLER's message. Getting it proves the request
+  // reached the function rather than being turned away in front of it — which
+  // is exactly what App Check Enforce did on 2026-06-03.
+  assert.deepStrictEqual(fn.mustContain, ["auth required", "UNAUTHENTICATED"]);
+
+  const enforced = async () => ({ status: 401, body: "{\"error\":{\"message\":\"Unauthenticated\",\"status\":\"UNAUTHENTICATED\"}}", ms: 5 });
+  const bad = await probe.runOne(fn, { fetchUrl: enforced, sleep: noSleep });
+  assert.strictEqual(
+    bad.pass,
+    false,
+    "a 401 that is NOT the handler's own `auth required` means something in front of the " +
+      "function rejected the call — that is the 2026-06-03 incident and must go red"
+  );
+
+  const real = async () => ({ status: 401, body: "{\"error\":{\"message\":\"auth required\",\"status\":\"UNAUTHENTICATED\"}}", ms: 311 });
+  const ok = await probe.runOne(fn, { fetchUrl: real, sleep: noSleep });
+  assert.strictEqual(ok.pass, true, "the real production response must pass");
+});
+
+test("attemptOne forwards method, body and per-check timeout to the transport", async () => {
+  // Without this the hfPatient check would silently degrade to a GET, which
+  // does not reach a callable's handler and would fail for the wrong reason.
+  const fn = DEP("hfPatient");
+  let seen = null;
+  const spy = async (_url, opts) => { seen = opts; return { status: 401, body: "auth required UNAUTHENTICATED", ms: 1 }; };
+  await probe.attemptOne(fn, spy);
+  assert.strictEqual(seen.method, "POST");
+  assert.strictEqual(seen.body, JSON.stringify({ data: {} }));
+  assert.strictEqual(seen.timeoutMs, probe.DEP_TIMEOUT_MS);
+  // Headers matter as much as the method: a callable that does not receive
+  // `Content-Type: application/json` can be rejected BEFORE the handler runs,
+  // and this check's whole value is that it reaches the handler.
+  assert.deepStrictEqual(seen.headers, { "Content-Type": "application/json" });
+});
+
+test("no check's mustContain is vacuous", async () => {
+  // The pass rule used to be implicit — "any status other than 200 skips the
+  // body assertion" — which silently made every non-200 check's `mustContain`
+  // decorative. That is the same defect #299 found in the rules suite: an
+  // assertion that would pass with the thing it guards deleted.
+  //
+  // This is deliberately GENERIC rather than naming rtdb and hfPatient, so a
+  // future backend check cannot be added into the same trap. Each check that
+  // declares content is served its own expected status with an EMPTY body; a
+  // check that still passes is not really asserting anything.
+  const checks = probe.buildChecks("https://example.invalid");
+  for (const c of checks) {
+    if (!c.mustContain.length) continue;
+    if (Array.isArray(c.tolerate) && c.tolerate.length) continue;
+    for (const status of c.expectStatuses) {
+      const emptyBody = async () => ({ status, body: "", ms: 1 });
+      const r = await probe.runOne(c, { fetchUrl: emptyBody, sleep: noSleep, attempts: 1 });
+      assert.strictEqual(
+        r.pass,
+        false,
+        `${c.label} passes on status ${status} with an EMPTY body, so its ` +
+          `mustContain (${JSON.stringify(c.mustContain)}) is vacuous`
+      );
+    }
+  }
+});
+
+test("`tolerate` is explicit, and only healthcheck.html has it", async () => {
+  const checks = probe.buildChecks("https://example.invalid");
+  const tolerant = checks.filter(c => Array.isArray(c.tolerate) && c.tolerate.length);
+  assert.deepStrictEqual(
+    tolerant.map(c => c.label),
+    ["healthcheck.html"],
+    "only the not-yet-shipped healthcheck page may skip its body assertion"
+  );
+
+  // and the tolerance itself still works
+  const hc = DEP("healthcheck.html");
+  const notFound = async () => ({ status: 404, body: "nope", ms: 3 });
+  const r = await probe.runOne(hc, { fetchUrl: notFound, sleep: noSleep });
+  assert.strictEqual(r.pass, true);
+  assert.strictEqual(r.tolerated, true);
+});
+
+test("the probed backend URLs are the ones the app itself resolves", () => {
+  // A region or project change that missed the probe would leave it happily
+  // watching an endpoint nothing uses — green while production is dark.
+  const cfg = fs.readFileSync(
+    path.join(ROOT, "docs/Third_session/PBL_platform/firebase-config.js"), "utf8");
+  const fns = fs.readFileSync(
+    path.join(ROOT, "docs/Third_session/PBL_platform/functions/index.js"), "utf8");
+
+  const dbUrl = cfg.match(/^\s*databaseURL:\s*"([^"]+)"/m);
+  const projectId = cfg.match(/^\s*projectId:\s*"([^"]+)"/m);
+  assert.ok(dbUrl, "firebase-config.js has no databaseURL");
+  assert.ok(projectId, "firebase-config.js has no projectId");
+
+  const hfStart = fns.indexOf("exports.hfPatient = onCall({");
+  assert.ok(hfStart > 0, "functions/index.js has no `exports.hfPatient = onCall({`");
+  const hfRegion = fns.slice(hfStart).match(/^\s*region:\s*"([^"]+)"/m);
+  assert.ok(hfRegion, "the hfPatient onCall block declares no region");
+
+  assert.strictEqual(
+    probe.RTDB_URL,
+    dbUrl[1].replace(/\/$/, ""),
+    "the probe's RTDB_URL must be the databaseURL the client connects to"
+  );
+  assert.strictEqual(
+    probe.FN_BASE,
+    `https://${hfRegion[1]}-${projectId[1]}.cloudfunctions.net`,
+    "the probe's function base must match hfPatient's deployed region and the project id"
+  );
+});
+
 /* ── the workflow's timeout budget ────────────────────────────────────── */
 
 /** Text of the job before `steps:` (job-level keys only). */
@@ -268,17 +421,32 @@ test("the probe step carries its own timeout, so runner setup cannot eat it", ()
 });
 
 test("the probe step's timeout is above the probe's own worst case", () => {
-  const nChecks = probe.buildChecks("https://example.invalid").length;
-  const backoff = probe.BACKOFF_MS
-    .slice(0, probe.ATTEMPTS - 1)
-    .reduce((a, b) => a + b, 0);
-  const worstCaseMs = nChecks * (probe.ATTEMPTS * probe.TIMEOUT_MS + backoff);
+  // Uses the script's OWN arithmetic, not a copy of it, so adding a check or
+  // retuning the retry budget cannot drift away from the cap it needs.
+  const checks = probe.buildChecks("https://example.invalid");
+  const worst = probe.worstCaseMs(checks);
   const stepMs = minutes(probeStep(), "the `Run synthetic probe` step") * 60_000;
   assert.ok(
-    stepMs > worstCaseMs,
-    `the probe can take up to ${Math.round(worstCaseMs / 1000)}s (${nChecks} checks x ` +
-      `${probe.ATTEMPTS} attempts x ${probe.TIMEOUT_MS}ms + ${backoff}ms backoff) but the ` +
-      `step is capped at ${Math.round(stepMs / 1000)}s — raise the cap or lower the retry budget`
+    stepMs > worst,
+    `the probe can take up to ${Math.round(worst / 1000)}s across its ${checks.length} checks ` +
+      `(${probe.ATTEMPTS} attempts each) but the step is capped at ` +
+      `${Math.round(stepMs / 1000)}s — raise the cap or lower the retry budget`
+  );
+});
+
+test("the probe's checkout does not persist the workflow token", () => {
+  // actions/checkout writes the token into .git/config by default, leaving it
+  // readable by every later step. Nothing here runs a git command after the
+  // checkout, so there is no reason to keep it.
+  const start = WORKFLOW.search(/^ {6}- uses: actions\/checkout@/m);
+  assert.ok(start > 0, "synthetic-uptime.yml has no actions/checkout step");
+  const rest = WORKFLOW.slice(start + 1);
+  const next = rest.search(/^ {6}- /m);
+  const checkoutStep = next < 0 ? rest : rest.slice(0, next);
+  assert.match(
+    checkoutStep,
+    /persist-credentials: false/,
+    "the probe only reads the checked-out source; the workflow token must not be persisted"
   );
 });
 
