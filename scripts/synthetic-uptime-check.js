@@ -55,9 +55,21 @@
  * means re-enabling Enforce cannot happen silently: the probe goes red, and
  * the operator either reverts or updates this check in the same change.
  *
- * NB these checks cost ~96 RTDB denials and ~96 function invocations a day
- * (~2.9k/month against a 2M/month free tier, returning 64 bytes). That is
- * inside the free tier the $1 budget alert is guarding.
+ * NOT THE ONLY BACKEND COVERAGE, and deliberately not a replacement for it:
+ * healthcheck.html is an on-demand pre-session page ("open it ~30 minutes
+ * before each live session") whose `firebase-db` and `app-check` rows probe
+ * these same dependencies FROM THE BROWSER, with real auth. That is the
+ * richer signal and the one a facilitator should act on. What it cannot be is
+ * continuous — it only runs when a human opens it. These checks are the
+ * unattended, credential-free half, watching between sessions from outside
+ * Google's network. Note healthcheck.html does not cover hfPatient at all.
+ *
+ * NB these checks cost ~96 RTDB denials and ~96 function invocations a day at
+ * the NOMINAL cadence (~2.9k/month against a 2M/month free tier, returning 64
+ * bytes) — inside the tier the $1 budget alert guards. The real figure is far
+ * lower: measured across the last 100 scheduled runs (2026-07-29..08-07) only
+ * 13% of ticks actually fired, median gap 107 min, because GitHub drops
+ * scheduled runs on public repos under load.
  *
  * ── WHY THERE IS A RETRY (2026-08-07) ────────────────────────────────────
  * An alert is only worth having if a red run means "the site is down". Over
