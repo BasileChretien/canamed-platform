@@ -15,15 +15,26 @@
 #
 # ── READ THIS BEFORE DIAGNOSING A RED RUN ────────────────────────────────
 # A red run here does NOT imply the site was down. Of the three non-success
-# runs in the last 100, the probe never executed in two of them:
+# runs in the last 100, the probe never executed in two of them. So ask which
+# STEPS ran and how each ended, not just whether the run failed:
 #
 #   gh api repos/BasileChretien/canamed-platform/actions/runs/<id>/jobs \
-#     --jq '.jobs[] | {conclusion, runner_name, steps: (.steps|length)}'
+#     --jq '.jobs[] | {conclusion, runner_name,
+#                      steps: [.steps[] | "\(.name)=\(.conclusion)"]}'
 #
-# An empty `runner_name` with zero steps means GitHub never allocated a
-# runner and the site was never tested (observed 2026-08-06 17:53: pending
-# 15 m 02 s, then killed). Only a run that reached the `Run synthetic probe`
-# step says anything at all about production. Check the step list first.
+# Read the answer like this:
+#   runner_name "" and steps []     -> GitHub never allocated a runner; the
+#                                      site was NEVER TESTED (seen 2026-08-06
+#                                      17:53: pending 15 m 02 s, then killed)
+#   steps stop before the probe     -> setup consumed the job; NEVER TESTED
+#                                      (seen 2026-08-06 15:53, `Set up job`
+#                                      alone took 2 m 33 s)
+#   "Run synthetic probe=failure"   -> the only case that says anything about
+#                                      production; now read that step's log
+#
+# (The list-jobs endpoint does include the steps array, with per-step
+# conclusions — verified against this repo on 2026-08-07. If you already have
+# a job id, `gh api .../actions/jobs/<job_id>` returns the same detail.)
 
 name: Synthetic uptime probe
 

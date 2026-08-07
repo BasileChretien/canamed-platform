@@ -41,6 +41,7 @@ const test = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
 const path = require("node:path");
+const http = require("node:http");
 
 const probe = require("../scripts/synthetic-uptime-check.js");
 
@@ -150,6 +151,49 @@ test("a failed attempt reports real elapsed time, not 0", async () => {
     r.ms >= 20,
     `the error path must report how long the attempt took; got ms=${r.ms}`
   );
+});
+
+test("a slow-drip response cannot outlive its deadline", async (t) => {
+  // The whole retry budget — and therefore the workflow's step cap derived
+  // from it — assumes a request cannot exceed its timeout. `req.setTimeout`
+  // alone does NOT give that: it is a socket-IDLE timeout that every received
+  // byte resets. Measured locally 2026-08-07 against a server writing one byte
+  // every 200 ms, a 1 000 ms `setTimeout` had still not fired after 5 000 ms.
+  //
+  // This runs against a REAL server that trickles forever, so it fails if the
+  // wall-clock deadline is ever removed rather than merely asserting it exists.
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    const drip = setInterval(() => { try { res.write("."); } catch (_e) { /* closed */ } }, 20);
+    req.on("close", () => clearInterval(drip));
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+
+  const check = {
+    url: `http://127.0.0.1:${server.address().port}/`,
+    label: "drip",
+    expectStatuses: [200],
+    mustContain: ["never appears"],
+    timeoutMs: 300
+  };
+
+  const startedAt = Date.now();
+  const raced = await Promise.race([
+    probe.runOne(check, { sleep: noSleep, attempts: 1 }).then(r => ({ done: true, r })),
+    new Promise((res) => setTimeout(() => res({ done: false }), 4000))
+  ]);
+  const elapsed = Date.now() - startedAt;
+
+  assert.ok(
+    raced.done,
+    "the drip-feed request was never cut off after 4 s against a 300 ms timeout — " +
+      "the request has no wall-clock deadline, so `worst case = attempts x timeoutMs` " +
+      "is not enforced and the workflow's step cap is sized against a guarantee that " +
+      "does not hold"
+  );
+  assert.strictEqual(raced.r.pass, false);
+  assert.ok(elapsed < 3000, `expected the deadline to cut in near 300 ms; took ${elapsed}ms`);
 });
 
 test("formatResult marks a retried pass so the log shows it happened", () => {

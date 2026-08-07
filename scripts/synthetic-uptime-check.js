@@ -63,6 +63,7 @@
 
 "use strict";
 
+const http = require("node:http");
 const https = require("node:https");
 
 const BASE = (process.env.PROBE_URL || "https://canamed-69785.web.app").replace(/\/$/, "");
@@ -102,24 +103,75 @@ function buildChecks(base) {
 
 const CHECKS = buildChecks(BASE);
 
-function fetchUrl(url) {
+/* Longest the probe can possibly take, used to size the workflow's step cap.
+ * This arithmetic is only sound because fetchUrl enforces a WALL-CLOCK
+ * deadline per request — see the note there. */
+function worstCaseMs(checks) {
+  const backoff = BACKOFF_MS.slice(0, ATTEMPTS - 1).reduce((a, b) => a + b, 0);
+  return (checks || CHECKS).reduce((sum, c) => {
+    const t = typeof c.timeoutMs === "number" ? c.timeoutMs : TIMEOUT_MS;
+    return sum + ATTEMPTS * t + backoff;
+  }, 0);
+}
+
+/* Production is https; http is accepted so the deadline below can be tested
+ * against a real local server instead of a stubbed transport. */
+function transportFor(url) {
+  return String(url).startsWith("http://") ? http : https;
+}
+
+function fetchUrl(url, opts) {
+  const o = opts || {};
+  const timeoutMs = typeof o.timeoutMs === "number" ? o.timeoutMs : TIMEOUT_MS;
+
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
-    const req = https.get(url, { headers: { "User-Agent": "canamed-synthetic-probe" } }, (res) => {
-      let body = "";
-      res.on("data", (chunk) => { body += chunk; });
-      res.on("end", () => {
-        resolve({
+    let settled = false;
+    let deadline = null;
+    const finish = (fn, arg) => {
+      if (settled) return;
+      settled = true;
+      if (deadline) clearTimeout(deadline);
+      fn(arg);
+    };
+
+    const req = transportFor(url).get(
+      url,
+      { headers: { "User-Agent": "canamed-synthetic-probe" } },
+      (res) => {
+        let body = "";
+        res.on("data", (chunk) => { body += chunk; });
+        res.on("end", () => finish(resolve, {
           status: res.statusCode,
           body,
           ms: Date.now() - startedAt,
           headers: res.headers
-        });
-      });
-    });
-    req.on("error", reject);
-    req.setTimeout(TIMEOUT_MS, () => {
-      req.destroy(new Error("Request timed out after " + TIMEOUT_MS + "ms"));
+        }));
+      }
+    );
+    req.on("error", (e) => finish(reject, e));
+
+    // TWO timers, because they bound different things and only one of them
+    // bounds what the workflow's step cap is sized against.
+    //
+    // req.setTimeout is a socket-IDLE timeout: it fires when nothing arrives
+    // for timeoutMs, and every byte received RESETS it. A server that trickles
+    // output therefore keeps a request alive indefinitely under it — verified
+    // locally 2026-08-07 against a server writing one byte every 200 ms, where
+    // a 1 000 ms setTimeout had still not fired after 5 000 ms. It also does
+    // not cover DNS resolution, since it only arms once a socket is assigned.
+    //
+    // So it cannot be the guarantee that "worst case = attempts x timeoutMs"
+    // rests on, and the step cap derived from that arithmetic would not hold.
+    // The wall-clock deadline is what actually enforces it. The idle timeout
+    // stays because it fires EARLIER on a silent socket, which keeps the
+    // common failure fast rather than always paying the full deadline.
+    deadline = setTimeout(() => {
+      req.destroy(new Error("Request exceeded its " + timeoutMs + "ms deadline"));
+    }, timeoutMs);
+
+    req.setTimeout(timeoutMs, () => {
+      req.destroy(new Error("Request timed out after " + timeoutMs + "ms"));
     });
   });
 }
@@ -133,7 +185,7 @@ function sleep(ms) {
 async function attemptOne(check, fetchImpl) {
   const startedAt = Date.now();
   try {
-    const r = await fetchImpl(check.url);
+    const r = await fetchImpl(check.url, { timeoutMs: check.timeoutMs });
     const statusOk = check.expectStatuses.indexOf(r.status) >= 0;
     const body = typeof r.body === "string" ? r.body : "";
     const contentOk = check.mustContain.every(s => body.indexOf(s) >= 0);
@@ -222,6 +274,7 @@ module.exports = {
   BACKOFF_MS,
   TIMEOUT_MS,
   buildChecks,
+  worstCaseMs,
   attemptOne,
   runOne,
   formatResult,
