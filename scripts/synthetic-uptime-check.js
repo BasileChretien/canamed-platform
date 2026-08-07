@@ -175,11 +175,48 @@ function buildChecks(base, rtdb, fnBase) {
       mustContain: []
     },
     {
-      // A DENIAL IS THE HEALTHY ANSWER. Root is `.read: false`, so an
-      // unauthenticated REST read must come back 401 "Permission denied" —
-      // which proves DNS, TLS, the database instance and a loaded ruleset all
-      // at once. An unreachable or rule-less database answers differently
-      // (5xx, a timeout, or — the interesting one — data).
+      // ⚠ THE 200 IS THE POINT, and it is not about this path's contents.
+      //
+      // `credentials/$certId` is public-read by design (the unauthenticated
+      // certificate-verification page needs it), so an unauthenticated read of
+      // a non-existent id returns 200 `null`. Crucially this request carries
+      // NO App Check token — and App Check *Enforce* rejects unattested
+      // requests at the API layer, BEFORE rules are evaluated. So a 200 here
+      // proves RTDB App Check is on **Monitor**, not Enforce.
+      //
+      // That matters because Enforce has caused two production incidents on
+      // this project (2026-05-30 RTDB, 2026-06-03 hfPatient): reCAPTCHA's
+      // grecaptcha.execute() intermittently hangs, no token mints, and under
+      // Enforce the whole database rejects every client. The Console also
+      // reports ~95% of RTDB traffic as *unverified*, so enabling Enforce
+      // today would turn away the great majority of real users.
+      //
+      // Until now the only way to know which mode was live was to open the
+      // Firebase Console — and CLAUDE.md's banner about it went stale for two
+      // months precisely because nobody could check it from a terminal. This
+      // check makes the setting continuously verified instead: flipping RTDB
+      // to Enforce turns the probe red within a tick. If that flip is ever
+      // deliberate, this check must be updated in the same change, which is
+      // exactly the coupling the hfPatient check already provides.
+      //
+      // The id is a fixed non-existent one: no PII, and cert ids are
+      // crypto-random so this reads nothing and enumerates nothing.
+      url: db + "/credentials/appcheck-canary-not-a-real-cert-id.json",
+      label: "rtdb-appcheck",
+      expectStatuses: [200],
+      mustContain: ["null"],
+      timeoutMs: DEP_TIMEOUT_MS
+    },
+    {
+      // A DENIAL IS THE HEALTHY ANSWER here, by contrast. Root is
+      // `.read: false`, so an unauthenticated REST read must come back 401
+      // "Permission denied" — which proves DNS, TLS, the database instance and
+      // a loaded ruleset all at once. An unreachable or rule-less database
+      // answers differently (5xx, a timeout, or — the interesting one — data).
+      //
+      // Read together, the pair is stronger than either alone: the canary
+      // above proves unattested access REACHES the rules, and this proves the
+      // rules then DENY what they should.
       url: db + "/.json",
       label: "rtdb",
       expectStatuses: [401],

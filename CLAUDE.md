@@ -220,8 +220,27 @@ reCAPTCHA-hang reasoning in item 1.
      (check reCAPTCHA admin console error rate/volume for the site key +
      Firebase App Check metrics); consider reCAPTCHA Enterprise or a longer
      App-Check token TTL / proactive refresh before re-enforcing.
-   - `Verify:` Firebase Console → App Check → APIs → Realtime Database shows
-     *Monitored* (Console-only — no code signal). The `hfPatient` function's
+   - `Verify:` **there IS a CLI signal — this is no longer Console-only
+     (2026-08-07).** `credentials/$certId` is public-read by design, so an
+     unauthenticated, App-Check-**tokenless** read of a non-existent id must
+     return `200 null`. Enforce rejects unattested requests at the API layer
+     BEFORE rules run, so a 200 proves the database is on *Monitor*:
+
+     ```
+     curl -s -w ' http=%{http_code}\n' 'https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app/credentials/appcheck-canary-not-a-real-cert-id.json'
+     # null http=200        <- Monitor (expected)
+     ```
+
+     Pair it with a root read, which the rules must still deny
+     (`{"error":"Permission denied"} http=401`): together they show unattested
+     access *reaches* the rules AND the rules then deny what they should. The
+     synthetic uptime probe runs both every tick, so flipping RTDB to Enforce
+     now turns a scheduled run red instead of silently changing a setting
+     nobody can see. **This banner went stale for two months precisely because
+     "Console-only" made it uncheckable by anyone without Console access** —
+     the failure the STATUS-CLAIM RULE above exists to prevent. The Firebase
+     Console (App Check → APIs → Realtime Database → *Monitored*) remains the
+     authoritative view. The `hfPatient` function's
      App Check was **also reverted to Monitor (`APP_CHECK_ENFORCE=false`)
      2026-06-03** (see item 4) — after the chat fell back to the stub on every
      message because Enforce rejected every call when no reCAPTCHA token minted.

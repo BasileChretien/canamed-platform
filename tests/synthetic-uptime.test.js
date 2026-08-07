@@ -267,6 +267,57 @@ test("the rtdb check demands the denial BODY, not just a 401", async () => {
   assert.strictEqual(ok.pass, true, "the real production response must pass");
 });
 
+test("the App Check canary demands a 200, because a denial would be the bug", async () => {
+  // The one check in this file where SUCCESS is the assertion. `credentials/`
+  // is public-read by design, so an unauthenticated, App-Check-TOKENLESS read
+  // of a non-existent id returns 200 null. Enforce rejects unattested requests
+  // at the API layer BEFORE rules run, so a 200 proves RTDB is on Monitor.
+  //
+  // Enforce has caused two production incidents here (2026-05-30 RTDB,
+  // 2026-06-03 hfPatient) and the Console reports ~95% of RTDB traffic as
+  // unverified, so enabling it would turn away most real users. Until now the
+  // mode was knowable only from the Console, which is exactly why CLAUDE.md's
+  // banner about it went stale for two months.
+  const canary = DEP("rtdb-appcheck");
+  assert.match(canary.url, /\/credentials\//, "the canary must read a PUBLIC-read path");
+  assert.deepStrictEqual(canary.expectStatuses, [200]);
+  assert.deepStrictEqual(canary.mustContain, ["null"]);
+  assert.ok(
+    !Array.isArray(canary.tolerate) || canary.tolerate.length === 0,
+    "the canary must not tolerate a non-200 — the non-200 IS the finding"
+  );
+
+  // Enforce turns the read away before the rules ever run. Whatever shape that
+  // rejection takes, it must NOT read as healthy.
+  for (const rejected of [
+    { status: 401, body: "{\"error\":\"Unauthorized request.\"}", ms: 4 },
+    { status: 403, body: "App Check token missing", ms: 4 },
+    { status: 401, body: "{\n  \"error\" : \"Permission denied\"\n}", ms: 4 }
+  ]) {
+    const r = await probe.runOne(canary, { fetchUrl: async () => rejected, sleep: noSleep, attempts: 1 });
+    assert.strictEqual(
+      r.pass, false,
+      `an unattested read answered ${rejected.status} must go red — that is App Check enforcing`
+    );
+  }
+
+  const monitor = async () => ({ status: 200, body: "null", ms: 499 });
+  const ok = await probe.runOne(canary, { fetchUrl: monitor, sleep: noSleep });
+  assert.strictEqual(ok.pass, true, "the real production response (200 null) must pass");
+});
+
+test("the canary and the root-denial check assert opposite things on purpose", () => {
+  // Neither alone is sufficient: the canary proves unattested access REACHES
+  // the rules, the root check proves the rules then DENY. A future edit that
+  // collapses them into one would lose half the signal.
+  const canary = DEP("rtdb-appcheck");
+  const root = DEP("rtdb");
+  assert.deepStrictEqual(canary.expectStatuses, [200]);
+  assert.deepStrictEqual(root.expectStatuses, [401]);
+  assert.notStrictEqual(canary.url, root.url);
+  assert.match(root.url, /\/\.json$/, "the root check must read the database root");
+});
+
 test("the hfPatient check POSTs and demands the handler's own error", async () => {
   const fn = DEP("hfPatient");
   assert.strictEqual(fn.method, "POST", "a GET does not reach a callable's handler");
