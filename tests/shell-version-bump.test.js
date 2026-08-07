@@ -33,6 +33,7 @@
  * a copied list drifts, and a drifted allow-list is a guard that silently
  * stops guarding:
  *   - sw.js            SHELL_ASSETS[]                (the precache manifest)
+ *                      …AND sw.js ITSELF — see THE ENFORCER IS NOT AN ASSET
  *   - script-loader.js every v("…") and loadScript("/…")  (the lazy chunks +
  *                      the idle-prefetch set, which all route through v())
  *   - index.html       every src/href carrying ?v=vNNN (the eager bundle;
@@ -42,6 +43,34 @@
  *   - i18n.js          the /locales/<lang>.js line, for the LOCALE_VERSION pair
  * Every derivation asserts on its own input, so a parser that stops matching
  * fails loudly here instead of quietly narrowing the set to nothing.
+ *
+ * THE ENFORCER IS NOT AN ASSET, so it has to be named explicitly. Four of the
+ * five sources above are ALSO addressed by the machinery they enforce, and so
+ * land in the watched set for free: index.html and i18n.js are precached by
+ * SHELL_ASSETS, script-loader.js carries a ?v= in index.html, and reader-dict.js
+ * is itself one of script-loader.js's v("…") chunks.
+ * sw.js is addressed by NONE of them — a service worker cannot precache itself
+ * and it carries no ?v= — so an sw.js-only change tripped nothing. Proved by
+ * control run on #305 (2026-08-07): the whole fetch policy rewritten, all three
+ * markers left at v142, this file reported `# fail 0`.
+ * It has to be watched because the cache a returning client holds is a function
+ * of BOTH halves of sw.js — the SHELL_ASSETS manifest (what is in the cache)
+ * and the fetch handler (what gets served from it) — while `activate` rebuilds
+ * that cache only when the cache NAME changes. Ship either half without a bump
+ * and the new SW code runs over a cache the new code did not build. The
+ * sharpest instance: DELETE an entry from SHELL_ASSETS with no bump, and the
+ * old cache survives activate still holding the removed file — and still
+ * serving it cache-first, to that client, forever.
+ * Watching the whole file (rather than only the manifest and the routing
+ * functions) is deliberate. A rule keyed to particular function names would be
+ * the hand-maintained allow-list this header already warns about two paragraphs
+ * up, and it would drift the first time sw.js grew a function. The friction it
+ * saves is close to nil, measured over the file's real history: 132 commits
+ * have touched sw.js, and 127 of them bumped SHELL_VERSION anyway — the marker
+ * lives in this very file, so almost every sw.js edit already ships a bump. Of
+ * the 5 that did not, 4 were SHELL_ASSETS additions that this rule would have
+ * caught. The residual cost is one commit in 132 (2029908, a comment plus an
+ * `&& event.source` guard) paying for a version number it did not strictly owe.
  *
  * DELETIONS COUNT, so the set is derived at BOTH ENDS of the diff. (Review
  * finding, CodeRabbit on #301.) Deriving from the working tree alone has a
@@ -100,13 +129,13 @@
  * sw.js `isImmutableRequest()` and tests/sw-cache-policy.test.js, whose
  * derived guard re-discovers that set from the repo on every run.
  *
- * STILL NOT COVERED HERE: sw.js ITSELF is not in the watched set (it is not
- * precached — a service worker cannot cache itself — and carries no ?v=), so
- * editing sw.js alone never trips this guard. That is consistent with the
- * contract above (browsers re-fetch sw.js on every update check, so it is
- * never served stale from the SW cache), but it does mean a change to the
- * cache POLICY or the manifest can ship without rebuilding existing clients'
- * caches. Verified by control run, 2026-08-07.
+ * That residual was about the pages sw.js SERVES. sw.js ITSELF was a separate
+ * hole, and is now closed too — it IS in the watched set; see THE ENFORCER IS
+ * NOT AN ASSET above. (This paragraph read "STILL NOT COVERED HERE: sw.js
+ * ITSELF is not in the watched set … Verified by control run, 2026-08-07" until
+ * that control run's finding was fixed. Both statements were true when written,
+ * a few hours apart; if you are reading a claim like it here, check the
+ * derivation and the test rather than the prose.)
  */
 
 const test = require("node:test");
@@ -231,9 +260,16 @@ function toRepoPath(url) {
 function deriveShellAssets(src) {
   const urls = [];
 
-  // 1. the service-worker precache manifest
+  // 1. the service worker: its precache manifest, AND the file itself.
   const sw = src.read(APP + "/sw.js");
   src.expect(sw, `sw.js is unreadable in ${src.label}`);
+
+  // sw.js is the only enforcing source that is not also an addressed asset, so
+  // nothing else in this function can put it in the watched set (header: THE
+  // ENFORCER IS NOT AN ASSET). A constant, not a parse: there is no pattern to
+  // drift, and a file that cannot be read is still a file that can be changed.
+  urls.push("/sw.js");
+
   const manifest = sw && sw.match(/SHELL_ASSETS\s*=\s*\[([\s\S]*?)\]\s*;/);
   src.expect(manifest, "sw.js: could not find the SHELL_ASSETS array — the precache-manifest parser needs updating");
   if (manifest) {
@@ -476,6 +512,22 @@ test("the derived shell-asset set covers the chunks that have actually caused th
   // privacy.html deliberately carries no version marker: sw.js serves it
   // network-first instead (see the RESOLVED residual note in the header).
   assert.ok(!files.includes(`${APP}/privacy.html`), "privacy.html carries no version marker");
+});
+
+test("sw.js itself is watched — the enforcer is not one of the assets it enforces", () => {
+  // The other four sources ride in on their own machinery (index.html and
+  // i18n.js are precached; script-loader.js carries a ?v=; reader-dict.js is a
+  // v("…") chunk), so only this one needs naming. A control run on #305
+  // rewrote sw.js's entire fetch policy with all three markers left at v142 and
+  // this file reported `# fail 0`. Removing the explicit entry reinstates that.
+  const files = deriveShellAssets(WORKTREE);
+  assert.ok(
+    files.includes(`${APP}/sw.js`),
+    "sw.js is not in the derived watched set, so an sw.js-only change — a new cache policy, or an " +
+      "entry removed from SHELL_ASSETS — can ship with no bump. `activate` deletes only caches whose " +
+      "name differs from SHELL_VERSION, so every existing client then runs the NEW service-worker code " +
+      "over the OLD cache, indefinitely."
+  );
 });
 
 test("the unit-test workflow checks out enough history for the bump check to run", () => {
