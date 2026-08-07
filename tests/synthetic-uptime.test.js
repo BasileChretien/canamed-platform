@@ -270,8 +270,12 @@ test("the rtdb check demands the denial BODY, not just a 401", async () => {
 test("the App Check canary demands a 200, because a denial would be the bug", async () => {
   // The one check in this file where SUCCESS is the assertion. `credentials/`
   // is public-read by design, so an unauthenticated, App-Check-TOKENLESS read
-  // of a non-existent id returns 200 null. Enforce rejects unattested requests
-  // at the API layer BEFORE rules run, so a 200 proves RTDB is on Monitor.
+  // of a non-existent id returns 200 null. ENFORCED rejects unattested
+  // requests at the API layer BEFORE rules run, so a 200 proves App Check is
+  // NOT ENFORCING. It proves no more than that: App Check has OFF,
+  // UNENFORCED ("Monitor") and ENFORCED, and a tokenless read succeeds under
+  // both OFF and UNENFORCED. The Console stays the authority on which of the
+  // two is live; what this detects is the transition that has actually hurt.
   //
   // Enforce has caused two production incidents here (2026-05-30 RTDB,
   // 2026-06-03 hfPatient) and the Console reports ~95% of RTDB traffic as
@@ -279,9 +283,19 @@ test("the App Check canary demands a 200, because a denial would be the bug", as
   // mode was knowable only from the Console, which is exactly why CLAUDE.md's
   // banner about it went stale for two months.
   const canary = DEP("rtdb-appcheck");
-  assert.match(canary.url, /\/credentials\//, "the canary must read a PUBLIC-read path");
+  // Pin the EXACT documented non-existent id, not just "/credentials/". A
+  // loose match would let a future edit point the probe at a real credential
+  // record while this test stayed green, quietly breaking the no-PII contract.
+  assert.strictEqual(
+    canary.url.split("/credentials/")[1],
+    probe.APPCHECK_CANARY_ID + ".json",
+    "the canary must read the fixed, deliberately non-existent cert id"
+  );
+  assert.match(probe.APPCHECK_CANARY_ID, /not-a-real/, "the id must be self-evidently fake");
   assert.deepStrictEqual(canary.expectStatuses, [200]);
-  assert.deepStrictEqual(canary.mustContain, ["null"]);
+  // EXACT body. `mustContain: ["null"]` is a substring test that a real record
+  // like {"name":"null"} would satisfy — the opposite of what this asserts.
+  assert.strictEqual(canary.mustEqual, "null");
   assert.ok(
     !Array.isArray(canary.tolerate) || canary.tolerate.length === 0,
     "the canary must not tolerate a non-200 — the non-200 IS the finding"
@@ -300,6 +314,12 @@ test("the App Check canary demands a 200, because a denial would be the bug", as
       `an unattested read answered ${rejected.status} must go red — that is App Check enforcing`
     );
   }
+
+  // A 200 whose body merely CONTAINS "null" must not read as healthy — that is
+  // a real credential record, not an absent one.
+  const lookalike = async () => ({ status: 200, body: "{\"name\":\"null\"}", ms: 5 });
+  const near = await probe.runOne(canary, { fetchUrl: lookalike, sleep: noSleep, attempts: 1 });
+  assert.strictEqual(near.pass, false, "a 200 that merely contains \"null\" must fail");
 
   const monitor = async () => ({ status: 200, body: "null", ms: 499 });
   const ok = await probe.runOne(canary, { fetchUrl: monitor, sleep: noSleep });
@@ -357,7 +377,7 @@ test("attemptOne forwards method, body and per-check timeout to the transport", 
   assert.deepStrictEqual(seen.headers, { "Content-Type": "application/json" });
 });
 
-test("no check's mustContain is vacuous", async () => {
+test("no check's content assertion is vacuous", async () => {
   // The pass rule used to be implicit — "any status other than 200 skips the
   // body assertion" — which silently made every non-200 check's `mustContain`
   // decorative. That is the same defect #299 found in the rules suite: an
@@ -368,8 +388,27 @@ test("no check's mustContain is vacuous", async () => {
   // declares content is served its own expected status with an EMPTY body; a
   // check that still passes is not really asserting anything.
   const checks = probe.buildChecks("https://example.invalid");
+
+  // First: a check must DECLARE a content assertion at all. Dropping the
+  // declaration is a different hole from declaring one that does not bite, and
+  // the loop below cannot see it — it skips checks with nothing declared.
+  // Found by a control run that removed the canary's `mustEqual` and expected
+  // this test to fire; it did not. Exempt: checks that tolerate a status
+  // (healthcheck.html accepts a 404 for a page that may not be shipped yet)
+  // and checks that expect only errors, where the status is the assertion.
   for (const c of checks) {
-    if (!c.mustContain.length) continue;
+    const tolerant = Array.isArray(c.tolerate) && c.tolerate.length > 0;
+    const expectsOk = c.expectStatuses.some(s => s >= 200 && s < 300);
+    if (tolerant || !expectsOk) continue;
+    assert.ok(
+      c.mustContain.length > 0 || c.mustEqual != null,
+      `${c.label} expects a 2xx but asserts nothing about the body, so ANY ` +
+        "200 satisfies it — declare mustContain or mustEqual, or mark it tolerant"
+    );
+  }
+
+  for (const c of checks) {
+    if (!c.mustContain.length && c.mustEqual == null) continue;
     if (Array.isArray(c.tolerate) && c.tolerate.length) continue;
     for (const status of c.expectStatuses) {
       const emptyBody = async () => ({ status, body: "", ms: 1 });
@@ -378,7 +417,8 @@ test("no check's mustContain is vacuous", async () => {
         r.pass,
         false,
         `${c.label} passes on status ${status} with an EMPTY body, so its ` +
-          `mustContain (${JSON.stringify(c.mustContain)}) is vacuous`
+          `content assertion (mustContain ${JSON.stringify(c.mustContain)}, ` +
+          `mustEqual ${JSON.stringify(c.mustEqual)}) is vacuous`
       );
     }
   }
