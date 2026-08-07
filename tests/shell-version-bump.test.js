@@ -87,13 +87,26 @@
  * unit-test workflow still checks out enough history for the comparison to
  * run at all (actions/checkout defaults to depth 1, which has no origin/main).
  *
- * KNOWN RESIDUAL (deliberately not covered): sw.js also caches-on-fetch every
- * same-origin 200 it sees (handleSameOrigin), so unversioned secondary pages —
- * privacy*.html, verify.html/verify.js, scenario-author.html/.css,
- * healthcheck.* — are stale-served too after a visit. Catching those means
- * crawling every HTML entry point, which widens "you must bump" to most of the
- * platform directory; that is a workflow decision, not a bug fix, so it is
- * recorded here rather than enforced.
+ * ~~KNOWN RESIDUAL (deliberately not covered)~~ — RESOLVED at the source, not
+ * here. sw.js used to serve every same-origin GET cache-first while caching
+ * every 200 it saw, so unversioned secondary pages — privacy*.html,
+ * verify.html, scenario-author.html/.css, healthcheck.* — were stale-served
+ * after a single visit. Widening THIS guard to cover them would have meant
+ * crawling every HTML entry point and demanding a shell bump for most of the
+ * platform directory. Instead sw.js now splits its routing: cache-first only
+ * for URLs that pin their content (a ?v=, the SHELL_ASSETS manifest, two
+ * frozen vendored bundles), network-first-with-cache-fallback for everything
+ * else — so those pages need no version marker at all. See
+ * sw.js `isImmutableRequest()` and tests/sw-cache-policy.test.js, whose
+ * derived guard re-discovers that set from the repo on every run.
+ *
+ * STILL NOT COVERED HERE: sw.js ITSELF is not in the watched set (it is not
+ * precached — a service worker cannot cache itself — and carries no ?v=), so
+ * editing sw.js alone never trips this guard. That is consistent with the
+ * contract above (browsers re-fetch sw.js on every update check, so it is
+ * never served stale from the SW cache), but it does mean a change to the
+ * cache POLICY or the manifest can ship without rebuilding existing clients'
+ * caches. Verified by control run, 2026-08-07.
  */
 
 const test = require("node:test");
@@ -460,7 +473,9 @@ test("the derived shell-asset set covers the chunks that have actually caused th
   // …and is not simply "every file in the platform directory", which would be
   // a different (much stricter) contract than the one documented above.
   assert.ok(!files.includes(`${APP}/database.rules.json`), "database.rules.json is not a shell asset");
-  assert.ok(!files.includes(`${APP}/privacy.html`), "privacy.html carries no version marker — see the KNOWN RESIDUAL note");
+  // privacy.html deliberately carries no version marker: sw.js serves it
+  // network-first instead (see the RESOLVED residual note in the header).
+  assert.ok(!files.includes(`${APP}/privacy.html`), "privacy.html carries no version marker");
 });
 
 test("the unit-test workflow checks out enough history for the bump check to run", () => {
