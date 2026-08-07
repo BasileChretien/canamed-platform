@@ -554,15 +554,181 @@ test("generateSessionCode matches the expected format", () => {
   }
 });
 
-test("generateSessionCode collisions over a small batch are vanishingly rare", () => {
-  // 31^6 ≈ 887M combinations; in 1,000 draws expected collisions ≈ 0
-  const seen = new Set();
-  for (let i = 0; i < 1000; i++) {
-    const code = lib.generateSessionCode();
-    assert.equal(seen.has(code), false,
-      "Unexpected duplicate session code: " + code);
-    seen.add(code);
+/* The test that used to sit here drew 1,000 codes and asserted NO duplicate,
+ * on the premise "31^6 ≈ 887M combinations; in 1,000 draws expected collisions
+ * ≈ 0". The expectation is ~0.00056, which does round to zero — but the
+ * ASSERTION was about probability, not expectation, and the birthday bound
+ * gives
+ *
+ *     P(>=1 collision) = 1 - exp(-K(K-1)/2N) = 0.0563%   (K=1000, N=31^6)
+ *
+ * i.e. ONE RED BUILD IN ~1,777. It duly fired on 2026-08-07, on a PR that had
+ * nothing to do with lib.js. That is the worst kind of flake: it points at a
+ * security-relevant generator, so it cannot be waved through, and it costs the
+ * same diagnosis every time.
+ *
+ * The generator was checked at that point and is sound: `cutoff =
+ * floor(256/31)*31 = 248` is correct rejection sampling, so the modulo is
+ * unbiased. Over 20,000 independent trials of the old test there were 8
+ * collisions against an ideal 11.3 ± 6.6 at 95%, and the alphabet came out
+ * uniform (chi-square 31.92 on 30 df; 5% critical value 43.77).
+ *
+ * So the defect was the TEST. "Distinct draws come out distinct" is a property
+ * of the entropy, not of this function. The first two tests below assert the
+ * property that actually matters — no modulo bias — deterministically, and far
+ * more strictly than sampling ever could. The third keeps an end-to-end draw
+ * with thresholds the maths says cannot realistically fire.
+ */
+
+const SESSION_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789";
+const SESSION_CUTOFF = Math.floor(256 / SESSION_ALPHABET.length) * SESSION_ALPHABET.length; // 248
+
+/* `globalThis.crypto` in Node is an accessor with a GETTER AND NO SETTER, so a
+ * plain `global.crypto = stub` silently does nothing and the code under test
+ * keeps using real randomness — which turns a deterministic test into an
+ * infinite loop rather than a failure. It is `configurable`, so defineProperty
+ * is the way in; the original descriptor is restored either way. */
+function withStubbedCrypto(getRandomValues, body) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "crypto");
+  Object.defineProperty(globalThis, "crypto", {
+    value: { getRandomValues }, configurable: true, writable: true
+  });
+  // Prove the stub actually took effect before relying on it, or the tests
+  // below would silently assert nothing. Checked by IDENTITY, not by calling
+  // it — a probe call would consume from the very byte supply the caller is
+  // counting.
+  assert.strictEqual(
+    crypto.getRandomValues, getRandomValues,
+    "the crypto stub did not take effect — globalThis.crypto is a getter-only " +
+      "accessor, so plain assignment is silently ignored"
+  );
+  try {
+    return body();
+  } finally {
+    Object.defineProperty(globalThis, "crypto", original);
   }
+}
+
+/* Both generators share one construction, and the flake investigation turned up
+ * that only ONE of them was covered at all: generateRecoveryCode had tests for
+ * format, length, charset, non-determinism and its documented entropy, but
+ * nothing checked its sampling — and "31^12 ~ 59.5 bits" is only true while the
+ * sampling is unbiased. It is also the higher-stakes of the two: the session
+ * code is read aloud to a room and is not a secret, whereas the recovery code
+ * is the only way to overwrite a forgotten admin password. So drive both from
+ * one table; the shared invariant is the point. */
+const GENERATORS = [
+  { name: "generateSessionCode", fn: () => lib.generateSessionCode(), chars: 6, allZero: "aaa-aaa" },
+  { name: "generateRecoveryCode", fn: () => lib.generateRecoveryCode(), chars: 12, allZero: "aaaa-aaaa-aaaa" }
+];
+
+for (const g of GENERATORS) {
+  test(g.name + "'s rejection sampling admits no modulo bias", () => {
+    // Deterministic, and it must sweep the FULL byte range. An earlier draft
+    // fed only 0..247 and therefore could not see the cutoff being removed at
+    // all — every byte it offered was acceptable either way. A control run
+    // caught that; the bias lives entirely in 248..255.
+    //
+    // 256 is not a multiple of 31, so a naive `byte % 31` folds bytes 248..255
+    // back onto the first 8 characters, making them 9/256 likely against 8/256
+    // for the rest.
+    //
+    // CYCLES = 3 makes the accounting exact for both generators: 3 x 256 bytes
+    // served, 3 x 248 = 744 accepted, and 744 divides by both 6 and 12 — so a
+    // whole number of codes consumes a whole number of cycles and every
+    // character must appear EXACTLY 8 x 3 = 24 times. No tolerance needed.
+    const CYCLES = 3;
+    const ACCEPTED = SESSION_CUTOFF * CYCLES;            // 744
+    const PER_CHAR = (SESSION_CUTOFF / SESSION_ALPHABET.length) * CYCLES; // 24
+    assert.strictEqual(ACCEPTED % g.chars, 0, "CYCLES must yield whole codes");
+
+    const counts = Object.create(null);
+    for (const ch of SESSION_ALPHABET) counts[ch] = 0;
+
+    let served = 0;
+    withStubbedCrypto(
+      (buf) => { for (let i = 0; i < buf.length; i++) buf[i] = served++ % 256; return buf; },
+      () => {
+        let produced = 0;
+        let guard = 0;
+        while (produced < ACCEPTED) {
+          assert.ok(++guard < 5000, "the byte supply is not being consumed — stub not in effect");
+          for (const ch of g.fn().replace(/-/g, "")) {
+            assert.ok(ch in counts, "produced a character outside the alphabet: " + ch);
+            counts[ch]++;
+            produced++;
+          }
+        }
+        // Strictly MORE bytes consumed than characters produced — i.e. some
+        // were thrown away. Not an exact count: the generator stops the moment
+        // it has its last character, so the final run of rejected bytes may go
+        // unconsumed (760 rather than 768 here). Equality would mean nothing
+        // was ever rejected.
+        assert.ok(
+          served > ACCEPTED,
+          "producing " + ACCEPTED + " characters consumed only " + served +
+            " bytes, so nothing was rejected — bytes >= " + SESSION_CUTOFF +
+            " are being folded in"
+        );
+      }
+    );
+
+    for (const ch of SESSION_ALPHABET) {
+      assert.strictEqual(
+        counts[ch], PER_CHAR,
+        "character '" + ch + "' came out " + counts[ch] + " times, expected " + PER_CHAR +
+          " — a full sweep of 0..255 must map evenly onto the 31 characters, so this is modulo bias"
+      );
+    }
+  });
+
+  test(g.name + " discards the bytes that would skew the alphabet", () => {
+    // The other half of the contract: bytes >= 248 must be DISCARDED, not
+    // folded in. Serve only rejected bytes for a long stretch, then only
+    // accepted ones, and assert the rejected bytes reached nothing.
+    let served = 0;
+    const code = withStubbedCrypto(
+      (buf) => {
+        for (let i = 0; i < buf.length; i++) {
+          buf[i] = served < 600 ? 248 + (served % 8) : 0;
+          served++;
+        }
+        return buf;
+      },
+      g.fn
+    );
+    assert.ok(served > 600, "the rejected bytes must have been consumed and dropped");
+    assert.strictEqual(
+      code, g.allZero,
+      "only the accepted byte (0 -> 'a') may reach the output; got " + code +
+        ", so a byte >= 248 was folded in"
+    );
+  });
+}
+
+test("generateSessionCode draws across the whole keyspace", () => {
+  // End-to-end on the real crypto, with thresholds chosen so this cannot
+  // become the flake it replaces:
+  //   - ONE duplicate is allowed. P(>=1) = 0.0563% per run (1 in ~1,777) is
+  //     not evidence of a defect; P(>=2) ~ 1.6e-7 (1 in ~6.3 million) is.
+  //   - every alphabet character must appear somewhere in the 6,000 slots.
+  //     P(a given one missing) = (30/31)^6000 ~ e^-193, i.e. never.
+  const DRAWS = 1000;
+  const seen = new Set();
+  const chars = new Set();
+  for (let i = 0; i < DRAWS; i++) {
+    const code = lib.generateSessionCode();
+    seen.add(code);
+    for (const ch of code.replace("-", "")) chars.add(ch);
+  }
+  const duplicates = DRAWS - seen.size;
+  assert.ok(
+    duplicates <= 1,
+    duplicates + " duplicate session codes in " + DRAWS + " draws. One is " +
+      "expected about once per 1,777 runs and is fine; two means the keyspace " +
+      "is not 31^6 — check the alphabet and the rejection cutoff in lib.js"
+  );
+  assert.strictEqual(chars.size, 31, "every alphabet character must be reachable");
 });
 
 test("generateSessionCode never returns a forbidden character", () => {
