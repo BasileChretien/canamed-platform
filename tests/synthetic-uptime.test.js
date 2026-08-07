@@ -292,6 +292,36 @@ test("no concurrency group can evict a pending scheduled run", () => {
   );
 });
 
+test("the pre-session gate the workflow points at actually exists", () => {
+  // The header tells the next operator NOT to treat this cron as the
+  // pre-session check, and names healthcheck.html as the thing that is. That
+  // redirection is only safe while the page exists and still says so — if it
+  // were removed or repurposed, the workflow would be quietly pointing an
+  // operator at nothing, which is worse than not mentioning it. The measured
+  // cadence numbers in that header cannot be pinned by a test; this can.
+  assert.match(
+    WORKFLOW,
+    /healthcheck\.html/,
+    "the header must name the on-demand pre-session page"
+  );
+  const page = path.join(ROOT, "docs", "Third_session", "PBL_platform", "healthcheck.html");
+  assert.ok(fs.existsSync(page), "healthcheck.html is referenced by the workflow but does not exist");
+  const html = fs.readFileSync(page, "utf8");
+  assert.match(
+    html,
+    /before each live session/,
+    "healthcheck.html no longer presents itself as the pre-session check, so the " +
+      "workflow header must stop redirecting operators to it"
+  );
+  for (const row of ["firebase-db", "app-check"]) {
+    assert.match(
+      html,
+      new RegExp(`data-check="${row}"`),
+      `the header claims healthcheck.html covers ${row}, but that row is gone`
+    );
+  }
+});
+
 test("the workflow's stated cadence matches its cron", () => {
   const cron = WORKFLOW.match(/^ *- cron: *"\*\/(\d+) \* \* \* \*"/m);
   assert.ok(cron, "synthetic-uptime.yml has no `*/N * * * *` schedule");

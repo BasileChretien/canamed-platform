@@ -5,10 +5,51 @@
 # the job goes red and the operator gets an email (GitHub default
 # notification for failed workflows on the default branch).
 #
-# 15 minutes was chosen as a balance between detection latency (a session
-# usually has 20+ minutes of setup before students arrive) and GitHub
-# Actions minute budget (15min cadence = 96 runs/day = ~10 min/day, well
-# under the 2000 min/month free tier even with the rest of CI).
+# ⚠ THE CRON IS NOMINAL. IT IS NOT THE CADENCE YOU GET. The paragraph that
+# used to sit here justified */15 as "a balance between detection latency (a
+# session usually has 20+ minutes of setup before students arrive) and GitHub
+# Actions minute budget (15min cadence = 96 runs/day = ~10 min/day)". Both
+# halves are wrong in practice, measured across the last 100 scheduled runs
+# (2026-07-29 21:38 -> 2026-08-07 00:05 UTC):
+#
+#     ticks expected             778    actually ran  100    = 13%
+#     median INTERVAL between probes   106.6 min
+#     p90 interval                     197.2 min
+#     max interval                     371.9 min   (6.2 h with no probe)
+#
+# ⚠ Those are INTERVALS BETWEEN RUNS, not detection latency, and the
+# difference matters in both directions. This probe was never sampled against
+# a known outage, so nothing here measures how quickly one gets noticed. What
+# the intervals bound is when the site is LOOKED AT:
+#   - an incident starting just after a probe is invisible until the next one,
+#     so the wait is up to the whole interval and averages about half of it
+#     for an arbitrary onset — but the tail is the part to plan around, and
+#     the tail here is hours;
+#   - an outage SHORTER than the current interval can begin and end between
+#     two probes and never be observed at all. That is not late detection,
+#     it is no detection, and no cron cadence removes it.
+#
+# GitHub runs `schedule` on public repos best-effort and drops ticks under
+# load, which is what produces those intervals. The cost half of the old
+# rationale is wrong in the opposite direction: ~8x lower than the 96 runs/day
+# it assumed, making that argument moot rather than load-bearing.
+#
+# Reproduce:
+#   gh api "repos/BasileChretien/canamed-platform/actions/workflows/\
+# synthetic-uptime.yml/runs?per_page=100" \
+#     --jq '[.workflow_runs[]|select(.event=="schedule")|.created_at]'
+#
+# ⚠ SO DO NOT TREAT THIS AS THE PRE-SESSION GATE. That is healthcheck.html —
+# an on-demand page whose own lead text says "open it ~30 minutes before each
+# live session", and whose `firebase-db` / `app-check` rows probe the backends
+# from the browser with real auth. This workflow is the unattended, between-
+# sessions watcher; it cannot promise a bound on how stale its last answer is.
+#
+# The cron is LEFT AT */15 deliberately. Moving it off the quarter-hour (the
+# most contended minutes) is the usual advice, but the effect here is
+# unmeasured, and a change whose benefit cannot be demonstrated does not
+# belong in a monitor. The durable fix is an external uptime service, which is
+# an infrastructure decision, not a code change.
 #
 # Run manually:
 #   gh workflow run synthetic-uptime.yml
