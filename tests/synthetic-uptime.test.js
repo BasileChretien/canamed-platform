@@ -300,6 +300,10 @@ test("attemptOne forwards method, body and per-check timeout to the transport", 
   assert.strictEqual(seen.method, "POST");
   assert.strictEqual(seen.body, JSON.stringify({ data: {} }));
   assert.strictEqual(seen.timeoutMs, probe.DEP_TIMEOUT_MS);
+  // Headers matter as much as the method: a callable that does not receive
+  // `Content-Type: application/json` can be rejected BEFORE the handler runs,
+  // and this check's whole value is that it reaches the handler.
+  assert.deepStrictEqual(seen.headers, { "Content-Type": "application/json" });
 });
 
 test("no check's mustContain is vacuous", async () => {
@@ -427,6 +431,22 @@ test("the probe step's timeout is above the probe's own worst case", () => {
     `the probe can take up to ${Math.round(worst / 1000)}s across its ${checks.length} checks ` +
       `(${probe.ATTEMPTS} attempts each) but the step is capped at ` +
       `${Math.round(stepMs / 1000)}s — raise the cap or lower the retry budget`
+  );
+});
+
+test("the probe's checkout does not persist the workflow token", () => {
+  // actions/checkout writes the token into .git/config by default, leaving it
+  // readable by every later step. Nothing here runs a git command after the
+  // checkout, so there is no reason to keep it.
+  const start = WORKFLOW.search(/^ {6}- uses: actions\/checkout@/m);
+  assert.ok(start > 0, "synthetic-uptime.yml has no actions/checkout step");
+  const rest = WORKFLOW.slice(start + 1);
+  const next = rest.search(/^ {6}- /m);
+  const checkoutStep = next < 0 ? rest : rest.slice(0, next);
+  assert.match(
+    checkoutStep,
+    /persist-credentials: false/,
+    "the probe only reads the checked-out source; the workflow token must not be persisted"
   );
 });
 
