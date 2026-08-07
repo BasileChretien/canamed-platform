@@ -25,9 +25,9 @@
  * browsers keep serving the cached 7-day locale chunk"). Nothing enforced it.
  *
  * THE CHECK. Diff the working tree against the merge base with origin/main.
- * If any watched file differs, the corresponding version marker must differ
- * too. That is inherently diff-based: no snapshot of the current tree can
- * tell you whether its content moved.
+ * If any watched file differs, the corresponding version marker must have
+ * moved FORWARD. That is inherently diff-based: no snapshot of the current
+ * tree can tell you whether its content moved.
  *
  * THE WATCHED SET IS DERIVED FROM THE ENFORCING SOURCES, never hand-listed —
  * a copied list drifts, and a drifted allow-list is a guard that silently
@@ -42,6 +42,42 @@
  *   - i18n.js          the /locales/<lang>.js line, for the LOCALE_VERSION pair
  * Every derivation asserts on its own input, so a parser that stops matching
  * fails loudly here instead of quietly narrowing the set to nothing.
+ *
+ * DELETIONS COUNT, so the set is derived at BOTH ENDS of the diff. (Review
+ * finding, CodeRabbit on #301.) Deriving from the working tree alone has a
+ * hole: delete a precached asset or a locale chunk — which also means removing
+ * it from sw.js's manifest — and the HEAD derivation no longer mentions it, so
+ * it is never handed to `git diff` and the guard passes with no bump. But
+ * removing an asset changes what the shell IS, and every client still holding
+ * the old cache keeps serving the deleted file. The watched set is therefore
+ * the UNION of the derivation at the merge base and the derivation at HEAD.
+ * The base side is deliberately LENIENT (its `expect` is a no-op): the base is
+ * history and may predate any given parser, so it contributes what it can
+ * without failing a PR over how a file parsed two years ago. A companion test
+ * asserts the base side is not silently returning nothing, because that would
+ * re-open this exact hole without any visible symptom.
+ *
+ * A REVERT MUST BUMP FORWARD, NEVER BACK — the version must strictly INCREASE,
+ * not merely differ. (Second review finding on #301; the first version of this
+ * guard used notStrictEqual, on the reasoning that a revert legitimately
+ * restores the previous version string. That reasoning is wrong.) sw.js's
+ * activate handler deletes every cache whose name `!== SHELL_VERSION`: the
+ * version is an IDENTITY, and a re-install is triggered by the name CHANGING,
+ * not by it being newer. So take main going v142 → v143 → v142:
+ *   - a client that reached v143 sees the name change back to v142,
+ *     re-installs, and ends up correct — which is what makes the downgrade
+ *     look safe;
+ *   - a client still on v142 that NEVER SAW v143 (offline, or the window was
+ *     only minutes wide) sees no version change at all across the whole round
+ *     trip. It never re-installs and keeps serving its old v142 cache. If the
+ *     v142 main returned to is not byte-identical to the v142 that client
+ *     cached — a partial revert, or the usual "revert plus fix" — that client
+ *     is PERMANENTLY stale, which is the precise failure this guard exists to
+ *     prevent.
+ * A cache version is a monotonic identifier, never a content label, and a
+ * number is never reused. Revert the CONTENT and bump the version FORWARD
+ * (v143 → v144 carrying the reverted files). Do not "fix" the friction by
+ * relaxing this back to an inequality check.
  *
  * IT SKIPS, NEVER FAILS, WHEN THE COMPARISON IS IMPOSSIBLE: no git, no
  * origin/main (shallow clone, fork checkout without the base ref), no merge
@@ -68,11 +104,12 @@ const { execFileSync } = require("node:child_process");
 
 const ROOT = path.join(__dirname, "..");
 const APP = "docs/Third_session/PBL_platform";
-const read = (rel) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 
 // ---- git plumbing ---------------------------------------------------------
 // execFileSync, not a shell: argv goes to git.exe untouched, so Git Bash's
-// MSYS path mangling (`origin/main:path` → `origin\main;path`) cannot happen.
+// MSYS path mangling (`<rev>:path` → `<rev>\path`) cannot happen here. It very
+// much can in a hand-run `git show origin/main:path` — export MSYS_NO_PATHCONV=1
+// there, or the mangled path prints nothing and reads as "nothing changed".
 
 /** Run git; return trimmed stdout, or null if git fails / is absent. */
 function tryGit(args) {
@@ -81,7 +118,8 @@ function tryGit(args) {
       cwd: ROOT,
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true
+      windowsHide: true,
+      maxBuffer: 32 * 1024 * 1024
     }).trim();
   } catch (_) {
     return null;
@@ -106,6 +144,7 @@ function mergeBase() {
  * Watched files changed between `base` and the WORKING TREE — uncommitted
  * edits included on purpose: the working tree is what you are about to ship,
  * and a developer should learn they owe a bump before they commit, not after.
+ * Additions, modifications AND deletions all count (see the header).
  */
 function changedSince(base, files) {
   const out = tryGit(["diff", "--name-only", base, "--", ...files]);
@@ -121,6 +160,49 @@ function markerAt(base, file, re) {
   return m ? m[1] : null;
 }
 
+// ---- where to read the repo FROM ------------------------------------------
+
+/** The working tree. Strict: a parser that stops matching here is a defect. */
+const WORKTREE = {
+  label: "the working tree",
+  strict: true,
+  read(rel) {
+    const p = path.join(ROOT, rel);
+    return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : null;
+  },
+  list(dirRel) {
+    const p = path.join(ROOT, dirRel);
+    return fs.existsSync(p) ? fs.readdirSync(p) : [];
+  },
+  expect(cond, msg) {
+    assert.ok(cond, msg);
+  }
+};
+
+/** A git revision. Lenient — see the DELETIONS COUNT note in the header. */
+function atRevision(rev) {
+  return {
+    label: rev.slice(0, 8),
+    strict: false,
+    read(rel) {
+      return tryGit(["show", rev + ":" + rel]);
+    },
+    list(dirRel) {
+      const out = tryGit(["ls-tree", "--name-only", rev, "--", dirRel + "/"]);
+      if (!out) return [];
+      return out
+        .split(/\r?\n/)
+        .map((p) => p.trim())
+        .filter((p) => p.startsWith(dirRel + "/"))
+        .map((p) => p.slice(dirRel.length + 1))
+        .filter((name) => name && !name.includes("/"));
+    },
+    expect() {
+      /* history is allowed to have parsed differently */
+    }
+  };
+}
+
 // ---- derivation: what the version machinery actually addresses -------------
 
 /** All captures of `re` in `text`, deduped, in order. */
@@ -133,55 +215,79 @@ function toRepoPath(url) {
   return APP + (url === "/" ? "/index.html" : url);
 }
 
-function deriveShellAssets() {
-  const sw = read(APP + "/sw.js");
-  const loader = read(APP + "/script-loader.js");
-  const html = read(APP + "/index.html");
-  const dict = read(APP + "/reader-dict.js");
+function deriveShellAssets(src) {
+  const urls = [];
 
   // 1. the service-worker precache manifest
-  const manifest = sw.match(/SHELL_ASSETS\s*=\s*\[([\s\S]*?)\]\s*;/);
-  assert.ok(manifest, "sw.js: could not find the SHELL_ASSETS array — the precache manifest parser needs updating");
-  const precached = allMatches(manifest[1], /"([^"]+)"/g);
-  assert.ok(precached.length > 30, `sw.js SHELL_ASSETS parsed to only ${precached.length} entries — the parser is broken, not the manifest`);
+  const sw = src.read(APP + "/sw.js");
+  src.expect(sw, `sw.js is unreadable in ${src.label}`);
+  const manifest = sw && sw.match(/SHELL_ASSETS\s*=\s*\[([\s\S]*?)\]\s*;/);
+  src.expect(manifest, "sw.js: could not find the SHELL_ASSETS array — the precache-manifest parser needs updating");
+  if (manifest) {
+    const precached = allMatches(manifest[1], /"([^"]+)"/g);
+    src.expect(precached.length > 30, `sw.js SHELL_ASSETS parsed to only ${precached.length} entries — the parser is broken, not the manifest`);
+    urls.push(...precached);
+  }
 
   // 2. every lazy chunk, i.e. every URL that goes through the version helper
   //    v(src) → "/" + src + "?v=" + SHELL_VERSION, plus the two vendored
   //    bundles that bypass v() (pdfmake/vfs_fonts, deliberately unversioned
   //    but still shell-cached under the versioned cache name).
-  const lazy = allMatches(loader, /\bv\(\s*"([^"]+)"\s*\)/g).map((s) => "/" + s);
-  assert.ok(lazy.length > 20, `script-loader.js yielded only ${lazy.length} v("…") chunks — the parser is broken`);
-  const vendored = allMatches(loader, /loadScript\(\s*"(\/[^"?]+)"\s*\)/g);
-  assert.ok(vendored.length > 0, "script-loader.js: no un-versioned loadScript(\"/…\") bundles found — parser drift");
+  const loader = src.read(APP + "/script-loader.js");
+  src.expect(loader, `script-loader.js is unreadable in ${src.label}`);
+  if (loader) {
+    const lazy = allMatches(loader, /\bv\(\s*"([^"]+)"\s*\)/g).map((s) => "/" + s);
+    src.expect(lazy.length > 20, `script-loader.js yielded only ${lazy.length} v("…") chunks — the parser is broken`);
+    const vendored = allMatches(loader, /loadScript\(\s*"(\/[^"?]+)"\s*\)/g);
+    src.expect(vendored.length > 0, 'script-loader.js: no un-versioned loadScript("/…") bundles found — parser drift');
+    urls.push(...lazy, ...vendored);
+  }
 
   // 3. the eager bundle: everything index.html cache-busts by hand
-  const eager = allMatches(html, /(?:src|href)="([^"]+)\?v=v\d+"/g);
-  assert.ok(eager.length > 5, `index.html yielded only ${eager.length} ?v= assets — the parser is broken`);
+  const html = src.read(APP + "/index.html");
+  src.expect(html, `index.html is unreadable in ${src.label}`);
+  if (html) {
+    const eager = allMatches(html, /(?:src|href)="([^"]+)\?v=v\d+"/g);
+    src.expect(eager.length > 5, `index.html yielded only ${eager.length} ?v= assets — the parser is broken`);
+    urls.push(...eager);
+  }
 
   // 4. the reading-aid dictionaries, cache-busted off CanamedLoader.SHELL_VERSION
-  assert.match(dict, /SHELL_VERSION/, "reader-dict.js no longer references SHELL_VERSION — re-check whether its dict files still ride the shell version");
-  const dicts = allMatches(dict, /"(\/dict\/[^"]+)"/g);
-  assert.ok(dicts.length > 0, "reader-dict.js: no /dict/… files found — parser drift");
+  const dict = src.read(APP + "/reader-dict.js");
+  src.expect(dict, `reader-dict.js is unreadable in ${src.label}`);
+  if (dict) {
+    src.expect(/SHELL_VERSION/.test(dict), "reader-dict.js no longer references SHELL_VERSION — re-check whether its dict files still ride the shell version");
+    const dicts = allMatches(dict, /"(\/dict\/[^"]+)"/g);
+    src.expect(dicts.length > 0, "reader-dict.js: no /dict/… files found — parser drift");
+    urls.push(...dicts);
+  }
 
-  const files = [...new Set([...precached, ...lazy, ...vendored, ...eager, ...dicts].map(toRepoPath))];
-  for (const f of files) {
-    assert.ok(fs.existsSync(path.join(ROOT, f)), `${f} is addressed by the shell-version machinery but does not exist on disk`);
+  const files = [...new Set(urls.map(toRepoPath))];
+  if (src.strict) {
+    // Only meaningful for the working tree: a base-side entry may legitimately
+    // be absent from disk — that is exactly the deletion this guard catches.
+    for (const f of files) {
+      assert.ok(fs.existsSync(path.join(ROOT, f)), `${f} is addressed by the shell-version machinery but does not exist on disk`);
+    }
   }
   return files.sort();
 }
 
-function deriveLocaleAssets() {
-  const i18n = read(APP + "/i18n.js");
+function deriveLocaleAssets(src) {
+  const i18n = src.read(APP + "/i18n.js");
+  src.expect(i18n, `i18n.js is unreadable in ${src.label}`);
+  if (!i18n) return [];
   // The enforcing line itself: s.src = "/locales/" + lang + ".js?v=" + LOCALE_VERSION;
   const m = i18n.match(/"(\/locales\/)"\s*\+\s*\w+\s*\+\s*"(\.js)\?v="\s*\+\s*LOCALE_VERSION/);
-  assert.ok(m, "i18n.js: could not find the `\"/locales/\" + lang + \".js?v=\" + LOCALE_VERSION` load line — the locale-chunk parser needs updating");
-  const dir = m[1].replace(/^\/|\/$/g, "");
+  src.expect(m, 'i18n.js: could not find the `"/locales/" + lang + ".js?v=" + LOCALE_VERSION` load line — the locale-chunk parser needs updating');
+  if (!m) return [];
+  const dir = APP + "/" + m[1].replace(/^\/|\/$/g, "");
   const suffix = m[2];
-  const files = fs
-    .readdirSync(path.join(ROOT, APP, dir))
+  const files = src
+    .list(dir)
     .filter((f) => f.endsWith(suffix))
-    .map((f) => `${APP}/${dir}/${f}`);
-  assert.ok(files.length > 0, `${APP}/${dir} contains no ${suffix} chunks — derivation is wrong`);
+    .map((f) => `${dir}/${f}`);
+  src.expect(files.length > 0, `${dir} contains no ${suffix} chunks in ${src.label} — derivation is wrong`);
   return files.sort();
 }
 
@@ -213,7 +319,7 @@ const CONTRACTS = [
 function contractVersion(c) {
   const seen = [];
   for (const marker of c.markers) {
-    const found = allMatches(read(marker.file), marker.re);
+    const found = allMatches(WORKTREE.read(marker.file), marker.re);
     assert.ok(found.length > 0, `${marker.file}: no ${c.name} marker found — the marker regex needs updating`);
     assert.strictEqual(
       found.length,
@@ -231,6 +337,30 @@ function contractVersion(c) {
   return distinct[0];
 }
 
+/** "v142" → 142, asserting the shape so a malformed marker cannot compare as NaN. */
+function versionNumber(v, whence) {
+  const m = /^v(\d+)$/.exec(v);
+  assert.ok(m, `${whence} version "${v}" is not the expected vNNN form`);
+  return Number(m[1]);
+}
+
+/** Union of the watched set at the merge base and at HEAD (deletions count). */
+function watchedUnion(c, base) {
+  const head = c.derive(WORKTREE);
+  const before = base ? c.derive(atRevision(base)) : [];
+  return [...new Set([...head, ...before])].sort();
+}
+
+function wentBackwardsMessage(c, now, before, base) {
+  return (
+    `${c.name} moved BACKWARDS, ${before} → ${now} (base ${base.slice(0, 8)}). A cache version is a ` +
+    `monotonic identifier, not a content label: sw.js's activate handler re-installs when the cache ` +
+    `NAME changes, so a client that never saw ${before} sees no change at all across the round trip ` +
+    `and keeps serving its stale ${now} cache forever. Never reuse a number — even a revert bumps ` +
+    `FORWARD, carrying the reverted content. Fix: ${c.fix}.`
+  );
+}
+
 // ---- tests ----------------------------------------------------------------
 
 for (const c of CONTRACTS) {
@@ -246,8 +376,7 @@ for (const c of CONTRACTS) {
     if (!base) {
       return t.skip("no merge base with origin/main (shallow clone, or no origin) — nothing to compare against");
     }
-    const watched = c.derive();
-    const changed = changedSince(base, watched);
+    const changed = changedSince(base, watchedUnion(c, base));
     if (changed === null) return t.skip("git diff unavailable");
     if (changed.length === 0) return; // nothing this contract covers was touched
 
@@ -265,6 +394,42 @@ for (const c of CONTRACTS) {
         `Returning browsers will keep serving the CACHED copy of those files, so this deploy ` +
         `is a no-op for them. Fix: ${c.fix}.`
     );
+    assert.ok(
+      versionNumber(now, `${c.name} (working tree)`) > versionNumber(before, `${c.name} (base)`),
+      wentBackwardsMessage(c, now, before, base)
+    );
+  });
+
+  test(`${c.name}: the version never moves backwards`, (t) => {
+    // Holds even when no watched file changed: reusing a number is never safe,
+    // because the re-install trigger is the cache NAME changing (see header).
+    const base = mergeBase();
+    if (!base) return t.skip("no merge base with origin/main — nothing to compare against");
+    const marker = c.markers[0];
+    const before = markerAt(base, marker.file, new RegExp(marker.re.source));
+    if (before === null) return t.skip(`${marker.file} carries no ${c.name} at ${base.slice(0, 8)}`);
+    const now = contractVersion(c);
+    if (now === before) return; // untouched is fine; the test above owns "must move"
+    assert.ok(
+      versionNumber(now, `${c.name} (working tree)`) > versionNumber(before, `${c.name} (base)`),
+      wentBackwardsMessage(c, now, before, base)
+    );
+  });
+
+  test(`${c.name}: the merge-base side of the derivation actually reads`, (t) => {
+    // The base-side derivation is what closes the DELETED-asset hole, and it is
+    // lenient by design — so if `git show <base>:…` ever stopped working, it
+    // would return [] and the guard would silently fall back to working-tree-
+    // only, re-opening that hole with no visible symptom. Fail loudly instead.
+    const base = mergeBase();
+    if (!base) return t.skip("no merge base with origin/main — nothing to derive from");
+    const before = c.derive(atRevision(base));
+    assert.ok(
+      before.length > 0,
+      `deriving ${c.name}'s watched set at ${base.slice(0, 8)} produced NOTHING. The guard has ` +
+        `degraded to a working-tree-only derivation, which cannot see a DELETED asset — the exact ` +
+        `hole the two-sided union closes.`
+    );
   });
 }
 
@@ -273,7 +438,7 @@ test("the derived shell-asset set covers the chunks that have actually caused th
   // every broken state. Pin the members named in the incident record — the
   // lazy/precached chunks a PR is most likely to touch without thinking about
   // the cache — so a narrowed set fails here rather than passing everywhere.
-  const files = deriveShellAssets();
+  const files = deriveShellAssets(WORKTREE);
   for (const name of [
     "index.html",       // precached; served cache-first to returning users
     "script.js",
@@ -304,7 +469,7 @@ test("the unit-test workflow checks out enough history for the bump check to run
   // indistinguishable from passing. Strip comments first: the workflow is
   // free to discuss fetch-depth in prose. \r\n normalisation is load-bearing
   // on a CRLF checkout (JS `.` never matches \r, so `#.*$` would strip nothing).
-  const config = read(".github/workflows/test.yml")
+  const config = WORKTREE.read(".github/workflows/test.yml")
     .replace(/\r\n?/g, "\n")
     .split("\n")
     .map((line) => line.replace(/(^|\s)#.*$/, ""))
