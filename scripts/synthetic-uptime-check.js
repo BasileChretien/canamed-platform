@@ -10,12 +10,14 @@
  *   1. GET  https://canamed-69785.web.app/                      (splash)
  *   2. GET  https://canamed-69785.web.app/privacy.html          (privacy)
  *   3. GET  https://canamed-69785.web.app/healthcheck.html      (smoke page; tolerated 404 if not yet shipped)
- *   4. GET  <rtdb>/.json                                        (database reachable + rules loaded)
- *   5. POST <fn>/hfPatient                                      (LLM-patient callable reachable)
+ *   4. GET  <rtdb>/credentials/<fixed non-existent id>.json     (App Check is NOT enforcing)
+ *   5. GET  <rtdb>/.json                                        (database reachable + rules loaded)
+ *   6. POST <fn>/hfPatient                                      (LLM-patient callable reachable)
  *
- * 1-3 must return HTTP 200 and contain the brand mark and title. 4 and 5 must
- * return 401 with a SPECIFIC body — see below. If any check fails, the script
- * exits 1, the GitHub Actions job goes red and the operator gets an email.
+ * 1-3 must return HTTP 200 and contain the brand mark and title. 4 must return
+ * exactly `200 null`. 5 and 6 must return 401 with a SPECIFIC body — see below.
+ * If any check fails, the script exits 1, the GitHub Actions job goes red and
+ * the operator gets an email.
  *
  * ── WHY CHECKS 4 AND 5 EXIST (2026-08-07) ────────────────────────────────
  * Checks 1-3 only prove Firebase Hosting is serving files. Hosting has never
@@ -149,6 +151,10 @@ const FN_BASE = (process.env.PROBE_FN_URL ||
   "https://europe-west1-canamed-69785.cloudfunctions.net").replace(/\/$/, "");
 const DEP_TIMEOUT_MS = 10_000;
 
+// A fixed, deliberately non-existent certificate id. Pinned by a test so the
+// canary below can never be re-pointed at a real credential record.
+const APPCHECK_CANARY_ID = "appcheck-canary-not-a-real-cert-id";
+
 function buildChecks(base, rtdb, fnBase) {
   const db = (rtdb || RTDB_URL).replace(/\/$/, "");
   const fn = (fnBase || FN_BASE).replace(/\/$/, "");
@@ -175,11 +181,63 @@ function buildChecks(base, rtdb, fnBase) {
       mustContain: []
     },
     {
-      // A DENIAL IS THE HEALTHY ANSWER. Root is `.read: false`, so an
-      // unauthenticated REST read must come back 401 "Permission denied" —
-      // which proves DNS, TLS, the database instance and a loaded ruleset all
-      // at once. An unreachable or rule-less database answers differently
-      // (5xx, a timeout, or — the interesting one — data).
+      // ⚠ THE 200 IS THE POINT, and it is not about this path's contents.
+      //
+      // `credentials/$certId` is public-read by design (the unauthenticated
+      // certificate-verification page needs it), so an unauthenticated read of
+      // a non-existent id returns 200 `null`. Crucially this request carries
+      // NO App Check token — and App Check ENFORCED rejects unattested
+      // requests at the API layer, BEFORE rules are evaluated. So a 200 here
+      // proves App Check is NOT ENFORCING on the database.
+      //
+      // It proves exactly that and no more. App Check has three states — OFF,
+      // UNENFORCED (the Console calls it "Monitor") and ENFORCED — and a
+      // tokenless read succeeds under BOTH OFF and UNENFORCED. This check
+      // therefore cannot tell those two apart, and does not try to; the
+      // Console remains the authority on which of them is live. What it does
+      // detect is the transition that has actually hurt: OFF/UNENFORCED ->
+      // ENFORCED.
+      //
+      // That matters because ENFORCED has caused two production incidents on
+      // this project (2026-05-30 RTDB, 2026-06-03 hfPatient): reCAPTCHA's
+      // grecaptcha.execute() intermittently hangs, no token mints, and under
+      // enforcement the whole database rejects every client. The Console also
+      // reports ~95% of RTDB traffic as *unverified*, so enforcing today would
+      // turn away the great majority of real users.
+      //
+      // Until now the only way to know was to open the Firebase Console — and
+      // CLAUDE.md's banner about it went stale for two months precisely
+      // because nobody could check it from a terminal. This makes it
+      // continuously verified instead. NB an enforcement change can take up to
+      // ~15 minutes to propagate, so the probe goes red on the first tick
+      // AFTER Firebase applies it, not the moment the Console is clicked. If
+      // enforcement is ever enabled deliberately, this check must be updated
+      // in the same change — the coupling the hfPatient check already gives.
+      //
+      // The id is a fixed non-existent one: no PII, and cert ids are
+      // crypto-random so this reads nothing and enumerates nothing.
+      // `tests/synthetic-uptime.test.js` pins that exact id, so the probe
+      // cannot later be pointed at a real credential record.
+      url: db + "/credentials/" + APPCHECK_CANARY_ID + ".json",
+      label: "rtdb-appcheck",
+      expectStatuses: [200],
+      // EXACT body, not a substring: `mustContain: ["null"]` would also be
+      // satisfied by a real record such as {"name":"null"}, which is the
+      // opposite of what this asserts.
+      mustContain: [],
+      mustEqual: "null",
+      timeoutMs: DEP_TIMEOUT_MS
+    },
+    {
+      // A DENIAL IS THE HEALTHY ANSWER here, by contrast. Root is
+      // `.read: false`, so an unauthenticated REST read must come back 401
+      // "Permission denied" — which proves DNS, TLS, the database instance and
+      // a loaded ruleset all at once. An unreachable or rule-less database
+      // answers differently (5xx, a timeout, or — the interesting one — data).
+      //
+      // Read together, the pair is stronger than either alone: the canary
+      // above proves unattested access REACHES the rules, and this proves the
+      // rules then DENY what they should.
       url: db + "/.json",
       label: "rtdb",
       expectStatuses: [401],
@@ -298,7 +356,13 @@ async function attemptOne(check, fetchImpl) {
     });
     const statusOk = check.expectStatuses.indexOf(r.status) >= 0;
     const body = typeof r.body === "string" ? r.body : "";
-    const contentOk = check.mustContain.every(s => body.indexOf(s) >= 0);
+    const containsOk = check.mustContain.every(s => body.indexOf(s) >= 0);
+    // `mustEqual` is the STRICT form: the whole (trimmed) body must equal it.
+    // `mustContain` is a substring test, so `["null"]` would also be satisfied
+    // by a real record like {"name":"null"} — fine for prose in an HTML page,
+    // useless for asserting "this endpoint returned exactly null".
+    const equalOk = check.mustEqual == null || body.trim() === check.mustEqual;
+    const contentOk = containsOk && equalOk;
     // `tolerate` is an EXPLICIT list of statuses that skip the body assertion
     // (the not-yet-shipped healthcheck page's 404). It replaces the old
     // implicit rule "any status other than 200 skips the body", which would
@@ -306,13 +370,15 @@ async function attemptOne(check, fetchImpl) {
     // body, and a 401 is their healthy answer.
     const tolerated = Array.isArray(check.tolerate) && check.tolerate.indexOf(r.status) >= 0;
     const pass = statusOk && (tolerated || contentOk);
+    const missing = containsOk ? [] : check.mustContain.filter(s => body.indexOf(s) < 0);
+    if (!equalOk) missing.push("<body !== " + JSON.stringify(check.mustEqual) + ">");
     return {
       label: check.label,
       url: check.url,
       pass: pass,
       status: r.status,
       ms: typeof r.ms === "number" ? r.ms : Date.now() - startedAt,
-      missing: contentOk ? [] : check.mustContain.filter(s => body.indexOf(s) < 0),
+      missing: missing,
       tolerated: tolerated
     };
   } catch (e) {
@@ -391,6 +457,7 @@ module.exports = {
   DEP_TIMEOUT_MS,
   RTDB_URL,
   FN_BASE,
+  APPCHECK_CANARY_ID,
   buildChecks,
   worstCaseMs,
   attemptOne,
