@@ -12,6 +12,18 @@
 #
 # Run manually:
 #   gh workflow run synthetic-uptime.yml
+#
+# ── READ THIS BEFORE DIAGNOSING A RED RUN ────────────────────────────────
+# A red run here does NOT imply the site was down. Of the three non-success
+# runs in the last 100, the probe never executed in two of them:
+#
+#   gh api repos/BasileChretien/canamed-platform/actions/runs/<id>/jobs \
+#     --jq '.jobs[] | {conclusion, runner_name, steps: (.steps|length)}'
+#
+# An empty `runner_name` with zero steps means GitHub never allocated a
+# runner and the site was never tested (observed 2026-08-06 17:53: pending
+# 15 m 02 s, then killed). Only a run that reached the `Run synthetic probe`
+# step says anything at all about production. Check the step list first.
 
 name: Synthetic uptime probe
 
@@ -24,21 +36,54 @@ on:
     - cron: "*/15 * * * *"   # every 15 minutes
   workflow_dispatch:
 
-concurrency:
-  group: synthetic-uptime
-  cancel-in-progress: false   # let each tick complete; don't piggyback
+# NO `concurrency:` BLOCK — deliberately. There used to be one
+# (group: synthetic-uptime, cancel-in-progress: false, "let each tick
+# complete; don't piggyback"). GitHub allows only ONE pending run per
+# concurrency group, so when a run sits pending across a cron tick the older
+# pending run is CANCELLED — and this probe demonstrably can sit pending for
+# a full tick (2026-08-06 17:53 waited 15 m 02 s for a runner). In that state
+# the group can only ever convert "GitHub had no runners" into a red run and
+# an operator email; it cannot make the probe more correct.
+#
+# Honesty note: no competing run exists in the API history for 18:08, so the
+# group is NOT confirmed to have caused that specific eviction. It is removed
+# because it carries that failure mode with no upside — three read-only GETs
+# are harmless to run concurrently, and at a 15-minute cadence against a job
+# that normally finishes in well under a minute, overlap is near-impossible
+# anyway.
 
 jobs:
   probe:
     name: probe canamed-69785.web.app
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # 12 at the JOB level, 5 on the probe STEP — not 3 on the job.
+    #
+    # `timeout-minutes` on a job is measured from JOB START, so it covers
+    # runner setup, checkout and setup-node as well as the probe. The old
+    # `timeout-minutes: 3` was sized for the probe alone and duly killed a
+    # run that was doing nothing wrong: on 2026-08-06 15:53 the `Set up job`
+    # step ALONE took 2 m 33 s (15:56:19 -> 15:58:52) and the job was
+    # cancelled 3 m 32 s after starting, before checkout finished. The probe
+    # never ran, and the red X is indistinguishable from a real outage.
+    #
+    # This is the fourth time this exact defect has been paid for in this
+    # repo (#275, #284, #286 in e2e.yml — see the long note there). The fix
+    # is the same one: bound the WORK at the step, and leave the job cap
+    # loose enough that infrastructure cannot consume it.
+    #
+    # 5 on the step is above the probe's worst case: 3 checks x (3 attempts
+    # x 15 s request timeout + 2 s + 5 s backoff) = 2 m 36 s. A healthy run
+    # is ~1 s. `tests/synthetic-uptime.test.js` pins step < job and
+    # worst-case < step, so retuning either one without the other fails a
+    # fast unit test rather than a scheduled run at 03:00.
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Run synthetic probe
+        timeout-minutes: 5
         run: node scripts/synthetic-uptime-check.js
         env:
           PROBE_URL: https://canamed-69785.web.app

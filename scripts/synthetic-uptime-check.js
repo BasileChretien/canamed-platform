@@ -2,9 +2,9 @@
 /* synthetic-uptime-check.js
  *
  * External health probe for the CaNaMED platform. Runs from GitHub Actions
- * on a 5-minute cron so we know the production site is reachable from outside
- * Firebase's network — catches OAuth/Hosting outages we'd otherwise discover
- * at session-start.
+ * on the cron in `.github/workflows/synthetic-uptime.yml` so we know the
+ * production site is reachable from outside Firebase's network — catches
+ * OAuth/Hosting outages we'd otherwise discover at session-start.
  *
  * Checks:
  *   1. GET https://canamed-69785.web.app/                       (splash)
@@ -13,8 +13,45 @@
  *
  * For each: must return HTTP 200, must include the brand mark text, must
  * include the platform's <title> tag. If any check fails, the script exits
- * with code 1 — the GitHub Actions job will go red and the operator gets
- * an email.
+ * with code 1 — the GitHub Actions job goes red and the operator gets an
+ * email.
+ *
+ * ── WHY THERE IS A RETRY (2026-08-07) ────────────────────────────────────
+ * An alert is only worth having if a red run means "the site is down". Over
+ * the last 100 scheduled runs there were three non-success runs, and NOT ONE
+ * of them was an outage:
+ *
+ *   2026-08-06 15:53 (cancelled) — the job got a runner but `Set up job`
+ *     alone took 2 m 33 s and the job's `timeout-minutes: 3` killed it.
+ *     THE PROBE NEVER EXECUTED. Fixed in the workflow: the tight bound now
+ *     sits on the probe STEP, and the job cap is loose enough that runner
+ *     setup cannot consume it. Same defect class as #275/#284/#286.
+ *   2026-08-06 17:53 (failure) — the run sat pending 15 m 02 s, never got a
+ *     runner at all (`runner_name` empty, zero steps) and was killed.
+ *     THE PROBE NEVER EXECUTED. Nothing in this repo can prevent that; it is
+ *     GitHub-side runner starvation. Recorded here so the next operator does
+ *     not re-diagnose it as an outage.
+ *   2026-08-04 19:08 (failure) — the probe DID run, and this is the one this
+ *     retry addresses. Two consecutive requests timed out at 15 s each and
+ *     then the THIRD request returned 200 in 214 ms:
+ *         [FAIL] splash        status=0 ms=0 error=Request timed out after 15000ms
+ *         [FAIL] privacy.html  status=0 ms=0 error=Request timed out after 15000ms
+ *         [OK]   healthcheck.html status=200 ms=214
+ *     A ~30 s blip from one Azure region is not an outage a facilitator would
+ *     ever notice, but it emailed the operator as if it were.
+ *
+ * So: each check is attempted up to ATTEMPTS times with a backoff, and only
+ * fails the run when EVERY attempt fails. A healthy check still returns on
+ * attempt 1, so the normal run is unchanged (~1 s); only the pathological
+ * path is slow, which is exactly when patience is wanted. Retries cover
+ * content mismatches too, not just network errors — a truncated body reads
+ * as a content mismatch, and retrying a genuinely wrong page costs a bounded
+ * few seconds and still goes red.
+ *
+ * `ms` is now the real elapsed time on the ERROR path as well. It used to be
+ * hardcoded to 0, which is why the 2026-08-04 log above cannot distinguish
+ * "hung for the full 15 s" from "refused instantly" — the two have completely
+ * different causes.
  *
  * No external dependencies — uses node's built-in https module so it runs
  * without `npm install`. Works on node >= 18.
@@ -31,28 +68,39 @@ const https = require("node:https");
 const BASE = (process.env.PROBE_URL || "https://canamed-69785.web.app").replace(/\/$/, "");
 const TIMEOUT_MS = 15_000;
 
-const CHECKS = [
-  {
-    url: BASE + "/",
-    label: "splash",
-    expectStatuses: [200],
-    mustContain: ["CaNaMED", "splash"]
-  },
-  {
-    url: BASE + "/privacy.html",
-    label: "privacy.html",
-    expectStatuses: [200],
-    mustContain: ["Privacy Policy", "GDPR"]
-  },
-  {
-    // healthcheck page is shipped in a separate PR; treat 404 as tolerable
-    // here (probe still records it, just doesn't fail the run on 404)
-    url: BASE + "/healthcheck.html",
-    label: "healthcheck.html",
-    expectStatuses: [200, 404],
-    mustContain: []
-  }
-];
+// Attempts PER CHECK, and the wait before attempt 2 and attempt 3. Worst case
+// for one check is 3 x 15 s + 2 s + 5 s = 52 s, so all three checks cannot
+// exceed ~2 m 36 s. The workflow's probe-step timeout must stay above that —
+// `tests/synthetic-uptime.test.js` pins the two together.
+const ATTEMPTS = 3;
+const BACKOFF_MS = [2_000, 5_000];
+
+function buildChecks(base) {
+  return [
+    {
+      url: base + "/",
+      label: "splash",
+      expectStatuses: [200],
+      mustContain: ["CaNaMED", "splash"]
+    },
+    {
+      url: base + "/privacy.html",
+      label: "privacy.html",
+      expectStatuses: [200],
+      mustContain: ["Privacy Policy", "GDPR"]
+    },
+    {
+      // healthcheck page is shipped in a separate PR; treat 404 as tolerable
+      // here (probe still records it, just doesn't fail the run on 404)
+      url: base + "/healthcheck.html",
+      label: "healthcheck.html",
+      expectStatuses: [200, 404],
+      mustContain: []
+    }
+  ];
+}
+
+const CHECKS = buildChecks(BASE);
 
 function fetchUrl(url) {
   return new Promise((resolve, reject) => {
@@ -76,19 +124,27 @@ function fetchUrl(url) {
   });
 }
 
-async function runOne(check) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/* One attempt at one check. Never throws — a transport error is a failed
+ * result, not an exception, so the retry loop above stays simple. */
+async function attemptOne(check, fetchImpl) {
+  const startedAt = Date.now();
   try {
-    const r = await fetchUrl(check.url);
+    const r = await fetchImpl(check.url);
     const statusOk = check.expectStatuses.indexOf(r.status) >= 0;
-    const contentOk = check.mustContain.every(s => r.body.indexOf(s) >= 0);
+    const body = typeof r.body === "string" ? r.body : "";
+    const contentOk = check.mustContain.every(s => body.indexOf(s) >= 0);
     const pass = statusOk && (r.status !== 200 || contentOk);
     return {
       label: check.label,
       url: check.url,
       pass: pass,
       status: r.status,
-      ms: r.ms,
-      missing: contentOk ? [] : check.mustContain.filter(s => r.body.indexOf(s) < 0),
+      ms: typeof r.ms === "number" ? r.ms : Date.now() - startedAt,
+      missing: contentOk ? [] : check.mustContain.filter(s => body.indexOf(s) < 0),
       // not-fatal mark for the 404 case on shippable-later pages
       tolerated: r.status !== 200 && check.expectStatuses.indexOf(r.status) >= 0
     };
@@ -98,27 +154,89 @@ async function runOne(check) {
       url: check.url,
       pass: false,
       status: 0,
-      ms: 0,
+      // Real elapsed time, not 0 — see the header. This is what tells a hang
+      // apart from an instant refusal when reading a failed run's log.
+      ms: Date.now() - startedAt,
+      missing: [],
       error: e.message
     };
   }
 }
 
-(async function main() {
-  console.log("Probing", BASE, "at", new Date().toISOString());
+/* Run one check, retrying until it passes or the attempts are exhausted.
+ * Returns the LAST result, annotated with `attempt` (which attempt produced
+ * it) and `attempts` (how many were allowed). */
+async function runOne(check, opts) {
+  const o = opts || {};
+  const fetchImpl = o.fetchUrl || fetchUrl;
+  const sleepImpl = o.sleep || sleep;
+  const attempts = typeof o.attempts === "number" ? o.attempts : ATTEMPTS;
+  const backoff = o.backoffMs || BACKOFF_MS;
+
+  let result = null;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await sleepImpl(backoff[Math.min(i - 1, backoff.length - 1)]);
+    result = await attemptOne(check, fetchImpl);
+    result.attempt = i + 1;
+    result.attempts = attempts;
+    if (result.pass) return result;
+  }
+  return result;
+}
+
+function formatResult(r) {
+  const tag = r.pass ? (r.tolerated ? "TOLERATED" : "OK") : "FAIL";
+  const retried = r.attempt > 1 ? " (attempt " + r.attempt + "/" + r.attempts + ")" : "";
+  return "[" + tag + "]" + retried + " " + String(r.label).padEnd(20) +
+    " status=" + r.status + " ms=" + r.ms +
+    (r.error ? " error=" + r.error : "") +
+    (r.missing && r.missing.length ? " missing=" + r.missing.join("|") : "");
+}
+
+/* Returns the process exit code rather than calling process.exit, so the whole
+ * probe is exercisable from a unit test. */
+async function main(opts) {
+  const o = opts || {};
+  const checks = o.checks || CHECKS;
+  const log = o.log || console.log;
+  const logErr = o.logErr || console.error;
+
+  log("Probing " + (o.base || BASE) + " at " + new Date().toISOString());
   const results = [];
-  for (const c of CHECKS) {
-    const r = await runOne(c);
-    const tag = r.pass ? (r.tolerated ? "TOLERATED" : "OK") : "FAIL";
-    console.log("[" + tag + "]", r.label.padEnd(20), "status=" + r.status, "ms=" + r.ms,
-      r.error ? "error=" + r.error : "",
-      r.missing && r.missing.length ? "missing=" + r.missing.join("|") : "");
+  for (const c of checks) {
+    const r = await runOne(c, o);
+    log(formatResult(r));
     results.push(r);
   }
   const hardFails = results.filter(r => !r.pass);
   if (hardFails.length > 0) {
-    console.error("FAIL: " + hardFails.length + " check(s) failed");
-    process.exit(1);
+    logErr("FAIL: " + hardFails.length + " check(s) failed");
+    return 1;
   }
-  console.log("OK: all checks passed");
-})();
+  log("OK: all checks passed");
+  return 0;
+}
+
+module.exports = {
+  ATTEMPTS,
+  BACKOFF_MS,
+  TIMEOUT_MS,
+  buildChecks,
+  attemptOne,
+  runOne,
+  formatResult,
+  main
+};
+
+if (require.main === module) {
+  // process.exitCode rather than process.exit so nothing is truncated mid-write.
+  // Both paths have been timed against production: a healthy run exits 0 in ~1 s,
+  // and a failing run exits 1 as soon as the retry budget is spent (no socket
+  // keeps the loop alive).
+  main()
+    .then((code) => { process.exitCode = code; })
+    .catch((e) => {
+      console.error("FAIL: probe crashed:", e && e.stack ? e.stack : e);
+      process.exitCode = 1;
+    });
+}
