@@ -15,8 +15,15 @@
  *     cold-start, cheaper per-invocation pricing.
  *
  * SECURITY model (unchanged from v1 — only the API style changed):
- *   - App Check ENFORCED on hfPatient (consumeAppCheckToken=false; see H7
- *     of the 2026-05-28 review for why single-use is wrong here).
+ *   - App Check WIRED on hfPatient but enforcement is a param, not a constant:
+ *     `enforceAppCheck: APP_CHECK_ENFORCE` (defineBoolean, default false), and
+ *     consumeAppCheckToken=false (see H7 of the 2026-05-28 review for why
+ *     single-use is wrong for a multi-turn chat). Enforcement ran
+ *     2026-05-28 → 2026-06-03, then was reverted: reCAPTCHA intermittently
+ *     failed to mint a token and every chat turn fell back to the stub. The
+ *     room-membership check below is the boundary that always applies.
+ *   - Room membership enforced per call (_verifyMembership): the caller's
+ *     session-level roomOf/<uid> claim must name the room they claim to be in.
  *   - HF token + SMTP password in Google Secret Manager (never in .env,
  *     never in source). Bound per-function via `secrets: [...]`.
  *   - Non-secret config (MODA_LLM_ENABLED, SMTP_HOST, etc.) via
