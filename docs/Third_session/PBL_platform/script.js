@@ -1158,8 +1158,33 @@ function stageLabelLegacy(i) {
 }
 /* Stage-flow wrappers — the logic (branched skips stage 2) lives in the LAZY
    branched-render.js; these delegate once it has loaded, else the standard flow. */
+/* Does the BRANCHED ENGINE own this session's stage flow?
+ *
+ * Only when the branched FORMAT owns the whole session. Once a session picks
+ * sections (S1b) the pick is authoritative: a branched section is then one
+ * section among several, and branched-render's mirror must not speak for the
+ * whole flow. That mirror derives the flow from CURRENT_SCENARIO_FORMAT /
+ * CANAMED_MODULE_STAGES — neither of which knows about picked sections — so it
+ * collapsed a mixed session to its own [0, 1, LAST].
+ *
+ * Live symptom (found 2026-08-12) in a 2-section session (PBL + branched): the
+ * stepper read "Stage 1 of 4", "Stage 2 of 4", then "Stage 3 of 3" the moment
+ * the lazy branched chunk loaded — and the room's real stage (2) was not even a
+ * member of the returned flow, so the wrap-up ALSO rendered as "Stage 3 of 3".
+ *
+ * Gating all three flow functions on this together is deliberate: if the
+ * stepper used the section flow while Back/Advance used the branched one they
+ * would disagree, which is the exact failure standardStageFlow's own comment
+ * warns about. With no pick (legacy scenarios + STANDALONE branched) behaviour
+ * is unchanged — the branched engine still owns the flow. */
+function _branchedFlowOwner() {
+  if (typeof window === "undefined" || !window.CanamedBranchedRender) return null;
+  let picked = null;
+  try { picked = pickedSections(); } catch (_) { picked = null; }
+  return picked ? null : window.CanamedBranchedRender;
+}
 function stageFlow() {
-  const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
+  const b = _branchedFlowOwner();
   return (b && b.stageFlow) ? b.stageFlow() : standardStageFlow();
 }
 /* Welcome + one stage per module this scenario RUNS + Wrap-up. So an A-only
@@ -1180,11 +1205,11 @@ function standardStageFlow() {
   return [0].concat(mid, [lastStage()]);
 }
 function snapStageToFlow(to, from) {
-  const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
+  const b = _branchedFlowOwner();
   return (b && b.snapStageToFlow) ? b.snapStageToFlow(to, from) : Math.max(0, Math.min(lastStage(), to));
 }
 function adjacentStage(cur, dir) {
-  const b = (typeof window !== "undefined") && window.CanamedBranchedRender;
+  const b = _branchedFlowOwner();
   return (b && b.adjacentStage) ? b.adjacentStage(cur, dir) : Math.max(0, Math.min(lastStage(), cur + dir));
 }
 // Generic i18n lookup with English-string fallback. Use for hardcoded

@@ -166,7 +166,8 @@ const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 // validation + collapse, and lang normalisation (FINDING-06). The 12000-char
 // body cap lives there (system prompt ~3800 chars + ~6 transcript turns).
 const { SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang,
-        safeCharacterName, buildRolePrefixRe, dayKey } = require("./lib/hf-helpers");
+        safeCharacterName, buildRolePrefixRe, dayKey,
+        roomClaimPath, roomClaimMatches } = require("./lib/hf-helpers");
 const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -268,11 +269,14 @@ async function _verifyMembership(uid, body) {
   if (!/^[^.#$\[\]/]{1,40}$/.test(roomId)) return null;
   if (orgSlug && !/^[A-Za-z0-9_-]{1,40}$/.test(orgSlug)) return null;
 
-  const path = orgSlug
-    ? `orgs/${orgSlug}/sessions/${code}/rooms/${roomId}/uidMembers/${uid}`
-    : `sessions/${code}/rooms/${roomId}/uidMembers/${uid}`;
+  /* Authorise against the SESSION-level `roomOf/<uid>` claim, NOT the retired
+     per-room `uidMembers` marker — see hf-helpers.roomClaimPath for why #268
+     moved it and how missing this call site silently disabled the whole
+     LLM-patient feature. The claim's `room` must MATCH the claimed roomId;
+     existence alone would authorise any room. */
+  const path = roomClaimPath(code, orgSlug, uid);
   const snap = await admin.database().ref(path).once("value");
-  return snap.exists() ? { code, roomId, orgSlug } : null;
+  return roomClaimMatches(snap.val(), roomId) ? { code, roomId, orgSlug } : null;
 }
 
 async function _hfCallWithRetry(url, headers, body, signal, totalBudgetMs) {

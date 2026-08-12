@@ -324,7 +324,30 @@ reCAPTCHA-hang reasoning in item 1.
      Console-only; functional check = create an account with email/password on
      the live splash and confirm no `auth/operation-not-allowed` error.
 
-4. **Module A LLM-patient pilot (2026-05-28) — ✅ ACTIVATED 2026-05-30.**
+4. **Module A LLM-patient pilot (2026-05-28) — ✅ ACTIVATED 2026-05-30;
+   ⚠️ was SILENTLY BROKEN 2026-08-03 → 2026-08-12, fixed in code, NEEDS A
+   FUNCTIONS DEPLOY.**
+   > **Outage (found by a live test 2026-08-12).** `#268` (2026-08-03) replaced
+   > the per-room `uidMembers` marker with the session-level `roomOf/<uid>`
+   > claim and migrated the client + the DB rules, but **not**
+   > `functions/index.js`. `_verifyMembership()` kept reading a node nothing
+   > writes any more, so hfPatient returned `permission-denied` on **every**
+   > turn and the bridge degraded **every room** to the stub patient — which
+   > answers a *different* question than the one asked, so it reads as an
+   > incoherent patient rather than an outage. Nine days, green CI, unnoticed:
+   > the bridge treats any error as "backend unavailable" by design.
+   > **Fixed** by pointing `_verifyMembership` at `roomOf` (via
+   > `hf-helpers.roomClaimPath` / `roomClaimMatches`) — **inert until
+   > `firebase deploy --only functions` runs.** Guarded by
+   > `tests/hf-membership-lockstep.test.js` (client↔function node lockstep +
+   > "no rule/function may read `uidMembers`"), the mirror of the DB-rule guard
+   > in `tests/rules.test.js` that this call site slipped past.
+   > `Verify:` from a room in the browser console,
+   > `firebase.app().functions('europe-west1').httpsCallable('hfPatient')({roomCode, roomId, lang:'en', messages:[{role:'user',content:'hi'}]})`
+   > must NOT return `permission-denied: not a member of the claimed room`.
+   > (Call it WITHOUT the region and you hit us-central1 and get a misleading
+   > CORS/403 — the function lives in `europe-west1`.)
+
    The free-text chat with the scenario's patient (via HF Inference Providers,
    proxied by the `hfPatient` Firebase Cloud Function) is live. All activation steps
    are complete: **(a)** privacy notice updated (HF disclosed as sub-processor;
@@ -365,7 +388,8 @@ reCAPTCHA-hang reasoning in item 1.
      returns the handler's own `auth required` (not an App-Check rejection),
      confirming Enforce was the gate — same reCAPTCHA-can't-mint-a-token failure
      as the RTDB revert (item 1). The room-membership check (`_verifyMembership`:
-     `roomCode`/`roomId` → `uidMembers`) remains the security boundary; re-enable
+     `roomCode`/`roomId` → `roomOf/<uid>.room`, `uidMembers` until 2026-08-12 —
+     see the outage note above) remains the security boundary; re-enable
      (`true` + redeploy) only once reCAPTCHA reliability is understood. History
      below (enforcement was ON 2026-05-28 → 2026-06-03).
    - **App Check on hfPatient — was ✅ DONE & DEPLOYED (verified 2026-05-30).**
