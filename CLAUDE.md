@@ -933,11 +933,28 @@ fixed state from the broken state — run it against BOTH if you can.)
 changed:
 
 ```bash
+# 1. the org page must EMIT root-absolute URLs — that is what the fix changed.
 curl -s https://canamed-69785.web.app/o/caen-nagoya/ | grep -o 'src="/theme-init\.js?v=v[0-9]*"'
 # src="/theme-init.js?v=v143"   <- LEADING SLASH = fixed (broken state: src="theme-init.js?v=…")
-curl -sI https://canamed-69785.web.app/theme-init.js | grep -i content-type
-# content-type: text/javascript   <- what the browser is then actually sent
+
+# 2. and the URL it emits must really serve JS. Assert the STATUS as well as the
+#    type: a non-200 carrying a JS content type would otherwise pass, which is
+#    the same class of defect this whole section is about. GET, not HEAD (-I),
+#    because GET is what the browser issues.
+curl -sS -w '\n%{http_code} %{content_type}\n' https://canamed-69785.web.app/theme-init.js | tail -1
+# 200 text/javascript; charset=utf-8      <- must be BOTH 200 and javascript
 ```
+
+Do **not** rewrite that second one as the more obvious
+`curl -o /dev/null -w '%{http_code} %{content_type}\n' …`: Git Bash here ships
+**mingw64 curl** (a Windows binary), which cannot write to the MSYS `/dev/null`
+path and exits **23** `client returned ERROR on write` *after* printing the
+correct answer. It looks like a failed check on a healthy site — this section's
+own failure mode, one layer down. Discarding the body via `-o` is what breaks;
+appending the status line to it and taking `tail -1` needs no discard.
+Discrimination confirmed on all three cases: `/theme-init.js` → `200
+text/javascript` (pass); `/o/caen-nagoya/theme-init.js` → `200 text/html`
+(fail, the rewrite); a missing asset → `404 text/html` (fail).
 
 Measured 2026-08-12: `/o/caen-nagoya/` serves HTML byte-identical to
 `/index.html` (same md5), carrying `/theme-init.js?v=v143`, `/tokens.css?v=v143`,
