@@ -115,7 +115,8 @@ the patient's reply. The HF token NEVER reaches the client.
   in, so a session member cannot drive another room's patient, and a
   non-participant cannot spend HF tokens at all. This runs before any HF call.
 - **Auth required** — anonymous Firebase Auth is enough (every classroom user
-  has it). Verified via `context.auth.uid`.
+  has it). Verified via `request.auth.uid` (Gen 2 `onCall` passes a single
+  `request`; `context.auth` is the v1 shape and does not exist here).
 - **App Check is wired but NOT enforcing here.** The callable declares
   `enforceAppCheck: APP_CHECK_ENFORCE` (a `defineBoolean`, default `false`) and
   `consumeAppCheckToken: false` — single-use tokens are deliberately wrong for a
@@ -142,10 +143,21 @@ the patient's reply. The HF token NEVER reaches the client.
 - **Reply sanitised**: speaker prefix stripped, JSON-shaped replies
   rejected, length capped at **600** chars. Provider error bodies are never
   forwarded to the client.
-- **No PII logged.** Only counters reach the database
-  (`metrics/hfPatient/events` — `uid, at, lang, msgCount, replyLen, latencyMs`).
-  The transcript itself lives at `rooms/<r>/moduleA/chat/<id>` under the RTDB
-  rules, no part of it on the function's side.
+- **No transcript logged — but the metrics are PSEUDONYMOUS, not anonymous.**
+  The function never writes the question, the reply, or any free text: only
+  counters reach `metrics/hfPatient/events` (`uid, at, lang, msgCount,
+  replyLen, latencyMs`). That record still carries the Firebase Auth **`uid`**,
+  a persistent online identifier — so under GDPR (Recital 30) it is personal
+  data in pseudonymous form, and must not be described as "no PII".
+  - *Access:* the whole `metrics/` tree has **no rule**, so the root
+    `.read: false` / `.write: false` applies — no client can read or write it.
+    Only the Admin SDK (this function) touches it.
+  - *Retention:* ⚠️ **none today.** No cleanup job prunes
+    `metrics/hfPatient/events`, so these uid-keyed rows accumulate
+    indefinitely. That is a storage-limitation gap, not a design decision —
+    give it a retention window before any real research use of the metrics.
+  - The chat text itself lives at `rooms/<r>/moduleA/chat/<id>` under the RTDB
+    rules and the session-retention flow, no part of it on the function's side.
 
 > The numbers and identifiers above are pinned to the code by
 > `tests/hfpatient-security-doc.test.js` — they were wrong for months before it

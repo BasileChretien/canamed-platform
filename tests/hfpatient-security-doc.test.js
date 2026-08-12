@@ -54,21 +54,42 @@ function securitySection() {
 }
 
 const FACTS = [
-  ["max messages per body", constOf(HELPERS, "MAX_BODY_MESSAGES")],
-  ["max chars per body", constOf(HELPERS, "MAX_BODY_CHARS")],
-  ["max reply chars", constOf(INDEX, "MAX_REPLY_CHARS")],
-  ["per-uid hourly turns", constOf(INDEX, "RATE_LIMIT_TURNS")],
-  ["per-uid daily turns", constOf(INDEX, "RATE_LIMIT_DAILY_TURNS")],
-  ["per-session turns", constOf(INDEX, "SESSION_RATE_LIMIT_TURNS")]
+  /* Each fact carries the WORDS that identify which control it is. Checking
+     only that the number appears somewhere in the section lets the three rate
+     limits be swapped — "40 / day, 200 / hour" would satisfy a bare presence
+     test while documenting a 5x-wrong hourly budget. `near` keeps the value and
+     its label in the same clause without pinning the whole sentence. */
+  ["max messages per body", constOf(HELPERS, "MAX_BODY_MESSAGES"), "messages"],
+  ["max chars per body", constOf(HELPERS, "MAX_BODY_CHARS"), "chars"],
+  ["max reply chars", constOf(INDEX, "MAX_REPLY_CHARS"), "chars"],
+  ["per-uid hourly turns", constOf(INDEX, "RATE_LIMIT_TURNS"), "hour"],
+  ["per-uid daily turns", constOf(INDEX, "RATE_LIMIT_DAILY_TURNS"), "day"],
+  ["per-session turns", constOf(INDEX, "SESSION_RATE_LIMIT_TURNS"), "session"]
 ];
 
-test("every documented limit matches the constant in code", () => {
+/* value ... label, within one clause (no sentence end between them). */
+function near(sec, value, label) {
+  return new RegExp("\\b" + value + "\\b[^.\\n]{0,40}" + label).test(sec);
+}
+
+test("every documented limit matches the constant in code, under its own label", () => {
   const sec = securitySection();
-  for (const [label, value] of FACTS) {
+  for (const [label, value, keyword] of FACTS) {
     assert.ok(sec.includes(value),
       `the security section never states the ${label} (${value}) — either it is ` +
       "missing or it still shows the old number");
+    assert.ok(near(sec, value, keyword),
+      `${label} (${value}) appears, but not attached to "${keyword}" — a number ` +
+      "documented against the wrong control is as misleading as a wrong number");
   }
+});
+
+test("the reply cap is the reply's, not a second body cap", () => {
+  /* MAX_REPLY_CHARS and MAX_BODY_CHARS are both "<n> chars", so the keyword
+     test above cannot tell them apart on its own. */
+  const sec = securitySection();
+  assert.match(sec, new RegExp("capped at[^.\\n]{0,20}\\b" + constOf(INDEX, "MAX_REPLY_CHARS") + "\\b"),
+    "the reply cap must be stated as the REPLY's cap");
 });
 
 test("the retired 4000-char body cap is gone", () => {
@@ -86,9 +107,22 @@ test("App Check is not described as unconditionally enforced", () => {
       `the security section claims \`${claim}\`, but enforcement is the ` +
       "APP_CHECK_ENFORCE param (default false) and single-use tokens are wrong here");
   }
-  // ...and the param that actually drives it must be named.
+  // ...and the param that actually drives it must be named, WITH its default —
+  // "enforcement is a param" reads as reassuring unless the doc says the param
+  // is off. Same for the single-use setting, whose absence let the old text
+  // claim `consumeAppCheckToken: true` unchallenged.
   assert.match(sec, /APP_CHECK_ENFORCE/,
     "the section must name the param that actually controls enforcement");
+  assert.match(sec, /default\s*`?false`?/i,
+    "the section must state that APP_CHECK_ENFORCE defaults to false, or a " +
+    "reader assumes enforcement is on");
+  assert.match(sec, /consumeAppCheckToken:\s*false/,
+    "the section must state consumeAppCheckToken: false — it is a deliberate " +
+    "choice (single-use tokens break a multi-turn chat), not an oversight");
+  assert.match(INDEX, /consumeAppCheckToken:\s*false/,
+    "index.js must actually set it false (this is what the doc describes)");
+  assert.match(INDEX, /defineBoolean\("APP_CHECK_ENFORCE",\s*\{\s*default:\s*false/,
+    "the documented default must be the real one");
   assert.match(INDEX, /enforceAppCheck:\s*APP_CHECK_ENFORCE/,
     "index.js must drive enforcement from the param (this is what the doc describes)");
 });
@@ -113,6 +147,29 @@ test("the enable flag is named MODA_LLM_ENABLED everywhere in the README", () =>
   assert.match(README, /MODA_LLM_ENABLED/);
   assert.match(INDEX, /defineBoolean\("MODA_LLM_ENABLED"/,
     "index.js must define MODA_LLM_ENABLED (this is what the doc describes)");
+});
+
+test("the metrics are not described as anonymous / PII-free", () => {
+  /* The function persists the Firebase Auth `uid` with every metrics row. A
+     persistent online identifier is personal data in pseudonymous form (GDPR
+     Recital 30), so "No PII logged" was an overstatement — and this repo carries
+     a real GDPR/APPI posture, so an overstatement here is not cosmetic. What IS
+     true is that no transcript or free text is written by the function. */
+  /* Match the CLAIM ("No PII logged"), never a bare mention of "no PII" — the
+     corrected text has to be able to SAY it must not be described that way.
+     Third time this bit in one session (the uidMembers comment in #311, the
+     functions.config() ban above, this): a guard that forbids naming the bug
+     forbids documenting the fix. Ban the assertion, not the vocabulary. */
+  const sec = securitySection();
+  for (const claim of [/no pii logged/i, /\bnot? personal data\b/i, /\banonymous(?:ly)? logg/i]) {
+    assert.ok(!claim.test(sec),
+      `the security section claims ${claim} of the metrics, but each row carries ` +
+      "the uid — pseudonymous, not anonymous");
+  }
+  assert.match(sec, /pseudonymous/i, "the section must classify the metrics honestly");
+  assert.match(INDEX, /metrics\/hfPatient\/events/,
+    "the metrics path must exist (this is what the doc describes)");
+  assert.match(INDEX, /\buid,/, "the events record must actually carry uid");
 });
 
 test("the room-membership boundary is documented", () => {
