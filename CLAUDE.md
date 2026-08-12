@@ -177,6 +177,19 @@ requests**, so re-enabling *Enforce* today would reject the great majority of
 traffic — independent evidence for staying on Monitor, on top of the
 reCAPTCHA-hang reasoning in item 1.
 
+**Re-confirmed 2026-08-12 without Console access**, using the checks each item
+now carries: the RTDB canary returned `null http=200` with the paired root read
+still `401 Permission denied`, and a tokenless POST to `hfPatient` returned the
+handler's own `auth required`. Both surfaces are therefore still non-enforcing.
+A live end-to-end run the same day passed while App Check was 403-ing and
+self-throttled, so no token minted at all. Scope that honestly: it shows the
+flows it exercised — anonymous sign-in, `sessionStatus()`, session create/start,
+room writes, the Module A chat, session close — do not currently depend on
+attestation. It is evidence about those flows, not a proof that no operation
+anywhere does, and it does not by itself predict what fraction of clients
+*Enforce* would break. The ~5% verified figure above is the basis for that
+estimate; the two together are why Monitor stays.
+
 > ⚠️ **STATUS-CLAIM RULE — read before reporting any item here as done /
 > outstanding / dormant.** These hand-maintained labels CAN go stale: an
 > operator may finish a Console/deploy step without updating this file (that
@@ -230,6 +243,16 @@ reCAPTCHA-hang reasoning in item 1.
      curl -s -w ' http=%{http_code}\n' 'https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app/credentials/appcheck-canary-not-a-real-cert-id.json'
      # null http=200        <- not enforcing (expected)
      ```
+
+     ✅ **Re-verified 2026-08-12.** Canary `null http=200`; paired root read
+     `{"error":"Permission denied"} http=401`. Both as specified, so RTDB is
+     still not enforcing and the rules still deny what they should.
+     Independently, the whole live test that day ran with App Check **failing**:
+     the SDK logged a 403 and self-throttled for 24 h, so no token could mint —
+     yet anonymous sign-in, `sessionStatus()`, session creation, room writes and
+     the chat all worked. That exercises the **authenticated realtime SDK** path
+     (reads *and* writes), which the public-REST canary does not touch and which
+     is what actually broke in the 2026-05-30 incident.
 
      ⚠️ It proves exactly that and **no more**. App Check has three states —
      OFF, UNENFORCED (the Console labels it *Monitor*) and ENFORCED — and a
@@ -383,16 +406,41 @@ reCAPTCHA-hang reasoning in item 1.
      kill-switch for the HF backend (see Panic button above).
      `Verify:` `grep -A6 "function modALLMFlagOn" docs/.../script-loader.js`
      ends with `return true`.
-   - **App Check on hfPatient — ⚠️ REVERTED to Monitor 2026-06-03
-     (`APP_CHECK_ENFORCE=false`, redeployed).** The chat fell back to the stub
-     patient on *every* message; a tokenless probe of the live function now
-     returns the handler's own `auth required` (not an App-Check rejection),
-     confirming Enforce was the gate — same reCAPTCHA-can't-mint-a-token failure
-     as the RTDB revert (item 1). The room-membership check (`_verifyMembership`:
-     `roomCode`/`roomId` → `roomOf/<uid>.room`, `uidMembers` until 2026-08-12 —
-     see the outage note above) remains the security boundary; re-enable
-     (`true` + redeploy) only once reCAPTCHA reliability is understood. History
-     below (enforcement was ON 2026-05-28 → 2026-06-03).
+   - **App Check on hfPatient — ⚠️ still NOT ENFORCING
+     (`APP_CHECK_ENFORCE=false`). RE-VERIFIED ON A FRESH DEPLOY 2026-08-12.**
+     Deliberately *not* worded "Monitor": for a callable, enforcement is the
+     code-level `enforceAppCheck` option, and the probe below distinguishes
+     ENFORCED from not-enforcing but cannot tell *Monitor* from *Off* — so
+     claiming either would assert more than the evidence supports, and would
+     contradict this bullet's own caveat further down.
+     The function was redeployed that day (the `roomOf`
+     fix, #311), so every deploy-timestamp argument in the bullet below is now
+     about a **superseded revision** — read this one instead. The deploy came
+     from a checkout whose `functions/.env` has `APP_CHECK_ENFORCE=false`, and
+     a live probe confirms it end-to-end:
+
+     ```bash
+     curl -s -X POST -H 'Content-Type: application/json' -d '{"data":{}}' https://europe-west1-canamed-69785.cloudfunctions.net/hfPatient
+     # {"error":{"message":"auth required","status":"UNAUTHENTICATED"}}  <- handler reached
+     ```
+
+     That message is the **handler's own**, so the request got past the App
+     Check layer: not enforcing (a rejection there never reaches the handler).
+     Stronger still, the same day an *authenticated* call succeeded end-to-end
+     while the browser's App Check was returning 403 and self-throttled for
+     24 h — no token could mint at all, and the call still worked.
+     ⚠️ Like the RTDB canary in item 1, this separates ENFORCED from
+     not-enforcing; it cannot tell OFF from *Monitor*. The Console stays the
+     authority on which of those two is live.
+
+     Original revert **2026-06-03** (`APP_CHECK_ENFORCE=false`, redeployed):
+     the chat fell back to the stub patient on *every* message — the same
+     reCAPTCHA-can't-mint-a-token failure as the RTDB revert (item 1). The
+     room-membership check (`_verifyMembership`: `roomCode`/`roomId` →
+     `roomOf/<uid>.room`, `uidMembers` until 2026-08-12 — see the outage note
+     above) remains the security boundary; re-enable (`true` + redeploy) only
+     once reCAPTCHA reliability is understood. History below (enforcement was
+     ON 2026-05-28 → 2026-06-03).
    - **App Check on hfPatient — was ✅ DONE & DEPLOYED (verified 2026-05-30).**
      `firebase functions:list` shows `hfPatient` live (v2 callable); its last
      deploy (`gcloud functions describe` updateTime `2026-05-28T11:38:37Z`)
