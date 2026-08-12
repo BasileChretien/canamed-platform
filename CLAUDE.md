@@ -354,9 +354,10 @@ reCAPTCHA-hang reasoning in item 1.
    in-product `modA.chat.disclosure` banner shown); **(b)** Blaze enabled with
    a $1 budget alert (volumes stay inside the Cloud Functions free tier);
    **(c)** `HF_TOKEN` set in Secret Manager + `functions/.env` with
-   `MODA_LLM_ENABLED=true`, `HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3`,
+   `MODA_LLM_ENABLED=true`, `HF_MODEL=meta-llama/Llama-3.1-8B-Instruct`,
    `HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct` (lang-aware `_hfModel()` routes JA
-   to Qwen); **(d)** `firebase-functions-compat.js` added to
+   to Qwen — Mistral-7B's Japanese is too weak for in-character roleplay);
+   **(d)** `firebase-functions-compat.js` added to
    [index.html](docs/Third_session/PBL_platform/index.html) after the
    app-check compat script, with its integrity hash; **(e)** deployed
    (`firebase deploy --only functions,database,hosting`). The bridge now wires

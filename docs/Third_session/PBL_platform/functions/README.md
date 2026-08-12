@@ -148,9 +148,17 @@ with:
 
 ```
 MODA_LLM_ENABLED=true
-HF_MODEL=mistralai/Mistral-7B-Instruct-v0.3
+HF_MODEL=meta-llama/Llama-3.1-8B-Instruct
 HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct
 ```
+
+These are also the `defineString` defaults baked into `index.js`
+(`HF_DEFAULT_MODEL` / `HF_DEFAULT_MODEL_JA`), so omitting them changes nothing —
+set them only to override. Keep this block in step with those constants: it is
+copy-pasted into a real `.env`, so a stale value here silently deploys a
+DIFFERENT model than the code default. (Mistral-7B-Instruct-v0.3 was the
+original choice; JA moved to Qwen because Mistral's Japanese is too weak for
+in-character roleplay, and EN followed to Llama-3.1-8B.)
 
 `.env` is in `.gitignore`. `.env.<projectId>` is **per-project** and only
 applies to that Firebase project — useful if you have separate dev / staging
