@@ -70,11 +70,17 @@ for (const [key, constName] of [["HF_MODEL", "HF_DEFAULT_MODEL"],
     }
   });
 
-  test(`${key}: the guard is not vacuous — the docs DO state it`, () => {
-    // If a rename made the assignments disappear, the loop above would pass
-    // over an empty list and prove nothing.
-    const total = SOURCES.reduce((n, [, src]) => n + assignments(src, key).length, 0);
-    assert.ok(total >= 2, `expected ${key} to be documented in at least 2 places, found ${total}`);
+  test(`${key}: the guard is not vacuous — EVERY source states it`, () => {
+    /* Per source, not a total. A total lets one file go silent while the others
+       carry the count: drop HF_MODEL from CLAUDE.md and a `>= 2` check still
+       passes, so the doc stops stating the deployed model and nothing complains
+       — the exact failure this file exists to catch. Each source is a place an
+       operator reads, so each must answer the question. */
+    for (const [label, src] of SOURCES) {
+      assert.ok(assignments(src, key).length > 0,
+        `${label} no longer states ${key}=… — a source that goes silent cannot go stale, ` +
+        "but it also stops telling operators which model is deployed");
+    }
   });
 }
 
