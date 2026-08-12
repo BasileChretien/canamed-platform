@@ -94,11 +94,14 @@ async function dbReadAsOwner(path) {
 
 /* Claim per-room membership the way the CLIENT does, in one place.
  *
- * Since 2026-08-03 a `uidMembers` claim is no longer self-asserted: its VALUE
- * must be a clientId the claimant owns (`clientMapping/<cid> == auth.uid`) and
- * that is assigned to this room (`pool/<cid>/room == $roomId`). Writing a bare
- * `true` is now REJECTED — which is the whole point, since that was the
- * self-claim bypass.
+ * Since 2026-08-03 (#268) the per-room `uidMembers` marker is GONE, replaced by
+ * a SESSION-level `roomOf/<uid> = { room, cid }` claim — write-once, so a
+ * participant holds exactly one room identity per session (the old marker was
+ * write-once PER ROOM, so they could claim each room in turn: the self-claim
+ * bypass). The claim is not self-asserted either: its `cid` must be a clientId
+ * the claimant owns (`clientMapping/<cid> == auth.uid`) and that is assigned to
+ * this room (`pool/<cid>/room == $roomId`), which is why all three writes below
+ * are needed. Writing a bare `true` is REJECTED.
  *
  * `sessionBase` is the session subtree, e.g. `sessions/<code>` or
  * `orgs/<slug>/sessions/<id>`. Returns the clientId used, so a caller can

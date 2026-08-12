@@ -111,7 +111,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v143";
+  var SHELL_VERSION = "v144";
   // ROOT-ABSOLUTE, and the leading "/" is load-bearing (2026-08-06).
   // firebase.json rewrites `/o/**` -> /index.html for the multi-tenant org
   // entry point, so on a page served at /o/<slug>/ a BARE filename resolves to

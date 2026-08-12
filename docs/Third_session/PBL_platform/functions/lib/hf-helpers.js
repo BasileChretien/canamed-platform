@@ -112,8 +112,40 @@ function dayKey(now) {
   return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate();
 }
 
+/* Per-room authorisation for hfPatient — the `roomOf` claim.
+ *
+ * 2026-08-03 (#268) replaced the per-room `uidMembers` marker with a
+ * SESSION-level `roomOf/<uid> = { room, cid }` claim, write-once, so a
+ * participant holds exactly ONE room identity per session (the old marker was
+ * write-once per room, so they could collect every room in turn). The database
+ * rules were fully migrated — tests/rules.test.js forbids any rule from reading
+ * `uidMembers` — but this function was missed, so _verifyMembership kept
+ * reading a node no client writes any more. Every hfPatient call was therefore
+ * rejected with permission-denied and the client silently fell back to the stub
+ * patient. Caught by a live test on 2026-08-12, ~9 days after #268 shipped.
+ *
+ * Split into pure helpers so the path shape and the room comparison are
+ * unit-testable without firebase-admin (see tests/hf-helpers.test.js). */
+function roomClaimPath(code, orgSlug, uid) {
+  return orgSlug
+    ? `orgs/${orgSlug}/sessions/${code}/roomOf/${uid}`
+    : `sessions/${code}/roomOf/${uid}`;
+}
+
+/* The claim lives at SESSION level, so the room it grants is carried in the
+ * VALUE. It must be COMPARED, not merely proven to exist: an existence check
+ * would let a member of Room 1 drive the chat of Room 2 — exactly the
+ * cross-room hole the per-room marker was there to close. */
+function roomClaimMatches(claim, roomId) {
+  if (!claim || typeof claim !== "object") return false;
+  const room = claim.room;
+  if (typeof room !== "string" || !room) return false;
+  return room === String(roomId);
+}
+
 module.exports = {
   MAX_BODY_MESSAGES, MAX_BODY_CHARS, SERVER_GUARD,
   isAllowedHfUrl, validateMessages, buildMessages, normLang,
-  safeCharacterName, buildRolePrefixRe, dayKey
+  safeCharacterName, buildRolePrefixRe, dayKey,
+  roomClaimPath, roomClaimMatches
 };

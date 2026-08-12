@@ -157,3 +157,95 @@ test.describe("A mixed session, end to end", () => {
     expect(archive.rooms[0].sections["1"].answers).toEqual([]);
   });
 });
+
+/* ── A mixed session that INCLUDES the branched section ────────────────────
+ *
+ * The regression the suite above could not see. Every test in it picks pbl +
+ * roleplay, and for that pair branched-render's module-derived fallback happens
+ * to return the same [0,1,2,3] the section flow does — so the delegation looked
+ * correct. Pick a BRANCHED section and it sets CURRENT_SCENARIO_FORMAT, at which
+ * point branched-render answers with its STANDALONE flow [0,1,LAST] and speaks
+ * for a session it cannot see.
+ *
+ * Live symptom (2026-08-12): the stepper read "Stage 1 of 4", "Stage 2 of 4",
+ * then "Stage 3 of 3" once the branched chunk loaded — and the room's real
+ * stage (2) was not in the flow, so the wrap-up also rendered "Stage 3 of 3".
+ * ensureCaseContent() loads branched-render.js, so the hijack is live here.
+ */
+const BRANCHED_PICK = ["chronic-pain-pbl", "ward-escalation-branched"];
+
+test.describe("A mixed session containing a branched section", () => {
+  test("the section pick owns the flow — branched-render must not collapse it", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => !!window.CANAMED_SECTIONS);
+    await page.evaluate((ids) => {
+      window.setSessionSections(ids.join(","));
+      document.body.classList.remove("locked");
+      const splash = document.getElementById("splash");
+      if (splash) splash.classList.add("hidden");
+      const app = document.getElementById("app");
+      if (app) app.classList.remove("hidden");
+    }, BRANCHED_PICK);
+
+    /* RENDER the branched stage before reading the flow. Having the chunk
+       LOADED is not enough: branched-render only claims the standalone flow
+       once CURRENT_SCENARIO_FORMAT is "branched", which the branched section
+       sets as it renders. Without this step the assertions below pass on the
+       BROKEN build too — confirmed by reverting the fix and re-running. */
+    const info = await page.evaluate(() => {
+      window._test_setViewStage(2);
+      window.renderStage();
+      return {
+        branchedLoaded: !!window.CanamedBranchedRender,
+        format: window.CURRENT_SCENARIO_FORMAT,
+        slots: window.sectionSlots().map(s => [s.stage, s.type]),
+        flow: window.stageFlow(),
+        last: window.lastStage(),
+        count: window.stageCount(),
+        nav: [window.adjacentStage(1, 1), window.adjacentStage(2, 1)]
+      };
+    });
+
+    // Both preconditions for the hijack must hold, or this test proves nothing.
+    expect(info.branchedLoaded).toBe(true);
+    expect(info.format).toBe("branched");
+    expect(info.slots).toEqual([[1, "pbl"], [2, "branched"]]);
+    expect(info.count).toBe(4);
+    expect(info.flow).toEqual([0, 1, 2, 3]);
+    // The precise defect: the branched section's own stage must be IN the flow.
+    expect(info.flow).toContain(2);
+    // Navigation must agree with the stepper, or Advance skips the section.
+    expect(info.nav).toEqual([2, 3]);
+  });
+
+  test("the stepper reads 'of 4' on every stage, including the wrap-up", async ({ page }) => {
+    await page.goto("/");
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => !!window.CANAMED_SECTIONS);
+    await page.evaluate((ids) => {
+      window.setSessionSections(ids.join(","));
+      document.body.classList.remove("locked");
+      const splash = document.getElementById("splash");
+      if (splash) splash.classList.add("hidden");
+      const app = document.getElementById("app");
+      if (app) app.classList.remove("hidden");
+    }, BRANCHED_PICK);
+
+    /* The denominator is what the student reads. It changed mid-session (4 → 3)
+       and then repeated "3 of 3" for two different stages. */
+    const seen = [];
+    for (const stage of [0, 1, 2, 3]) {
+      seen.push(await page.evaluate((s) => {
+        window._test_setViewStage(s);
+        window.renderStage();
+        const m = (document.getElementById("app").innerText.match(/STAGE\s+(\d+)\s+OF\s+(\d+)/i) || []);
+        return m[0] || null;
+      }, stage));
+    }
+    for (const label of seen) expect(label).toMatch(/OF\s+4/i);
+    expect(new Set(seen).size).toBe(seen.length, "each stage needs its own number");
+  });
+});

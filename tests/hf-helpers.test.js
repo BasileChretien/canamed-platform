@@ -7,7 +7,8 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const {
-  SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang, MAX_BODY_MESSAGES, dayKey
+  SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang, MAX_BODY_MESSAGES, dayKey,
+  roomClaimPath, roomClaimMatches
 } = require("../docs/Third_session/PBL_platform/functions/lib/hf-helpers");
 
 test("isAllowedHfUrl: allows huggingface.co + subdomains, the default router URL", () => {
@@ -113,4 +114,43 @@ test("dayKey: UTC yyyymmdd integer, stable within a day, rolls over at UTC midni
   assert.strictEqual(dayKey(Date.UTC(2026, 6, 22, 23, 59, 59)), 20260722);
   assert.strictEqual(dayKey(Date.UTC(2026, 6, 23, 0, 0, 0)), 20260723); // next day
   assert.strictEqual(dayKey(Date.UTC(2026, 0, 5, 12, 0, 0)), 20260105); // zero-padded m/d
+});
+
+/* ── Per-room authorisation: the `roomOf` claim (#268 migration) ───────────
+ * hfPatient authorises against roomOf/<uid> = { room, cid }. Reading the
+ * retired per-room `uidMembers` marker instead rejected EVERY call and dropped
+ * the whole room to the stub patient (found live 2026-08-12). */
+
+test("roomClaimPath: session-level roomOf, in both the default and org trees", () => {
+  assert.strictEqual(roomClaimPath("abc-def", "", "uid1"),
+    "sessions/abc-def/roomOf/uid1");
+  assert.strictEqual(roomClaimPath("abc-def", "caen", "uid1"),
+    "orgs/caen/sessions/abc-def/roomOf/uid1");
+  // The claim is NOT under the room — a per-room path is the retired shape.
+  assert.ok(!roomClaimPath("abc-def", "", "uid1").includes("uidMembers"));
+  assert.ok(!roomClaimPath("abc-def", "", "uid1").includes("/rooms/"));
+});
+
+test("roomClaimMatches: the claim's room must MATCH, not merely exist", () => {
+  assert.strictEqual(roomClaimMatches({ room: "Room 1", cid: "c1" }, "Room 1"), true);
+  // The cross-room case: holding Room 1 must not authorise acting in Room 2.
+  assert.strictEqual(roomClaimMatches({ room: "Room 1", cid: "c1" }, "Room 2"), false);
+});
+
+test("roomClaimMatches: rejects every non-claim value", () => {
+  for (const v of [null, undefined, false, 0, "", "Room 1", 42, [],
+                   {}, { cid: "c1" }, { room: "" }, { room: null }, { room: 1 },
+                   { room: true }, { room: ["Room 1"] }]) {
+    assert.strictEqual(roomClaimMatches(v, "Room 1"), false, JSON.stringify(v) || String(v));
+  }
+  // `true` was the ORIGINAL per-room marker value. If it ever authorised again
+  // the self-claim bypass #268 closed would be back.
+  assert.strictEqual(roomClaimMatches(true, "Room 1"), false);
+});
+
+test("roomClaimMatches: room names with spaces (the real key shape) work", () => {
+  assert.strictEqual(roomClaimMatches({ room: "Room 10" }, "Room 10"), true);
+  // No prefix/substring matching: "Room 1" must not satisfy "Room 10".
+  assert.strictEqual(roomClaimMatches({ room: "Room 1" }, "Room 10"), false);
+  assert.strictEqual(roomClaimMatches({ room: "Room 10" }, "Room 1"), false);
 });
