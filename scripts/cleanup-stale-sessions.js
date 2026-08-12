@@ -53,16 +53,39 @@
 const admin = require("firebase-admin");
 const { readSessionLocations, safeLabel } = require("./lib/session-trees");
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
+const { parseRetentionDays } = require("./lib/retention-window");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
-const CLOSED_DAYS = parseInt(process.env.CLEANUP_RETENTION_CLOSED_DAYS || "30", 10);
-const OPEN_DAYS = parseInt(process.env.CLEANUP_RETENTION_OPEN_DAYS || "90", 10);
+/* Retention windows come from free-form workflow_dispatch string inputs, and
+   they are the ONLY thing standing between this job and the whole database.
+   parseInt() is far too forgiving for that:
+     "-1"  → a cutoff in the FUTURE, so every current row satisfies
+             `at < cutoff` and the job deletes live data;
+     "abc" → NaN, every comparison is false, and retention silently stops
+             happening — the exact failure this job exists to prevent.
+   Neither is recoverable and neither announces itself, so a bad window aborts
+   the run instead of being guessed at. Applied to all three windows: the
+   session ones carry the same trap, and there "-1" would purge every session
+   in both trees. Flagged by CodeRabbit on #314. */
+function retentionDays(name, fallback) {
+  const r = parseRetentionDays(process.env[name], fallback);
+  if (!r.ok) {
+    console.error(`FATAL: ${name}=${r.error}. Refusing to run: a negative window ` +
+      "puts the cutoff in the future and deletes live data, and a non-numeric one " +
+      "disables retention silently.");
+    process.exit(2);
+  }
+  return r.value;
+}
+
+const CLOSED_DAYS = retentionDays("CLEANUP_RETENTION_CLOSED_DAYS", 30);
+const OPEN_DAYS = retentionDays("CLEANUP_RETENTION_OPEN_DAYS", 90);
 /* The hfPatient metrics are not tied to a session lifecycle, so they need their
    own window. 30d matches the "identified data ≤ 30 days" commitment the
    privacy policy already makes — these rows are pseudonymous rather than
    identified, so the same window is conservative, not lax. */
-const METRICS_DAYS = parseInt(process.env.CLEANUP_RETENTION_METRICS_DAYS || "30", 10);
+const METRICS_DAYS = retentionDays("CLEANUP_RETENTION_METRICS_DAYS", 30);
 const CONFIRM = process.env.CLEANUP_CONFIRM === "1";
 const QUIET = process.env.CLEANUP_QUIET === "1";
 

@@ -35,10 +35,14 @@ const read = (...p) => fs.readFileSync(path.join(...p), "utf8");
 const cleanupSrc = read(ROOT, "scripts", "cleanup-stale-sessions.js");
 
 function enforcedDefault(envVar) {
-  // e.g. process.env.CLEANUP_RETENTION_CLOSED_DAYS || "30"
-  const m = cleanupSrc.match(
-    new RegExp(`process\\.env\\.${envVar}\\s*\\|\\|\\s*"(\\d+)"`)
-  );
+  /* e.g. retentionDays("CLEANUP_RETENTION_CLOSED_DAYS", 30)
+     Was `process.env.<VAR> || "30"` until 2026-08-12, when the windows moved
+     behind a validator — a free-form workflow input reaching parseInt() meant
+     "-1" put the cutoff in the FUTURE and deleted live data. The older form is
+     still accepted so this guard keeps working on either shape rather than
+     going quiet, which for a consistency check is the failure that matters. */
+  const m = cleanupSrc.match(new RegExp(`retentionDays\\("${envVar}",\\s*(\\d+)\\)`))
+    || cleanupSrc.match(new RegExp(`process\\.env\\.${envVar}\\s*\\|\\|\\s*"(\\d+)"`));
   assert.ok(m, `could not read the ${envVar} default out of cleanup-stale-sessions.js`);
   return Number(m[1]);
 }

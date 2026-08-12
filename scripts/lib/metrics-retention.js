@@ -55,6 +55,21 @@ function expiredBucketKeys(buckets, cutoffMs) {
    Returns the individual day paths to delete, plus the uids whose every day
    expired — those parent nodes must go too, or the tree keeps one empty node
    per participant for ever, which is still a uid-keyed record of who used it. */
+/* A key must be exactly eight digits AND a real UTC calendar date.
+ *
+ * parseInt() is the trap here, and it fails in the direction that KEEPS data:
+ * "20261301" (month 13) parses to a number larger than any real cutoff, and
+ * "20260812junk" parses to 20260812 — both then read as recent and survive the
+ * window for ever, which contradicts the malformed-expires rule the rest of
+ * this file follows. Flagged by CodeRabbit on #314. */
+function _validDayKey(k) {
+  if (!/^\d{8}$/.test(k)) return false;
+  const y = +k.slice(0, 4), m = +k.slice(4, 6), d = +k.slice(6, 8);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  // Round-trip catches month 13, day 32, and 30 February (which Date rolls over).
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+}
+
 function expiredDailyPaths(daily, cutoffMs) {
   const out = { dayPaths: [], emptyUids: [] };
   if (!daily || typeof daily !== "object") return out;
@@ -63,10 +78,7 @@ function expiredDailyPaths(daily, cutoffMs) {
     const days = daily[uid];
     if (!days || typeof days !== "object") { out.emptyUids.push(uid); continue; }
     const keys = Object.keys(days);
-    const expired = keys.filter(d => {
-      const n = parseInt(d, 10);
-      return !Number.isFinite(n) || n < cutoffDay;
-    });
+    const expired = keys.filter(d => !_validDayKey(d) || Number(d) < cutoffDay);
     if (expired.length === keys.length) out.emptyUids.push(uid);
     else for (const d of expired) out.dayPaths.push(uid + "/" + d);
   }

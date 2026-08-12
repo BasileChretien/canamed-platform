@@ -165,7 +165,7 @@ test("wiring: the workflow passes the retention window", () => {
 });
 
 test("wiring: the window the README promises is the window the script defaults to", () => {
-  const m = SCRIPT.match(/CLEANUP_RETENTION_METRICS_DAYS\s*\|\|\s*"(\d+)"/);
+  const m = SCRIPT.match(/retentionDays\("CLEANUP_RETENTION_METRICS_DAYS",\s*(\d+)\)/);
   assert.ok(m, "the script must define a default metrics window");
   const readmeDays = FN_README.match(/\*Retention:\*\s*\*\*(\d+)\s*days\*\*/);
   assert.ok(readmeDays, "the README must state the retention window");
@@ -292,4 +292,112 @@ test("prune: an empty tree is a clean no-op", async () => {
   assert.deepStrictEqual(db.updates, []);
   assert.strictEqual(n.errors, 0);
   assert.strictEqual(n.events + n.usage + n.sessionUsage + n.dailyDays + n.dailyUids, 0);
+});
+
+/* ── Malformed day keys must EXPIRE, not survive ──────────────────────────
+ * parseInt() failed in the direction that keeps data: "20261301" (month 13)
+ * parses larger than any real cutoff and "20260812junk" parses to a recent day,
+ * so both would outlive the window for ever — contradicting the
+ * malformed-expires rule the rest of the file follows. CodeRabbit, #314. */
+
+test("dailyUid: an out-of-range month/day key expires instead of living for ever", () => {
+  const daily = {
+    u: {
+      "20261301": 1,        // month 13
+      "20260832": 1,        // day 32
+      "20260230": 1,        // 30 February — Date would roll this over
+      "20260812junk": 1,    // numeric prefix, junk suffix
+      "2026081": 1,         // too short
+      "202608123": 1        // too long
+    }
+  };
+  const out = expiredDailyPaths(daily, CUTOFF);
+  assert.deepStrictEqual(out.emptyUids, ["u"],
+    "every key is malformed, so nothing is worth keeping and the uid node goes");
+});
+
+test("dailyUid: a malformed key is dropped even when a valid recent day survives", () => {
+  const daily = { u: { "20261301": 1, [FRESH_DAY]: 2 } };
+  const out = expiredDailyPaths(daily, CUTOFF);
+  assert.deepStrictEqual(out.dayPaths, ["u/20261301"], "the impossible date is deleted");
+  assert.deepStrictEqual(out.emptyUids, [], "the valid recent day keeps the uid node alive");
+});
+
+test("dailyUid: real leap-day and month-end keys are NOT mistaken for malformed", () => {
+  // 2028 is a leap year; deleting a legitimate key would destroy live rate-limit state.
+  const daily = { u: { "20280229": 1, "20280131": 1, "20280430": 1 } };
+  const out = expiredDailyPaths(daily, CUTOFF);
+  assert.deepStrictEqual(out, { dayPaths: [], emptyUids: [] });
+  // ...and 2026 is NOT a leap year, so 29 Feb 2026 is impossible and must go.
+  const bad = expiredDailyPaths({ u: { "20260229": 1 } }, CUTOFF);
+  assert.deepStrictEqual(bad.emptyUids, ["u"]);
+});
+
+/* ── The retention window itself is validated before anything is deleted ── */
+
+test("the script validates the retention windows before computing a cutoff", () => {
+  /* A free-form workflow input reaching parseInt() is the worst input path in
+     this repo: "-1" puts the cutoff in the FUTURE, so `at < cutoff` is true for
+     every live row and the job deletes current data; "abc" gives NaN, every
+     comparison is false, and retention silently stops. Both are unrecoverable
+     and neither announces itself. */
+  assert.match(SCRIPT, /function retentionDays\(/, "windows must go through a validator");
+  assert.ok(!/parseInt\(process\.env\.CLEANUP_RETENTION/.test(SCRIPT),
+    "no retention window may be read with bare parseInt()");
+  for (const v of ["CLEANUP_RETENTION_CLOSED_DAYS", "CLEANUP_RETENTION_OPEN_DAYS",
+                   "CLEANUP_RETENTION_METRICS_DAYS"]) {
+    assert.ok(SCRIPT.includes(`retentionDays("${v}"`),
+      `${v} must be validated — "-1" there deletes live data`);
+  }
+  assert.match(SCRIPT, /parseRetentionDays\(process\.env\[name\], fallback\)/,
+    "validation must go through the tested parser, not a local copy of the rule");
+  assert.match(SCRIPT, /process\.exit\(2\)/,
+    "a bad window must abort the run, not be guessed at");
+});
+
+/* ── The window parser itself, exercised rather than grepped ──────────────── */
+
+const { parseRetentionDays } = require("../scripts/lib/retention-window");
+
+test("retention window: a negative value is REJECTED, not turned into a future cutoff", () => {
+  /* The catastrophic case. Date.now() - (-1 * DAY) is in the FUTURE, so every
+     live row satisfies `at < cutoff`. On CLEANUP_RETENTION_CLOSED_DAYS that
+     purges every session in both trees. */
+  for (const bad of ["-1", "-30", "0"]) {
+    const r = parseRetentionDays(bad, 30);
+    assert.strictEqual(r.ok, false, `${bad} must be rejected`);
+    assert.match(r.error, /positive whole number/);
+  }
+});
+
+test("retention window: a non-numeric value is REJECTED, not silently NaN", () => {
+  // NaN makes every comparison false, so nothing purges and the run looks clean.
+  for (const bad of ["abc", "30d", "1e400", "NaN", "Infinity", "0x1f", " "]) {
+    assert.strictEqual(parseRetentionDays(bad, 30).ok, false, `${bad} must be rejected`);
+  }
+});
+
+test("retention window: a fractional value is REJECTED, not truncated", () => {
+  // parseInt("30.5") silently gives 30 — a different policy than was asked for.
+  for (const bad of ["30.5", "0.5", "29.999"]) {
+    assert.strictEqual(parseRetentionDays(bad, 30).ok, false, `${bad} must be rejected`);
+  }
+});
+
+test("retention window: unset falls back, valid values pass through", () => {
+  for (const empty of [undefined, null, ""]) {
+    assert.deepStrictEqual(parseRetentionDays(empty, 30), { ok: true, value: 30 });
+  }
+  assert.deepStrictEqual(parseRetentionDays("1", 30), { ok: true, value: 1 });
+  assert.deepStrictEqual(parseRetentionDays("90", 30), { ok: true, value: 90 });
+  assert.deepStrictEqual(parseRetentionDays("3650", 30), { ok: true, value: 3650 });
+  assert.deepStrictEqual(parseRetentionDays(45, 30), { ok: true, value: 45 }, "numbers too");
+});
+
+test("retention window: the rejected value never reaches a cutoff computation", () => {
+  // Belt and braces: prove the shape the caller relies on, so a future refactor
+  // cannot return {ok:false, value:<something>} and have the caller use it.
+  const r = parseRetentionDays("-1", 30);
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.value, undefined, "a rejected window must carry no usable value");
 });
