@@ -182,9 +182,13 @@ now carries: the RTDB canary returned `null http=200` with the paired root read
 still `401 Permission denied`, and a tokenless POST to `hfPatient` returned the
 handler's own `auth required`. Both surfaces are therefore still non-enforcing.
 A live end-to-end run the same day passed while App Check was 403-ing and
-self-throttled, so no token minted at all — the strongest evidence yet that
-nothing depends on attestation today, and equally that re-enabling *Enforce*
-would break the platform outright.
+self-throttled, so no token minted at all. Scope that honestly: it shows the
+flows it exercised — anonymous sign-in, `sessionStatus()`, session create/start,
+room writes, the Module A chat, session close — do not currently depend on
+attestation. It is evidence about those flows, not a proof that no operation
+anywhere does, and it does not by itself predict what fraction of clients
+*Enforce* would break. The ~5% verified figure above is the basis for that
+estimate; the two together are why Monitor stays.
 
 > ⚠️ **STATUS-CLAIM RULE — read before reporting any item here as done /
 > outstanding / dormant.** These hand-maintained labels CAN go stale: an
@@ -402,8 +406,14 @@ would break the platform outright.
      kill-switch for the HF backend (see Panic button above).
      `Verify:` `grep -A6 "function modALLMFlagOn" docs/.../script-loader.js`
      ends with `return true`.
-   - **App Check on hfPatient — ⚠️ still Monitor. RE-VERIFIED ON A FRESH
-     DEPLOY 2026-08-12.** The function was redeployed that day (the `roomOf`
+   - **App Check on hfPatient — ⚠️ still NOT ENFORCING
+     (`APP_CHECK_ENFORCE=false`). RE-VERIFIED ON A FRESH DEPLOY 2026-08-12.**
+     Deliberately *not* worded "Monitor": for a callable, enforcement is the
+     code-level `enforceAppCheck` option, and the probe below distinguishes
+     ENFORCED from not-enforcing but cannot tell *Monitor* from *Off* — so
+     claiming either would assert more than the evidence supports, and would
+     contradict this bullet's own caveat further down.
+     The function was redeployed that day (the `roomOf`
      fix, #311), so every deploy-timestamp argument in the bullet below is now
      about a **superseded revision** — read this one instead. The deploy came
      from a checkout whose `functions/.env` has `APP_CHECK_ENFORCE=false`, and
