@@ -881,7 +881,8 @@ routed to their own `answers/sections/<slot>`, and the take-home the student
 downloads carried both back.
 
 **⚠️ `/o/<slug>/` WAS BROKEN IN PRODUCTION — asset resolution, not data.
-FIXED IN CODE 2026-08-06 (shell v142); NOT YET CONFIRMED ON THE LIVE SITE.**
+FIXED IN CODE 2026-08-06 (shell v142); ✅ CONFIRMED LIVE 2026-08-12 (see STATUS
+below — and read the `Verify:` note there before concluding it is broken).**
 index.html had no `<base>` and referenced every asset relatively, while
 firebase.json rewrites `/o/**` → `/index.html`. Measured against the live
 deploy 2026-08-05:
@@ -908,14 +909,42 @@ prefix-stripping crutch in the same change** — it made the dev server kinder
 than Hosting and masked the defect; it now resolves real-file-then-rewrite,
 exactly like Hosting.
 
-⚠️ **STATUS — the code is fixed and locally proven; PRODUCTION IS UNVERIFIED
-until this is deployed.** The whole defect is a Hosting-rewrite behaviour, and
-nothing local can prove Firebase Hosting's response. After the deploy lands,
-run the `Verify:` below and only then may this be called fixed in production.
-`Verify:` `curl -sI https://canamed-69785.web.app/o/caen-nagoya/theme-init.js | grep -i content-type`
-must report `text/javascript` (it reported `text/html` before the fix). Also
-`curl -s https://canamed-69785.web.app/sw.js | grep canamed-shell-v` should show
-`v142` or later, confirming the shell carrying the fix is actually live.
+✅ **STATUS — CONFIRMED FIXED IN PRODUCTION 2026-08-12** (checked against the
+live site at shell v143). The defect is a Hosting-rewrite behaviour, so nothing
+local can prove it; the check below was run against the live deploy and passes.
+
+⚠️ **The `Verify:` first recorded here could NEVER have passed — it would have
+reported this as broken forever, on a site that works.** It read
+`curl -sI …/o/caen-nagoya/theme-init.js` expecting `text/javascript`. That
+expectation belongs to the Hosting **capture-rule** fix — the one explicitly
+REJECTED two paragraphs up. firebase.json still rewrites `/o/**` →
+`/index.html` with no asset exclusion, so that URL returns index.html as
+`text/html` **by design**, identically before and after the fix. What the
+root-absolute fix changes is that nothing ever *requests* that URL: the page at
+`/o/<slug>/` asks for `/theme-init.js`, which is a real file. So a `text/html`
+there is NOT a regression signal — **do not re-open this on that reading.**
+(General lesson, and the reason this is spelled out rather than quietly
+swapped: a `Verify:` that cannot pass is worse than none. A missing check
+leaves you uncertain; a false one manufactures a bug report about healthy code,
+and costs whoever chases it. When writing one, confirm it distinguishes the
+fixed state from the broken state — run it against BOTH if you can.)
+
+`Verify:` check the URLs the org page actually emits, which is what the fix
+changed:
+
+```bash
+curl -s https://canamed-69785.web.app/o/caen-nagoya/ | grep -o 'src="/theme-init\.js?v=v[0-9]*"'
+# src="/theme-init.js?v=v143"   <- LEADING SLASH = fixed (broken state: src="theme-init.js?v=…")
+curl -sI https://canamed-69785.web.app/theme-init.js | grep -i content-type
+# content-type: text/javascript   <- what the browser is then actually sent
+```
+
+Measured 2026-08-12: `/o/caen-nagoya/` serves HTML byte-identical to
+`/index.html` (same md5), carrying `/theme-init.js?v=v143`, `/tokens.css?v=v143`,
+`/script-loader.js?v=v143` and `register("/sw.js", { scope: "/" })` — every one
+root-absolute. Also `curl -s https://canamed-69785.web.app/sw.js | grep
+canamed-shell-v` should show `v142` or later, confirming the shell carrying the
+fix is live (v143 as of this check).
 Regression cover: `tests-e2e/org-session-e2e.spec.js` asserts on the real
 network responses at `/o/e2e-org/` — separately for the static shell and for a
 LAZY chunk, because the first passing proves nothing about the second.
