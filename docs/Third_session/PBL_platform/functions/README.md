@@ -152,10 +152,16 @@ the patient's reply. The HF token NEVER reaches the client.
   - *Access:* the whole `metrics/` tree has **no rule**, so the root
     `.read: false` / `.write: false` applies — no client can read or write it.
     Only the Admin SDK (this function) touches it.
-  - *Retention:* ⚠️ **none today.** No cleanup job prunes
-    `metrics/hfPatient/events`, so these uid-keyed rows accumulate
-    indefinitely. That is a storage-limitation gap, not a design decision —
-    give it a retention window before any real research use of the metrics.
+  - *Retention:* **30 days**, enforced daily by
+    `.github/workflows/cleanup-stale-sessions.yml` →
+    `scripts/cleanup-stale-sessions.js` (`CLEANUP_RETENTION_METRICS_DAYS`).
+    It prunes `events`, the uid-keyed rate-limit buckets (`usage/<uid>`,
+    `dailyUid/<uid>`) and `sessionUsage/<code>`. These rows hang off no
+    session, so the session walk never reached them and they accumulated with
+    no retention at all from the pilot's launch until 2026-08-12.
+    `global/<day>` is **kept**: a bare per-day invocation count with no uid,
+    no session code and no text — it identifies nobody, and it is the cost
+    history the $1 budget alert is reasoned against.
   - The chat text itself lives at `rooms/<r>/moduleA/chat/<id>` under the RTDB
     rules and the session-retention flow, no part of it on the function's side.
 

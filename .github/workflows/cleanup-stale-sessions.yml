@@ -5,6 +5,12 @@
 # us to: identified data ≤ 30 days after session close, abandoned sessions
 # ≤ 90 days after creation. This workflow enforces that schedule.
 #
+# Since 2026-08-12 it also prunes the hfPatient metrics tree (≤ 30 days).
+# Those rows hang off no session, so the session walk never reached them and
+# they had accumulated with no retention at all since the LLM pilot launched.
+# They are uid-keyed — pseudonymous personal data, not anonymous counters.
+# The per-day `global/` aggregate carries no identifier and is kept.
+#
 # WHY THIS LIVES IN THE PUBLIC REPO (moved 2026-05-29):
 #   The retention workflows originally ran on the private
 #   BasileChretien/CANAMED repo, but that account's GitHub Actions are
@@ -56,6 +62,11 @@ on:
         type: string
         required: true
         default: "90"
+      retention_metrics_days:
+        description: "Retention for hfPatient metrics (days)"
+        type: string
+        required: true
+        default: "30"
 
 concurrency:
   group: cleanup-stale-sessions
@@ -91,6 +102,10 @@ jobs:
           CLEANUP_CONFIRM: ${{ (github.event_name == 'schedule' || github.event.inputs.confirm == 'true') && '1' || '0' }}
           CLEANUP_RETENTION_CLOSED_DAYS: ${{ github.event.inputs.retention_closed_days || '30' }}
           CLEANUP_RETENTION_OPEN_DAYS:   ${{ github.event.inputs.retention_open_days   || '90' }}
+          # hfPatient metrics (uid-keyed, no session to expire with) — see the
+          # script header. Kept at the identified-data window; these rows are
+          # only pseudonymous, so 30d is conservative rather than lax.
+          CLEANUP_RETENTION_METRICS_DAYS: ${{ github.event.inputs.retention_metrics_days || '30' }}
           # PUBLIC repo: logs are world-readable — never print raw session codes.
           CLEANUP_QUIET: "1"
         run: node scripts/cleanup-stale-sessions.js
