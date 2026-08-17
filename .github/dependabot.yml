@@ -40,6 +40,23 @@ updates:
     labels:
       - "dependencies"
       - "npm"
+    # firebase-admin v14 REMOVES the namespaced accessors the four ops scripts
+    # are built on — measured against 14.2.0, not inferred:
+    #     admin.initializeApp  function
+    #     admin.database       undefined   <- 4 call sites
+    #     admin.storage        undefined   <- 1 call site (lib/gcs-archive.js)
+    # so `const db = admin.database()` is a TypeError on the first line of real
+    # work in backup-sessions, cleanup-stale-sessions, firebase-cost-monitor
+    # and pseudonymise-export. Those run ONLY on their nightly cron, so the
+    # bump would have gone green on the PR and broken at 03:00.
+    # Hold the major until the scripts move to the modular API
+    # (getDatabase(app) / getStorage(app)); do BOTH in one change, then drop
+    # this ignore. PR #320 is left open as the marker for that migration.
+    # tests/firebase-admin-api-surface.test.js now fails loudly if the two ever
+    # get out of step, so this ignore is a convenience, not the safety net.
+    ignore:
+      - dependency-name: "firebase-admin"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
@@ -78,11 +95,18 @@ updates:
       - "dependencies"
       - "npm"
       - "functions"
-    # firebase-functions (7.2.5, the latest) peers firebase-admin to
-    # ^11 || ^12 || ^13, so firebase-admin v14 is NOT installable here yet — a
-    # clean `npm ci` fails ERESOLVE (see the Functions CI job, which caught
-    # exactly this). Hold the major until firebase-functions adds v14 support,
-    # then remove this ignore (and migrate admin.database() -> getDatabase()).
+    # ⚠ THE STATED REASON FOR THIS IGNORE EXPIRED (corrected 2026-08-17).
+    # It read: "firebase-functions (7.2.5, the latest) peers firebase-admin to
+    # ^11 || ^12 || ^13, so v14 is NOT installable here — a clean npm ci fails
+    # ERESOLVE. Hold the major until firebase-functions adds v14 support, then
+    # remove this ignore." firebase-functions is now 7.3.2 and peers
+    # `^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0`, so that precondition is MET
+    # and ERESOLVE is no longer the blocker.
+    # The ignore still stands, for the OTHER half of that old note: v14 removes
+    # the namespaced accessors, and functions/index.js is still written against
+    # them. So the blocker moved from the peer range to the CODE. Lift this
+    # only together with the modular-API migration (here and in scripts/ — see
+    # the root entry above and tests/firebase-admin-api-surface.test.js).
     ignore:
       - dependency-name: "firebase-admin"
         update-types: ["version-update:semver-major"]
