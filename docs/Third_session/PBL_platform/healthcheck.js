@@ -177,10 +177,10 @@
         done("fail", "no /.info/connected reply within 5s");
       }, 5000);
 
-      loadScript("https://www.gstatic.com/firebasejs/12.13.0/firebase-app-compat.js")
+      loadScript("https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js")
         .then(function () {
           return loadScript(
-            "https://www.gstatic.com/firebasejs/12.13.0/firebase-database-compat.js"
+            "https://www.gstatic.com/firebasejs/12.17.1/firebase-database-compat.js"
           );
         })
         .then(function () {

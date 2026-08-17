@@ -9,9 +9,12 @@
 #
 # What it does (in order):
 #   1. Verifies https://www.gstatic.com/firebasejs/<VERSION>/ exists.
-#   2. Downloads each of the four compat SDKs we ship (app, database,
-#      auth, app-check, performance) and computes sha384-<base64>.
-#   3. Rewrites the four <script ... integrity="..."> lines in
+#   2. Downloads each of the five compat SDKs we ship (app, database,
+#      auth, app-check, functions) and computes sha384-<base64>.
+#      (This list said "four … app-check, performance" until 2026-08-17:
+#      wrong count, and it named a performance SDK we do not ship while
+#      omitting the functions one we do. See the FILES array.)
+#   3. Rewrites the five <script ... integrity="..."> lines in
 #      docs/Third_session/PBL_platform/index.html with the new version
 #      + new hashes.
 #   4. Prints a `git diff --stat` so you can sanity-check.
@@ -62,7 +65,28 @@ declare -a FILES=(
   "firebase-database-compat.js"
   "firebase-auth-compat.js"
   "firebase-app-check-compat.js"
+  # Added 2026-08-17. This tag has shipped in index.html since 2026-05-30
+  # (the hfPatient LLM-patient bridge) but was never added here, so a run of
+  # this script bumped FOUR of the five tags and silently left
+  # firebase-functions-compat.js on the OLD version — a mixed-version compat
+  # load, precisely the breakage this script exists to prevent.
+  "firebase-functions-compat.js"
 )
+
+# Fail rather than half-update. If index.html references a firebasejs file
+# this array does not know about, the run would leave that tag behind on the
+# old version and report success — so refuse instead, naming the offender.
+MISSING=""
+for seen in $(grep -oE 'firebasejs/[0-9]+\.[0-9]+\.[0-9]+/[a-z-]+\.js' "$INDEX_HTML" \
+              | sed 's|.*/||' | sort -u); do
+  printf '%s\n' "${FILES[@]}" | grep -qx "$seen" || MISSING="$MISSING $seen"
+done
+if [ -n "$MISSING" ]; then
+  echo "Refusing — index.html loads firebasejs files this script does not track:"
+  echo "  $MISSING"
+  echo "Add them to the FILES array (in index.html load order) and re-run."
+  exit 2
+fi
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
