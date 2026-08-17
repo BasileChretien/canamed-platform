@@ -36,14 +36,14 @@
        whenever the deploy bumps the string. Procedure when shipping a
        schema-affecting change:
          1. Bump SHELL_VERSION in sw.js (e.g. "canamed-shell-v2" -> "v3").
-         2. Update every "?v=v145" below to the matching new string.
+         2. Update every "?v=v146" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
        Third-party Firebase scripts already cache-bust via the version
        segment in their own URL, so they don't need a query string.
        (Version deliberately not repeated here — this comment named a
        long-obsolete 10.x release for years after the SDK moved on.) -->
-  <script src="/theme-init.js?v=v145"></script>
+  <script src="/theme-init.js?v=v146"></script>
   <!-- Design tokens + self-hosted variable fonts (Clinical Editorial).
        tokens.css MUST precede style.css: it is the single source of truth
        for every custom property style.css consumes. Fonts are same-origin
@@ -51,14 +51,14 @@
        first — crossorigin is required for font preloads even same-origin. -->
   <link rel="preload" href="/fonts/source-sans-3-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="preload" href="/fonts/source-serif-4-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="stylesheet" href="/tokens.css?v=v145" />
-  <link rel="stylesheet" href="/style.css?v=v145" />
+  <link rel="stylesheet" href="/tokens.css?v=v146" />
+  <link rel="stylesheet" href="/style.css?v=v146" />
   <!-- PWA manifest + service worker for offline tolerance (a wifi blip mid-
        workshop is a non-event). The SW registers itself on window.load and
        caches the platform shell; Firebase API calls go to network always. -->
-  <link rel="manifest" href="/manifest.webmanifest?v=v145" />
+  <link rel="manifest" href="/manifest.webmanifest?v=v146" />
   <meta name="theme-color" content="#1763a6" />
-  <script src="/sw-register.js?v=v145" defer></script>
+  <script src="/sw-register.js?v=v146" defer></script>
 </head>
 <body class="locked">
   <!-- ============ INLINE SVG ICON SPRITE (2026-07-17) ============
@@ -1405,16 +1405,27 @@
         </div>
         <div class="card">
           <h3>Today's structure (approx. 2 hours)</h3>
+          <!-- The agenda lists ONLY what this platform runs: the picked
+               sections (or the scenario's modules) plus the wrap-up.
+               An "Opening presentation" row used to be hardcoded here,
+               describing a Franco-Japanese student pair comparing medical
+               education (10-15 min). Removed 2026-08-17: what opens a session
+               varies from session to session, so a fixed row was wrong for most
+               of them — and it is a real-world step the platform neither runs
+               nor knows about. Facilitators introduce their own opening. -->
           <ol class="info-list">
-            <li><strong>Opening presentation</strong> &mdash; a Franco-Japanese student pair
-              compares medical education in France and Japan (10&ndash;15 min + questions).</li>
             <li id="lobby-struct-modA"><strong>Module A &mdash; Chronic Pain &amp; the Clinical Case</strong>, worked
               through here on the platform.</li>
             <li id="lobby-struct-modB"><strong>Module B &mdash; Breaking Bad News</strong>, a cross-cultural roleplay.</li>
             <li><strong>Wrap-up</strong> &mdash; debrief and the end-of-session questionnaire.</li>
           </ol>
-          <p class="hint">Watch and listen during the opening presentation. A facilitator
-            will move your room to Module A when it finishes.</p>
+          <!-- Deliberately does NOT name a first step: with the opening row gone
+               the old "Watch and listen during the opening presentation … will
+               move your room to Module A" was doubly wrong (it referenced a row
+               that no longer exists, and "Module A" is not what a branched or
+               section-picked session starts with). -->
+          <p class="hint">Your facilitator will start your room when the session
+            begins.</p>
         </div>
         <!-- in-platform pre-test card: appears only when the scenario defines a
              preTest question bank AND the participant has not already taken it.
@@ -1931,19 +1942,25 @@
               <div class="answer-bullet" data-bullet-key="diagnosis">
                 <label class="answer-bullet-label" for="answer-input-moduleA-diagnosis"
                        data-i18n="modA.answers.bullet.diagnosis.label">
-                  1. Your diagnosis and plan
+                  1. Your working diagnosis
                 </label>
+                <!-- Asks only how the team REACHED the diagnosis. It used to end
+                     "Then give the first-line treatment plan you'd propose for
+                     Mr Lefebvre", which duplicated the dec_plan vote in the
+                     Decide tab ("What should be the core of this patient's
+                     initial management plan?"). Dropped 2026-08-17 so the plan
+                     is asked in exactly one place — the vote, which is scored
+                     and gated on the workup. Do not reintroduce it here. -->
                 <p class="hint" data-i18n="modA.answers.bullet.diagnosis.hint">
                   How did your team reach its working diagnosis — what in the history,
-                  examination and tests pointed you there, and what did you rule out? Then
-                  give the first-line treatment plan you'd propose for Mr Lefebvre.
+                  examination and tests pointed you there, and what did you rule out?
                 </p>
                 <ul class="answers-list" id="answers-list-moduleA-diagnosis"></ul>
                 <div class="answer-add">
                   <input type="text" id="answer-input-moduleA-diagnosis" maxlength="500"
                          data-bullet-key="diagnosis"
                          data-i18n="modA.answers.bullet.diagnosis.placeholder" data-i18n-attr="placeholder"
-                         placeholder="e.g. mechanical low-back pain; first-line = stay active + NSAID + reassurance, no opioids" />
+                         placeholder="e.g. mechanical low-back pain; red flags ruled out on history and examination" />
                   <button class="answer-add-btn" data-mod="moduleA" data-bullet-key="diagnosis"
                           data-i18n="room.answer.add" title="Add">Add</button>
                 </div>
@@ -3290,26 +3307,26 @@
   <!-- if a Firebase config is provided but the SDK above did not load (CDN
        blocked, offline), script.js detects it via sharedExpectedButBroken()
        and refuses to start instead of silently running in isolated local mode -->
-  <script src="/firebase-config.js?v=v145" defer></script>
+  <script src="/firebase-config.js?v=v146" defer></script>
   <!-- orgs.js: the MULTI-TENANT registry. window.CANAMED_ORGS lists every
        partnership this deployment hosts; /o/{slug}/ URLs select one of them.
        MUST load before platform-config.js + script.js. -->
-  <script src="/orgs.js?v=v145" defer></script>
+  <script src="/orgs.js?v=v146" defer></script>
   <!-- platform-config.js: the LEGACY single-tenant fallback (kept for the
        default org's branding strings). For new partnerships, add an entry
        in orgs.js instead. -->
-  <script src="/platform-config.js?v=v145" defer></script>
+  <script src="/platform-config.js?v=v146" defer></script>
   <!-- telemetry.js — installs error + CSP-violation listeners. Loads
        (deferred) BEFORE script.js so its window.onerror handler is in
        place by the time the boot path runs. Buffers up to 50 events in
        sessionStorage; exposes window.CanamedTelemetry.{getErrors,download,
        clear,record}. -->
-  <script src="/telemetry.js?v=v145" defer></script>
+  <script src="/telemetry.js?v=v146" defer></script>
   <!-- purify.min.js — vendored DOMPurify (Cure53), local copy so it complies
        with the script-src 'self' CSP (no CDN at runtime). MUST load BEFORE
        i18n.js so window.DOMPurify exists when i18n sanitises the
        data-i18n-html innerHTML sinks. defer so it runs in document order. -->
-  <script src="/purify.min.js?v=v145" defer></script>
+  <script src="/purify.min.js?v=v146" defer></script>
   <!-- lib.js holds the pure utility functions (safeHref, hashPassword,
        generateSessionCode, sanitizeResume, scoreTotal, …) that have their
        own Node-based unit tests under tests/. Must load BEFORE script.js
@@ -3325,22 +3342,22 @@
        no Firebase, no i18n), so nothing here depends on load order the other
        way round. Found by a live test 2026-08-12; pinned by
        tests/i18n-load-order.test.js. -->
-  <script src="/lib.js?v=v145" defer></script>
+  <script src="/lib.js?v=v146" defer></script>
   <!-- i18n.js — EN / FR / JA translations for splash + lobby + waiting room.
        Loads BEFORE script.js so the language switcher exposes window.setLang.
        defer so it doesn't block HTML parsing; runs in document order before
        script.js because both are deferred. AFTER lib.js — see above. -->
-  <script src="/i18n.js?v=v145" defer></script>
+  <script src="/i18n.js?v=v146" defer></script>
   <!-- localdb.js — the localStorage-backed Firebase mock used in
        MODE === "local" (when window.CANAMED_FIREBASE is null). Exposes
        window.LocalDB / window.LocalRef so script.js can `new LocalDB()`
        without import boilerplate. Must load BEFORE script.js. -->
-  <script src="/localdb.js?v=v145" defer></script>
+  <script src="/localdb.js?v=v146" defer></script>
   <!-- pure-utils.js — pure presentation/util helpers (colour assignment,
        room names, time-since, reduced-motion) carved out of script.js for
        unit-testability. Must load BEFORE script.js so the helpers are
        global by the time the engine runs. -->
-  <script src="/pure-utils.js?v=v145" defer></script>
+  <script src="/pure-utils.js?v=v146" defer></script>
   <!-- glossary.js — tiny clinical glossary (EN + JP) used by
        _annotateButtonWithGlossary() to attach tooltips to any case-content
        button whose text contains a glossed term. It is NOT needed on the
@@ -3351,7 +3368,7 @@
        glossary.js, qrcode.js, tour.js and scenario-author.js on demand so
        the splash boot stays under the perf budget (see tests-e2e/perf.spec.js).
        Exposes window.CanamedLoader.ensure*(). -->
-  <script src="/script-loader.js?v=v145" defer></script>
+  <script src="/script-loader.js?v=v146" defer></script>
   <!-- Module A LLM-patient pilot (2026-05-28): the four scripts
        (modA-question-scoring, modA-llm-prompts, modA-llm-bridge, modA-llm-init)
        were LAZY-SPLIT out of the eager bundle 2026-06-01 to reclaim splash
@@ -3361,7 +3378,7 @@
        CanamedLoader.modALLMFlagOn() is true. The ?llm=1 → localStorage
        promotion that must survive the join flow is done eagerly in
        script-loader.js (see its header). -->
-  <script src="/script.js?v=v145" defer></script>
+  <script src="/script.js?v=v146" defer></script>
   <!-- case-content.js, qrcode.js, tour.js, scenario-author.js and the four
        modA-llm pilot scripts are NOT in the initial HTML on purpose — they're
        injected by script-loader.js on demand. See that file's header for the
