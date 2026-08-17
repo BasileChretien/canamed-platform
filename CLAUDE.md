@@ -327,10 +327,36 @@ estimate; the two together are why Monitor stays.
      bucket) and their daily `schedule:` blocks enabled (02:47 / 03:47 UTC).
      Re-provisioning steps live in the `backup-sessions.yml` header and
      `scripts/ops/setup-pii-bucket.sh`.
+   - ⚠️ **SECOND retention gap: 2026-07-31 → 2026-08-04 (5 days) — cause
+     removed 2026-08-17.** All four workflows failed on all five of those
+     days, so there was no `/sessions` backup, no stale-session purge and no
+     pseudonymised export in that window (a GDPR/APPI storage-limitation gap,
+     the second after the ≈11-day billing-blocked one above). **Nothing in
+     this repo changed** — verified by diffing the last-passing against the
+     first-failing commit. All four installed with
+     `npm i --no-save --no-audit --no-fund firebase-admin@13`, a *floating*
+     install that pinned nothing and re-resolved the whole transitive tree on
+     every run. `@firebase/database-compat` 2.1.5 (published 2026-07-30 18:29
+     UTC, hours before the first failure) shipped a
+     `dist/index.standalone.js` — the bundle firebase-admin loads — that
+     `require()`s `@firebase/app`, which 2.1.5 declares only as a **peer**
+     dependency, so npm never installed it: every run died on
+     `Cannot find module '@firebase/app'`. The jobs self-healed on 2026-08-05
+     purely because upstream reverted the bundle in 2.1.6 (published
+     2026-08-04 22:43 UTC) — we had no control over the recovery.
+     **Fix:** `firebase-admin` is now a real `devDependency` and all four
+     workflows install with `npm ci`, so the lockfile pins the whole tree by
+     integrity hash and an upstream regression arrives as a Dependabot PR
+     that CI can reject instead of as a silent nightly outage. NB the same
+     lesson had already been applied to the *test* workflows in #286
+     (2026-08-05, mid-incident) — it just never reached these four.
    - `Verify:` `gh workflow list` shows all 4 (cleanup, cost-monitor, backup,
      pseudonymise-export) **active**; `.github/workflows/*.yml` have live
      (uncommented) `schedule:` blocks; `gcloud storage ls gs://canamed-pii-archive/`
-     lists recent objects under `backups/`, `pseudonymised/`, `linkage/`.
+     lists recent objects under `backups/`, `pseudonymised/`, `linkage/`;
+     `grep -L "npm ci" .github/workflows/{backup-sessions,cleanup-stale-sessions,cost-monitor,pseudonymise-export}.yml`
+     prints nothing (any file listed there has drifted back to a floating
+     install) and `grep -c firebase-admin package-lock.json` > 0.
 
 5. **Email/Password sign-in provider — DONE.** The splash account view offers
    Google **and** email/password sign-in (added 2026-05-29 as the foundation
