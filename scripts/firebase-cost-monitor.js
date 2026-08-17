@@ -31,7 +31,8 @@
 
 "use strict";
 
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { getDatabase } = require("firebase-admin/database");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -48,8 +49,8 @@ const SPARK_CAPS = {
 const WARN_THRESHOLD = 0.80;    // 80% of any cap triggers exit 1
 
 async function main() {
-  admin.initializeApp({ databaseURL: DB_URL });
-  const db = admin.database();
+  initializeApp({ databaseURL: DB_URL });
+  const db = getDatabase();
 
   console.log("--- CaNaMED Spark-plan cost monitor ---");
   console.log("Database: " + DB_URL);

@@ -259,21 +259,24 @@ exact file at this version (mirror the existing pattern for the other
 firebase compat scripts):
 
 ```html
-<script src="https://www.gstatic.com/firebasejs/12.13.0/firebase-functions-compat.js"
-        integrity="sha384-0e6ckm3xAVRuudHvqdLzPYsVoBYmqB3xnx4uw9owqugEc3FyhMYiwmB7SjWACApm"
+<script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-functions-compat.js"
+        integrity="sha384-kJycxHIKThWtKXqD5X9jnKbYZNUCyKdX8NlV8KLXUzS2ameiZdNDlcv5ksCDe1pR"
         crossorigin="anonymous"></script>
 ```
 
-The integrity hash above was computed against the exact file at v12.13.0 on
-2026-05-28. If you bump the Firebase SDK version (the other compat scripts
-in [index.html](../index.html) ship as a set — keep them in lockstep),
-recompute every hash with:
+The integrity hash above was computed against the exact file at v12.17.1 on
+2026-08-17. The five compat scripts in [index.html](../index.html) ship as a
+set and must stay in lockstep, so do **not** recompute them by hand — run:
 
 ```bash
-for f in firebase-app-compat firebase-database-compat firebase-auth-compat firebase-app-check-compat firebase-functions-compat; do
-  echo "$f: $(curl -s https://www.gstatic.com/firebasejs/<NEW_VERSION>/$f.js | openssl dgst -sha384 -binary | openssl base64 -A)"
-done
+bash scripts/update-firebase-sri.sh <NEW_VERSION>
 ```
+
+It downloads all five, recomputes every hash, rewrites both the `src` and the
+`integrity` attributes, and refuses to run at all if `index.html` references a
+firebasejs file it does not track. (It tracked only four until 2026-08-17 and
+silently skipped `firebase-functions-compat.js` — the exact drift this README
+warns about, sitting inside the tool meant to prevent it.)
 
 Without this tag the bridge stays in **stub mode** — chat works locally with
 canned answers, but no LLM is called. This is the safe default.

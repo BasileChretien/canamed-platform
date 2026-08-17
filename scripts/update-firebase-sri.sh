@@ -9,9 +9,12 @@
 #
 # What it does (in order):
 #   1. Verifies https://www.gstatic.com/firebasejs/<VERSION>/ exists.
-#   2. Downloads each of the four compat SDKs we ship (app, database,
-#      auth, app-check, performance) and computes sha384-<base64>.
-#   3. Rewrites the four <script ... integrity="..."> lines in
+#   2. Downloads each of the five compat SDKs we ship (app, database,
+#      auth, app-check, functions) and computes sha384-<base64>.
+#      (This list said "four … app-check, performance" until 2026-08-17:
+#      wrong count, and it named a performance SDK we do not ship while
+#      omitting the functions one we do. See the FILES array.)
+#   3. Rewrites the five <script ... integrity="..."> lines in
 #      docs/Third_session/PBL_platform/index.html with the new version
 #      + new hashes.
 #   4. Prints a `git diff --stat` so you can sanity-check.
@@ -62,7 +65,49 @@ declare -a FILES=(
   "firebase-database-compat.js"
   "firebase-auth-compat.js"
   "firebase-app-check-compat.js"
+  # Added 2026-08-17. This tag has shipped in index.html since 2026-05-30
+  # (the hfPatient LLM-patient bridge) but was never added here, so a run of
+  # this script bumped FOUR of the five tags and silently left
+  # firebase-functions-compat.js on the OLD version — a mixed-version compat
+  # load, precisely the breakage this script exists to prevent.
+  "firebase-functions-compat.js"
 )
+
+# Fail rather than half-update — and check BOTH directions, because each one
+# produces a run that reports success while doing the wrong thing:
+#
+#   (a) index.html loads a firebasejs file FILES does not know about. That tag
+#       is left behind on the OLD version -> mixed-version compat load. This is
+#       what actually happened with firebase-functions-compat.js.
+#   (b) FILES names a file index.html no longer loads (removed or renamed).
+#       The run downloads it, rewrites no tag, and still prints "Done" — a
+#       silent no-op reporting success. Same class of lie, opposite direction.
+#
+# (b) was missed when (a) was added on 2026-08-17 and caught in review; a
+# one-directional check on a symmetric invariant is only half a guard.
+UNTRACKED=""
+for seen in $(grep -oE 'firebasejs/[0-9]+\.[0-9]+\.[0-9]+/[a-z-]+\.js' "$INDEX_HTML" \
+              | sed 's|.*/||' | sort -u); do
+  printf '%s\n' "${FILES[@]}" | grep -qx "$seen" || UNTRACKED="$UNTRACKED $seen"
+done
+ABSENT=""
+for expected in "${FILES[@]}"; do
+  grep -qE "firebasejs/[0-9]+\.[0-9]+\.[0-9]+/$expected" "$INDEX_HTML" \
+    || ABSENT="$ABSENT $expected"
+done
+if [ -n "$UNTRACKED" ] || [ -n "$ABSENT" ]; then
+  if [ -n "$UNTRACKED" ]; then
+    echo "Refusing — index.html loads firebasejs files this script does not track:"
+    echo "  $UNTRACKED"
+    echo "  Add them to the FILES array, in index.html load order."
+  fi
+  if [ -n "$ABSENT" ]; then
+    echo "Refusing — FILES names firebasejs files index.html no longer loads:"
+    echo "  $ABSENT"
+    echo "  Remove them from the FILES array."
+  fi
+  exit 2
+fi
 
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
