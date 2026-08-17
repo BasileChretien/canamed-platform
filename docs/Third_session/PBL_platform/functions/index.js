@@ -37,7 +37,8 @@ const { onValueCreated } = require("firebase-functions/v2/database");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { defineString, defineSecret, defineBoolean, defineInt } = require("firebase-functions/params");
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { getDatabase } = require("firebase-admin/database");
 const nodemailer = require("nodemailer");
 
 // Force Node 22 explicitly. Without this, firebase-tools v13.x defaults Gen 2
@@ -47,7 +48,7 @@ const nodemailer = require("nodemailer");
 // but is more verbose.)
 setGlobalOptions({ runtime: "nodejs22" });
 
-admin.initializeApp();
+initializeApp();
 
 /* ============================================================================
  * sendQueuedMail — consent-gated transactional email (DORMANT by default).
@@ -223,7 +224,7 @@ function _sanitiseReply(s, characterName) {
 
 
 async function _bumpCounter(path, limit) {
-  const ref = admin.database().ref(path);
+  const ref = getDatabase().ref(path);
   const now = Date.now();
   const result = await ref.transaction(cur => {
     cur = cur || { count: 0, windowStart: now };
@@ -241,7 +242,7 @@ async function _bumpCounter(path, limit) {
 // Per-day-keyed counter (the UTC day is baked into `path`), so there is no
 // sliding-window reset — a new day gets a fresh key. Returns the new count.
 async function _bumpDaily(path) {
-  const result = await admin.database().ref(path).transaction(cur => (Number(cur) || 0) + 1);
+  const result = await getDatabase().ref(path).transaction(cur => (Number(cur) || 0) + 1);
   return (result.snapshot && result.snapshot.val()) || 0;
 }
 
@@ -282,7 +283,7 @@ async function _verifyMembership(uid, body) {
      LLM-patient feature. The claim's `room` must MATCH the claimed roomId;
      existence alone would authorise any room. */
   const path = roomClaimPath(code, orgSlug, uid);
-  const snap = await admin.database().ref(path).once("value");
+  const snap = await getDatabase().ref(path).once("value");
   return roomClaimMatches(snap.val(), roomId) ? { code, roomId, orgSlug } : null;
 }
 
@@ -508,7 +509,7 @@ exports.hfPatient = onCall({
   const reply = _sanitiseReply(raw, safeCharacterName(body.characterName));
   // 8) Counters only — never user text, never patient reply.
   try {
-    await admin.database().ref("metrics/hfPatient/events").push({
+    await getDatabase().ref("metrics/hfPatient/events").push({
       uid,
       at: Date.now(),
       lang,

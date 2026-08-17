@@ -49,11 +49,19 @@ updates:
     # work in backup-sessions, cleanup-stale-sessions, firebase-cost-monitor
     # and pseudonymise-export. Those run ONLY on their nightly cron, so the
     # bump would have gone green on the PR and broken at 03:00.
-    # Hold the major until the scripts move to the modular API
-    # (getDatabase(app) / getStorage(app)); do BOTH in one change, then drop
-    # this ignore. PR #320 is left open as the marker for that migration.
-    # tests/firebase-admin-api-surface.test.js now fails loudly if the two ever
-    # get out of step, so this ignore is a convenience, not the safety net.
+    # ✅ THAT MIGRATION IS DONE (2026-08-17). scripts/ and functions/ now import
+    # getDatabase / getStorage from firebase-admin/database and
+    # firebase-admin/storage. Those modular paths exist in v13 AND v14 and were
+    # exercised against real installs of both, so the code is version-agnostic
+    # across the boundary — v14 no longer breaks it.
+    #
+    # This ignore is kept ONLY so the major lands deliberately rather than as a
+    # surprise alongside unrelated work: the bump still needs the functions
+    # package.json moved in the same change. Lift it together with that bump,
+    # at which point PR #320 becomes safe to take.
+    # tests/firebase-admin-api-surface.test.js is the real safety net — it
+    # derives the entry points the scripts import and fails if an installed
+    # version stops exporting them. This ignore is convenience.
     ignore:
       - dependency-name: "firebase-admin"
         update-types: ["version-update:semver-major"]
@@ -102,11 +110,14 @@ updates:
     # remove this ignore." firebase-functions is now 7.3.2 and peers
     # `^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0`, so that precondition is MET
     # and ERESOLVE is no longer the blocker.
-    # The ignore still stands, for the OTHER half of that old note: v14 removes
-    # the namespaced accessors, and functions/index.js is still written against
-    # them. So the blocker moved from the peer range to the CODE. Lift this
-    # only together with the modular-API migration (here and in scripts/ — see
-    # the root entry above and tests/firebase-admin-api-surface.test.js).
+    # The second half of that old note — v14 removes the namespaced accessors
+    # and index.js was written against them — is ALSO resolved now: index.js
+    # migrated to getDatabase (firebase-admin/database) on 2026-08-17, a path
+    # v13 and v14 expose identically. Verified by loading index.js against both.
+    #
+    # So nothing technical blocks v14 here any more. The ignore is kept only so
+    # the major lands as a deliberate change (root + functions together, both
+    # lockfiles) rather than arriving piecemeal. Lift it with that bump.
     ignore:
       - dependency-name: "firebase-admin"
         update-types: ["version-update:semver-major"]

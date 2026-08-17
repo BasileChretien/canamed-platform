@@ -123,10 +123,14 @@ jobs:
       # green on the PR and failed at 03:00. Dependabot #320 (v14.2.0, which
       # removes admin.database / admin.storage) demonstrated it within a day.
       # The claim is now true because tests/firebase-admin-api-surface.test.js
-      # exists: it derives the admin.* members these scripts call and asserts
-      # the installed package still exposes them, so a breaking major fails in
-      # the unit job in ~50 ms. Do not delete that test without restoring some
-      # other check here — the visibility alone never was one.
+      # exists: it derives the firebase-admin entry points these scripts import
+      # and asserts the installed package exports them, so a breaking version
+      # fails in the unit job in ~50 ms. Do not delete that test without
+      # restoring some other check here — the visibility alone never was one.
+      #
+      # The scripts themselves moved to the modular API on 2026-08-17
+      # (getDatabase / getStorage), which v13 and v14 expose identically, so
+      # the v14 boundary specifically no longer threatens them.
       - name: Install from the committed lockfile
         run: npm ci --no-audit --no-fund
 
