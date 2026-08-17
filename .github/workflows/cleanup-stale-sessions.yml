@@ -84,9 +84,38 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 20
+          # Keyed on the ROOT lock only — the repo also has
+          # docs/Third_session/PBL_platform/functions/package-lock.json
+          # (functions-ci.yml), which must not evict this cache.
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install firebase-admin (one-shot, not added to package.json)
-        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+      # WHY npm ci AND NOT `npm i --no-save firebase-admin@13` (changed
+      # 2026-08-17) — the full rationale for all four ops workflows
+      # (backup-sessions, cleanup-stale-sessions, cost-monitor,
+      # pseudonymise-export), which shared the old floating install:
+      #
+      # That one-shot install pinned nothing. `firebase-admin@13` resolved
+      # its entire transitive tree fresh on every run, so a single bad
+      # publish anywhere beneath it broke all four jobs at once, with no
+      # change on our side and no way to roll back.
+      #
+      # It happened: @firebase/database-compat 2.1.5 (published 2026-07-30
+      # 18:29 UTC) shipped a dist/index.standalone.js — the bundle
+      # firebase-admin loads — that require()s @firebase/app, which 2.1.5
+      # declares only as a *peer* dependency, so npm never installed it.
+      # Every run died on `Cannot find module '@firebase/app'`. All four
+      # workflows failed on all five days from 2026-07-31 to 2026-08-04 —
+      # no /sessions backup, no stale-session purge, no pseudonymised
+      # export — a GDPR/APPI storage-limitation gap. They self-healed on
+      # 2026-08-05 only because upstream reverted the bundle in 2.1.6.
+      #
+      # firebase-admin now lives in devDependencies and the lockfile pins
+      # the whole tree by integrity hash. An upstream regression can no
+      # longer arrive unattended: it comes as a Dependabot PR that CI gets
+      # to reject first.
+      - name: Install from the committed lockfile
+        run: npm ci --no-audit --no-fund
 
       - name: Write service-account credentials to a temp file
         env:

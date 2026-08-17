@@ -40,9 +40,19 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 20
+          # Keyed on the ROOT lock only — the repo also has
+          # docs/Third_session/PBL_platform/functions/package-lock.json
+          # (functions-ci.yml), which must not evict this cache.
+          cache: npm
+          cache-dependency-path: package-lock.json
 
-      - name: Install firebase-admin (one-shot)
-        run: npm i --no-save --no-audit --no-fund firebase-admin@13
+      # npm ci, NOT the old `npm i --no-save firebase-admin@13` — see
+      # cleanup-stale-sessions.yml for the full rationale (a floating
+      # transitive dep broke all four ops workflows for five days,
+      # 2026-07-31 to 2026-08-04). firebase-admin is a devDependency and
+      # the lockfile pins its whole tree.
+      - name: Install from the committed lockfile
+        run: npm ci --no-audit --no-fund
 
       - name: Write service-account credentials
         env:
