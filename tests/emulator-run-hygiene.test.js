@@ -106,10 +106,50 @@ test("the runner preflights the emulator ports AND the web port", () => {
   assert.match(RUNNER, /ports\.survey\(\[\.\.\.EMU_PORTS, WEB_PORT\]\)/,
     "all three ports must be checked before anything is started");
   const at = RUNNER.indexOf("ports.survey([...EMU_PORTS, WEB_PORT])");
-  const spawnAt = RUNNER.indexOf('spawn("npx"');
+  /* Locate the spawn STRUCTURALLY, not by its command literal. This used to
+     be indexOf('spawn("npx"'), which went stale the moment the CLI was pinned
+     (2026-08-17) and the command became the resolved firebase binary. A stale
+     locator returns -1 and the ordering assertion then fails as a bogus
+     "preflight runs too late" — a misleading error about the wrong thing, the
+     exact class this file exists to prevent. Hence the explicit found-checks
+     below: a future rename fails as "locator stale", saying what it means. */
+  const spawnAt = RUNNER.indexOf("const child = spawn(");
   const buildAt = RUNNER.indexOf("build-emulator-rules.js");
+  assert.ok(spawnAt > 0, "locator stale: the emulator spawn was not found");
+  assert.ok(buildAt > 0, "locator stale: the rules build was not found");
   assert.ok(at > 0 && at < buildAt && at < spawnAt,
     "the preflight must run BEFORE the rules build and the emulator spawn");
+});
+
+test("the emulator runs against the PINNED firebase CLI, not whatever npx finds", () => {
+  /* The CLI is selected by an explicit path, NOT by putting the pinned .bin on
+     $PATH and still calling `npx firebase`. npx resolves the local
+     node_modules/.bin and then the npm GLOBAL prefix, and ignores PATH: on a
+     machine carrying a global firebase-tools it silently runs THAT one.
+     Measured 2026-08-17 — with the pinned 15.27.0 first on PATH,
+     `npx firebase --version` still reported the global 15.19.0, while a plain
+     shell `firebase --version` reported 15.27.0. A pin npx quietly ignores is
+     worse than no pin, because it reads as pinned. Same "the tooling lied
+     about what it validated" class as the three defects in the header. */
+  assert.match(RUNNER, /"tools",\s*"firebase-cli"/,
+    "the runner must resolve the pinned CLI under tools/firebase-cli");
+  assert.ok(!/spawn\("npx"/.test(RUNNER),
+    "the emulator must not be launched via a literal `spawn(\"npx\"…)` — npx " +
+    "ignores PATH and can pick a global firebase-tools over the pinned one");
+
+  const cliPkg = JSON.parse(read("tools", "firebase-cli", "package.json"));
+  assert.ok(cliPkg.dependencies && cliPkg.dependencies["firebase-tools"],
+    "tools/firebase-cli must declare firebase-tools");
+
+  const lock = JSON.parse(read("tools", "firebase-cli", "package-lock.json"));
+  const locked = lock.packages && lock.packages["node_modules/firebase-tools"];
+  assert.ok(locked && locked.version,
+    "firebase-tools must be pinned by a COMMITTED lockfile. A version range " +
+    "alone still floats the ~670 packages beneath it, and a transitive dep is " +
+    "exactly what broke the four ops workflows for five days over " +
+    "2026-07-31..08-04 (see .github/workflows/cleanup-stale-sessions.yml)");
+  assert.ok(locked.integrity || locked.resolved,
+    "the locked firebase-tools entry must carry integrity/resolved");
 });
 
 test("the runner sweeps survivors on every exit path", () => {

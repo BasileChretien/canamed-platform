@@ -16,11 +16,13 @@
 #     CDN-loaded scripts. Use scripts/update-firebase-sri.sh to bump
 #     the version + recompute the integrity hashes when Firebase
 #     publishes a new SDK — schedule a quarterly reminder.
-#   - firebase-admin (used by scripts/cleanup-stale-sessions.js and
-#     scripts/backup-sessions.js). Installed one-shot via `npm i
-#     --no-save` in the workflows, not added to package.json — so
-#     Dependabot has nothing to grab. The pinned major (`@13`) keeps
-#     it predictable; bump in the workflow files when needed.
+#   (firebase-admin was listed here as NOT covered, because the ops
+#   workflows installed it one-shot with `npm i --no-save`. That stopped
+#   being true in #316, 2026-08-17: it is a root devDependency in the
+#   committed lock now, so the "/" entry below already covers it, and the
+#   four ops workflows install it with `npm ci`.)
+#   (firebase-tools was likewise uncovered until 2026-08-17 — it now has
+#   its own package + lock under tools/firebase-cli, watched below.)
 #
 # Schedule: weekly Mondays, 04:18 UTC. Off-:00 minute and offset from
 # the daily cleanup/backup crons to avoid runner contention.
@@ -38,6 +40,26 @@ updates:
     labels:
       - "dependencies"
       - "npm"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+
+  # The pinned firebase-tools CLI has its OWN package.json + lock under
+  # tools/firebase-cli, kept out of the root lock on purpose (670 packages
+  # that only the rules-E2E job needs). Watched here so pinning it does not
+  # mean freezing it — an unwatched pin just ages into a stale, unpatched
+  # one. Added 2026-08-17 with the pin itself.
+  - package-ecosystem: "npm"
+    directory: "/tools/firebase-cli"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:18"
+    open-pull-requests-limit: 2
+    labels:
+      - "dependencies"
+      - "npm"
+      - "firebase-tools"
     commit-message:
       prefix: "chore(deps)"
       include: "scope"

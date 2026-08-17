@@ -49,8 +49,12 @@ jobs:
           # Keyed on the ROOT lock only — the repo also has
           # docs/Third_session/PBL_platform/functions/package-lock.json
           # (functions-ci.yml), which must not evict this cache. The cached
-          # ~/.npm also serves the firebase-tools install below, which is by
-          # far the heaviest download in this job.
+          # ~/.npm also serves the firebase-tools install below (now
+          # tools/firebase-cli, a separate lock — same shared download cache),
+          # which is by far the heaviest download in this job. Deliberately
+          # NOT keyed on that second lock too: it would make every root-lock
+          # change invalidate the CLI's cached tarballs as well, and npm
+          # already handles a partial cache hit by fetching only what's new.
           cache: npm
           cache-dependency-path: package-lock.json
 
@@ -63,21 +67,35 @@ jobs:
 
       - name: Install npm dependencies
         # npm ci, not npm install — installs the locked tree exactly.
-        # ⚠ ORDER IS LOAD-BEARING: `npm ci` DELETES node_modules before it
-        # installs, which `npm install` did not. The firebase-tools step must
-        # stay BELOW this one; hoist it above and it is silently wiped, and
-        # the failure surfaces much later as a missing `firebase` binary.
+        # (The old ORDER-IS-LOAD-BEARING warning that lived here is retired:
+        # firebase-tools no longer installs into THIS node_modules, so this
+        # step can no longer wipe it. See the next step.)
         run: npm ci --no-audit --no-fund
 
-      - name: Install firebase-tools
-        # Kept out of package.json deliberately: --no-save keeps this CLI out
-        # of the committed lock so it cannot perturb the app's dependency tree.
-        # NB it therefore floats on the registry `latest` tag and is NOT
-        # pinned — an unlocked CLI release can change what this job validates
-        # against. Accepted for now (it only drives the emulator, never ships);
-        # pinning it is tracked separately from this PR's scope.
-        # Must run AFTER `npm ci` above — see the ordering warning.
-        run: npm install --no-save firebase-tools
+      - name: Install the pinned firebase-tools CLI
+        # PINNED 2026-08-17 (was `npm install --no-save firebase-tools`, which
+        # floated on the registry `latest` tag with nothing locked at all).
+        #
+        # The old comment's reason for --no-save was sound — the CLI's tree is
+        # 670 packages and must not enter the ROOT lock, or every `npm ci` in
+        # CI (all 8 E2E matrix jobs included) would pay for it. But --no-save
+        # bought that at the price of no pinning whatsoever, which is the same
+        # exposure that took out the four ops workflows for five days over
+        # 2026-07-31..08-04 (see cleanup-stale-sessions.yml). Note that break
+        # came from a TRANSITIVE dependency, so pinning only the top-level
+        # version here would not have prevented the analogous failure.
+        #
+        # So the CLI now lives in tools/firebase-cli as its OWN package with
+        # its OWN lockfile: the whole tree is pinned by integrity hash and the
+        # root lock is untouched. Dependabot watches that directory (see
+        # .github/dependabot.yml) so the pin still gets security bumps.
+        working-directory: tools/firebase-cli
+        run: npm ci --no-audit --no-fund
+
+      - name: Show which firebase CLI is pinned
+        # Cheap, and it makes the pin auditable from the job log rather than
+        # only from the lockfile. run-rules-e2e.js logs the same resolution.
+        run: ./tools/firebase-cli/node_modules/.bin/firebase --version
 
       - name: Cache Playwright browsers
         id: pw-cache
