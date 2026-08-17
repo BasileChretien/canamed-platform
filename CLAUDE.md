@@ -350,6 +350,31 @@ estimate; the two together are why Monitor stays.
      that CI can reject instead of as a silent nightly outage. NB the same
      lesson had already been applied to the *test* workflows in #286
      (2026-08-05, mid-incident) — it just never reached these four.
+   - ⚠️ **"that CI can reject" was an OVERCLAIM when written; true only since
+     2026-08-17.** Making the dependency visible to Dependabot worked, but
+     **no CI job required firebase-admin** — these four scripts run solely on
+     their nightly cron, so a breaking bump would go fully green on the PR and
+     fail at 03:00. Dependabot proved it inside a day: **#320** (firebase-admin
+     13.10.0 → **14.2.0**) removes the namespaced accessors — measured against
+     14.2.0, `admin.database` and `admin.storage` are both `undefined`, and
+     `admin.initializeApp` is the only survivor — so `const db =
+     admin.database()` is a TypeError on the first line of real work in all
+     four scripts (and in `functions/index.js`, 4 more call sites).
+     Now genuinely covered by **`tests/firebase-admin-api-surface.test.js`**,
+     which derives the `admin.*` members the scripts actually call and asserts
+     the installed package still exposes them — controlled by running it
+     against a real v14 install, where it fails and names every call site.
+     A root-directory `ignore` for firebase-admin majors was added to
+     `dependabot.yml` as well, but **the test is the safety net; the ignore is
+     only convenience.** #320 is deliberately left OPEN as the marker for the
+     modular-API migration (`getDatabase(app)` / `getStorage(app)`), which must
+     cover `scripts/` **and** `functions/` in one change.
+     - Related stale label fixed in the same pass: the functions-directory
+       ignore said v14 "is NOT installable — npm ci fails ERESOLVE" because
+       firebase-functions peered `^11 || ^12 || ^13`. firebase-functions is
+       **7.3.2** now and peers `^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0`, so
+       that precondition is **met** — the blocker moved from the peer range to
+       the code.
    - `Verify:` `gh workflow list` shows all 4 (cleanup, cost-monitor, backup,
      pseudonymise-export) **active**; `.github/workflows/*.yml` have live
      (uncommented) `schedule:` blocks; `gcloud storage ls gs://canamed-pii-archive/`

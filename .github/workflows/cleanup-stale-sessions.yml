@@ -114,6 +114,19 @@ jobs:
       # the whole tree by integrity hash. An upstream regression can no
       # longer arrive unattended: it comes as a Dependabot PR that CI gets
       # to reject first.
+      #
+      # ⚠ CORRECTION (2026-08-17): when the paragraph above was written, that
+      # last clause was an OVERCLAIM. Making the dependency visible to
+      # Dependabot worked — but NO CI job required firebase-admin, so there
+      # was no check to do the rejecting. This job and its three siblings run
+      # only on their nightly cron; a breaking bump would have been fully
+      # green on the PR and failed at 03:00. Dependabot #320 (v14.2.0, which
+      # removes admin.database / admin.storage) demonstrated it within a day.
+      # The claim is now true because tests/firebase-admin-api-surface.test.js
+      # exists: it derives the admin.* members these scripts call and asserts
+      # the installed package still exposes them, so a breaking major fails in
+      # the unit job in ~50 ms. Do not delete that test without restoring some
+      # other check here — the visibility alone never was one.
       - name: Install from the committed lockfile
         run: npm ci --no-audit --no-fund
 
