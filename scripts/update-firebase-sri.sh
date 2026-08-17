@@ -73,18 +73,39 @@ declare -a FILES=(
   "firebase-functions-compat.js"
 )
 
-# Fail rather than half-update. If index.html references a firebasejs file
-# this array does not know about, the run would leave that tag behind on the
-# old version and report success — so refuse instead, naming the offender.
-MISSING=""
+# Fail rather than half-update — and check BOTH directions, because each one
+# produces a run that reports success while doing the wrong thing:
+#
+#   (a) index.html loads a firebasejs file FILES does not know about. That tag
+#       is left behind on the OLD version -> mixed-version compat load. This is
+#       what actually happened with firebase-functions-compat.js.
+#   (b) FILES names a file index.html no longer loads (removed or renamed).
+#       The run downloads it, rewrites no tag, and still prints "Done" — a
+#       silent no-op reporting success. Same class of lie, opposite direction.
+#
+# (b) was missed when (a) was added on 2026-08-17 and caught in review; a
+# one-directional check on a symmetric invariant is only half a guard.
+UNTRACKED=""
 for seen in $(grep -oE 'firebasejs/[0-9]+\.[0-9]+\.[0-9]+/[a-z-]+\.js' "$INDEX_HTML" \
               | sed 's|.*/||' | sort -u); do
-  printf '%s\n' "${FILES[@]}" | grep -qx "$seen" || MISSING="$MISSING $seen"
+  printf '%s\n' "${FILES[@]}" | grep -qx "$seen" || UNTRACKED="$UNTRACKED $seen"
 done
-if [ -n "$MISSING" ]; then
-  echo "Refusing — index.html loads firebasejs files this script does not track:"
-  echo "  $MISSING"
-  echo "Add them to the FILES array (in index.html load order) and re-run."
+ABSENT=""
+for expected in "${FILES[@]}"; do
+  grep -qE "firebasejs/[0-9]+\.[0-9]+\.[0-9]+/$expected" "$INDEX_HTML" \
+    || ABSENT="$ABSENT $expected"
+done
+if [ -n "$UNTRACKED" ] || [ -n "$ABSENT" ]; then
+  if [ -n "$UNTRACKED" ]; then
+    echo "Refusing — index.html loads firebasejs files this script does not track:"
+    echo "  $UNTRACKED"
+    echo "  Add them to the FILES array, in index.html load order."
+  fi
+  if [ -n "$ABSENT" ]; then
+    echo "Refusing — FILES names firebasejs files index.html no longer loads:"
+    echo "  $ABSENT"
+    echo "  Remove them from the FILES array."
+  fi
   exit 2
 fi
 

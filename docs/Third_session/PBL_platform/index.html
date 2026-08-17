@@ -39,8 +39,10 @@
          2. Update every "?v=v145" below to the matching new string.
          3. Deploy together so service-worker pre-cache and browser
             in-memory cache invalidate in lockstep.
-       Third-party Firebase scripts already cache-bust via their version
-       segment in the URL (10.12.5) so they don't need a query string. -->
+       Third-party Firebase scripts already cache-bust via the version
+       segment in their own URL, so they don't need a query string.
+       (Version deliberately not repeated here — this comment named a
+       long-obsolete 10.x release for years after the SDK moved on.) -->
   <script src="/theme-init.js?v=v145"></script>
   <!-- Design tokens + self-hosted variable fonts (Clinical Editorial).
        tokens.css MUST precede style.css: it is the single source of truth
@@ -3242,10 +3244,17 @@
           data-i18n-aria-label="backToTop.label" data-i18n-title="backToTop.label"
           aria-label="Back to top" title="Back to top">&#8593;</button>
 
-  <!-- Firebase JS SDK 10.12.5 - pinned. Re-check before each academic year:
+  <!-- Firebase JS SDK — pinned. The authoritative version is the one in the
+       src URLs immediately below; this comment deliberately does NOT repeat
+       it, because it went on claiming a 10.x release for years after the
+       SDK had moved on.
+       Re-check before each academic year:
        https://firebase.google.com/support/release-notes/js
-       integrity hashes are sha384 of these exact files; if you bump the version
-       you must recompute them (or the page will refuse to load the SDK). -->
+       The integrity hashes are sha384 of these exact files, so a version bump
+       MUST recompute them or the page refuses to load the SDK. Do not do that
+       by hand — run `bash scripts/update-firebase-sri.sh <version>`, which
+       rewrites all five as a set and refuses to run if this list and its own
+       FILES array have drifted apart in either direction. -->
   <script src="https://www.gstatic.com/firebasejs/12.17.1/firebase-app-compat.js"
           integrity="sha384-rGbwvB6k85I5jkhcy5vYOSdABhBKcD9CHXb0RJIIuxMYVZatT6uul1faR/C5QI1U"
           crossorigin="anonymous"></script>
