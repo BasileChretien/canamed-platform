@@ -21,7 +21,7 @@
 
 "use strict";
 
-const admin = require("firebase-admin");
+const { getStorage } = require("firebase-admin/storage");
 
 /**
  * @param {object}  opts
@@ -35,7 +35,7 @@ async function uploadToGcs({ bucket, localPath, destination }) {
   if (!localPath) throw new Error("uploadToGcs: localPath is required");
   if (!destination) throw new Error("uploadToGcs: destination is required");
 
-  const [file] = await admin.storage().bucket(bucket).upload(localPath, {
+  const [file] = await getStorage().bucket(bucket).upload(localPath, {
     destination,
     resumable: false, // small JSON files — one-shot upload is simpler/faster
     metadata: {

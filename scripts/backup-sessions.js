@@ -39,7 +39,8 @@
 
 "use strict";
 
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { getDatabase } = require("firebase-admin/database");
 const fs = require("fs");
 const path = require("path");
 const { uploadToGcs } = require("./lib/gcs-archive");
@@ -71,8 +72,8 @@ async function main() {
     process.exit(2);
   }
 
-  admin.initializeApp({ databaseURL: DB_URL });
-  const db = admin.database();
+  initializeApp({ databaseURL: DB_URL });
+  const db = getDatabase();
 
   console.log("--- CaNaMED daily backup ---");
   console.log(`Database:  ${DB_URL}`);
