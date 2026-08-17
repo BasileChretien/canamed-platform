@@ -361,14 +361,29 @@ estimate; the two together are why Monitor stays.
      admin.database()` is a TypeError on the first line of real work in all
      four scripts (and in `functions/index.js`, 4 more call sites).
      Now genuinely covered by **`tests/firebase-admin-api-surface.test.js`**,
-     which derives the `admin.*` members the scripts actually call and asserts
-     the installed package still exposes them — controlled by running it
-     against a real v14 install, where it fails and names every call site.
-     A root-directory `ignore` for firebase-admin majors was added to
-     `dependabot.yml` as well, but **the test is the safety net; the ignore is
-     only convenience.** #320 is deliberately left OPEN as the marker for the
-     modular-API migration (`getDatabase(app)` / `getStorage(app)`), which must
-     cover `scripts/` **and** `functions/` in one change.
+     which derives the firebase-admin entry points the scripts import and
+     asserts the installed package exports them. A root-directory `ignore` for
+     firebase-admin majors was added to `dependabot.yml` as well, but **the
+     test is the safety net; the ignore is only convenience.**
+   - ✅ **Modular-API migration DONE (2026-08-17).** `scripts/` (5 call sites)
+     and `functions/index.js` (4) now import `getDatabase` / `getStorage` from
+     `firebase-admin/database` / `firebase-admin/storage` instead of the
+     namespaced `admin.database()` / `admin.storage()`.
+     **The key finding that shaped it: v13.10.0 ALREADY exposes the modular
+     API**, identically to v14 — so the migration needed no version bump and
+     was fully verifiable on the version already in production. Proven by
+     running the same migrated code against real installs of both (each
+     returns a working `Database` / `Storage` handle) and by loading
+     `functions/index.js` under each. That turns a risky big-bang into two
+     small steps, and the code is now version-agnostic across the boundary.
+     The guard test was rewritten to match (it tracked `admin.*` before) —
+     note its anti-vacuity sentinel is hardcoded ON PURPOSE and does **not**
+     follow the scripts automatically, contrary to what its first header
+     claimed; update it in the same change that moves off these entry points.
+     **Remaining step:** bump firebase-admin to ^14 in the root **and**
+     `functions/package.json` together, and lift both `dependabot.yml` ignores
+     in that same change — at which point **#320 becomes safe to take**. It is
+     deliberately left OPEN as the marker for that bump.
      - Related stale label fixed in the same pass: the functions-directory
        ignore said v14 "is NOT installable — npm ci fails ERESOLVE" because
        firebase-functions peered `^11 || ^12 || ^13`. firebase-functions is

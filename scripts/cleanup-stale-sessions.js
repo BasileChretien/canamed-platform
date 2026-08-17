@@ -50,7 +50,8 @@
 
 "use strict";
 
-const admin = require("firebase-admin");
+const { initializeApp } = require("firebase-admin/app");
+const { getDatabase } = require("firebase-admin/database");
 const { readSessionLocations, safeLabel } = require("./lib/session-trees");
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
@@ -116,8 +117,8 @@ async function pruneMetrics(db) {
 
 async function main() {
   // initializeApp picks up GOOGLE_APPLICATION_CREDENTIALS automatically
-  admin.initializeApp({ databaseURL: DB_URL });
-  const db = admin.database();
+  initializeApp({ databaseURL: DB_URL });
+  const db = getDatabase();
 
   console.log("--- CaNaMED session cleanup ---");
   console.log(`Database:    ${DB_URL}`);
