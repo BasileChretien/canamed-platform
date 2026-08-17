@@ -10726,8 +10726,10 @@ function lobbyShowLockedSession() {
 
 /* Populate the lobby "Today's structure" list from the ACTIVE scenario's
  * module names (set by applyScenario), so the agenda always matches what the
- * room will actually run. Opening presentation + Wrap-up are fixed real-world
- * steps; only the two middle items are scenario-specific. Branched scenarios
+ * room will actually run. Wrap-up is the one fixed row; everything above it is
+ * scenario-specific. (An "Opening presentation" row was fixed here too until
+ * 2026-08-17 — removed because what opens a session varies per session, and it
+ * is a real-world step the platform does not run.) Branched scenarios
  * run the whole case in Stage 1 and use Stage 2 as a reflection/debrief, so
  * their wording differs. Built with textContent (never innerHTML) because the
  * names can be facilitator-authored. */
@@ -10752,7 +10754,7 @@ function renderLobbyStructure() {
 
      Generated rows are rebuilt from scratch on every call (this runs again on a
      language switch and on every lobby paint), and inserted BEFORE the static
-     Module-A row so they land between "Opening presentation" and "Wrap-up". */
+     Module-A row, so the agenda reads: the picked sections, then "Wrap-up". */
   const parent = liA.parentNode;
   if (parent) {
     Array.prototype.slice.call(parent.querySelectorAll("li[data-sec-slot]"))

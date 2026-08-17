@@ -604,9 +604,9 @@
       "modA.answers.bullet.disagree.placeholder": "e.g. whether imaging is reassuring or a waste of resources",
       "modA.answers.bullet.takehome.label": "4. One thing you each take home",
       "modA.answers.bullet.takehome.placeholder": "one sentence per person",
-      "modA.answers.bullet.diagnosis.label": "1. Your diagnosis and plan",
-      "modA.answers.bullet.diagnosis.hint": "How did your team reach its working diagnosis — what in the history, examination and tests pointed you there, and what did you rule out? Then give the first-line treatment plan you'd propose for {patientName}.",
-      "modA.answers.bullet.diagnosis.placeholder": "e.g. mechanical low-back pain; first-line = stay active + NSAID + reassurance, no opioids",
+      "modA.answers.bullet.diagnosis.label": "1. Your working diagnosis",
+      "modA.answers.bullet.diagnosis.hint": "How did your team reach its working diagnosis — what in the history, examination and tests pointed you there, and what did you rule out?",
+      "modA.answers.bullet.diagnosis.placeholder": "e.g. mechanical low-back pain; red flags ruled out on history and examination",
       "modA.answers.bullet.culture.label": "2. Pain across cultures",
       "modA.answers.bullet.culture.hint": "Compare how different countries (e.g. France and Japan) approach pain — cultural attitudes to pain, how freely opioids are prescribed and by whom, and the usual drugs and doses at each step of the WHO analgesic ladder (<em>Palier 1 → 3</em>). Where do they genuinely differ?",
       "modA.answers.bullet.culture.placeholder": "e.g. Japan prescribes opioids far less than France; Palier-1 paracetamol/NSAID, Palier-2 codeine/tramadol, Palier-3 morphine",
@@ -1008,7 +1008,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v13";  // consent box C + Microsoft as processor + the section picker's strings
+  const LOCALE_VERSION = "v14";  // Q1 asks only for the working diagnosis (plan deduped to the dec_plan vote)
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

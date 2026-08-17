@@ -224,10 +224,17 @@ test("an unsafe name degrades to the generic stripper, it does not throw", () =>
 // -------------------------------------------------------------------- i18n ---
 
 test("the chat chrome names the scenario's patient, not Mr Lefebvre", () => {
+  /* Strings that ADDRESS the patient, so each must interpolate a name rather
+     than name one outright. modA.answers.bullet.diagnosis.hint sat in this
+     list until 2026-08-17: it ended "…the first-line treatment plan you'd
+     propose for {patientName}", which duplicated the dec_plan vote, so that
+     sentence was removed and the hint now names no patient at all.
+     It is NOT dropped from coverage — the "no i18n string in ANY locale
+     hardcodes a built-in patient's name" test below still scans it, in every
+     locale. Re-add it here only if the hint addresses the patient again. */
   const KEYS = ["modA.chart.title", "modA.chart.team-click-warning",
                 "modA.chat.disclosure", "modA.chat.placeholder",
-                "modA.chat.thinking", "modA.coach.read-case",
-                "modA.answers.bullet.diagnosis.hint"];
+                "modA.chat.thinking", "modA.coach.read-case"];
 
   const saved = { window: global.window, self: global.self };
   global.window = undefined;
