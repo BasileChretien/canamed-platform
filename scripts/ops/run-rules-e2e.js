@@ -51,6 +51,37 @@ const AUTH_PORT = parseInt(process.env.SIM_AUTH_PORT || "9099", 10);
 const WEB_PORT = parseInt(process.env.PORT || "8765", 10);
 const EMU_PORTS = [DB_PORT, AUTH_PORT];
 
+/* Resolve the firebase CLI.
+ *
+ * Prefer the version-pinned copy in tools/firebase-cli — its own package +
+ * lockfile, so the CLI's whole tree (670 packages) is pinned by integrity
+ * hash without any of it entering the ROOT lock. Fall back to `npx firebase`
+ * so a checkout that has not installed it behaves exactly as before.
+ *
+ * Do NOT try to select the pinned copy by putting its .bin directory on PATH
+ * and still calling `npx firebase`. npx resolves the local node_modules/.bin
+ * and then the npm GLOBAL prefix, and ignores PATH — so on a machine that has
+ * a global firebase-tools it silently runs THAT version. Verified 2026-08-17:
+ * with the pinned 15.27.0 first on PATH, `npx firebase --version` still
+ * reported the global 15.19.0, while a plain shell `firebase --version`
+ * correctly reported 15.27.0. A pin that npx quietly ignores is worse than no
+ * pin, because it reads as pinned. Hence the explicit path below. */
+function firebaseCli() {
+  const win = process.platform === "win32";
+  const pinned = path.join(ROOT, "tools", "firebase-cli", "node_modules",
+                           ".bin", win ? "firebase.cmd" : "firebase");
+  if (!fs.existsSync(pinned)) {
+    return { cmd: "npx", pre: ["firebase"], label: "npx firebase (UNPINNED fallback)" };
+  }
+  /* shell:true on Windows re-parses the command through cmd.exe, so a path
+     containing a space has to arrive quoted. */
+  return {
+    cmd: win && /\s/.test(pinned) ? '"' + pinned + '"' : pinned,
+    pre: [],
+    label: pinned
+  };
+}
+
 function fatal(msg) {
   console.error(msg);
   process.exit(1);
@@ -151,16 +182,18 @@ function dropTempScript() {
 }
 
 console.log("rules-e2e: starting emulators (database + auth) and running the suite…");
-const child = spawn("npx", [
-  "firebase", "emulators:exec",
+const fbCli = firebaseCli();
+console.log("rules-e2e: firebase CLI -> " + fbCli.label);
+const child = spawn(fbCli.cmd, fbCli.pre.concat([
+  "emulators:exec",
   "--only", "database,auth",
   "--config", "docs/Third_session/PBL_platform/firebase.emulator.json",
   "--project", "canamed-sim",
   execArg
-], {
+]), {
   cwd: ROOT,
   stdio: "inherit",
-  shell: process.platform === "win32",   // npx.cmd on Windows
+  shell: process.platform === "win32",   // firebase.cmd / npx.cmd on Windows
   env: Object.assign({}, process.env, { PORT: String(WEB_PORT) })
 });
 
