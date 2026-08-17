@@ -374,6 +374,46 @@ estimate; the two together are why Monitor stays.
      that CI can reject instead of as a silent nightly outage. NB the same
      lesson had already been applied to the *test* workflows in #286
      (2026-08-05, mid-incident) — it just never reached these four.
+   - ⚠️ **"that CI can reject" was an OVERCLAIM when written; true only since
+     2026-08-17.** Making the dependency visible to Dependabot worked, but
+     **no CI job required firebase-admin** — these four scripts run solely on
+     their nightly cron, so a breaking bump would go fully green on the PR and
+     fail at 03:00. Dependabot proved it inside a day: **#320** (firebase-admin
+     13.10.0 → **14.2.0**) removes the namespaced accessors — measured against
+     14.2.0, `admin.database` and `admin.storage` are both `undefined`, and
+     `admin.initializeApp` is the only survivor — so `const db =
+     admin.database()` is a TypeError on the first line of real work in all
+     four scripts (and in `functions/index.js`, 4 more call sites).
+     Now genuinely covered by **`tests/firebase-admin-api-surface.test.js`**,
+     which derives the firebase-admin entry points the scripts import and
+     asserts the installed package exports them. A root-directory `ignore` for
+     firebase-admin majors was added to `dependabot.yml` as well, but **the
+     test is the safety net; the ignore is only convenience.**
+   - ✅ **Modular-API migration DONE (2026-08-17).** `scripts/` (5 call sites)
+     and `functions/index.js` (4) now import `getDatabase` / `getStorage` from
+     `firebase-admin/database` / `firebase-admin/storage` instead of the
+     namespaced `admin.database()` / `admin.storage()`.
+     **The key finding that shaped it: v13.10.0 ALREADY exposes the modular
+     API**, identically to v14 — so the migration needed no version bump and
+     was fully verifiable on the version already in production. Proven by
+     running the same migrated code against real installs of both (each
+     returns a working `Database` / `Storage` handle) and by loading
+     `functions/index.js` under each. That turns a risky big-bang into two
+     small steps, and the code is now version-agnostic across the boundary.
+     The guard test was rewritten to match (it tracked `admin.*` before) —
+     note its anti-vacuity sentinel is hardcoded ON PURPOSE and does **not**
+     follow the scripts automatically, contrary to what its first header
+     claimed; update it in the same change that moves off these entry points.
+     **Remaining step:** bump firebase-admin to ^14 in the root **and**
+     `functions/package.json` together, and lift both `dependabot.yml` ignores
+     in that same change — at which point **#320 becomes safe to take**. It is
+     deliberately left OPEN as the marker for that bump.
+     - Related stale label fixed in the same pass: the functions-directory
+       ignore said v14 "is NOT installable — npm ci fails ERESOLVE" because
+       firebase-functions peered `^11 || ^12 || ^13`. firebase-functions is
+       **7.3.2** now and peers `^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0`, so
+       that precondition is **met** — the blocker moved from the peer range to
+       the code.
    - `Verify:` `gh workflow list` shows all 4 (cleanup, cost-monitor, backup,
      pseudonymise-export) **active**; `.github/workflows/*.yml` have live
      (uncommented) `schedule:` blocks; `gcloud storage ls gs://canamed-pii-archive/`

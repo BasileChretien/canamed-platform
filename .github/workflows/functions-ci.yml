@@ -5,7 +5,10 @@
 # browser-side PBL_platform files — it never installs or loads the Functions
 # tree. So a dependency bump there could break index.js at deploy/runtime while
 # CI stays green. That is not hypothetical: firebase-admin v14 removed the
-# legacy admin.database() accessor (used by index.js), and the Dependabot
+# legacy admin.database() accessor, which index.js used until the modular
+# migration on 2026-08-17 (it now imports getDatabase from
+# firebase-admin/database — a path v13 and v14 expose identically, so the
+# file is version-agnostic across that boundary). The Dependabot
 # auto-merge bot lands npm patch/minor bumps automatically once the *required*
 # checks pass — none of which touched this package.
 #
@@ -64,8 +67,14 @@ jobs:
       - name: Load index.js (catches breaking dependency changes at require time)
         # Requiring the entry point exercises every top-level import + the
         # firebase-functions handler registration. A removed/renamed export in
-        # a bumped dependency (e.g. firebase-admin's admin.database()) throws
-        # here. GCLOUD_PROJECT lets admin.initializeApp() resolve without creds.
+        # a bumped dependency throws here — this is the check that would have
+        # caught firebase-admin v14 dropping the namespaced admin.database()
+        # accessor index.js used before the 2026-08-17 modular migration.
+        # GCLOUD_PROJECT lets initializeApp() resolve without creds.
+        #
+        # NB this covers functions/ only. The four ops scripts under scripts/
+        # have no equivalent — they run solely on their nightly cron — which is
+        # why tests/firebase-admin-api-surface.test.js exists.
         env:
           GCLOUD_PROJECT: demo-functions-ci
         run: node -e "require('./index.js'); console.log('index.js loaded OK under', process.version);"
