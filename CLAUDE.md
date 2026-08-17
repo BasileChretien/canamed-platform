@@ -404,10 +404,24 @@ estimate; the two together are why Monitor stays.
      note its anti-vacuity sentinel is hardcoded ON PURPOSE and does **not**
      follow the scripts automatically, contrary to what its first header
      claimed; update it in the same change that moves off these entry points.
-     **Remaining step:** bump firebase-admin to ^14 in the root **and**
-     `functions/package.json` together, and lift both `dependabot.yml` ignores
-     in that same change — at which point **#320 becomes safe to take**. It is
-     deliberately left OPEN as the marker for that bump.
+   - ✅ **firebase-admin is ON v14.2.0 (2026-08-17)** — root and
+     `functions/package.json`, both lockfiles, with both `dependabot.yml`
+     ignores lifted in the same change. Verified rather than assumed: a clean
+     `npm ci` in `functions/` resolves admin 14.2.0 alongside firebase-functions
+     7.3.2 with **no ERESOLVE** (the old stated blocker), `index.js` loads on
+     v14 via the same check Functions CI runs, and
+     `tests/firebase-admin-api-surface.test.js` — which **failed** on v14
+     before the migration, naming every call site — now **passes** on it. That
+     inversion is the whole payoff of the modular migration.
+   - ⚠️ **An `ignore:` is not a pause button — it CLOSES the open PR.** This
+     file previously said "#320 is deliberately left OPEN as the marker for
+     that bump". That was **false within hours of being written**: the root
+     firebase-admin ignore added in #324 made Dependabot close #320 at
+     2026-08-17 04:51 UTC — *"Looks like firebase-admin is no longer being
+     updated by Dependabot, so this is no longer needed."* The bump was
+     therefore done by hand rather than by merging #320. **If you want a
+     tracking marker for a held dependency, use an issue, not the bot's PR**,
+     and expect any `ignore:` you add to retire matching PRs immediately.
      - Related stale label fixed in the same pass: the functions-directory
        ignore said v14 "is NOT installable — npm ci fails ERESOLVE" because
        firebase-functions peered `^11 || ^12 || ^13`. firebase-functions is
