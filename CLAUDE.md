@@ -309,6 +309,30 @@ estimate; the two together are why Monitor stays.
      scripts and the `FIREBASE_SERVICE_ACCOUNT_CANAMED_69785` secret were
      already present here. **Leave the private repo's copies disabled** — do
      not re-enable them and double-run.
+   - ⚠️ **That "disabled" was WRONG until 2026-08-17 — they were never disabled,
+     and had been failing daily ever since.** Caught only because the operator
+     asked about a CI failure email that turned out not to be this repo at all.
+     In `BasileChretien/CANAMED` all four (`Backup sessions`, `Cleanup stale
+     sessions`, `Cost monitor`, `Pseudonymised export`) were still `active` with
+     live `schedule:` blocks, firing every day and failing in ~2 s with zero
+     steps run: *"The job was not started because recent account payments have
+     failed or your spending limit needs to be increased."* (That repo's `Unit
+     tests` and `E2E tests` HAD been disabled, which is probably why the whole
+     set was assumed to be.) **Now actually disabled** — all four set to
+     `disabled_manually` via `gh workflow disable "<name>" --repo
+     BasileChretien/CANAMED` on 2026-08-17.
+     - No data was ever at risk: the public repo's copies are the live ones and
+       are green. The cost was **four failure emails a day from jobs believed
+       retired** — pure alert fatigue, which is exactly the condition under
+       which a real failure gets ignored.
+     - The private repo's `firebase-deploy.yml` is *named* "(DISABLED — see
+       public repo)" while its workflow state is still `active` — that one is
+       genuinely harmless: its `push:` trigger is commented out, leaving only
+       `workflow_dispatch:`, so it cannot fire on its own. Left as-is.
+     - `Verify:` `gh workflow list --repo BasileChretien/CANAMED --all` shows
+       those four as `disabled_manually`. This is a CROSS-REPO claim — it cannot
+       be checked from this repo's files, so re-verify it rather than trusting
+       this line (that is what went stale last time).
    - ✅ **`backup-sessions` + `pseudonymise-export` — LIVE via private GCS
      (2026-05-30).** These produce artefacts containing identified PII (full
      `/sessions` dump; a pseudonym→name linkage table), so they must **not**
