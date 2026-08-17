@@ -354,9 +354,14 @@ estimate; the two together are why Monitor stays.
      pseudonymise-export) **active**; `.github/workflows/*.yml` have live
      (uncommented) `schedule:` blocks; `gcloud storage ls gs://canamed-pii-archive/`
      lists recent objects under `backups/`, `pseudonymised/`, `linkage/`;
-     `grep -L "npm ci" .github/workflows/{backup-sessions,cleanup-stale-sessions,cost-monitor,pseudonymise-export}.yml`
+     `grep -EL '^[[:space:]]*run:[[:space:]]*npm ci([[:space:]]|$)' .github/workflows/{backup-sessions,cleanup-stale-sessions,cost-monitor,pseudonymise-export}.yml`
      prints nothing (any file listed there has drifted back to a floating
-     install) and `grep -c firebase-admin package-lock.json` > 0.
+     install) and `grep -c firebase-admin package-lock.json` > 0. The pattern
+     must anchor to the executable `run:` line: a plain `grep -L "npm ci"`
+     is satisfied by the *comments* in these files, which mention `npm ci`
+     by name — so it stays silent even on a file whose install step has
+     fully reverted (verified). Judge it by its OUTPUT, not its exit status;
+     `grep -L` does not return a usable exit code here.
 
 5. **Email/Password sign-in provider — DONE.** The splash account view offers
    Google **and** email/password sign-in (added 2026-05-29 as the foundation
