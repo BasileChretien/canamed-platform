@@ -278,9 +278,51 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 20
+          # This job's only npm work is the pinned CLI below, so key the
+          # cache on ITS lock rather than the root one.
+          cache: npm
+          cache-dependency-path: tools/firebase-cli/package-lock.json
 
-      - name: Install the Firebase CLI
-        run: npm install -g firebase-tools
+      - name: Install the pinned Firebase CLI
+        # PINNED 2026-08-17. Was `npm install -g firebase-tools`: no version,
+        # no lock, resolved from the registry `latest` tag on every deploy —
+        # which made the CLI that ships hosting and database rules to
+        # PRODUCTION the least pinned thing on the most consequential path.
+        # An upstream regression would have landed here first and unreviewed
+        # (see cleanup-stale-sessions.yml for the five-day outage that pattern
+        # already caused in the ops workflows).
+        #
+        # Reuses tools/firebase-cli — the same package + lockfile the rules-E2E
+        # job uses — so production and CI validate against the SAME CLI build
+        # instead of two independently floating ones.
+        working-directory: tools/firebase-cli
+        run: npm ci --no-audit --no-fund
+
+      - name: Put the pinned CLI on PATH
+        # The deploy steps below invoke a bare `firebase`, and a plain shell
+        # command DOES honour PATH — unlike `npx`, which resolves the local
+        # node_modules/.bin then the npm GLOBAL prefix and ignores PATH
+        # entirely. That asymmetry is the whole reason this works here and
+        # does not work for the rules-E2E runner; it is documented at length
+        # in scripts/ops/run-rules-e2e.js. GITHUB_PATH prepends, so this
+        # takes precedence over anything preinstalled on the runner image.
+        run: echo "$GITHUB_WORKSPACE/tools/firebase-cli/node_modules/.bin" >> "$GITHUB_PATH"
+
+      - name: Assert the pinned CLI is the one that will deploy
+        # A wrong-CLI resolution must never be silent on the production path:
+        # fail loudly BEFORE anything ships. Also records the deploying CLI's
+        # version in the job log, so which build shipped is auditable later.
+        # (printf, not a literal `::error::` — see the note in the next step
+        # on why a literal in the source annotates every run.)
+        run: |
+          resolved="$(command -v firebase || true)"
+          echo "firebase resolves to: ${resolved:-<not found>}"
+          firebase --version
+          expected="$GITHUB_WORKSPACE/tools/firebase-cli/node_modules/.bin/firebase"
+          if [ "$resolved" != "$expected" ]; then
+            printf '%s%s%s\n' '::' 'error::' "Expected the pinned Firebase CLI at $expected, got ${resolved:-<not found>}"
+            exit 1
+          fi
 
       - name: Write service-account credentials to a temp file
         # the JSON is held in GitHub Secrets; we materialise it on disk and
