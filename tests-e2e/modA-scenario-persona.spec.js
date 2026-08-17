@@ -58,8 +58,16 @@ test.describe("Module A persona follows the scenario", () => {
         placeholder: window.t("modA.chat.placeholder"),
         thinking: window.t("modA.chat.thinking"),
         chartTitle: window.t("modA.chart.title"),
-        coach: window.t("modA.coach.read-case"),
-        diagnosisHint: window.t("modA.answers.bullet.diagnosis.hint")
+        coach: window.t("modA.coach.read-case")
+        /* modA.answers.bullet.diagnosis.hint was collected here until
+           2026-08-17 and asserted by the loop below to contain the patient's
+           name. It ended "…the first-line treatment plan you'd propose for
+           {patientName}", which duplicated the dec_plan vote; that sentence
+           was removed, so the hint now names no patient and cannot satisfy a
+           "must interpolate" assertion.
+           It has NOT lost coverage: tests/scenario-characters.test.js still
+           scans it — in every locale — for a hardcoded built-in patient name.
+           Re-add it here only if the hint addresses the patient again. */
       }));
 
       expect(out.name).toBe(sc.patient);
