@@ -58,3 +58,11 @@ docs/Third_session/PBL_platform/functions/.env.*
 .DS_Store
 Thumbs.db
 .dict-cache/
+
+# SAKURA / PHC funding application materials — local-only, never tracked
+financing/
+
+# Ethics-committee dossiers (CER Unicaen, Nagoya bioethics) — drafts contain
+# named investigators, participant-facing consent wording and unsigned
+# attestations. Local-only, same policy as financing/.
+ethics/
