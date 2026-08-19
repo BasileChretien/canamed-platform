@@ -932,10 +932,29 @@ all seven `locales/*.js`, and the hardcoded fallback `<p>` in `index.html`.
   the old published id was the *deterministic* `canamedCertId(session|clientId)`,
   recomputable by any session member from the pool keys — it now survives ONLY as
   an offline fallback, never as a published id. Migration: existing deterministic
-  certs stay valid (no backfill); new ones are random. The record carries only a
-  name **hash** + session label. `Verify:` `grep -n certIdPath
-  docs/Third_session/PBL_platform/script.js` > 0; the `certIds/$id` case in
-  `tests-e2e/emulator/rules-smoke.spec.js` proves owner-write-once + PEER-DENIED.
+  certs stay valid (no backfill); new ones are random.
+  ⚠️ **What the record actually carries — corrected 2026-08-19.** This said "only
+  a name **hash** + session label", which UNDERSTATED it, and the same wrong
+  claim appeared under "Round-3 — re-confirmed ACCEPTED" below. `takehome.js`
+  writes **five** fields: `nameHash`, `session`, `sessionLabel`, `at`,
+  `retentionUntil`. The one that matters is `session` — it is `sessionNum`, the
+  **session CODE**, not a label. So a public, unauthenticated read by exact id
+  discloses the session code, and this repo treats that code as semi-sensitive
+  elsewhere (`cleanup-stale-sessions.yml` sets `CLEANUP_QUIET=1` precisely so
+  world-readable CI logs never print session codes). Bounded, not alarming: cert
+  ids are crypto-random since #239 so nothing is enumerable, and you must already
+  hold an id — which certificates are meant to be shareable with. But it is more
+  than the two fields claimed, and the consent/DPA text must not repeat the
+  narrower wording. **Open question for the pilot:** whether `session` needs to
+  be in the public payload at all — the verification page may only need the
+  label, in which case the fix is to stop publishing the code rather than to
+  document that we do. (Found by CodeRabbit on #236, against a CLAUDE.md hunk
+  that PR no longer carries; the wrong text was here on main.)
+  `Verify:` `grep -n certIdPath docs/Third_session/PBL_platform/script.js` > 0;
+  the `certIds/$id` case in `tests-e2e/emulator/rules-smoke.spec.js` proves
+  owner-write-once + PEER-DENIED; and
+  `sed -n '/const payload = {/,/};/p' docs/Third_session/PBL_platform/takehome.js`
+  lists the fields actually published — compare it against any claim made here.
 - `poll/$clientId` uses the same tolerant first-write `clientMapping` branch as
   `pool`/`presence`/`typing`: in the brief window before the join chain commits
   the mapping, a peer could spoof another participant's qualitative poll answer
@@ -1249,8 +1268,10 @@ observed — LOCAL mode models no rules — so these are static findings:**
   crypto-random + persisted (see the "Accepted by design" note above; the
   deterministic-id gap was **FIXED 2026-07-24**), so it's a genuine
   "know-the-ID-to-read-it" feature — not an enumerable oracle, and no longer
-  classmate-recomputable for new certs. Only a name **hash** + session label are
-  exposed.
+  classmate-recomputable for new certs. ⚠️ It exposes **five** fields, not two —
+  `nameHash`, `session` (the session CODE), `sessionLabel`, `at`,
+  `retentionUntil`. See the corrected note under "Accepted by design" above;
+  this bullet carried the same understatement until 2026-08-19.
 - `sessions/<code>/adminPasswordHash` `.read:auth!=null`: the value is a
   non-secret random marker (real hash is in the unreadable `adminSecrets/`);
   cross-session read leaks only "this session has admin configured".
