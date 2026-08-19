@@ -551,6 +551,47 @@ test("rules: score/penalties is write-ONCE while triage refines — the asymmetr
   expect(await ok("score/auto/decline_labs:2", { points: 5, at: Date.now() })).toBe("ALLOWED");
 });
 
+/* Org parity for the same asymmetry.
+ *
+ * The sessions-tree test above is the one that documents WHY this matters; this
+ * is the org mirror. Splitting it out rather than bolting an org leg onto that
+ * test keeps each one a single session, so a failure names which TREE broke.
+ *
+ * Parity here is not decoration: the two subtrees have drifted before — the
+ * 2026-08-05 diff found 'audit' declared only under orgs/ and 'rosters' org
+ * branch mis-nested by one level, both silent. A write-once clause dropped from
+ * one tree only is exactly that class of defect, and the client guard it
+ * underwrites (_triageWants) is tree-agnostic. */
+test("rules: org score/penalties is write-ONCE while triage refines (org parity)", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const code = "openx-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const base = `orgs/${slug}/sessions/${code}`;
+  await claimRoom(page, base, "Room 1", uid);
+  const ok = (p, v) => tryWrite(page, `${base}/rooms/Room 1/${p}`, v);
+
+  const pid = "score/penalties/declinereason_labs:4";
+
+  // Positive control first — otherwise the denials below prove nothing.
+  expect(await ok(pid, { points: 3, at: Date.now() })).toBe("ALLOWED");
+  // Immutable: neither overwritten...
+  expect(String(await ok(pid, { points: 1, at: Date.now() })))
+    .toMatch(/permission_denied|denied/i);
+  // ...nor deleted, which is the move the naive "clear it on refinement" fix makes.
+  expect(String(await ok(pid, null))).toMatch(/permission_denied|denied/i);
+
+  // ...while the triage entry for the same item still refines freely.
+  const t = (r) => ok("sections/1/triage/labs:4",
+    { disposition: "ruleout", reason: r, by: "S", at: Date.now() });
+  expect(await t("premature")).toBe("ALLOWED");
+  expect(await t("harm"), "a rule-out stays refinable in the org tree too").toBe("ALLOWED");
+
+  // And the reward node stays writable here too — the rules do not stop a room
+  // banking both; only the client guard does, in either tree.
+  expect(await ok("score/auto/decline_labs:4", { points: 5, at: Date.now() })).toBe("ALLOWED");
+});
+
 test("rules: org sections/<slot>/triage — own org room allowed, cross-room denied (org parity)", async ({ page }) => {
   await page.goto("/");
   const uid = await waitForUid(page);
