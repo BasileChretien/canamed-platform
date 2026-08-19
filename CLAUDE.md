@@ -791,17 +791,37 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   huggingface.co (no token exfil to arbitrary hosts); HF error body no longer
   forwarded to the client; `lang` allowlisted. PROMPT_VERSION bumped to 2.2.
 
-### 2026-07-23 Phase-4e legal fact-check — FOUR COMPLIANCE GAPS FOUND (all verified)
+### 2026-07-23 Phase-4e legal fact-check — FOUR COMPLIANCE GAPS — ✅ ALL FOUR FIXED (re-verified 2026-08-19)
+
+> **STATUS (re-verified against the code 2026-08-19):** all four gaps below are
+> CLOSED. Gaps 2 and 3 were corrected in place earlier (2026-07-29 / 2026-07-31);
+> gaps 1 and 4 stayed labelled OPEN here long after their fixes had landed, and
+> that stale labelling is what this entry corrects. Trust each gap's own
+> `Verify:` line, not this banner.
+>
+> ⚠️ **One sub-claim is still OPEN** — a certificate is still minted *and published*
+> on the download click with no separate prompt. See the "Also" paragraph after
+> gap 4. That, not these four, is the remaining blocker on the consent/DPA text.
 
 Drafting the facilitator-as-controller legal pack forced every privacy claim to be
-checked against the code. Four are wrong in the CODE, not the prose — the legal text
-cannot be made truthful until these are fixed. **Fix these before publishing any
-consent/DPA text.**
-1. **Research export ignores consent entirely (HIGHEST).** `scripts/pseudonymise-export.js`
-   and `scripts/backup-sessions.js` walk the whole `/sessions` tree unfiltered; there is
-   no consent flag anywhere (`grep -rn consent scripts/` finds only the simulator). So
-   "using your work for research is optional" CANNOT be stated truthfully today. Needs a
-   consent field + the exports honouring it.
+checked against the code. Four were wrong in the CODE, not the prose — the legal
+text could not be made truthful until they were fixed. The gap text below is kept
+as the historical record of what was wrong.
+1. ~~**Research export ignores consent entirely (HIGHEST).**~~ **✅ FIXED — label was
+   stale, corrected 2026-08-19.** The gap was real when written; the research export
+   now gates on consent. `pseudonymise-export.js` imports `sessionHasConsent` /
+   `hasResearchConsent` from `scripts/lib/pseudonymise.js`, filters to
+   `consentedCodes`, and reports how many sessions and participants were excluded;
+   the gate comment names this gap by number.
+   **Scope note (do not over-read the fix):** `backup-sessions.js` is deliberately
+   NOT consent-gated. It is operational disaster recovery — it archives a snapshot
+   before the retention purge so a database bug or malicious wipe stays recoverable —
+   which is a different lawful basis from research reuse; gating it on consent would
+   defeat the backup. The consent text may therefore say research *reuse* is
+   optional, but must not imply that no copy of the data exists.
+   `Verify:` `grep -c -i consent scripts/pseudonymise-export.js` > 0 (15 on
+   2026-08-19) and `grep -n "RESEARCH CONSENT gate" scripts/pseudonymise-export.js`
+   hits; `grep -c -i consent scripts/backup-sessions.js` = 0 **by design**.
 2. ~~**Org-scoped sessions have ZERO retention coverage.**~~ **✅ FIXED — label was stale,
    corrected 2026-07-29.** The gap was real when written (all three retention jobs were
    hard-scoped to `db.ref("sessions")`), but has since been closed: all three now walk
@@ -846,11 +866,24 @@ consent/DPA text.**
 
    </details>
 
-4. **`canamed_stable_id` survives sign-out** holding the signed-out account's uid:
-   `accountSignOut()` (script.js ~14342) clears nothing, while the comment at
-   script.js ~1300 claims "signOut() removes it". Stale comment, real linkage risk.
-Also: certificates are minted on download click (`resolveCertId`) with no prompt, so
-"getting a certificate is optional" is likewise not true yet.
+4. ~~**`canamed_stable_id` survives sign-out**~~ **✅ FIXED — label was stale,
+   corrected 2026-08-19.** `accountSignOut()` now drops the persisted stableId
+   instead of clearing nothing: the comment "The signed-in uid was persisted as the
+   stableId; drop it so the next…" sits immediately above a `resetStableId()` call,
+   so a signed-out account's uid no longer lingers as a linkage key. (The old line
+   reference "script.js ~14342" was stale too — `accountSignOut()` is ~12328 today.)
+   `Verify:` `grep -A22 "function accountSignOut" docs/Third_session/PBL_platform/script.js | grep -c resetStableId` = 1.
+Also — ⚠️ **STILL OPEN (re-checked 2026-08-19):** a certificate is minted *and
+published* on the download click, with no separate prompt. `resolveCertId` now lives
+in [takehome.js](docs/Third_session/PBL_platform/takehome.js) (~130 — moved there by
+the lazy split, no longer script.js), and the same click that builds the take-home
+also writes the (name-hash, session) record to `credentials/<certId>`. Clicking
+"download" is an opt-in to *receiving* a certificate, but not an informed opt-in to
+*publishing* a verifiable record — so "getting a certificate is optional" still
+cannot be stated without qualification. **This is the one Phase-4e item still
+genuinely open.** `Verify:` `grep -n "credentials/"
+docs/Third_session/PBL_platform/takehome.js` shows the `.set(payload)` publish
+reached from the download flow with no consent check between.
 Drafts (with these gaps flagged) live in `docs/Third_session/PBL_platform/legal/`.
 
 **A FIFTH gap, found 2026-07-29 while preparing the CER Unicaen dossier — ✅ FIXED
