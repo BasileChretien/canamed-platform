@@ -201,9 +201,11 @@ AI chat)** and **6 (your certificate)**.
 - **We collect** your first name, your university, your year of study, your
   self-rated English level, and everything you write or choose during the
   session.
-- **Nothing you write in the session is private from your classmates.** Everyone
-  signed in to the session can read the **whole** session — including the other
-  rooms' work and **the AI-chat transcripts**.
+- **Nothing you write in the session is private from your classmates — except
+  the AI chat.** Everyone signed in to the session can read the **whole** session,
+  including the other rooms' work. Your conversation with the AI character is the
+  one exception: since 2026-07-24 it is stored outside the session record and only
+  your own room, plus the facilitator, can read it (section 5).
 - **Your end-of-session feedback, your "what was hardest?" answer and your
   knowledge-check score are not private either.** They are stored next to your
   name and every other participant in the session can read them. If you want to
@@ -481,8 +483,10 @@ them as a teaching prop, never as clinical information.
 **Where your words go, exactly:**
 
 1. You type a message (up to **500 characters**). It is saved in the session
-   database. **Every signed-in member of the session can read the transcript** —
-   not only your own room.
+   database, outside the shared session record. **Your own room — and the
+   facilitator, who needs it for the debrief — can read the transcript. Students
+   in other rooms cannot.** (Before 2026-07-24 every signed-in member of the
+   session could read it; see section 4.)
 2. Your message — together with the hidden scenario instructions and **at most
    15 recent turns of the conversation, capped at about 12,000 characters
    in total** — is sent to a server function operated for us by Google. **That
@@ -518,8 +522,8 @@ or [INDEPENDENT CONTACT]. **We can delete that turn from the session record. We
 cannot recall it from the AI provider.** Your facilitator will say this out loud
 before the chat starts.
 
-**Be aware:** the transcript is stored like the rest of the session, is readable
-by the whole session, and is included in the identified backup. It is removed
+**Be aware:** the transcript is readable by your room and the facilitator, and is
+included in the identified backup. It is removed
 from the pseudonymised research dataset — but that is *after the fact*, and the
 other free-text boxes are **not** removed (section 5a). The safest control is
 not typing personal information in the first place.
@@ -1132,14 +1136,19 @@ it was overlooked.
    public-task-plus-objection model. Do not publish the consent model over
    unchanged code.
 
-7. **Room-level confidentiality of the AI chat has been removed as a claim.**
-   The earlier draft said only your own room could read the chat. That is wrong:
-   the database grants read access at the level of the whole session, and access
-   granted at that level cannot be withdrawn for a part of it — the narrower
-   rule on the chat restricts *writing*, not reading. **Recommend to the
-   operator:** if per-room confidentiality is genuinely wanted, the chat must be
-   moved out of the session subtree, as the admin secrets and the roster already
-   were.
+7. **Room-level confidentiality of the AI chat — RESOLVED; the recommendation
+   was implemented.** This entry previously said the claim had been removed,
+   because read access granted on the whole session subtree cannot be withdrawn
+   for a part of it, so the narrower rule on the chat restricted *writing*, not
+   reading. It then recommended moving the chat out of the session subtree, as
+   the admin secrets and the roster already were. **That change shipped on
+   2026-07-24 (PR #235):** the transcript now lives in a top-level `roomChat`
+   tree with its own read rule, granted per ROOM plus the facilitator. So
+   room-level confidentiality is a claim the notice may now make — and sections
+   4, 5 and the short notice were corrected to make it (2026-08-19). The
+   reasoning above is kept because it still governs every future node: a deeper
+   read rule is additive only, so restricting access means moving the data, not
+   tightening a child rule.
 
 8. **Numbers corrected against the code, for the record:** the chat input cap is
    **500** characters (600 is the cap on the AI's reply and the database's
