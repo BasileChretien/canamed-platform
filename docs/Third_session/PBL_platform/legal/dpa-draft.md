@@ -24,17 +24,22 @@
 > source code and must be checked against the live system or a vendor contract
 > before anyone asserts it. Do not delete these markers by guessing.
 >
-> **This draft is not in a signable state.** Annex VI lists **eighteen BLOCKING
-> items**, at least one of which (G1) describes processing that appears to be
-> happening today without the basis the platform's own notice promises. Clause 5.4
+> **This draft is not in a signable state.** Annex VI lists **seventeen BLOCKING
+> items**, of which **two are now closed** (L3 in 2026-07, G1 in 2026-08) —
+> fifteen remain open. G1 previously described processing happening without the
+> basis the platform's own notice promised; the export has since been gated on
+> research consent, so that is no longer the case. Clause 5.4
 > makes every BLOCKING item a condition precedent: signature is legally
 > ineffective until they are closed and countersigned.
 >
-> **Also note (technical):** this file lives inside the Firebase Hosting public
-> directory (`firebase.json` sets `"public": "."` and its `ignore` list excludes
-> only `README.md`, not `*.md`). If the site is deployed as-is, **this draft will
-> be served publicly** at `/legal/dpa-draft.md`. Add an ignore entry, or move the
-> file outside the hosting root, before the next deploy.
+> **Also note (technical) — ✅ RESOLVED 2026-08-19.** This file lives inside the
+> Firebase Hosting public directory (`firebase.json` sets `"public": "."`), and
+> its `ignore` list previously excluded only `README.md` — so deploying as-is
+> would have served this draft publicly at `/legal/dpa-draft.md`. `legal/**` was
+> added to `hosting.ignore`, and `tests/round3-security.test.js` now fails if it
+> is removed. Verified against production before the fix: `/RUNBOOK.md` and
+> `/ARCHITECTURE/data-model.md` did return 200 `text/markdown`, so the mechanism
+> was real, not theoretical.
 
 ---
 
@@ -519,8 +524,13 @@ breach of Art. 28(1). Acceptance language cannot cure any of that.
 5.4 **Conditions precedent and remediation schedule.**
 
 (a) *What is suspended.* **No personal data may be processed and no session may
-be run** under this DPA until every item marked BLOCKING in Annex VI is closed
-and the closure countersigned by both Parties in the table below. Non-blocking
+be run** under this DPA until every row marked BLOCKING in the table below is
+closed and the closure countersigned by both Parties. That is **nineteen rows**:
+the **seventeen** BLOCKING items in Annex VI, plus the **two** Annex IV
+international-transfer rows, which gate processing on the same terms even though
+they are not numbered Annex VI findings. *(This clause previously referred only
+to "every item marked BLOCKING in Annex VI", which did not match its own table —
+the two Annex IV rows were gated in practice but not in the wording.)* Non-blocking
 items carry an owner and a target date but do not gate the start of processing.
 
 (b) *What binds immediately on signature.* Clause 5.4(a) suspends the
@@ -852,7 +862,7 @@ pseudonymised export at 03:47 UTC.
 > verify that each scheduled job ran and deleted as expected, and report that
 > verification to the Controller [MONTHLY / ON REQUEST — select], and shall
 > implement failure alerting (Annex VI, item G11).
-
+>
 > **[TO VERIFY — an internal inconsistency to resolve before signature.]** The
 > header of `scripts/pseudonymise-export.js` says the linkage table's retention
 > matches "the **6-month** linkage-destruction commitment in the privacy
@@ -1909,7 +1919,18 @@ Controller's before any session runs.
 
 ## Functional gaps in deletion and rights
 
-**G1 — BLOCKING (new). The research export ignores research consent entirely.**
+**G1 — ✅ CLOSED 2026-08-19 (was BLOCKING). The research export now honours
+research consent.** This item required BOTH artefacts filtered and a test proving
+a non-consenting participant appears in neither; both conditions are met.
+`scripts/pseudonymise-export.js` filters sessions to `consentedCodes` via
+`sessionHasConsent`, and builds the linkage table inside that same loop, so a
+decliner is erased from the pseudonymised file AND the linkage table;
+`tests/admin-tools-research-consent.test.js` asserts an explicit decline is
+absent, and the facilitator CSV is gated by the same helper. One thing this does
+NOT cover, stated so it is not read as broader than it is:
+`scripts/backup-sessions.js` remains deliberately ungated — disaster recovery on
+a different lawful basis. The original finding follows.
+**G1 — (historical) The research export ignores research consent entirely.**
 Verified: `scripts/pseudonymise-export.js` selects sessions with
 `codes.filter(c => sessions[c] && sessions[c].closed)` — **the only filter is
 `closed`**. The per-participant research-consent flag (`pool/$cid/consent`) is

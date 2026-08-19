@@ -447,7 +447,7 @@ safeguards, plus "you can obtain a copy from [CONTACT]".]`
 `[TO VERIFY — whether the 2019 EU→Japan adequacy decision reaches a National
 University Corporation after the 2021 APPI amendment moved public-sector bodies
 into a separate chapter. Do not assume it does; both this draft and
-`privacy.html` previously asserted it flatly.]`
+privacy.html previously asserted it flatly.]`
 
 **What we keep in this browser.** Your name, university and the choices you made
 on the join form, so you can rejoin after a reload; your session code; your
