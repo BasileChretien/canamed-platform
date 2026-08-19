@@ -464,6 +464,60 @@ test("rules: org per-room gating — moduleA/B writes allowed in own org room, d
   }
 });
 
+test("rules: sections/<slot>/triage — member rule-out allowed + refinable; bad disposition/reason/extra-field/cross-room denied (appropriateness triage)", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "triage-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+
+  // Become a member of Room 1 only. roomOf, not the retired uidMembers marker
+  // (#268): nothing writes uidMembers any more, so gating on it would make this
+  // node unsatisfiable and every denial below would prove nothing.
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
+  const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
+
+  // A well-formed rule-out is allowed for a room member...
+  expect(await ok("sections/1/triage/labs:1",
+    { disposition: "ruleout", reason: "not_indicated", by: "S", at: Date.now() })).toBe("ALLOWED");
+  // ...and is REFINABLE (deliberately NOT write-once) — a second reason for the
+  // same item is accepted, unlike the write-once reveal/score paths.
+  expect(await ok("sections/1/triage/labs:1",
+    { disposition: "ruleout", reason: "harm", by: "S", at: Date.now() })).toBe("ALLOWED");
+
+  // Validation (named-child rules + $other sentinel):
+  //  - a disposition other than "ruleout" is rejected,
+  expect(String(await ok("sections/1/triage/labs:2",
+    { disposition: "order", reason: "harm", by: "S", at: Date.now() }))).toMatch(/permission_denied|denied/i);
+  //  - a reason outside the controlled vocabulary is rejected,
+  expect(String(await ok("sections/1/triage/labs:2",
+    { disposition: "ruleout", reason: "because", by: "S", at: Date.now() }))).toMatch(/permission_denied|denied/i);
+  //  - an unknown/injected field is rejected by the $other sentinel,
+  expect(String(await ok("sections/1/triage/labs:2",
+    { disposition: "ruleout", reason: "harm", by: "S", at: Date.now(), evil: "x" }))).toMatch(/permission_denied|denied/i);
+  //  - a missing required child (no reason) is rejected.
+  expect(String(await ok("sections/1/triage/labs:2",
+    { disposition: "ruleout", by: "S", at: Date.now() }))).toMatch(/permission_denied|denied/i);
+
+  // Cross-room: the SAME valid write into Room 2 (not a member) is denied.
+  expect(String(await tryWrite(page, `sessions/${code}/rooms/Room 2/sections/1/triage/labs:1`,
+    { disposition: "ruleout", reason: "not_indicated", by: "S", at: Date.now() }))).toMatch(/permission_denied|denied/i);
+});
+
+test("rules: org sections/<slot>/triage — own org room allowed, cross-room denied (org parity)", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const code = "otriage-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const base = `orgs/${slug}/sessions/${code}`;
+
+  await claimRoom(page, base, "Room 1", uid);
+  expect(await tryWrite(page, `${base}/rooms/Room 1/sections/1/triage/labs:4`,
+    { disposition: "ruleout", reason: "low_value", by: "S", at: Date.now() })).toBe("ALLOWED");
+
+  // Cross-room in the org tree is denied too (parity with sessions/).
+  expect(String(await tryWrite(page, `${base}/rooms/Room 2/sections/1/triage/labs:4`,
+    { disposition: "ruleout", reason: "low_value", by: "S", at: Date.now() }))).toMatch(/permission_denied|denied/i);
+});
+
 test("rules: initial-set admin hash is creatorUid-bound — a non-creator can't claim admin in the create gap (R4)", async ({ page, browser }) => {
   await page.goto("/");
   const uidA = await waitForUid(page);

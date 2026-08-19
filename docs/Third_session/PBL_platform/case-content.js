@@ -230,6 +230,7 @@ var CASE = {
   ],
   exam: [
     { group: { en: "General examination", fr: "Examen général", ja: "全身の診察" },
+      indicated: true,
       q: { en: "General observation and gait",
            fr: "Observation générale et démarche",
            ja: "全身観察と歩行" },
@@ -237,6 +238,7 @@ var CASE = {
            fr: "Confortable au repos, marche normalement — y compris sur les talons et la pointe des pieds. Se mobilise de façon raide et prudente lors des changements de position.",
            ja: "安静時は楽そうで、歩行は正常 — 踵歩き・つま先歩きも問題ありません。体位変換時は固く慎重な動きをします。" } },
     { group: { en: "Spine examination", fr: "Examen du rachis", ja: "脊椎の診察" },
+      indicated: true,
       q: { en: "Spine inspection and palpation",
            fr: "Inspection et palpation du rachis",
            ja: "脊椎の視診と触診" },
@@ -244,6 +246,7 @@ var CASE = {
            fr: "Pas de déformation, pas de marche d'escalier rachidienne, pas de rougeur ni de tuméfaction en regard. Sensibilité diffuse des muscles paravertébraux ; pas de douleur osseuse médiane.",
            ja: "変形なし、脊椎の段差なし、表面の発赤や腫脹もありません。傍脊柱筋にびまん性の圧痛あり;正中の骨性圧痛はありません。" } },
     { group: { en: "Spine examination", fr: "Examen du rachis", ja: "脊椎の診察" },
+      indicated: true,
       q: { en: "Lumbar range of movement",
            fr: "Amplitude des mouvements lombaires",
            ja: "腰椎の可動域" },
@@ -251,6 +254,7 @@ var CASE = {
            fr: "La flexion lombaire est réduite et limitée par la douleur ; l'extension et les inclinaisons latérales sont conservées. La douleur ne s'améliore pas nettement après quelques minutes de mobilisation.",
            ja: "腰椎の前屈は疼痛のため低下・制限されています;伸展と側屈は保たれています。しばらく動いていても痛みは明らかに改善しません。" } },
     { group: { en: "Neurological & regional examination", fr: "Examen neurologique et régional", ja: "神経学的・局所の診察" },
+      indicated: true,
       q: { en: "Neurological examination of the legs",
            fr: "Examen neurologique des membres inférieurs",
            ja: "下肢の神経学的診察" },
@@ -258,6 +262,7 @@ var CASE = {
            fr: "Force, sensibilité et réflexes normaux partout. Le signe de Lasègue est négatif des deux côtés.",
            ja: "全体に筋力・感覚・反射は正常。下肢伸展挙上テスト(SLR)は両側とも陰性です。" } },
     { group: { en: "Neurological & regional examination", fr: "Examen neurologique et régional", ja: "神経学的・局所の診察" },
+      indicated: true,
       q: { en: "Hip examination and sacroiliac joint (FABER) test",
            fr: "Examen des hanches et test sacro-iliaque (FABER)",
            ja: "股関節の診察と仙腸関節 (FABER) テスト" },
@@ -672,65 +677,85 @@ var SCORING = {
  * long `why` paragraphs may ship with empty fr/ja stubs — tc() falls back
  * to en until a translator pass fills them in.
  * ========================================================================== */
+/* ===================== REASON VOCABULARY (Module A triage) ================
+ * The controlled set of reasons a team attaches when it decides NOT to run an
+ * exam/test ("Rule out"). Four chips, deliberately universal across history /
+ * examination / investigations. `key` is the engine token (persisted + graded
+ * + validated by database.rules.json); `label` is the translatable trio;
+ * `icon` is a small recognition aid for a low-proficiency (B1/A2) cohort.
+ * Per-item grading (best / ok / off-target) is derived from each PENALTIES
+ * row's optional `bestReasons` / `okReasons`, falling back to group defaults
+ * in script.js (_bestReasonsFor). Educator-editable without touching script.js.
+ * NB: if you add/rename a key, update the reason enum in database.rules.json
+ * (both the sessions and orgs `moduleA/triage` rules).
+ * ========================================================================== */
+var REASON_VOCAB = [
+  { key: "harm",          icon: "⚠️",
+    label: { en: "Could harm", fr: "Risque de nuire", ja: "害の恐れ" } },
+  { key: "not_indicated", icon: "∅",
+    label: { en: "Not indicated", fr: "Non indiqué", ja: "適応なし" } },
+  { key: "low_value",     icon: "⚖️",
+    label: { en: "Won't change the plan", fr: "Ne changera pas la conduite", ja: "方針は変わらない" } },
+  { key: "premature",     icon: "⏱️",
+    label: { en: "Too early — screen first", fr: "Trop tôt — dépister d'abord", ja: "時期尚早 — 先に評価" } }
+];
+
 var PENALTIES = [
   { id: "pen_mri", item: "labs:1", points: 12,
+    bestReasons: ["not_indicated", "low_value"], okReasons: ["premature"],
     title: { en: "Ordered an MRI that was not needed",
              fr: "A prescrit une IRM non indiquée",
              ja: "不要なMRIを指示した" },
     why: { en: "Mr Lefebvre has no red flags and a normal examination, so an MRI is " +
                "not indicated. It only finds harmless age-related changes that worry " +
-               "the patient and lead to more tests - that is why your team loses points.",
+               "the patient and lead to more tests.",
            fr: "M. Lefebvre n'a aucun drapeau rouge et son examen est normal, l'IRM n'est " +
                "donc pas indiquée. Elle ne révèle que des modifications bénignes liées à l'âge " +
-               "qui inquiètent le patient et entraînent d'autres examens — c'est pourquoi votre " +
-               "équipe perd des points.",
+               "qui inquiètent le patient et entraînent d'autres examens.",
            ja: "M. Lefebvre にはレッドフラッグがなく、診察も正常であるため、MRIの適応はあり" +
                "ません。MRIでは患者を不安にさせ追加検査を招く、無害な加齢性変化が見つかるだけ" +
-               "です — それがチームが減点される理由です。" } },
+               "です。" } },
   { id: "pen_xray", item: "labs:2", points: 10,
+    bestReasons: ["not_indicated", "harm"], okReasons: ["low_value"],
     title: { en: "Ordered an X-ray that was not needed",
              fr: "A prescrit une radiographie non indiquée",
              ja: "不要なX線を指示した" },
     why: { en: "A plain X-ray has no role in non-specific low-back pain without a " +
-               "fracture concern - it adds radiation and shows only age-related change. " +
-               "Ordering it here costs your team points.",
+               "fracture concern - it adds radiation and shows only age-related change.",
            fr: "La radiographie standard n'a pas de place dans la lombalgie non spécifique " +
                "en l'absence d'une suspicion de fracture — elle expose à des rayonnements et " +
-               "ne montre que des modifications liées à l'âge. La prescrire ici coûte des " +
-               "points à votre équipe.",
+               "ne montre que des modifications liées à l'âge.",
            ja: "単純X線は、骨折を疑う根拠のない非特異的腰痛では役割がありません — 被ばくを" +
-               "増やすだけで、加齢性変化しか示しません。ここで指示することは、チームの減点に" +
-               "つながります。" } },
+               "増やすだけで、加齢性変化しか示しません。" } },
   { id: "pen_bloods", item: "labs:3", points: 8,
+    bestReasons: ["not_indicated"], okReasons: ["low_value"],
     title: { en: "Ordered blood tests that were not needed",
              fr: "A prescrit un bilan sanguin non indiqué",
              ja: "不要な血液検査を指示した" },
     why: { en: "Blood tests are useful only when a red flag raises suspicion of " +
                "infection, cancer or inflammatory disease - there are none in this " +
-               "case, so ordering them costs your team points.",
+               "case.",
            fr: "Le bilan sanguin n'est utile que lorsqu'un drapeau rouge fait suspecter " +
                "une infection, un cancer ou une pathologie inflammatoire — il n'y en a aucun " +
-               "dans ce cas, alors le prescrire coûte des points à votre équipe.",
+               "dans ce cas.",
            ja: "血液検査は、感染・がん・炎症性疾患を疑わせるレッドフラッグがある場合にのみ" +
-               "有用です — 本症例にはそれらは一つもないため、指示することはチームの減点に" +
-               "つながります。" } },
+               "有用です — 本症例にはそれらは一つもありません。" } },
   { id: "pen_ct", item: "labs:4", points: 14,
+    bestReasons: ["harm", "not_indicated"], okReasons: ["low_value"],
     title: { en: "Ordered a lumbar CT that was not needed",
              fr: "A prescrit un scanner lombaire non indiqué",
              ja: "不要な腰椎CTを指示した" },
     why: { en: "A lumbar CT delivers a large radiation dose to a region full of " +
                "radiosensitive organs and shows less soft-tissue detail than MRI - " +
                "of the three imaging choices for a patient without red flags, this " +
-               "is the most harmful, so it costs the most points.",
+               "is the most harmful.",
            fr: "Un scanner lombaire délivre une dose de rayonnements importante à une " +
                "région riche en organes radiosensibles et montre moins de détails des tissus " +
                "mous que l'IRM — parmi les trois choix d'imagerie pour un patient sans " +
-               "drapeau rouge, c'est le plus délétère, et c'est donc celui qui coûte le plus " +
-               "de points.",
+               "drapeau rouge, c'est le plus délétère.",
            ja: "腰椎CTは放射線感受性の高い臓器が集中する領域に大きな被ばくをもたらし、" +
                "軟部組織の描出能はMRIより劣ります — レッドフラッグのない患者に対する3つの" +
-               "画像検査の選択肢の中で、最も有害であり、したがって最も多くの点数が減点され" +
-               "ます。" } },
+               "画像検査の選択肢の中で、最も有害です。" } },
   /* --- history: the two deliberately wrong opening moves --- */
   { id: "pen_prescribe", item: "history:9", points: 14,
     title: { en: "Promised the oxycodone before any assessment",
@@ -740,16 +765,16 @@ var PENALTIES = [
                "screening red flags or building a shared plan is exactly the " +
                "prescribing pattern that drives dependence. The rest of the " +
                "consultation now revolves around delivering that promise, not " +
-               "exploring the request - that is why your team loses points.",
+               "exploring the request.",
            fr: "Accepter de prescrire un opioïde fort avant d'avoir évalué la douleur, " +
                "dépisté les drapeaux rouges ou élaboré un plan partagé est exactement le " +
                "schéma de prescription qui favorise la dépendance. Le reste de la " +
                "consultation tourne désormais autour de la tenue de cette promesse, et non " +
-               "de l'exploration de la demande — c'est pourquoi votre équipe perd des points.",
+               "de l'exploration de la demande.",
            ja: "痛みの評価、レッドフラッグのスクリーニング、共有された計画づくりを行う" +
                "前に強オピオイドの処方に同意することは、まさに依存症を生み出す処方パターン" +
                "です。診察の残りは要望の掘り下げではなく、その約束を実行することを中心に" +
-               "回ることになります — それがチームが減点される理由です。" } },
+               "回ることになります。" } },
   { id: "pen_dismiss", item: "history:10", points: 12,
     title: { en: "Started an opioid 'trial' with no indication",
              fr: "A débuté un « essai » d'opioïde sans indication",
@@ -777,15 +802,14 @@ var PENALTIES = [
     why: { en: "A digital rectal examination is indicated only when cauda equina is " +
                "suspected (saddle anaesthesia, urinary retention, bowel symptoms) - " +
                "and there are none here. Doing an intimate, undignified examination " +
-               "without a reason is harmful and costs your team points.",
+               "without a reason is harmful.",
            fr: "Le toucher rectal n'est indiqué qu'en cas de suspicion de syndrome de la " +
                "queue de cheval (anesthésie en selle, rétention urinaire, troubles du transit) " +
                "— et aucun de ces signes n'est présent ici. Réaliser un examen intime et " +
-               "dégradant sans raison est délétère et coûte des points à votre équipe.",
+               "dégradant sans raison est délétère.",
            ja: "直腸指診は、馬尾症候群が疑われる場合 (鞍状部知覚異常、尿閉、便通障害) に" +
                "限って適応となります — そして本症例にはこれらが一つもありません。理由なく" +
-               "内密的で患者の尊厳を損なう診察を行うことは有害であり、チームの減点に" +
-               "つながります。" } },
+               "内密的で患者の尊厳を損なう診察を行うことは有害です。" } },
   { id: "pen_cvresp", item: "exam:6", points: 6,
     title: { en: "Did a scattergun cardio-respiratory examination",
              fr: "A fait un examen cardio-respiratoire au hasard",
@@ -1462,18 +1486,17 @@ var PENALTIES_B = [
                "removes her capacity to exercise her preference. Whatever the family " +
                "wishes, the patient is the one whose information it is. The son's " +
                "fear deserves exploration, not a binding promise that bypasses his " +
-               "mother. That is why your team loses points.",
+               "mother.",
            fr: "S'engager auprès d'un tiers à ne pas informer une patiente apte — avant " +
                "même de lui avoir demandé ce qu'elle souhaite savoir — la prive de la " +
                "possibilité d'exercer sa préférence. Quels que soient les souhaits de la " +
                "famille, l'information appartient à la patiente. La peur du fils mérite " +
-               "d'être explorée, pas une promesse engageante qui contourne sa mère. " +
-               "C'est pourquoi votre équipe perd des points.",
+               "d'être explorée, pas une promesse engageante qui contourne sa mère.",
            ja: "判断能力のある患者に何を知りたいか尋ねもしないうちに、第三者に対して情報" +
                "を伏せることを約束することは、患者が自分の希望を行使する余地を奪うこと" +
                "です。家族の希望が何であれ、情報は患者本人のものです。息子の恐れは掘り" +
                "下げるべきものであり、母親をバイパスする拘束的な約束をすべきものでは" +
-               "ありません — それがチームの減点理由です。" } },
+               "ありません。" } },
   { id: "pen_rule_dump", item: "history:8", points: 10,
     title: { en: "Answered the son with a rule, without acknowledging his fear",
              fr: "A répondu au fils par une règle, sans reconnaître sa peur",
@@ -1482,17 +1505,16 @@ var PENALTIES_B = [
                "wrong as an opening response to a frightened, recently-bereaved son. " +
                "It dismisses his fear, breaks the therapeutic alliance with the " +
                "family, and still leaves you without having asked the patient what " +
-               "she actually wants. Right rule, wrong moment — that costs points.",
+               "she actually wants. Right rule, wrong moment.",
            fr: "« Je ne peux pas garder de secret vis-à-vis de ma patiente » est juste sur " +
                "le principe mais inapproprié comme première réponse à un fils effrayé et " +
                "récemment endeuillé. Cela dévalorise sa peur, rompt l'alliance thérapeutique " +
                "avec la famille, et vous laisse toujours sans avoir demandé à la patiente " +
-               "ce qu'elle souhaite réellement. La bonne règle, au mauvais moment — cela " +
-               "coûte des points.",
+               "ce qu'elle souhaite réellement. La bonne règle, au mauvais moment.",
            ja: "「患者に秘密は持てません」は原則としては正しいですが、最近父を亡くしたばか" +
                "りで怯えている息子への最初の応答としては不適切です。彼の恐れを軽視し、家" +
                "族との治療同盟を壊し、しかも患者本人が本当は何を望んでいるかをまだ尋ねて" +
-               "いない状態を残します。正しい規則、誤ったタイミング — それが減点理由です。" } }
+               "いない状態を残します。正しい規則、誤ったタイミング。" } }
 ];
 
 /* DECISIONS for the Breaking-Bad-News scenario. Two votes:
@@ -2324,20 +2346,19 @@ var PENALTIES_C = [
                "viral pharyngitis (they do not) is exactly the prescribing pattern " +
                "that the HAS 2021 guidance, NICE NG84 and the Japanese AMR action " +
                "plan are all trying to change. The rest of the consultation now " +
-               "revolves around delivering that promise — that is why your team " +
-               "loses points.",
+               "revolves around delivering that promise.",
            fr: "Accepter de prescrire un antibiotique avant d'avoir calculé le score " +
                "Centor/McIsaac, examiné la gorge ou même discuté du fait que les " +
                "antibiotiques raccourcissent une pharyngite virale (ce qui n'est pas " +
                "le cas) est exactement le schéma de prescription que les recommandations " +
                "HAS 2021, NICE NG84 et le plan AMR japonais cherchent tous à modifier. " +
                "Le reste de la consultation tourne désormais autour de la tenue de cette " +
-               "promesse — c'est pourquoi votre équipe perd des points.",
+               "promesse.",
            ja: "Centor/McIsaacスコアを算出する前、咽頭を診察する前、そして抗生物質が" +
                "ウイルス性咽頭炎を短縮するかどうか(短縮しません)を話し合う前に抗生" +
                "物質の処方に同意することは、まさにHAS 2021、NICE NG84、日本のAMR" +
                "行動計画が変えようとしている処方パターンそのものです。診察の残りは" +
-               "その約束の履行を中心に進むことになります — それがチームの減点理由です。" } },
+               "その約束の履行を中心に進むことになります。" } },
   { id: "pen_dismiss_cold", item: "history:8", points: 10,
     title: { en: "Dismissed her with 'it's just a cold' and skipped the examination",
              fr: "L'a renvoyée avec « ce n'est qu'un rhume » sans réaliser d'examen",

@@ -341,6 +341,17 @@
                       ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
                     }
                   },
+                  "triage": {
+                    "$itemId": {
+                      ".write": "auth != null && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('roomOf').child(auth.uid).child('room').val() == $roomId",
+                      ".validate": "newData.val() == null || newData.hasChildren(['disposition','reason','by','at'])",
+                      "disposition": { ".validate": "newData.isString() && newData.val() === 'ruleout'" },
+                      "reason": { ".validate": "newData.isString() && newData.val().matches(/^(harm|not_indicated|low_value|premature)$/)" },
+                      "by": { ".validate": "newData.isString() && newData.val().length <= 40" },
+                      "at": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 1800000" },
+                      "$other": { ".validate": false }
+                    }
+                  },
                   "scoring": {
                     "awarded": {
                       "$familyId": {
@@ -1075,6 +1086,17 @@
                         "$itemId": {
                           ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists()",
                           ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+                        }
+                      },
+                      "triage": {
+                        "$itemId": {
+                          ".write": "auth != null && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('roomOf').child(auth.uid).child('room').val() == $roomId",
+                          ".validate": "newData.val() == null || newData.hasChildren(['disposition','reason','by','at'])",
+                          "disposition": { ".validate": "newData.isString() && newData.val() === 'ruleout'" },
+                          "reason": { ".validate": "newData.isString() && newData.val().matches(/^(harm|not_indicated|low_value|premature)$/)" },
+                          "by": { ".validate": "newData.isString() && newData.val().length <= 40" },
+                          "at": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 1800000" },
+                          "$other": { ".validate": false }
                         }
                       },
                       "scoring": {

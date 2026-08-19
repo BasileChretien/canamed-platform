@@ -183,6 +183,263 @@ function rebuildCaseDerived() {
 rebuildCaseDerived();
 function itemById(id) { const [g, i] = id.split(":"); return CASE[g][+i]; }
 
+/* ===================== MODULE A — APPROPRIATENESS TRIAGE ==================
+ * Slice 1 (Investigations block, flag-gated ?triage=1). Adds a symmetric
+ * "Order vs Rule out (+ graded reason)" decision to each investigation:
+ *   - Ordering stays the existing single tap (reveal); an un-indicated order
+ *     still costs points via PENALTIES.
+ *   - Ruling out an INAPPROPRIATE test EARNS points (mirror of the penalty),
+ *     graded by the reason chosen (best +2 / ok +1 / off-target +0, on a base
+ *     of +3 => 3..5).
+ *   - Ruling out an INDICATED test costs a small penalty (-4).
+ * Shared per-room state (mirrors `revealed`): one teammate's disposition is
+ * seen by the whole room. Persisted at moduleA/triage/<itemId>. First-write-
+ * wins and one-shot, like reveal() — a ruled-out item can't then be ordered
+ * (and vice-versa). See database.rules.json (sessions + orgs) and the scoring
+ * hooks in checkScoreEvents / scoreEventMeta / penaltyMeta.
+ * ========================================================================== */
+const DECLINE_INDICATED_PENALTY = 4;   // cost of ruling out a test that WAS needed
+// Ruling out an inappropriate test is the right DECISION; the REASON is then
+// graded and can WIN OR LOSE points — the sharpest reason wins most, an
+// acceptable one wins a little, an off-target/wrong reason LOSES points.
+const DECLINE_BEST_REWARD = 5;         // best reason      (reason-quality 2)
+const DECLINE_OK_REWARD = 2;           // acceptable reason (reason-quality 1)
+const DECLINE_WRONG_PENALTY = 3;       // off-target reason (reason-quality 0) → −3
+let triage = {};                       // itemId -> { disposition:"ruleout", reason, by, at }
+let refTriage = null;
+const triageOpen = new Set();          // transient UI: which rows have the reason rail open
+function _triageFlagOn() {
+  try {
+    const p = new URLSearchParams(location.search);
+    if (p.get("triage") === "1") { localStorage.setItem("canamedModATriage", "1"); return true; }
+    if (p.get("triage") === "0") { localStorage.removeItem("canamedModATriage"); return false; }
+    return localStorage.getItem("canamedModATriage") === "1";
+  } catch (e) { return false; }
+}
+let TRIAGE_ON = (typeof location !== "undefined") ? _triageFlagOn() : false;
+
+/* Which reasons are "best" / "acceptable" for ruling out this item. An author
+   can set bestReasons/okReasons on the item's PENALTIES row; otherwise fall
+   back to per-group defaults so any scenario works with zero authoring. */
+function _bestReasonsFor(id) {
+  const pens = (typeof window !== "undefined" && Array.isArray(window.PENALTIES))
+    ? window.PENALTIES
+    : (typeof PENALTIES !== "undefined" ? PENALTIES : []);
+  const p = pens.find(x => x && x.item === id);
+  if (p && Array.isArray(p.bestReasons)) {
+    return { best: p.bestReasons, ok: Array.isArray(p.okReasons) ? p.okReasons : [] };
+  }
+  const g = String(id).split(":")[0];
+  if (g === "labs") return { best: ["not_indicated", "harm"], ok: ["low_value"] };
+  if (g === "exam") return { best: ["harm", "not_indicated"], ok: ["low_value"] };
+  return { best: ["not_indicated", "premature"], ok: ["low_value"] };   // history
+}
+function _reasonQuality(id, reason) {
+  if (!reason) return 0;
+  const { best, ok } = _bestReasonsFor(id);
+  if (best.indexOf(reason) !== -1) return 2;
+  if (ok.indexOf(reason) !== -1) return 1;
+  return 0;
+}
+/* Net points for correctly ruling out an INAPPROPRIATE item, by reason quality.
+   Positive → reward (score/auto); negative → penalty (score/penalties). This is
+   what makes the reason choice consequential: best wins, ok wins a little, an
+   off-target reason loses. */
+function _declinePoints(id, reason) {
+  const q = _reasonQuality(id, reason);
+  if (q === 2) return DECLINE_BEST_REWARD;
+  if (q === 1) return DECLINE_OK_REWARD;
+  return -DECLINE_WRONG_PENALTY;
+}
+/* An item that genuinely "had to be done" — ruling it out is a wrong decision
+   and costs points regardless of the reason. Marked in content via
+   `indicated: true` (or the legacy synthesis `key: true`). */
+function _isIndicated(item) {
+  return !!(item && (item.indicated === true || item.key === true));
+}
+function _reasonVocab() {
+  return (typeof REASON_VOCAB !== "undefined" && Array.isArray(REASON_VOCAB)) ? REASON_VOCAB : [];
+}
+function _reasonLabel(key, lang) {
+  const rv = _reasonVocab().find(r => r.key === key);
+  if (rv) return (typeof tc === "function") ? tc(rv.label, lang) : (rv.label.en || key);
+  return key;
+}
+/* Commit a rule-out decision for `id` with `reason`. First-write-wins, like
+   reveal(); refuses if the item was already ordered (revealed). */
+function writeTriage(id, reason) {
+  if (!refTriage || revealed[id]) return;
+  triageOpen.delete(id);
+  const entry = { disposition: "ruleout", reason: reason, by: myName, at: Date.now() };
+  refTriage.child(id).transaction(cur => (cur == null ? entry : undefined))
+    .catch(e => console.error("Triage write failed", e));
+}
+/* The (empty) managed sibling that renderTriage() fills for one item. */
+function _makeTriageBox(id) {
+  const box = document.createElement("div");
+  box.className = "req-triage";
+  box.dataset.id = id;
+  box.hidden = true;
+  return box;
+}
+function _makeBulkRuleOut() {
+  const foot = document.createElement("div");
+  foot.className = "req-triage-bulk";
+  foot.hidden = true;
+  return foot;
+}
+/* Wrap one exam/investigation button + its Rule-out box in a flex row so the
+   control sits to the RIGHT of the item (CSS drops it to a full-width row below
+   only when the reason rail opens or a decision is committed). */
+function _makeReqItem(group, i) {
+  const wrap = document.createElement("div");
+  wrap.className = "req-item";
+  wrap.appendChild(_makeReqBtn(group, i));
+  wrap.appendChild(_makeTriageBox(group + ":" + i));
+  return wrap;
+}
+/* Append item `i` of `group` to `parent`: as a triage-wrapped row for the
+   Examination + Investigations panels when the flag is on, else the bare button
+   (unchanged history / flag-off behaviour). */
+function _appendItem(parent, group, i) {
+  if (TRIAGE_ON && (group === "labs" || group === "exam")) {
+    parent.appendChild(_makeReqItem(group, i));
+  } else {
+    parent.appendChild(_makeReqBtn(group, i));
+  }
+}
+/* Populate every .req-triage box + the bulk foot from live state. Idempotent:
+   safe to call on every render (mirrors renderButtons). */
+function renderTriage() {
+  if (!TRIAGE_ON) return;
+  const lang = (typeof _curLang === "function") ? _curLang() : "en";
+  document.querySelectorAll(".req-triage").forEach(box => {
+    const id = box.dataset.id;
+    const item = (typeof itemById === "function") ? itemById(id) : null;
+    const t = (triage && triage[id]) || null;
+    const ruledOut = !!(t && t.disposition === "ruleout");
+    const ordered = !!revealed[id];
+    const btn = document.querySelector('.req-btn[data-id="' + id + '"]');
+    box.textContent = "";
+    if (ordered) {                     // ordered wins; no rule-out offered
+      box.hidden = true;
+      if (btn) { btn.classList.remove("ruled-out"); btn.disabled = false; btn.removeAttribute("aria-disabled"); }
+      return;
+    }
+    box.hidden = false;
+    // Compact (just the "Rule out ▾" toggle) sits inline on the right; once the
+    // reason rail is open or a decision is committed, drop to a full-width row.
+    box.classList.toggle("expanded", ruledOut || triageOpen.has(id));
+    if (ruledOut) {
+      if (btn) { btn.classList.add("ruled-out"); btn.disabled = true; btn.setAttribute("aria-disabled", "true"); }
+      _renderRuledOut(box, id, item, t, lang);
+    } else {
+      if (btn) { btn.classList.remove("ruled-out"); btn.disabled = false; btn.removeAttribute("aria-disabled"); }
+      _renderRuleOutControl(box, id, item, lang);
+    }
+  });
+  _renderBulkRuleOut(lang);
+}
+function _renderRuleOutControl(box, id, item, lang) {
+  const open = triageOpen.has(id);
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "triage-toggle";
+  toggle.setAttribute("aria-expanded", open ? "true" : "false");
+  toggle.textContent = tFallback("modA.triage.ruleout", "Rule out") + (open ? "  ▲" : "  ▾");
+  toggle.addEventListener("click", () => {
+    if (triageOpen.has(id)) triageOpen.delete(id); else triageOpen.add(id);
+    renderTriage();
+  });
+  box.appendChild(toggle);
+  if (!open) return;
+  const group = document.createElement("div");
+  group.className = "triage-reasons";
+  group.setAttribute("role", "radiogroup");
+  group.setAttribute("aria-label", tFallback("modA.triage.why", "Why would you not order this?"));
+  const best = _bestReasonsFor(id).best;
+  _reasonVocab().forEach(rv => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "triage-reason" + (best.indexOf(rv.key) !== -1 ? " suggested" : "");
+    chip.setAttribute("role", "radio");
+    chip.setAttribute("aria-checked", "false");
+    chip.dataset.reason = rv.key;
+    chip.textContent = (rv.icon ? rv.icon + " " : "") + ((typeof tc === "function") ? tc(rv.label, lang) : rv.label.en);
+    chip.addEventListener("click", () => writeTriage(id, rv.key));
+    group.appendChild(chip);
+  });
+  box.appendChild(group);
+}
+function _renderRuledOut(box, id, item, t, lang) {
+  const head = document.createElement("div");
+  head.className = "triage-done";
+  head.setAttribute("role", "status");
+  head.setAttribute("aria-live", "polite");
+  head.textContent = "✓ " + tFallback("modA.triage.ruledout", "Ruled out") + " · " + _reasonLabel(t.reason, lang);
+  box.appendChild(head);
+  const inappropriate = (typeof PENALTY_ITEM_IDS !== "undefined") && PENALTY_ITEM_IDS.has(id);
+  const indicated = _isIndicated(item);
+  const chip = document.createElement("span");
+  if (inappropriate) {
+    const pts = _declinePoints(id, t.reason);
+    if (pts >= 0) {
+      chip.className = "triage-award";
+      chip.textContent = "+" + pts + "  " + tFallback("modA.triage.goodcall", "Good call — you held off");
+    } else {
+      chip.className = "triage-penalty";
+      chip.textContent = "−" + (-pts) + "  " +
+        tFallback("modA.triage.wrongreason", "Right to hold off — but the wrong reason");
+    }
+  } else if (indicated) {
+    chip.className = "triage-penalty";
+    chip.textContent = "−" + DECLINE_INDICATED_PENALTY + "  " +
+                       tFallback("modA.triage.needed", "This one was needed");
+  } else {
+    chip.className = "triage-neutral";
+    chip.textContent = tFallback("modA.triage.judgment", "Your judgment call — not scored");
+  }
+  box.appendChild(chip);
+  // Teaching feedback: an inappropriate test → WHY it wasn't indicated
+  // (PENALTIES.why); a needed test ruled out → what it would have shown (the
+  // item's own finding), so the team learns what they skipped.
+  let feedbackText = "";
+  if (inappropriate) {
+    const pens = (typeof window !== "undefined" && Array.isArray(window.PENALTIES))
+      ? window.PENALTIES : (typeof PENALTIES !== "undefined" ? PENALTIES : []);
+    const p = pens.find(x => x && x.item === id);
+    if (p && p.why) feedbackText = (typeof tc === "function") ? tc(p.why, lang) : (p.why.en || "");
+  } else if (indicated && item && item.a) {
+    feedbackText = (typeof tc === "function") ? tc(item.a, lang) : (item.a.en || "");
+  }
+  if (feedbackText) {
+    const why = document.createElement("div");
+    why.className = "triage-why";
+    why.textContent = feedbackText;
+    box.appendChild(why);
+  }
+}
+function _renderBulkRuleOut(lang) {
+  const foot = document.querySelector(".req-triage-bulk");
+  if (!foot) return;
+  foot.textContent = "";
+  const labsIds = [];
+  if (typeof CASE !== "undefined" && CASE && CASE.labs) {
+    CASE.labs.forEach((_, i) => { const id = "labs:" + i; if (id !== SYNTH_ID) labsIds.push(id); });
+  }
+  const pending = labsIds.filter(id =>
+    (typeof PENALTY_ITEM_IDS !== "undefined") && PENALTY_ITEM_IDS.has(id) &&
+    !revealed[id] && !(triage[id] && triage[id].disposition === "ruleout"));
+  if (pending.length < 2) { foot.hidden = true; return; }   // only worth a bulk action for 2+
+  foot.hidden = false;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "triage-bulk-btn";
+  btn.textContent = tFallback("modA.triage.rest", "Rule out the rest — not indicated") + "  (" + pending.length + ")";
+  btn.addEventListener("click", () => pending.forEach(id => writeTriage(id, "not_indicated")));
+  foot.appendChild(btn);
+}
+
 /* swap the global content to a different scenario. `customContent` is an
    already-parsed object (from a session's scenarioCustomJson); `id` is one of
    the keys in window.CANAMED_SCENARIOS. customContent wins if both are given. */
@@ -1341,6 +1598,29 @@ function penaltyMeta(ev) {
       };
     }
   }
+  // a decline penalty: id is "declinepen_<itemId>" — the team ruled out a test
+  // that WAS indicated. The feedback teaches why it was needed (the finding it
+  // would have shown, i.e. the item's own result text).
+  const dpm = /^declinepen_(.+)$/.exec(ev);
+  if (dpm) {
+    const item = (typeof itemById === "function") ? itemById(dpm[1]) : null;
+    return {
+      id: ev, points: DECLINE_INDICATED_PENALTY,
+      title: "Ruled out a test that was needed",
+      why: item ? tc(item.a, lang) : ""
+    };
+  }
+  // a wrong-reason decline: id is "declinereason_<itemId>" — right to hold off,
+  // but the reason chosen was clinically off-target, so it costs points.
+  const drm = /^declinereason_(.+)$/.exec(ev);
+  if (drm) {
+    const p = (typeof PENALTIES !== "undefined") ? PENALTIES.find(x => x && x.item === drm[1]) : null;
+    return {
+      id: ev, points: DECLINE_WRONG_PENALTY,
+      title: "Right to hold off — but the wrong reason",
+      why: p ? tc(p.why, lang) : ""
+    };
+  }
   if (typeof PENALTIES === "undefined") return null;
   const p = PENALTIES.find(pp => pp.id === ev) || null;
   if (!p) return null;
@@ -1382,6 +1662,35 @@ function scoreEventMeta(ev) {
       title: "Team decision: " + decisionShort(d.decision, lang),
       why: tc(d.option && d.option.why, lang),
       did: "Your team voted together and locked in the safest answer."
+    };
+  }
+  // a correct rule-out (Module A triage): id is "decline_<itemId>". Points =
+  // base (3) + reason quality (0..2), read live from the triage state. The
+  // feedback reuses the item's PENALTIES `why` — the very reason it was not
+  // indicated, now surfaced as positive reinforcement for holding off.
+  const decm = /^decline_(.+)$/.exec(ev);
+  if (decm) {
+    const id = decm[1];
+    const t = (typeof triage !== "undefined" && triage[id]) || null;
+    const q = _reasonQuality(id, t && t.reason);
+    const pts = _declinePoints(id, t && t.reason);   // reward path only: +5 (best) or +2 (ok)
+    const pens = (typeof PENALTIES !== "undefined" ? PENALTIES : []);
+    const p = pens.find(x => x && x.item === id);
+    return {
+      points: pts, tier: "milestone", module: "A",
+      title: q === 2 ? "Sharp call — the right reason" : "Good call — an acceptable reason",
+      why: p ? tc(p.why, lang) : "",
+      did: "Your room correctly ruled out an investigation this case does not need."
+    };
+  }
+  // ordering an INDICATED test: id is "order_<itemId>" — a small token that
+  // "ordering the right thing is right", balancing the decline reward.
+  const ordm = /^order_(.+)$/.exec(ev);
+  if (ordm) {
+    return {
+      points: 2, tier: "micro", module: "A",
+      title: "Ordered the right test",
+      did: "Your room ordered an investigation this case genuinely needs."
     };
   }
   const m = /^concept([AB])_(.+)$/.exec(ev);
@@ -2086,7 +2395,7 @@ let sectionState = {};     // slot → { revealed: {…}, hypotheses: {…} }
 let activeSlot = 1;        // the slot whose state the pointers below refer to
 function slotState(slot) {
   const k = String(slot);
-  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {}, answers: {} };
+  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {}, triage: {}, answers: {} };
   return sectionState[k];
 }
 /* Repoint the legacy globals at the slot on screen. Called whenever the viewed
@@ -2099,6 +2408,7 @@ function refreshActiveSlotState() {
   const st = slotState(activeSlot);
   revealed = st.revealed;
   hypotheses = st.hypotheses;
+  triage = st.triage;
   /* S2b-2 — and the WRITE refs follow the same slot, so an item revealed while
      looking at section 3 lands in section 3's node, not section 1's. */
   if (typeof pointSectionRefs === "function") pointSectionRefs();
@@ -4705,6 +5015,10 @@ function bindSectionRefs(base) {
     const R = {
       revealed:   db.ref(p + "/revealed"),
       hypotheses: db.ref(p + "/hypotheses"),
+      /* Triage rides the SLOT, exactly like `revealed` it mirrors. On a
+         module-literal node it would hit the S6 bug below — two PBL slots and
+         the readers come up empty. */
+      triage:     db.ref(p + "/triage"),
       phase:      db.ref(p + "/phase"),
       roleAssign: db.ref(p + "/roleAssign"),
       /* S6 — answers move per slot too. They were the last room state still on
@@ -4713,6 +5027,13 @@ function bindSectionRefs(base) {
       answers:    db.ref(base + "/answers/sections/" + slot)
     };
     refSection[slot] = R;
+
+    /* Shared per-room triage (Order vs Rule-out) — same shape as revealed. */
+    R.triage.on("value", snap => {
+      slotState(slot).triage = snap.val() || {};
+      refreshActiveSlotState();
+      renderCase();
+    });
 
     R.revealed.on("value", snap => {
       slotState(slot).revealed = snap.val() || {};
@@ -4787,7 +5108,7 @@ function bindSectionRefs(base) {
 function unbindSectionRefs() {
   Object.keys(refSection).forEach(k => {
     const R = refSection[k];
-    ["revealed", "hypotheses", "phase", "roleAssign", "answers"].forEach(n => {
+    ["revealed", "hypotheses", "triage", "phase", "roleAssign", "answers"].forEach(n => {
       if (R && R[n]) { try { R[n].off(); } catch (_) {} }
     });
   });
@@ -4827,6 +5148,7 @@ function pointSectionRefs() {
   const R = refSection[activeSlot];
   refRevealed   = R ? R.revealed   : null;
   refHypotheses = R ? R.hypotheses : null;
+  refTriage     = R ? R.triage     : null;
   refModBPhase  = R ? R.phase      : null;
   refRoleAssign = R ? R.roleAssign : null;
   /* All three module keys write into the ACTIVE slot's bucket: which container
@@ -6415,8 +6737,12 @@ function buildButtons() {
       order.forEach(i => {
         const id = group + ":" + i;
         if (id === SYNTH_ID) return;
-        container.appendChild(_makeReqBtn(group, i));
+        // Slice-1 appropriateness triage: each investigation renders as a flex
+        // row (button + inline Rule-out control on the right) when the flag is
+        // on. renderTriage() fills the box from shared room state.
+        _appendItem(container, group, i);
       });
+      if (TRIAGE_ON) container.appendChild(_makeBulkRuleOut());
       return;
     }
 
@@ -6463,7 +6789,9 @@ function buildButtons() {
         items.setAttribute("aria-label", label);
         order.forEach(i => {
           if (cluster.indices.indexOf(i) !== -1) {
-            items.appendChild(_makeReqBtn(group, i));
+            // Examination items get the same inline Rule-out control as
+            // Investigations (flag-gated); History stays a bare button.
+            _appendItem(items, group, i);
             placed[i] = true;
           }
         });
@@ -6477,7 +6805,7 @@ function buildButtons() {
         const extra = document.createElement("div");
         extra.className = "req-category req-category-other";
         extra.setAttribute("role", "group");
-        leftover.forEach(i => extra.appendChild(_makeReqBtn(group, i)));
+        leftover.forEach(i => _appendItem(extra, group, i));
         container.appendChild(extra);
       }
       return;
@@ -6969,6 +7297,11 @@ if (typeof window !== "undefined") {
   window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
   window._test_setRoomVotes     = function (m) { roomVotes = m || {}; };
   window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
+  // Module A appropriateness triage (slice 1) — drive the Order/Rule-out state
+  // and the flag without a Firebase round-trip. Inert in production.
+  window._test_setTriage        = function (m) { triage = m || {}; };
+  window._test_setTriageOn      = function (b) { TRIAGE_ON = !!b; };
+  window.renderTriage           = renderTriage;
   // Set the group-answers map (per module) so E2E can drive the
   // all-bullets-covered completion CTAs without a Firebase round-trip.
   window._test_setAnswers       = function (m) {
@@ -7050,7 +7383,7 @@ function renderContrib() {
   });
 }
 function renderCase() {
-  renderButtons(); renderFindings(); renderContrib();
+  renderButtons(); renderTriage(); renderFindings(); renderContrib();
   checkScoreEvents();
 }
 
@@ -7090,7 +7423,12 @@ function checkScoreEvents() {
   // through their decisions, never the Module-A workup milestones.
   if (SYNTH_PREREQS.length > 0 && prereqsDone && !imaging) setWant("redFlagFirst");  // ORDER: screen before scan
   if (reachedSynthesis) setWant("synthesis");
-  if (reachedSynthesis && !imaging) setWant("restraint");
+  // Suppress the coarse "restraint" milestone (+20 for never imaging) when the
+  // team earned per-item decline rewards via triage — otherwise restraint is
+  // paid twice for the same clinical judgment.
+  const anyImagingDeclined = TRIAGE_ON && ["labs:1", "labs:2", "labs:3", "labs:4"]
+    .some(id => triage[id] && triage[id].disposition === "ruleout");
+  if (reachedSynthesis && !imaging && !anyImagingDeclined) setWant("restraint");
 
   /* --- the team's typed answers --- */
   const entriesOf = mk => Object.keys(answers[mk] || {})
@@ -7128,6 +7466,26 @@ function checkScoreEvents() {
     });
   }
 
+  // Module A appropriateness triage: reward correctly ruling out an
+  // inappropriate investigation (graded by the reason via scoreEventMeta) and
+  // ordering an INDICATED test. Penalties for wrong rule-outs are handled in
+  // the penalties pass below. Points are written by the want-loop that follows.
+  if (TRIAGE_ON && triage) {
+    Object.keys(triage).forEach(id => {
+      const t = triage[id];
+      // Reward a correct rule-out ONLY when the reason earns points; an
+      // off-target reason is handled as a penalty in the penalties pass below.
+      if (t && t.disposition === "ruleout" && !revealed[id] && PENALTY_ITEM_IDS.has(id)
+          && _declinePoints(id, t.reason) >= 0) {
+        setWant("decline_" + id);
+      }
+    });
+    ITEM_IDS.forEach(id => {
+      const it = itemById(id);
+      if (revealed[id] && it && it.key && id !== SYNTH_ID) setWant("order_" + id);
+    });
+  }
+
   Object.keys(want).forEach(ev => {
     refScore.child("auto").child(ev).transaction(cur =>
       (cur == null ? { points: want[ev], at: Date.now() } : undefined)
@@ -7155,6 +7513,40 @@ function checkScoreEvents() {
           logEvent(myRoom, "score.penalty", { penaltyId: p.id, points: p.points });
         }
       }).catch(e => console.error("Penalty write failed", e));
+    });
+  }
+
+  // --- DECLINE PENALTIES: ruling out an INDICATED test costs the team a small
+  //     amount (the mirror of the decline reward). Idempotent, like the rest. ---
+  if (TRIAGE_ON && triage && typeof itemById === "function") {
+    const dpen = roomScore.penalties || {};
+    Object.keys(triage).forEach(id => {
+      const t = triage[id];
+      if (!t || t.disposition !== "ruleout" || revealed[id]) return;
+      // Inappropriate test ruled out with an OFF-TARGET reason → lose points
+      // (the decision was right; the clinical reasoning was wrong).
+      if (PENALTY_ITEM_IDS.has(id)) {
+        const pts = _declinePoints(id, t.reason);
+        if (pts >= 0) return;                                // rewarded in the want-loop
+        const rpid = "declinereason_" + id;
+        if (dpen[rpid]) return;
+        refScore.child("penalties").child(rpid).transaction(cur =>
+          (cur == null ? { points: -pts, at: Date.now() } : undefined)
+        ).then(res => {
+          if (res && res.committed) logEvent(myRoom, "score.penalty", { penaltyId: rpid, points: -pts });
+        }).catch(e => console.error("Decline-reason penalty write failed", e));
+        return;
+      }
+      // Indicated item ruled out → wrong decision (reason moot).
+      const item = itemById(id);
+      if (!item || !_isIndicated(item) || id === SYNTH_ID) return;
+      const pid = "declinepen_" + id;
+      if (dpen[pid]) return;
+      refScore.child("penalties").child(pid).transaction(cur =>
+        (cur == null ? { points: DECLINE_INDICATED_PENALTY, at: Date.now() } : undefined)
+      ).then(res => {
+        if (res && res.committed) logEvent(myRoom, "score.penalty", { penaltyId: pid, points: DECLINE_INDICATED_PENALTY });
+      }).catch(e => console.error("Decline-penalty write failed", e));
     });
   }
 
