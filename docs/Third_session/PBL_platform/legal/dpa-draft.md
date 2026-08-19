@@ -163,7 +163,7 @@ ineffective until each is closed and countersigned. Full text in Annex VI.
 |---|---|
 | L1 | The live notice names Caen + Nagoya as joint controllers, not the facilitator's institution. |
 | L2 | `compliance.html` — the page a reviewing DPO reads first — carries several claims that the code contradicts. |
-| L3 | The notice says session data is purged in **7 days**; the job purges at **30/90 days**. |
+| L3 | ~~The notice says session data is purged in **7 days**; the job purges at **30/90 days**.~~ **✅ CLOSED 2026-07** — the notice was corrected to 30/90 across all twelve published surfaces, and `tests/retention-notice-consistency.test.js` now derives the figures from the cleanup job and fails on drift. Re-verified 2026-08-19. |
 | L4 | The language model, Hugging Face and the US transfer appear **nowhere** in the notice. |
 | L5 | The French and Japanese notices state a different legal basis, a different retention period, and a consent checkbox that does not exist. |
 | L6 | Hard-coded fallback text in the page calls identified data "pseudonymised" and "anonymous". |
@@ -887,12 +887,17 @@ data — and even a 7-day purge — remains 保有個人データ carrying the f
 Arts. 33–35 rights. Neither Party may rely on a short retention period to argue
 that rights do not attach.
 
-10.7 **The published retention statement is wrong and must be corrected.** The
-live privacy notice and the join screen tell participants that "live session data
-is purged within 7 days", in all three languages. The implemented periods are 30
-and 90 days. This mismatch must be resolved — by changing the code, the notice,
-or both — before any participant is onboarded under this DPA. See Annex VI,
-item L3.
+10.7 **The published retention statement — corrected 2026-07; ✅ no longer
+blocking.** This clause required resolution of a mismatch: the live notice and
+join screen told participants, in all three languages, that "live session data is
+purged within 7 days", while the implemented periods were 30 and 90 days. It was
+resolved by correcting the TEXT, not the job — 30/90 is proportionate to the
+facilitator debrief window, and a 7-day purge would have destroyed sessions still
+in use. Twelve published surfaces were updated, and
+`tests/retention-notice-consistency.test.js` now derives the enforced figures
+from the cleanup job and the workflow, failing if any surface drifts again.
+Re-verified 2026-08-19: no "7 days" text remains in `i18n.js`, `privacy.html`
+or `locales/*.js`. See Annex VI, item L3.
 
 ---
 
@@ -1765,10 +1770,14 @@ the first page a reviewing DPO reads. Verified defects:
 | "a fully trilingual interface" | The workshop UI renders **in English only** — see L7 |
 | "Residency: data is stored on Google Firebase" | Omits `us-central1` and the US GitHub Actions leg |
 
-**L3 — BLOCKING. The published retention period is wrong.** All three language
-versions of the notice, and the join screen, say live session data is purged
-"within 7 days". The implemented job purges 30 days after close and 90 days if
-abandoned. Fix the code, the text, or both.
+**L3 — ✅ CLOSED 2026-07 (was BLOCKING).** All three language versions of the
+notice, and the join screen, said live session data was purged "within 7 days",
+while the implemented job purged 30 days after close and 90 days if abandoned.
+Resolved by correcting the TEXT: 30/90 matches the debrief window, and tightening
+the job to 7 days would have destroyed sessions still in use. Guarded since by
+`tests/retention-notice-consistency.test.js`, which parses the enforced days out
+of the job and the workflow and fails if any of the twelve published surfaces
+drifts. Re-verified 2026-08-19.
 
 **L4 — BLOCKING. The language model and its providers are not in the notice.**
 A search of `privacy.html` for "language model", "LLM", "chat" or "sub-processor"

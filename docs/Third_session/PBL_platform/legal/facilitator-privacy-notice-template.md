@@ -31,8 +31,15 @@ At the moment of collection the participant reads the **join screen**, not this
 notice. Today that screen (verified in `i18n.js`) says the controllers are
 "the CaNaMED research team (Université de Caen Normandie × Nagoya University),
 joint controllers under GDPR Art. 26 / joint users under APPI Art. 27(5)", that
-"live session data is purged within **7 days**", and points at
-`canamed-ethics@unicaen.fr`. `privacy.html` repeats both. The consent record
+that live session data is deleted **30 days after a session is closed, or 90 days
+after creation if it is never closed** — matching the deployed cleanup job — and
+points at `canamed-ethics@unicaen.fr`. `privacy.html` repeats both.
+*(This paragraph said the screen claimed a **7-day** purge. That was true when
+written and was corrected across all twelve published surfaces in 2026-07;
+`tests/retention-notice-consistency.test.js` now derives the enforced figures
+from the cleanup job and the workflow and fails if any surface drifts. Re-verified
+2026-08-19: no "7 days" text remains in `i18n.js`, `privacy.html` or
+`locales/*.js`.)* The consent record
 written to the database hard-codes a **different notice version**
 (`CONSENT_NOTICE_VERSION = "PIS-v2-2026-05"` in `script.js`) — so the audit
 trail evidences somebody else's notice, not yours.
@@ -43,19 +50,22 @@ notice version. A precedence clause in a document read afterwards does not cure
 information given wrongly at the point of collection (GDPR Art. 13(1) chapeau,
 Art. 12(1); APPI Art. 21).
 
-**B2 — The research export is not consent-gated in code.**
-`scripts/pseudonymise-export.js` and `scripts/lib/pseudonymise.js` contain **no
-reference to consent** (verified by search). The nightly export pseudonymises
-and ships the whole `/sessions` tree — every participant's answers, hypotheses,
-votes, poll free text and the five 2,000-character questionnaire boxes —
-**whether or not the participant ticked the research box**. Only the email
-roster branches on `consent.research`.
-**Do not present research as a consented, refusable purpose until** either (a)
-the export filters at source on `pool/$cid/consent.research`, or (b) you drop
-the consent framing and rely on Art. 6(1)(e) + Art. 89(1) safeguards with a
-**right to object**. Section 3 and section 10 below must be edited to match
-whichever you choose. Publishing the consent framing over the current code is a
-false statement to every participant who declines.
+**B2 — The research export is consent-gated. ✅ SATISFIED — verified 2026-08-19.**
+This precondition previously read "the research export is not consent-gated in
+code", and blocked presenting research as a refusable purpose. Route (a) was
+taken and shipped: `scripts/pseudonymise-export.js` imports `sessionHasConsent`
+/ `hasResearchConsent` from `scripts/lib/pseudonymise.js`, filters to
+`consentedCodes`, and reports the sessions and participants it excluded. The
+facilitator's identifiable CSV is gated by the same rule
+(`admin-tools.js :: _hasResearchConsent`); malformed or absent consent
+**excludes** the participant, as Art. 7 requires.
+**One qualification survives and must be stated, not dropped:**
+`scripts/backup-sessions.js` is deliberately **not** consent-gated. It is
+operational disaster recovery — a snapshot taken before the retention purge so a
+database fault or malicious wipe stays recoverable — which rests on a different
+lawful basis from research reuse; gating it would defeat the backup. Sections 3
+and 10 may therefore present research **reuse** as consented and refusable, but
+must not imply that declining means no copy of the data exists.
 
 **B3 — Decide the Art. 9 / 要配慮個人情報 question before, not after.**
 GDPR Art. 9(1) is a **prohibition** with exhaustive exceptions; it is not a
@@ -594,6 +604,13 @@ already know a specific code to look anything up.
 
 1. **Anyone in the world who has your certificate code can read that record
    without logging in.** No account is needed.
+   *(For certificates issued **before 2026-07-24** there is a further caveat:
+   their codes were derived from the session code and your participant id rather
+   than generated at random, so a classmate in the same session could work one
+   out instead of having to be given it. Codes issued since that date are random
+   and cannot be derived. Existing certificates were left valid rather than
+   re-issued, so an older one still carries a derivable code — ask us to remove
+   the entry if that concerns you.)*
 2. **The scrambling is weak.** It is a single fast hash with no secret
    ingredient added ("unsalted"), applied to a **first name** plus the session
    code — and the session code is stored **in readable form in the same
@@ -973,7 +990,7 @@ underlying platform identifiers are `europe-west1` and `us-central1`.)*
 
 | Data | What the platform does today | Our retention period |
 |---|---|---|
-| Live session data — names, answers, hypotheses, votes, poll, knowledge check, wrap-up questionnaire, **AI chat transcripts**, presence | Automatically deleted **30 days after the session is closed**, or **90 days after creation** if never closed | [RETENTION — SESSION DATA] |
+| Live session data — names, answers, hypotheses, votes, poll, knowledge check, wrap-up questionnaire, presence. **The AI-chat transcript is stored separately** (`roomChat/`, outside the session record, since 2026-07-24) and is deleted by the same job on the same schedule | Automatically deleted **30 days after the session is closed**, or **90 days after creation** if never closed | [RETENTION — SESSION DATA] |
 | Facilitator's downloaded archive (on the facilitator's own computer) | Not controlled by the platform | [RETENTION — ARCHIVE] · stored at [ARCHIVE STORAGE LOCATION] |
 | Identified nightly backup | Private cloud bucket, expires after **90 days** [TO VERIFY the expiry rule is live on the bucket] | [RETENTION — BACKUP] |
 | Pseudonymised research dataset | Display names replaced with "Student-A/B/…", universities grouped, **AI-chat transcripts dropped entirely**. **Other free text is kept as written** and a name is only replaced where it is the whole content of a name field — so a name written mid-sentence survives. **Account and device identifiers are kept**, so the file can be linked back to a person by anyone who also holds the roster or the identified backup, without the linkage file. File expires after **90 days** [TO VERIFY] | [RETENTION — RESEARCH DATASET] |

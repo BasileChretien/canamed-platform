@@ -158,9 +158,11 @@ anyone's contact details.
 *Approx. 190 words. Verification notes:*
 
 - *The 30/90-day figures come from `scripts/cleanup-stale-sessions.js`
-  (`CLOSED_DAYS` / `OPEN_DAYS`, ≈42-43). The live UI currently says "7 days"
-  (`index.html` `lobby.privacy.p3` fallback ≈970-975; `i18n.js ::
-  "lobby.privacy.p3"` ≈378) — that claim is false and must be corrected in the
+  (`CLOSED_DAYS` / `OPEN_DAYS`, ≈42-43), and the live UI now states them.
+  **(Corrected 2026-07: the UI previously said "7 days" — false against the job.
+  All twelve published surfaces were updated and
+  `tests/retention-notice-consistency.test.js` now derives the figures from the
+  job and fails on drift. Re-verified 2026-08-19.)** The remaining task is in the
   same change (§11, M1).*
 - *The Belgium claim is **only true for the database**. `hfPatient` runs in
   `us-central1` (`functions/index.js`, ≈319). The earlier draft's flat
@@ -914,10 +916,13 @@ that exists independently of this document.
   same surface as the tick-box, writing `consent.research = false` and marking
   the participant for exclusion from the next export. The certificate opt-out
   and the roster removal are email-only too.
-- **M1 — Retention.** UI says session data is purged in **7 days**
-  (`index.html` ≈970-975, `i18n.js :: "lobby.privacy.p3"` ≈378,
-  `privacy.html` ≈155/322/485). The job purges at **30 days after close / 90
-  days if never closed** (`scripts/cleanup-stale-sessions.js`, ≈42-43). Pick one
+- **M1 — Retention. ✅ DONE 2026-07.** The UI said session data was purged in
+  **7 days** while the job purged at **30 days after close / 90 days if never
+  closed**. Resolved by correcting the TEXT across all twelve published surfaces
+  — 30/90 matches the debrief window, and tightening the job to 7 days would have
+  destroyed sessions still in use. Guarded by
+  `tests/retention-notice-consistency.test.js`. Re-verified 2026-08-19. The
+  original choice was: pick one
   and make both match.
 - **M9 — Org-scoped sessions have *no* retention at all.** Verified:
   `cleanup-stale-sessions.js`, `backup-sessions.js` and `pseudonymise-export.js`

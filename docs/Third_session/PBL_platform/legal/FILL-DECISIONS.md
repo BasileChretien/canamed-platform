@@ -143,8 +143,10 @@ All verified against the code/live system on 2026-07-24:
 | Sub-processors | **Google Firebase** (hosting, RTDB, auth, functions); **Hugging Face, Inc.** (AI patient); **[SMTP PROVIDER — confirm from `functions/`]** | code |
 
 ⚠️ The **`[RETENTION PERIOD CHOSEN BY THE CONTROLLER]`** slots must use 30/90 days.
-The **live notice currently publishes 7 days**, which the code contradicts — that
-is gap L3 and must be corrected in the same pass.
+**(Gap L3 is CLOSED: the live notice published 7 days, contradicting the code, and
+was corrected across all twelve surfaces in 2026-07. It no longer needs fixing in
+this pass — the slots simply have to match the 30/90 the notice now states.
+Re-verified 2026-08-19.)**
 
 ## 6. Remaining `[OWNER]` / `[DATE]` — 58 slots, STILL OPEN
 
