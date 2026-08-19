@@ -35,8 +35,11 @@
 }
 .triage-toggle {
   align-self: flex-start;
-  min-height: 34px;
-  padding: 6px 12px;
+  /* 44px, not 34: this file's header states "Targets >=44px" and this is the
+     primary control on every investigation row, on a mobile-first workshop
+     platform. (CodeRabbit, #331.) */
+  min-height: 44px;
+  padding: 10px 12px;
   font: inherit;
   font-size: 0.86rem;
   font-weight: 600;

@@ -326,7 +326,13 @@ function _triageWants(setWant) {
     });
     ITEM_IDS.forEach(id => {
       const it = itemById(id);
-      if (revealed[id] && it && it.key && id !== SYNTH_ID) setWant("order_" + id);
+      /* _isIndicated, not it.key: this PR marks indicated items with
+         `indicated: true`. The only items carrying `key: true` are each
+         scenario's labs[0] — which IS SYNTH_ID and excluded on the next
+         clause — so gating on it.key made this reward unreachable in every
+         shipped scenario, and the "balances the decline reward" comment above
+         was describing something that never fired. (CodeRabbit, #331.) */
+      if (revealed[id] && _isIndicated(it) && id !== SYNTH_ID) setWant("order_" + id);
     });
   }
 
