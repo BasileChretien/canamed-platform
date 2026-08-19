@@ -10,6 +10,7 @@
       "README.md",
       "*.bak",
       "tests/**",
+      "legal/**",
       "package.json",
       "package-lock.json"
     ],
