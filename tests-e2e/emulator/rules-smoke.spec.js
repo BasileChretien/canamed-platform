@@ -502,6 +502,55 @@ test("rules: sections/<slot>/triage — member rule-out allowed + refinable; bad
     { disposition: "ruleout", reason: "not_indicated", by: "S", at: Date.now() }))).toMatch(/permission_denied|denied/i);
 });
 
+/* The asymmetry the triage scoring rests on, pinned at the rules layer.
+ *
+ * sections/<slot>/triage IS refinable (asserted in the test above) but
+ * score/penalties/$eventId is write-ONCE. That combination is exactly why
+ * _triageWants withholds the decline_ reward once a declinereason_ penalty has
+ * been banked: a client CANNOT clear the stale penalty, so the alternative fix
+ * — "delete it on refinement" — would be rejected by these rules and fail
+ * silently. If either half ever changes, that guard becomes either unnecessary
+ * or wrong, and this test is what says so out loud.
+ *
+ * NB scope, so nobody reads more into a green run than it earns: this pins the
+ * PREMISE, not the guard. The guard itself is client logic in _triageWants and
+ * cannot be exercised from the rules layer. */
+test("rules: score/penalties is write-ONCE while triage refines — the asymmetry the no-double-pay guard rests on", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "pen1-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
+  const ok = (p, v) => tryWrite(page, `sessions/${code}/rooms/Room 1/${p}`, v);
+
+  const pid = "score/penalties/declinereason_labs:2";
+
+  // Positive control FIRST: this member may bank the penalty at all. Without
+  // this leg every denial below would also pass on a node nobody can write.
+  expect(await ok(pid, { points: 3, at: Date.now() })).toBe("ALLOWED");
+
+  // ...and now it is immutable. Re-writing it (e.g. to a smaller cost after a
+  // refinement) is DENIED — same member, same room, same shape of payload.
+  expect(String(await ok(pid, { points: 1, at: Date.now() })))
+    .toMatch(/permission_denied|denied/i);
+
+  // ...and it cannot be DELETED either, which is the specific move the naive
+  // "clear the stale penalty on refinement" fix would have made.
+  expect(String(await ok(pid, null))).toMatch(/permission_denied|denied/i);
+
+  // Meanwhile the triage entry for that very item still refines freely, so the
+  // two halves of the asymmetry are proven against ONE session, not two runs.
+  const t = (r) => ok("sections/1/triage/labs:2",
+    { disposition: "ruleout", reason: r, by: "S", at: Date.now() });
+  expect(await t("premature")).toBe("ALLOWED");
+  expect(await t("not_indicated"), "a rule-out stays refinable while its penalty does not")
+    .toBe("ALLOWED");
+
+  // The reward node itself is unrelated to the penalty and remains writable —
+  // which is WHY the client-side guard is load-bearing: the rules do not stop
+  // a room banking both, only _triageWants does.
+  expect(await ok("score/auto/decline_labs:2", { points: 5, at: Date.now() })).toBe("ALLOWED");
+});
+
 test("rules: org sections/<slot>/triage — own org room allowed, cross-room denied (org parity)", async ({ page }) => {
   await page.goto("/");
   const uid = await waitForUid(page);
