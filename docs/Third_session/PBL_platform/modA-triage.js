@@ -75,13 +75,20 @@ function _reasonLabel(key, lang) {
   if (rv) return (typeof tc === "function") ? tc(rv.label, lang) : (rv.label.en || key);
   return key;
 }
-/* Commit a rule-out decision for `id` with `reason`. First-write-wins, like
-   reveal(); refuses if the item was already ordered (revealed). */
+/* Commit a rule-out decision for `id` with `reason`. REFINABLE: a second
+   choice for the same item REPLACES the first. Refuses if the item was already
+   ordered (revealed) — the order/rule-out split is the one-way part. */
 function writeTriage(id, reason) {
   if (!refTriage || revealed[id]) return;
   triageOpen.delete(id);
   const entry = { disposition: "ruleout", reason: reason, by: myName, at: Date.now() };
-  refTriage.child(id).transaction(cur => (cur == null ? entry : undefined))
+  /* set(), not a first-write-wins transaction: a rule-out is REFINABLE by
+     design — a team that talks it through and picks a sharper reason should be
+     able to say so. The DB rule agrees (no !data.exists() on triage/$itemId),
+     which is what the emulator test has always asserted. Scoring stays honest
+     because the reward is suppressed once a penalty has been banked for the
+     item; see _triageWants. */
+  refTriage.child(id).set(entry)
     .catch(e => console.error("Triage write failed", e));
 }
 /* The (empty) managed sibling that renderTriage() fills for one item. */
@@ -317,11 +324,19 @@ function _triageWants(setWant) {
   if (TRIAGE_ON && triage) {
     Object.keys(triage).forEach(id => {
       const t = triage[id];
-      // Reward a correct rule-out ONLY when the reason earns points; an
-      // off-target reason is handled as a penalty in the penalties pass below.
+      /* Reward a correct rule-out ONLY when the reason earns points AND no
+         penalty has already been banked against this item. Both halves matter
+         now that a rule-out is refinable: score/penalties is write-ONCE in the
+         rules (!data.exists()), so a declinereason_ penalty can never be
+         cleared — without this guard, refining an off-target reason into a best
+         one would KEEP the penalty and collect the reward on top. Refining is
+         still allowed and still improves the on-screen feedback; it just does
+         not pay twice. (CodeRabbit, #331.) */
       if (t && t.disposition === "ruleout" && !revealed[id] && PENALTY_ITEM_IDS.has(id)
           && (typeof _declinePoints === "function" ? _declinePoints : function () { return 0; })(id, t.reason) >= 0) {
-        setWant("decline_" + id);
+        if (!((roomScore && roomScore.penalties) || {})["declinereason_" + id]) {
+          setWant("decline_" + id);
+        }
       }
     });
     ITEM_IDS.forEach(id => {
@@ -388,8 +403,14 @@ function _triagePenaltyPass() {
  *   - Ruling out an INDICATED test costs a small penalty (-4).
  * Shared per-room state (mirrors `revealed`): one teammate's disposition is
  * seen by the whole room. Persisted per SLOT at sections/<slot>/triage/<itemId>, mirroring
- * `revealed`. First-write-wins and one-shot, like reveal() — a ruled-out
- * item can't then be ordered
- * (and vice-versa). See database.rules.json (sessions + orgs) and the scoring
- * hooks in checkScoreEvents / scoreEventMeta / penaltyMeta.
+ * `revealed`. REFINABLE — unlike reveal(), a rule-out can be REVISED: a team
+ * that talks it through and picks a sharper reason may say so, and the DB rule
+ * agrees (no !data.exists() on triage/$itemId), which is what the emulator test
+ * has always asserted. What stays one-way is the ORDER / RULE-OUT split: a
+ * ruled-out item can't then be ordered, and vice-versa.
+ * Refinement does NOT pay twice. score/penalties is write-ONCE in the rules, so
+ * a declinereason_ penalty can never be cleared; the reward is therefore
+ * withheld once one has been banked for that item (see _triageWants).
+ * See database.rules.json (sessions + orgs) and the scoring hooks in
+ * checkScoreEvents / scoreEventMeta / penaltyMeta.
  * ========================================================================== */
