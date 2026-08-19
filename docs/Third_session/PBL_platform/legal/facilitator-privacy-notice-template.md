@@ -522,11 +522,14 @@ or [INDEPENDENT CONTACT]. **We can delete that turn from the session record. We
 cannot recall it from the AI provider.** Your facilitator will say this out loud
 before the chat starts.
 
-**Be aware:** the transcript is readable by your room and the facilitator, and is
-included in the identified backup. It is removed
-from the pseudonymised research dataset — but that is *after the fact*, and the
-other free-text boxes are **not** removed (section 5a). The safest control is
-not typing personal information in the first place.
+**Be aware:** the transcript is readable by your room and the facilitator. Since
+2026-07-24 it sits outside the session record, so it is **not** copied into the
+identified backup and it never enters the pseudonymised research dataset at all —
+the export reads the session tree, which no longer contains it. It is deleted with
+the session. The other free-text boxes are **not** treated this way: they stay in
+the session record, are readable by everyone in the session, go into the backup,
+and survive the research export verbatim (section 5a). The safest control is
+still not typing personal information in the first place.
 
 **A technical log we also keep about the chat** (not the content of your
 messages): your account identifier, the time, the language, the number of

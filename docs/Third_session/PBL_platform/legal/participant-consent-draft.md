@@ -137,9 +137,10 @@ other rooms, not just yours. Use a first name or a nickname.
 patient, which are processed in the United States**.
 
 **How long:** session data is deleted **30 days** after your teacher closes the
-session (90 days if it is never closed), and a **private backup copy — which
-includes your AI-patient chat — is kept for up to 90 days**. A few records last
-longer: your certificate entry, and your email address if you sign in.
+session (90 days if it is never closed), and a **private backup copy is kept for
+up to 90 days** — that copy is identified, but since 2026-07-24 it does **not**
+include your AI-patient chat. A few records last longer: your certificate entry,
+and your email address if you sign in.
 
 **We also keep some things in this browser** (your name, university and the
 choices you make below) so you can rejoin if the page reloads.
@@ -263,19 +264,30 @@ Notice version `[NOTICE VERSION]` · [Full privacy notice]
   facilitator-as-controller model each controller needs its **own** version
   string, so this must become per-session configuration.
   `[FACILITATOR TO CONFIRM]` what their notice version is.*
-- ***CORRECTED — this is the most important correction in this revision.**
-  The previous draft said `consent.research` "filters the research export".
-  **It does not. Nothing does.** Verified: `grep -rn consent scripts/` returns
-  no hit outside the simulator; `scripts/pseudonymise-export.js` reads
-  `db.ref("sessions")` and pseudonymises **every** closed session's every
-  participant; `scripts/backup-sessions.js` snapshots the **whole identified**
-  `/sessions` tree and strips only `adminPasswordHash`; and the facilitator's
-  own identifiable CSV (`admin-tools.js :: researchCsvParticipantRows`, ≈415)
-  has no consent check either — while its embedded note claims the data is
-  linked "per the consent the participants gave".
-  **`consent.research` has exactly one effect in the entire codebase:**
-  `script.js :: writeRoster` (≈2328-2345). Until §11 M11 lands, Screen B may
-  **not** describe research use as optional, because it is not.*
+- ***RESOLVED 2026-08-19 — the gate landed; this entry is now history.**
+  An earlier revision of this draft made "the most important correction in this
+  revision": that `consent.research` did **not** filter the research export and
+  **nothing did** — `pseudonymise-export.js` pseudonymised every closed
+  session's every participant, and the facilitator's identifiable CSV had no
+  check either, while its own note claimed the data was linked "per the consent
+  the participants gave". That was true when written and it is **no longer
+  true.** Verified against the code 2026-08-19:
+  **(a)** `scripts/pseudonymise-export.js` imports `sessionHasConsent` /
+  `hasResearchConsent` from `scripts/lib/pseudonymise.js`, filters to
+  `consentedCodes`, and reports how many sessions and participants it excluded;
+  its gate comment names Phase-4e compliance gap 1 explicitly.
+  **(b)** the facilitator CSV is gated too — `admin-tools.js ::
+  _hasResearchConsent(cid)` (≈438) mirrors the same helper, and the row builder
+  carries a "Research-consent gate" branch. Malformed or absent consent
+  **excludes** the participant, because Art. 7 requires consent to be
+  affirmative.
+  So Screen B **may** now describe research use as optional. **One qualification
+  it must still carry:** `scripts/backup-sessions.js` is deliberately NOT
+  consent-gated. It is operational disaster recovery — it archives a snapshot
+  before the retention purge so a database fault or malicious wipe stays
+  recoverable — which rests on a different lawful basis from research reuse, and
+  gating it would defeat the backup. Screen B may therefore say research *reuse*
+  is optional; it must not imply that declining means no copy of the data exists.*
 - *The sensitive-data box is **restored**, not new. `locales/ja.js ::
   "lobby.privacy.p2"` (≈267) currently tells Japanese participants that the
   **second, optional** box covers 要配慮個人情報 (「下の2つ目の任意の同意ボックス
@@ -448,7 +460,7 @@ from GDPR and the CNIL enforces it independently.]`
 | | |
 |---|---|
 | Everything you type in the session | deleted **30 days** after the session is closed (90 days if never closed) |
-| A private backup copy — **identified, and it includes your AI-patient chat** | **90 days** |
+| A private backup copy — **identified**. Since 2026-07-24 it does **not** include your AI-patient chat: the chat moved out of the session record and the backup job never reads it | **90 days** |
 | Research dataset — **re-identifiable, not anonymous** (see below) | `[RETENTION PERIOD CHOSEN BY THE CONTROLLER]` |
 | The table that links your name to the research dataset | `[LINKAGE RETENTION — N days]` |
 | Certificate verification entry (only if you download a certificate) | up to **5 years** |

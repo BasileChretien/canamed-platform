@@ -1195,7 +1195,7 @@ widely than participants are told.
 | Identity-to-account bindings | `clientMapping`, `stableIdMapping`, `members`, `rooms/*/uidMembers` | Every session member | Maps a browser identity to a Firebase auth UID |
 | Free-text clinical answers and replies | `rooms/<room>/answers`, `answerReplies` | Every session member (not only the room) | Carries the author's display name and university |
 | Diagnostic hypotheses, prompt replies, revealed items, scores | `rooms/<room>/moduleA/*`, `moduleB/*` | Every session member | Free text capped at 200 characters |
-| **Free-text conversation with the simulated patient** | `rooms/<room>/moduleA/chat/<turnId>` | **Room members only** (the one read-gated node) | Up to 600 characters per turn; **the highest-risk field** because it is unconstrained student writing |
+| **Free-text conversation with the simulated patient** | `roomChat/<code>/<room>/chat/<turnId>` — org sessions: `roomChat/orgs/<slug>/<code>/<room>/chat/<turnId>`. **Outside the session subtree since 2026-07-24 (PR #235)**; it was `rooms/<room>/moduleA/chat/<turnId>` before that | **Room members only, and genuinely so** — its own `.read`, granted per room plus the facilitator. Before the move the room-scoped rule restricted *writing* only, because `.read` cascades from `sessions/$sessionId` | Up to 600 characters per turn; **the highest-risk field** because it is unconstrained student writing |
 | Votes and committed decisions | `rooms/<room>/votes/*` | Every session member | |
 | Presence, typing indicators, role choices, observer list | `rooms/<room>/*` | Every session member | |
 | **Knowledge-test results** | `rooms/<room>/tests/<clientId>` | **Every session member** — the node has no read rule of its own and inherits the session-wide member grant | Per-item answers, score, timestamps, `stableId`. Participants are told the test is "anonymous within your university". It is not. See Annex VI, G2 and L6 |
@@ -1263,11 +1263,20 @@ parties (patients, relatives, colleagues).
   hospital or a private training body has no exemption. See clause 3.6(d).
 
 The in-product instruction "do not type names, contact details, or anything
-personal" is a mitigation, not a control: everything typed is stored, is visible
-to other session members, and is included in the identified nightly backup. Chat
-content is excluded from the *pseudonymised* research export — but **the
-2,000-character free-text questionnaire answers, the poll free text, the room
-answers and the hypotheses are not** (Annex II §1, Annex VI R7).
+personal" is a mitigation, not a control: everything typed into the session
+record is stored, is visible to other session members, and is included in the
+identified nightly backup.
+**The AI-patient chat is the exception on all three counts since 2026-07-24.**
+It lives outside the session subtree, so it is readable only by the room and the
+facilitator; `scripts/backup-sessions.js` walks the session trees and never reads
+`roomChatPath`, so it is **not** in the nightly backup; and it never reaches the
+pseudonymised export, which reads the same session trees — it is dropped by
+absence, not by a scrubbing step. `cleanup-stale-sessions.js` purges it
+explicitly (`loc.roomChatPath`) on the session's retention date.
+That exception does **not** extend to the rest: the 2,000-character free-text
+questionnaire answers, the poll free text, the room answers and the hypotheses
+all remain in the session record, in the backup, and in the research export
+verbatim (Annex II §1, Annex VI R7).
 
 ## 7. Frequency
 
@@ -1358,7 +1367,8 @@ that could not be confirmed from the code is marked.*
 - **Unknown-key sentinels are the exception, not the rule.** Exactly **five**
   nodes carry an `$other: {".validate": false}` sentinel (`rosters` ×2,
   `roleChoices` ×2, `reports/scenarios` ×1). The participant-writable free-text
-  nodes — `moduleA/chat/$turnId`, `hypotheses/$entryId`, `promptReplies`,
+  nodes — `roomChat/…/chat/$turnId` (still no sentinel after the 2026-07-24
+  move), `hypotheses/$entryId`, `promptReplies`,
   `exchangeReplies`, `scoring/awarded`, `score/auto` and `penalties`, `events`,
   `votes/$voteId/committed`, `uidMembers`, `members`, `callForHelp` — do **not**.
   Unknown-key and oversized-field injection there is an open hardening item,
@@ -1912,7 +1922,9 @@ this item open until that test is green.
 are readable by every other participant.** Verified: `sessions/$sessionId` grants
 `.read` on the **whole subtree** to any member; `rooms/$roomId/tests/$cid` and
 `rooms/$roomId/survey/$cid` have **no read rule of their own**, so they inherit
-it. Only `moduleA/chat` is narrowed to its own room. A classmate with developer
+it. **Nothing inside the subtree is narrowed** — the AI chat, once the sole
+exception, was MOVED OUT to `roomChat/` on 2026-07-24 precisely because a deeper
+rule could not narrow it. A classmate with developer
 tools can therefore read another student's pre/post-test score and their
 **2,000-character written reflection** on the session and the facilitator —
 while the product tells them (L6) the test is "anonymous within your university"
