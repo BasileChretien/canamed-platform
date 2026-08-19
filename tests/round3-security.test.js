@@ -52,6 +52,30 @@ function scorePenaltiesOrgs() {
 // ------------------------------------------------------------------
 // S1, S2 — legacy /sessions score paths are write-once
 // ------------------------------------------------------------------
+/* Hosting serves the platform directory itself (`"public": "."`), so ANY file
+ * committed under docs/Third_session/PBL_platform/ is published unless
+ * firebase.json ignores it. Verified against production 2026-08-19:
+ * /RUNBOOK.md, /OPERATOR_INCIDENT_RUNBOOK.md and /ARCHITECTURE/data-model.md
+ * all return 200 text/markdown; only README.md (ignored) 404s.
+ *
+ * That is tolerable for docs already public in this repo. It is NOT tolerable
+ * for legal/, which holds UNREVIEWED drafts with unfilled bracketed slots — a
+ * DPA, a participant consent form and a facilitator privacy notice. The risk is
+ * not secrecy (the repo is public); it is that an unreviewed draft served from
+ * the PLATFORM'S OWN DOMAIN reads as the operative legal document, and is
+ * indexable as one. A draft consent form at canamed-69785.web.app/legal/ is a
+ * different claim from the same file in a git tree.
+ *
+ * Guarding it because the fix is one line of config that nothing else enforces,
+ * and the directory it protects does not exist on main yet (it arrives with
+ * PR #236) — so a silent drop would go unnoticed until the drafts were live. */
+test("firebase.json keeps the legal drafts OFF the public site", () => {
+  const ignore = FIREBASE.hosting.ignore || [];
+  assert.ok(ignore.includes("legal/**"),
+    'hosting.ignore must contain "legal/**" — Hosting serves "." so legal/ ' +
+    "would otherwise be published at /legal/<draft>.md on the next deploy");
+});
+
 test("Round3-S1: /sessions/.../score/auto/$eventId is write-once (!data.exists)", () => {
   const w = scoreAutoLegacy()[".write"];
   assert.ok(w.includes("!data.exists()"),
