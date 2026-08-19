@@ -584,7 +584,31 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     (reports 313 rounded) and gzip of the git blobs for the same 15 assets,
 //     which LF-normalised reads 345.4 -> 311.5 across main -> this branch —
 //     the same -34.0 KB from a completely independent measurement path.
-const FIRST_PARTY_BYTES_LIMIT_KB = 316;
+//   2026-08-19: RAISED 316 -> 320 for the Module A appropriateness-triage slice
+//     (?triage=1, default-off). A JUSTIFIED BUMP in the sense the paragraph
+//     above asks for, and it comes AFTER the reclaim, not instead of it.
+//     The feature first measured 321.3 — 5.3 KB over — because it shipped in
+//     the eager bundle despite being flag-gated and default-off, i.e. exactly
+//     the "new eager asset" the working margin was never meant to absorb.
+//     It was then lazy-split into modA-triage.js + modA-triage.css behind
+//     CanamedLoader.ensureModATriage(): the UI, the reason grading, and the
+//     triage branches that had been inline in penaltyMeta / scoreEventMeta /
+//     checkScoreEvents all moved. That reclaimed 4.8 KB, 321.3 -> 316.5, and
+//     modA-triage.spec.js now PROVES the split — its flag-off case asserts
+//     neither chunk is fetched at all.
+//     What is left eager is the SEAM and cannot be lazy-loaded: the two
+//     bindings bindSectionRefs() assigns before any chunk could load, the flag
+//     the loader reads to decide whether to fetch, and the typeof-guarded call
+//     sites in buildButtons / renderCase. ~1.5 KB, irreducible without a
+//     generic hook registry in core.
+//     WHY 320 AND NOT 317: never set the cap to the measurement. 317 would
+//     leave 0.5 KB and re-arm precisely the trap the 313 entry above records
+//     (0.12 KB headroom, PRs trimming comment PROSE to land). 320 leaves
+//     ~3.5 KB — the same working margin the 316 entry deliberately chose.
+//     STILL BANKED: the 347 -> 316 reclaim handed back 31 KB; this spends 4 of
+//     them and the lazy split earned most of that back. The next entry here
+//     should again be a reclaim, not another bump.
+const FIRST_PARTY_BYTES_LIMIT_KB = 320;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
