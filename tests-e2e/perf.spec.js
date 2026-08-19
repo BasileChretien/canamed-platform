@@ -699,6 +699,12 @@ test.describe("Perf budget — splash", () => {
       // from initEndPoll(), so the splash never fetches it at all; listed here
       // so that stays true even if it is ever prefetched.
       "takehome.js",
+      /* Module A appropriateness triage (2026-08-19): the feature is gated
+         behind ?triage=1 and default-off, so shipping it eagerly cost every
+         splash ~5 KB gz for a path almost no session takes — which is what
+         pushed this budget to 321.3 KB. Loaded by ensureModATriage() only
+         when the flag is on. */
+      "modA-triage.js", "modA-triage.css",
       // section-content.js (2026-07-28, S3a): a roleplay section's authorable
       // content renderers, extracted from script.js and chained into
       // ensureRoomStyles(). Room-only, never on the splash path.

@@ -19,13 +19,25 @@ async function setup(page, opts) {
     if (window.CanamedLoader && window.CanamedLoader.ensureCaseContent) {
       await window.CanamedLoader.ensureCaseContent();
     }
+    /* The triage engine is a LAZY chunk (modA-triage.js + .css), fetched only
+       when the flag is on. Set the flag the way a real session does, then go
+       through the loader — driving renderTriage() without this would test a
+       function that production never loads. */
+    if (args.on) {
+      try { localStorage.setItem("canamedModATriage", "1"); } catch (e) {}
+      if (window.CanamedLoader && window.CanamedLoader.ensureModATriage) {
+        await window.CanamedLoader.ensureModATriage();
+      }
+    }
     window._test_setTriageOn(!!args.on);
     if (window._test_rebuildCaseDerived) window._test_rebuildCaseDerived();
     window._test_setRevealed(args.rev || {});
     window._test_setTriage(args.tri || {});
     window.buildButtons();
     window.renderButtons();
-    window.renderTriage();
+    /* Guarded exactly like the production call site: with the flag off the
+       LAZY chunk is never fetched, so renderTriage does not exist. */
+    if (typeof window.renderTriage === "function") window.renderTriage();
     return true;
   }, opts);
 }
@@ -178,5 +190,13 @@ test.describe("Module A — appropriateness triage (Order / Rule-out)", () => {
     await setup(page, { on: false, rev: {}, tri: {} });
     const boxes = await page.evaluate(() => document.querySelectorAll(".req-triage").length);
     expect(boxes, "flag off => no triage boxes built").toBe(0);
+    /* Stronger since the split: flag off must not even FETCH the engine. This
+       is the whole point of making it lazy — it was ~5 KB gz on every splash. */
+    const loaded = await page.evaluate(() => ({
+      js: typeof window.renderTriage === "function",
+      css: !!document.getElementById("moda-triage-css")
+    }));
+    expect(loaded.js, "flag off => modA-triage.js never loaded").toBe(false);
+    expect(loaded.css, "flag off => modA-triage.css never linked").toBe(false);
   });
 });
