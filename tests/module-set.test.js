@@ -327,7 +327,7 @@ test("M4d: the branched bucket is subscribed — now per SLOT", () => {
   assert.match(SCRIPT, /answers:\s+db\.ref\(base \+ "\/answers\/sections\/" \+ slot\)/,
     "the per-slot ref must be created");
   assert.match(SCRIPT, /R\.answers\.on\("value"/, "…and subscribed");
-  assert.match(SCRIPT, /\["revealed", "hypotheses", "phase", "roleAssign", "answers"\]/,
+  assert.match(SCRIPT, /\["revealed", "hypotheses", "triage", "phase", "roleAssign", "answers"\]/,
     "…and torn down with the rest of the slot's refs");
   assert.ok(!/db\.ref\(base \+ "\/answers\/moduleBranched"\)/.test(SCRIPT),
     "the module-literal answers node is retired");

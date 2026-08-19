@@ -111,7 +111,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v146";
+  var SHELL_VERSION = "v147";
   // ROOT-ABSOLUTE, and the leading "/" is load-bearing (2026-08-06).
   // firebase.json rewrites `/o/**` -> /index.html for the multi-tenant org
   // entry point, so on a page served at /o/<slug>/ a BARE filename resolves to
@@ -215,6 +215,43 @@
      Classic script — see its header for why that matters (it reads script.js
      top-level `let`s under their bare names). */
   function ensureTakeHome() { return loadScript(v("takehome.js")); }
+  /* modA-triage.js + .css — the ?triage=1 slice, LAZY because the feature is
+     default-off and cost ~5 KB gz on every splash. Resolves only when BOTH are
+     in (ensureRoomStyles shape). No-ops when the flag is off. */
+  function triageFlagOn() {
+    try {
+      var p = new URLSearchParams(location.search);
+      if (p.get("triage") === "1") { localStorage.setItem("canamedModATriage", "1"); return true; }
+      if (p.get("triage") === "0") { localStorage.removeItem("canamedModATriage"); return false; }
+      return localStorage.getItem("canamedModATriage") === "1";
+    } catch (e) { return false; }
+  }
+  function ensureModATriage() {
+    if (!triageFlagOn()) return Promise.resolve();
+    return Promise.all([loadScript(v("modA-triage.js")), _triageCss()]).then(function () {});
+  }
+  function _triageCss() {
+    if (typeof document === "undefined") return Promise.resolve();
+    var link = document.getElementById("moda-triage-css");
+    if (!link) {
+      link = document.createElement("link");
+      link.id = "moda-triage-css";
+      link.rel = "stylesheet";
+      link.href = v("modA-triage.css");
+      (document.head || document.documentElement).appendChild(link);
+    }
+    if (link.sheet) return Promise.resolve();
+    return new Promise(function (resolve) {
+      link.addEventListener("load", function () { resolve(); }, { once: true });
+      link.addEventListener("error", function () {
+        /* A dead <link> never re-fires, so drop it and let a retry be fresh.
+           Resolve rather than reject: an unstyled rule-out control is far
+           better than a room that will not open. */
+        try { link.remove(); } catch (e) {}
+        resolve();
+      }, { once: true });
+    });
+  }
   /* script-admin.js (2026-08-05) — the FACILITATOR DASHBOARD engine, split out
      of the eager script.js as slice 2 of
      ARCHITECTURE/eager-bundle-reclaim-plan.md. This is the extraction the
@@ -417,6 +454,8 @@
     ensurePdfmake,
     ensureStudentPdf,
     ensureTakeHome,
+    ensureModATriage,
+    triageFlagOn,
     ensureAdminApp,
     modALLMFlagOn,
     ensureModALlm

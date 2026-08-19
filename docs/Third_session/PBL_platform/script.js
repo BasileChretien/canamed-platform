@@ -183,9 +183,31 @@ function rebuildCaseDerived() {
 rebuildCaseDerived();
 function itemById(id) { const [g, i] = id.split(":"); return CASE[g][+i]; }
 
-/* swap the global content to a different scenario. `customContent` is an
-   already-parsed object (from a session's scenarioCustomJson); `id` is one of
-   the keys in window.CANAMED_SCENARIOS. customContent wins if both are given. */
+/* Module A appropriateness triage — the state the SECTION ENGINE binds. The
+   feature itself (UI, grading, scoring hooks) is the LAZY modA-triage.js;
+   see its header. Only the flag and these two bindings stay eager, because
+   bindSectionRefs() assigns them before any chunk could have loaded. */
+let triage = {};                       // itemId -> { disposition:"ruleout", reason, by, at }
+let refTriage = null;
+/* ONE reader of the flag: the loader owns it, because it must decide whether to
+   fetch the chunk before any of this file could answer. A second copy here
+   would be a second thing to keep in step. */
+let TRIAGE_ON = (function () {
+  try { return !!(window.CanamedLoader && window.CanamedLoader.triageFlagOn()); }
+  catch (e) { return false; }
+})();
+
+/* Append item `i` of `group` to `parent`: as a triage-wrapped row for the
+   Examination + Investigations panels when the flag is on, else the bare button
+   (unchanged history / flag-off behaviour). */
+function _appendItem(parent, group, i) {
+  if (TRIAGE_ON && typeof _makeReqItem === "function"
+      && (group === "labs" || group === "exam")) {
+    parent.appendChild(_makeReqItem(group, i));
+  } else {
+    parent.appendChild(_makeReqBtn(group, i));
+  }
+}
 function applyScenario(id, customContent) {
   let sc = null;
   if (customContent && typeof customContent === "object") sc = customContent;
@@ -1341,6 +1363,11 @@ function penaltyMeta(ev) {
       };
     }
   }
+  /* decline penalties live in the LAZY modA-triage.js chunk */
+  if (typeof _triagePenaltyMeta === "function") {
+    const _tpm = _triagePenaltyMeta(ev, lang);
+    if (_tpm) return _tpm;
+  }
   if (typeof PENALTIES === "undefined") return null;
   const p = PENALTIES.find(pp => pp.id === ev) || null;
   if (!p) return null;
@@ -1383,6 +1410,11 @@ function scoreEventMeta(ev) {
       why: tc(d.option && d.option.why, lang),
       did: "Your team voted together and locked in the safest answer."
     };
+  }
+  /* triage rewards live in the LAZY modA-triage.js chunk */
+  if (typeof _triageScoreMeta === "function") {
+    const _tsm = _triageScoreMeta(ev, lang);
+    if (_tsm) return _tsm;
   }
   const m = /^concept([AB])_(.+)$/.exec(ev);
   if (m && typeof SCORING !== "undefined") {
@@ -2086,7 +2118,7 @@ let sectionState = {};     // slot → { revealed: {…}, hypotheses: {…} }
 let activeSlot = 1;        // the slot whose state the pointers below refer to
 function slotState(slot) {
   const k = String(slot);
-  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {}, answers: {} };
+  if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {}, triage: {}, answers: {} };
   return sectionState[k];
 }
 /* Repoint the legacy globals at the slot on screen. Called whenever the viewed
@@ -2099,6 +2131,7 @@ function refreshActiveSlotState() {
   const st = slotState(activeSlot);
   revealed = st.revealed;
   hypotheses = st.hypotheses;
+  triage = st.triage;
   /* S2b-2 — and the WRITE refs follow the same slot, so an item revealed while
      looking at section 3 lands in section 3's node, not section 1's. */
   if (typeof pointSectionRefs === "function") pointSectionRefs();
@@ -4564,6 +4597,12 @@ function enterRoom(roomName, asAdmin) {
   // stylesheet is in flight while the room is still being wired up. Warmed even
   // earlier from the lobby (see below), so this is normally already resolved.
   try { CanamedLoader.ensureRoomStyles().catch(function () {}); } catch (e) {}
+  /* The ?triage=1 chunk + sheet, in parallel. No-ops when the flag is off;
+     every call site into it is typeof-guarded, so late or never degrades to
+     the flag-off UI. */
+  try { CanamedLoader.ensureModATriage().then(function () {
+    if (typeof renderTriage === "function") renderTriage();
+  }, function () {}); } catch (e) {}
   if (refStage) teardownRoom();      // switching rooms: drop the old subscriptions
   isRoomAdmin = asAdmin;
   myRoom = roomName;
@@ -4705,6 +4744,10 @@ function bindSectionRefs(base) {
     const R = {
       revealed:   db.ref(p + "/revealed"),
       hypotheses: db.ref(p + "/hypotheses"),
+      /* Triage rides the SLOT, exactly like `revealed` it mirrors. On a
+         module-literal node it would hit the S6 bug below — two PBL slots and
+         the readers come up empty. */
+      triage:     db.ref(p + "/triage"),
       phase:      db.ref(p + "/phase"),
       roleAssign: db.ref(p + "/roleAssign"),
       /* S6 — answers move per slot too. They were the last room state still on
@@ -4713,6 +4756,13 @@ function bindSectionRefs(base) {
       answers:    db.ref(base + "/answers/sections/" + slot)
     };
     refSection[slot] = R;
+
+    /* Shared per-room triage (Order vs Rule-out) — same shape as revealed. */
+    R.triage.on("value", snap => {
+      slotState(slot).triage = snap.val() || {};
+      refreshActiveSlotState();
+      renderCase();
+    });
 
     R.revealed.on("value", snap => {
       slotState(slot).revealed = snap.val() || {};
@@ -4787,7 +4837,7 @@ function bindSectionRefs(base) {
 function unbindSectionRefs() {
   Object.keys(refSection).forEach(k => {
     const R = refSection[k];
-    ["revealed", "hypotheses", "phase", "roleAssign", "answers"].forEach(n => {
+    ["revealed", "hypotheses", "triage", "phase", "roleAssign", "answers"].forEach(n => {
       if (R && R[n]) { try { R[n].off(); } catch (_) {} }
     });
   });
@@ -4827,6 +4877,7 @@ function pointSectionRefs() {
   const R = refSection[activeSlot];
   refRevealed   = R ? R.revealed   : null;
   refHypotheses = R ? R.hypotheses : null;
+  refTriage     = R ? R.triage     : null;
   refModBPhase  = R ? R.phase      : null;
   refRoleAssign = R ? R.roleAssign : null;
   /* All three module keys write into the ACTIVE slot's bucket: which container
@@ -6415,8 +6466,12 @@ function buildButtons() {
       order.forEach(i => {
         const id = group + ":" + i;
         if (id === SYNTH_ID) return;
-        container.appendChild(_makeReqBtn(group, i));
+        // Slice-1 appropriateness triage: each investigation renders as a flex
+        // row (button + inline Rule-out control on the right) when the flag is
+        // on. renderTriage() fills the box from shared room state.
+        _appendItem(container, group, i);
       });
+      if (TRIAGE_ON && typeof _makeBulkRuleOut === "function") container.appendChild(_makeBulkRuleOut());
       return;
     }
 
@@ -6463,7 +6518,9 @@ function buildButtons() {
         items.setAttribute("aria-label", label);
         order.forEach(i => {
           if (cluster.indices.indexOf(i) !== -1) {
-            items.appendChild(_makeReqBtn(group, i));
+            // Examination items get the same inline Rule-out control as
+            // Investigations (flag-gated); History stays a bare button.
+            _appendItem(items, group, i);
             placed[i] = true;
           }
         });
@@ -6477,7 +6534,7 @@ function buildButtons() {
         const extra = document.createElement("div");
         extra.className = "req-category req-category-other";
         extra.setAttribute("role", "group");
-        leftover.forEach(i => extra.appendChild(_makeReqBtn(group, i)));
+        leftover.forEach(i => _appendItem(extra, group, i));
         container.appendChild(extra);
       }
       return;
@@ -6969,6 +7026,14 @@ if (typeof window !== "undefined") {
   window._test_setAnswerReplies = function (m) { answerReplies = m || {}; };
   window._test_setRoomVotes     = function (m) { roomVotes = m || {}; };
   window._test_setHypotheses    = function (m) { hypotheses = m || {}; };
+  // Module A appropriateness triage (slice 1) — drive the Order/Rule-out state
+  // and the flag without a Firebase round-trip. Inert in production.
+  window._test_setTriage        = function (m) { triage = m || {}; };
+  window._test_setTriageOn      = function (b) { TRIAGE_ON = !!b; };
+  /* renderTriage lives in the LAZY modA-triage.js. It is a classic-script
+     function declaration, so it is ALREADY window.renderTriage once that chunk
+     loads — re-exporting it here would overwrite the real one with a wrapper
+     that calls itself. Nothing to do.*/
   // Set the group-answers map (per module) so E2E can drive the
   // all-bullets-covered completion CTAs without a Firebase round-trip.
   window._test_setAnswers       = function (m) {
@@ -7050,7 +7115,9 @@ function renderContrib() {
   });
 }
 function renderCase() {
-  renderButtons(); renderFindings(); renderContrib();
+  renderButtons();
+  if (typeof renderTriage === "function") renderTriage();
+  renderFindings(); renderContrib();
   checkScoreEvents();
 }
 
@@ -7090,7 +7157,12 @@ function checkScoreEvents() {
   // through their decisions, never the Module-A workup milestones.
   if (SYNTH_PREREQS.length > 0 && prereqsDone && !imaging) setWant("redFlagFirst");  // ORDER: screen before scan
   if (reachedSynthesis) setWant("synthesis");
-  if (reachedSynthesis && !imaging) setWant("restraint");
+  // Suppress the coarse "restraint" milestone (+20 for never imaging) when the
+  // team earned per-item decline rewards via triage — otherwise restraint is
+  // paid twice for the same clinical judgment.
+  const anyImagingDeclined = TRIAGE_ON && ["labs:1", "labs:2", "labs:3", "labs:4"]
+    .some(id => triage[id] && triage[id].disposition === "ruleout");
+  if (reachedSynthesis && !imaging && !anyImagingDeclined) setWant("restraint");
 
   /* --- the team's typed answers --- */
   const entriesOf = mk => Object.keys(answers[mk] || {})
@@ -7128,6 +7200,9 @@ function checkScoreEvents() {
     });
   }
 
+  /* triage want-events live in the LAZY modA-triage.js chunk */
+  if (typeof _triageWants === "function") _triageWants(setWant);
+
   Object.keys(want).forEach(ev => {
     refScore.child("auto").child(ev).transaction(cur =>
       (cur == null ? { points: want[ev], at: Date.now() } : undefined)
@@ -7157,6 +7232,9 @@ function checkScoreEvents() {
       }).catch(e => console.error("Penalty write failed", e));
     });
   }
+
+  /* triage penalty pass lives in the LAZY modA-triage.js chunk */
+  if (typeof _triagePenaltyPass === "function") _triagePenaltyPass();
 
   // --- TEAM DECISIONS: a locked-in vote earns points if correct, or costs
   //     points if wrong (penalty 0 = teaching feedback only). Idempotent. ---
