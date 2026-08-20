@@ -2,9 +2,25 @@
  *
  * The verifier enters the ID printed on the certificate AND the name on it.
  * We read the credential by exact ID (rule: .read true on /credentials/$id,
- * .read false on the parent — so the registry can NOT be listed), hash the
- * verifier's typed name + session, and confirm a match. We never publish the
- * name; only "valid" / "no match" / "not found" is returned.
+ * .read false on the parent — so the registry can NOT be listed), then hash the
+ * verifier's typed name TOGETHER WITH the session code STORED IN THE RECORD,
+ * and confirm a match. We never publish the name; only "valid" / "no match" /
+ * "not found" is returned.
+ *
+ * That second hash input is worth being precise about, because it is easy to
+ * misread and it constrains the payload. The verifier types TWO things only —
+ * the id and the name (#verify-id, #verify-name). The session is NOT typed; it
+ * comes from `cred.session`. So `credentials/$id.session` is load-bearing:
+ * remove it from the published payload and credentialNameHash() has nothing to
+ * recompute against, and every certificate fails to verify. (It is also shown
+ * in the result line, but that use is cosmetic.)
+ *
+ * The consequence for privacy is deliberate and disclosed: the record is
+ * `.read: true`, so the session CODE is readable by anyone holding a
+ * certificate id — see the facilitator privacy notice, section 6. Publishing an
+ * opaque per-session token instead of the joinable code would work equally well
+ * for hashing and would remove that exposure, but it changes the hash input, so
+ * it needs a legacy path for certificates already issued.
  *
  * CSP-safe: external script, no inline handlers, no eval, no innerHTML of
  * untrusted input. Pure-utils provides credentialNameHash() and normalizeName().
