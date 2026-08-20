@@ -667,16 +667,24 @@ and we can link the entry back to you for as long as we hold such a list.
 be justified, not asserted:
 - The **session record is deleted** 30 days after the session closes (90 if it is
   never closed), and the certificate-code map (`certIds/`) is deleted with it.
-- The **certificate entry itself survives** for about five years.
-- The **facilitator's participant list — which holds your name — is not deleted
-  by any automated job.** No script touches it; its retention is an open item on
-  the operator's side.
-So the link survives because that list survives. If the list were deleted on a
-defined schedule, the entry would become a scrambled value whose only remaining
-attack is guessing candidate names — still not anonymous, but no longer directly
-linkable by us. **[CONTROLLER TO DECIDE: a deletion schedule for the participant
-list, or an explicit statement that the link is retained for the life of the
-certificate entry.]**
+- Your **participation record** — the entry showing that you took part, with your
+  name — is **kept for as long as the certificate is verifiable, about five
+  years**, and is then deleted with it. Each certificate carries its own expiry
+  date, recorded when it is issued.
+- The **certificate entry itself survives** for that same period.
+
+**This is deliberate, and it is why the certificate works.** A certificate that
+nobody can check is not a certificate. To answer "did this person attend this
+session", we have to still hold the record that says you did — so we keep it,
+for exactly as long as the certificate it supports.
+
+**It is kept for that purpose only.** Participation data is not research data.
+Your participation record is retained to verify certificates and for nothing
+else; it is not part of the research dataset, is not shared with the research
+team on that basis, and declining the research box does not remove it — nor does
+consenting to research extend it. If you would rather not have a verifiable
+certificate at all, tell your facilitator and we will delete the entry: the two
+stand or fall together.
 
 *Why we are allowed to do this:* `[LEGAL BASIS — if GDPR Art. 6(1)(f), name the
 interest. NOTE: APPI has **no** legitimate-interests basis, so a Japanese
