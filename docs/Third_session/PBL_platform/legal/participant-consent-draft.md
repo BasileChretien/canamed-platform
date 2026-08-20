@@ -668,10 +668,36 @@ be justified, not asserted:
 - The **session record is deleted** 30 days after the session closes (90 if it is
   never closed), and the certificate-code map (`certIds/`) is deleted with it.
 - Your **participation record** — the entry showing that you took part, with your
-  name — is **kept for as long as the certificate is verifiable, about five
-  years**, and is then deleted with it. Each certificate carries its own expiry
-  date, recorded when it is issued.
-- The **certificate entry itself survives** for that same period.
+  name — is **intended to be kept for as long as the certificate is verifiable,
+  about five years**, and no longer. Each certificate is stamped with its own
+  expiry date when it is issued, and the database refuses any date more than
+  about five years out, so nothing can quietly claim a longer life.
+- The **certificate entry itself** is kept for that same period.
+
+> ⚠️ **[CONTROLLER — DO NOT PUBLISH THIS SECTION AS WRITTEN UNTIL THE DELETION
+> PATH EXISTS.]** The five years above is the **intended** retention, not an
+> enforced one. Verified against the code on 2026-08-20:
+>
+> - **No job deletes these records.** `retentionUntil` is written and capped, but
+>   nothing ever reads it back — no script in `scripts/` refers to it or to
+>   `credentials/` at all. The daily cleanup deletes the session and the
+>   code→certificate map (`certIds/`), and stops there.
+> - **The records are write-once** (`credentials/$certId` allows a write only when
+>   no value exists), so a participant cannot delete their own even in principle.
+>   Only an operator using the admin SDK can, and no such procedure is documented.
+> - **`retentionUntil` is not a required field.** The rules cap it when it is
+>   present; they do not insist it be there. Our own client always writes it, so
+>   this is a latent gap rather than a live one — but it is not a guarantee.
+>
+> So a promise that these records "are deleted after five years" would be
+> untrue at the moment of publication, and the storage-limitation principle
+> (GDPR Art. 5(1)(e)) is not satisfied by an intention. **Two honest options:**
+> **(a)** implement expiry-based deletion plus a request-driven path, and then
+> publish the wording above as fact; or **(b)** publish it as the intended
+> period, say plainly that deletion is currently performed by hand on request,
+> and give participants the address to ask. Option (a) is the one that closes
+> Annex VI item **G6**; option (b) is honest but leaves G6 open.
+> Tracked as G6 — this note must be resolved, not merely deleted.
 
 **This is deliberate, and it is why the certificate works.** A certificate that
 nobody can check is not a certificate. To answer "did this person attend this
@@ -683,8 +709,10 @@ Your participation record is retained to verify certificates and for nothing
 else; it is not part of the research dataset, is not shared with the research
 team on that basis, and declining the research box does not remove it — nor does
 consenting to research extend it. If you would rather not have a verifiable
-certificate at all, tell your facilitator and we will delete the entry: the two
-stand or fall together.
+certificate at all, tell your facilitator and the entry will be removed: the two
+stand or fall together. *(Controller: this removal is performed by hand by an
+operator with administrative access — the records are write-once, so there is no
+self-service path. Name the contact who does it before publishing.)*
 
 *Why we are allowed to do this:* `[LEGAL BASIS — if GDPR Art. 6(1)(f), name the
 interest. NOTE: APPI has **no** legitimate-interests basis, so a Japanese
