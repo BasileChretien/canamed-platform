@@ -143,9 +143,85 @@ function roomClaimMatches(claim, roomId) {
   return room === String(roomId);
 }
 
+/* DATA-RESIDENCY PIN (2026-08-20).
+ *
+ * Hugging Face's router picks an inference provider PER REQUEST unless the
+ * model id carries an explicit ":provider" suffix. Unpinned, the recipient of
+ * a participant's free-text clinical chat varies from turn to turn, which is
+ * why the DPA could not assess that leg at all: there was no fixed importer to
+ * name. Pinning makes that recipient a fixed, documented party, and an
+ * EU-resident one keeps the inference itself inside the EEA. It does not close
+ * the whole leg on its own: the request still passes through the Hugging Face
+ * router, which is a separate recipient with its own location and contract.
+ *
+ * FAIL-CLOSED ON PURPOSE. A malformed provider string throws rather than
+ * falling back to the unpinned id: sending the data to an unknown provider is
+ * the exact failure this control exists to prevent, and a thrown error is at
+ * least visible in the function log. An EMPTY provider is a deliberate opt-out
+ * (it restores router "auto"), so it is allowed — it has to be a conscious
+ * configuration choice, not a typo. */
+function applyProviderPin(model, provider) {
+  const m = String(model == null ? "" : model).trim();
+  if (!m) throw new Error("applyProviderPin: empty model id");
+  if (provider == null) return m;      // unset: the router picks (auto)
+  // Coercing here would be a trap: String(42) is "42", which SATISFIES the
+  // pattern below and would pin to a provider that cannot exist. A non-string
+  // is a configuration error and is treated as one.
+  if (typeof provider !== "string") {
+    throw new Error("applyProviderPin: invalid provider id " + JSON.stringify(provider));
+  }
+  const p = provider.trim();
+  if (!p) return m;                    // explicit opt-out: the router picks (auto)
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(p)) {
+    throw new Error("applyProviderPin: invalid provider id " + JSON.stringify(p));
+  }
+  // Only the segment after the final "/" may carry a ":provider" suffix.
+  const tail = m.slice(m.lastIndexOf("/") + 1);
+  const colon = tail.indexOf(":");
+  if (colon !== -1) {
+    // An id that ALREADY names a provider must name the SAME one. Letting a
+    // suffix in HF_MODEL silently win over HF_PROVIDER would send the chat to
+    // one provider while every other artefact — .env, the lockstep test, the
+    // DPA transfer table — reported the other. That divergence is invisible at
+    // runtime: the chat works perfectly, against the wrong recipient.
+    const existing = tail.slice(colon + 1);
+    if (existing !== p) {
+      throw new Error("applyProviderPin: model id pins " + JSON.stringify(existing) +
+        " but HF_PROVIDER is " + JSON.stringify(p) + " — set one or make them agree");
+    }
+    return m;                          // already pinned, and consistently so
+  }
+  return m + ":" + p;
+}
+
+/* Qwen3.x and other hybrid-reasoning models emit a <think> … </think> block
+ * BEFORE the answer, and do so BY DEFAULT. The request asks for it to be off
+ * (chat_template_kwargs.enable_thinking), but that flag is honoured by the
+ * serving stack rather than guaranteed by the router, so the reply is stripped
+ * here too — a simulated patient must never narrate its own reasoning to a
+ * student.
+ *
+ * An UNCLOSED block is stripped to the end of the string: max_tokens can cut a
+ * reply off mid-thought, and what is left is reasoning, not speech. That can
+ * legitimately empty the reply, which the caller already handles as an empty
+ * completion (falling back to the stub) — the right outcome, because showing
+ * the model's private reasoning to a student is worse than showing nothing.
+ *
+ * Deliberately NOT backreferenced (<think>…</think\> only): a mismatched pair
+ * should still be stripped. Over-stripping loses a reply; under-stripping leaks
+ * reasoning into the consultation. */
+const REASONING_BLOCK = /<(?:think|thinking|reasoning)>[\s\S]*?<\/(?:think|thinking|reasoning)>/gi;
+const REASONING_OPEN  = /<(?:think|thinking|reasoning)>[\s\S]*$/i;
+
+function stripReasoning(text) {
+  if (text == null) return "";
+  return String(text).replace(REASONING_BLOCK, "").replace(REASONING_OPEN, "").trim();
+}
+
 module.exports = {
   MAX_BODY_MESSAGES, MAX_BODY_CHARS, SERVER_GUARD,
   isAllowedHfUrl, validateMessages, buildMessages, normLang,
   safeCharacterName, buildRolePrefixRe, dayKey,
-  roomClaimPath, roomClaimMatches
+  roomClaimPath, roomClaimMatches,
+  applyProviderPin, stripReasoning
 };

@@ -166,8 +166,38 @@ exports.sendQueuedMail = onValueCreated({
 // model, so it returns 400 "is not a chat model" via the OpenAI-compat
 // route. Llama-3.1-8B-Instruct is universally available on the free tier
 // as a chat model and is excellent for instruction-following roleplay.
-const HF_DEFAULT_MODEL = "meta-llama/Llama-3.1-8B-Instruct";
-const HF_DEFAULT_MODEL_JA = "Qwen/Qwen2.5-7B-Instruct";
+/* MODELS — chosen for DATA RESIDENCY first, capability second (2026-08-20).
+ *
+ * Both previous defaults had to change, because neither was served by any
+ * provider whose location can be pinned inside the EEA:
+ *   - meta-llama/Llama-3.1-8B-Instruct  -> novita, nscale, featherless-ai, deepinfra
+ *   - Qwen/Qwen2.5-7B-Instruct          -> featherless-ai only (together errors)
+ * nscale looks European and is not pinnable to a place: it is a UK company
+ * running 13 data centres including US sites, so "nscale" names a counterparty,
+ * not a jurisdiction. A DPA needs the jurisdiction.
+ *
+ * Qwen3.5-9B on OVHcloud is served from Gravelines, FRANCE, by a French
+ * company. That fixes the ONWARD recipient — named, assessable, EU-resident —
+ * but the request still goes through the Hugging Face ROUTER, a separate
+ * recipient whose processing location and contract are not established, so this
+ * pin alone does not make the leg intra-EEA. It also collapses the
+ * EN/JA split: the model covers 201 languages, which subsumes the reason the JA
+ * route existed (Mistral-7B's Japanese was too weak, so JA was sent to Qwen).
+ * Both languages now go to one Qwen, and HF_MODEL_JA is kept as a param so the
+ * split can be restored from .env without a code change.
+ *
+ * ⚠️ It is a HYBRID-REASONING model: it emits <think> … </think> by default.
+ * Two independent mitigations, because one is not guaranteed — the request
+ * disables thinking (chat_template_kwargs, honoured by the serving stack) and
+ * hf-helpers.stripReasoning removes any block that arrives anyway.
+ *
+ * ⚠️ NOT YET EXERCISED AGAINST THE LIVE ENDPOINT. Model choice changes how the
+ * simulated patient talks, and the prompt was tuned against Llama-3.1-8B. Run a
+ * real EN and JA turn after deploying and re-tune PROMPT_VERSION if the replies
+ * drift from the 2-4 sentence in-character register. */
+const HF_DEFAULT_MODEL = "Qwen/Qwen3.5-9B";
+const HF_DEFAULT_MODEL_JA = "Qwen/Qwen3.5-9B";
+const HF_DEFAULT_PROVIDER = "ovhcloud";
 const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 // Pure, unit-tested helpers (functions/lib/hf-helpers.js + tests/hf-helpers.test.js):
 // the server guard (FINDING-01), HF_URL allowlist (FINDING-02), message
@@ -175,7 +205,8 @@ const HF_DEFAULT_URL   = "https://router.huggingface.co/v1/chat/completions";
 // body cap lives there (system prompt ~3800 chars + ~6 transcript turns).
 const { SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang,
         safeCharacterName, buildRolePrefixRe, dayKey,
-        roomClaimPath, roomClaimMatches } = require("./lib/hf-helpers");
+        roomClaimPath, roomClaimMatches,
+        applyProviderPin, stripReasoning } = require("./lib/hf-helpers");
 const MAX_REPLY_CHARS   = 600;
 const RATE_LIMIT_TURNS  = 40;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -186,7 +217,7 @@ const SESSION_RATE_LIMIT_TURNS = 250;
 // without a code change; sized to stay inside the Cloud Functions free tier.
 const RATE_LIMIT_DAILY_TURNS = 200;
 const GLOBAL_DAILY_CAP = defineInt("HF_GLOBAL_DAILY_CAP", { default: 4000 });
-const PROMPT_VERSION = "modA-llm@2.4";   // bumped to force redeploy: per-scenario personas — guard generalised from "patient" to "character", reply prefix stripped by the scenario's character name — prev 2.3: chattier patient (2–4 sentences, max_tokens 320, temp 0.55)
+const PROMPT_VERSION = "modA-llm@2.5";   // bumped to force redeploy: EU data-residency pin (HF_PROVIDER=ovhcloud, Gravelines FR) + Qwen3.5-9B for both languages + <think> stripping — prev 2.4: per-scenario personas, guard generalised to "character"
 
 
 const MODA_LLM_ENABLED = defineBoolean("MODA_LLM_ENABLED", { default: false });
@@ -194,6 +225,10 @@ const HF_TOKEN         = defineSecret("HF_TOKEN");
 const HF_URL           = defineString("HF_URL",       { default: HF_DEFAULT_URL });
 const HF_MODEL         = defineString("HF_MODEL",     { default: HF_DEFAULT_MODEL });
 const HF_MODEL_JA      = defineString("HF_MODEL_JA",  { default: HF_DEFAULT_MODEL_JA });
+// Inference provider to pin the router to. Set HF_PROVIDER="" in .env to opt
+// out and let the router choose per request — which reinstates the varying,
+// unassessable recipient the DPA flags, so it is a decision, not a default.
+const HF_PROVIDER      = defineString("HF_PROVIDER", { default: HF_DEFAULT_PROVIDER });
 // App Check enforcement toggle (2026-05-28). Defaults to false because the
 // platform's CANAMED_RECAPTCHA_SITE_KEY isn't set in firebase-config.js yet.
 // Flip to true via functions/.env once the reCAPTCHA v3 site key is wired
@@ -201,12 +236,17 @@ const HF_MODEL_JA      = defineString("HF_MODEL_JA",  { default: HF_DEFAULT_MODE
 const APP_CHECK_ENFORCE = defineBoolean("APP_CHECK_ENFORCE", { default: false });
 
 function _hfModel(lang) {
-  return lang === "ja" ? HF_MODEL_JA.value() : HF_MODEL.value();
+  const model = lang === "ja" ? HF_MODEL_JA.value() : HF_MODEL.value();
+  return applyProviderPin(model, HF_PROVIDER.value());
 }
 
 function _sanitiseReply(s, characterName) {
   if (s == null) return "";
-  let t = String(s).trim();
+  // FIRST, before any other pass: a hybrid-reasoning model puts <think> … </think>
+  // ahead of the reply, and everything below (bracket stripping, the JSON-shape
+  // check, the role-prefix regex) would otherwise be reading the model private
+  // reasoning instead of what the character says.
+  let t = stripReasoning(s);
   // Strip wrapper brackets BEFORE the JSON-shape check.
   t = t.replace(/^\s*\[[A-Za-z0-9 .,'!_'-]{1,60}\]\s*/, "");
   // The name is scenario-authored, so hf-helpers validates and escapes it before
@@ -462,6 +502,11 @@ exports.hfPatient = onCall({
     top_p: 0.9,
     presence_penalty: 0.3,
     stop: ["\nDoctor:", "\n- ", "[INST]", "</s>"],
+    // Qwen3.x reasons by default. Belt and braces: ask the serving stack to
+    // turn it off, and strip any <think> block that still arrives
+    // (_sanitiseReply -> stripReasoning). Providers that do not understand
+    // chat_template_kwargs ignore it, so this is safe to send unconditionally.
+    chat_template_kwargs: { enable_thinking: false },
     stream: false
   });
   try {

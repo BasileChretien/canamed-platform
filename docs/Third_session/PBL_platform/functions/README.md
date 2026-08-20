@@ -175,8 +175,8 @@ the patient's reply. The HF token NEVER reaches the client.
   per month. A workshop with 30 students × 10 chat turns = 300 invocations.
   You are not going to bill.
 - **HF Inference Providers** has a free tier on most open-weights models
-  (Mistral-7B-Instruct, Llama-3.1-8B-Instruct, Qwen-2.5-7B-Instruct). Set the
-  model via `hf.model` config below.
+  (including Qwen3.5-9B). Set the model and the pinned provider via the `.env`
+  block below.
 - Set a **$1 budget alert** on the Firebase Console to catch any surprise.
 
 > **Note (2026):** Firebase has deprecated `functions:config:*` (shuts down
@@ -195,17 +195,35 @@ with:
 
 ```
 MODA_LLM_ENABLED=true
-HF_MODEL=meta-llama/Llama-3.1-8B-Instruct
-HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct
+HF_PROVIDER=ovhcloud
+HF_MODEL=Qwen/Qwen3.5-9B
+HF_MODEL_JA=Qwen/Qwen3.5-9B
 ```
 
 These are also the `defineString` defaults baked into `index.js`
 (`HF_DEFAULT_MODEL` / `HF_DEFAULT_MODEL_JA`), so omitting them changes nothing —
 set them only to override. Keep this block in step with those constants: it is
 copy-pasted into a real `.env`, so a stale value here silently deploys a
-DIFFERENT model than the code default. (Mistral-7B-Instruct-v0.3 was the
-original choice; JA moved to Qwen because Mistral's Japanese is too weak for
-in-character roleplay, and EN followed to Llama-3.1-8B.)
+DIFFERENT model than the code default.
+
+**`HF_PROVIDER` is a data-residency control, not a tuning knob.** Unpinned, the
+HF router picks a provider per request, so the recipient of the chat varies turn
+to turn and cannot be named in the DPA; `ovhcloud` serves from Gravelines,
+France. **Scope the claim carefully:** the pin fixes the ONWARD provider, so the
+inference happens in the EEA against a named party. The request still passes
+through the Hugging Face ROUTER, a separate recipient whose location and
+contract are not established, so the pin does not by itself make the whole leg
+intra-EEA. The model must be one that provider actually serves — check before
+switching:
+
+```sh
+curl -s 'https://huggingface.co/api/models/<org>/<model>?expand[]=inferenceProviderMapping'
+```
+
+(History: Mistral-7B-Instruct-v0.3 was the original choice; JA moved to Qwen
+because Mistral's Japanese is too weak for in-character roleplay, and EN
+followed to Llama-3.1-8B. Both were dropped in 2026-08 because neither is served
+by a provider pinnable inside the EEA — Qwen3.5-9B covers both languages.)
 
 `.env` is in `.gitignore`. `.env.<projectId>` is **per-project** and only
 applies to that Firebase project — useful if you have separate dev / staging

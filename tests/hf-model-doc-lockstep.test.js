@@ -87,8 +87,56 @@ for (const [key, constName] of [["HF_MODEL", "HF_DEFAULT_MODEL"],
 /* The README tells operators these values are the same as the code defaults, so
    omitting them is a no-op. That sentence is only true while it is true. */
 test("the code defaults are what the README claims operators can safely omit", () => {
-  assert.strictEqual(codeDefault("HF_DEFAULT_MODEL"), "meta-llama/Llama-3.1-8B-Instruct");
-  assert.strictEqual(codeDefault("HF_DEFAULT_MODEL_JA"), "Qwen/Qwen2.5-7B-Instruct");
+  assert.strictEqual(codeDefault("HF_DEFAULT_MODEL"), "Qwen/Qwen3.5-9B");
+  assert.strictEqual(codeDefault("HF_DEFAULT_MODEL_JA"), "Qwen/Qwen3.5-9B");
   assert.match(README, /defineString` defaults baked into `index\.js`/,
     "the README must keep explaining that these mirror the code defaults");
+});
+
+/* HF_PROVIDER (2026-08-20) is under the same lockstep, and matters MORE than the
+ * model names: it is a data-residency control. Unpinned, the HF router picks an
+ * inference provider per request, so the recipient of a participant's free-text
+ * clinical chat varies turn to turn and cannot be named in the DPA at all.
+ *
+ * The sentinel is hardcoded ON PURPOSE. Deriving it from index.js would make
+ * this test agree with whatever the code says, including "" — which is exactly
+ * the regression worth catching, because it is INVISIBLE: the chat keeps working
+ * flawlessly while the data goes somewhere undocumented. Changing the pin should
+ * require changing this line, and changing this line should mean re-reading the
+ * DPA transfer table. */
+test("HF_PROVIDER is pinned, and pinned to the jurisdiction the DPA claims", () => {
+  const provider = codeDefault("HF_DEFAULT_PROVIDER");
+  assert.strictEqual(provider, "ovhcloud",
+    "the pinned provider changed — Annex IV of the DPA names the recipient and " +
+    "its jurisdiction, so update the transfer table in the same change");
+  assert.notStrictEqual(provider, "",
+    "an empty pin restores router 'auto': the recipient becomes unassessable");
+
+  // The .env template is copy-pasted into a real .env, so a stale value here
+  // silently deploys an UNPINNED function.
+  const envPin = assignments(ENV_EXAMPLE, "HF_PROVIDER");
+  assert.deepStrictEqual(envPin, [provider],
+    ".env.example must pin the same provider as the code default");
+});
+
+/* The pin and the model are only correct TOGETHER: a model the pinned provider
+ * does not serve makes every call fail, and the bridge treats any failure as
+ * "backend unavailable" and falls back to the stub patient — silently. That is
+ * the exact shape of the 9-day hfPatient outage (#311). */
+test("the pinned provider actually serves the default models (recorded evidence)", () => {
+  const models = new Set([codeDefault("HF_DEFAULT_MODEL"), codeDefault("HF_DEFAULT_MODEL_JA")]);
+  // Verified 2026-08-20 against
+  //   https://huggingface.co/api/models/Qwen/Qwen3.5-9B?expand[]=inferenceProviderMapping
+  // which listed ovhcloud with status "live". This cannot be re-checked offline,
+  // so it is recorded rather than queried — but a model change forces a reader
+  // past this note, which is the point.
+  const VERIFIED = { "Qwen/Qwen3.5-9B": ["ovhcloud", "together", "featherless-ai", "deepinfra"] };
+  for (const m of models) {
+    assert.ok(VERIFIED[m],
+      "default model " + m + " has no recorded provider check — confirm it is live " +
+      "on the pinned provider and record it here");
+    assert.ok(VERIFIED[m].includes(codeDefault("HF_DEFAULT_PROVIDER")),
+      m + " is not served by the pinned provider — every call would 404 and the " +
+      "chat would degrade silently to the stub patient");
+  }
 });
