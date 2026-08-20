@@ -650,11 +650,11 @@ Rules</sub>
 | What | Where it goes | Why it leaves | Safeguard we rely on |
 |---|---|---|---|
 | The main database, the email function, and the private archive bucket | **Belgium** (Google, `europe-west1`) | Hosting | Stays in the EEA |
-| **The AI-character chat function** | **United States** (Google, `us-central1`) | That function is only deployed there | [TRANSFER MECHANISM — see the note below] |
+| **The AI-character chat function** | **Belgium** (Google, `europe-west1`) — *corrected 2026-08-19; it ran in `us-central1` and was moved, with `tests/hf-region-lockstep.test.js` pinning the client and function to one region* | Co-located with the database | [TRANSFER MECHANISM — see the note below] |
 | **The AI chat text, onward from Hugging Face** | **Not identifiable in advance** — Hugging Face routes each request to one of several inference providers, and the platform only learns which one after the reply | The AI character | [TRANSFER MECHANISM — **and see blocking precondition B5: if this cannot be pinned to a named provider and country with an agreement in force, the AI chat must be switched off**] |
 | The automated deletion, backup and research-export jobs — **including the full identified copy of the session and the file linking pseudonyms back to real names**, which are written to the machine running the job before being stored in Belgium | **GitHub-hosted runners** (United States infrastructure) [TO VERIFY the runner region with the operator] | Automation | [TRANSFER MECHANISM] |
 | Your IP address and browser details, on every page load | Google (`gstatic.com` software libraries, reCAPTCHA security check, and `apis.google.com` if you sign in with Google) | The platform's own software and its bot protection | [TRANSFER MECHANISM] |
-| Your Google account processing, if you sign in with Google | Google | Sign-in | Google's own terms |
+| Your Google account processing, if you sign in with Google | Google | Sign-in | `[TRANSFER MECHANISM — **not yet established**. "Google's own terms" is not one: a transfer needs an adequacy decision, an Art. 46 safeguard (SCCs, BCRs) or an Art. 49 derogation, and a provider's terms of service are none of those. Establish and cite (i) which Google entity is the counterparty, (ii) whether it is a processor here or an independent controller of the account relationship — the answer changes whether this row belongs in this table at all — and (iii) the actual route, with the certification or executed clauses on file.]` |
 
 **Transfer safeguards — fill one line per row above, do not use one mechanism
 for all of them.** For each transfer outside the EEA we rely on

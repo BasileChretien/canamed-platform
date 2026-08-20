@@ -659,7 +659,22 @@ today's date.
 **This is not anonymous.** We do not publish your name, and the page only
 answers "valid" or "no match". But the scrambled value is derived from your
 name, so **someone who already has a list of names can test them against it**,
-and we can always link the entry back to you.
+and we can link the entry back to you for as long as we hold such a list.
+
+**How long that is, precisely** — because "always" is a strong word and it should
+be justified, not asserted:
+- The **session record is deleted** 30 days after the session closes (90 if it is
+  never closed), and the certificate-code map (`certIds/`) is deleted with it.
+- The **certificate entry itself survives** for about five years.
+- The **facilitator's participant list — which holds your name — is not deleted
+  by any automated job.** No script touches it; its retention is an open item on
+  the operator's side.
+So the link survives because that list survives. If the list were deleted on a
+defined schedule, the entry would become a scrambled value whose only remaining
+attack is guessing candidate names — still not anonymous, but no longer directly
+linkable by us. **[CONTROLLER TO DECIDE: a deletion schedule for the participant
+list, or an explicit statement that the link is retained for the life of the
+certificate entry.]**
 
 *Why we are allowed to do this:* `[LEGAL BASIS — if GDPR Art. 6(1)(f), name the
 interest. NOTE: APPI has **no** legitimate-interests basis, so a Japanese
