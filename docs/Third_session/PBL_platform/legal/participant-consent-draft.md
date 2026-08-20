@@ -133,8 +133,15 @@ your year, everything you write during the session, **and your answers to the
 end-of-session questionnaire and the knowledge checks**. That includes people in
 other rooms, not just yours. Use a first name or a nickname.
 
-**Where it is kept:** on a server in Belgium — **except your messages to the AI
-patient, which are processed in the United States**.
+**Where it is kept:** the database is on a server in **Belgium**, and the
+function that carries your AI-patient messages runs there too. Two things do
+leave:
+- **your messages to the AI patient**, once they go on to **Hugging Face**, which
+  routes them to an inference provider **we cannot identify in advance** and which
+  may be outside Europe (section 5);
+- **the private backup copy**, which is stored in Europe but is produced by an
+  automated job running on **GitHub's infrastructure in the United States**, so
+  the data passes through there.
 
 **How long:** session data is deleted **30 days** after your teacher closes the
 session (90 days if it is never closed), and a **private backup copy is kept for
@@ -937,7 +944,13 @@ that exists independently of this document.
 - **M2 — The AI patient is absent from the binding notice.** `privacy.html`
   contains **no** mention of a language model, of chat, of Hugging Face, or of
   reCAPTCHA (grep-confirmed). Disclosure exists only in the in-product banner.
-- **M3 — Undisclosed US processing.** `hfPatient` runs in `us-central1`
+- **M3 — ⚠️ RE-CHECK: the US leg this item describes has MOVED. `hfPatient` now
+  runs in `europe-west1` (functions/index.js ≈110, "co-located with the trigger
+  (EU-resident data)"; the client pins the same region and
+  tests/hf-region-lockstep.test.js holds the pair). The residual non-EEA transfer
+  is the Hugging Face leg and the GitHub Actions runners, NOT the Google
+  function. Original text follows and must be reworked, not deleted —
+  **M3 — Undisclosed US processing.** `hfPatient` runs in `us-central1`
   (`functions/index.js`, ≈319) while the notice tells participants the data is
   in Belgium. No transfer mechanism is described.
 - **M4 — "Anonymous" is claimed three times and is false every time.**

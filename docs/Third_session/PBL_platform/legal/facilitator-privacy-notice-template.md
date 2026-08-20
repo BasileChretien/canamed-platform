@@ -500,8 +500,11 @@ them as a teaching prop, never as clinical information.
 2. Your message — together with the hidden scenario instructions and **at most
    15 recent turns of the conversation, capped at about 12,000 characters
    in total** — is sent to a server function operated for us by Google. **That
-   particular function runs in the United States**, so your text leaves Europe
-   at this point.
+   function runs in Belgium (`europe-west1`)**, co-located with the database, so
+   your text does **not** leave Europe at this step. *(An earlier version of this
+   notice said the function ran in the United States. It did; it was moved to
+   `europe-west1`, and `tests/hf-region-lockstep.test.js` now pins the client and
+   the function to the same region so they cannot drift apart.)*
 3. From there it is sent to **Hugging Face**, which routes it onward to a
    third-party inference provider. **Which provider handles any given message
    varies from request to request, and we are not told in advance** — the

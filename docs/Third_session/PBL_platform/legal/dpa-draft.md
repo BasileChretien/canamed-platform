@@ -32,6 +32,35 @@
 > makes every BLOCKING item a condition precedent: signature is legally
 > ineffective until they are closed and countersigned.
 >
+> ## ⚠️ READ FIRST — the US transfer this draft analyses has MOVED (2026-08-19)
+>
+> **`hfPatient` no longer runs in `us-central1`. It runs in `europe-west1`**, and
+> the client pins the same region (`modA-llm-init.js :: HF_FUNCTIONS_REGION`), with
+> `tests/hf-region-lockstep.test.js` holding the pair so they cannot drift apart.
+> The code comment at `functions/index.js` ≈110 reads "co-located with the trigger
+> (EU-resident data)", and ≈333 refers to routing chat "through a US region" as a
+> problem that was fixed.
+>
+> **About twenty statements in this draft still describe the Google Cloud Function
+> leg as a US transfer.** They were true when written. They are not now, and the
+> transfer analysis built on them — Annex IV's EEA→US row, the clause 10 residency
+> discussion, the sub-processor table, and blocking precondition B5 — needs
+> reworking rather than deleting.
+>
+> **What has NOT changed:** the chat still leaves the EEA at the **Hugging Face**
+> step, to an inference provider that cannot be identified in advance — which is
+> the substance of Annex VI R-items and B5 — and the backup/export jobs still run
+> on **GitHub Actions runners in the United States**, so that transfer is real
+> even though the archive bucket is `europe-west1`. The US leg is NARROWER than
+> this draft says, not absent.
+>
+> This flag is deliberately not a rewrite: which mechanism now covers which leg is
+> a legal determination, and it interacts with the Google Sign-In safeguard
+> question. The participant-facing texts (consent Screen A, notice section 5) HAVE
+> been corrected, because leaving participants told their chat is processed in the
+> US when the function sits in Belgium is a factual misstatement at the point of
+> collection.
+
 > **Also note (technical) — ✅ RESOLVED 2026-08-19.** This file lives inside the
 > Firebase Hosting public directory (`firebase.json` sets `"public": "."`), and
 > its `ignore` list previously excluded only `README.md` — so deploying as-is
