@@ -204,13 +204,19 @@ These are also the `defineString` defaults baked into `index.js`
 (`HF_DEFAULT_MODEL` / `HF_DEFAULT_MODEL_JA`), so omitting them changes nothing —
 set them only to override. Keep this block in step with those constants: it is
 copy-pasted into a real `.env`, so a stale value here silently deploys a
-DIFFERENT model than the code default. **`HF_PROVIDER` is a data-residency control, not a tuning knob.** Unpinned, the
+DIFFERENT model than the code default.
+
+**`HF_PROVIDER` is a data-residency control, not a tuning knob.** Unpinned, the
 HF router picks a provider per request, so the recipient of the chat varies turn
 to turn and cannot be named in the DPA; `ovhcloud` serves from Gravelines,
-France, so the leg is not an EEA transfer at all. The model must be one that
-provider actually serves — check before switching:
+France. **Scope the claim carefully:** the pin fixes the ONWARD provider, so the
+inference happens in the EEA against a named party. The request still passes
+through the Hugging Face ROUTER, a separate recipient whose location and
+contract are not established, so the pin does not by itself make the whole leg
+intra-EEA. The model must be one that provider actually serves — check before
+switching:
 
-```
+```sh
 curl -s 'https://huggingface.co/api/models/<org>/<model>?expand[]=inferenceProviderMapping'
 ```
 

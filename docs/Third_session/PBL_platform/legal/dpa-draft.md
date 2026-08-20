@@ -1622,7 +1622,11 @@ produce output — as Hugging Face and its downstream providers do — falls
   the transfer table could not name a recipient for this leg: the router selected
   a provider per request. The previous models — `meta-llama/Llama-3.1-8B-Instruct`
   (EN/FR) and `Qwen/Qwen2.5-7B-Instruct` (JA) — were replaced because neither is
-  served by any provider that can be pinned inside the EEA.
+  served by any provider that can be pinned inside the EEA. **The pin resolves the
+  ONWARD leg only.** The request still passes through the Hugging Face router,
+  which remains a separate recipient with its own location and transfer basis (see
+  the EEA → Hugging Face row above); pinning the inference provider does not close
+  that row, it closes the one below it.
 - The Firebase Cloud Storage bucket is configured in the client but **no
   client-side use of it was found in the code**; the archive bucket used by the
   retention jobs is a separate private Google Cloud Storage bucket.

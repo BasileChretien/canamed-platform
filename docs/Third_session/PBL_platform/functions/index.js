@@ -177,7 +177,10 @@ exports.sendQueuedMail = onValueCreated({
  * not a jurisdiction. A DPA needs the jurisdiction.
  *
  * Qwen3.5-9B on OVHcloud is served from Gravelines, FRANCE, by a French
- * controller — so this leg stops being a transfer at all. It also collapses the
+ * company. That fixes the ONWARD recipient — named, assessable, EU-resident —
+ * but the request still goes through the Hugging Face ROUTER, a separate
+ * recipient whose processing location and contract are not established, so this
+ * pin alone does not make the leg intra-EEA. It also collapses the
  * EN/JA split: the model covers 201 languages, which subsumes the reason the JA
  * route existed (Mistral-7B's Japanese was too weak, so JA was sent to Qwen).
  * Both languages now go to one Qwen, and HF_MODEL_JA is kept as a param so the

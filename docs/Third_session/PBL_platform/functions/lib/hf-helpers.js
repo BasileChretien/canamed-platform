@@ -149,9 +149,10 @@ function roomClaimMatches(claim, roomId) {
  * model id carries an explicit ":provider" suffix. Unpinned, the recipient of
  * a participant's free-text clinical chat varies from turn to turn, which is
  * why the DPA could not assess that leg at all: there was no fixed importer to
- * name. Pinning makes the recipient a fixed, documented party — and pinning an
- * EU-resident provider removes the transfer from the EEA rather than merely
- * documenting it.
+ * name. Pinning makes that recipient a fixed, documented party, and an
+ * EU-resident one keeps the inference itself inside the EEA. It does not close
+ * the whole leg on its own: the request still passes through the Hugging Face
+ * router, which is a separate recipient with its own location and contract.
  *
  * FAIL-CLOSED ON PURPOSE. A malformed provider string throws rather than
  * falling back to the unpinned id: sending the data to an unknown provider is
@@ -174,10 +175,22 @@ function applyProviderPin(model, provider) {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(p)) {
     throw new Error("applyProviderPin: invalid provider id " + JSON.stringify(p));
   }
-  // Only the segment after the final "/" may carry a ":provider" suffix, so an
-  // already-pinned id is returned untouched rather than pinned twice.
+  // Only the segment after the final "/" may carry a ":provider" suffix.
   const tail = m.slice(m.lastIndexOf("/") + 1);
-  if (tail.includes(":")) return m;
+  const colon = tail.indexOf(":");
+  if (colon !== -1) {
+    // An id that ALREADY names a provider must name the SAME one. Letting a
+    // suffix in HF_MODEL silently win over HF_PROVIDER would send the chat to
+    // one provider while every other artefact — .env, the lockstep test, the
+    // DPA transfer table — reported the other. That divergence is invisible at
+    // runtime: the chat works perfectly, against the wrong recipient.
+    const existing = tail.slice(colon + 1);
+    if (existing !== p) {
+      throw new Error("applyProviderPin: model id pins " + JSON.stringify(existing) +
+        " but HF_PROVIDER is " + JSON.stringify(p) + " — set one or make them agree");
+    }
+    return m;                          // already pinned, and consistently so
+  }
   return m + ":" + p;
 }
 

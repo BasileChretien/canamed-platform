@@ -190,16 +190,27 @@ test("applyProviderPin: FAILS CLOSED on a malformed provider id", () => {
   assert.throws(() => applyProviderPin("", "ovhcloud"), /empty model id/);
 });
 
-test("applyProviderPin: never double-pins an already-pinned id", () => {
+test("applyProviderPin: never double-pins an id already pinned to the SAME provider", () => {
   assert.strictEqual(
     applyProviderPin("Qwen/Qwen3.5-9B:ovhcloud", "ovhcloud"), "Qwen/Qwen3.5-9B:ovhcloud");
-  // An operator pin in .env WINS over the default — it is the more specific
-  // instruction, and silently re-pinning it elsewhere would be worse.
-  assert.strictEqual(
-    applyProviderPin("Qwen/Qwen3.5-9B:scaleway", "ovhcloud"), "Qwen/Qwen3.5-9B:scaleway");
   // A colon in the ORG segment is not a pin; only the tail counts.
   assert.strictEqual(
     applyProviderPin("weird:org/model", "ovhcloud"), "weird:org/model:ovhcloud");
+});
+
+test("applyProviderPin: a model pinned to a DIFFERENT provider is refused", () => {
+  // This test previously asserted the opposite — that a suffix in HF_MODEL
+  // "wins" as the more specific instruction. That was a silent-divergence hole,
+  // and the test blessed it: HF_MODEL=Qwen/Qwen3.5-9B:scaleway with
+  // HF_PROVIDER=ovhcloud would route participants chat to Scaleway while .env,
+  // the lockstep test and the DPA all reported OVHcloud. Nothing at runtime
+  // would show it, because the chat keeps working.
+  assert.throws(
+    () => applyProviderPin("Qwen/Qwen3.5-9B:scaleway", "ovhcloud"),
+    /pins "scaleway" but HF_PROVIDER is "ovhcloud"/);
+  // Still fine when the operator opts out of the default pin entirely.
+  assert.strictEqual(
+    applyProviderPin("Qwen/Qwen3.5-9B:scaleway", ""), "Qwen/Qwen3.5-9B:scaleway");
 });
 
 test("stripReasoning: removes a <think> block and keeps only the spoken reply", () => {

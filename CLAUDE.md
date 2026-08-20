@@ -490,8 +490,12 @@ estimate; the two together are why Monitor stays.
    `HF_MODEL_JA=Qwen/Qwen3.5-9B` — **`HF_PROVIDER` is a DATA-RESIDENCY control,
    not a tuning knob** (2026-08-20): unpinned, the HF router picks a provider per
    request, so the recipient of the free-text chat varies turn to turn and cannot
-   be named in the DPA; `ovhcloud` serves from Gravelines, FRANCE, so the leg
-   stops being an EEA transfer. The model must be one the pinned provider serves
+   be named in the DPA; `ovhcloud` serves from Gravelines, FRANCE. **Careful with
+   the claim:** this fixes the ONWARD leg only — the request still goes through
+   the Hugging Face ROUTER, a separate recipient whose processing location and
+   executed contract are not established, so the pin does NOT by itself make the
+   chat intra-EEA. What it removes is the varying, unnameable recipient. The
+   model must be one the pinned provider serves
    or every call 404s and the chat degrades **silently** to the stub — the same
    failure mode as the 9-day `uidMembers` outage. Verify with
    `curl -s 'https://huggingface.co/api/models/<org>/<model>?expand[]=inferenceProviderMapping'`.
