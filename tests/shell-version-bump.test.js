@@ -342,6 +342,38 @@ function deriveLocaleAssets(src) {
 
 // ---- the two cache-version contracts --------------------------------------
 
+/* A SECONDARY PAGE'S OWN ?v= COUNTER.
+ *
+ * index.html carries SHELL_VERSION, but verify.html and revisit.html each carry
+ * a counter of their own (v26, v4) that moves independently. sw.js routes ANY
+ * url with a non-empty ?v= cache-first — it names `verify.js?v=v26` as the
+ * example — so a file addressed through one of these markers is served from
+ * cache until THAT marker changes.
+ *
+ * The trap is the overlap. Five of the seven addressed files are ALSO shell
+ * assets: pure-utils.js and firebase-config.js sit in index.html, and
+ * case-content.js, section-registry.js and branched-seed.js are script-loader
+ * chunks. Bumping SHELL_VERSION gives the main app a fresh url while the
+ * secondary page still asks for the old one, so the shell guard passing is not
+ * evidence these pages are current — e.g. edit case-content.js, bump the shell,
+ * and /revisit keeps serving the previous case content indefinitely.
+ *
+ * Derived from the HTML rather than a hand-copied list, for the same reason the
+ * shell contract derives from sw.js and script-loader.js: a new <script> tag
+ * joins the watched set without anyone remembering to add it here. */
+function derivePageAssets(page) {
+  return function (src) {
+    const html = src.read(page);
+    if (!html) return [];
+    const refs = [...html.matchAll(/(?:src|href)="([^"?]+)\?v=v\d+"/g)].map((m) => m[1]);
+    src.expect(
+      refs.length > 0,
+      page + ": no ?v= references found — the page-asset parser needs updating"
+    );
+    return [...new Set(refs.map((u) => APP + "/" + u.replace(/^\.?\//, "")))].sort();
+  };
+}
+
 const CONTRACTS = [
   {
     name: "SHELL_VERSION",
@@ -355,6 +387,25 @@ const CONTRACTS = [
       "bump SHELL_VERSION in sw.js AND script-loader.js AND every ?v= in index.html " +
       "(all three must move together — see CLAUDE.md, and re-check after any rebase: " +
       "git drops an identical bump hunk as already-upstream)"
+  },
+  {
+    name: "VERIFY_PAGE_VERSION",
+    markers: [{ file: APP + "/verify.html", re: /\?v=(v\d+)"/g }],
+    derive: derivePageAssets(APP + "/verify.html"),
+    fix:
+      "bump the ?v= on EVERY tag in verify.html (its own counter, independent of " +
+      "SHELL_VERSION). Note pure-utils.js and firebase-config.js are shell assets " +
+      "too, so a change to either needs BOTH this bump and a SHELL_VERSION bump — " +
+      "they are different urls and sw.js caches each separately"
+  },
+  {
+    name: "REVISIT_PAGE_VERSION",
+    markers: [{ file: APP + "/revisit.html", re: /\?v=(v\d+)"/g }],
+    derive: derivePageAssets(APP + "/revisit.html"),
+    fix:
+      "bump the ?v= on EVERY tag in revisit.html (its own counter). case-content.js, " +
+      "section-registry.js and branched-seed.js are script-loader chunks as well, so " +
+      "a change to any of them needs BOTH this bump and a SHELL_VERSION bump"
   },
   {
     name: "LOCALE_VERSION",
