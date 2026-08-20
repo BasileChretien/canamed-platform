@@ -1644,9 +1644,9 @@ produce output — as Hugging Face and its downstream providers do — falls
 | **EU-origin data → US, onward via the Japanese side** | Governed by the **restricted onward-transfer rule in the PPC Supplementary Rules**, in addition to GDPR Chapter V | **[TO VERIFY — not previously analysed.]** This route exists whenever EU-origin participant data reaches a Japanese counterparty and is then handled by a US recipient |
 
 **Annex IV-A — evidence of the transfer mechanism, per route.** *[TO BE ANNEXED
-BEFORE ANY TRANSFER.]* **What has to be produced depends on which Chapter V route
-the row relies on — they are not interchangeable, and only one of the three
-involves an instrument to sign:**
+BEFORE ANY TRANSFER.]* **What has to be produced depends on which route the row
+relies on — they are not interchangeable, and they do not all involve an
+instrument to sign:**
 
 - **Art. 46 — Standard Contractual Clauses.** Attach the executed 2021 EU SCCs
   with: the **module** identified [MODULE 2 (controller→processor) / MODULE 3
@@ -1659,6 +1659,15 @@ involves an instrument to sign:**
   decision relied on, and record the project-specific evidence that the transfer
   falls within its scope — including any conditions attached to it, such as the
   PPC Supplementary Rules for EU-origin data.
+- **UK restricted transfers — a SEPARATE record, not covered by the EU SCCs.**
+  Where a route carries UK-subject data out of the UK (the Firebase terms invoke
+  this for Google), EU SCC evidence does not complete it. Attach either the
+  **UK International Data Transfer Addendum** together with the EU SCCs it
+  modifies, or the standalone **UK International Data Transfer Agreement** where
+  that is the instrument relied on — and record, for whichever is used, its
+  scope, the parties, and its effective date. Note this is a different question
+  from the EEA → UK direction, which runs on the EU's adequacy decision for the
+  UK and belongs in the Art. 45 bullet above.
 - **A certification-based Data Transfer Solution** (e.g. the EU–US Data Privacy
   Framework). Again nothing is executed by us. Record the certified entity, the
   certification's current status, and the fact that it covers this transfer.
@@ -2365,7 +2374,9 @@ restructured on 2026-08-20 to stop assuming every route is an SCC route:** the
 table also carries Art. 45 adequacy rows and a certification-based Data Transfer
 Solution, neither of which has anything to sign, so demanding “executed SCCs
 before any transfer” would have made adequacy routes unsatisfiable on paper.
-Annex IV-A now sets out what evidence each of the three route types requires, and
+Annex IV-A now sets out what evidence each route type requires — Art. 46 SCCs,
+Art. 45 adequacy, a certification-based Data Transfer Solution, and the separate
+UK Addendum/Agreement record for UK restricted transfers — and
 clause 12.7 conditions each route on the evidence appropriate to it.
 
 **Q10 — Items deliberately left as `[TO VERIFY]` rather than resolved.** The
