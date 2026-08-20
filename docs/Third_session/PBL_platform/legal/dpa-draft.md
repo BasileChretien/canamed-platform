@@ -688,8 +688,11 @@ contract terms, **not default rules the Controller can waive**. Accordingly:
   `:provider` suffix on the model id; the default `auto` / `:fastest` policy is what
   produces today’s varying recipient. Scaleway and OVHcloud AI Endpoints are
   French; Nebius is Netherlands-established. **Nscale is UK-based and Public AI is
-  Swiss — do NOT count either as EEA** (both jurisdictions have adequacy
-  decisions, which is a different mechanism and must be recorded as one). Pinning
+  Swiss — do NOT count either as EEA.** Both jurisdictions benefit from adequacy
+  decisions, which is a different Chapter V route: such a transfer must be
+  recorded in Annex IV under the applicable **adequacy decision** (Art. 45),
+  naming the decision relied on — not omitted on the basis that the recipient is
+  “European”. Pinning
   makes the recipient nameable and assessable, which is the defect this item is
   about; whether processing also stays inside the EEA has to be evidenced for the
   specific provider, model and region, not inferred from the provider’s
@@ -1076,7 +1079,9 @@ decision in 12.2; the two are not interchangeable.)
 Adequacy does **not** cover the US leg. For every transfer to the US the Parties
 must identify, **and execute**, a valid mechanism:
 
-**(a) Google (reCAPTCHA, the global Hosting edge, and Firebase Authentication; NOT Cloud Functions or the archive bucket, both of which are `europe-west1`).**
+**(a) Google — the global Hosting edge and Firebase Authentication; NOT Cloud Functions or the archive bucket, both of which are `europe-west1`.**
+
+**(a-bis) Google reCAPTCHA v3 / App Check — a SEPARATE contract route, split out 2026-08-20.** reCAPTCHA Classic v3 is supplied under the Google Cloud Terms of Service with the **Cloud Data Processing Addendum** and the **reCAPTCHA Service Specific Terms**; the Firebase Data Processing and Security Terms that cover the Authentication account record do not govern it. Identify and execute its mechanism independently of (a), and record the contracting entity and its role separately. See the dedicated Annex IV row.
 
 *Two Google relationships must not be conflated, and the notice's transfer table now separates them.* When a participant signs in with Google they authenticate **with Google directly** — the platform sends Google nothing about them to achieve it, and Google acts as controller of that participant's own account. What follows IS ours: Firebase Authentication stores the returned email and account id as **our processor**, under the same Google Cloud DPA as every other Google service here. Consequently there is **one** Google mechanism question, not two — an earlier draft gave the sign-in row its own safeguard ("Google's own terms"), which is not a mechanism and implied a second, separate verification that does not exist. *(The controller/processor characterisation is the stated position and needs legal sign-off; the consolidation of the mechanism question does not.)*
 Google's Cloud Data Processing Addendum incorporates the EU Standard Contractual
@@ -1642,10 +1647,16 @@ produce output — as Hugging Face and its downstream providers do — falls
 TRANSFER.]* The executed 2021 EU Standard Contractual Clauses are to be attached
 here, with: the **module** identified for each route
 [MODULE 2 (controller→processor) / MODULE 3 (processor→processor) — select per
-route]; the exporter and importer **named** with addresses and signature blocks;
+route, the module following from the parties’ roles rather than being chosen
+freely]; the exporter and importer **named** with addresses and signature blocks;
 the docking clause elected or not; and Annexes I–III of the SCCs completed. No
 route in the table above may operate before the corresponding instrument is
-executed (clause 12.7).
+executed (clause 12.7). **One instrument per ROUTE, not per company:** Google
+appears on more than one row under different agreements — Firebase
+Authentication under the Firebase Data Processing and Security Terms, reCAPTCHA
+under the Google Cloud Terms with the Cloud Data Processing Addendum and the
+reCAPTCHA Service Specific Terms — and each needs its own entry here. A single
+“Google” instrument does not discharge both.
 
 **Transfer impact assessment: [NOT YET PERFORMED — overdue, since transfers are
 already occurring. Controller to complete with Processor's technical input; scope
