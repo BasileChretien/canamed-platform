@@ -88,8 +88,10 @@ ticked, so that box cannot be a free choice: treat it as an acknowledgement of
 reading, and say so (section 3 does).
 
 **B5 — Resolve the Hugging Face transfer, or turn the AI chat off.**
-The `hfPatient` function runs in **`us-central1`** (verified in
-`functions/index.js`) and Hugging Face routes each request onward to an
+The `hfPatient` function runs in **`europe-west1`** (verified in
+`functions/index.js` ≈110; it ran in `us-central1` and was moved — corrected
+2026-08-19), **so the Google leg is no longer the problem.** The problem is the
+next hop: Hugging Face routes each request onward to an
 inference provider **whose identity is only visible in the response header
 after the fact** — it cannot be named in advance. You cannot make a GDPR
 Art. 13(1)(f) disclosure, or conclude Art. 46 safeguards, with an importer whose
@@ -984,8 +986,10 @@ change to this notice or to the platform's code.]
 No advertising networks, no third-party analytics. Fonts and PDF libraries are
 served from the platform itself, not from an outside network.
 
-*(Where this table names a technical region — Belgium, the United States — the
-underlying platform identifiers are `europe-west1` and `us-central1`.)*
+*(Where this table names a technical region, the underlying platform identifier
+for Belgium is `europe-west1`. The US rows are GitHub Actions runners and
+Google's global edge / reCAPTCHA — **not** a Cloud Function region: the chat
+proxy moved from `us-central1` to `europe-west1`, corrected 2026-08-19.)*
 
 ---
 

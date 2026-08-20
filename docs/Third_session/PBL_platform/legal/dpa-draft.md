@@ -164,11 +164,15 @@ This agreement says who is responsible for what:
 
 > ### ⚠️ Before you sign — three things this summary must not hide
 >
-> 1. **What a student types to the AI patient leaves the EU.** It is processed
->    in the United States (Google `us-central1`), then passed to Hugging Face,
->    then to a third-party inference company **that changes from one message to
->    the next**. No transfer contract for that leg is evidenced anywhere
+> 1. **What a student types to the AI patient leaves the EU — at Hugging Face,
+>    not before.** The proxy function now runs in `europe-west1` (Belgium), so
+>    the Google leg is EU-internal; from there the text passes to Hugging Face and
+>    on to a third-party inference company **that changes from one message to the
+>    next**. No transfer contract for that onward leg is evidenced anywhere
 >    (Annex IV). The feature is currently **on by default** for every session.
+>    *(Corrected 2026-08-19: this said the text was processed in the United States
+>    at `us-central1`. That was true; the function was moved. The transfer to an
+>    unidentifiable provider is unchanged and remains the substance of B5.)*
 > 2. **Several categories of student data are never deleted.** Participant
 >    email rosters, certificate records, the AI usage log, account profiles,
 >    authored scenarios, and everything under the `orgs/` tree have no automated
@@ -989,7 +993,7 @@ remediation item (Annex VI, L11).
 |---|---|---|
 | Realtime Database (all session data) | **`europe-west1`** (Belgium, EU) | `firebase-config.js` — `canamed-69785-default-rtdb.europe-west1.firebasedatabase.app` |
 | `sendQueuedMail` Cloud Function | **`europe-west1`** (EU) | `functions/index.js` — explicitly "co-located with the trigger (EU-resident data)" |
-| **`hfPatient` Cloud Function (the LLM proxy)** | **`us-central1` — UNITED STATES** | `functions/index.js` |
+| **`hfPatient` Cloud Function (the LLM proxy)** | **`europe-west1`** (Belgium, EU) — *moved from `us-central1`; corrected 2026-08-19* | `functions/index.js` ≈110 ("co-located with the trigger (EU-resident data)"); client pinned in `modA-llm-init.js`, pair held by `tests/hf-region-lockstep.test.js` |
 | Hugging Face router and downstream inference provider | **Outside the EU; provider varies per request** | `functions/index.js`, `functions/lib/hf-helpers.js` |
 | Private PII archive bucket (`gs://canamed-pii-archive`) | `europe-west1` (EU), per the provisioning script | `scripts/ops/setup-pii-bucket.sh` — [TO VERIFY the bucket exists with these settings] |
 | **GitHub Actions runners (retention, backup and export jobs)** | GitHub-hosted infrastructure, **US** | `.github/workflows/*.yml` |
@@ -1061,7 +1065,7 @@ decision in 12.2; the two are not interchangeable.)
 Adequacy does **not** cover the US leg. For every transfer to the US the Parties
 must identify, **and execute**, a valid mechanism:
 
-**(a) Google (Cloud Functions in `us-central1`, Cloud Storage, reCAPTCHA).**
+**(a) Google (reCAPTCHA and the global Hosting edge; NOT Cloud Functions or the archive bucket, both of which are `europe-west1`).**
 Google's Cloud Data Processing Addendum incorporates the EU Standard Contractual
 Clauses and Google entities have historically self-certified under the EU–US Data
 Privacy Framework. [TO VERIFY: that the Google Cloud DPA / Data Processing and
@@ -1129,6 +1133,12 @@ the US leg for chat content entirely: all remaining processing then sits in
 `region:` on `hfPatient` from `us-central1` to `europe-west1` would additionally
 remove the **Google** US leg for chat, independently of the Hugging Face
 question; the Parties should treat that as a near-term mitigation.
+**✅ That mitigation was implemented (verified 2026-08-19).** `hfPatient` runs in
+`europe-west1`, the client pins the same region, and
+`tests/hf-region-lockstep.test.js` holds the pair so the two cannot drift apart.
+The Google US leg for chat content is therefore closed. **The Hugging Face leg is
+not** — that remains the open question, and closing the Google leg does not
+touch it.
 
 12.7 **No reliance on derogations.** The Parties record that **GDPR Art. 49
 derogations are not relied on** for any route in Annex IV. Systematic,
@@ -1575,7 +1585,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 
 | # | Sub-processor | Service | Personal data it receives | Location | APPI characterisation |
 |---|---|---|---|---|---|
-| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database and the mail function in `europe-west1` (Belgium); **the language-model proxy function in `us-central1` (USA)**; Hosting on Google's global edge | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
+| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database, the mail function **and the language-model proxy** all in `europe-west1` (Belgium) — *the proxy moved from `us-central1`; corrected 2026-08-19*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
 | 2 | Google (reCAPTCHA v3 / App Check) | Bot resistance | Participant IP address and browser signals, on the application page | Google; not region-pinned [TO VERIFY] | [TO VERIFY] |
 | 3 | **Hugging Face** — [EXACT LEGAL ENTITY AND ADDRESS TO CONFIRM] | Inference Providers router for the simulated-patient character | The scenario system prompt plus **participant free-text chat turns** (up to 16 messages / 12,000 characters per call) | Outside the EU [TO VERIFY exact location] | **Art. 28 foreign provision** — it processes the content to generate output, so the cloud exception does not apply |
 | 4 | **Hugging Face's downstream inference providers** — the code names Together, Fireworks and Cerebras, but the handling provider **varies per request** | Actual model execution | Same as #3 | **Varies per request; presumed US** [TO VERIFY] | **Art. 28 foreign provision, with an unidentifiable recipient** — the destination country cannot be named, so the Art. 28(2) prescribed information cannot be given. **Not authorised under clause 6.1 until pinned and named here.** |
@@ -1607,7 +1617,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 |---|---|---|
 | EEA → Japan (participants, partner institution) | **European Commission adequacy decision for Japan** (2019, maintained on review), plus the PPC **Supplementary Rules** for EU-origin data | Adequacy is a firm legal fact; **applying the Supplementary Rules on the Japanese side is [TO VERIFY]** — clause 12.2 now sets them out as obligations |
 | Japan → EEA (data written into the EU-hosted database) | Japan's PPC has designated the EEA as offering an equivalent standard, so no separate foreign-transfer consent is required under APPI Art. 28 | [CONFIRM with Japanese counsel for this specific processing] |
-| EEA → US (Google Cloud Functions `us-central1`, Cloud Storage, reCAPTCHA) | Google Cloud DPA incorporating the EU **Standard Contractual Clauses**, and/or EU–US Data Privacy Framework certification | **[TO VERIFY]** — acceptance for project `canamed-69785` and the current certification status cannot be checked from the repository. **Not executed as far as this draft can evidence** |
+| EEA → US (Google: reCAPTCHA and the global Hosting edge). *Cloud Functions and Cloud Storage are **no longer** on this row — the proxy moved to `europe-west1` and the archive bucket is `europe-west1`; corrected 2026-08-19, which NARROWS this transfer rather than removing it* | Google Cloud DPA incorporating the EU **Standard Contractual Clauses**, and/or EU–US Data Privacy Framework certification | **[TO VERIFY]** — acceptance for project `canamed-69785` and the current certification status cannot be checked from the repository. **Not executed as far as this draft can evidence.** The narrowing does not discharge this: an edge/reCAPTCHA transfer still needs a mechanism |
 | EEA → US/elsewhere (**Hugging Face**) | **None identified** | **BLOCKING.** If no DPA/SCCs exist, the language-model character has no lawful transfer basis and must be disabled (clause 12.6) |
 | EEA → onward inference providers via Hugging Face | Would require flow-down SCCs from Hugging Face to each provider | **BLOCKING** — the recipient varies per request, which makes a fixed assessment impossible until the account is pinned to one provider and region (clause 6.4) |
 | EEA → US (**GitHub Actions — nightly full identified `/sessions` dump + linkage-table construction on a US runner**) | GitHub DPA/SCCs | **[TO VERIFY]** — and the scope is far larger than a credential at rest (clause 12.1) |
@@ -1690,7 +1700,7 @@ where the data is handled. The countries engaged here are:
 | Country | What is handled there | Basis for knowing |
 |---|---|---|
 | **Belgium** (`europe-west1`) | The Realtime Database (all session data), the mail function, the private archive bucket | Verified in config |
-| **United States** (`us-central1`; GitHub Actions runners) | The language-model proxy; the nightly full identified `/sessions` dump and the linkage-table construction | Verified in code |
+| **United States** (GitHub Actions runners) — *the language-model proxy moved to `europe-west1` on the platform side; corrected 2026-08-19* | The nightly full identified `/sessions` dump and the linkage-table construction | Verified in code |
 | **Unidentifiable** | Hugging Face's downstream inference provider, which varies per request | Verified in code — and this is the problem |
 
 **The last row defeats both duties.** An operator cannot understand the regime of
@@ -1828,7 +1838,7 @@ the first page a reviewing DPO reads. Verified defects:
 | "abuse protection via Firebase App Check (reCAPTCHA)" presented as a live control | App Check enforcement is **off** in both places (`APP_CHECK_ENFORCE=false`; RTDB reverted to Monitor) |
 | "exports and all reporting are aggregate and pseudonymous by default — no individual is named" | False for the nightly **identified** backup and for the facilitator's identified roster CSV |
 | "a fully trilingual interface" | The workshop UI renders **in English only** — see L7 |
-| "Residency: data is stored on Google Firebase" | Omits `us-central1` and the US GitHub Actions leg |
+| "Residency: data is stored on Google Firebase" | Omits the Hugging Face leg and the US GitHub Actions leg. *(It also omitted `us-central1`; that leg closed when `hfPatient` moved to `europe-west1` — corrected 2026-08-19.)* |
 
 **L3 — ✅ CLOSED 2026-07 (was BLOCKING).** All three language versions of the
 notice, and the join screen, said live session data was purged "within 7 days",
@@ -2031,9 +2041,13 @@ note in v0.1 and the repository's security notes).
 **G4 — BLOCKING (new). Japan-resident participants are exposed to the
 language-model character with no APPI Art. 28 basis.** Every Module A chat turn
 from a Japan-resident participant is a provision of 個人データ to a third party in
-a foreign country: `hfPatient` runs in `us-central1`, and the Hugging Face router
-then forwards to a provider that changes per call. The US is not a
-PPC-designated equivalent jurisdiction; 基準適合体制 cannot be concluded with an
+a foreign country. **The route is now shorter but not shorter enough:**
+`hfPatient` runs in `europe-west1` (corrected 2026-08-19 — it ran in
+`us-central1`), so the Google leg is EU-internal and the EU **is** a
+PPC-designated equivalent jurisdiction; but the Hugging Face router still
+forwards to a provider that changes per call. **That unidentifiable leg is what
+keeps G4 BLOCKING** — the destination country cannot be named, so 基準適合体制
+cannot be concluded with an
 unidentifiable recipient; and Art. 28(1) prior consent is impossible because
 Art. 28(2) requires the **destination country to be named before consent** and the
 join flow has no foreign-transfer consent element. The chat is **on by default**,

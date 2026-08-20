@@ -69,7 +69,8 @@ participants, and none is true today:**
    (`scripts/cleanup-stale-sessions.js` :: `CLEANUP_RETENTION_CLOSED_DAYS` /
    `CLEANUP_RETENTION_OPEN_DAYS`, ≈42-43); the LLM model and sub-processor are
    set in the operator's `functions/.env`; the Cloud Function region is fixed in
-   code (`functions/index.js :: exports.hfPatient` `region: "us-central1"`,
+   code (`functions/index.js :: exports.hfPatient` `region: "europe-west1"` (it was `us-central1`; corrected 2026-08-19, and
+   `tests/hf-region-lockstep.test.js` pins the client to the same value),
    ≈319); and there is no facilitator switch for the AI patient at all — only a
    client-side `?llm=0` URL flag. Under **GDPR Art. 28(10)** a processor that
    determines essential means becomes a **controller** for that processing.
@@ -171,8 +172,10 @@ anyone's contact details.
   `tests/retention-notice-consistency.test.js` now derives the figures from the
   job and fails on drift. Re-verified 2026-08-19.)** The remaining task is in the
   same change (§11, M1).*
-- *The Belgium claim is **only true for the database**. `hfPatient` runs in
-  `us-central1` (`functions/index.js`, ≈319). The earlier draft's flat
+- *The Belgium claim now holds for the database **and** the chat function:
+  `hfPatient` runs in `europe-west1` (it ran in `us-central1`; corrected
+  2026-08-19). What still leaves Belgium is the Hugging Face hop and the
+  US-hosted backup/export runners, which Screen A now names. (`functions/index.js`, ≈319). The earlier draft's flat
   "everything you type is stored on a server in Belgium" contradicted its own
   Screen D and has been corrected.*
 - *The deletion promise is **not currently true for every store**. Verified:
@@ -564,8 +567,7 @@ that is a URL flag, not a student-facing choice.]`
 *Approx. 180 words. Notes:*
 
 - *The current banner says "sent to our server and to Hugging Face (US/EU)" but
-  omits that the Cloud Function itself runs in `us-central1`
-  (`functions/index.js`, ≈319) and that Hugging Face's router dispatches onward
+  omits that Hugging Face's router dispatches onward
   to a per-request provider (≈421-425, `x-inference-provider` at ≈447).*
 - ***CORRECTED.** The previous draft said the chat is "deleted with the rest of
   the session". **False.** `scripts/backup-sessions.js` snapshots the full
