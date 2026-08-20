@@ -1003,10 +1003,14 @@ that exists independently of this document.
 - **M20 — Consent evidence is destroyed with the session** while the research
   dataset lives on. Copy the decision into the export artefact. See §10.
 - **M21 — Linkage retention contradiction: 14 days vs 6 months.** See §10.
-- **M23 — `stableId` is an undisclosed persistent identifier.**
-  `script.js :: STABLE_ID_KEY` (≈1306) stores an 80-bit value in
-  `localStorage.canamed_stable_id` that survives tab close, refresh, new tabs
-  and **separate sessions**, or is bound to `auth.uid` when signed in. It is
+- **M23 — `stableId` is an undisclosed persistent identifier — and it is TWO
+  identifiers.** `script.js :: STABLE_ID_KEY` stores a **64-bit** random value
+  (`mintStableId`, `new Uint8Array(8)` — not 80 bits, corrected 2026-08-19) in
+  `localStorage.canamed_stable_id` that survives tab close, refresh, new tabs and
+  **separate sessions**. For a signed-in participant it is instead the **Firebase
+  auth UID** — an account key, not a device token, so it follows the person across
+  devices and joins directly to their account and email. Only the first case is a
+  random device value; the two need describing separately. It is
   written into `survey`, `tests` and `votes/ballots` precisely to link one
   person across sessions. Under the facilitator-as-controller model the same
   identifier links a participant across sessions run by **different

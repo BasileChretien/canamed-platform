@@ -1233,10 +1233,30 @@ theme, Module B role, programme sessions, LLM opt-out flag, LLM chat
 acknowledgement, and — added here because it was missing from the previous draft
 — **`canamed_stable_id`**.
 
-**`canamed_stable_id` deserves separate mention.** It is an 80-bit random
-identifier that **persists across tabs, refreshes and sessions** (cleared only on
-full sign-out; for signed-in users it is set to the Firebase auth UID). It is
-written into `pool`, into answer metadata, and into `tests/$cid/stableId` and
+**`canamed_stable_id` deserves separate mention — and it is TWO different
+identifiers, with different privacy profiles, under one name.**
+
+- **Anonymous participants:** a **64-bit** random value minted by
+  `mintStableId()` (`crypto.getRandomValues` over `new Uint8Array(8)`, hex, "s"
+  prefix) and kept in `localStorage`. It is **per-device**: the same person on a
+  second device is a different subject, and it means nothing outside this
+  platform.
+- **Signed-in participants:** `handleAuthStateChange()` **overwrites it with the
+  Firebase auth UID**. That is not random and not device-scoped — it is the
+  person's **account identifier**, the same value used for authentication and in
+  `clientMapping` / `roomOf`, so it follows them across devices and browsers and
+  is directly joinable to their account record and their email. For this cohort
+  "pseudonymous device token" is the wrong description; it is an account key.
+
+*(The draft previously described only one identifier, "an 80-bit random
+identifier … for signed-in users it is set to the Firebase auth UID", which
+buried the second path in a parenthesis and misstated the entropy: the code
+generates **8 bytes = 64 bits**, not 80. Corrected 2026-08-19 against
+`script.js :: mintStableId`.)*
+
+It is cleared on sign-out and account deletion (`resetStableId()`), so a shared
+lab machine does not carry one account's key into the next person's session. It
+is written into `pool`, into answer metadata, and into `tests/$cid/stableId` and
 `survey/$cid/stableId` (rules cap it at 64 characters). Its stated purpose, in
 the code comment, is so that **researchers can deduplicate participants across
 sessionStorage resets** — that is, a *research* purpose, not service delivery.
@@ -1247,7 +1267,8 @@ notice. **[CONTROLLER / DPO TO DECIDE: its lawful basis, and whether it must be
 gated on the research-consent tick rather than set for everyone.]** See
 Annex VI, item R8.
 
-`sessionStorage`: a per-tab random client identifier (`canamed_client`, 80 bits),
+`sessionStorage`: a per-tab random client identifier (`canamed_client`, **64
+bits** — `new Uint8Array(8)`, corrected from 80),
 a local error-telemetry buffer, and transient connection flags.
 
 Error telemetry is **local only** — it is buffered in the browser (maximum 50
@@ -2100,8 +2121,9 @@ and questionnaire nodes must be narrowed out of this grant (G2); and the
 
 **R2 — Certificate identifiers and the name hash — corrected.** v0.1 stated that
 "enumeration is impractical only because the client identifier carries about 80
-bits of entropy". **That was wrong and is corrected here.** The 80 bits is the
-`clientId` *input*; `canamedCertId()` feeds the seed through `hashStr` — a
+bits of entropy". **That was wrong and is corrected here** — twice over. The
+`clientId` input is **64** bits, not 80 (`new Uint8Array(8)`); and the input
+entropy was never the binding constraint anyway, because `canamedCertId()` feeds the seed through `hashStr` — a
 cyrb53-style **non-cryptographic** hash yielding roughly 53 bits — and then emits
 **10 Crockford base-32 characters, so the identifier keyspace is at most 2⁵⁰**,
 enforced by the rule regex. The record is `".read": true` with **no
@@ -2164,8 +2186,13 @@ treatment to the long free-text items as to chat, or hold the export to a
 reviewed-release process.
 
 **R8 — Persistent research identifier in the browser (new).**
-`canamed_stable_id` is an 80-bit identifier persisted in `localStorage` across
-tabs, refreshes and sessions (cleared only on full sign-out), written into `pool`,
+`canamed_stable_id` is **two identifiers under one name**: for anonymous
+participants a **64-bit** random value in `localStorage` (per-device); for
+signed-in participants the **Firebase auth UID**, which is not random, follows
+the person across devices, and is directly joinable to their account and email
+(see clause 4 for the full split). Either way it persists across
+tabs, refreshes and sessions, is cleared on sign-out and account deletion
+(`resetStableId()`), and is written into `pool`,
 answer metadata and the test/questionnaire records, and existing — per its own
 code comment — so researchers can **deduplicate participants across sessions**.
 It serves a research purpose rather than service delivery, and appears nowhere in
