@@ -1643,20 +1643,36 @@ produce output — as Hugging Face and its downstream providers do — falls
 | Japan → US (any of the above, for Japanese participants) | APPI Art. 28: prior informed consent with the prescribed information, designated-equivalent country, or 基準適合体制 plus follow-up measures | **BLOCKING** — the US is not designated-equivalent; the destination cannot be named for the LLM leg; the join flow contains no foreign-transfer consent element (Annex VI, G4) |
 | **EU-origin data → US, onward via the Japanese side** | Governed by the **restricted onward-transfer rule in the PPC Supplementary Rules**, in addition to GDPR Chapter V | **[TO VERIFY — not previously analysed.]** This route exists whenever EU-origin participant data reaches a Japanese counterparty and is then handled by a US recipient |
 
-**Annex IV-A — executed transfer instruments.** *[TO BE ANNEXED BEFORE ANY
-TRANSFER.]* The executed 2021 EU Standard Contractual Clauses are to be attached
-here, with: the **module** identified for each route
-[MODULE 2 (controller→processor) / MODULE 3 (processor→processor) — select per
-route, the module following from the parties’ roles rather than being chosen
-freely]; the exporter and importer **named** with addresses and signature blocks;
-the docking clause elected or not; and Annexes I–III of the SCCs completed. No
-route in the table above may operate before the corresponding instrument is
-executed (clause 12.7). **One instrument per ROUTE, not per company:** Google
-appears on more than one row under different agreements — Firebase
-Authentication under the Firebase Data Processing and Security Terms, reCAPTCHA
-under the Google Cloud Terms with the Cloud Data Processing Addendum and the
-reCAPTCHA Service Specific Terms — and each needs its own entry here. A single
-“Google” instrument does not discharge both.
+**Annex IV-A — evidence of the transfer mechanism, per route.** *[TO BE ANNEXED
+BEFORE ANY TRANSFER.]* **What has to be produced depends on which Chapter V route
+the row relies on — they are not interchangeable, and only one of the three
+involves an instrument to sign:**
+
+- **Art. 46 — Standard Contractual Clauses.** Attach the executed 2021 EU SCCs
+  with: the **module** identified [MODULE 2 (controller→processor) / MODULE 3
+  (processor→processor) — per route, the module following from the parties'
+  roles rather than being chosen freely]; the exporter and importer **named**
+  with addresses and signature blocks; the docking clause elected or not; and
+  Annexes I–III of the SCCs completed.
+- **Art. 45 — adequacy decision** (e.g. the EEA → Japan rows, and any route to a
+  UK or Swiss recipient). **There is no instrument to execute.** Identify the
+  decision relied on, and record the project-specific evidence that the transfer
+  falls within its scope — including any conditions attached to it, such as the
+  PPC Supplementary Rules for EU-origin data.
+- **A certification-based Data Transfer Solution** (e.g. the EU–US Data Privacy
+  Framework). Again nothing is executed by us. Record the certified entity, the
+  certification's current status, and the fact that it covers this transfer.
+  Note that the Firebase terms treat a Data Transfer Solution and the SCCs as
+  **alternatives** — the Solution applies where available, with the SCCs as the
+  fallback — so a row must say which of the two it is relying on, not cite both.
+
+No route in the table above may operate until the evidence appropriate to ITS
+route is on file (clause 12.7). **One record per ROUTE, not per company:** Google
+appears on more than one row under different agreements — Firebase Authentication
+under the Firebase Data Processing and Security Terms, reCAPTCHA under the Google
+Cloud Terms with the Cloud Data Processing Addendum and the reCAPTCHA Service
+Specific Terms — and each needs its own entry here. A single "Google" instrument
+does not discharge both.
 
 **Transfer impact assessment: [NOT YET PERFORMED — overdue, since transfers are
 already occurring. Controller to complete with Processor's technical input; scope
@@ -2344,9 +2360,13 @@ students) is a legal judgement.
 
 **Q9 — Executed SCCs.** A reviewer correctly noted that Chapter V is "drafted by
 cross-reference, not by instrument". A draft cannot annex an executed instrument.
-Annex IV-A is therefore a named, empty slot with the module, parties and
-signature blocks to be completed, and clause 12.7 makes execution a precondition
-to any transfer.
+Annex IV-A is therefore a named, empty slot to be completed. **It was
+restructured on 2026-08-20 to stop assuming every route is an SCC route:** the
+table also carries Art. 45 adequacy rows and a certification-based Data Transfer
+Solution, neither of which has anything to sign, so demanding “executed SCCs
+before any transfer” would have made adequacy routes unsatisfiable on paper.
+Annex IV-A now sets out what evidence each of the three route types requires, and
+clause 12.7 conditions each route on the evidence appropriate to it.
 
 **Q10 — Items deliberately left as `[TO VERIFY]` rather than resolved.** The
 current PPC report deadlines and the extended final-report window (clause 9.4);
