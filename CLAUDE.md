@@ -486,9 +486,19 @@ estimate; the two together are why Monitor stays.
    in-product `modA.chat.disclosure` banner shown); **(b)** Blaze enabled with
    a $1 budget alert (volumes stay inside the Cloud Functions free tier);
    **(c)** `HF_TOKEN` set in Secret Manager + `functions/.env` with
-   `MODA_LLM_ENABLED=true`, `HF_MODEL=meta-llama/Llama-3.1-8B-Instruct`,
-   `HF_MODEL_JA=Qwen/Qwen2.5-7B-Instruct` (lang-aware `_hfModel()` routes JA
-   to Qwen — Mistral-7B's Japanese is too weak for in-character roleplay);
+   `MODA_LLM_ENABLED=true`, `HF_PROVIDER=ovhcloud`, `HF_MODEL=Qwen/Qwen3.5-9B`,
+   `HF_MODEL_JA=Qwen/Qwen3.5-9B` — **`HF_PROVIDER` is a DATA-RESIDENCY control,
+   not a tuning knob** (2026-08-20): unpinned, the HF router picks a provider per
+   request, so the recipient of the free-text chat varies turn to turn and cannot
+   be named in the DPA; `ovhcloud` serves from Gravelines, FRANCE, so the leg
+   stops being an EEA transfer. The model must be one the pinned provider serves
+   or every call 404s and the chat degrades **silently** to the stub — the same
+   failure mode as the 9-day `uidMembers` outage. Verify with
+   `curl -s 'https://huggingface.co/api/models/<org>/<model>?expand[]=inferenceProviderMapping'`.
+   Qwen3.5-9B covers both languages (201 languages), replacing the old EN→Llama /
+   JA→Qwen split, neither of which is served by any EEA-pinnable provider. It is a
+   HYBRID-REASONING model, so replies are double-guarded against `<think>` leakage
+   (request flag + `hf-helpers.stripReasoning`);
    **(d)** `firebase-functions-compat.js` added to
    [index.html](docs/Third_session/PBL_platform/index.html) after the
    app-check compat script, with its integrity hash; **(e)** deployed
@@ -588,7 +598,22 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
 - **⚠ `hfPatient` needs `firebase deploy --only functions` to pick this up.**
   `SERVER_GUARD` was generalised from "simulated patient" to "simulated
   character", and the reply-prefix stripper is now driven by the character's
-  name. `PROMPT_VERSION` is `modA-llm@2.4`.
+  name. `PROMPT_VERSION` is `modA-llm@2.5` (bumped 2026-08-20 by the EU
+  data-residency pin — see the `HF_PROVIDER` note in item 4 above).
+
+- **⚠️ A SECOND UNDEPLOYED CHANGE IS NOW QUEUED BEHIND THE SAME DEPLOY
+  (2026-08-20).** The provider pin, the `Qwen/Qwen3.5-9B` switch and the
+  `<think>` stripping are all **inert until `firebase deploy --only functions`
+  runs** — until then the live function keeps calling the router UNPINNED with
+  the old models, so the DPA's claim that this leg terminates in France is TRUE
+  OF THE REPO AND FALSE OF PRODUCTION. Do not cite the pin as a live control
+  before deploying and checking.
+  `Verify:` after deploying, send one EN and one JA turn from a real room and
+  read `metrics/hfPatient/events` — `promptVersion` must be `modA-llm@2.5` and
+  the recorded `provider` must be `ovhcloud`. The function stores the
+  `x-inference-provider` response header, so that field is the only end-to-end
+  proof that the pin took effect; a stub-patient reply instead means the model
+  is not served by the pinned provider.
   `Verify:` `grep PROMPT_VERSION docs/.../functions/index.js` and compare with
   the `promptVersion` field on recent `metrics/hfPatient/events` entries.
 - Six i18n strings interpolate `{patientName}` (`modA.chart.title`,

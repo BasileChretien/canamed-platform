@@ -8,7 +8,8 @@ const test = require("node:test");
 const assert = require("node:assert");
 const {
   SERVER_GUARD, isAllowedHfUrl, validateMessages, buildMessages, normLang, MAX_BODY_MESSAGES, dayKey,
-  roomClaimPath, roomClaimMatches
+  roomClaimPath, roomClaimMatches,
+  applyProviderPin, stripReasoning
 } = require("../docs/Third_session/PBL_platform/functions/lib/hf-helpers");
 
 test("isAllowedHfUrl: allows huggingface.co + subdomains, the default router URL", () => {
@@ -153,4 +154,84 @@ test("roomClaimMatches: room names with spaces (the real key shape) work", () =>
   // No prefix/substring matching: "Room 1" must not satisfy "Room 10".
   assert.strictEqual(roomClaimMatches({ room: "Room 1" }, "Room 10"), false);
   assert.strictEqual(roomClaimMatches({ room: "Room 10" }, "Room 1"), false);
+});
+
+/* ---- DATA-RESIDENCY PIN (2026-08-20) ------------------------------------
+ *
+ * These guard a PRIVACY control, not a formatting nicety: unpinned, the HF
+ * router picks an inference provider per request, so the recipient of a
+ * participant's free-text clinical chat varies turn to turn and cannot be named
+ * in the DPA. A regression here is silent — the chat keeps working perfectly
+ * while the data goes somewhere undocumented. */
+
+test("applyProviderPin: appends the provider suffix the router expects", () => {
+  assert.strictEqual(
+    applyProviderPin("Qwen/Qwen3.5-9B", "ovhcloud"), "Qwen/Qwen3.5-9B:ovhcloud");
+  assert.strictEqual(
+    applyProviderPin("meta-llama/Llama-3.1-8B-Instruct", "nscale"),
+    "meta-llama/Llama-3.1-8B-Instruct:nscale");
+});
+
+test("applyProviderPin: an EMPTY provider is a deliberate opt-out, not an error", () => {
+  // Restores router "auto". Allowed so an operator can fall back from .env, but
+  // it must be an explicit empty string — see the invalid-input test below.
+  for (const empty of ["", "   ", null, undefined]) {
+    assert.strictEqual(applyProviderPin("Qwen/Qwen3.5-9B", empty), "Qwen/Qwen3.5-9B");
+  }
+});
+
+test("applyProviderPin: FAILS CLOSED on a malformed provider id", () => {
+  // The tempting alternative — return the model unpinned — is precisely the
+  // outcome this control exists to prevent, so a typo must be loud.
+  for (const bad of ["OVHcloud", "ovh cloud", "ovh:cloud", "-ovh", "ovh/cloud", "ovh_cloud", 42, {}]) {
+    assert.throws(() => applyProviderPin("Qwen/Qwen3.5-9B", bad), /invalid provider id/,
+      "should reject " + JSON.stringify(bad));
+  }
+  assert.throws(() => applyProviderPin("", "ovhcloud"), /empty model id/);
+});
+
+test("applyProviderPin: never double-pins an already-pinned id", () => {
+  assert.strictEqual(
+    applyProviderPin("Qwen/Qwen3.5-9B:ovhcloud", "ovhcloud"), "Qwen/Qwen3.5-9B:ovhcloud");
+  // An operator pin in .env WINS over the default — it is the more specific
+  // instruction, and silently re-pinning it elsewhere would be worse.
+  assert.strictEqual(
+    applyProviderPin("Qwen/Qwen3.5-9B:scaleway", "ovhcloud"), "Qwen/Qwen3.5-9B:scaleway");
+  // A colon in the ORG segment is not a pin; only the tail counts.
+  assert.strictEqual(
+    applyProviderPin("weird:org/model", "ovhcloud"), "weird:org/model:ovhcloud");
+});
+
+test("stripReasoning: removes a <think> block and keeps only the spoken reply", () => {
+  assert.strictEqual(
+    stripReasoning("<think>The patient should sound worried.</think>It started last Tuesday."),
+    "It started last Tuesday.");
+  assert.strictEqual(
+    stripReasoning("<think>a</think>\n\nIt hurts here.\n"), "It hurts here.");
+});
+
+test("stripReasoning: an UNCLOSED block is dropped to end-of-string", () => {
+  // max_tokens can truncate mid-thought. What remains is reasoning, not speech;
+  // returning it would show a student the model's private deliberation.
+  assert.strictEqual(stripReasoning("<think>I should mention the chest pain but"), "");
+  assert.strictEqual(
+    stripReasoning("It hurts here.<think>now consider the differential"), "It hurts here.");
+});
+
+test("stripReasoning: leaves an ordinary reply completely untouched", () => {
+  // The failure that would matter most in a consultation: eating real speech.
+  const spoken = "I think it's been about three days? Maybe four. It's hard to say.";
+  assert.strictEqual(stripReasoning(spoken), spoken);
+  assert.strictEqual(stripReasoning("Doctor, I <3 my job."), "Doctor, I <3 my job.");
+  assert.strictEqual(stripReasoning("a < b and c > d"), "a < b and c > d");
+});
+
+test("stripReasoning: tag variants and casing, and non-string input", () => {
+  assert.strictEqual(stripReasoning("<THINK>x</THINK>ok"), "ok");
+  assert.strictEqual(stripReasoning("<thinking>x</thinking>ok"), "ok");
+  assert.strictEqual(stripReasoning("<reasoning>x</reasoning>ok"), "ok");
+  // Mismatched pair: strip anyway. Leaking reasoning is worse than losing a reply.
+  assert.strictEqual(stripReasoning("<think>x</thinking>ok"), "ok");
+  assert.strictEqual(stripReasoning(null), "");
+  assert.strictEqual(stripReasoning(undefined), "");
 });

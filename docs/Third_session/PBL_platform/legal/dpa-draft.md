@@ -1616,8 +1616,13 @@ produce output — as Hugging Face and its downstream providers do — falls
   configuration (`EMAIL_ENABLED=false`, no SMTP host set) and the function records
   jobs as `disabled`. It must not be enabled until a provider is named here and a
   DPA with that provider is in place.
-- The models used are `meta-llama/Llama-3.1-8B-Instruct` for English and French
-  and `Qwen/Qwen2.5-7B-Instruct` for Japanese.
+- The model used for every language is `Qwen/Qwen3.5-9B`, and the request **pins
+  the inference provider to `ovhcloud`** (OVHcloud AI Endpoints, served from
+  Gravelines, France). Until 2026-08-20 the request was unpinned, which is why
+  the transfer table could not name a recipient for this leg: the router selected
+  a provider per request. The previous models — `meta-llama/Llama-3.1-8B-Instruct`
+  (EN/FR) and `Qwen/Qwen2.5-7B-Instruct` (JA) — were replaced because neither is
+  served by any provider that can be pinned inside the EEA.
 - The Firebase Cloud Storage bucket is configured in the client but **no
   client-side use of it was found in the code**; the archive bucket used by the
   retention jobs is a separate private Google Cloud Storage bucket.
