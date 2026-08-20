@@ -683,7 +683,21 @@ contract terms, **not default rules the Controller can waive**. Accordingly:
 - The tractable fix is to **pin the Hugging Face account to a single named
   provider and a single region**, name that entity and its location in Annex III,
   and obtain a written **zero-retention / no-training** commitment from it.
-  [TO VERIFY with Hugging Face whether the account can be pinned.]
+  **Pinning is a supported feature, not a question for Hugging Face (researched
+  2026-08-20).** Inference Providers accepts an explicit `provider`, or a
+  `:provider` suffix on the model id; the default `auto` / `:fastest` policy is what
+  produces today’s varying recipient. Scaleway and OVHcloud AI Endpoints are
+  French; Nebius is Netherlands-established. **Nscale is UK-based and Public AI is
+  Swiss — do NOT count either as EEA.** Both jurisdictions benefit from adequacy
+  decisions, which is a different Chapter V route: such a transfer must be
+  recorded in Annex IV under the applicable **adequacy decision** (Art. 45),
+  naming the decision relied on — not omitted on the basis that the recipient is
+  “European”. Pinning
+  makes the recipient nameable and assessable, which is the defect this item is
+  about; whether processing also stays inside the EEA has to be evidenced for the
+  specific provider, model and region, not inferred from the provider’s
+  nationality.
+  Source: huggingface.co/docs/inference-providers
 - Until that is done, the language-model character must be disabled by default
   (clause 12.6).
 
@@ -1065,7 +1079,9 @@ decision in 12.2; the two are not interchangeable.)
 Adequacy does **not** cover the US leg. For every transfer to the US the Parties
 must identify, **and execute**, a valid mechanism:
 
-**(a) Google (reCAPTCHA, the global Hosting edge, and Firebase Authentication; NOT Cloud Functions or the archive bucket, both of which are `europe-west1`).**
+**(a) Google — the global Hosting edge and Firebase Authentication; NOT Cloud Functions or the archive bucket, both of which are `europe-west1`.**
+
+**(a-bis) Google reCAPTCHA v3 / App Check — a SEPARATE contract route, split out 2026-08-20.** reCAPTCHA Classic v3 is supplied under the Google Cloud Terms of Service with the **Cloud Data Processing Addendum** and the **reCAPTCHA Service Specific Terms**; the Firebase Data Processing and Security Terms that cover the Authentication account record do not govern it. Identify and execute its mechanism independently of (a), and record the contracting entity and its role separately. See the dedicated Annex IV row.
 
 *Two Google relationships must not be conflated, and the notice's transfer table now separates them.* When a participant signs in with Google they authenticate **with Google directly** — the platform sends Google nothing about them to achieve it, and Google acts as controller of that participant's own account. What follows IS ours: Firebase Authentication stores the returned email and account id as **our processor**, under the same Google Cloud DPA as every other Google service here. Consequently there is **one** Google mechanism question, not two — an earlier draft gave the sign-in row its own safeguard ("Google's own terms"), which is not a mechanism and implied a second, separate verification that does not exist. *(The controller/processor characterisation is the stated position and needs legal sign-off; the consolidation of the mechanism question does not.)*
 Google's Cloud Data Processing Addendum incorporates the EU Standard Contractual
@@ -1619,21 +1635,53 @@ produce output — as Hugging Face and its downstream providers do — falls
 |---|---|---|
 | EEA → Japan (participants, partner institution) | **European Commission adequacy decision for Japan** (2019, maintained on review), plus the PPC **Supplementary Rules** for EU-origin data | Adequacy is a firm legal fact; **applying the Supplementary Rules on the Japanese side is [TO VERIFY]** — clause 12.2 now sets them out as obligations |
 | Japan → EEA (data written into the EU-hosted database) | Japan's PPC has designated the EEA as offering an equivalent standard, so no separate foreign-transfer consent is required under APPI Art. 28 | [CONFIRM with Japanese counsel for this specific processing] |
-| EEA → US (Google: reCAPTCHA, the global Hosting edge, **and Firebase Authentication**). *Firebase Auth holds the signed-in participant's email and account id. Unlike the Realtime Database — pinned to `europe-west1` in `firebase-config.js` — nothing in the configuration pins an Auth location, and Firebase Auth is not regionalised the same way, so this store is presumed outside the EEA. **This was absent from the draft entirely until 2026-08-19**; the pack referenced the auth UID as an identifier five times without ever saying where the account record lives. `[TO VERIFY — the Auth data location for this project.]`* *Cloud Functions and Cloud Storage are **no longer** on this row — the proxy moved to `europe-west1` and the archive bucket is `europe-west1`; corrected 2026-08-19, which NARROWS this transfer rather than removing it* | Google Cloud DPA incorporating the EU **Standard Contractual Clauses**, and/or EU–US Data Privacy Framework certification | **[TO VERIFY]** — acceptance for project `canamed-69785` and the current certification status cannot be checked from the repository. **Not executed as far as this draft can evidence.** The narrowing does not discharge this: an edge/reCAPTCHA transfer still needs a mechanism |
-| EEA → US/elsewhere (**Hugging Face**) | **None identified** | **BLOCKING.** If no DPA/SCCs exist, the language-model character has no lawful transfer basis and must be disabled (clause 12.6) |
-| EEA → onward inference providers via Hugging Face | Would require flow-down SCCs from Hugging Face to each provider | **BLOCKING** — the recipient varies per request, which makes a fixed assessment impossible until the account is pinned to one provider and region (clause 6.4) |
+| EEA → US (Google: the global Hosting edge **and Firebase Authentication**; reCAPTCHA is a SEPARATE row below — different terms). *Firebase Auth holds the signed-in participant's email and account id. Unlike the Realtime Database — pinned to `europe-west1` in `firebase-config.js` — nothing in the configuration pins an Auth location, and Firebase Auth is not regionalised the same way, so this store is presumed outside the EEA. **This was absent from the draft entirely until 2026-08-19**; the pack referenced the auth UID as an identifier five times without ever saying where the account record lives. `[TO VERIFY — the Auth data location for this project.]`* *Cloud Functions and Cloud Storage are **no longer** on this row — the proxy moved to `europe-west1` and the archive bucket is `europe-west1`; corrected 2026-08-19, which NARROWS this transfer rather than removing it* | **Firebase Data Processing and Security Terms**, which incorporate the EU **Standard Contractual Clauses, Module 2 (controller-to-processor)** — you the exporter, **Google LLC** the importer — plus the UK International Data Transfer Addendum for UK-subject transfers. Google LLC is separately **certified under the EU–US Data Privacy Framework** (also covering the UK Extension and the Swiss–US DPF), which Google has adopted as a Data Transfer Solution. **Which of the two carries a given transfer is not a free choice:** the Firebase terms apply the Data Transfer Solution where one is available and fall back to the SCCs otherwise, and the SCC MODULE follows from the parties roles — so the module named here is the expected one, not a verified one for this project. Sources: firebase.google.com/terms/firebase-sccs-eu-c2p, firebase.google.com/terms/firebase-mcc, policies.google.com/privacy/frameworks | **INSTRUMENT IDENTIFIED — acceptance for THIS project still owed (2026-08-20).** What research settled is that the mechanism **exists and is published**, not that it was accepted here: clause 12.4 still carries `[TO VERIFY]` for acceptance by project `canamed-69785`, the contracting Google entity, and the SCC module actually in force. Record those three, with dates, before this row may read as executed. |
+| EEA → US (**Google reCAPTCHA v3 / App Check**) — participant IP address and browser/interaction signals, collected on the splash for every visitor | **A DIFFERENT Google contract route from the row above, and it must not be folded into it.** reCAPTCHA Classic v3 is provided under the Google Cloud Terms of Service with the **Cloud Data Processing Addendum** and the **reCAPTCHA Service Specific Terms** — not the Firebase Data Processing and Security Terms that cover the Authentication account record | **BLOCKING — separated out 2026-08-20.** Record independently: the contracting Google entity, its role, the accepted terms, and the transfer mechanism. `[TO VERIFY]` for each. Two further problems specific to this row: reCAPTCHA loads **before any consent is given**, and it is not region-pinned |
+| EEA → Hugging Face (the router) | **Hugging Face DPA**, publicly offered (cdn-media.huggingface.co/landing/assets/Data+Processing+Agreement.pdf). Note also that **Hugging Face SAS has its main establishment in Paris, France** — an EU establishment with CNIL as lead supervisory authority (huggingface.co/privacy) | **STILL BLOCKING, but no longer UNKNOWN — researched 2026-08-20.** This row read "None identified", which was a statement about the draft's research, not about the world. **Note the mechanics: the DPA is incorporated by reference into the Hugging Face Agreement and takes effect with it — there is no separate document to sign.** So what must be recorded is not an "executed DPA" but: the accepted Agreement/ToS, the DPA version it incorporated, and the acceptance date. The row stays blocking until that acceptance is evidenced for this account |
+| EEA → onward inference provider via Hugging Face | **Solvable by configuration — the recipient CAN be pinned.** Hugging Face Inference Providers accepts an explicit `provider` (or a `:provider` suffix on the model id); the default is `auto` / `:fastest`, which is what makes today's recipient vary per request. **Providers with an EEA option exist** — Scaleway and OVHcloud AI Endpoints are French. **Two entries in an earlier version of this cell were wrong and are corrected here: Nscale is UK-based and Public AI is Swiss — neither is an EU/EEA provider** (both jurisdictions benefit from adequacy decisions, which is a different mechanism and must be recorded as such, not silently counted as EEA). Nebius is Netherlands-established, to be verified per model. Pinning a provider makes the importer **nameable and assessable**, which is what this row lacks today; whether it also keeps processing inside the EEA depends on the provider, the model, and the region actually serving it, and must be evidenced per model rather than assumed from the provider name | **BLOCKING — reframed, not downgraded (2026-08-20).** Previously "impossible until the account can be pinned"; pinning is a supported feature, not a request to Hugging Face, so the obstacle is configuration rather than impossibility. **It is not yet done in the deployed function:** `functions/index.js` calls `router.huggingface.co` unpinned and learns the provider only *after the fact*, from the `x-inference-provider` response header. To clear this row, record for **each** model actually used: the pinned provider, its legal entity, the processing region, the contract, and the transfer mechanism. Note also that pinning this row does not clear the Hugging Face **router** row above it — that is a separate recipient. Source: huggingface.co/docs/inference-providers |
 | EEA → US (**GitHub Actions — nightly full identified `/sessions` dump + linkage-table construction on a US runner**) | GitHub DPA/SCCs | **[TO VERIFY]** — and the scope is far larger than a credential at rest (clause 12.1) |
 | Japan → US (any of the above, for Japanese participants) | APPI Art. 28: prior informed consent with the prescribed information, designated-equivalent country, or 基準適合体制 plus follow-up measures | **BLOCKING** — the US is not designated-equivalent; the destination cannot be named for the LLM leg; the join flow contains no foreign-transfer consent element (Annex VI, G4) |
 | **EU-origin data → US, onward via the Japanese side** | Governed by the **restricted onward-transfer rule in the PPC Supplementary Rules**, in addition to GDPR Chapter V | **[TO VERIFY — not previously analysed.]** This route exists whenever EU-origin participant data reaches a Japanese counterparty and is then handled by a US recipient |
 
-**Annex IV-A — executed transfer instruments.** *[TO BE ANNEXED BEFORE ANY
-TRANSFER.]* The executed 2021 EU Standard Contractual Clauses are to be attached
-here, with: the **module** identified for each route
-[MODULE 2 (controller→processor) / MODULE 3 (processor→processor) — select per
-route]; the exporter and importer **named** with addresses and signature blocks;
-the docking clause elected or not; and Annexes I–III of the SCCs completed. No
-route in the table above may operate before the corresponding instrument is
-executed (clause 12.7).
+**Annex IV-A — evidence of the transfer mechanism, per route.** *[TO BE ANNEXED
+BEFORE ANY TRANSFER.]* **What has to be produced depends on which route the row
+relies on — they are not interchangeable, and they do not all involve an
+instrument to sign:**
+
+- **Art. 46 — Standard Contractual Clauses.** Attach the executed 2021 EU SCCs
+  with: the **module** identified [MODULE 2 (controller→processor) / MODULE 3
+  (processor→processor) — per route, the module following from the parties'
+  roles rather than being chosen freely]; the exporter and importer **named**
+  with addresses and signature blocks; the docking clause elected or not; and
+  Annexes I–III of the SCCs completed.
+- **Art. 45 — adequacy decision** (e.g. the EEA → Japan rows, and any route to a
+  UK or Swiss recipient). **There is no instrument to execute.** Identify the
+  decision relied on, and record the project-specific evidence that the transfer
+  falls within its scope — including any conditions attached to it, such as the
+  PPC Supplementary Rules for EU-origin data.
+- **UK restricted transfers — a SEPARATE record, not covered by the EU SCCs.**
+  Where a route carries UK-subject data out of the UK (the Firebase terms invoke
+  this for Google), EU SCC evidence does not complete it. Attach either the
+  **UK International Data Transfer Addendum** together with the EU SCCs it
+  modifies, or the standalone **UK International Data Transfer Agreement** where
+  that is the instrument relied on — and record, for whichever is used, its
+  scope, the parties, and its effective date. Note this is a different question
+  from the EEA → UK direction, which runs on the EU's adequacy decision for the
+  UK and belongs in the Art. 45 bullet above.
+- **A certification-based Data Transfer Solution** (e.g. the EU–US Data Privacy
+  Framework). Again nothing is executed by us. Record the certified entity, the
+  certification's current status, and the fact that it covers this transfer.
+  Note that the Firebase terms treat a Data Transfer Solution and the SCCs as
+  **alternatives** — the Solution applies where available, with the SCCs as the
+  fallback — so a row must say which of the two it is relying on, not cite both.
+
+No route in the table above may operate until the evidence appropriate to ITS
+route is on file (clause 12.7). **One record per ROUTE, not per company:** Google
+appears on more than one row under different agreements — Firebase Authentication
+under the Firebase Data Processing and Security Terms, reCAPTCHA under the Google
+Cloud Terms with the Cloud Data Processing Addendum and the reCAPTCHA Service
+Specific Terms — and each needs its own entry here. A single "Google" instrument
+does not discharge both.
 
 **Transfer impact assessment: [NOT YET PERFORMED — overdue, since transfers are
 already occurring. Controller to complete with Processor's technical input; scope
@@ -2321,9 +2369,15 @@ students) is a legal judgement.
 
 **Q9 — Executed SCCs.** A reviewer correctly noted that Chapter V is "drafted by
 cross-reference, not by instrument". A draft cannot annex an executed instrument.
-Annex IV-A is therefore a named, empty slot with the module, parties and
-signature blocks to be completed, and clause 12.7 makes execution a precondition
-to any transfer.
+Annex IV-A is therefore a named, empty slot to be completed. **It was
+restructured on 2026-08-20 to stop assuming every route is an SCC route:** the
+table also carries Art. 45 adequacy rows and a certification-based Data Transfer
+Solution, neither of which has anything to sign, so demanding “executed SCCs
+before any transfer” would have made adequacy routes unsatisfiable on paper.
+Annex IV-A now sets out what evidence each route type requires — Art. 46 SCCs,
+Art. 45 adequacy, a certification-based Data Transfer Solution, and the separate
+UK Addendum/Agreement record for UK restricted transfers — and
+clause 12.7 conditions each route on the evidence appropriate to it.
 
 **Q10 — Items deliberately left as `[TO VERIFY]` rather than resolved.** The
 current PPC report deadlines and the extended final-report window (clause 9.4);
