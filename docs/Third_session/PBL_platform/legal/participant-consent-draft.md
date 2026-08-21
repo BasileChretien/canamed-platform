@@ -664,49 +664,72 @@ name, so **someone who already has a list of names can test them against it**,
 and we can link the entry back to you for as long as we hold such a list.
 
 **How long that is, precisely** — because "always" is a strong word and it should
-be justified, not asserted:
+be justified, not asserted. Two different things are kept for two different
+lengths of time, and it matters which is which:
 - The **session record is deleted** 30 days after the session closes (90 if it is
-  never closed), and the certificate-code map (`certIds/`) is deleted with it.
-- Your **participation record** — the entry showing that you took part, with your
-  name — is **intended to be kept for as long as the certificate is verifiable,
-  about five years**, and no longer. Each certificate is stamped with its own
-  expiry date when it is issued, and the database refuses any date more than
-  about five years out, so nothing can quietly claim a longer life.
-- The **certificate entry itself** is kept for that same period.
+  never closed). Deleted with it: the certificate-code map (`certIds/`), the
+  workshop chat, and — since 21 August 2026 — **the participant list your
+  facilitator holds, which is where your name, email address and university
+  are**. So your name itself is not kept for years.
+- What *is* kept for about five years is the **certificate registry entry**, and
+  it does **not** contain your name. It holds a **one-way hash** of your name and
+  session — a scrambled value that cannot be turned back into your name — plus
+  the session it belongs to and its expiry date. That is what lets someone you
+  give the certificate to confirm it is genuine, and it is the reason the entry
+  has to outlive the session.
+- Each certificate is stamped with its own expiry date when it is issued, and the
+  database refuses any date more than about five years out, so nothing can
+  quietly claim a longer life.
 
-> ⚠️ **[CONTROLLER — DO NOT PUBLISH THIS SECTION AS WRITTEN UNTIL THE DELETION
-> PATH EXISTS.]** The five years above is the **intended** retention, not an
-> enforced one. Verified against the code on 2026-08-20:
+**What that means in practice.** For the first 30 days (or 90) we hold your name.
+After that, what remains is a scrambled value that only matches if someone
+already knows the name to check it against. That is not the same as anonymous —
+someone who guesses your name can confirm the match — but we no longer hold the
+name ourselves.
+
+> ℹ️ **[CONTROLLER — the deletion path now EXISTS, but is not yet armed.
+> Read this before publishing.]** Updated 2026-08-21, replacing a note that said
+> this section must not be published at all because nothing deleted these
+> records. Two of the three gaps it described are closed:
 >
-> - **No job deletes these records.** `retentionUntil` is written and capped, but
->   nothing ever reads it back — no script in `scripts/` refers to it or to
->   `credentials/` at all. The daily cleanup deletes the session and the
->   code→certificate map (`certIds/`), and stops there.
-> - **The records are write-once** (`credentials/$certId` allows a write only when
->   no value exists), so a participant cannot delete their own even in principle.
->   Only an operator using the admin SDK can, and no such procedure is documented.
-> - **`retentionUntil` is not a required field.** The rules cap it when it is
->   present; they do not insist it be there. Our own client always writes it, so
->   this is a latent gap rather than a live one — but it is not a guarantee.
+> - **Certificate records are now deletable on their own clock.**
+>   `scripts/cleanup-expired-credentials.js` reads `retentionUntil` — which was
+>   written on every record and never read back by anything — and deletes
+>   records whose date has passed. A record with no usable date is **never**
+>   deleted and is reported instead: the rules do not require `retentionUntil`,
+>   and treating an undated record as infinitely old would destroy exactly the
+>   records we understand least, irreversibly.
+> - **The participant list is now deleted with its session.** It rides the
+>   existing 30/90-day session purge rather than the five-year certificate
+>   clock, because nothing in verification reads it — a certificate is checked
+>   by hashing the name the *verifier* types. Keeping names for five years
+>   would have served no function.
 >
-> So a promise that these records "are deleted after five years" would be
-> untrue at the moment of publication, and the storage-limitation principle
-> (GDPR Art. 5(1)(e)) is not satisfied by an intention. **Two honest options:**
-> **(a)** implement expiry-based deletion plus a request-driven path, and then
-> publish the wording above as fact; or **(b)** publish it as the intended
-> period, say plainly that deletion is currently performed by hand on request,
-> and give participants the address to ask. Option (a) is the one that closes
-> Annex VI item **G6**; option (b) is honest but leaves G6 open.
-> Tracked as G6 — this note must be resolved, not merely deleted.
+> **What is still true, and gates publication of a five-year promise:** the
+> scheduled credential job runs in **DRY-RUN**. It has never deleted anything,
+> and the population it targets has never been pruned, so the first live run
+> would be the largest deletion this project has performed — against records
+> whose purpose is to still be there when someone checks a certificate. Arm it
+> deliberately (`.github/workflows/cleanup-expired-credentials.yml`) after
+> reading a few dry-run reports, and in particular the `Undated` count.
+>
+> Until it is armed, this section may state the five-year period as the
+> **intended** retention, and must not assert that deletion happens
+> automatically. Once armed, the qualification can go and Annex VI **G6** closes.
+>
+> One thing this does NOT change: the records remain **write-once**, so a
+> participant still cannot delete their own. Erasure on request is performed by
+> an operator with administrative access, and the contact for that has to be
+> named below before publication.
 
 **This is deliberate, and it is why the certificate works.** A certificate that
-nobody can check is not a certificate. To answer "did this person attend this
-session", we have to still hold the record that says you did — so we keep it,
-for exactly as long as the certificate it supports.
+nobody can check is not a certificate. To answer "is this certificate genuine",
+we have to still hold the registry entry it points at — so we keep that entry,
+for exactly as long as the certificate it supports. We do not have to keep your
+name to do it, and we do not.
 
 **It is kept for that purpose only.** Participation data is not research data.
-Your participation record is retained to verify certificates and for nothing
-else; it is not part of the research dataset, is not shared with the research
+The registry entry is retained to verify certificates and for nothing else; it is not part of the research dataset, is not shared with the research
 team on that basis, and declining the research box does not remove it — nor does
 consenting to research extend it. If you would rather not have a verifiable
 certificate at all, tell your facilitator and the entry will be removed: the two
@@ -760,9 +783,11 @@ a favour.
   `CLAUDE.md` ("cert IDs are crypto-random high-entropy (no enumeration)") —
   both must be corrected in the same change, per `CLAUDE.md`'s own STATUS-CLAIM
   RULE.*
-- *`[TO VERIFY]` The registry entry is currently **never deleted** — no job
-  touches `credentials/*`. The "5 years" promise is not enforced by anything.
-  Either build the deletion job or change the wording.*
+- *The deletion job now exists (`scripts/cleanup-expired-credentials.js`,
+  2026-08-21) and reads the `retentionUntil` that every record already carried.
+  **It is still running DRY-RUN**, so nothing has been deleted yet — see the
+  controller note in section 6. Until it is armed, the "5 years" may be stated
+  as the intended period but not as something enforced automatically.*
 
 ---
 
