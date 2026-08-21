@@ -605,8 +605,25 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   name. `PROMPT_VERSION` is `modA-llm@2.5` (bumped 2026-08-20 by the EU
   data-residency pin — see the `HF_PROVIDER` note in item 4 above).
 
-- **⚠️ A SECOND UNDEPLOYED CHANGE IS NOW QUEUED BEHIND THE SAME DEPLOY
-  (2026-08-20).** The provider pin, the `Qwen/Qwen3.5-9B` switch and the
+- **✅ DEPLOYED 2026-08-21 — the queue behind this deploy is now empty.** Both the
+  scenario-characters `SERVER_GUARD` change and the EU provider pin are live
+  (`firebase deploy --only functions`, hfPatient + sendQueuedMail updated in
+  `europe-west1`).
+  **⚠️ THE TRAP THAT ALMOST MADE THIS A SILENT OUTAGE, for whoever deploys next:**
+  `functions/.env` is git-ignored, so NO test and NO CI check can see it — and its
+  values OVERRIDE the code defaults. It still named the OLD models
+  (`meta-llama/Llama-3.1-8B-Instruct` / `Qwen/Qwen2.5-7B-Instruct`) and had no
+  `HF_PROVIDER` at all. Deploying as-is would have combined the old models with
+  the new default provider — `meta-llama/Llama-3.1-8B-Instruct:ovhcloud`, which
+  OVHcloud does not serve — so every call would have 404d and the chat would have
+  degraded **silently** to the stub patient. `tests/hf-model-doc-lockstep.test.js`
+  cannot catch this: it reads `.env.example`, not `.env`. **Whenever HF_MODEL,
+  HF_MODEL_JA or HF_PROVIDER changes in code, open the real `functions/.env` and
+  reconcile it by hand before deploying.** Also: non-interactive deploy refuses to
+  run without an explicit `HF_GLOBAL_DAILY_CAP`, now pinned in `.env` to the same
+  4000 the code defaults to.
+  **STILL OWED — the end-to-end check (needs a real room, cannot be done from the
+  CLI):** The provider pin, the `Qwen/Qwen3.5-9B` switch and the
   `<think>` stripping are all **inert until `firebase deploy --only functions`
   runs** — until then the live function keeps calling the router UNPINNED with
   the old models, so the DPA's claim that this leg terminates in France is TRUE
