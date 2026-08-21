@@ -605,16 +605,31 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   name. `PROMPT_VERSION` is `modA-llm@2.5` (bumped 2026-08-20 by the EU
   data-residency pin — see the `HF_PROVIDER` note in item 4 above).
 
-- **⚠️ A SECOND UNDEPLOYED CHANGE IS NOW QUEUED BEHIND THE SAME DEPLOY
-  (2026-08-20).** The provider pin, the `Qwen/Qwen3.5-9B` switch and the
-  `<think>` stripping are all **inert until `firebase deploy --only functions`
-  runs** — until then the live function keeps calling the router UNPINNED with
-  the old models, so the DPA's claim that this leg terminates in France is TRUE
-  OF THE REPO AND FALSE OF PRODUCTION. Do not cite the pin as a live control
-  before deploying and checking.
-  `Verify:` after deploying, send one EN and one JA turn from a real room and
-  read `metrics/hfPatient/events` — `promptVersion` must be `modA-llm@2.5` and
-  the recorded `provider` must be `ovhcloud`. The function stores the
+- **✅ DEPLOYED 2026-08-21 — the queue behind this deploy is now empty.** Both the
+  scenario-characters `SERVER_GUARD` change and the EU provider pin are live
+  (`firebase deploy --only functions`, hfPatient + sendQueuedMail updated in
+  `europe-west1`).
+  **⚠️ THE TRAP THAT ALMOST MADE THIS A SILENT OUTAGE, for whoever deploys next:**
+  `functions/.env` is git-ignored, so NO test and NO CI check can see it — and its
+  values OVERRIDE the code defaults. It still named the OLD models
+  (`meta-llama/Llama-3.1-8B-Instruct` / `Qwen/Qwen2.5-7B-Instruct`) and had no
+  `HF_PROVIDER` at all. Deploying as-is would have combined the old models with
+  the new default provider — `meta-llama/Llama-3.1-8B-Instruct:ovhcloud`, which
+  OVHcloud does not serve — so every call would have 404d and the chat would have
+  degraded **silently** to the stub patient. `tests/hf-model-doc-lockstep.test.js`
+  cannot catch this: it reads `.env.example`, not `.env`. **Whenever HF_MODEL,
+  HF_MODEL_JA or HF_PROVIDER changes in code, open the real `functions/.env` and
+  reconcile it by hand before deploying.** Also: non-interactive deploy refuses to
+  run without an explicit `HF_GLOBAL_DAILY_CAP`, now pinned in `.env` to the same
+  4000 the code defaults to.
+  **STILL OWED — the end-to-end check (needs a real room, cannot be done from the
+  CLI).** The provider pin, the `Qwen/Qwen3.5-9B` switch and the `<think>`
+  stripping are **deployed**; what is not yet evidenced is that they behave as
+  intended against the live endpoint. Qwen3.5-9B replaced BOTH previous models
+  and no automated check covers how it talks.
+  `Verify:` send one EN and one JA turn from a real room and read
+  `metrics/hfPatient/events` — `promptVersion` must be `modA-llm@2.5` and the
+  recorded `provider` must be `ovhcloud`. The function stores the
   `x-inference-provider` response header, so that field is the only end-to-end
   proof that the pin took effect; a stub-patient reply instead means the model
   is not served by the pinned provider.
