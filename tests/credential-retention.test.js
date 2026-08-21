@@ -10,7 +10,8 @@
 const test = require("node:test");
 const assert = require("node:assert");
 const {
-  credentialVerdict, partitionCredentials, pruneExpiredCredentials
+  credentialVerdict, partitionCredentials, pruneExpiredCredentials,
+  validateFallbackDays, MAX_FALLBACK_DAYS
 } = require("../scripts/lib/credential-retention");
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -169,4 +170,39 @@ test("a failing delete is counted, and does not abort the remaining ones", async
   assert.strictEqual(res.deleted, 1);
   assert.deepStrictEqual(removed, ["credentials/CNM-BBBBB-BBBBB"],
     "the second deletion must still run after the first fails");
+});
+
+/* ---- the fallback window is a CEILING ---------------------------------
+ *
+ * The value reaches the job from a free-form workflow_dispatch input, so an
+ * operator entering 3650 would silently grant TEN years to exactly the records
+ * that carry no explicit expiry — contradicting both the database rules (which
+ * cap retentionUntil at ~5 years) and the participant notice.
+ *
+ * Tested here rather than by running the script: the script cannot even be
+ * loaded without firebase-admin, so a probe of it dies on a missing module
+ * before reaching the check. A first attempt at a behavioural test reported
+ * PASS on four different values for exactly that reason. */
+
+test("validateFallbackDays rejects anything above the five-year ceiling", () => {
+  assert.strictEqual(MAX_FALLBACK_DAYS, 1826, "5 x 365 + 1 leap day");
+  assert.strictEqual(validateFallbackDays(1826).ok, true, "the ceiling itself is allowed");
+  for (const d of [1827, 3650, 1e6]) {
+    const r = validateFallbackDays(d);
+    assert.strictEqual(r.ok, false, d + " must be rejected");
+    assert.match(r.error, /exceeds the 1826-day ceiling/);
+  }
+});
+
+test("validateFallbackDays allows any SHORTER window", () => {
+  // A shorter window only deletes sooner, which cannot breach the promise.
+  for (const d of [1, 30, 365, 1825]) {
+    assert.strictEqual(validateFallbackDays(d).ok, true, d + " must be allowed");
+  }
+});
+
+test("validateFallbackDays rejects non-numbers rather than coercing", () => {
+  for (const d of ["1826", null, undefined, NaN, Infinity, {}, []]) {
+    assert.strictEqual(validateFallbackDays(d).ok, false, JSON.stringify(d) + " must be rejected");
+  }
 });

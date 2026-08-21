@@ -131,4 +131,43 @@ async function pruneExpiredCredentials(db, opts) {
   };
 }
 
-module.exports = { credentialVerdict, partitionCredentials, pruneExpiredCredentials };
+/* The fallback window is a CEILING, not just a default.
+ *
+ * 1826 days is 5 x 365 + 1 leap day. The database rules cap `retentionUntil`
+ * at roughly five years from the write, and the participant notice states
+ * about five years — so a record that merely lacks `retentionUntil` must not
+ * be treated more generously than one that has it.
+ *
+ * This matters because the value reaches the job from a free-form
+ * workflow_dispatch input. An operator entering 3650 would silently grant TEN
+ * years to exactly the records with no explicit expiry, contradicting both the
+ * rules and the notice, and nothing downstream would notice. A SHORTER window
+ * is always fine: it only deletes sooner.
+ *
+ * Lives here rather than in the script so it can be tested — the script cannot
+ * even be loaded without firebase-admin, so a check inside it is unreachable
+ * from the unit suite. (Found the hard way: a behavioural probe of the cap
+ * reported PASS four times while the script was actually dying on a missing
+ * module before it got anywhere near the check.) */
+const MAX_FALLBACK_DAYS = 1826;
+
+function validateFallbackDays(days) {
+  if (typeof days !== "number" || !Number.isFinite(days)) {
+    return { ok: false, error: JSON.stringify(days) + " is not a number of days" };
+  }
+  if (days > MAX_FALLBACK_DAYS) {
+    return {
+      ok: false,
+      error: days + " exceeds the " + MAX_FALLBACK_DAYS + "-day ceiling. The rules " +
+        "cap retentionUntil at ~5 years and the participant notice states ~5 years; " +
+        "a longer fallback would keep undated records beyond both. Lower it, or " +
+        "change the rules and the notice first."
+    };
+  }
+  return { ok: true, value: days };
+}
+
+module.exports = {
+  credentialVerdict, partitionCredentials, pruneExpiredCredentials,
+  validateFallbackDays, MAX_FALLBACK_DAYS
+};

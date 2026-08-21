@@ -173,10 +173,12 @@ This agreement says who is responsible for what:
 >    *(Corrected 2026-08-19: this said the text was processed in the United States
 >    at `us-central1`. That was true; the function was moved. The transfer to an
 >    unidentifiable provider is unchanged and remains the substance of B5.)*
-> 2. **Several categories of student data are never deleted.** Participant
->    email rosters, certificate records, the AI usage log, account profiles,
->    authored scenarios, and everything under the `orgs/` tree have no automated
->    deletion at all (Annex VI, G5–G9). Deleting a session does not reach them.
+> 2. **Several categories of student data are still never deleted — though two
+>    were closed on 2026-08-21.** Participant email rosters now purge with their
+>    session (G5), and certificate records have a deletion job that is built but
+>    deliberately still running DRY-RUN (G6). The AI usage log, account profiles,
+>    authored scenarios and everything under the `orgs/` tree have no automated
+>    deletion at all (Annex VI, G7–G9). Deleting a session does not reach those.
 > 3. **This platform is not ready to run with real students under this DPA
 >    until the BLOCKING items in Annex VI are closed.** One of them (G1) is not
 >    a paperwork gap: the nightly research export includes participants who
@@ -1580,7 +1582,8 @@ Stated plainly so the Controller does not over-rely on this Annex:
 - **no written confidentiality undertakings on file** for the persons with
   production access (clause 4.1);
 - no penetration test by an independent third party [TO VERIFY — none found];
-- no automated deletion for several data categories (Annex VI, G5–G9);
+- no automated deletion for several data categories (Annex VI, G7–G9; G5 was
+  closed and G6 built-but-unarmed on 2026-08-21);
 - **no monitoring or alerting on the retention, backup and export jobs**
   (Annex VI, G11);
 - **no per-controller isolation and no per-session configuration**: all
@@ -2120,19 +2123,40 @@ not be exposed to the language-model character — which, given clause 6.5's
 deployment-global switch, means the feature is off for everyone until G10 is also
 closed.
 
-**G5 — HIGH. Participant email addresses are never deleted.** The roster path sits
-outside `sessions/`, so the cleanup job never sees it, the backup never captures
-it, and the pseudonymiser never touches it. Retention is effectively indefinite.
-The facilitator can export it as an identifiable CSV. The privacy notice does not
-mention it. **Storage limitation is not met for this category** without a manual
-process. [CONTROLLER-CHOSEN RETENTION — ROSTER EMAILS: ____ ]
+**G5 — ~~HIGH~~ CLOSED 2026-08-21. Participant email addresses are now deleted
+with their session.** The finding was accurate when written: the roster path sits
+outside `sessions/`, so the cleanup job never saw it, the backup never captured
+it and the pseudonymiser never touched it — retention was effectively indefinite,
+and no script in `scripts/` referenced `rosters` at all. It is now purged
+alongside the session at 30/90 days, in the same atomic multi-path delete as the
+session subtree, `adminSecrets`, `roomChat` and `certIds`.
+It rides the SESSION clock rather than the certificate clock deliberately:
+verification hashes the name the VERIFIER types, so nothing in verification
+reads the roster, and keeping names for five years would serve no purpose.
+**Two residual items, both for the Controller:** the facilitator can still export
+the roster as an identifiable CSV, which leaves the platform's control entirely;
+and rosters ORPHANED BEFORE 2026-08-21 are unreachable by the job — their
+sessions are already gone, so no enumeration can find them, and clearing them is
+a one-off operator task. [CONTROLLER — CONFIRM THE BACKFILL WAS RUN: ____ ]
 
-**G6 — HIGH. Certificate records are never deleted.** Each record carries a
-`retentionUntil` value and the notice promises up to 5 years, but **no job reads
-or acts on that field**. The records are readable by anyone who knows the exact
-certificate identifier, with no authentication, and no client can delete one (the
-rule permits writes only when `!data.exists()`). **Fix:** ship a `retentionUntil`
-sweeper. [CONTROLLER-CHOSEN RETENTION — CERTIFICATE RECORDS: ____ ]
+**G6 — ~~HIGH~~ MECHANISM BUILT 2026-08-21, NOT YET ARMED. Certificate records
+are now deletable, but nothing has been deleted yet.** The finding was accurate:
+each record carried a `retentionUntil` value and the notice promised up to 5
+years, but no job read or acted on that field.
+`scripts/cleanup-expired-credentials.js` now does, deleting records whose date
+has passed and applying a five-year fallback — itself capped, so an operator
+cannot widen it past the ceiling the rules and the notice both state.
+**Its scheduled run is DRY-RUN.** The population has never been pruned, so the
+first live run would be the largest deletion this project has performed, against
+records whose purpose is to still be there when someone checks a certificate.
+Undated records are never deleted, only reported — the rules do not require
+`retentionUntil`, and treating an undated record as infinitely old would destroy
+exactly the records least understood.
+Unchanged: the records are readable by anyone holding the exact certificate
+identifier, with no authentication, and no client can delete one (the rule
+permits writes only when `!data.exists()`), so erasure on request is an operator
+action. **This item closes when the job is armed, not now.**
+[CONTROLLER — DATE THE JOB WAS ARMED: ____ ]
 
 **G7 — HIGH. The language-model usage log is undisclosed, unbounded and
 unreachable.** `metrics/hfPatient/events` records the auth UID, timestamp,

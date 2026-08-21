@@ -770,9 +770,11 @@ a favour.
   `CLAUDE.md` ("cert IDs are crypto-random high-entropy (no enumeration)") —
   both must be corrected in the same change, per `CLAUDE.md`'s own STATUS-CLAIM
   RULE.*
-- *`[TO VERIFY]` The registry entry is currently **never deleted** — no job
-  touches `credentials/*`. The "5 years" promise is not enforced by anything.
-  Either build the deletion job or change the wording.*
+- *The deletion job now exists (`scripts/cleanup-expired-credentials.js`,
+  2026-08-21) and reads the `retentionUntil` that every record already carried.
+  **It is still running DRY-RUN**, so nothing has been deleted yet — see the
+  controller note in section 6. Until it is armed, the "5 years" may be stated
+  as the intended period but not as something enforced automatically.*
 
 ---
 

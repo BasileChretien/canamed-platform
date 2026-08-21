@@ -124,19 +124,46 @@ test("certIds paths mirror the two-tree layout", () => {
   assert.strictEqual(byKey["orgs/caen/XYZ"].rosterPath, "rosters/orgs/caen/sessions/XYZ");
 });
 
-test("cleanup purges the session's adminSecrets entry too", () => {
+test("cleanup purges the session AND its four out-of-cascade siblings", () => {
   const src = read("cleanup-stale-sessions.js");
-  assert.match(src, /adminSecretPath\)\.remove\(\)/,
-    "adminSecrets lives outside the session subtree and nothing else purges it");
-  assert.match(src, /db\.ref\(loc\.path\)\.remove\(\)/,
-    "cleanup must purge by resolved location path, not a hardcoded sessions/ path");
-  assert.match(src, /roomChatPath\)\.remove\(\)/,
-    "the free-text chat lives outside the session subtree and must not outlive it");
-  assert.match(src, /certIdsPath\)\.remove\(\)/,
-    "the published-cert-id map lives outside the session subtree and must not outlive it");
-  assert.ok(src.includes("loc.rosterPath).remove()"),
-    "the participant roster holds names and emails; nothing deleted it before " +
-    "2026-08-21 (Annex VI G5) and it must not outlive its session");
+  for (const [key, why] of [
+    ["loc.path",
+      "cleanup must purge by resolved location path, not a hardcoded sessions/ path"],
+    ["loc.adminSecretPath",
+      "adminSecrets lives outside the session subtree and nothing else purges it"],
+    ["loc.roomChatPath",
+      "the free-text chat lives outside the session subtree and must not outlive it"],
+    ["loc.certIdsPath",
+      "the published-cert-id map lives outside the session subtree and must not outlive it"],
+    ["loc.rosterPath",
+      "the participant roster holds names and emails; nothing deleted it before " +
+      "2026-08-21 (Annex VI G5) and it must not outlive its session"]
+  ]) {
+    assert.ok(src.includes("purge[" + key + "] = null;"), why);
+  }
+});
+
+/* The five paths must go in ONE atomic update, and the reason is recoverability
+   rather than tidiness.
+
+   They used to be five sequential removes with `sessions/<code>` FIRST. If any
+   later delete failed, the session was already gone — and the enumeration that
+   drives this job walks `sessions` and `orgs`, so the next run could never
+   rediscover it. The surviving sibling was orphaned permanently, with nothing
+   left pointing at it. Stranding the roster that way is the worst case: it is
+   the node holding names and emails.
+
+   An RTDB update() with null values applies every path or none, so a failure
+   leaves the session in place and the next run retries the whole set. */
+test("the purge is ONE atomic multi-path update, so a partial failure is retryable", () => {
+  const src = read("cleanup-stale-sessions.js");
+  assert.ok(src.includes("db.ref().update(purge)"),
+    "the purge must be a single root-level update() so it is all-or-nothing");
+  // No stragglers: a later edit that adds a sixth path as a separate remove()
+  // would reintroduce exactly the orphaning this replaced.
+  assert.ok(!/loc\.\w+\)\.remove\(\)/.test(src),
+    "no purge path may be removed separately — that is what made a partial " +
+    "failure unrecoverable. Add it to the `purge` object instead.");
 });
 
 /* The roster path is DERIVED here, but the rules are hand-written, so the two

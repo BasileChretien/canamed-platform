@@ -175,24 +175,43 @@ async function main() {
       if (!QUIET) console.log(`${tag} ${loc.key}  ${reason}`);
 
       if (verdict === "PURGE" && CONFIRM) {
-        await db.ref(loc.path).remove();
+        /* ONE ATOMIC MULTI-PATH UPDATE, not five sequential removes.
+         *
+         * The session subtree and its four out-of-cascade siblings used to be
+         * deleted one after another, with `sessions/<code>` going FIRST. That
+         * ordering is unrecoverable if any later delete fails: the session is
+         * already gone, so the next run's enumeration — which walks `sessions`
+         * and `orgs` — cannot rediscover it, and the surviving sibling is
+         * orphaned permanently with nothing left pointing at it. The roster is
+         * the worst one to strand, because it holds names and emails.
+         *
+         * An RTDB update() with null values applies every path or none, so a
+         * failure leaves the session in place and the NEXT run retries the
+         * whole set. Paths are absolute from the root, which is why they are
+         * passed as one object rather than as refs.
+         *
+         * NB this does not reach rosters orphaned BEFORE 2026-08-21, when
+         * nothing deleted them at all — their sessions are already gone, so no
+         * enumeration can find them. That backfill is an operator task; this
+         * change only stops the population growing. */
+        const purge = {};
+        purge[loc.path] = null;
         // The session's admin secret lives OUTSIDE its subtree, so removing the
         // session left adminSecrets/<code> (the real PBKDF2 hash + proof
-        // writes) behind forever — nothing else purges it. Remove it with the
-        // session it belongs to.
-        await db.ref(loc.adminSecretPath).remove();
+        // writes) behind forever — nothing else purges it.
+        purge[loc.adminSecretPath] = null;
         // Same story for the Module A chat: it was moved out of the session
         // read-cascade into the top-level roomChat/ tree (RTDB .read cascades
         // and cannot be revoked deeper, so a room-scoped rule under the session
         // restricted nothing). It is the most sensitive free text we hold, so
         // it must not outlive its session. A no-op on deployments that predate
         // the move.
-        await db.ref(loc.roomChatPath).remove();
+        purge[loc.roomChatPath] = null;
         // Certificate-id map (certIds/<code>): another out-of-cascade top-level
-        // tree (like roomChat/adminSecrets), so it needs the same explicit purge
-        // or it orphans a map of published cert ids after its session is gone. A
-        // no-op on deployments predating certIds.
-        await db.ref(loc.certIdsPath).remove();
+        // tree, so it needs the same explicit purge or it orphans a map of
+        // published cert ids after its session is gone. A no-op on deployments
+        // predating certIds.
+        purge[loc.certIdsPath] = null;
         // Participant roster (rosters/<session path>/<uid>): name, email and
         // university, i.e. the most directly identifying data we hold — and
         // until 2026-08-21 NOTHING deleted it. No script referenced rosters at
@@ -205,7 +224,9 @@ async function main() {
         // in verification reads the roster. Keeping it for the sake of the
         // certificate would retain names for five years for no functional
         // reason.
-        await db.ref(loc.rosterPath).remove();
+        purge[loc.rosterPath] = null;
+
+        await db.ref().update(purge);
       }
       if (verdict === "PURGE") purged++;
       else kept++;

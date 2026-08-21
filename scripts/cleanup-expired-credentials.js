@@ -31,7 +31,8 @@
  * Env vars:
  *   GOOGLE_APPLICATION_CREDENTIALS   path to the SA JSON (set by GH Actions)
  *   FIREBASE_DATABASE_URL            the RTDB URL (with region suffix)
- *   CREDENTIALS_RETENTION_DAYS       default 1826 (~5y) — fallback window applied
+ *   CREDENTIALS_RETENTION_DAYS       default 1826 (~5y), and 1826 is also the MAX —
+ *                                    a larger value aborts the run. Fallback applied
  *                                    to `at` ONLY when a record carries no usable
  *                                    `retentionUntil`. Records that carry one are
  *                                    judged by it, not by this.
@@ -49,7 +50,7 @@
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const { parseRetentionDays } = require("./lib/retention-window");
-const { pruneExpiredCredentials } = require("./lib/credential-retention");
+const { pruneExpiredCredentials, validateFallbackDays } = require("./lib/credential-retention");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -62,13 +63,14 @@ function retentionDays(name, fallback) {
       "one disables retention silently.");
     process.exit(2);
   }
+  const cap = validateFallbackDays(r.value);
+  if (!cap.ok) {
+    console.error(`FATAL: ${name}=${cap.error}`);
+    process.exit(2);
+  }
   return r.value;
 }
 
-/* 1826 days is 5 x 365 + 1 leap day. The database rules cap `retentionUntil` at
-   roughly five years from the write, so this fallback matches the ceiling the
-   rules already enforce — a record missing the field is treated no more
-   generously than one that has it. */
 const RETENTION_DAYS = retentionDays("CREDENTIALS_RETENTION_DAYS", 1826);
 const CONFIRM = process.env.CREDENTIALS_CONFIRM === "1";
 const QUIET = process.env.CREDENTIALS_QUIET === "1";
