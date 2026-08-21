@@ -493,22 +493,37 @@ score-based bot detection for this threat model.
    `deactivate()`, so it takes effect on the next load. Say that plainly rather
    than implying an immediate stop.
 
-7. Reload the live site with consent granted and confirm the DevTools console
-   prints **neither** `[CaNaMED] App Check is OFF` (no site key) **nor**
-   `[CaNaMED] App Check is NOT activated: reCAPTCHA is consent-gated` (no
-   consent recorded). Both are no-ops; only their absence means a token is
-   being minted.
+7. **Verify a token is actually being minted — do not infer it from the console
+   being quiet.** With consent granted, reload the live site and check ONE of:
+
+   - **DevTools → Network**, filtered to `firebaseappcheck`: a successful
+     `exchangeRecaptchaV3Token` call to
+     `content-firebaseappcheck.googleapis.com`. This is the request that mints
+     the token; if it is absent or failing, nothing downstream has one.
+   - **DevTools → Console**:
+     ```js
+     firebase.appCheck().getToken().then(t => console.log("minted", t.token.slice(0, 12)))
+     ```
+     A resolved token is direct evidence. A rejection tells you why.
+   - **Firebase Console → App Check → Requests**: the *verified* count rising
+     for the Realtime Database.
+
+   The absence of `[CaNaMED] App Check is OFF` and `[CaNaMED] App Check is NOT
+   activated` is necessary but **not sufficient**: it shows only that the
+   no-site-key and no-consent branches did not run. `initAppCheck()` can still
+   log `App Check activation failed` from its catch, and even a clean activation
+   does not prove a token was obtained — reCAPTCHA can hang or be blocked
+   afterwards, which is exactly what caused the 2026-05-30 incident below.
 
 8. **Firebase Console → App Check → APIs → Realtime Database**: leave at
    **Unenforced** for at least 24 h while you watch the "Requests" metric.
    Once you see ≥99 % of traffic coming through verified clients, flip it to
    **Enforced**.
 
-   ⚠️ **Do not reach this step before step 6.** With no consent UI, no client
-   mints a token at all, so Enforced would reject **100 %** of traffic rather
-   than a stray few — every participant would hang on "Checking…" and then
-   "Couldn't reach the session server". Verify tokens are actually minting
-   first; the ≥99 % figure above is the check that tells you.
+   ⚠️ **Do not reach this step before steps 6 and 7.** With no consent UI, no
+   client mints a token at all, so Enforced would reject **100 %** of traffic
+   rather than a stray few — every participant would hang on "Checking…" and
+   then "Couldn't reach the session server".
 
    Historical note: RTDB *was* switched to Enforced on 2026-05-23 and reverted
    on 2026-05-30 after an availability incident — `grecaptcha.execute()` hung,
@@ -516,10 +531,18 @@ score-based bot detection for this threat model.
    every client. That risk is why enforcement is gated on evidence rather than
    on the setting being available.
 
-**Backout:** to roll back, set `CANAMED_RECAPTCHA_SITE_KEY = null` and flip
-the enforcement back to Unenforced — clients will return to the rules-only
-protection level. No data is lost. Removing a consent UI has the same effect
-without a config change, since the gate then never opens.
+**Backout.** Set `CANAMED_RECAPTCHA_SITE_KEY = null` and flip enforcement back
+to Unenforced — clients return to the rules-only protection level, and no data
+is lost.
+
+⚠️ **Removing the consent UI is NOT a rollback.** Consent is persisted per
+browser in `localStorage` under `canamed_appcheck_consent`, so deleting the UI
+leaves every browser that already opted in still passing the gate on its next
+load, for as long as that value survives. To actually stop those clients you
+must either clear the stored consent (the app's own `revokeAppCheckConsent()`,
+which takes effect on the next load — the Firebase SDK has no `deactivate()`)
+or remove the site key, which is the only client-side stop that does not depend
+on each browser's stored state. Prefer the site key for an incident.
 
 ### Setting the session password
 
