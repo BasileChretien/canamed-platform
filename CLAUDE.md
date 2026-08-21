@@ -227,7 +227,8 @@ estimate; the two together are why Monitor stays.
    The synthetic uptime probe still runs the canary every tick, so enabling
    Enforce turns a scheduled run red.
    `Verify:` `node --test tests/appcheck-consent-gate.test.js` (7 tests,
-   mutation-verified) and `grep -n "appCheckConsentGranted" docs/.../script.js`.
+   mutation-verified) and `grep -n "appCheckConsentGranted"
+   docs/Third_session/PBL_platform/script.js`.
 
 1. **Firebase App Check → Monitor (NOT Enforce) for RTDB — REVERTED
    2026-05-30 after an availability incident (HIGH).** App Check (reCAPTCHA
