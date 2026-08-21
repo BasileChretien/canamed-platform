@@ -623,15 +623,13 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   run without an explicit `HF_GLOBAL_DAILY_CAP`, now pinned in `.env` to the same
   4000 the code defaults to.
   **STILL OWED — the end-to-end check (needs a real room, cannot be done from the
-  CLI):** The provider pin, the `Qwen/Qwen3.5-9B` switch and the
-  `<think>` stripping are all **inert until `firebase deploy --only functions`
-  runs** — until then the live function keeps calling the router UNPINNED with
-  the old models, so the DPA's claim that this leg terminates in France is TRUE
-  OF THE REPO AND FALSE OF PRODUCTION. Do not cite the pin as a live control
-  before deploying and checking.
-  `Verify:` after deploying, send one EN and one JA turn from a real room and
-  read `metrics/hfPatient/events` — `promptVersion` must be `modA-llm@2.5` and
-  the recorded `provider` must be `ovhcloud`. The function stores the
+  CLI).** The provider pin, the `Qwen/Qwen3.5-9B` switch and the `<think>`
+  stripping are **deployed**; what is not yet evidenced is that they behave as
+  intended against the live endpoint. Qwen3.5-9B replaced BOTH previous models
+  and no automated check covers how it talks.
+  `Verify:` send one EN and one JA turn from a real room and read
+  `metrics/hfPatient/events` — `promptVersion` must be `modA-llm@2.5` and the
+  recorded `provider` must be `ovhcloud`. The function stores the
   `x-inference-provider` response header, so that field is the only end-to-end
   proof that the pin took effect; a stub-patient reply instead means the model
   is not served by the pinned provider.
