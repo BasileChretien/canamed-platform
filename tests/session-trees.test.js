@@ -116,6 +116,12 @@ test("certIds paths mirror the two-tree layout", () => {
   const byKey = Object.fromEntries(locs.map(l => [l.key, l]));
   assert.strictEqual(byKey.ABC.certIdsPath, "certIds/ABC");
   assert.strictEqual(byKey["orgs/caen/XYZ"].certIdsPath, "certIds/orgs/caen/XYZ");
+  // rosterPath must mirror the CLIENT path exactly: script.js writes
+  // "rosters/" + sPath(uid), and sPath is _sessionPrefix(org) + code. A
+  // mismatch here is silent - the roster write is best-effort and .catch()es,
+  // so a wrong path means names are never purged and nobody finds out.
+  assert.strictEqual(byKey.ABC.rosterPath, "rosters/sessions/ABC");
+  assert.strictEqual(byKey["orgs/caen/XYZ"].rosterPath, "rosters/orgs/caen/sessions/XYZ");
 });
 
 test("cleanup purges the session's adminSecrets entry too", () => {
@@ -128,4 +134,24 @@ test("cleanup purges the session's adminSecrets entry too", () => {
     "the free-text chat lives outside the session subtree and must not outlive it");
   assert.match(src, /certIdsPath\)\.remove\(\)/,
     "the published-cert-id map lives outside the session subtree and must not outlive it");
+  assert.ok(src.includes("loc.rosterPath).remove()"),
+    "the participant roster holds names and emails; nothing deleted it before " +
+    "2026-08-21 (Annex VI G5) and it must not outlive its session");
+});
+
+/* The roster path is DERIVED here, but the rules are hand-written, so the two
+   can drift. If the rule tree stopped covering the path the client writes to,
+   rosters would land somewhere retention never looks - and the write is
+   best-effort with a .catch(), so nothing would surface it. */
+test("the rosters rule tree covers both derived roster paths", () => {
+  const rulesPath = path.join(__dirname, "..", "docs", "Third_session",
+    "PBL_platform", "database.rules.json");
+  const r = JSON.parse(fs.readFileSync(rulesPath, "utf8")).rules.rosters;
+  assert.ok(r.sessions && r.sessions.$sessionId,
+    "rosters/sessions/$sessionId must exist - the default-tree write target");
+  assert.ok(r.orgs && r.orgs.$orgSlug && r.orgs.$orgSlug.sessions
+    && r.orgs.$orgSlug.sessions.$sessionId,
+    "rosters/orgs/$orgSlug/sessions/$sessionId must exist. CLAUDE.md long claimed " +
+    "this branch was MIS-NESTED at rosters/sessions/orgs/... and therefore " +
+    "fail-closed for every org session. It is not; that was fixed. This pins it.");
 });

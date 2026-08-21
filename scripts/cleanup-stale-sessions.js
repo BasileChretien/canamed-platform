@@ -193,6 +193,19 @@ async function main() {
         // or it orphans a map of published cert ids after its session is gone. A
         // no-op on deployments predating certIds.
         await db.ref(loc.certIdsPath).remove();
+        // Participant roster (rosters/<session path>/<uid>): name, email and
+        // university, i.e. the most directly identifying data we hold — and
+        // until 2026-08-21 NOTHING deleted it. No script referenced rosters at
+        // all, so every participant name ever captured outlived its session
+        // indefinitely (Annex VI item G5, GDPR Art. 5(1)(e)).
+        //
+        // It belongs on the SESSION clock, not the certificate clock: a
+        // certificate is verified by hashing the name the VERIFIER types
+        // (verify.js calls credentialNameHash(name, cred.session)), so nothing
+        // in verification reads the roster. Keeping it for the sake of the
+        // certificate would retain names for five years for no functional
+        // reason.
+        await db.ref(loc.rosterPath).remove();
       }
       if (verdict === "PURGE") purged++;
       else kept++;

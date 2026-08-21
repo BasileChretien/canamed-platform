@@ -607,8 +607,8 @@ arising from the termination itself, without prejudice to accrued rights.
 | G2 tests + questionnaire readable by peers | BLOCKING | [OWNER] | [DATE] | |
 | G3 cross-tenant readable session metadata | BLOCKING | [OWNER] | [DATE] | |
 | G4 no APPI Art. 28 basis for the LLM leg | BLOCKING | [OWNER] | [DATE] | |
-| G5 roster emails never deleted | HIGH | [OWNER] | [DATE] | |
-| G6 certificate records never deleted | HIGH | [OWNER] | [DATE] | |
+| G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
+| G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
 | G7 LLM usage log undisclosed / unbounded / unreachable | HIGH | [OWNER] | [DATE] | |
 | G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |

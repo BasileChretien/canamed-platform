@@ -674,30 +674,40 @@ be justified, not asserted:
   about five years out, so nothing can quietly claim a longer life.
 - The **certificate entry itself** is kept for that same period.
 
-> ⚠️ **[CONTROLLER — DO NOT PUBLISH THIS SECTION AS WRITTEN UNTIL THE DELETION
-> PATH EXISTS.]** The five years above is the **intended** retention, not an
-> enforced one. Verified against the code on 2026-08-20:
+> ℹ️ **[CONTROLLER — the deletion path now EXISTS, but is not yet armed.
+> Read this before publishing.]** Updated 2026-08-21, replacing a note that said
+> this section must not be published at all because nothing deleted these
+> records. Two of the three gaps it described are closed:
 >
-> - **No job deletes these records.** `retentionUntil` is written and capped, but
->   nothing ever reads it back — no script in `scripts/` refers to it or to
->   `credentials/` at all. The daily cleanup deletes the session and the
->   code→certificate map (`certIds/`), and stops there.
-> - **The records are write-once** (`credentials/$certId` allows a write only when
->   no value exists), so a participant cannot delete their own even in principle.
->   Only an operator using the admin SDK can, and no such procedure is documented.
-> - **`retentionUntil` is not a required field.** The rules cap it when it is
->   present; they do not insist it be there. Our own client always writes it, so
->   this is a latent gap rather than a live one — but it is not a guarantee.
+> - **Certificate records are now deletable on their own clock.**
+>   `scripts/cleanup-expired-credentials.js` reads `retentionUntil` — which was
+>   written on every record and never read back by anything — and deletes
+>   records whose date has passed. A record with no usable date is **never**
+>   deleted and is reported instead: the rules do not require `retentionUntil`,
+>   and treating an undated record as infinitely old would destroy exactly the
+>   records we understand least, irreversibly.
+> - **The participant list is now deleted with its session.** It rides the
+>   existing 30/90-day session purge rather than the five-year certificate
+>   clock, because nothing in verification reads it — a certificate is checked
+>   by hashing the name the *verifier* types. Keeping names for five years
+>   would have served no function.
 >
-> So a promise that these records "are deleted after five years" would be
-> untrue at the moment of publication, and the storage-limitation principle
-> (GDPR Art. 5(1)(e)) is not satisfied by an intention. **Two honest options:**
-> **(a)** implement expiry-based deletion plus a request-driven path, and then
-> publish the wording above as fact; or **(b)** publish it as the intended
-> period, say plainly that deletion is currently performed by hand on request,
-> and give participants the address to ask. Option (a) is the one that closes
-> Annex VI item **G6**; option (b) is honest but leaves G6 open.
-> Tracked as G6 — this note must be resolved, not merely deleted.
+> **What is still true, and gates publication of a five-year promise:** the
+> scheduled credential job runs in **DRY-RUN**. It has never deleted anything,
+> and the population it targets has never been pruned, so the first live run
+> would be the largest deletion this project has performed — against records
+> whose purpose is to still be there when someone checks a certificate. Arm it
+> deliberately (`.github/workflows/cleanup-expired-credentials.yml`) after
+> reading a few dry-run reports, and in particular the `Undated` count.
+>
+> Until it is armed, this section may state the five-year period as the
+> **intended** retention, and must not assert that deletion happens
+> automatically. Once armed, the qualification can go and Annex VI **G6** closes.
+>
+> One thing this does NOT change: the records remain **write-once**, so a
+> participant still cannot delete their own. Erasure on request is performed by
+> an operator with administrative access, and the contact for that has to be
+> named below before publication.
 
 **This is deliberate, and it is why the certificate works.** A certificate that
 nobody can check is not a certificate. To answer "did this person attend this

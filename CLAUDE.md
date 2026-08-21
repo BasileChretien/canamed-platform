@@ -1248,14 +1248,19 @@ LAZY chunk, because the first passing proves nothing about the second.
 
 **Two NEW rule-parity gaps, found by diffing the two rule subtrees. Neither was
 observed — LOCAL mode models no rules — so these are static findings:**
-- **`rosters` org branch is mis-nested by one level.** The client writes
-  `"rosters/" + sPath(uid)` → `rosters/orgs/<slug>/sessions/<code>/<uid>`, but
-  the rule sits at `rosters/**sessions**/orgs/$orgSlug/sessions/$sessionId/$uid`.
-  `rosters` declares no `orgs` child and no wildcard, so the participant email
-  capture **and** the facilitator roster export are fail-closed for every org
-  session — silently, because both call sites `.catch()` and continue.
-  `tests/facilitator-email-roster.test.js` checks the client path and the rule
-  tree separately and so cannot see the mismatch.
+- ~~**`rosters` org branch is mis-nested by one level.**~~ **✅ NOT TRUE ANY MORE —
+  label was stale, corrected 2026-08-21.** The rule tree now reads
+  `rosters/orgs/$orgSlug/sessions/$sessionId/$uid`, which matches the client
+  path (`"rosters/" + sPath(uid)`, i.e. `_sessionPrefix(org) + code + "/" + uid`)
+  exactly. Both branches — `rosters/sessions/$sessionId` and the org one — are
+  present. The finding was real when written; it was fixed at some point without
+  this line being updated, which is precisely what the STATUS-CLAIM RULE exists
+  to catch.
+  `Verify:` this is now **pinned by a test**, not by prose —
+  `tests/session-trees.test.js` "the rosters rule tree covers both derived roster
+  paths" asserts both branches exist in `database.rules.json`, and two sibling
+  assertions pin the derived `rosterPath` values. A regression fails the unit
+  suite instead of silently fail-closing org rosters again.
 - **`audit` is org-only — the DEFAULT tree has no rule for it.**
   `logAdminAction()` writes `sPath("audit")` for both trees, but `audit` is
   declared only under `orgs/$orgSlug/sessions/$sessionId`, and
@@ -1300,7 +1305,8 @@ observed — LOCAL mode models no rules — so these are static findings:**
   those three, and only those three, are `sessions/`-only. The same diff turned
   up **two gaps in the OTHER direction, both new** (see the 2026-08-05 org
   section below): `audit` exists ONLY under `orgs/`, and `rosters`'s org branch
-  is mis-nested. `Verify:` diff the key sets of `rules.sessions.$sessionId` and
+  was mis-nested. **The `rosters` half is FIXED as of 2026-08-21** (see the
+  corrected entry above and its new test); the `audit` half stands. `Verify:` diff the key sets of `rules.sessions.$sessionId` and
   `rules.orgs.$orgSlug.sessions.$sessionId` in `database.rules.json`.
 - `summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
   low value); `answers/.../edits/$editId` has no explicit owner check (possible
