@@ -664,15 +664,28 @@ name, so **someone who already has a list of names can test them against it**,
 and we can link the entry back to you for as long as we hold such a list.
 
 **How long that is, precisely** — because "always" is a strong word and it should
-be justified, not asserted:
+be justified, not asserted. Two different things are kept for two different
+lengths of time, and it matters which is which:
 - The **session record is deleted** 30 days after the session closes (90 if it is
-  never closed), and the certificate-code map (`certIds/`) is deleted with it.
-- Your **participation record** — the entry showing that you took part, with your
-  name — is **intended to be kept for as long as the certificate is verifiable,
-  about five years**, and no longer. Each certificate is stamped with its own
-  expiry date when it is issued, and the database refuses any date more than
-  about five years out, so nothing can quietly claim a longer life.
-- The **certificate entry itself** is kept for that same period.
+  never closed). Deleted with it: the certificate-code map (`certIds/`), the
+  workshop chat, and — since 21 August 2026 — **the participant list your
+  facilitator holds, which is where your name, email address and university
+  are**. So your name itself is not kept for years.
+- What *is* kept for about five years is the **certificate registry entry**, and
+  it does **not** contain your name. It holds a **one-way hash** of your name and
+  session — a scrambled value that cannot be turned back into your name — plus
+  the session it belongs to and its expiry date. That is what lets someone you
+  give the certificate to confirm it is genuine, and it is the reason the entry
+  has to outlive the session.
+- Each certificate is stamped with its own expiry date when it is issued, and the
+  database refuses any date more than about five years out, so nothing can
+  quietly claim a longer life.
+
+**What that means in practice.** For the first 30 days (or 90) we hold your name.
+After that, what remains is a scrambled value that only matches if someone
+already knows the name to check it against. That is not the same as anonymous —
+someone who guesses your name can confirm the match — but we no longer hold the
+name ourselves.
 
 > ℹ️ **[CONTROLLER — the deletion path now EXISTS, but is not yet armed.
 > Read this before publishing.]** Updated 2026-08-21, replacing a note that said
@@ -710,13 +723,13 @@ be justified, not asserted:
 > named below before publication.
 
 **This is deliberate, and it is why the certificate works.** A certificate that
-nobody can check is not a certificate. To answer "did this person attend this
-session", we have to still hold the record that says you did — so we keep it,
-for exactly as long as the certificate it supports.
+nobody can check is not a certificate. To answer "is this certificate genuine",
+we have to still hold the registry entry it points at — so we keep that entry,
+for exactly as long as the certificate it supports. We do not have to keep your
+name to do it, and we do not.
 
 **It is kept for that purpose only.** Participation data is not research data.
-Your participation record is retained to verify certificates and for nothing
-else; it is not part of the research dataset, is not shared with the research
+The registry entry is retained to verify certificates and for nothing else; it is not part of the research dataset, is not shared with the research
 team on that basis, and declining the research box does not remove it — nor does
 consenting to research extend it. If you would rather not have a verifiable
 certificate at all, tell your facilitator and the entry will be removed: the two

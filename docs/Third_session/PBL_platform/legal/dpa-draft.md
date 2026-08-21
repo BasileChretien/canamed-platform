@@ -173,10 +173,12 @@ This agreement says who is responsible for what:
 >    *(Corrected 2026-08-19: this said the text was processed in the United States
 >    at `us-central1`. That was true; the function was moved. The transfer to an
 >    unidentifiable provider is unchanged and remains the substance of B5.)*
-> 2. **Several categories of student data are still never deleted — though two
->    were closed on 2026-08-21.** Participant email rosters now purge with their
->    session (G5), and certificate records have a deletion job that is built but
->    deliberately still running DRY-RUN (G6). The AI usage log, account profiles,
+> 2. **Several categories of student data are still never deleted. ONE was
+>    closed on 2026-08-21; a second has a mechanism that has not been switched
+>    on.** Participant email rosters now purge with their session — that one is
+>    closed (G5). Certificate records have a deletion job that is built but
+>    deliberately still running DRY-RUN, so **nothing has actually been deleted
+>    and G6 is not closed** (it closes when the job is armed). The AI usage log, account profiles,
 >    authored scenarios and everything under the `orgs/` tree have no automated
 >    deletion at all (Annex VI, G7–G9). Deleting a session does not reach those.
 > 3. **This platform is not ready to run with real students under this DPA
