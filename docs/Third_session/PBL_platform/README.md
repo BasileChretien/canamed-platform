@@ -472,17 +472,77 @@ score-based bot detection for this threat model.
 4. **Firebase Console → App Check → CANAMED APP → reCAPTCHA**: paste the
    **secret key** into the "reCAPTCHA secret key" field → **Save**. (This is
    the only place the secret key lives outside the Google Cloud key store.)
-5. Push to `main`. The workflow re-deploys hosting; reload the live site and
-   confirm `[CaNaMED] App Check is OFF` is NO LONGER printed to the DevTools
-   console.
-6. **Firebase Console → App Check → APIs → Realtime Database**: leave at
+5. Push to `main`. The workflow re-deploys hosting.
+
+6. **Build a consent affordance — this step is not optional, and nothing works
+   without it (added 2026-08-21).** reCAPTCHA is consent-gated:
+   `initAppCheck()` returns unless an affirmative opt-in has been recorded, so
+   setting the site key alone does **not** activate App Check. Loading reCAPTCHA
+   before consent profiles every visitor (IP, mouse movement, keystroke timing,
+   device signals, persistent cookies), and ePrivacy Art. 5(3) requires prior
+   consent for that — legitimate interest does not substitute, and CNIL has
+   fined on exactly this point.
+
+   Your UI calls `grantAppCheckConsent()` when the visitor opts in; that
+   persists the choice and activates immediately, with no reload. It must also
+   disclose reCAPTCHA in the privacy notice, which currently does **not**
+   mention it, and note that since 2026-04-02 the site owner — not Google — is
+   the data controller for it.
+
+   `revokeAppCheckConsent()` records a withdrawal, but the Firebase SDK has no
+   `deactivate()`, so it takes effect on the next load. Say that plainly rather
+   than implying an immediate stop.
+
+7. **Verify a token is actually being minted — do not infer it from the console
+   being quiet.** With consent granted, reload the live site and check ONE of:
+
+   - **DevTools → Network**, filtered to `firebaseappcheck`: a successful
+     `exchangeRecaptchaV3Token` call to
+     `content-firebaseappcheck.googleapis.com`. This is the request that mints
+     the token; if it is absent or failing, nothing downstream has one.
+   - **DevTools → Console**:
+     ```js
+     firebase.appCheck().getToken().then(t => console.log("minted", t.token.slice(0, 12)))
+     ```
+     A resolved token is direct evidence. A rejection tells you why.
+   - **Firebase Console → App Check → Requests**: the *verified* count rising
+     for the Realtime Database.
+
+   The absence of `[CaNaMED] App Check is OFF` and `[CaNaMED] App Check is NOT
+   activated` is necessary but **not sufficient**: it shows only that the
+   no-site-key and no-consent branches did not run. `initAppCheck()` can still
+   log `App Check activation failed` from its catch, and even a clean activation
+   does not prove a token was obtained — reCAPTCHA can hang or be blocked
+   afterwards, which is exactly what caused the 2026-05-30 incident below.
+
+8. **Firebase Console → App Check → APIs → Realtime Database**: leave at
    **Unenforced** for at least 24 h while you watch the "Requests" metric.
    Once you see ≥99 % of traffic coming through verified clients, flip it to
-   **Enforced**. Requests without a valid attestation will then be rejected.
+   **Enforced**.
 
-**Backout:** to roll back, set `CANAMED_RECAPTCHA_SITE_KEY = null` and flip
-the enforcement back to Unenforced — clients will return to the rules-only
-protection level. No data is lost.
+   ⚠️ **Do not reach this step before steps 6 and 7.** With no consent UI, no
+   client mints a token at all, so Enforced would reject **100 %** of traffic
+   rather than a stray few — every participant would hang on "Checking…" and
+   then "Couldn't reach the session server".
+
+   Historical note: RTDB *was* switched to Enforced on 2026-05-23 and reverted
+   on 2026-05-30 after an availability incident — `grecaptcha.execute()` hung,
+   no token could mint, and under Enforce that took the whole database down for
+   every client. That risk is why enforcement is gated on evidence rather than
+   on the setting being available.
+
+**Backout.** Set `CANAMED_RECAPTCHA_SITE_KEY = null` and flip enforcement back
+to Unenforced — clients return to the rules-only protection level, and no data
+is lost.
+
+⚠️ **Removing the consent UI is NOT a rollback.** Consent is persisted per
+browser in `localStorage` under `canamed_appcheck_consent`, so deleting the UI
+leaves every browser that already opted in still passing the gate on its next
+load, for as long as that value survives. To actually stop those clients you
+must either clear the stored consent (the app's own `revokeAppCheckConsent()`,
+which takes effect on the next load — the Firebase SDK has no `deactivate()`)
+or remove the site key, which is the only client-side stop that does not depend
+on each browser's stored state. Prefer the site key for an incident.
 
 ### Setting the session password
 
