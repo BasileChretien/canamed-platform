@@ -2454,9 +2454,94 @@ let replayRoundReady = false;
    - the network call to attest may fail and we don't want to break the app
    The platform stays functional in any of those failure modes; only the
    abuse-protection layer goes missing. */
+/* App Check / reCAPTCHA — CONSENT-GATED since 2026-08-21. Read this before
+   "fixing" the fact that it never activates.
+
+   reCAPTCHA v3 profiles the visitor: IP address, mouse movement, keystroke
+   timing, device and browser signals, and it sets persistent cookies. Under
+   ePrivacy Art. 5(3) that storage and access needs PRIOR consent, and
+   legitimate interest under GDPR Art. 6 does not substitute for it — CNIL has
+   fined on exactly this point (Cityscoot EUR 125,000; NS Cards France
+   EUR 105,000, both partly for reCAPTCHA loaded without cookie consent).
+
+   Until today this ran at Firebase init, i.e. on page load, for every visitor,
+   before any consent existed — and the platform's only consent block lives in
+   the LOBBY, which a visitor reaches long afterwards and only if they join a
+   session. The privacy notice did not mention reCAPTCHA at all.
+
+   Since 2026-04-02 the site owner is reCAPTCHA's sole data CONTROLLER (Google
+   moved to processor, under the Google Cloud Terms + Cloud Data Processing
+   Addendum + reCAPTCHA Service Specific Terms). So this is our disclosure and
+   our lawful basis to get right, not Google's.
+
+   WHY GATING COSTS US NOTHING TODAY. App Check is in *Monitor*, not Enforce —
+   verified 2026-08-21 with the documented canary (an unattested, tokenless read
+   of credentials/<non-existent-id> returned `null http=200`, while the paired
+   root read was still `401 Permission denied`, so the rules — the real security
+   boundary — are unaffected). Nothing rejects an unattested request, so the
+   token this used to mint bought no access control. CLAUDE.md also records
+   ~5% verified traffic and a live session that worked while App Check was
+   403-ing entirely.
+
+   WHAT THIS CHANGES. Nothing activates unless consent has been RECORDED. No UI
+   records it today, so reCAPTCHA is simply not loaded — which is the compliant
+   state. The path stays live and callable so that adding a consent affordance
+   later is a UI job, not a re-architecture: call grantAppCheckConsent().
+
+   ⚠️ IF YOU TURN ON APP CHECK *ENFORCE* IN THE FIREBASE CONSOLE, READ THIS
+   FIRST. With no client-side activation, no client mints a token, so Enforce
+   would reject 100% of traffic rather than the ~95% it would reject today. The
+   order is: build the consent gate UI → confirm tokens are minting → only then
+   enforce. The synthetic uptime probe is the tripwire — it runs the canary
+   above every tick, so enabling Enforce turns a scheduled run red.
+
+   The one thing gating gives up is App Check's *metrics* (the verified/
+   unverified split), because unattested requests stop being labelled. That is
+   the entire cost. */
+const APPCHECK_CONSENT_KEY = "canamed_appcheck_consent";
+
+function appCheckConsentGranted() {
+  // Absence, storage errors and any value other than the exact opt-in string
+  // all mean "no". Consent must be an affirmative act, so the failure
+  // direction here is deliberately towards NOT loading.
+  try {
+    return localStorage.getItem(APPCHECK_CONSENT_KEY) === "1";
+  } catch (_) {
+    return false;
+  }
+}
+
+/* The API a future consent banner calls. Grant activates immediately so the
+   visitor does not have to reload for their choice to take effect. */
+function grantAppCheckConsent() {
+  try { localStorage.setItem(APPCHECK_CONSENT_KEY, "1"); } catch (_) { /* ignore */ }
+  initAppCheck();
+}
+
+/* Revocation cannot un-activate App Check inside this page — the Firebase SDK
+   has no deactivate() — so it records the choice and the next load honours it.
+   Say that plainly in any UI rather than implying an immediate stop. */
+function revokeAppCheckConsent() {
+  try { localStorage.removeItem(APPCHECK_CONSENT_KEY); } catch (_) { /* ignore */ }
+}
+
 let _appCheckActivated = false;
 function initAppCheck() {
   if (_appCheckActivated) return;
+  // THE GATE. Everything below this line profiles the visitor, so it must not
+  // run before an affirmative opt-in — see the block above.
+  if (!appCheckConsentGranted()) {
+    if (!window.__canamedAppCheckConsentHinted) {
+      window.__canamedAppCheckConsentHinted = true;
+      console.info(
+        "[CaNaMED] App Check is NOT activated: reCAPTCHA is consent-gated and " +
+        "no consent is recorded. This is the expected state — App Check is in " +
+        "Monitor, so no access depends on it. Call grantAppCheckConsent() from " +
+        "a consent affordance to enable it."
+      );
+    }
+    return;
+  }
   const siteKey = window.CANAMED_RECAPTCHA_SITE_KEY;
   if (!siteKey) {
     // operator hint — shown once per page load, never to participants in

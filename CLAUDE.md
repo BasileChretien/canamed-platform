@@ -206,6 +206,29 @@ estimate; the two together are why Monitor stays.
 >    reminders, "Known security follow-ups", inline ✅/DONE notes), not just
 >    this section.
 
+0. **⚠️ reCAPTCHA IS NOW CONSENT-GATED CLIENT-SIDE (2026-08-21, shell v148) —
+   read this BEFORE touching App Check enforcement.** `initAppCheck()` returns
+   unless an affirmative opt-in is recorded, and **no UI records one**, so
+   reCAPTCHA is not loaded at all. That is the intended state: reCAPTCHA v3
+   profiles every visitor (IP, mouse movement, keystroke timing, device signals,
+   persistent cookies) and ePrivacy Art. 5(3) needs PRIOR consent for it —
+   legitimate interest does not substitute, and CNIL has fined on exactly this
+   (Cityscoot €125k, NS Cards France €105k). It used to run at Firebase init, on
+   page load, for every visitor; the platform’s only consent block is in the
+   LOBBY, reached later and only by people who join a session, and the privacy
+   notice never mentioned reCAPTCHA at all.
+   Gating cost nothing because App Check is in *Monitor* (canary re-verified the
+   same day), so the token bought no access control. The one loss is App Check’s
+   verified/unverified metrics.
+   **⚠️ CONSEQUENCE FOR ITEM 1 BELOW:** with no client activation, NO client
+   mints a token, so switching RTDB to *Enforce* would now reject **100%** of
+   traffic rather than ~95%. Order of operations: build a consent affordance
+   (call `grantAppCheckConsent()`) → confirm tokens mint → only then enforce.
+   The synthetic uptime probe still runs the canary every tick, so enabling
+   Enforce turns a scheduled run red.
+   `Verify:` `node --test tests/appcheck-consent-gate.test.js` (7 tests,
+   mutation-verified) and `grep -n "appCheckConsentGranted" docs/.../script.js`.
+
 1. **Firebase App Check → Monitor (NOT Enforce) for RTDB — REVERTED
    2026-05-30 after an availability incident (HIGH).** App Check (reCAPTCHA
    v3) is wired client-side; enforcement is a Console setting.
