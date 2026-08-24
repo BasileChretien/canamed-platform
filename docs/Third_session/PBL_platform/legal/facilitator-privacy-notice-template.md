@@ -338,12 +338,21 @@ say so here.]
 - Small settings stored on your own device (language, sound, theme, the session
   code so you can rejoin). No advertising cookies, no analytics trackers.
 - **Scripts loaded from Google on every page.** The platform's core software
-  libraries are served by Google (`gstatic.com`), a security check (Google
-  reCAPTCHA) runs on page load, and Google's sign-in service is contacted if you
-  sign in with Google. Each of these means your IP address and browser details
-  reach Google **before you have read this notice or made any choice**.
-  [TO VERIFY before publishing — whether reCAPTCHA stores anything on your
-  device in our configuration, and whether it is treated as strictly necessary
+  libraries are served by Google (`gstatic.com`), and Google's sign-in service
+  (`identitytoolkit.googleapis.com`) is contacted **on every visit** — not only
+  if you choose to sign in with Google. The platform signs you in anonymously at
+  startup, and that is what contacts it. Both mean your IP address and browser
+  details reach Google **before you have read this notice or made any choice**.
+  *(Measured against the live site on 22 August 2026. An earlier draft said the
+  sign-in service was contacted only "if you sign in with Google", which
+  understated it.)*
+  **Google reCAPTCHA no longer runs** (changed 21 August 2026): it is
+  consent-gated, and because nothing in the interface asks for that consent yet,
+  it is never loaded — verified against the live site on 22 August 2026, which
+  made no request to any reCAPTCHA endpoint across two page loads. If a consent
+  control is ever added, this paragraph and the tables below have to be restored
+  along with it.
+  [TO VERIFY before publishing — whether the strictly-necessary position for
   under the ePrivacy rules (French Art. 82 LIL / your national equivalent). This
   must be resolved before publication, not afterwards.]
 
@@ -384,7 +393,7 @@ collection (Art. 21). Both are set out below.
 | **[Assessment — DELETE IF NOT APPLICABLE]** | [Whether any of this counts towards a grade] | [LEGAL BASIS] | [To assess your performance on [COURSE]] |
 | **[Education research — DELETE IF NOT APPLICABLE]** | Analysing the session for the study "[STUDY NAME]" and publishing aggregated findings | [See the important note below before choosing] | To conduct and publish the education-research study named above |
 | **Certificate verification** | Letting someone you show a certificate to confirm it is genuine (section 6) | [Art. 6(1)(f) legitimate interests. **The interest is:** so that a certificate you show to an employer or another university can be trusted. Confirm your institution accepts this after a balancing test, and record it — the record is readable by anyone holding the code (section 6). **For participants in Japan, legitimate interests do not exist as a basis**: see the note below.] | [To allow a third party to confirm a certificate is genuine] |
-| **Security and abuse prevention** | reCAPTCHA, access rules, technical logs | [Art. 6(1)(f) legitimate interests. **The interest is:** to stop automated abuse of a free-tier service and keep the session available to the class.] | To protect the service against unauthorised or abusive access |
+| **Security and abuse prevention** | Access rules and technical logs. *(reCAPTCHA is listed here in earlier versions; it is consent-gated and not currently loaded — see section 2.)* | [Art. 6(1)(f) legitimate interests. **The interest is:** to stop automated abuse of a free-tier service and keep the session available to the class.] | To protect the service against unauthorised or abusive access |
 
 **We will not use your data for any purpose beyond those listed without asking
 you first** (APPI Art. 18), and we will not use it in a way that could encourage
@@ -464,8 +473,8 @@ universities and **email addresses**.
 **Companies that process data for us.** Some of the companies we use themselves
 rely on further companies; those are listed too. Everything is in **Appendix A**.
 In summary: Google (hosting, database, sign-in, serverless functions, backups,
-the reCAPTCHA security check, and the software libraries loaded by your
-browser), **Hugging Face and the inference providers it routes to** (the AI
+and the software libraries loaded by your browser — **not** the reCAPTCHA check,
+which is consent-gated and not currently loaded), **Hugging Face and the inference providers it routes to** (the AI
 character chat), GitHub (runs our automated deletion, backup and export jobs),
 and [SMTP PROVIDER — only if you enable session emails; the email feature is
 switched **off** by default].
@@ -655,7 +664,7 @@ Rules</sub>
 | **The AI-character chat function** | **Belgium** (Google, `europe-west1`) — *corrected 2026-08-19; it ran in `us-central1` and was moved, with `tests/hf-region-lockstep.test.js` pinning the client and function to one region* | Co-located with the database | [TRANSFER MECHANISM — see the note below] |
 | **The AI chat text, onward from Hugging Face** | **Not identifiable in advance** — Hugging Face routes each request to one of several inference providers, and the platform only learns which one after the reply | The AI character | [TRANSFER MECHANISM — **and see blocking precondition B5: if this cannot be pinned to a named provider and country with an agreement in force, the AI chat must be switched off**] |
 | The automated deletion, backup and research-export jobs — **including the full identified copy of the session and the file linking pseudonyms back to real names**, which are written to the machine running the job before being stored in Belgium | **GitHub-hosted runners** (United States infrastructure) [TO VERIFY the runner region with the operator] | Automation | [TRANSFER MECHANISM] |
-| Your IP address and browser details, on every page load | Google (`gstatic.com` software libraries, reCAPTCHA security check, and `apis.google.com` if you sign in with Google) | The platform's own software and its bot protection | [TRANSFER MECHANISM] |
+| Your IP address and browser details, on every page load | Google (`gstatic.com` software libraries, and `apis.google.com` if you sign in with Google). **The reCAPTCHA check is NOT in this row any more** — consent-gated since 21 August 2026 and not loaded, so no data reaches Google by that route | The platform's own software and its bot protection | [TRANSFER MECHANISM] |
 | **Your sign-in with Google — the act of logging into your own Google account** | Google, as the controller of **your** account | This is not a transfer *by us*: you authenticate with Google directly, in Google's own window. We never see your Google password, and we send Google nothing about you in order to sign you in | **Google's own privacy terms govern your account** — this row is here for completeness, not as a safeguard we provide. *Google is an **independent controller** of your Google account for this step, not our processor: you authenticate with Google directly, we never see your password, and we send Google nothing about you in order to sign you in. Adopted as the controller's position, 2026-08-20.* |
 | **What we then store about you from that sign-in** — your email address and the account identifier Google returns | Google (Firebase Authentication), as **our processor** | Firebase Authentication holds the account record so you can sign back in and keep your history | Covered by the Google route that applies to **this** service — Firebase Authentication — which is now identified rather than guessed at. *(reCAPTCHA is NOT covered by this route: it runs under different Google terms and is listed separately in the DPA.)* the **Firebase Data Processing and Security Terms**, which incorporate the EU **Standard Contractual Clauses** with a Google entity as importer. Google LLC is separately certified under the **EU–US Data Privacy Framework**. *(The applicable SCC **module** follows from the parties roles, and the Firebase terms apply a Data Transfer Solution where one is available, falling back to the SCCs — so neither the module nor the importing entity is settled here; both are verification items, listed below and in the DPA. No certification date is stated because the published date is the effective date of Google framework page, not of the certification itself.)* **These are two distinct routes, not one** — the DPF is an adequacy-based solution for transfers to a certified US entity, the SCCs are an Art. 46 safeguard, and Firebase applies the SCCs as the fallback where the DPF does not cover a given transfer. Say which one carries THIS transfer, do not cite both as if they were interchangeable. `[TO VERIFY — for project canamed-69785: acceptance of the Firebase terms, the contracting Google entity, and which of the two instruments is relied on. Same single Google question as Annex IV.]` *(2026-08-20: the mechanism was researched and named, replacing a bare [TO VERIFY]. Naming it is not the same as evidencing acceptance, so a narrower [TO VERIFY] remains — and "Google's own terms" is still not a mechanism.)* |
 
@@ -878,9 +887,11 @@ decision about you.
 - Automated deletion jobs; identified backups written to a **private** cloud
   bucket with automatic expiry [TO VERIFY that the bucket and its expiry rules
   are actually provisioned for your project — ask the operator for evidence].
-- A bot-protection signal (Google reCAPTCHA / Firebase App Check) is collected
-  on each page load. [TO VERIFY — at the time of writing the platform's
-  documentation records this as being in **monitoring** mode on both the
+- A bot-protection signal (Google reCAPTCHA / Firebase App Check) is **no longer
+  collected**: consent-gated since 21 August 2026 and not loaded, because no
+  interface asks for the consent. It was previously collected on each page load.
+  [TO VERIFY if it is ever re-enabled — the platform's documentation records it
+  as being in **monitoring** mode on both the
   database and the AI-chat function, meaning it observes but does not block.
   Confirm the live setting with the operator before describing it as a control.]
 - The automation account used by the deletion, backup and export jobs can read
@@ -888,8 +899,9 @@ decision about you.
 
 **Where your data is handled, for the APPI Art. 32 disclosure.** Your data is
 handled in **Belgium** (the database, the email function and the archive
-bucket), in the **United States** (the AI-chat function; the automation runners;
-Google's reCAPTCHA and software-library servers), and — for the AI chat only —
+bucket), in the **United States** (the automation runners and Google's software-library
+servers; **not** reCAPTCHA, which is no longer loaded, and **not** the AI-chat
+function, which moved to Belgium), and — for the AI chat only —
 in **a country we cannot identify in advance** (see section 7). [ADD A ONE-LINE
 OUTLINE OF EACH COUNTRY'S DATA-PROTECTION REGIME — required by the PPC's
 guidance on 外的環境の把握. See Appendix E.]
@@ -928,12 +940,20 @@ guidance on 外的環境の把握. See Appendix E.]
 
 - **No advertising cookies and no analytics trackers.** But the platform's core
   software libraries are downloaded from **Google (`gstatic.com`)** on every
-  page load, **Google reCAPTCHA** runs as a security check on every page load
-  and receives your IP address and browser signals, and **`apis.google.com`** is
-  contacted if you sign in with Google. All three happen before you interact
-  with anything.
-  [TO VERIFY — whether reCAPTCHA stores anything on your device in our
-  configuration, and the consent position for it under the ePrivacy rules. See
+  page load, and Google's sign-in service (`identitytoolkit.googleapis.com`) is
+  contacted **on every visit** — the platform signs you in anonymously at
+  startup, so this is not limited to people who choose Google sign-in.
+  (`apis.google.com` is additionally contacted if you do choose it.)
+  All of this happens before you interact with anything.
+  **No cookies are set by any of it** — checked on the live site, 22 August 2026:
+  the page holds no cookies at all.
+  **Google reCAPTCHA used to run here too, and no longer does** (21 August
+  2026). It set cookies and read IP address, mouse movement, keystroke timing
+  and device signals — which under the ePrivacy rules needs your consent first,
+  and it was running before anything could ask. It is now gated behind a consent
+  that no part of the interface requests, so it does not load at all.
+  [TO VERIFY only if it is re-enabled — what it stores on your device in our
+  configuration, and the consent mechanism that would then be required. See
   section 2.]
 
 You can clear the stored items from your browser settings at any time.
@@ -972,7 +992,7 @@ add only if your institution requires it.]
 |---|---|---|---|
 | **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | Everything in section 2 | Database, email function and storage in **Belgium**; **the AI-chat function in the United States** | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
 | **Google (software libraries)** — the platform's core JavaScript is downloaded from `gstatic.com` on every page load | Your IP address and browser details | [TO VERIFY — served from a global network, not region-pinned] | Content delivery |
-| **Google reCAPTCHA / App Check** | Your IP address and browser signals, on every page load | [TO VERIFY — not region-pinned] | Anti-abuse |
+| **Google reCAPTCHA / App Check** — *not currently active* | Nothing. Consent-gated since 21 August 2026 and not loaded, so it receives no data. Previously: your IP address and browser signals, on every page load | [TO VERIFY if re-enabled — not region-pinned] | Anti-abuse |
 | **Google Sign-In (`apis.google.com`)** | Contacted only if you sign in with a Google account | [TO VERIFY] | Authentication |
 | **Hugging Face — Inference Providers** | Only the AI-character chat: the hidden scenario instructions plus at most 15 recent turns / about 12,000 characters of what participants typed | **Routes onward to a third-party provider that varies per request and is not known in advance** — [TO VERIFY which providers may be used, and in which countries. The platform's source code mentions some provider names only in a passing comment that ends "etc."; that is not a definitive or exhaustive list and must not be published as one.] | Sub-processor for the AI character |
 | **GitHub / GitHub Actions** | Runs the automated deletion, backup, export and cost-monitor jobs with an account that can read and delete the whole database. **The full identified copy of the session and the pseudonym-to-name linkage file are written on the job machine** before being stored in Belgium | United States infrastructure [TO VERIFY the runner region] | Automation |
@@ -989,8 +1009,9 @@ served from the platform itself, not from an outside network.
 
 *(Where this table names a technical region, the underlying platform identifier
 for Belgium is `europe-west1`. The US rows are GitHub Actions runners and
-Google's global edge / reCAPTCHA — **not** a Cloud Function region: the chat
-proxy moved from `us-central1` to `europe-west1`, corrected 2026-08-19.)*
+Google's global edge — **not** a Cloud Function region: the chat proxy moved
+from `us-central1` to `europe-west1`, corrected 2026-08-19. reCAPTCHA was on
+this list until 2026-08-21 and is no longer loaded at all.)*
 
 ---
 

@@ -343,7 +343,7 @@ To run this session, some of your data is handled outside Japan:
 |---|---|---|
 | **Belgium (EU)** | everything you type in the session | Google (Firebase Realtime Database) |
 | **United States** | your messages to the AI patient | the platform operator's Cloud Function, then Hugging Face, then **an AI company we cannot name in advance** |
-| **United States** | your IP address and browser signals | Google (reCAPTCHA anti-abuse) |
+| ~~**United States**~~ *(no longer applies)* | ~~your IP address and browser signals~~ — reCAPTCHA is consent-gated since 21 Aug 2026 and is not loaded, so nothing is sent | ~~Google (reCAPTCHA anti-abuse)~~ |
 | **United States** | the whole session record, once a night | GitHub (the servers that run our clean-up, backup and research-export jobs) |
 
 `[TO VERIFY — one line per destination:]`
@@ -378,10 +378,15 @@ substitute information instead: `[SUBSTITUTE INFORMATION — required]`.
   engineering, not wording: pin the provider.***
 - *This consent must be recorded **server-side**, alongside
   `pool/$cid/consent.*` — not in `localStorage` (see §5 and §11 M17).*
-- ***Sequencing problem, unfixable by wording:** reCAPTCHA / App Check
-  initialises at page load, **before any screen is shown**. An Art. 28 consent
-  taken on the join form cannot cover a transfer that already happened. See
-  §11 M18.*
+- ***Sequencing problem — RESOLVED 21 August 2026, in code rather than by
+  wording.** It was correctly diagnosed as unfixable by wording: reCAPTCHA /
+  App Check initialised at page load, **before any screen was shown**, so an
+  Art. 28 consent taken on the join form could not cover a transfer that had
+  already happened. The fix was the one this note implied — stop the transfer
+  happening. `initAppCheck()` now returns unless consent is recorded, and nothing
+  records it, so reCAPTCHA does not load. If a consent control is ever added,
+  the sequencing problem returns unless that control runs BEFORE Firebase
+  initialises. See §11 M18.*
 
 ---
 
@@ -417,7 +422,7 @@ email address and display name.
 | Sensitive free-text content | `[GDPR Art. 9(2)(...)]` · `[APPI Art. 20(2) consent or 学術研究 exception]` |
 | Education research | `[GDPR BASIS + Art. 89(1) safeguards]` · `[APPI basis]` |
 | Certificate verification | `[GDPR BASIS — if Art. 6(1)(f), name the interest]` · `[APPI: NOTE — APPI has no legitimate-interests basis; see §11 M5]` |
-| Anti-abuse (reCAPTCHA), backups, security | `[GDPR BASIS — if Art. 6(1)(f), name the interest]` |
+| Anti-abuse, backups, security *(reCAPTCHA is no longer part of this — not loaded since 21 Aug 2026)* | `[GDPR BASIS — if Art. 6(1)(f), name the interest]` |
 
 **Who can see it.** Everyone signed into the same session can read the whole
 session, including other rooms' answers, **your questionnaire answers, your
@@ -445,8 +450,12 @@ things leave the EU:
   and then sent to **Hugging Face**, which forwards them to a third-party AI
   provider that **changes from message to message and cannot be named in
   advance**. This is why you must not type anything personal into that chat.
-- Google's **anti-abuse check (reCAPTCHA)** receives your IP address and browser
-  signals on every page load, **before this notice is shown**.
+- Google's **anti-abuse check (reCAPTCHA)** used to receive your IP address and
+  browser signals on every page load, before this notice was shown. **It no
+  longer runs at all** (21 August 2026): it is gated behind a consent that
+  nothing currently asks for, so it is never loaded. Verified against the live
+  site on 22 August 2026 — no request to any reCAPTCHA endpoint, and no cookies
+  set on the page at all.
 - The **automatic clean-up, backup and research-export jobs** run on GitHub's
   infrastructure in the United States.
 - **Japan:** facilitators and observers in Japan read the whole session record
@@ -1020,8 +1029,12 @@ that exists independently of this document.
 **High — false or missing statements in the binding notice:**
 
 - **M2 — The AI patient is absent from the binding notice.** `privacy.html`
-  contains **no** mention of a language model, of chat, of Hugging Face, or of
-  reCAPTCHA (grep-confirmed). Disclosure exists only in the in-product banner.
+  contains **no** mention of a language model, of chat, or of Hugging Face
+  (grep-confirmed). Disclosure exists only in the in-product banner.
+  *The same grep shows no mention of reCAPTCHA either. That was a gap while
+  reCAPTCHA ran; since 21 August 2026 it is simply accurate, because reCAPTCHA
+  is consent-gated and not loaded. It becomes a gap again the moment a consent
+  control is added.*
 - **M3 — ⚠️ RE-CHECK: the US leg this item describes has MOVED. `hfPatient` now
   runs in `europe-west1` (functions/index.js ≈110, "co-located with the trigger
   (EU-resident data)"; the client pins the same region and
@@ -1054,9 +1067,18 @@ that exists independently of this document.
   `privacy.html`, `i18n.js` (`lobby.privacy.p1` ≈376, `lobby.privacy.p6` ≈381),
   `compliance.html` and the survey's university options. All must become
   per-controller configuration.
-- **M22 — "No third-party cookies, no tracking pixels" is false.**
-  `privacy.html` §17 (≈214-219) says it, while reCAPTCHA loads on every page.
-  This is a false statement in the **binding** notice, not an open question.
+- **M22 — ✅ RESOLVED 21 August 2026. "No third-party cookies, no tracking
+  pixels" is now TRUE.** It was false while reCAPTCHA loaded on every page and
+  set persistent cookies. reCAPTCHA is now consent-gated and never loaded, and
+  the claim was re-checked against the live site on 22 August 2026:
+  `document.cookie` is **empty** — zero cookies of any kind — and no reCAPTCHA
+  request is made, so none can be set.
+  **Read the claim narrowly, because it is narrow.** It is about cookies and
+  pixels, not about third-party connections. The page still contacts two Google
+  origins on load: `www.gstatic.com` (the Firebase SDKs) and
+  `identitytoolkit.googleapis.com` (anonymous sign-in). Neither sets a cookie,
+  so the sentence holds — but a reader who took it to mean "no third-party
+  contact" would be misled, and §2 of the notice is where that is disclosed.
 
 **Medium — structural changes this wording assumes:**
 
@@ -1071,7 +1093,8 @@ that exists independently of this document.
   session, re-prompted on notice-version **or provider/model** change.
 - **M18 — ePrivacy / Art. 82 loi Informatique et Libertés.** Reading or writing
   terminal equipment is a **separate** consent regime the CNIL enforces
-  independently of GDPR. Engaged by reCAPTCHA **and** by the platform's own
+  independently of GDPR. **No longer engaged by reCAPTCHA** (consent-gated
+  since 21 August 2026, not loaded), but still engaged by the platform's own
   storage: `localStorage.canamedModALLMConsent` and the resume blob, which
   persists name, university and consent state and **auto-rejoins the session
   with no screen shown** if the notice version still matches
@@ -1186,9 +1209,10 @@ Japanese block natively, in Art. 33/34/35 terms, with the fee stated.
 1. Transfer mechanism **per destination, per regime**: for GDPR, the adequacy
    decision or the specific safeguards **plus the means to obtain a copy**
    (Art. 13(1)(f)); for APPI, the Art. 28 information set or the 基準適合体制
-   route. Legs: the US Cloud Function, Hugging Face **and its downstream
-   providers**, reCAPTCHA, GitHub Actions, and **Japan** (remote facilitator/
-   observer access and research recipients).
+   route. Legs: Hugging Face **and its downstream provider** (now pinned to
+   OVHcloud, Gravelines), GitHub Actions, and **Japan** (remote facilitator/
+   observer access and research recipients). *Two legs have left this list: the
+   Cloud Function moved to `europe-west1`, and reCAPTCHA is no longer loaded.*
 2. Whether the 2019 EU→Japan adequacy decision reaches a **国立大学法人** after
    the 2021 APPI amendment moved public-sector bodies into a separate chapter.
 3. Whether a Nagoya-run session is governed by the private-sector chapter or by

@@ -1015,7 +1015,7 @@ remediation item (Annex VI, L11).
 | Hugging Face router and downstream inference provider | **Outside the EU; provider varies per request** | `functions/index.js`, `functions/lib/hf-helpers.js` |
 | Private PII archive bucket (`gs://canamed-pii-archive`) | `europe-west1` (EU), per the provisioning script | `scripts/ops/setup-pii-bucket.sh` — [TO VERIFY the bucket exists with these settings] |
 | **GitHub Actions runners (retention, backup and export jobs)** | GitHub-hosted infrastructure, **US** | `.github/workflows/*.yml` |
-| reCAPTCHA v3 / App Check | Google; region not pinned | `firebase-config.js`, `firebase.json` CSP — [TO VERIFY processing location] |
+| reCAPTCHA v3 / App Check — **not loaded since 2026-08-21** | n/a while consent-gated; Google, region not pinned, if re-enabled | `script.js` `initAppCheck()` returns unless consent is recorded, and no UI records it — [TO VERIFY processing location only if re-enabled] |
 | Google account avatars (signed-in users) | `lh3.googleusercontent.com` | `firebase.json` CSP |
 | Certificate-verification page (`verify.html`) loads the Firebase SDK from `www.gstatic.com` | Google edge; visitor IP disclosed | `verify.html` |
 
@@ -1500,15 +1500,25 @@ that could not be confirmed from the code is marked.*
   `Cross-Origin-Opener-Policy: same-origin-allow-popups`.
 - No third-party analytics or advertising origins are permitted by the CSP.
   Fonts are self-hosted; the HTML sanitiser and PDF library are vendored locally.
-- **Where Google script actually loads — corrected.** A live reCAPTCHA v3 key
-  means Google origins load on the **application page** (`index.html`) and the
-  Firebase SDK loads from `www.gstatic.com` on the **certificate-verification
-  page** (`verify.html`). They do **not** load on `privacy.html` or
-  `compliance.html`, which reference no Google origin at all. Any blanket claim
-  of "no third-party requests" is inaccurate for the application; any claim that
-  Google script loads on "every page" is also inaccurate. [TO VERIFY which
-  cookies reCAPTCHA actually sets, before repeating the "no third-party cookies"
-  claim in the notice.]
+- **Where Google script actually loads — measured against the live site
+  2026-08-22.** The application page (`index.html`) contacts exactly two Google
+  origins: `www.gstatic.com` for the Firebase SDKs, and
+  `identitytoolkit.googleapis.com` for sign-in. `verify.html` loads the Firebase
+  SDK from `www.gstatic.com`. Neither `privacy.html` nor `compliance.html`
+  references a Google origin at all.
+  **reCAPTCHA is no longer among them** — consent-gated 2026-08-21, and with no
+  UI recording consent it never loads; two full page loads produced no request to
+  any reCAPTCHA endpoint.
+  Consequences for the claims made elsewhere: a blanket "no third-party requests"
+  remains **inaccurate** for the application page, and "Google script loads on
+  every page" remains inaccurate too. But **"no third-party cookies" is now
+  accurate** — `document.cookie` is empty on the live application page, and the
+  two remaining Google origins set nothing.
+  ⚠️ **`identitytoolkit.googleapis.com` is contacted on EVERY visit**, because the
+  platform signs users in anonymously at startup — not only when someone chooses
+  Google sign-in. The facilitator notice describes Google's sign-in service as
+  contacted "if you sign in with Google", which understates it.
+  [TO FIX in the notice.]
 - HTML in queued emails is sanitised through a tight allowlist before sending.
 
 ## 5. Language-model proxy controls
@@ -1609,7 +1619,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 | # | Sub-processor | Service | Personal data it receives | Location | APPI characterisation |
 |---|---|---|---|---|---|
 | 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database, the mail function **and the language-model proxy** all in `europe-west1` (Belgium) — *the proxy moved from `us-central1`; corrected 2026-08-19*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
-| 2 | Google (reCAPTCHA v3 / App Check) | Bot resistance | Participant IP address and browser signals, on the application page | Google; not region-pinned [TO VERIFY] | [TO VERIFY] |
+| 2 | Google (reCAPTCHA v3 / App Check) — **INACTIVE since 2026-08-21** | Bot resistance | **Nothing.** Consent-gated and never loaded, so it receives no data. Previously: participant IP address and browser signals, on the application page | n/a while inactive; Google, not region-pinned, if re-enabled [TO VERIFY] | [TO VERIFY] |
 | 3 | **Hugging Face** — [EXACT LEGAL ENTITY AND ADDRESS TO CONFIRM] | Inference Providers router for the simulated-patient character | The scenario system prompt plus **participant free-text chat turns** (up to 16 messages / 12,000 characters per call) | Outside the EU [TO VERIFY exact location] | **Art. 28 foreign provision** — it processes the content to generate output, so the cloud exception does not apply |
 | 4 | **The inference provider behind Hugging Face** — **OVHcloud AI Endpoints** (OVH SAS) | Actual model execution | Same as #3 | **Pinned to `ovhcloud`, served from Gravelines, FRANCE — DEPLOYED 2026-08-21.** The running function now sends an explicit provider, so the recipient no longer varies per request. Note the deploy also had to correct `functions/.env`, which is git-ignored and was still naming the previous models: `.env` overrides the code defaults, so deploying without that fix would have paired the old models with the new provider, 404ing every call | **Art. 28 foreign provision.** The recipient becomes nameable when the pin is deployed, which is what Art. 28(2) requires and what this row previously could not supply. **Still not authorised under clause 6.1** — and the reason is no longer the deploy, which happened on 2026-08-21. Pinning names the recipient; it does not by itself produce the contract or the transfer record, and those remain outstanding. The runtime evidence is outstanding too: confirm from `metrics/hfPatient/events` (`provider` field, taken from the `x-inference-provider` response header) that a live turn records `ovhcloud` |
 | 5 | GitHub (GitHub Actions) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Runs the scheduled retention, backup, export and cost-monitoring jobs | **Receives and processes on US infrastructure a nightly copy of the entire identified `/sessions` tree, including free-text chat, writes it to the runner's local disk, and generates the real-name → pseudonym linkage table there.** Job logs are configured to contain no PII | US | **Candidate cloud exception is doubtful** — the runner materially handles the data, not merely stores it [TO VERIFY with Japanese counsel] |
@@ -1898,7 +1908,7 @@ the first page a reviewing DPO reads. Verified defects:
 
 | Claim on the page | Reality |
 |---|---|
-| "No third-party trackers" badge; "no third-party script origins" | A live reCAPTCHA v3 key loads Google script on the application page; `verify.html` loads the Firebase SDK from `www.gstatic.com` |
+| "No third-party trackers" badge; "no third-party script origins" | Still inaccurate as to script ORIGINS, though narrower since 2026-08-21: reCAPTCHA no longer loads, but the application page still contacts `www.gstatic.com` and `identitytoolkit.googleapis.com`, and `verify.html` loads the Firebase SDK from `www.gstatic.com` |
 | "abuse protection via Firebase App Check (reCAPTCHA)" presented as a live control | App Check enforcement is **off** in both places (`APP_CHECK_ENFORCE=false`; RTDB reverted to Monitor) |
 | "exports and all reporting are aggregate and pseudonymous by default — no individual is named" | False for the nightly **identified** backup and for the facilitator's identified roster CSV |
 | "a fully trilingual interface" | The workshop UI renders **in English only** — see L7 |
@@ -2293,12 +2303,18 @@ ever becomes graded, scoring must move server-side.**
 **R5 — App Check is not enforced.** See Annex II §6. The database rules are the
 real boundary.
 
-**R6 — Third-party script claims — scope corrected.** The notice's "no
-third-party cookies, no tracking pixels" claim sits alongside a live reCAPTCHA
-integration. Corrected scope (v0.1 overstated this): Google script loads on the
-**application page** and, via the Firebase SDK from `www.gstatic.com`, on the
+**R6 — Third-party script claims — scope corrected, and the COOKIE half is now
+resolved.** The notice's "no third-party cookies, no tracking pixels" claim used
+to sit alongside a live reCAPTCHA integration that set persistent cookies. Since
+2026-08-21 reCAPTCHA is consent-gated and not loaded, and the claim was measured
+against the live site on 2026-08-22: `document.cookie` is **empty**. **That
+sentence is now true**, and it should be read as narrowly as it is written — it
+is about cookies and pixels, not about third-party contact.
+The SCRIPT-ORIGIN half stands: Google script still loads on the **application
+page** (`www.gstatic.com`, plus `identitytoolkit.googleapis.com` for anonymous
+sign-in on every visit) and, via the Firebase SDK, on the
 **certificate-verification page**; `privacy.html` and `compliance.html` load no
-Google origin at all. Reword the claim and verify which cookies reCAPTCHA sets.
+Google origin at all.
 The `verify.html` leg additionally discloses a **non-participant's** IP address to
 Google with no notice — see clause 2.4.
 
