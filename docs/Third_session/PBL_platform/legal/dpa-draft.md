@@ -670,10 +670,15 @@ Controller for each sub-processor's performance.
 6.4 **Onward sub-processing by Hugging Face — specifically disclosed.** The
 Module A language-model character is served through Hugging Face Inference
 Providers. Hugging Face's router (`https://router.huggingface.co/v1/chat/
-completions`) forwards each request to a **third-party inference provider**, and
-which provider handles a given request **varies per call**. The platform records
-the provider returned in the `x-inference-provider` response header; providers
-named in the code are Together, Fireworks and Cerebras.
+completions`) forwards each request to a **third-party inference provider**.
+**Which provider is now fixed** (2026-08-21): the model id carries a
+`:ovhcloud` suffix, so the router is directed to **OVHcloud AI Endpoints**,
+Gravelines, **France**. Until then it varied per call, and the providers named in
+the code were Together, Fireworks and Cerebras.
+The platform still records the provider returned in the `x-inference-provider`
+response header — but now as **verification** that the pin took effect, not as
+the only way to learn where the text went. **Two recipients remain, not one:**
+Hugging Face operates the router and receives the text before passing it on.
 
 **The consequence, stated plainly:** GDPR Art. 28(2) requires the controller to
 authorise *identified* sub-processors and to be told of intended changes with a
@@ -1012,7 +1017,7 @@ remediation item (Annex VI, L11).
 | Realtime Database (all session data) | **`europe-west1`** (Belgium, EU) | `firebase-config.js` — `canamed-69785-default-rtdb.europe-west1.firebasedatabase.app` |
 | `sendQueuedMail` Cloud Function | **`europe-west1`** (EU) | `functions/index.js` — explicitly "co-located with the trigger (EU-resident data)" |
 | **`hfPatient` Cloud Function (the LLM proxy)** | **`europe-west1`** (Belgium, EU) — *moved from `us-central1`; corrected 2026-08-19* | `functions/index.js` ≈110 ("co-located with the trigger (EU-resident data)"); client pinned in `modA-llm-init.js`, pair held by `tests/hf-region-lockstep.test.js` |
-| Hugging Face router and downstream inference provider | **Outside the EU; provider varies per request** | `functions/index.js`, `functions/lib/hf-helpers.js` |
+| Hugging Face router and downstream inference provider | **Router: outside the EU [TO VERIFY]. Downstream provider: OVHcloud AI Endpoints, Gravelines, FRANCE** — pinned 2026-08-21, where it previously varied per request | `functions/index.js`, `functions/lib/hf-helpers.js` |
 | Private PII archive bucket (`gs://canamed-pii-archive`) | `europe-west1` (EU), per the provisioning script | `scripts/ops/setup-pii-bucket.sh` — [TO VERIFY the bucket exists with these settings] |
 | **GitHub Actions runners (retention, backup and export jobs)** | GitHub-hosted infrastructure, **US** | `.github/workflows/*.yml` |
 | reCAPTCHA v3 / App Check — **not loaded since 2026-08-21** | n/a while consent-gated; Google, region not pinned, if re-enabled | `script.js` `initAppCheck()` returns unless consent is recorded, and no UI records it — [TO VERIFY processing location only if re-enabled] |
@@ -1031,11 +1036,17 @@ data set to a US processor**, and it must be assessed as such under GDPR
 Chapter V and APPI Art. 28. Mitigation available: move both jobs to Cloud Run or
 Cloud Scheduler in `europe-west1` (open item, Annex VI G11).
 
-**Consequence to state plainly to participants:** the free-text conversation with
-the simulated patient — including whatever a student types — leaves the EU. It is
-processed in the United States by Google Cloud, then sent to Hugging Face, then
-to a third-party inference provider that changes from request to request. The
-current privacy notice does not say this. See Annex VI, item L4.
+**Consequence to state plainly to participants — and it has changed twice in
+2026.** The free-text conversation with the simulated patient, including whatever
+a student types, is processed by Google Cloud in **`europe-west1` (Belgium)**,
+then sent to **Hugging Face**, then to **OVHcloud AI Endpoints in Gravelines,
+France**.
+*Both of the old US legs are gone: `hfPatient` moved from `us-central1` to
+`europe-west1` on 2026-07-24, and the onward provider was pinned on 2026-08-21
+where it previously changed from request to request.*
+**What has NOT changed:** the text still leaves our control and reaches two
+separate companies, and the current privacy notice still does not say so. See
+Annex VI, item L4.
 
 ### 12.2 EU → Japan
 
@@ -1101,11 +1112,16 @@ only an API token in Secret Manager. If no DPA exists, the chat feature has **no
 Art. 28 contract and no Chapter V transfer mechanism** and must be disabled until
 one is in place — see clause 12.6.]
 
-**(c) Hugging Face's onward inference providers.** Because the handling provider
-varies per request, neither a fixed transfer-impact assessment nor a fixed
-sub-processor list is currently possible. The fix is to pin the account
-(clause 6.4). [TO VERIFY with Hugging Face whether pinning to a single named
-provider and region is available on this account.]
+**(c) Hugging Face's onward inference provider — the obstacle described here is
+REMOVED, the item is not.** A fixed transfer-impact assessment and a fixed
+sub-processor list used to be impossible because the handling provider varied per
+request. It is pinned to **OVHcloud AI Endpoints, Gravelines, France** as of
+2026-08-21, so both are now possible.
+*The question this bullet asked — whether pinning was available on the account —
+was answered by doing it: it is a request parameter, not an account feature.*
+**Still outstanding:** the assessment and the sub-processor entry have to actually
+be produced, no contract with OVHcloud is evidenced, and the runtime confirmation
+on a live turn has not been done.
 
 **(d) GitHub Actions.** As restated in 12.1, the retention jobs copy the entire
 identified database onto US infrastructure nightly and build the linkage table
@@ -1782,7 +1798,7 @@ where the data is handled. The countries engaged here are:
 |---|---|---|
 | **Belgium** (`europe-west1`) | The Realtime Database (all session data), the mail function, the private archive bucket | Verified in config |
 | **United States** (GitHub Actions runners) — *the language-model proxy moved to `europe-west1` on the platform side; corrected 2026-08-19* | The nightly full identified `/sessions` dump and the linkage-table construction | Verified in code |
-| **Unidentifiable** | Hugging Face's downstream inference provider, which varies per request | Verified in code — and this is the problem |
+| **France** (Gravelines) | Hugging Face's downstream inference provider — **OVHcloud AI Endpoints**, pinned 2026-08-21 where it previously varied per request and was the entry that made this table say *Unidentifiable* | Verified in code (`applyProviderPin`); the runtime confirmation on a live turn is still outstanding |
 
 **The last row defeats both duties.** An operator cannot understand the regime of
 a country it cannot name, and cannot publish the list Art. 32(1) requires. This
