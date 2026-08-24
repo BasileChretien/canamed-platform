@@ -20,7 +20,7 @@
 > | # | Defect | Status |
 > |---|---|---|
 > | M11 | No consent filter on the research export | ✅ **FIXED** — PR #232, deployed. The export now includes only participants with `consent.research === true`, fail-closed. |
-> | M12 | AI-patient transfer has no identified recipient and no documented transfer mechanism | ❌ **STILL OPEN.** A legal/documentation gap, not a code one — it needs the sub-processor and transfer mechanism named by counsel. |
+> | M12 | AI-patient transfer: recipient now IDENTIFIED (pinned 2026-08-21), transfer mechanism still undocumented | ❌ **STILL OPEN — on narrower grounds.** A legal/documentation gap, not a code one — it needs the sub-processor and transfer mechanism named by counsel. |
 > | M13 | Certificate verification IDs are computable by any classmate | ❌ **STILL OPEN — and confirmed correct.** `resolveCertId()` mints a *deterministic* non-cryptographic hash of `sessionCode\|clientId`, both readable by any session member. A crypto-random `randomCredentialId()` exists but is never called. The project's own CLAUDE.md claimed these IDs were crypto-random; **that claim was wrong and has been corrected.** |
 >
 > Two further code defects found in the same pass have also been fixed and
@@ -1017,7 +1017,8 @@ that exists independently of this document.
   ⚠️ **Still open:** `admin-tools.js :: researchCsvParticipantRows` (the
   facilitator CSV) has **no consent check**. Screen B may now describe the
   research *export* as optional, but not the facilitator CSV.
-- **M12 — The AI-patient recipient is unknowable in advance.** `HF_URL` points
+- **M12 — ⚠️ REBASED 2026-08-21. The recipient IS now knowable; the mechanism is still missing.** The evidence below described the unpinned router and is kept as the record of what the pin changed — removing `HF_PROVIDER` restores all of it. What survives the pin: no contract with the named provider, no documented transfer mechanism, Hugging Face's own location `[TO VERIFY]`, and no foreign-transfer consent element in the join flow.
+  *Original finding:* **The AI-patient recipient is unknowable in advance.** `HF_URL` points
   at Hugging Face's router (`functions/index.js`, ≈163); the downstream provider
   is only learned **after** the response (`x-inference-provider`, ≈447). You
   cannot inform a data subject of a recipient you do not know (GDPR Art.

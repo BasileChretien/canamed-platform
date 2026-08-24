@@ -906,7 +906,11 @@ handled in **Belgium** (the database, the email function and the archive
 bucket, **and the AI-chat function**), in the **United States** (the automation
 runners — the one confirmed US transfer; **not** reCAPTCHA, which is no longer
 loaded), on a **global content-delivery network whose location for these requests
-is `[TO VERIFY]`** (Google's software libraries and the sign-in endpoint), and —
+is `[TO VERIFY]`** (Google's software libraries, `gstatic.com` — **this entry is
+the CDN only**), on **Firebase Authentication** (`identitytoolkit.googleapis.com`,
+contacted on every visit for the anonymous sign-in; **not** content delivery, and
+its location and transfer status are `[TO VERIFY]` under the same Google Cloud
+question as the rest of Firebase), and —
 for the AI chat's onward step — in **France** per the provider's published
 material, `[TO VERIFY against contract]`, having previously been a country we
 could not identify in advance. **Hugging Face sits between the two and its own
