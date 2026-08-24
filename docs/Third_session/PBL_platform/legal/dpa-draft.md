@@ -1511,9 +1511,11 @@ that could not be confirmed from the code is marked.*
   any reCAPTCHA endpoint.
   Consequences for the claims made elsewhere: a blanket "no third-party requests"
   remains **inaccurate** for the application page, and "Google script loads on
-  every page" remains inaccurate too. But **"no third-party cookies" is now
-  accurate** — `document.cookie` is empty on the live application page, and the
-  two remaining Google origins set nothing.
+  every page" remains inaccurate too. As for cookies: `document.cookie` was **empty** on the live application page, so
+  no script-visible first-party cookie exists. That is the whole of what was
+  measured — `HttpOnly` cookies and anything set on the two remaining Google
+  origins are outside what `document.cookie` can report, and remain unevidenced.
+  reCAPTCHA is the one certainty: no request reached it, so it set nothing.
   ⚠️ **`identitytoolkit.googleapis.com` is contacted on EVERY visit**, because the
   platform signs users in anonymously at startup — not only when someone chooses
   Google sign-in. The facilitator notice describes Google's sign-in service as
@@ -2307,9 +2309,16 @@ real boundary.
 resolved.** The notice's "no third-party cookies, no tracking pixels" claim used
 to sit alongside a live reCAPTCHA integration that set persistent cookies. Since
 2026-08-21 reCAPTCHA is consent-gated and not loaded, and the claim was measured
-against the live site on 2026-08-22: `document.cookie` is **empty**. **That
-sentence is now true**, and it should be read as narrowly as it is written — it
-is about cookies and pixels, not about third-party contact.
+against the live site on 2026-08-22: `document.cookie` was **empty** on the
+application page. **That sentence is now true** on the evidence available, and
+it should be read as narrowly as it is written — it is about cookies and pixels,
+not about third-party contact.
+**The evidence has a known limit.** `document.cookie` sees script-visible cookies
+on our own origin only: not `HttpOnly` cookies, and not anything set on
+`gstatic.com` or `identitytoolkit.googleapis.com`. Confirming the claim to a
+standard that would survive challenge needs `Set-Cookie` inspection across those
+origins. The reCAPTCHA half needs no such work — no request reached it, so it
+set nothing.
 The SCRIPT-ORIGIN half stands: Google script still loads on the **application
 page** (`www.gstatic.com`, plus `identitytoolkit.googleapis.com` for anonymous
 sign-in on every visit) and, via the Firebase SDK, on the

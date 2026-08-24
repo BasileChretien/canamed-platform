@@ -342,7 +342,7 @@ To run this session, some of your data is handled outside Japan:
 | Where | What goes there | Who handles it |
 |---|---|---|
 | **Belgium (EU)** | everything you type in the session | Google (Firebase Realtime Database) |
-| **United States** | your messages to the AI patient | the platform operator's Cloud Function, then Hugging Face, then **an AI company we cannot name in advance** |
+| **Belgium (EU)**, then onward | your messages to the AI patient | the platform operator's Cloud Function is in **Belgium** (`europe-west1`), not the United States. From there the text goes to **Hugging Face**, and then to **OVHcloud** in Gravelines, France — pinned since 21 August 2026, where it previously varied per message |
 | ~~**United States**~~ *(no longer applies)* | ~~your IP address and browser signals~~ — reCAPTCHA is consent-gated since 21 Aug 2026 and is not loaded, so nothing is sent | ~~Google (reCAPTCHA anti-abuse)~~ |
 | **United States** | the whole session record, once a night | GitHub (the servers that run our clean-up, backup and research-export jobs) |
 
@@ -446,7 +446,7 @@ Authentication** `[REGION TO VERIFY]`, and the site itself is served by
 **Firebase Hosting**, which keeps request logs `[REGION TO VERIFY]`. These
 things leave the EU:
 
-- Your **questions to the AI patient** are processed in the **United States**
+- Your **questions to the AI patient** are processed in **Belgium**
   and then sent to **Hugging Face**, which forwards them to a third-party AI
   provider that **changes from message to message and cannot be named in
   advance**. This is why you must not type anything personal into that chat.
@@ -551,10 +551,16 @@ mechanisms or the Japanese rights block.*
 The "patient" is a **language model**. It invents its answers. It is a training
 exercise, not a source of medical fact.
 
-**Where your questions go.** Each question you type is sent to our server in the
-**United States**, then to **Hugging Face**, which passes it to an AI company
-that **varies from message to message — we cannot tell you in advance which one,
-or in which country it is**.
+**Where your questions go.** Each question you type is sent to our server in
+**Belgium**, then to **Hugging Face**, which passes it to **OVHcloud** in
+Gravelines, **France**.
+
+*Both halves of this changed during 2026 and the old wording was wrong in the
+direction that mattered. The server moved from the United States to Belgium on
+24 July 2026. The AI company used to vary from message to message, so we could
+not tell you in advance which one or in which country — since 21 August 2026 it
+is pinned to one named provider in France. The Hugging Face step in the middle
+is unchanged, and is still a separate company handling your text.*
 
 **Your questions and the replies are saved.** They stay in this session's record
 until it is deleted, **and in a private backup copy for up to 90 days**.
