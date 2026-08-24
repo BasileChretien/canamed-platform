@@ -47,8 +47,10 @@
 > discussion, the sub-processor table, and blocking precondition B5 — needs
 > reworking rather than deleting.
 >
-> **What has NOT changed:** the chat still leaves the EEA at the **Hugging Face**
-> step, to an inference provider that cannot be identified in advance — which is
+> **What has NOT changed:** the chat still leaves our control at the **Hugging
+> Face** step, and Hugging Face's own processing location is `[TO VERIFY]`. The
+> onward provider IS now identifiable — pinned to **OVHcloud AI Endpoints** (France per the provider's published material, `[TO VERIFY against contract]`) on 2026-08-21 —
+> so B5's *naming* half is answered while its *agreement* half is not, which is
 > the substance of Annex VI R-items and B5 — and the backup/export jobs still run
 > on **GitHub Actions runners in the United States**, so that transfer is real
 > even though the archive bucket is `europe-west1`. The US leg is NARROWER than
@@ -172,7 +174,9 @@ This agreement says who is responsible for what:
 >    (Annex IV). The feature is currently **on by default** for every session.
 >    *(Corrected 2026-08-19: this said the text was processed in the United States
 >    at `us-central1`. That was true; the function was moved. The transfer to an
->    unidentifiable provider is unchanged and remains the substance of B5.)*
+>    then-unidentifiable provider was unchanged by that move; it was pinned
+>    separately on 2026-08-21. B5 remains open for want of an agreement, not for
+>    want of a name.)*
 > 2. **Several categories of student data are still never deleted. ONE was
 >    closed on 2026-08-21; a second has a mechanism that has not been switched
 >    on.** Participant email rosters now purge with their session — that one is
@@ -285,10 +289,12 @@ Processor shall not use participant personal data for its own purposes, for
 product analytics, for advertising, or for training or evaluating
 machine-learning models, and shall not permit any sub-processor it engages to do
 so. **Disclosed limitation:** for the language-model leg the Processor cannot
-today *verify* that undertaking downstream, because Hugging Face's router selects
-the inference company per request (clause 6.4). Until clause 6.4 is resolved, the
-no-training commitment binds the Processor and (once contracted) Hugging Face,
-but the Processor makes **no representation** about the downstream providers.
+today *verify* that undertaking downstream. The reason has narrowed: the router
+no longer selects the inference company per request — it is pinned (clause 6.4) —
+but no agreement with the pinned provider is in force, so nothing binds it. The
+no-training commitment binds the Processor and (once contracted) Hugging Face;
+the Processor makes **no representation** about the downstream provider until
+that provider is under contract.
 See Annex VI, item G4 and Annex IV.
 
 2.4 **Where the Processor acts as a controller — expanded.** The following are
@@ -694,10 +700,13 @@ contract** on each. A controller cannot authorise recipients that cannot be
 named, and cannot object to a change it is never told of. These are mandatory
 contract terms, **not default rules the Controller can waive**. Accordingly:
 
-- **The feature cannot lawfully run in its current configuration.** This DPA does
-  not offer the Controller the option of accepting an unnameable recipient set.
-- The tractable fix is to **pin the Hugging Face account to a single named
-  provider and a single region**, name that entity and its location in Annex III,
+- **The feature still cannot lawfully run, but for a different reason than when
+  this was written.** The unnameable recipient set is gone; what remains is that
+  no agreement is in force with the named one. This DPA does not offer the
+  Controller the option of accepting either.
+- The pin — **done 2026-08-21** — was the tractable first step: the request now
+  names a single provider. What is still owed is to name that entity and its
+  location in Annex III,
   and obtain a written **zero-retention / no-training** commitment from it.
   **Pinning is a supported feature, not a question for Hugging Face (researched
   2026-08-20).** Inference Providers accepts an explicit `provider`, or a
@@ -1694,7 +1703,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 | EEA → Hugging Face (the router) | **Hugging Face DPA**, publicly offered (cdn-media.huggingface.co/landing/assets/Data+Processing+Agreement.pdf). Note also that **Hugging Face SAS has its main establishment in Paris, France** — an EU establishment with CNIL as lead supervisory authority (huggingface.co/privacy) | **STILL BLOCKING, but no longer UNKNOWN — researched 2026-08-20.** This row read "None identified", which was a statement about the draft's research, not about the world. **Note the mechanics: the DPA is incorporated by reference into the Hugging Face Agreement and takes effect with it — there is no separate document to sign.** So what must be recorded is not an "executed DPA" but: the accepted Agreement/ToS, the DPA version it incorporated, and the acceptance date. The row stays blocking until that acceptance is evidenced for this account |
 | EEA → onward inference provider via Hugging Face | **Solvable by configuration — the recipient CAN be pinned.** Hugging Face Inference Providers accepts an explicit `provider` (or a `:provider` suffix on the model id); the default is `auto` / `:fastest`, which is what makes today's recipient vary per request. **Pinned to OVHcloud AI Endpoints (Gravelines, France) and DEPLOYED 2026-08-21 — the running function now names one provider per request.** Providers with an EEA option exist — Scaleway and OVHcloud AI Endpoints are French. **Two entries in an earlier version of this cell were wrong and are corrected here: Nscale is UK-based and Public AI is Swiss — neither is an EU/EEA provider** (both jurisdictions benefit from adequacy decisions, which is a different mechanism and must be recorded as such, not silently counted as EEA). Nebius is Netherlands-established, to be verified per model. Pinning a provider makes the importer **nameable and assessable**, which is what this row lacks today; whether it also keeps processing inside the EEA depends on the provider, the model, and the region actually serving it, and must be evidenced per model rather than assumed from the provider name | **BLOCKING — reframed, not downgraded (2026-08-20).** Previously "impossible until the account can be pinned"; pinning is a supported feature, not a request to Hugging Face, so the obstacle is configuration rather than impossibility. **Done in code and DEPLOYED 2026-08-21**, so the recipient is fixed rather than selected per request; the runtime evidence for it (a live turn recording `provider: ovhcloud` in `metrics/hfPatient/events`, taken from the `x-inference-provider` response header) is still outstanding. To clear this row, record for **each** model actually used: the pinned provider, its legal entity, the processing region, the contract, and the transfer mechanism. Note also that pinning this row does not clear the Hugging Face **router** row above it — that is a separate recipient. Source: huggingface.co/docs/inference-providers |
 | EEA → US (**GitHub Actions — nightly full identified `/sessions` dump + linkage-table construction on a US runner**) | GitHub DPA/SCCs | **[TO VERIFY]** — and the scope is far larger than a credential at rest (clause 12.1) |
-| Japan → US (any of the above, for Japanese participants) | APPI Art. 28: prior informed consent with the prescribed information, designated-equivalent country, or 基準適合体制 plus follow-up measures | **BLOCKING** — the US is not designated-equivalent; the destination cannot be named for the LLM leg; the join flow contains no foreign-transfer consent element (Annex VI, G4) |
+| Japan → US (any of the above, for Japanese participants) | APPI Art. 28: prior informed consent with the prescribed information, designated-equivalent country, or 基準適合体制 plus follow-up measures | **BLOCKING, on narrower grounds since 2026-08-21** — the US is not designated-equivalent; the LLM leg's onward destination CAN now be named (pinned; France per the provider's material, `[TO VERIFY against contract]`) but Hugging Face's own location is still `[TO VERIFY]`; and, decisively on its own, the join flow contains no foreign-transfer consent element (Annex VI, G4) |
 | **EU-origin data → US, onward via the Japanese side** | Governed by the **restricted onward-transfer rule in the PPC Supplementary Rules**, in addition to GDPR Chapter V | **[TO VERIFY — not previously analysed.]** This route exists whenever EU-origin participant data reaches a Japanese counterparty and is then handled by a US recipient |
 
 **Annex IV-A — evidence of the transfer mechanism, per route.** *[TO BE ANNEXED
@@ -1807,10 +1816,11 @@ where the data is handled. The countries engaged here are:
 | **United States** (GitHub Actions runners) — *the language-model proxy moved to `europe-west1` on the platform side; corrected 2026-08-19* | The nightly full identified `/sessions` dump and the linkage-table construction | Verified in code |
 | **France, per the provider's own documentation** `[TO VERIFY against contract]` | Hugging Face's downstream inference provider — the **`ovhcloud`** provider, pinned 2026-08-21 where it previously varied per request and was the entry that made this table say *Unidentifiable* | **Two different strengths of evidence, and they should not be conflated.** The PIN is verified in code (`applyProviderPin` appends `:ovhcloud`) and will be confirmed at runtime from the `x-inference-provider` header. The LOCATION and the LEGAL ENTITY are not: `ovhcloud` is an identifier, and Gravelines/OVH SAS comes from the provider's published material, not from a contract or an operator attestation. Obtain both before relying on France in a signed document |
 
-**The last row defeats both duties.** An operator cannot understand the regime of
-a country it cannot name, and cannot publish the list Art. 32(1) requires. This
-is recorded in Annex VI, item G4, and is a further reason the feature must be
-pinned or disabled (clause 6.4).
+**That row used to defeat both duties**, because an operator cannot understand
+the regime of a country it cannot name, nor publish the list Art. 32(1) requires.
+Since the pin (2026-08-21) the country CAN be named, so both duties are now
+performable — they have not yet been performed. Recorded in Annex VI, item G4,
+which stays open on that basis rather than on impossibility (clause 6.4).
 
 **V.4 Foreign transfer (APPI Art. 28).** Where personal data of individuals in
 Japan is transferred outside Japan — which happens for **every** language-model
@@ -2153,13 +2163,14 @@ from a Japan-resident participant is a provision of 個人データ to a third p
 a foreign country. **The route is now shorter but not shorter enough:**
 `hfPatient` runs in `europe-west1` (corrected 2026-08-19 — it ran in
 `us-central1`), so the Google leg is EU-internal and the EU **is** a
-PPC-designated equivalent jurisdiction; but the Hugging Face router still
-forwards to a provider that changes per call. **That unidentifiable leg is what
-keeps G4 BLOCKING** — the destination country cannot be named, so 基準適合体制
-cannot be concluded with an
-unidentifiable recipient; and Art. 28(1) prior consent is impossible because
-Art. 28(2) requires the **destination country to be named before consent** and the
-join flow has no foreign-transfer consent element. The chat is **on by default**,
+PPC-designated equivalent jurisdiction. The Hugging Face router used to forward
+to a provider that changed per call; since 2026-08-21 it is pinned.
+**What keeps G4 BLOCKING has therefore changed.** The destination country can now
+be named, so 基準適合体制 CAN be concluded and the Art. 28(2) prescribed
+information CAN be given. Neither has been done: no arrangement exists with the
+pinned provider, Hugging Face's own location remains `[TO VERIFY]`, and the join
+flow still has **no foreign-transfer consent element** at all — which alone
+defeats Art. 28(1) prior consent regardless of naming. The chat is **on by default**,
 so this affects every session with a Japan-resident participant. It also defeats
 外的環境の把握 and the Art. 32(1) publication duty (Annex V.3-bis).
 **Fix — either:** (a) pin the Hugging Face account to a single named provider and
@@ -2343,9 +2354,16 @@ resolved.** The notice's "no third-party cookies, no tracking pixels" claim used
 to sit alongside a live reCAPTCHA integration that set persistent cookies. Since
 2026-08-21 reCAPTCHA is consent-gated and not loaded, and the claim was measured
 against the live site on 2026-08-22: `document.cookie` was **empty** on the
-application page. **That sentence is now true** on the evidence available, and
-it should be read as narrowly as it is written — it is about cookies and pixels,
-not about third-party contact.
+application page.
+**Do not mark this resolved.** What that shows is narrower than the sentence
+claims: no *script-visible* cookie on *our own origin* during *the loads tested*.
+The sentence asserts no third-party cookies at all, and `document.cookie` cannot
+see `HttpOnly` cookies or anything set on another origin — so the claim is
+**unrefuted, not verified**. Verifying it needs `Set-Cookie` inspection across
+`gstatic.com` and `identitytoolkit.googleapis.com`.
+**The reCAPTCHA half is separate and IS settled:** no request reached any
+reCAPTCHA endpoint, so it set nothing. That conclusion rests on the absent
+request, not on the cookie check, and should not be bundled with it.
 **The evidence has a known limit.** `document.cookie` sees script-visible cookies
 on our own origin only: not `HttpOnly` cookies, and not anything set on
 `gstatic.com` or `identitytoolkit.googleapis.com`. Confirming the claim to a

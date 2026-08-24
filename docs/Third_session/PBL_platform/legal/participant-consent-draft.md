@@ -138,8 +138,10 @@ other rooms, not just yours. Use a first name or a nickname.
 function that carries your AI-patient messages runs there too. Two things do
 leave:
 - **your messages to the AI patient**, once they go on to **Hugging Face**, which
-  routes them to an inference provider **we cannot identify in advance** and which
-  may be outside Europe (section 5);
+  routes them to **OVHcloud in France** — pinned since 21 August 2026, where
+  before that it was a provider we could not identify in advance and which might
+  be outside Europe. Hugging Face itself is still a separate company in the
+  middle (section 5);
 - **the private backup copy**, which is stored in Europe but is produced by an
   automated job running on **GitHub's infrastructure in the United States**, so
   the data passes through there.
@@ -1091,12 +1093,16 @@ that exists independently of this document.
   `privacy.html`, `i18n.js` (`lobby.privacy.p1` ≈376, `lobby.privacy.p6` ≈381),
   `compliance.html` and the survey's university options. All must become
   per-controller configuration.
-- **M22 — ✅ RESOLVED 21 August 2026. "No third-party cookies, no tracking
-  pixels" is now TRUE.** It was false while reCAPTCHA loaded on every page and
+- **M22 — ⚠️ NARROWED, NOT RESOLVED. The reCAPTCHA cause is removed; the claim
+  itself is unrefuted rather than verified.** It was false while reCAPTCHA loaded on every page and
   set persistent cookies. reCAPTCHA is now consent-gated and never loaded, and
   the claim was re-checked against the live site on 22 August 2026:
-  `document.cookie` is **empty** — zero cookies of any kind — and no reCAPTCHA
-  request is made, so none can be set.
+  no reCAPTCHA request is made, so reCAPTCHA can set nothing — that part is
+  settled, and it rests on the absent request rather than on any cookie check.
+  A cookie check the same day found `document.cookie` empty, but that sees only
+  script-visible cookies on our own origin during the loads tested; it cannot see
+  `HttpOnly` cookies or anything set on another origin. **Verifying the sentence
+  needs `Set-Cookie` inspection across the remaining Google origins.**
   **Read the claim narrowly, because it is narrow.** It is about cookies and
   pixels, not about third-party connections. The page still contacts two Google
   origins on load: `www.gstatic.com` (the Firebase SDKs) and
@@ -1200,7 +1206,7 @@ Japanese block natively, in Art. 33/34/35 terms, with the fee stated.
 | `[FEE — APPI disclosure request]` | Screen C |
 | `[ACCREDITED PIP ORGANISATION — or "none"]` | Screen C |
 | `[SAFETY-MANAGEMENT MEASURES SUMMARY — 安全管理措置]` | Screen C |
-| `[SUBSTITUTE INFORMATION — unidentifiable transfer country]` | Screen B-JP |
+| ~~`[SUBSTITUTE INFORMATION — unidentifiable transfer country]`~~ — **may no longer be needed** (2026-08-21): the onward provider is pinned and nameable, so the substitute-information route exists only if Hugging Face's own location stays `[TO VERIFY]`. Resolve that first, then delete this row or keep it for the router leg alone | Screen B-JP |
 | `[RESEARCH RECIPIENTS]` (EU and Japan) | Screen C |
 | `[SIGN-IN PROVIDER]` | Screen G |
 | `[SMTP PROVIDER]` | Screen C — see below |

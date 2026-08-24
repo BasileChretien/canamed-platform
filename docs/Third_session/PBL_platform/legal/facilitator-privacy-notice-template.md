@@ -341,7 +341,7 @@ say so here.]
   sign out; otherwise it stays until you clear your browser storage.
 - Small settings stored on your own device (language, sound, theme, the session
   code so you can rejoin). No advertising cookies, no analytics trackers.
-- **Scripts loaded from Google on every page.** The platform's core software
+- **Scripts loaded from Google — on the application and certificate pages, not on this notice.** *(`privacy.html` and `compliance.html` load no Google origin at all; Appendix A gives the per-page detail.)* The platform's core software
   libraries are served by Google (`gstatic.com`), and Google's sign-in service
   (`identitytoolkit.googleapis.com`) is contacted **on every visit** — not only
   if you choose to sign in with Google. The platform signs you in anonymously at
@@ -903,10 +903,14 @@ decision about you.
 
 **Where your data is handled, for the APPI Art. 32 disclosure.** Your data is
 handled in **Belgium** (the database, the email function and the archive
-bucket), in the **United States** (the automation runners and Google's software-library
-servers; **not** reCAPTCHA, which is no longer loaded, and **not** the AI-chat
-function, which moved to Belgium), and — for the AI chat only —
-in **a country we cannot identify in advance** (see section 7). [ADD A ONE-LINE
+bucket, **and the AI-chat function**), in the **United States** (the automation
+runners — the one confirmed US transfer; **not** reCAPTCHA, which is no longer
+loaded), on a **global content-delivery network whose location for these requests
+is `[TO VERIFY]`** (Google's software libraries and the sign-in endpoint), and —
+for the AI chat's onward step — in **France** per the provider's published
+material, `[TO VERIFY against contract]`, having previously been a country we
+could not identify in advance. **Hugging Face sits between the two and its own
+processing location is `[TO VERIFY]`** (see section 7). [ADD A ONE-LINE
 OUTLINE OF EACH COUNTRY'S DATA-PROTECTION REGIME — required by the PPC's
 guidance on 外的環境の把握. See Appendix E.]
 
