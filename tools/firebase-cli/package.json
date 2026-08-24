@@ -4,6 +4,6 @@
   "private": true,
   "description": "Pinned firebase-tools CLI for the rules-E2E emulator job. Deliberately its OWN package so the CLI's large dependency tree never enters the root lock — see .github/workflows/rules-e2e.yml for the full rationale.",
   "dependencies": {
-    "firebase-tools": "^15.27.0"
+    "firebase-tools": "^15.28.1"
   }
 }
