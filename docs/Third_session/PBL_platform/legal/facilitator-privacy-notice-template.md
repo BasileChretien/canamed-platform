@@ -1129,8 +1129,16 @@ individual can readily know them.*
   countries in which the data is handled** and an outline of each country's
   data-protection regime: [see section 13 — **Belgium** (the database, the email
   function, the archive bucket and the AI-chat function); **France** (the AI
-  chat's onward inference provider, pinned 21 August 2026); and the **United
-  States** (the automation runners, and Google's global software-delivery edge).
+  chat's onward inference provider, pinned 21 August 2026 — **per the
+  provider's published material; not yet confirmed against a contract**); the
+  **United States** (the automation runners, which is confirmed); and **a global
+  content-delivery network whose location for these requests is `[TO VERIFY]`**
+  (Google's `gstatic.com` software libraries and
+  `identitytoolkit.googleapis.com`).
+  *An earlier version of this list put the software-delivery edge under the
+  United States. Appendix A marks its location unverified, so that was an
+  overstatement introduced here — the confirmed US transfer is the automation
+  runners.*
   *An earlier version listed, for the AI chat, "a country that cannot be
   identified in advance". That is no longer the case.*].
 

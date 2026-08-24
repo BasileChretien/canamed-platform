@@ -672,8 +672,15 @@ Module A language-model character is served through Hugging Face Inference
 Providers. Hugging Face's router (`https://router.huggingface.co/v1/chat/
 completions`) forwards each request to a **third-party inference provider**.
 **Which provider is now fixed** (2026-08-21): the model id carries a
-`:ovhcloud` suffix, so the router is directed to **OVHcloud AI Endpoints**,
-Gravelines, **France**. Until then it varied per call, and the providers named in
+`:ovhcloud` suffix, so the router is directed to the **`ovhcloud`** provider —
+**OVHcloud AI Endpoints**, which the provider documents as serving from
+Gravelines, **France**.
+> ⚠️ **Separate the two claims before signing.** That the request is PINNED is
+> verified in code and confirmable at runtime. That the pinned provider is OVH
+> SAS serving from Gravelines is taken from the provider’s published material —
+> `ovhcloud` is an identifier, not a location. Obtain the legal entity and the
+> processing location from the contract or an operator attestation before this
+> clause is relied on. `[TO VERIFY]` Until then it varied per call, and the providers named in
 the code were Together, Fireworks and Cerebras.
 The platform still records the provider returned in the `x-inference-provider`
 response header — but now as **verification** that the pin took effect, not as
@@ -1798,7 +1805,7 @@ where the data is handled. The countries engaged here are:
 |---|---|---|
 | **Belgium** (`europe-west1`) | The Realtime Database (all session data), the mail function, the private archive bucket | Verified in config |
 | **United States** (GitHub Actions runners) — *the language-model proxy moved to `europe-west1` on the platform side; corrected 2026-08-19* | The nightly full identified `/sessions` dump and the linkage-table construction | Verified in code |
-| **France** (Gravelines) | Hugging Face's downstream inference provider — **OVHcloud AI Endpoints**, pinned 2026-08-21 where it previously varied per request and was the entry that made this table say *Unidentifiable* | Verified in code (`applyProviderPin`); the runtime confirmation on a live turn is still outstanding |
+| **France, per the provider's own documentation** `[TO VERIFY against contract]` | Hugging Face's downstream inference provider — the **`ovhcloud`** provider, pinned 2026-08-21 where it previously varied per request and was the entry that made this table say *Unidentifiable* | **Two different strengths of evidence, and they should not be conflated.** The PIN is verified in code (`applyProviderPin` appends `:ovhcloud`) and will be confirmed at runtime from the `x-inference-provider` header. The LOCATION and the LEGAL ENTITY are not: `ovhcloud` is an identifier, and Gravelines/OVH SAS comes from the provider's published material, not from a contract or an operator attestation. Obtain both before relying on France in a signed document |
 
 **The last row defeats both duties.** An operator cannot understand the regime of
 a country it cannot name, and cannot publish the list Art. 32(1) requires. This
@@ -1807,7 +1814,12 @@ pinned or disabled (clause 6.4).
 
 **V.4 Foreign transfer (APPI Art. 28).** Where personal data of individuals in
 Japan is transferred outside Japan — which happens for **every** language-model
-chat turn, because the proxy function runs in the United States — the Controller
+chat turn, though no longer for the reason this clause used to give. The proxy
+function runs in **`europe-west1` (Belgium)**, not the United States, since
+2026-07-24. The transfer out of Japan is now the onward route: from Belgium to
+**Hugging Face** (whose own processing location is `[TO VERIFY]`), and from
+there to the pinned inference provider. These are **two separate legs and two
+separate recipients** — the Controller
 must have secured one of the permitted routes **before** the transfer, and must
 provide individuals, **before consent**, with the Art. 28(2) prescribed
 information: the **name of the destination country**, information about **that
