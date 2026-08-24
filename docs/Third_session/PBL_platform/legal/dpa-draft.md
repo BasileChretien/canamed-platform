@@ -1121,10 +1121,15 @@ recipient being in a designated-equivalent jurisdiction (**the US is not**); or
 the recipient having established a system meeting Japanese standards (基準適合
 体制), with the transferor taking the required follow-up measures.
 
-> **None of the three routes is available for the language-model leg today.**
-> The destination country cannot be named in advance (the provider varies per
-> call), so the Art. 28(2) prescribed information cannot be given; a 基準適合体制
-> arrangement cannot be concluded with an unidentifiable recipient; and the join
+> **The blocker has NARROWED, but the leg is still not cleared** (updated
+> 2026-08-21). The destination used to be unnameable — the router picked a
+> provider per call — which by itself defeated all three routes. It is now pinned
+> to **OVHcloud, Gravelines, France**, so the Art. 28(2) prescribed information
+> CAN be given and a 基準適合体制 arrangement CAN in principle be concluded with a
+> named recipient.
+> **What still blocks it:** no such arrangement has been concluded, no contract
+> with the provider is evidenced, the runtime confirmation that the pin takes
+> effect is outstanding, and the join
 > flow has exactly **two** consent checkboxes (`consent-workshop`,
 > `consent-research`) — neither is a foreign-transfer consent. Because the chat
 > is on by default, this affects **every session with a Japan-resident

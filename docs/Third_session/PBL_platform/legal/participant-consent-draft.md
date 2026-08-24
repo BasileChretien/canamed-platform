@@ -352,10 +352,18 @@ protection system; (iii) the measures the recipient takes]` — or, alternativel
 `[the 基準適合体制 route per recipient, with the Art. 28(3) continued-
 implementation measures and on-request disclosure]`.
 
-**For the AI patient we cannot tell you which company processes your message,
-or in which country.** Where the country cannot reasonably be identified, the
-Enforcement Rules require us to say **that fact and why**, and to give
-substitute information instead: `[SUBSTITUTE INFORMATION — required]`.
+**For the AI patient, the company and country CAN now be named** (changed
+21 August 2026): the request is pinned to **OVHcloud**, in **Gravelines,
+France**. Before that the router chose a different provider per message and this
+paragraph correctly said we could not tell you which one — that is why the
+substitute-information route existed here.
+*Two things keep this honest. The pin is configuration, and the runtime
+confirmation — reading back the provider actually used on a live turn — is still
+outstanding. And if the pin ever fails, the call errors and the chat falls back
+to the built-in scripted patient; it does not quietly go to some other provider.
+So the onward recipient is OVHcloud or nobody, never an unnamed one.*
+**Hugging Face itself is a separate recipient in the middle of this and is
+unchanged** — it still receives the text before passing it on.
 
 **☐ 同意します — I consent to my data being sent outside Japan as described.**
 
@@ -367,7 +375,10 @@ substitute information instead: `[SUBSTITUTE INFORMATION — required]`.
   "SCCs / adequacy" bracket covering all legs is wrong for Japan; each leg needs
   its own APPI answer. Only the Belgium leg is covered by the PPC's
   equivalent-standard designation for the EEA.*
-- *The "cannot be named in advance" problem is **real and verified**:
+- *The "cannot be named in advance" problem was **real and verified**, and was
+  **fixed on 21 August 2026** by pinning the provider — see the note below the
+  evidence. The evidence is kept because it is what the pin had to overcome, and
+  because deleting `HF_PROVIDER` restores every word of it:
   `functions/index.js` sets `HF_URL` to Hugging Face's OpenAI-compat **router**
   (`HF_DEFAULT_URL = "https://router.huggingface.co/v1/chat/completions"`,
   ≈163), which dispatches to whichever downstream provider it picks (the code's
@@ -446,16 +457,20 @@ Authentication** `[REGION TO VERIFY]`, and the site itself is served by
 **Firebase Hosting**, which keeps request logs `[REGION TO VERIFY]`. These
 things leave the EU:
 
-- Your **questions to the AI patient** are processed in **Belgium**
-  and then sent to **Hugging Face**, which forwards them to a third-party AI
-  provider that **changes from message to message and cannot be named in
-  advance**. This is why you must not type anything personal into that chat.
+- Your **questions to the AI patient** are processed in **Belgium**, then sent
+  to **Hugging Face**, which forwards them to **OVHcloud in Gravelines, France**.
+  Until 21 August 2026 that last step went to a provider that changed from
+  message to message and could not be named in advance. Two companies still
+  handle what you type, so you should still not type anything personal into that
+  chat.
 - Google's **anti-abuse check (reCAPTCHA)** used to receive your IP address and
   browser signals on every page load, before this notice was shown. **It no
   longer runs at all** (21 August 2026): it is gated behind a consent that
   nothing currently asks for, so it is never loaded. Verified against the live
-  site on 22 August 2026 — no request to any reCAPTCHA endpoint, and no cookies
-  set on the page at all.
+  site on 22 August 2026 — no request reached any reCAPTCHA endpoint, so it can
+  have set nothing. *(A cookie check the same day found none on the page either,
+  but that check sees only script-visible cookies on our own origin, so it is the
+  absent request that carries the weight here.)*
 - The **automatic clean-up, backup and research-export jobs** run on GitHub's
   infrastructure in the United States.
 - **Japan:** facilitators and observers in Japan read the whole session record
@@ -582,8 +597,11 @@ that is a URL flag, not a student-facing choice.]`
 *Approx. 180 words. Notes:*
 
 - *The current banner says "sent to our server and to Hugging Face (US/EU)" but
-  omits that Hugging Face's router dispatches onward
-  to a per-request provider (≈421-425, `x-inference-provider` at ≈447).*
+  omits the onward dispatch. That dispatch is no longer per-request: since
+  21 August 2026 the model id carries a `:ovhcloud` pin, so the onward recipient
+  is fixed. `x-inference-provider` is still read from the response, but as
+  VERIFICATION of the pin rather than as the way the provider is discovered.
+  The banner should name OVHcloud/France.*
 - ***CORRECTED.** The previous draft said the chat is "deleted with the rest of
   the session". **False.** `scripts/backup-sessions.js` snapshots the full
   `/sessions` tree and strips **only** `adminPasswordHash` — it does **not**
