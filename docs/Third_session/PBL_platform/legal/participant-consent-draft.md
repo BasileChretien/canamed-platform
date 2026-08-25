@@ -20,7 +20,7 @@
 > | # | Defect | Status |
 > |---|---|---|
 > | M11 | No consent filter on the research export | ✅ **FIXED** — PR #232, deployed. The export now includes only participants with `consent.research === true`, fail-closed. |
-> | M12 | AI-patient transfer has no identified recipient and no documented transfer mechanism | ❌ **STILL OPEN.** A legal/documentation gap, not a code one — it needs the sub-processor and transfer mechanism named by counsel. |
+> | M12 | AI-patient transfer: recipient now IDENTIFIED (pinned 2026-08-21), transfer mechanism still undocumented | ❌ **STILL OPEN — on narrower grounds.** A legal/documentation gap, not a code one — it needs the sub-processor and transfer mechanism named by counsel. |
 > | M13 | Certificate verification IDs are computable by any classmate | ❌ **STILL OPEN — and confirmed correct.** `resolveCertId()` mints a *deterministic* non-cryptographic hash of `sessionCode\|clientId`, both readable by any session member. A crypto-random `randomCredentialId()` exists but is never called. The project's own CLAUDE.md claimed these IDs were crypto-random; **that claim was wrong and has been corrected.** |
 >
 > Two further code defects found in the same pass have also been fixed and
@@ -138,8 +138,10 @@ other rooms, not just yours. Use a first name or a nickname.
 function that carries your AI-patient messages runs there too. Two things do
 leave:
 - **your messages to the AI patient**, once they go on to **Hugging Face**, which
-  routes them to an inference provider **we cannot identify in advance** and which
-  may be outside Europe (section 5);
+  routes them to **OVHcloud in France** — pinned since 21 August 2026, where
+  before that it was a provider we could not identify in advance and which might
+  be outside Europe. Hugging Face itself is still a separate company in the
+  middle (section 5);
 - **the private backup copy**, which is stored in Europe but is produced by an
   automated job running on **GitHub's infrastructure in the United States**, so
   the data passes through there.
@@ -342,8 +344,8 @@ To run this session, some of your data is handled outside Japan:
 | Where | What goes there | Who handles it |
 |---|---|---|
 | **Belgium (EU)** | everything you type in the session | Google (Firebase Realtime Database) |
-| **United States** | your messages to the AI patient | the platform operator's Cloud Function, then Hugging Face, then **an AI company we cannot name in advance** |
-| **United States** | your IP address and browser signals | Google (reCAPTCHA anti-abuse) |
+| **Belgium (EU)**, then onward | your messages to the AI patient | the platform operator's Cloud Function is in **Belgium** (`europe-west1`), not the United States. From there the text goes to **Hugging Face**, and then to **OVHcloud** in Gravelines, France — pinned since 21 August 2026, where it previously varied per message |
+| ~~**United States**~~ *(no longer applies)* | ~~your IP address and browser signals~~ — reCAPTCHA is consent-gated since 21 Aug 2026 and is not loaded, so nothing is sent | ~~Google (reCAPTCHA anti-abuse)~~ |
 | **United States** | the whole session record, once a night | GitHub (the servers that run our clean-up, backup and research-export jobs) |
 
 `[TO VERIFY — one line per destination:]`
@@ -352,10 +354,18 @@ protection system; (iii) the measures the recipient takes]` — or, alternativel
 `[the 基準適合体制 route per recipient, with the Art. 28(3) continued-
 implementation measures and on-request disclosure]`.
 
-**For the AI patient we cannot tell you which company processes your message,
-or in which country.** Where the country cannot reasonably be identified, the
-Enforcement Rules require us to say **that fact and why**, and to give
-substitute information instead: `[SUBSTITUTE INFORMATION — required]`.
+**For the AI patient, the company and country CAN now be named** (changed
+21 August 2026): the request is pinned to **OVHcloud**, in **Gravelines,
+France**. Before that the router chose a different provider per message and this
+paragraph correctly said we could not tell you which one — that is why the
+substitute-information route existed here.
+*Two things keep this honest. The pin is configuration, and the runtime
+confirmation — reading back the provider actually used on a live turn — is still
+outstanding. And if the pin ever fails, the call errors and the chat falls back
+to the built-in scripted patient; it does not quietly go to some other provider.
+So the onward recipient is OVHcloud or nobody, never an unnamed one.*
+**Hugging Face itself is a separate recipient in the middle of this and is
+unchanged** — it still receives the text before passing it on.
 
 **☐ 同意します — I consent to my data being sent outside Japan as described.**
 
@@ -367,7 +377,10 @@ substitute information instead: `[SUBSTITUTE INFORMATION — required]`.
   "SCCs / adequacy" bracket covering all legs is wrong for Japan; each leg needs
   its own APPI answer. Only the Belgium leg is covered by the PPC's
   equivalent-standard designation for the EEA.*
-- *The "cannot be named in advance" problem is **real and verified**:
+- *The "cannot be named in advance" problem was **real and verified**, and was
+  **fixed on 21 August 2026** by pinning the provider — see the note below the
+  evidence. The evidence is kept because it is what the pin had to overcome, and
+  because deleting `HF_PROVIDER` restores every word of it:
   `functions/index.js` sets `HF_URL` to Hugging Face's OpenAI-compat **router**
   (`HF_DEFAULT_URL = "https://router.huggingface.co/v1/chat/completions"`,
   ≈163), which dispatches to whichever downstream provider it picks (the code's
@@ -378,10 +391,15 @@ substitute information instead: `[SUBSTITUTE INFORMATION — required]`.
   engineering, not wording: pin the provider.***
 - *This consent must be recorded **server-side**, alongside
   `pool/$cid/consent.*` — not in `localStorage` (see §5 and §11 M17).*
-- ***Sequencing problem, unfixable by wording:** reCAPTCHA / App Check
-  initialises at page load, **before any screen is shown**. An Art. 28 consent
-  taken on the join form cannot cover a transfer that already happened. See
-  §11 M18.*
+- ***Sequencing problem — RESOLVED 21 August 2026, in code rather than by
+  wording.** It was correctly diagnosed as unfixable by wording: reCAPTCHA /
+  App Check initialised at page load, **before any screen was shown**, so an
+  Art. 28 consent taken on the join form could not cover a transfer that had
+  already happened. The fix was the one this note implied — stop the transfer
+  happening. `initAppCheck()` now returns unless consent is recorded, and nothing
+  records it, so reCAPTCHA does not load. If a consent control is ever added,
+  the sequencing problem returns unless that control runs BEFORE Firebase
+  initialises. See §11 M18.*
 
 ---
 
@@ -417,7 +435,7 @@ email address and display name.
 | Sensitive free-text content | `[GDPR Art. 9(2)(...)]` · `[APPI Art. 20(2) consent or 学術研究 exception]` |
 | Education research | `[GDPR BASIS + Art. 89(1) safeguards]` · `[APPI basis]` |
 | Certificate verification | `[GDPR BASIS — if Art. 6(1)(f), name the interest]` · `[APPI: NOTE — APPI has no legitimate-interests basis; see §11 M5]` |
-| Anti-abuse (reCAPTCHA), backups, security | `[GDPR BASIS — if Art. 6(1)(f), name the interest]` |
+| Anti-abuse, backups, security *(reCAPTCHA is no longer part of this — not loaded since 21 Aug 2026)* | `[GDPR BASIS — if Art. 6(1)(f), name the interest]` |
 
 **Who can see it.** Everyone signed into the same session can read the whole
 session, including other rooms' answers, **your questionnaire answers, your
@@ -441,12 +459,20 @@ Authentication** `[REGION TO VERIFY]`, and the site itself is served by
 **Firebase Hosting**, which keeps request logs `[REGION TO VERIFY]`. These
 things leave the EU:
 
-- Your **questions to the AI patient** are processed in the **United States**
-  and then sent to **Hugging Face**, which forwards them to a third-party AI
-  provider that **changes from message to message and cannot be named in
-  advance**. This is why you must not type anything personal into that chat.
-- Google's **anti-abuse check (reCAPTCHA)** receives your IP address and browser
-  signals on every page load, **before this notice is shown**.
+- Your **questions to the AI patient** are processed in **Belgium**, then sent
+  to **Hugging Face**, which forwards them to **OVHcloud in Gravelines, France**.
+  Until 21 August 2026 that last step went to a provider that changed from
+  message to message and could not be named in advance. Two companies still
+  handle what you type, so you should still not type anything personal into that
+  chat.
+- Google's **anti-abuse check (reCAPTCHA)** used to receive your IP address and
+  browser signals on every page load, before this notice was shown. **It no
+  longer runs at all** (21 August 2026): it is gated behind a consent that
+  nothing currently asks for, so it is never loaded. Verified against the live
+  site on 22 August 2026 — no request reached any reCAPTCHA endpoint, so it can
+  have set nothing. *(A cookie check the same day found none on the page either,
+  but that check sees only script-visible cookies on our own origin, so it is the
+  absent request that carries the weight here.)*
 - The **automatic clean-up, backup and research-export jobs** run on GitHub's
   infrastructure in the United States.
 - **Japan:** facilitators and observers in Japan read the whole session record
@@ -542,10 +568,16 @@ mechanisms or the Japanese rights block.*
 The "patient" is a **language model**. It invents its answers. It is a training
 exercise, not a source of medical fact.
 
-**Where your questions go.** Each question you type is sent to our server in the
-**United States**, then to **Hugging Face**, which passes it to an AI company
-that **varies from message to message — we cannot tell you in advance which one,
-or in which country it is**.
+**Where your questions go.** Each question you type is sent to our server in
+**Belgium**, then to **Hugging Face**, which passes it to **OVHcloud** in
+Gravelines, **France**.
+
+*Both halves of this changed during 2026 and the old wording was wrong in the
+direction that mattered. The server moved from the United States to Belgium on
+24 July 2026. The AI company used to vary from message to message, so we could
+not tell you in advance which one or in which country — since 21 August 2026 it
+is pinned to one named provider in France. The Hugging Face step in the middle
+is unchanged, and is still a separate company handling your text.*
 
 **Your questions and the replies are saved.** They stay in this session's record
 until it is deleted, **and in a private backup copy for up to 90 days**.
@@ -567,8 +599,11 @@ that is a URL flag, not a student-facing choice.]`
 *Approx. 180 words. Notes:*
 
 - *The current banner says "sent to our server and to Hugging Face (US/EU)" but
-  omits that Hugging Face's router dispatches onward
-  to a per-request provider (≈421-425, `x-inference-provider` at ≈447).*
+  omits the onward dispatch. That dispatch is no longer per-request: since
+  21 August 2026 the model id carries a `:ovhcloud` pin, so the onward recipient
+  is fixed. `x-inference-provider` is still read from the response, but as
+  VERIFICATION of the pin rather than as the way the provider is discovered.
+  The banner should name OVHcloud/France.*
 - ***CORRECTED.** The previous draft said the chat is "deleted with the rest of
   the session". **False.** `scripts/backup-sessions.js` snapshots the full
   `/sessions` tree and strips **only** `adminPasswordHash` — it does **not**
@@ -982,7 +1017,8 @@ that exists independently of this document.
   ⚠️ **Still open:** `admin-tools.js :: researchCsvParticipantRows` (the
   facilitator CSV) has **no consent check**. Screen B may now describe the
   research *export* as optional, but not the facilitator CSV.
-- **M12 — The AI-patient recipient is unknowable in advance.** `HF_URL` points
+- **M12 — ⚠️ REBASED 2026-08-21. The recipient IS now knowable; the mechanism is still missing.** The evidence below described the unpinned router and is kept as the record of what the pin changed — removing `HF_PROVIDER` restores all of it. What survives the pin: no contract with the named provider, no documented transfer mechanism, Hugging Face's own location `[TO VERIFY]`, and no foreign-transfer consent element in the join flow.
+  *Original finding:* **The AI-patient recipient is unknowable in advance.** `HF_URL` points
   at Hugging Face's router (`functions/index.js`, ≈163); the downstream provider
   is only learned **after** the response (`x-inference-provider`, ≈447). You
   cannot inform a data subject of a recipient you do not know (GDPR Art.
@@ -1020,8 +1056,12 @@ that exists independently of this document.
 **High — false or missing statements in the binding notice:**
 
 - **M2 — The AI patient is absent from the binding notice.** `privacy.html`
-  contains **no** mention of a language model, of chat, of Hugging Face, or of
-  reCAPTCHA (grep-confirmed). Disclosure exists only in the in-product banner.
+  contains **no** mention of a language model, of chat, or of Hugging Face
+  (grep-confirmed). Disclosure exists only in the in-product banner.
+  *The same grep shows no mention of reCAPTCHA either. That was a gap while
+  reCAPTCHA ran; since 21 August 2026 it is simply accurate, because reCAPTCHA
+  is consent-gated and not loaded. It becomes a gap again the moment a consent
+  control is added.*
 - **M3 — ⚠️ RE-CHECK: the US leg this item describes has MOVED. `hfPatient` now
   runs in `europe-west1` (functions/index.js ≈110, "co-located with the trigger
   (EU-resident data)"; the client pins the same region and
@@ -1054,9 +1094,22 @@ that exists independently of this document.
   `privacy.html`, `i18n.js` (`lobby.privacy.p1` ≈376, `lobby.privacy.p6` ≈381),
   `compliance.html` and the survey's university options. All must become
   per-controller configuration.
-- **M22 — "No third-party cookies, no tracking pixels" is false.**
-  `privacy.html` §17 (≈214-219) says it, while reCAPTCHA loads on every page.
-  This is a false statement in the **binding** notice, not an open question.
+- **M22 — ⚠️ NARROWED, NOT RESOLVED. The reCAPTCHA cause is removed; the claim
+  itself is unrefuted rather than verified.** It was false while reCAPTCHA loaded on every page and
+  set persistent cookies. reCAPTCHA is now consent-gated and never loaded, and
+  the claim was re-checked against the live site on 22 August 2026:
+  no reCAPTCHA request is made, so reCAPTCHA can set nothing — that part is
+  settled, and it rests on the absent request rather than on any cookie check.
+  A cookie check the same day found `document.cookie` empty, but that sees only
+  script-visible cookies on our own origin during the loads tested; it cannot see
+  `HttpOnly` cookies or anything set on another origin. **Verifying the sentence
+  needs `Set-Cookie` inspection across the remaining Google origins.**
+  **Read the claim narrowly, because it is narrow.** It is about cookies and
+  pixels, not about third-party connections. The page still contacts two Google
+  origins on load: `www.gstatic.com` (the Firebase SDKs) and
+  `identitytoolkit.googleapis.com` (anonymous sign-in). Neither sets a cookie,
+  so the sentence holds — but a reader who took it to mean "no third-party
+  contact" would be misled, and §2 of the notice is where that is disclosed.
 
 **Medium — structural changes this wording assumes:**
 
@@ -1071,7 +1124,8 @@ that exists independently of this document.
   session, re-prompted on notice-version **or provider/model** change.
 - **M18 — ePrivacy / Art. 82 loi Informatique et Libertés.** Reading or writing
   terminal equipment is a **separate** consent regime the CNIL enforces
-  independently of GDPR. Engaged by reCAPTCHA **and** by the platform's own
+  independently of GDPR. **No longer engaged by reCAPTCHA** (consent-gated
+  since 21 August 2026, not loaded), but still engaged by the platform's own
   storage: `localStorage.canamedModALLMConsent` and the resume blob, which
   persists name, university and consent state and **auto-rejoins the session
   with no screen shown** if the notice version still matches
@@ -1153,7 +1207,7 @@ Japanese block natively, in Art. 33/34/35 terms, with the fee stated.
 | `[FEE — APPI disclosure request]` | Screen C |
 | `[ACCREDITED PIP ORGANISATION — or "none"]` | Screen C |
 | `[SAFETY-MANAGEMENT MEASURES SUMMARY — 安全管理措置]` | Screen C |
-| `[SUBSTITUTE INFORMATION — unidentifiable transfer country]` | Screen B-JP |
+| ~~`[SUBSTITUTE INFORMATION — unidentifiable transfer country]`~~ — **may no longer be needed** (2026-08-21): the onward provider is pinned and nameable, so the substitute-information route exists only if Hugging Face's own location stays `[TO VERIFY]`. Resolve that first, then delete this row or keep it for the router leg alone | Screen B-JP |
 | `[RESEARCH RECIPIENTS]` (EU and Japan) | Screen C |
 | `[SIGN-IN PROVIDER]` | Screen G |
 | `[SMTP PROVIDER]` | Screen C — see below |
@@ -1186,9 +1240,10 @@ Japanese block natively, in Art. 33/34/35 terms, with the fee stated.
 1. Transfer mechanism **per destination, per regime**: for GDPR, the adequacy
    decision or the specific safeguards **plus the means to obtain a copy**
    (Art. 13(1)(f)); for APPI, the Art. 28 information set or the 基準適合体制
-   route. Legs: the US Cloud Function, Hugging Face **and its downstream
-   providers**, reCAPTCHA, GitHub Actions, and **Japan** (remote facilitator/
-   observer access and research recipients).
+   route. Legs: Hugging Face **and its downstream provider** (now pinned to
+   OVHcloud, Gravelines), GitHub Actions, and **Japan** (remote facilitator/
+   observer access and research recipients). *Two legs have left this list: the
+   Cloud Function moved to `europe-west1`, and reCAPTCHA is no longer loaded.*
 2. Whether the 2019 EU→Japan adequacy decision reaches a **国立大学法人** after
    the 2021 APPI amendment moved public-sector bodies into a separate chapter.
 3. Whether a Nagoya-run session is governed by the private-sector chapter or by
