@@ -3479,8 +3479,10 @@ function _joinParticipantWireUp() {
     // Distinct from clientId (per-tab, key of this pool entry).
     stableId: stableId
   });
-  // log this session under the signed-in user's history (if any); silent
-  // no-op for anonymous joiners
+  // Log this session under the signed-in user's history (if any). Genuinely a
+  // no-op for anonymous joiners since 2026-08-25 — it had said so since it was
+  // written, but the function only checked !currentUser, which is truthy for
+  // anonymous users. See issue #347.
   pushSessionToHistory(sessionNum);
   // Membership is persistent: do NOT arm onDisconnect().remove() here. On
   // mobile, locking the screen or switching apps drops the connection, and an
@@ -12280,10 +12282,26 @@ function saveProfile(updates) {
     .then(() => { currentProfile = merged; return merged; });
 }
 
-/* Log a session join to the user's history. Idempotent: writing the same
-   code twice just updates the timestamp. */
+/* Log a session join to the SIGNED-IN user's history. Idempotent: writing the
+   same code twice just updates the timestamp.
+
+   ANONYMOUS USERS ARE EXCLUDED, and until 2026-08-25 that was true only in the
+   comment at the call site. `currentUser` is set for ANY signed-in user —
+   `handleAuthStateChange` does `currentUser = user || null` — so a bare
+   `!currentUser` check let every anonymous joiner through, and the platform
+   signs everyone in anonymously at startup.
+
+   The data was written and never readable by the person it described: every
+   READ path is already gated on `isAnonymous` (the data export, and
+   `paintUserChip`, which hides the account chip entirely for anonymous users so
+   the dialog listing history cannot be opened). What accumulated was a growing
+   record of which workshops a persistent anonymous uid attended, under the
+   `users` tree — which no retention job touches — disclosed nowhere.
+
+   See issue #347. This stops NEW writes only; entries already written need an
+   operator sweep of history nodes belonging to uids that have no profile. */
 function pushSessionToHistory(code) {
-  if (!currentUser || !db || !code) return;
+  if (!currentUser || currentUser.isAnonymous || !db || !code) return;
   const path = "users/" + currentUser.uid + "/history/" + code;
   db.ref(path).set({
     code: code,
