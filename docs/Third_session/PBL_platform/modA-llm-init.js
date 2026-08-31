@@ -474,16 +474,84 @@
     bridge.setLang(_patientLang());
 
     // Wire the patient endpoint. Priority order:
-    //   1. Firebase HTTPS callable (when the SDK + the deployed function
-    //      are present). This is the secure default — App Check token is
-    //      injected automatically, HF token never leaves the server, and
-    //      the dormant `moda.llm` flag controls activation.
-    //   2. Plain HTTP endpoint via window.CANAMED_LLM_ENDPOINT (escape
-    //      hatch for facilitators who run their own proxy — e.g. a
-    //      Cloudflare Worker fronting an HF Space).
+    //   1. Self-hosted proxy via window.CANAMED_LLM_PROXY. Takes precedence
+    //      when configured — see the block below for why.
+    //   2. Firebase HTTPS callable (when the SDK + the deployed function
+    //      are present). App Check token injected automatically, HF token
+    //      never leaves the server, `moda.llm` flag controls activation.
     //   3. Local stub (no network) — what unit-tests and offline demos use.
     var fb = window.firebase;
-    if (fb && typeof fb.functions === "function") {
+    var proxyCfg = window.CANAMED_LLM_PROXY;
+
+    /* ── SELF-HOSTED PROXY (2026-08-31) ──────────────────────────────────
+     * Cloud Functions v2 need a Blaze plan. This project's billing trial
+     * closed 2026-08-27 and was not renewed, so hfPatient returns a 500 with
+     * no application logs and the chat degrades — SILENTLY — to the stub
+     * patient on every turn, which reads as an incoherent patient rather
+     * than an outage. proxy/ in this repo is the same handler, hosted free.
+     *
+     * ⚠ IT MUST TAKE PRECEDENCE OVER THE CALLABLE, and that is the whole
+     * reason this is not the pre-existing `else if` branch. The Functions
+     * SDK is still loaded and `fb.functions` is still a function — the SDK
+     * being present says nothing about whether the FUNCTION is deployed. So
+     * the old ordering could never reach the proxy: it would always pick the
+     * callable, call a dead endpoint, and fall back to the stub.
+     *
+     * Wired through setCallable(), NOT setEndpoint(), for two concrete
+     * reasons that are easy to miss:
+     *   - setEndpoint()'s body carries only { messages, lang, characterName }.
+     *     The proxy needs roomCode/roomId/orgSlug to check the roomOf claim;
+     *     without them every call is correctly refused as "not a member".
+     *   - setEndpoint()'s headers are captured ONCE. A Firebase ID token
+     *     expires after an hour, so a static Authorization header would work
+     *     for the first session and 401 every one after it. getIdToken() is
+     *     therefore called PER TURN; the SDK serves it from cache and only
+     *     hits the network when it is genuinely near expiry.
+     *
+     * ⚠ NO APP CHECK on this path — raw fetch cannot mint the token, and the
+     * proxy is off Google's platform so it could not verify one anyway. That
+     * is why acknowledgeUnsafe is still required. It costs nothing TODAY
+     * (App Check is in Monitor, and reCAPTCHA is consent-gated off since
+     * shell v148, so no client mints a token at all), but it must stay a
+     * conscious choice rather than a silent downgrade. The real defences are
+     * unchanged and all still enforced server-side: Firebase Auth required,
+     * the roomOf membership check, per-uid/per-session/global rate limits,
+     * and the HF token never reaching the browser.
+     */
+    if (proxyCfg && proxyCfg.url && proxyCfg.acknowledgeUnsafe === true &&
+        fb && typeof fb.auth === "function") {
+      var proxyUrl = String(proxyCfg.url);
+      bridge.setCallable(function (body) {
+        var user = fb.auth().currentUser;
+        if (!user) return Promise.reject(new Error("not signed in"));
+        return user.getIdToken().then(function (idToken) {
+          var payload = Object.assign({}, body, {
+            roomCode: String(window.sessionNum || ""),
+            roomId: String(window.myRoom || "")
+          });
+          if (window.CANAMED_ORG_SLUG) payload.orgSlug = String(window.CANAMED_ORG_SLUG);
+          return fetch(proxyUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": "Bearer " + idToken
+            },
+            body: JSON.stringify({ data: payload })
+          });
+        }).then(function (r) {
+          // Parse before checking r.ok: the proxy returns its error detail in
+          // the body, and throwing on status alone would discard the reason.
+          return r.json().catch(function () { return null; }).then(function (j) {
+            if (j && j.error) throw new Error(j.error.message || "proxy error");
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            // Callable WIRE format is { result: … }; the bridge understands
+            // the SDK's { data: … }. Translate so both paths look identical
+            // downstream — including the state:"disabled" stub fallback.
+            return { data: (j && j.result) ? j.result : j };
+          });
+        });
+      });
+    } else if (fb && typeof fb.functions === "function") {
       try {
         // REGION MUST MATCH functions/index.js. `fb.functions()` with no
         // argument resolves to us-central1, so an unqualified call would 404

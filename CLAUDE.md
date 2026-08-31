@@ -200,6 +200,47 @@ red probe means reading every failing workflow, not just the one that mailed.
   problem into a standing retention breach. Deletion is the legal duty; the
   backup is disaster recovery.
 
+### The LLM patient runs on a SELF-HOSTED PROXY now (2026-08-31)
+
+Rather than restore billing, Module A's chat was moved off Cloud Functions.
+`proxy/` is the same handler on Web-standard APIs (fetch + WebCrypto), so it
+runs on Cloudflare Workers, Scaleway Functions, Deno Deploy or Vercel.
+
+- **It is a PORT, not a rewrite.** The pure logic is IMPORTED from
+  `functions/lib/hf-helpers.js`, never copied, so the server-authoritative
+  prompt guard, the HF_URL allowlist and the `roomOf` comparison cannot drift
+  between the two deployments. `tests/llm-proxy.test.js` fails if the proxy
+  re-declares any of them.
+- **What is NOT preserved: App Check.** A raw fetch cannot mint the token and a
+  non-Google host cannot verify one, so the client requires an explicit
+  `acknowledgeUnsafe: true`. It costs nothing today (App Check is in Monitor
+  and reCAPTCHA is consent-gated off since v148, so no client mints a token at
+  all), but it must stay a conscious choice.
+- **No service-account key is used, deliberately.** The membership check reads
+  `roomOf/<uid>` over RTDB REST with the CALLER'S OWN token. Putting a Google
+  service-account key on a third-party host would be a full-database
+  credential — far more dangerous than the HF token it protects. The value
+  still comes from the DATABASE, so a client cannot assert its way into
+  another room.
+- **The rate-limit store is REQUIRED.** It carries the global daily cap, the
+  only hard ceiling on the HF bill; with no store bound the proxy refuses to
+  serve rather than run unmetered.
+- ⚠️ **ENABLING IT IS TWO EDITS.** `CANAMED_LLM_PROXY` in firebase-config.js
+  AND the origin in index.html's CSP `connect-src`. Miss the second and the
+  browser blocks every request while the room silently gets the stub patient.
+  `tests/llm-proxy-config.test.js` fails the build when they disagree.
+- ⚠️ **DATA RESIDENCY — the open question.** A FREE Cloudflare Worker cannot be
+  pinned to the EU (Regional Services / Data Localization Suite is an
+  Enterprise add-on), which conflicts with the EEA commitment recorded in
+  `functions/index.js` and `modA-llm-init.js` and assumed by the CER dossier.
+  **Scaleway Serverless Functions (fr-par, Paris) has a free tier and IS
+  EEA-pinnable** — prefer it. Whichever host is chosen becomes a NEW
+  SUB-PROCESSOR and must be added to the privacy notice (12 surfaces, 8
+  languages) and the DPA. That work is NOT done.
+  `Verify:` `proxy/README.md` carries the deploy steps and the three
+  post-deploy checks; the recorded `provider` field on a live reply is the
+  only end-to-end proof the EU inference pin took effect.
+
 ⚠️ **RESTORING BLAZE IS A THREE-PART CHANGE, all in one commit** — miss one and
 you get a silently half-restored system:
 1. re-attach billing, then `firebase deploy --only functions` (read the

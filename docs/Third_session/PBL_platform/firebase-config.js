@@ -72,3 +72,32 @@ window.CANAMED_SUPERADMIN_KEY = null;
  * layer. See README.md → "Enabling App Check" for the full step-by-step.
  */
 window.CANAMED_RECAPTCHA_SITE_KEY = "6Lemg-wsAAAAAKIkv6KorbZu0iUz_q3e36wrlFiQ";
+
+/* ── SELF-HOSTED LLM PROXY (Module A's simulated patient) ────────────────
+ *
+ * NULL by default, which keeps the Firebase callable path. Set this ONLY
+ * when you are running the proxy in proxy/ instead of the `hfPatient` Cloud
+ * Function — which is what a project on the free Spark plan has to do, since
+ * Cloud Functions v2 run on Cloud Run and need a Blaze (billing) plan.
+ *
+ *   window.CANAMED_LLM_PROXY = {
+ *     url: "https://canamed-hf-patient.<subdomain>.workers.dev",
+ *     acknowledgeUnsafe: true
+ *   };
+ *
+ * `acknowledgeUnsafe` is REQUIRED and is not a formality: a raw fetch cannot
+ * mint a Firebase App Check token, and a proxy off Google's platform could
+ * not verify one anyway. Everything else still applies server-side —
+ * Firebase Auth, the roomOf room-membership check, the per-uid / per-session
+ * / global rate limits, and the HF token never reaching the browser — but
+ * the App Check layer is genuinely absent, so it has to be opted into rather
+ * than acquired silently.
+ *
+ * ⚠ TWO PLACES, ONE ORIGIN. The URL's origin must ALSO be added to the
+ * `connect-src` directive of the Content-Security-Policy in index.html, or
+ * the browser blocks every request and the chat falls back to the stub
+ * patient with nothing in the UI to say why. tests/llm-proxy-config.test.js
+ * fails the build when these two disagree, because that failure is otherwise
+ * invisible.
+ */
+window.CANAMED_LLM_PROXY = null;
