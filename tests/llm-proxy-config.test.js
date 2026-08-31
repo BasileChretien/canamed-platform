@@ -47,11 +47,27 @@ function connectSrc() {
   return m[1].split(/\s+/).map(s => s.trim()).filter(Boolean);
 }
 
-test("the shipped default leaves the proxy OFF", () => {
-  /* The default must stay null: a URL committed here would point every
-   * deployment of this public repo at one person's endpoint. */
-  assert.equal(configuredProxy(), null,
-    "CANAMED_LLM_PROXY must ship as null — configure it per deployment, never in git");
+test("a configured proxy URL is https and not a placeholder", () => {
+  /* This REPLACED an assertion that CANAMED_LLM_PROXY must ship as `null`, on
+   * the reasoning that "a URL committed here would point every deployment of
+   * this public repo at one person's endpoint". That premise was wrong:
+   * firebase-config.js ALREADY commits this deployment's apiKey, projectId and
+   * databaseURL, so the file is deployment-specific by design and the proxy URL
+   * belongs alongside them. The URL is also not a secret — it is a public
+   * endpoint whose protection is the Firebase-auth check, the roomOf membership
+   * check and the origin allowlist, none of which depend on it being unguessable.
+   *
+   * What IS worth pinning is the shape, because both failure modes below are
+   * silent: the chat falls back to the stub patient with nothing in the UI. */
+  const cfg = configuredProxy();
+  if (cfg === null) return;   // OFF remains a valid state
+
+  assert.ok(cfg.url, "a configured proxy must carry a url");
+  const u = new URL(cfg.url);
+  assert.equal(u.protocol, "https:",
+    "the client sends a Firebase ID token in the Authorization header — never over plaintext");
+  assert.ok(!/example|placeholder|REPLACE|<|>/i.test(cfg.url),
+    `CANAMED_LLM_PROXY still looks like a placeholder: ${cfg.url}`);
 });
 
 test("if a proxy IS configured, its origin is in the CSP connect-src", () => {

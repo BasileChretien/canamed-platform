@@ -100,4 +100,15 @@ window.CANAMED_RECAPTCHA_SITE_KEY = "6Lemg-wsAAAAAKIkv6KorbZu0iUz_q3e36wrlFiQ";
  * fails the build when these two disagree, because that failure is otherwise
  * invisible.
  */
-window.CANAMED_LLM_PROXY = null;
+window.CANAMED_LLM_PROXY = {
+  // Scaleway Serverless Functions, fr-par (Paris) — deployed 2026-08-31.
+  // EEA-resident, in the same country as the pinned OVHcloud inference
+  // provider. See proxy/README.md for why this host and not Cloudflare.
+  url: "https://canameddmpevud1-hfpatient.functions.fnc.fr-par.scw.cloud",
+  // REQUIRED, and not a formality: this path has no App Check (a raw fetch
+  // cannot mint the token and a non-Google host could not verify one). The
+  // real defences are unchanged and all still enforced server-side — Firebase
+  // auth, the roomOf membership check, the per-uid/per-session rate limits,
+  // and the HF token never reaching the browser.
+  acknowledgeUnsafe: true
+};
