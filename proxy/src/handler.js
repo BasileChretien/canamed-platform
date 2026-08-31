@@ -115,10 +115,29 @@ function withHeaders(res, extra) {
  * KV, Scaleway's equivalent, or anything with get/put.
  *
  * REQUIRED, not optional. Without a shared store each instance counts only
- * its own traffic, so the "hard $ ceiling" the global cap is supposed to be
- * would silently become per-instance — the kind of control that looks present
- * and enforces nothing. An absent store therefore refuses service rather than
- * serving unmetered, mirroring BACKUP_REQUIRE_GCS elsewhere in this repo. */
+ * its own traffic, so the global cap would silently become per-instance — the
+ * kind of control that looks present and enforces nothing. An absent store
+ * therefore refuses service rather than serving unmetered, mirroring
+ * BACKUP_REQUIRE_GCS elsewhere in this repo.
+ *
+ * ⚠ IT IS AN APPROXIMATE CEILING, NOT A HARD ONE, and the difference is worth
+ * stating because an earlier draft of this file claimed the latter. bump() is
+ * a read-modify-write, and Cloudflare KV — like most edge KV — is eventually
+ * consistent with no atomic increment, so concurrent requests can overwrite
+ * each other's increments and the true count can run BELOW the recorded one.
+ * At workshop scale (tens of concurrent participants) the slippage is a
+ * handful of calls, not a blown budget, and approximate metering beats none.
+ * If it ever needs to be exact the counter must move to a backend with an
+ * atomic increment — Durable Objects, Redis INCR, or a real database. The
+ * store interface is where that swap happens; nothing else changes.
+ *
+ * ORDER MATTERS. The global counter is bumped LAST, after every per-caller
+ * limit has passed. Bumping it FIRST — as this did originally — let a single
+ * authenticated participant spend the WHOLE global cap on requests that were
+ * then refused at their own per-uid limit and cost nothing at Hugging Face,
+ * flipping every other participant to state:"disabled" for the rest of the
+ * UTC day. Anonymous sign-in makes getting a token cheap, so that was a
+ * one-caller denial of service against the whole platform. */
 async function bump(store, key, ttlSeconds) {
   const cur = Number((await store.get(key)) || 0) + 1;
   await store.put(key, String(cur), ttlSeconds);
@@ -130,9 +149,7 @@ export async function checkRateLimits(store, uid, sessionCode, now, caps) {
   const hourBucket = Math.floor(now / c.RATE_LIMIT_WINDOW_MS);
   const day = dayKey(now);
 
-  const global = await bump(store, `g:${day}`, 2 * 24 * 3600);
-  if (global > c.GLOBAL_DAILY_CAP) return { ok: false, scope: "global-daily", degrade: true };
-
+  // Per-caller limits FIRST — see the ORDER MATTERS note above.
   const perUidHour = await bump(store, `u:${uid}:${hourBucket}`, 2 * 3600);
   if (perUidHour > c.RATE_LIMIT_TURNS) return { ok: false, scope: "uid-hourly" };
 
@@ -141,6 +158,11 @@ export async function checkRateLimits(store, uid, sessionCode, now, caps) {
 
   const perSession = await bump(store, `s:${sessionCode}:${hourBucket}`, 2 * 3600);
   if (perSession > c.SESSION_RATE_LIMIT_TURNS) return { ok: false, scope: "session-hourly" };
+
+  // Only requests that will actually reach Hugging Face count against the
+  // shared budget.
+  const global = await bump(store, `g:${day}`, 2 * 24 * 3600);
+  if (global > c.GLOBAL_DAILY_CAP) return { ok: false, scope: "global-daily", degrade: true };
 
   return { ok: true };
 }
@@ -174,7 +196,20 @@ function hfModel(env, lang) {
   const base = lang === "ja"
     ? (env.HF_MODEL_JA || env.HF_MODEL || HF_DEFAULT_MODEL)
     : (env.HF_MODEL || HF_DEFAULT_MODEL);
-  const provider = env.HF_PROVIDER === undefined ? HF_DEFAULT_PROVIDER : env.HF_PROVIDER;
+  /* A BLANK value counts as unset, NOT as an opt-out. applyProviderPin treats
+   * "" as a deliberate opt-out and returns the UNPINNED model id — but hosts
+   * routinely surface a declared-but-empty variable as "", and an empty field
+   * in wrangler.toml or a dashboard is a typo, not a decision. Left as-is the
+   * chat keeps answering normally while the recipient of participants'
+   * clinical free text silently reverts to whatever the HF router picks per
+   * request: exactly the varying, unnameable recipient the pin exists to
+   * remove, and the DPA would then name a provider that is not receiving the
+   * data. Only a genuinely ABSENT variable falls back to the default pin;
+   * opting out has to be done in code, visibly. */
+  const rawProvider = env.HF_PROVIDER;
+  const provider = (rawProvider === undefined || String(rawProvider).trim() === "")
+    ? HF_DEFAULT_PROVIDER
+    : rawProvider;
   return applyProviderPin(base, provider);
 }
 

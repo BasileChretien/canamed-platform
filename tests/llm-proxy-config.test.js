@@ -64,9 +64,14 @@ test("if a proxy IS configured, its origin is in the CSP connect-src", () => {
     if (s === origin) return true;
     // Wildcard host form, e.g. https://*.workers.dev
     if (s.startsWith("https://*.")) {
-      const suffix = s.slice("https://*".length);     // ".workers.dev"
-      return new URL(cfg.url).hostname.endsWith(suffix.slice(1)) ||
-             origin.endsWith(suffix);
+      /* KEEP THE DOT. Stripping it made "evilworkers.dev" satisfy
+       * "*.workers.dev" — a suffix match that ignores the DNS label boundary,
+       * so this would bless a CSP that does not actually permit the
+       * configured origin. The SCHEME matters too: an http: URL is blocked by
+       * an https: source, and the browser falls back to the stub in silence. */
+      const suffix = s.slice("https://*".length);     // ".workers.dev" — dot kept
+      const u = new URL(cfg.url);
+      return u.protocol === "https:" && u.hostname.endsWith(suffix);
     }
     return false;
   });

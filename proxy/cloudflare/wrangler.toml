@@ -12,9 +12,21 @@ compatibility_date = "2026-08-01"
 # Non-secret configuration only.
 FIREBASE_PROJECT_ID = "canamed-69785"
 RTDB_URL = "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app"
-# The panic button, mirroring the callable's MODA_LLM_ENABLED. Set to "false"
-# and redeploy to make every client fall back to the local stub patient.
-MODA_LLM_ENABLED = "true"
+# ⚠ SHIPS DISABLED ON PURPOSE — do not flip this to "true" without reading the
+# data-residency section of ../README.md first.
+#
+# A workers.dev deployment is NOT EEA-pinnable on the free plan, and
+# HF_PROVIDER below constrains only the model-provider leg — not where this
+# Worker executes, nor where it terminates TLS. Enabling it here routes
+# participants' clinical free text through a recipient the privacy notice and
+# the DPA do not name, which is the one thing this directory exists to avoid
+# doing quietly.
+#
+# Set to "true" only after EITHER moving to an EEA-pinnable host (Scaleway
+# fr-par has a free tier) OR completing the sub-processor, privacy-notice and
+# DPA work. Afterwards it doubles as the panic button: back to "false" plus a
+# redeploy makes every client fall back to the local stub patient.
+MODA_LLM_ENABLED = "false"
 HF_URL = "https://router.huggingface.co/v1/chat/completions"
 HF_MODEL = "Qwen/Qwen3.5-9B"
 HF_MODEL_JA = "Qwen/Qwen3.5-9B"

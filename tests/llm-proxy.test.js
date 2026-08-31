@@ -34,6 +34,8 @@ test.before(async () => {
 const PROJECT = "canamed-69785";
 const NOW = Date.UTC(2026, 7, 31, 12, 0, 0);
 const UID = "uid-alice";
+// UTC day key for NOW, mirroring hf-helpers.dayKey — used by the global-cap tests.
+const NOW_DAY = 20260831;
 
 const ENV = {
   FIREBASE_PROJECT_ID: PROJECT,
@@ -490,4 +492,66 @@ test("a genuinely signed token VERIFIES — and aud/iss are still enforced", asy
   await assert.rejects(() => verify({ ...good, exp: nowS - 10_000 }), /expired/);
 
   jwt._resetCertCache();
+});
+
+/* ── regressions found by review on #350 ──────────────────────────────── */
+
+test("a rate-limited caller does NOT consume the shared global budget", async () => {
+  /* The global counter used to be bumped BEFORE the per-caller limits, so a
+   * single participant could spend the entire GLOBAL_DAILY_CAP on requests
+   * that were then refused at their own per-uid limit and cost nothing at
+   * Hugging Face — flipping every OTHER participant to state:"disabled" for
+   * the rest of the UTC day. Anonymous sign-in makes getting a token cheap,
+   * so that was a one-caller denial of service against the whole platform. */
+  const store = stores.memoryStore(() => NOW);
+  const caps = { ...proxy.LIMITS, RATE_LIMIT_TURNS: 2, GLOBAL_DAILY_CAP: 10 };
+
+  // One caller burns well past their own hourly limit.
+  for (let i = 0; i < 20; i++) await proxy.checkRateLimits(store, "greedy", "sess", NOW, caps);
+
+  // A DIFFERENT participant must still be served: the global budget should
+  // have been charged only for the 2 turns that actually reached HF.
+  const victim = await proxy.checkRateLimits(store, "innocent", "sess2", NOW, caps);
+  assert.equal(victim.ok, true,
+    "one rate-limited caller must not be able to exhaust everyone else's budget");
+  assert.equal(Number(await store.get("g:" + NOW_DAY)), 3,
+    "only requests that passed every per-caller limit may charge the global counter");
+});
+
+test("the global cap still bites once real traffic reaches it", async () => {
+  /* Positive control for the test above: reordering the checks must not have
+   * disabled the ceiling itself. */
+  const store = stores.memoryStore(() => NOW);
+  const caps = { ...proxy.LIMITS, GLOBAL_DAILY_CAP: 3 };
+  const seen = [];
+  for (let i = 0; i < 5; i++) {
+    seen.push((await proxy.checkRateLimits(store, "u" + i, "s" + i, NOW, caps)).scope || "ok");
+  }
+  assert.deepEqual(seen, ["ok", "ok", "ok", "global-daily", "global-daily"]);
+});
+
+test("a BLANK HF_PROVIDER keeps the EU pin instead of silently unpinning it", async () => {
+  /* applyProviderPin treats "" as a deliberate opt-out and returns the
+   * unpinned model id. Hosts routinely surface a declared-but-empty variable
+   * as "", so a blank field in wrangler.toml or a dashboard would silently
+   * hand participants' clinical free text back to the router's per-request
+   * provider choice — the varying, unnameable recipient the pin removes —
+   * while the chat kept answering normally and the DPA kept naming ovhcloud.
+   * Only a genuinely absent variable may fall back to the default. */
+  for (const blank of ["", "   ", "\t"]) {
+    const { calls } = await run({ env: { HF_PROVIDER: blank } });
+    const sent = JSON.parse(calls.hf[0].init.body);
+    assert.equal(sent.model, "Qwen/Qwen3.5-9B:ovhcloud",
+      `HF_PROVIDER=${JSON.stringify(blank)} must not drop the residency pin`);
+  }
+});
+
+test("an explicit opt-out is still possible, but only in code", async () => {
+  /* The escape hatch has to survive: applyProviderPin's empty-string opt-out
+   * restores router "auto" for anyone who deliberately wants it. It is now
+   * reachable by passing null rather than by leaving a field blank, so it
+   * cannot happen by accident. */
+  const { calls } = await run({ env: { HF_PROVIDER: null } });
+  const sent = JSON.parse(calls.hf[0].init.body);
+  assert.equal(sent.model, "Qwen/Qwen3.5-9B", "an explicit null means router auto");
 });
