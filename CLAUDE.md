@@ -222,21 +222,54 @@ runs on Cloudflare Workers, Scaleway Functions, Deno Deploy or Vercel.
   credential — far more dangerous than the HF token it protects. The value
   still comes from the DATABASE, so a client cannot assert its way into
   another room.
-- **The rate-limit store is REQUIRED.** It carries the global daily cap, the
-  only hard ceiling on the HF bill; with no store bound the proxy refuses to
-  serve rather than run unmetered.
+- **The rate-limit store is RTDB, and REQUIRED.** Scaleway's free tier has no
+  KV and its Serverless SQL Database has no free tier at all (~€0.10/month even
+  when idle), so the counters live in RTDB — already EEA, already in the DPA,
+  free. With no store bound the proxy refuses to serve rather than run
+  unmetered.
+  **The counters are written with the CALLER'S OWN token, so the RULES are the
+  security**: `rateLimits` is INCREMENT-ONLY (a write must be exactly
+  `data + 1`). A participant can inflate their own counter — self-harm — but
+  cannot reset it. That predicate also makes the increment ATOMIC: a concurrent
+  writer's stale `N+1` is rejected and retried, where an eventually-consistent
+  KV would silently lose it. Covered structurally
+  (`tests/rules.test.js`) and functionally against the real emulator
+  (`tests-e2e/emulator/rules-smoke.spec.js`, three cases, each with an ALLOW
+  leg).
+- ⚠️ **THE GLOBAL DAILY CAP IS NOT ENFORCED IN CODE ANY MORE — it moved to the
+  Hugging Face account's SPEND LIMIT.** Not an omission: a cross-user counter
+  written with the caller's own token is forgeable UPWARD by any participant,
+  who could push it past the cap and disable the chat platform-wide for the
+  rest of the day — a cost control turned into a one-caller denial of service.
+  A counter only the proxy could write would need a Google service-account key
+  on a third-party host, which the design refuses. **Setting the HF spend limit
+  is therefore a REQUIRED deploy step**, not optional hardening; the per-uid
+  limits bound one participant to 200 turns/day and nothing else bounds the
+  rest. `Verify:` `grep -n "GLOBAL_DAILY_CAP" proxy/src/handler.js` returns
+  only the comment explaining the move.
 - ⚠️ **ENABLING IT IS TWO EDITS.** `CANAMED_LLM_PROXY` in firebase-config.js
   AND the origin in index.html's CSP `connect-src`. Miss the second and the
   browser blocks every request while the room silently gets the stub patient.
   `tests/llm-proxy-config.test.js` fails the build when they disagree.
-- ⚠️ **DATA RESIDENCY — the open question.** A FREE Cloudflare Worker cannot be
-  pinned to the EU (Regional Services / Data Localization Suite is an
-  Enterprise add-on), which conflicts with the EEA commitment recorded in
+- ✅ **DATA RESIDENCY — SETTLED: the host is Scaleway `fr-par` (Paris).**
+  `proxy/scaleway/` is the deploy target; `proxy/cloudflare/` is kept for
+  local development and ships DISABLED. A free Cloudflare Worker cannot be
+  pinned to the EU (Regional Services / the Data Localization Suite is an
+  Enterprise add-on), which would have broken the EEA commitment recorded in
   `functions/index.js` and `modA-llm-init.js` and assumed by the CER dossier.
-  **Scaleway Serverless Functions (fr-par, Paris) has a free tier and IS
-  EEA-pinnable** — prefer it. Whichever host is chosen becomes a NEW
-  SUB-PROCESSOR and must be added to the privacy notice (12 surfaces, 8
-  languages) and the DPA. That work is NOT done.
+  Scaleway is French, `fr-par` is Paris, and the free tier is 1M requests +
+  400k GB-s/month. It puts the relay in the same country as the pinned
+  inference provider (OVHcloud, Gravelines).
+  ⚠️ Scaleway still requires a card + identity verification to open an account,
+  even for free-tier use.
+- ⚠️ **SCALEWAY IS A NEW SUB-PROCESSOR and the paperwork is NOT done.** Drafted
+  but unsigned/unpublished: `legal/dpa-draft.md` Annex III row #7 and the
+  data-flow step in `legal/facilitator-privacy-notice-template.md`. The
+  PUBLISHED notice (12 surfaces, 8 languages) still names Firebase + Hugging
+  Face only, and must not be shipped naming Scaleway until the DPA exists.
+  The same pass corrected a now-stale claim in the DPA: Annex III row #1 said
+  the language-model proxy runs in Google `europe-west1`, which stopped being
+  true on 2026-08-27.
   `Verify:` `proxy/README.md` carries the deploy steps and the three
   post-deploy checks; the recorded `provider` field on a live reply is the
   only end-to-end proof the EU inference pin took effect.

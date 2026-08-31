@@ -478,7 +478,7 @@ universities and **email addresses**.
 rely on further companies; those are listed too. Everything is in **Appendix A**.
 In summary: Google (hosting, database, sign-in, serverless functions, backups,
 and the software libraries loaded by your browser — **not** the reCAPTCHA check,
-which is consent-gated and not currently loaded), **Hugging Face and the inference providers it routes to** (the AI
+which is consent-gated and not currently loaded), **Scaleway** (which relays your AI-chat messages from Paris; it does not store them), **Hugging Face and the inference providers it routes to** (the AI
 character chat), GitHub (runs our automated deletion, backup and export jobs),
 and [SMTP PROVIDER — only if you enable session emails; the email feature is
 switched **off** by default].
@@ -515,11 +515,21 @@ them as a teaching prop, never as clinical information.
 2. Your message — together with the hidden scenario instructions and **at most
    15 recent turns of the conversation, capped at about 12,000 characters
    in total** — is sent to a server function operated for us by Google. **That
-   function runs in Belgium (`europe-west1`)**, co-located with the database, so
-   your text does **not** leave Europe at this step. *(An earlier version of this
-   notice said the function ran in the United States. It did; it was moved to
-   `europe-west1`, and `tests/hf-region-lockstep.test.js` now pins the client and
-   the function to the same region so they cannot drift apart.)*
+   relay runs in **Paris, France (`fr-par`), on Scaleway**, so your text does
+   **not** leave Europe at this step. *(This step has moved twice. It first ran
+   in the United States; it was moved to Google's `europe-west1` in Belgium; and
+   on 2026-08-31 it moved again, to Scaleway in Paris, because the platform left
+   Google's paid plan and Google Cloud Functions stopped working. Scaleway was
+   chosen over the other free option, Cloudflare, because a free Cloudflare
+   service runs wherever the visitor happens to be and could not be kept in
+   Europe.)*
+
+   > ⚠️ **[TO DO BEFORE PUBLISHING — Scaleway is a new recipient.]** Scaleway SAS
+   > (Paris) must be named in the recipients list below and in the record of
+   > processing, and a data-processing agreement with Scaleway must be in place.
+   > It only relays your message — it does not store it and does not run the AI
+   > model — but it is a recipient nonetheless, and this notice may not be
+   > published while it goes unnamed.
 3. From there it is sent to **Hugging Face**, which routes it onward to a
    third-party inference provider. **Which provider handles any given message
    varies from request to request, and we are not told in advance** — the

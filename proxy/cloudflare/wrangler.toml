@@ -36,7 +36,10 @@ HF_MODEL_JA = "Qwen/Qwen3.5-9B"
 # serves from Gravelines, France. The model MUST be one this provider serves
 # or every call 404s and the chat degrades silently to the stub.
 HF_PROVIDER = "ovhcloud"
-HF_GLOBAL_DAILY_CAP = "4000"
+# NB there is no HF_GLOBAL_DAILY_CAP here any more. The cross-user ceiling moved
+# to the SPEND LIMIT on the Hugging Face account, because a counter the proxy
+# writes with the caller's own token is forgeable upward by any participant —
+# see the note above LIMITS in ../src/handler.js and the README.
 # EXPLICIT allowlist. A wildcard would let any website on the internet spend
 # the HF budget using a logged-in visitor's token.
 ALLOWED_ORIGINS = "https://canamed-69785.web.app,https://canamed-69785.firebaseapp.com"

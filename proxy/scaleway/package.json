@@ -1,0 +1,15 @@
+{
+  "_comment": [
+    "Scoped to make THIS directory CommonJS while proxy/ as a whole is ESM.",
+    "Node resolves module type from the NEAREST package.json, so without this",
+    "file handler.js would be parsed as ESM and `module.exports.handle` — the",
+    "shape Scaleway's Node runtime looks for — would throw at load time.",
+    "The shared core in ../src stays ESM and is reached by dynamic import(),",
+    "which works from CommonJS."
+  ],
+  "name": "canamed-hf-patient-proxy-scaleway",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "main": "handler.js"
+}

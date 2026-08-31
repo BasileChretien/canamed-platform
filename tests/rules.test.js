@@ -1345,3 +1345,83 @@ test("rules: the client claims roomOf with {room, cid}, matching what the rule r
     "the transaction's rejection must be handled — try/catch does not catch it, " +
     "so a denied claim was silent and every later per-room write failed unexplained");
 });
+
+/* ── rateLimits: the self-hosted LLM proxy's counters ───────────────────
+ *
+ * These are written by the proxy with the CALLER'S OWN token, because the
+ * proxy deliberately holds no service-account key (that would be a
+ * full-database credential on a third-party host). So the RULES, not the
+ * proxy, are what make the counters trustworthy — and there are exactly two
+ * properties to protect.
+ */
+
+test("rules: rateLimits counters are INCREMENT-ONLY", () => {
+  /* Property 1. Without this the limit is decorative: a participant could
+   * simply write 0 to their own counter and keep going. Only `data + 1` (or a
+   * first write of 1) is accepted, so the worst they can do to themselves is
+   * count faster.
+   *
+   * Property 2, which comes free: the same predicate makes the increment
+   * ATOMIC. Two concurrent writers both read N and both try N+1; the second is
+   * rejected because `data` is already N+1. The loser re-reads and retries. An
+   * eventually-consistent KV would silently lose that increment instead. */
+  for (const scope of ["uid", "session"]) {
+    const bucket = rules.rules.rateLimits[scope][scope === "uid" ? "$uid" : "$code"].$bucket;
+    assert.ok(bucket, `rateLimits.${scope} has no $bucket rule`);
+    const w = bucket[".write"];
+    assert.match(w, /!data\.exists\(\)\s*\?\s*newData\.val\(\)\s*===\s*1/,
+      `${scope}: a first write must be exactly 1`);
+    assert.match(w, /newData\.val\(\)\s*===\s*data\.val\(\)\s*\+\s*1/,
+      `${scope}: a subsequent write must be exactly data + 1`);
+    assert.match(bucket[".validate"], /newData\.isNumber\(\)/, `${scope}: must be a number`);
+  }
+});
+
+test("rules: a rateLimits counter is bound to the identity it meters", () => {
+  /* An unbound counter would let anyone inflate anyone else's, turning a
+   * fairness control into a griefing tool. */
+  const uidWrite = rules.rules.rateLimits.uid.$uid.$bucket[".write"];
+  assert.match(uidWrite, /auth\.uid === \$uid/,
+    "the uid counter must be writable only by that uid — inflating it is then self-harm only");
+
+  const sessionWrite = rules.rules.rateLimits.session.$code.$bucket[".write"];
+  assert.match(sessionWrite, /roomOf/,
+    "the session counter must require a roomOf claim in that session, " +
+    "so griefing is bounded to a session the writer is already in");
+  assert.match(sessionWrite, /auth\.uid/, "…and that claim must be the writer's own");
+});
+
+test("rules: there is NO global rateLimits counter", () => {
+  /* Deliberate, and the reasoning must survive or someone will "restore" it.
+   * A cross-user counter written with the caller's own token is forgeable
+   * UPWARD by any participant, who could push it past the cap and switch the
+   * chat off for the whole platform — a cost control turned into a one-caller
+   * denial of service. The inference ceiling lives on the Hugging Face
+   * account's spend limit instead; see proxy/README.md. */
+  assert.deepEqual(
+    Object.keys(rules.rules.rateLimits).filter(k => !k.startsWith(".")).sort(),
+    ["$other", "session", "uid"],
+    "rateLimits must carry only per-uid and per-session scopes");
+});
+
+test("rules: rateLimits rejects unknown keys", () => {
+  assert.equal(rules.rules.rateLimits.$other[".validate"], false,
+    "an unknown top-level rateLimits child must be refused (storage-pollution guard)");
+});
+
+test("rules: no level of the ruleset has two wildcards", () => {
+  /* RTDB refuses to LOAD a ruleset with two `$wildcards` at the same level, so
+   * this mistake is not a subtle bug — it takes the whole database's rules
+   * down at deploy time. Cheap to assert, and it covers every node, not just
+   * the ones added here. */
+  const walk = (node, path) => {
+    if (!node || typeof node !== "object") return;
+    const wildcards = Object.keys(node).filter(k => k.startsWith("$"));
+    assert.ok(wildcards.length <= 1,
+      `two wildcards at ${path || "/"}: ${wildcards.join(", ")}`);
+    for (const k of Object.keys(node)) {
+      if (!k.startsWith(".")) walk(node[k], path + "/" + k);
+    }
+  };
+  walk(rules.rules, "");
+});

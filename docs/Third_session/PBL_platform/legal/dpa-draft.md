@@ -1661,12 +1661,13 @@ produce output — as Hugging Face and its downstream providers do — falls
 
 | # | Sub-processor | Service | Personal data it receives | Location | APPI characterisation |
 |---|---|---|---|---|---|
-| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database, the mail function **and the language-model proxy** all in `europe-west1` (Belgium) — *the proxy moved from `us-central1`; corrected 2026-08-19*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
+| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database in `europe-west1` (Belgium). ⚠️ **The mail function and the language-model proxy are no longer Google Cloud Functions at all** — the project's billing trial closed on 2026-08-27 and was not renewed, so Cloud Functions v2 (which require a Blaze plan) cannot run. The language-model proxy moved to Scaleway `fr-par`, row #7; the mail function is simply **unavailable** while the project is on the Spark plan, which reinforces row #6's "not active". *The proxy had earlier moved from `us-central1` to `europe-west1`; corrected 2026-08-19, superseded 2026-08-31.*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
 | 2 | Google (reCAPTCHA v3 / App Check) — **INACTIVE since 2026-08-21** | Bot resistance | **Nothing.** Consent-gated and never loaded, so it receives no data. Previously: participant IP address and browser signals, on the application page | n/a while inactive; Google, not region-pinned, if re-enabled [TO VERIFY] | [TO VERIFY] |
 | 3 | **Hugging Face** — [EXACT LEGAL ENTITY AND ADDRESS TO CONFIRM] | Inference Providers router for the simulated-patient character | The scenario system prompt plus **participant free-text chat turns** (up to 16 messages / 12,000 characters per call) | Outside the EU [TO VERIFY exact location] | **Art. 28 foreign provision** — it processes the content to generate output, so the cloud exception does not apply |
 | 4 | **The inference provider behind Hugging Face** — **OVHcloud AI Endpoints** (OVH SAS) | Actual model execution | Same as #3 | **Pinned to `ovhcloud`, served from Gravelines, FRANCE — DEPLOYED 2026-08-21.** The running function now sends an explicit provider, so the recipient no longer varies per request. Note the deploy also had to correct `functions/.env`, which is git-ignored and was still naming the previous models: `.env` overrides the code defaults, so deploying without that fix would have paired the old models with the new provider, 404ing every call | **Art. 28 foreign provision.** The recipient becomes nameable when the pin is deployed, which is what Art. 28(2) requires and what this row previously could not supply. **Still not authorised under clause 6.1** — and the reason is no longer the deploy, which happened on 2026-08-21. Pinning names the recipient; it does not by itself produce the contract or the transfer record, and those remain outstanding. The runtime evidence is outstanding too: confirm from `metrics/hfPatient/events` (`provider` field, taken from the `x-inference-provider` response header) that a live turn records `ovhcloud` |
 | 5 | GitHub (GitHub Actions) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Runs the scheduled retention, backup, export and cost-monitoring jobs | **Receives and processes on US infrastructure a nightly copy of the entire identified `/sessions` tree, including free-text chat, writes it to the runner's local disk, and generates the real-name → pseudonym linkage table there.** Job logs are configured to contain no PII | US | **Candidate cloud exception is doubtful** — the runner materially handles the data, not merely stores it [TO VERIFY with Japanese counsel] |
 | 6 | [SMTP PROVIDER IDENTITY — Controller/Processor to confirm before enabling email] | Transactional email | Recipient email address, subject, message body | [TO VERIFY] | [TO VERIFY] |
+| 7 | **Scaleway SAS** — 8 rue de la Ville l'Évêque, 75008 Paris, France [ENTITY AND ADDRESS TO CONFIRM AGAINST THE SIGNED TERMS] | Serverless Functions: hosts the simulated-patient proxy that **replaced** the Google Cloud Function | The scenario system prompt plus **participant free-text chat turns** (same payload as row #3), in transit; plus the caller's Firebase ID token and the session code and room name needed to authorise the call. **No persistent storage** — the function holds nothing after the response | **`fr-par` (Paris, FRANCE)** — inside the EEA | **Candidate cloud exception** — it relays rather than analyses the content; the model execution happens at #4. [TO VERIFY with Japanese counsel] |
 
 **Notes.**
 
@@ -1685,6 +1686,32 @@ produce output — as Hugging Face and its downstream providers do — falls
   which remains a separate recipient with its own location and transfer basis (see
   the EEA → Hugging Face row above); pinning the inference provider does not close
   that row, it closes the one below it.
+- **Why the proxy left Google (2026-08-31).** Not a data-protection decision in
+  origin — the billing trial closed and Cloud Functions stopped working — but it
+  has data-protection consequences that must not be glossed:
+  - **The EEA leg is preserved, and arguably improved.** `fr-par` is Paris, so
+    the relay is now in the same country as the pinned inference provider
+    (#4, Gravelines) and under a French controller-side legal regime. Scaleway
+    was chosen over the free alternative (Cloudflare Workers) precisely because
+    a free Cloudflare Worker executes at whichever edge location is nearest the
+    visitor and **cannot** be pinned to the EU — Regional Services / the Data
+    Localization Suite is an Enterprise add-on. That would have broken the EEA
+    statement this document and the CER dossier both rely on.
+  - **Row #7 is a NEW recipient and needs the same paperwork as any other**: a
+    signed DPA with Scaleway, an entry in the Controller's record of processing,
+    and disclosure in the participant-facing notice. **None of that is done.**
+  - **App Check no longer applies to this leg.** A browser cannot mint an App
+    Check token for a non-Google endpoint and Scaleway could not verify one, so
+    that control is absent here. The controls that remain are Firebase
+    authentication, a server-side room-membership check, per-participant and
+    per-session rate limits, and the model credential never reaching the
+    browser. App Check was in *Monitor* (non-enforcing) and reCAPTCHA has been
+    consent-gated off since 2026-08-21, so nothing was being enforced in
+    practice — but the notice must not claim a control that is now structurally
+    unavailable.
+  - **The global daily cap on model calls is gone** and has been replaced by a
+    spend limit on the Hugging Face account. Relevant here only because it was
+    previously described as a technical measure; it is now a commercial one.
 - The Firebase Cloud Storage bucket is configured in the client but **no
   client-side use of it was found in the code**; the archive bucket used by the
   retention jobs is a separate private Google Cloud Storage bucket.

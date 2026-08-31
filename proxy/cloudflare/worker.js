@@ -21,8 +21,11 @@ import { kvStore } from "../src/stores.js";
 
 export default {
   async fetch(request, env, _ctx) {
-    // env.RATE_LIMIT is the KV namespace binding from wrangler.toml. If it is
-    // missing, handler.js refuses to serve rather than running unmetered.
+    /* env.RATE_LIMIT is the OPTIONAL KV namespace binding from wrangler.toml.
+     * When it is absent the handler falls back to its RTDB-backed store, which
+     * is the better default anyway: KV is eventually consistent with no atomic
+     * increment and can silently lose one, while the RTDB counters are made
+     * atomic by the increment-only database rule. See ../src/stores.js. */
     const store = env.RATE_LIMIT ? kvStore(env.RATE_LIMIT) : null;
     return handleRequest(request, env, { store });
   }
