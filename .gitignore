@@ -66,3 +66,9 @@ financing/
 # named investigators, participant-facing consent wording and unsigned
 # attestations. Local-only, same policy as financing/.
 ethics/
+
+# Build output of proxy/build-package.cjs — reproduced from source on every
+# build, never committed (it vendors a copy of functions/lib/hf-helpers.js).
+proxy/dist/
+proxy/*.zip
+hf-patient-proxy.zip
