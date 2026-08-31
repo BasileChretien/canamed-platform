@@ -47,7 +47,7 @@ on:
   # therefore delays research reuse; it does not affect any retention duty,
   # which cleanup-stale-sessions discharges independently and is still running.
   # schedule:
-  #   - cron: "47 3 * * *   # daily 03:47 UTC — after cleanup (03:17)"
+  #   - cron: "47 3 * * *"  # daily 03:47 UTC — after cleanup (03:17)
   workflow_dispatch:
 
 concurrency:

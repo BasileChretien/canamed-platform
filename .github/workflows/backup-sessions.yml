@@ -70,7 +70,7 @@ on:
   # nothing writes the ops/lastBackup marker, so the purge job is deleting
   # sessions with no archive behind them — see scripts/lib/backup-marker.js.
   # schedule:
-  #   - cron: "47 2 * * *   # daily 02:47 UTC — 30 min before cleanup (03:17)"
+  #   - cron: "47 2 * * *"  # daily 02:47 UTC — 30 min before cleanup (03:17)
   workflow_dispatch:
 
 concurrency:

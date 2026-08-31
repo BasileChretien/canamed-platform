@@ -89,7 +89,12 @@ function assessBackupFreshness(opts) {
     return { fresh: false, ageDays: null, reason: "no backup marker has ever been written" };
   }
   const at = marker && marker.at;
-  if (typeof at !== "number" || !Number.isFinite(at)) {
+  /* Number.isFinite alone is NOT enough. A finite but out-of-ECMAScript-range
+   * value — Number.MAX_VALUE is the easy one — passes it, then builds an
+   * Invalid Date whose toISOString() throws RangeError from the future-date
+   * branch below. That converts a deliberate BLOCK into an uncaught crash.
+   * Range-check via the Date itself so there is one definition of usable. */
+  if (typeof at !== "number" || !Number.isFinite(at) || Number.isNaN(new Date(at).getTime())) {
     return { fresh: false, ageDays: null, reason: "backup marker has no usable `at` timestamp" };
   }
   const ageMs = now - at;

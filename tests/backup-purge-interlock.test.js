@@ -71,6 +71,23 @@ test("a FUTURE-dated marker is stale — it must not read as fresher than fresh"
   assert.ok(/FUTURE/.test(r.reason), r.reason);
 });
 
+test("an out-of-RANGE but finite timestamp is malformed, not a crash", () => {
+  /* Number.isFinite(Number.MAX_VALUE) is true, but new Date(MAX_VALUE) is an
+   * Invalid Date and toISOString() on it throws RangeError. Since such a value
+   * is also "in the future", it reached the branch that formats the date — so
+   * backupGateReport() THREW instead of returning its blocking result, turning
+   * a deliberate refusal into an uncaught crash. Caught by CodeRabbit on #349
+   * and reproduced before fixing. */
+  for (const at of [Number.MAX_VALUE, -Number.MAX_VALUE, 8.64e15 + 1]) {
+    const r = assessBackupFreshness(fresh({ marker: { at } }));
+    assert.equal(r.fresh, false, `at=${at}`);
+    // and the gate must still be able to speak
+    const g = backupGateReport(fresh({ armed: true, marker: { at } }));
+    assert.equal(g.block, true, `at=${at} must block, not throw`);
+    assert.ok(typeof g.line === "string" && g.line.length > 0);
+  }
+});
+
 test("the boundary is inclusive — exactly maxAgeDays old still counts as fresh", () => {
   assert.equal(assessBackupFreshness(fresh({ marker: { at: NOW - 2 * DAY } })).fresh, true);
   assert.equal(
@@ -155,7 +172,10 @@ test("the marker is written only AFTER a successful upload", () => {
    * upload records an attempt, and an attempt must never authorise a purge. */
   const src = read("scripts/backup-sessions.js").split("\r\n").join("\n");
   const upload = src.indexOf("await uploadToGcs(");
-  const mark = src.indexOf("writeBackupMarker(");
+  // "await writeBackupMarker(", not the bare name: more precise than matching
+  // the import, and it additionally fails if a future edit drops the `await`
+  // (an un-awaited marker write can lose the race with process.exit(0)).
+  const mark = src.indexOf("await writeBackupMarker(");
   assert.ok(upload > 0, "no uploadToGcs call found");
   assert.ok(mark > 0, "no writeBackupMarker call found");
   assert.ok(mark > upload, "writeBackupMarker must come after the awaited uploadToGcs");
