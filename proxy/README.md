@@ -100,14 +100,35 @@ several sessions.
 Prerequisites: a Scaleway account and the `scw` CLI (`scw init`). **You** create
 the account and hold the credentials.
 
-Deploy from the `proxy/` directory so `scaleway/handler.js` can reach `../src`:
+### 1. Build the package
+
+**Do not zip `proxy/` directly.** `src/handler.js` imports `hf-helpers.js` from
+*outside* this directory — deliberately, so the prompt guard and the HF_URL
+allowlist cannot drift from the Cloud Function's copy — so a zip of `proxy/`
+alone is missing that file and the function dies at load. The build vendors it
+into the package (and only into the package; git keeps one copy):
 
 ```bash
-cd proxy && zip -r ../hf-patient-proxy.zip . -x 'cloudflare/*'
+node proxy/build-package.cjs
 ```
 
-Create the function (namespace first, once) in `fr-par`, runtime `node22`,
-handler `scaleway/handler.handle`, and set these variables:
+That writes `proxy/dist/` with the adapter at the **root**, so the function's
+handler setting is simply `handler.handle` — no subdirectory path to get wrong.
+Then:
+
+```bash
+cd proxy/dist && zip -r ../hf-patient-proxy.zip .
+```
+
+`tests/proxy-build.test.js` builds the package and **runs it**, because the two
+ways this breaks (a path escaping the package, and the CommonJS helper being
+parsed as ESM next to the ESM core) both look fine on inspection and fail only
+at load — where the client reports them as the stub patient, silently.
+
+### 2. Create the function
+
+Create a Functions namespace in **`fr-par`** (once), then a function with
+runtime **`node22`**, handler **`handler.handle`**, and these variables:
 
 | variable | value |
 | --- | --- |
