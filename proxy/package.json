@@ -1,0 +1,11 @@
+{
+  "name": "canamed-hf-patient-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Host-agnostic replacement for the hfPatient Firebase callable, for running Module A's LLM patient without a Blaze plan.",
+  "type": "module",
+  "main": "src/handler.js",
+  "engines": {
+    "node": ">=18"
+  }
+}

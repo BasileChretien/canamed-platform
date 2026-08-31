@@ -1,0 +1,50 @@
+# Cloudflare Workers deployment config for the hfPatient proxy.
+#
+# Secrets are NOT set here — `wrangler secret put HF_TOKEN` stores it encrypted.
+# Anything in this file is committed to a PUBLIC repo, so it must stay
+# non-secret. See ../README.md for the full deploy walkthrough.
+
+name = "canamed-hf-patient"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+[vars]
+# Non-secret configuration only.
+FIREBASE_PROJECT_ID = "canamed-69785"
+RTDB_URL = "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app"
+# ⚠ SHIPS DISABLED ON PURPOSE — do not flip this to "true" without reading the
+# data-residency section of ../README.md first.
+#
+# A workers.dev deployment is NOT EEA-pinnable on the free plan, and
+# HF_PROVIDER below constrains only the model-provider leg — not where this
+# Worker executes, nor where it terminates TLS. Enabling it here routes
+# participants' clinical free text through a recipient the privacy notice and
+# the DPA do not name, which is the one thing this directory exists to avoid
+# doing quietly.
+#
+# Set to "true" only after EITHER moving to an EEA-pinnable host (Scaleway
+# fr-par has a free tier) OR completing the sub-processor, privacy-notice and
+# DPA work. Afterwards it doubles as the panic button: back to "false" plus a
+# redeploy makes every client fall back to the local stub patient.
+MODA_LLM_ENABLED = "false"
+HF_URL = "https://router.huggingface.co/v1/chat/completions"
+HF_MODEL = "Qwen/Qwen3.5-9B"
+HF_MODEL_JA = "Qwen/Qwen3.5-9B"
+# DATA-RESIDENCY PIN, not a tuning knob. Unpinned, Hugging Face's router
+# chooses a provider per request, so the recipient of participants' clinical
+# free text varies turn to turn and cannot be named in the DPA. ovhcloud
+# serves from Gravelines, France. The model MUST be one this provider serves
+# or every call 404s and the chat degrades silently to the stub.
+HF_PROVIDER = "ovhcloud"
+HF_GLOBAL_DAILY_CAP = "4000"
+# EXPLICIT allowlist. A wildcard would let any website on the internet spend
+# the HF budget using a logged-in visitor's token.
+ALLOWED_ORIGINS = "https://canamed-69785.web.app,https://canamed-69785.firebaseapp.com"
+
+# Rate-limit counters. REQUIRED: without this binding the proxy refuses to
+# serve, because the global daily cap is the only hard ceiling on the HF bill.
+#   wrangler kv namespace create RATE_LIMIT
+# then paste the id it prints here.
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "REPLACE_ME_WITH_THE_ID_FROM_wrangler_kv_namespace_create"
