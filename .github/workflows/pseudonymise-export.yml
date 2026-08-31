@@ -20,8 +20,34 @@
 name: Pseudonymised export
 
 on:
-  schedule:
-    - cron: "47 3 * * *"   # daily 03:47 UTC — after cleanup (03:17)
+  # ⚠ SCHEDULE DISABLED 2026-08-31 — NOT a pause, and not a decision about
+  # whether the research export matters.
+  #
+  # This job writes to Google Cloud Storage (gs://canamed-pii-archive), and
+  # GCS requires a billing account. The project's Blaze trial ended on
+  # 2026-08-27 and was deliberately not renewed, so the billing account is in
+  # state `closed` and every run since has died with:
+  #
+  #     FATAL: ApiError: The billing account for the owning project is
+  #            disabled in state closed
+  #
+  # It failed daily for four days, mailing the operator each time about a
+  # condition no code change can fix. CLAUDE.md already records what that
+  # costs — four failure emails a day from jobs believed retired was called
+  # out as "pure alert fatigue, which is exactly the condition under which a
+  # real failure gets ignored". Leaving this on rebuilds that state knowingly.
+  #
+  # `workflow_dispatch` is KEPT so the job can be run by hand the moment
+  # billing is restored — which is also the test that it still works.
+  #
+  # TO RESTORE: re-attach a billing account to canamed-69785, then uncomment
+  # the schedule below.
+  #
+  # NB this one exports only CLOSED, research-CONSENTED sessions. Its pause
+  # therefore delays research reuse; it does not affect any retention duty,
+  # which cleanup-stale-sessions discharges independently and is still running.
+  # schedule:
+  #   - cron: "47 3 * * *"  # daily 03:47 UTC — after cleanup (03:17)
   workflow_dispatch:
 
 concurrency:

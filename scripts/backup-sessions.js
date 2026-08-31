@@ -44,6 +44,7 @@ const { getDatabase } = require("firebase-admin/database");
 const fs = require("fs");
 const path = require("path");
 const { uploadToGcs } = require("./lib/gcs-archive");
+const { writeBackupMarker } = require("./lib/backup-marker");
 const { readSessionLocations } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -120,6 +121,27 @@ async function main() {
     const destination = `${GCS_PREFIX}/canamed-backup-${isoDate()}.json`;
     const uri = await uploadToGcs({ bucket: GCS_BUCKET, localPath: OUT_PATH, destination });
     console.log(`Uploaded to ${uri}`);
+
+    /* AFTER the upload resolves, never before. This marker is what
+     * cleanup-stale-sessions consults before it deletes anything (see
+     * scripts/lib/backup-marker.js), so it must record "an archive exists",
+     * not "a backup was attempted". Writing it earlier would let a failed
+     * upload authorise a purge — the precise combination the interlock is
+     * there to prevent.
+     *
+     * Only when GCS_BUCKET is set: the local-artifact path leaves nothing
+     * durable behind, so it must not vouch for an archive either.
+     *
+     * Non-fatal. The backup itself succeeded; failing the job over the
+     * bookkeeping write would turn a healthy run red, and the interlock
+     * already fails CLOSED on a missing marker — the safe direction. */
+    try {
+      await writeBackupMarker(db, { sessions: locations.length, uri });
+      console.log("Recorded backup marker for the purge interlock.");
+    } catch (e) {
+      console.warn(`WARN: backup succeeded but the marker write failed: ${e.message}`);
+      console.warn("cleanup-stale-sessions will treat this as 'no recent backup' if its gate is armed.");
+    }
   }
 
   process.exit(0);

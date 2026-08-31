@@ -594,3 +594,90 @@ test("the workflow's stated cadence matches its cron", () => {
       "this guard exists so that drift fails a test instead of misleading the next reader."
   );
 });
+
+/* ── the Blaze gate on the hfPatient check (2026-08-31) ────────────────── */
+/*
+ * Cloud Functions v2 needs a Blaze plan. The billing trial ended 2026-08-27
+ * and was deliberately not renewed, so hfPatient returns a front-end 500 with
+ * no application logs and CANNOT pass. Left armed, it turned every scheduled
+ * run red and mailed the operator about a condition no code change can fix.
+ *
+ * The risk in gating it is that the coverage vanishes quietly and nobody
+ * notices when Blaze comes back — the stale-label failure the STATUS-CLAIM
+ * RULE exists for. So these tests pin BOTH directions: off by default, and
+ * still fully present and re-armable.
+ */
+
+test("the hfPatient check is gated out by default, and SAYS so", () => {
+  const all = probe.buildChecks("https://example.invalid");
+  const { active, skipped } = probe.selectChecks(all, { functions: false });
+
+  assert.ok(!active.some(c => c.label === "hfPatient"),
+    "hfPatient must not run while Cloud Functions are unprovisioned");
+  const sk = skipped.find(s => s.label === "hfPatient");
+  assert.ok(sk, "a gated check must appear in `skipped`, not simply disappear");
+  assert.ok(sk.reason && sk.reason.length > 10,
+    "a skipped check needs a reason — an unexplained gap in coverage is the bug, not the fix");
+  assert.ok(/Blaze|billing/i.test(sk.reason), sk.reason);
+  assert.ok(/PROBE_EXPECT_FUNCTIONS/.test(sk.reason),
+    "the reason must name the env var that re-arms it, or re-enabling means reading source");
+});
+
+test("the gate is one env var away from re-armed — the check itself is intact", () => {
+  /* If restoring Blaze required re-implementing the check, it would not get
+   * done. buildChecks() still returns it, so every other invariant test in
+   * this file continues to cover its shape while it is switched off. */
+  const all = probe.buildChecks("https://example.invalid");
+  const { active, skipped } = probe.selectChecks(all, { functions: true });
+
+  const hf = active.find(c => c.label === "hfPatient");
+  assert.ok(hf, "functions:true must put hfPatient back in the active set");
+  assert.equal(hf.method, "POST");
+  assert.deepEqual(hf.expectStatuses, [401]);
+  assert.deepEqual(skipped, [], "nothing should be skipped when functions are expected");
+});
+
+test("only checks marked needsFunctions are gated — the free-tier checks always run", () => {
+  /* A gate that quietly took the RTDB checks with it would remove the
+   * platform's only continuous backend signal, which still works on Spark. */
+  const all = probe.buildChecks("https://example.invalid");
+  const { active } = probe.selectChecks(all, { functions: false });
+  for (const label of ["splash", "privacy.html", "healthcheck.html", "rtdb", "rtdb-appcheck"]) {
+    assert.ok(active.some(c => c.label === label), `${label} must survive the gate`);
+  }
+  assert.equal(active.length, all.length - 1, "exactly one check should be gated");
+});
+
+test("main() prints the [SKIP] line BEFORE the results", async () => {
+  /* Ordering matters: a reader who sees "OK: all checks passed" first and the
+   * omission afterwards has already drawn the wrong conclusion. */
+  const lines = [];
+  const checks = [{
+    url: "https://example.invalid/x", label: "splash",
+    expectStatuses: [200], mustContain: []
+  }];
+  const code = await probe.main({
+    checks,
+    skipped: [{ label: "hfPatient", reason: "billing account is closed (set PROBE_EXPECT_FUNCTIONS=1 to re-arm)" }],
+    fetchUrl: async () => ({ status: 200, body: "" }),
+    sleep: async () => {},
+    log: (l) => lines.push(l),
+    logErr: (l) => lines.push(l)
+  });
+
+  assert.strictEqual(code, 0, "a gated check must not make the probe red");
+  const skipAt = lines.findIndex(l => l.startsWith("[SKIP]"));
+  const okAt = lines.findIndex(l => l.startsWith("OK:"));
+  assert.ok(skipAt >= 0, `no [SKIP] line emitted; got:\n${lines.join("\n")}`);
+  assert.ok(okAt >= 0 && skipAt < okAt, "the skip must be reported before the summary");
+  assert.ok(/hfPatient/.test(lines[skipAt]), lines[skipAt]);
+});
+
+test("PROBE_EXPECT_FUNCTIONS is strict — only \"1\" arms it", () => {
+  /* Env values are strings. If "0" or "false" armed the gate, the probe would
+   * go red again for a reason nobody chose. */
+  const src = fs.readFileSync(
+    path.join(__dirname, "..", "scripts", "synthetic-uptime-check.js"), "utf8");
+  assert.ok(/process\.env\.PROBE_EXPECT_FUNCTIONS === "1"/.test(src),
+    "FUNCTIONS_EXPECTED must compare against the exact string \"1\", not test truthiness");
+});

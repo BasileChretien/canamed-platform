@@ -164,6 +164,66 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
 
 ## Operational reminders — ACTION REQUIRED (cannot be done in code)
 
+### ⛔ THE PROJECT IS BACK ON THE SPARK (FREE) PLAN — billing closed 2026-08-27
+
+**Read this before trusting ANY status below that involves Cloud Functions or
+Cloud Storage.** The Blaze trial ended and was deliberately not renewed (user
+decision, 2026-08-31: "I did not want to pay anything"). The billing account
+for `canamed-69785` is in state `closed`. Everything that needs billing is
+therefore not merely broken but **unfixable in code**:
+
+| surface | state |
+| --- | --- |
+| `hfPatient` (Module A LLM patient) | **DOWN.** 500 from the Google front end, no application logs at all — the container is never started. Last invocation logged 2026-08-27T00:16:12Z. |
+| `sendQueuedMail` | same class — a v2 function on Cloud Run. Facilitator mail cannot send. |
+| `backup-sessions` → GCS | **DISABLED.** Failed daily 2026-08-27 → 08-31: `ApiError: The billing account for the owning project is disabled in state closed`. |
+| `pseudonymise-export` → GCS | **DISABLED**, same error. |
+| Hosting, RTDB, Auth, App Check | **unaffected** — all free tier. The site serves normally, which is exactly why this went unnoticed. |
+
+How it surfaced: five identical *Synthetic uptime probe* failure emails. The
+probe reported `hfPatient status=503`, which is true and almost useless — the
+cause was written verbatim in the logs of two OTHER failing jobs. Diagnosing a
+red probe means reading every failing workflow, not just the one that mailed.
+
+**What changed in the repo (2026-08-31):**
+- The probe's `hfPatient` check is **gated off** (`PROBE_EXPECT_FUNCTIONS`,
+  default off) and prints an explicit `[SKIP]` line. It is not deleted —
+  `buildChecks()` still returns it, so its shape stays under test.
+- `backup-sessions.yml` + `pseudonymise-export.yml` schedules are commented
+  out; `workflow_dispatch` kept. This stops ~4 failure emails a day about a
+  condition no code change can fix — the alert-fatigue state item 3 below
+  already warns about.
+- A **backup↔purge interlock** was added (`scripts/lib/backup-marker.js`),
+  because `cleanup-stale-sessions` runs on RTDB and kept succeeding — and
+  deleting — while backups failed. It is **disarmed** today on purpose: with no
+  GCS, arming it would block deletion forever and turn a missing-archive
+  problem into a standing retention breach. Deletion is the legal duty; the
+  backup is disaster recovery.
+
+⚠️ **RESTORING BLAZE IS A THREE-PART CHANGE, all in one commit** — miss one and
+you get a silently half-restored system:
+1. re-attach billing, then `firebase deploy --only functions` (read the
+   git-ignored `functions/.env` trap under the scenario-characters section
+   FIRST — a stale `.env` 404s every chat call and degrades to the stub);
+2. set `PROBE_EXPECT_FUNCTIONS=1` in `synthetic-uptime.yml`;
+3. uncomment both GCS schedules **and** flip `CLEANUP_REQUIRE_BACKUP` to `"1"`.
+
+`Verify:` `node scripts/synthetic-uptime-check.js` prints `[SKIP] hfPatient`
+while on Spark; `PROBE_EXPECT_FUNCTIONS=1 node scripts/synthetic-uptime-check.js`
+must then FAIL on `hfPatient` (positive control — confirmed both directions
+2026-08-31). A tokenless POST to the callable returning Google's HTML *500
+Server Error* page — rather than the handler's own `auth required` — is the
+signal that functions are unprovisioned.
+
+⚠️ **This also removes the App Check enforcement signal for `hfPatient`.** Items
+1 and 4 below both lean on that tokenless POST as the ONLY CLI-verifiable check
+(`functions/.env` is git-ignored). It costs nothing while the function cannot
+start — an undeployable function enforces nothing — but it is uncheckable
+again until Blaze returns. The **RTDB** canary in item 1 is unaffected and
+still runs every tick.
+
+### Round-3 security follow-ups
+
 These are the Round-3 security follow-ups that require the Firebase / GCP
 Console (a human with project access), surfaced 2026-05-20. Items 2, 3, 4, 5
 are complete (see each). **✅ NO ACTION OUTSTANDING — verified in the Console
@@ -452,8 +512,15 @@ estimate; the two together are why Monitor stays.
        **7.3.2** now and peers `^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0`, so
        that precondition is **met** — the blocker moved from the peer range to
        the code.
-   - `Verify:` `gh workflow list` shows all 4 (cleanup, cost-monitor, backup,
-     pseudonymise-export) **active**; `.github/workflows/*.yml` have live
+   - ⚠️ **"all 4 active" STOPPED BEING TRUE 2026-08-31.** `backup-sessions` and
+     `pseudonymise-export` write to GCS, which needs billing; the Blaze trial
+     closed 2026-08-27 and both failed daily until their schedules were
+     commented out. Expect **2 scheduled** (cleanup, cost-monitor) and **2
+     dispatch-only** (backup, pseudonymise-export) until Blaze returns — see
+     the Spark-plan banner at the top of this section. The `npm ci` and
+     lockfile halves of the check below are unaffected and still apply.
+   - `Verify:` `gh workflow list` shows cleanup + cost-monitor **active**;
+     `.github/workflows/*.yml` have live
      (uncommented) `schedule:` blocks; `gcloud storage ls gs://canamed-pii-archive/`
      lists recent objects under `backups/`, `pseudonymised/`, `linkage/`;
      `grep -EL '^[[:space:]]*run:[[:space:]]*npm ci([[:space:]]|$)' .github/workflows/{backup-sessions,cleanup-stale-sessions,cost-monitor,pseudonymise-export}.yml`
@@ -480,7 +547,36 @@ estimate; the two together are why Monitor stays.
      Console-only; functional check = create an account with email/password on
      the live splash and confirm no `auth/operation-not-allowed` error.
 
-4. **Module A LLM-patient pilot (2026-05-28) — ✅ ACTIVATED 2026-05-30;
+4. **Module A LLM-patient pilot (2026-05-28) — ⛔ DOWN SINCE 2026-08-27, and
+   NOT fixable in code.**
+   > **⛔ CURRENT STATE (2026-08-31): the billing account is closed, so
+   > `hfPatient` cannot start at all** — a tokenless POST returns Google's
+   > generic HTML *500 Server Error*, and there are NO application logs after
+   > 2026-08-27T00:16:12Z. Everything below about deploys, App Check
+   > enforcement and `.env` describes a function that currently does not run;
+   > it becomes relevant again only once Blaze is restored. See the Spark-plan
+   > banner at the top of this section.
+   >
+   > **The student-visible effect is the dangerous part.** The bridge treats
+   > any failure as "backend unavailable" and falls back to the **stub
+   > patient**, which answers a DIFFERENT question than the one asked — so it
+   > reads as an incoherent patient, not as an outage. Module A's chat is the
+   > DEFAULT history-taking interface for every session (`?llm=0` is the only
+   > opt-out), so this affects every room. Same failure mode as the 9-day
+   > `uidMembers` outage below; this time the cause is billing, not code.
+   >
+   > ⚠️ **The `MODA_LLM_ENABLED=false` panic button below CANNOT be used** — it
+   > takes effect via `firebase deploy --only functions`, and deploying
+   > functions itself requires billing. The only lever available on Spark is
+   > client-side: `modALLMFlagOn()` in script-loader.js and `_flagOn()` in
+   > modA-llm-init.js, both currently `return true`. Flipping those to default
+   > OFF would give students the legacy click-button workup instead of an
+   > incoherent stub — a student-facing product decision, deliberately NOT
+   > taken here, and it needs a PWA shell bump.
+
+   <details><summary>Pre-2026-08-27 history, valid again once Blaze returns</summary>
+
+   **Module A LLM-patient pilot (2026-05-28) — ✅ ACTIVATED 2026-05-30;
    ⚠️ was SILENTLY BROKEN 2026-08-03 → 2026-08-12, fixed in code, NEEDS A
    FUNCTIONS DEPLOY.**
    > **Outage (found by a live test 2026-08-12).** `#268` (2026-08-03) replaced
@@ -611,6 +707,8 @@ estimate; the two together are why Monitor stays.
      (handler reached → App Check NOT enforcing). If instead it were rejected by
      the App-Check layer, Enforce would still be on. `.env` is git-ignored, so
      this label cannot be auto-checked from the repo alone.
+
+   </details>
 
 ## Scenario characters (facilitator-authored scenarios)
 

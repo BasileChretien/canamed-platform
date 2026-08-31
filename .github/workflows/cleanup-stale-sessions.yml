@@ -154,4 +154,30 @@ jobs:
           CLEANUP_RETENTION_METRICS_DAYS: ${{ github.event.inputs.retention_metrics_days || '30' }}
           # PUBLIC repo: logs are world-readable — never print raw session codes.
           CLEANUP_QUIET: "1"
+          # ── BACKUP INTERLOCK ────────────────────────────────────────────
+          # "1" makes this job REFUSE to purge (exit 3) unless backup-sessions
+          # recorded a recent success at ops/lastBackup.
+          #
+          # It is "0" TODAY ON PURPOSE, and the reasoning matters more than the
+          # value. backup-sessions is disabled because GCS needs a billing
+          # account and the Blaze trial ended 2026-08-27, so no marker will
+          # ever be written. Arming the gate in that state would block
+          # deletion PERMANENTLY — converting a missing-archive problem into a
+          # standing breach of the 30/90-day retention this platform publishes
+          # in its own privacy notice. Deletion is the legal duty; the backup
+          # is disaster recovery. When they conflict, deletion wins.
+          #
+          # This is not silent: with the gate disarmed the job prints
+          # "Backup gate: DISARMED … purging WITHOUT a verified archive" on
+          # every run, so the state cannot be mistaken for a healthy one.
+          #
+          # ⚠ FLIP THIS TO "1" IN THE SAME CHANGE THAT RE-ENABLES
+          # backup-sessions.yml. Leaving it at "0" with backups running gives
+          # the worst of both: an archive nobody checks, and a purge that
+          # proceeds when it silently stops.
+          CLEANUP_REQUIRE_BACKUP: "0"
+          # How stale a backup may be before an ARMED gate blocks. 2d, not 1d:
+          # the backup runs 30 min before this job, so a single missed night
+          # must not halt retention.
+          CLEANUP_BACKUP_MAX_AGE_DAYS: "2"
         run: node scripts/cleanup-stale-sessions.js

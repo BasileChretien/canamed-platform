@@ -42,8 +42,35 @@
 name: Backup sessions
 
 on:
-  schedule:
-    - cron: "47 2 * * *"   # daily 02:47 UTC — 30 min before cleanup (03:17)
+  # ⚠ SCHEDULE DISABLED 2026-08-31 — NOT a pause, and not a decision about
+  # whether daily backups matters.
+  #
+  # This job writes to Google Cloud Storage (gs://canamed-pii-archive), and
+  # GCS requires a billing account. The project's Blaze trial ended on
+  # 2026-08-27 and was deliberately not renewed, so the billing account is in
+  # state `closed` and every run since has died with:
+  #
+  #     FATAL: ApiError: The billing account for the owning project is
+  #            disabled in state closed
+  #
+  # It failed daily for four days, mailing the operator each time about a
+  # condition no code change can fix. CLAUDE.md already records what that
+  # costs — four failure emails a day from jobs believed retired was called
+  # out as "pure alert fatigue, which is exactly the condition under which a
+  # real failure gets ignored". Leaving this on rebuilds that state knowingly.
+  #
+  # `workflow_dispatch` is KEPT so the job can be run by hand the moment
+  # billing is restored — which is also the test that it still works.
+  #
+  # TO RESTORE: re-attach a billing account to canamed-69785, then uncomment
+  # the schedule below.
+  #
+  # ⚠ AND re-arm the purge interlock in cleanup-stale-sessions.yml
+  # (CLEANUP_REQUIRE_BACKUP: "1") in the SAME change. While this job is off,
+  # nothing writes the ops/lastBackup marker, so the purge job is deleting
+  # sessions with no archive behind them — see scripts/lib/backup-marker.js.
+  # schedule:
+  #   - cron: "47 2 * * *"  # daily 02:47 UTC — 30 min before cleanup (03:17)
   workflow_dispatch:
 
 concurrency:
