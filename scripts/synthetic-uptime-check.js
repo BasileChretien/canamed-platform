@@ -155,6 +155,62 @@ const DEP_TIMEOUT_MS = 10_000;
 // canary below can never be re-pointed at a real credential record.
 const APPCHECK_CANARY_ID = "appcheck-canary-not-a-real-cert-id";
 
+/* ── WHY THE hfPatient CHECK IS OFF BY DEFAULT (2026-08-31) ───────────────
+ * Cloud Functions v2 runs on Cloud Run, which requires a Blaze (billing)
+ * plan. The project's billing trial ended on 2026-08-27 and was deliberately
+ * NOT renewed, so the billing account is in state `closed`. With no billing:
+ *
+ *   hfPatient  -> 500 from the Google front end, with NO application logs at
+ *                 all (the container is never started). Confirmed live: the
+ *                 last invocation logged was 2026-08-27T00:16:12Z.
+ *
+ * So this check cannot pass again, no matter how healthy the platform is.
+ * Between 2026-08-27 and 2026-08-31 it turned every scheduled run red and
+ * mailed the operator about a condition no code change can fix — the
+ * alert-fatigue state CLAUDE.md already describes for the private repo's four
+ * nightly jobs, and the condition under which a REAL failure gets ignored.
+ *
+ * It is GATED, not deleted, and never silently: `main()` prints an explicit
+ * [SKIP] line naming the reason, so the output can never be read as "the
+ * callable was checked and is fine". `buildChecks()` still returns the check
+ * so its shape stays under test — re-arming is one env var, not a rewrite.
+ *
+ * ⚠ WHAT THIS COSTS, stated plainly because CLAUDE.md leans on it: the
+ * tokenless POST is also the ONLY CLI-verifiable signal for whether App Check
+ * is ENFORCING on the callable (`functions/.env` is git-ignored, so the
+ * setting cannot be read from the repo). That signal is gone while this is
+ * off. It costs nothing today — an unstartable function enforces nothing —
+ * but restoring Blaze MUST re-arm this in the same change, or the enforcement
+ * state silently becomes uncheckable again. The RTDB half (`rtdb-appcheck`)
+ * is unaffected and still runs every tick.
+ *
+ * Set PROBE_EXPECT_FUNCTIONS=1 to re-arm. */
+const FUNCTIONS_EXPECTED = process.env.PROBE_EXPECT_FUNCTIONS === "1";
+
+/* Reasons live in a map keyed by label so the [SKIP] line explains ITSELF in
+ * the run log. A skipped check with no reason is a silently dropped check,
+ * which is the failure mode this whole file argues against. */
+const SKIP_REASONS = {
+  hfPatient: "Cloud Functions needs a Blaze plan; billing account is closed " +
+    "(set PROBE_EXPECT_FUNCTIONS=1 to re-arm)"
+};
+
+/* Split rather than filter, so main() can report what did not run. */
+function selectChecks(checks, opts) {
+  const o = opts || {};
+  const functions = o.functions === undefined ? FUNCTIONS_EXPECTED : o.functions;
+  const active = [];
+  const skipped = [];
+  for (const c of checks || []) {
+    if (!functions && c.needsFunctions) {
+      skipped.push({ label: c.label, reason: SKIP_REASONS[c.label] || "not provisioned" });
+    } else {
+      active.push(c);
+    }
+  }
+  return { active, skipped };
+}
+
 function buildChecks(base, rtdb, fnBase) {
   const db = (rtdb || RTDB_URL).replace(/\/$/, "");
   const fn = (fnBase || FN_BASE).replace(/\/$/, "");
@@ -251,6 +307,9 @@ function buildChecks(base, rtdb, fnBase) {
       // clause is the point.
       url: fn + "/hfPatient",
       label: "hfPatient",
+      // Requires a Blaze plan — see FUNCTIONS_EXPECTED above. selectChecks()
+      // drops it (loudly) when functions are not provisioned.
+      needsFunctions: true,
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ data: {} }),
@@ -261,7 +320,8 @@ function buildChecks(base, rtdb, fnBase) {
   ];
 }
 
-const CHECKS = buildChecks(BASE, RTDB_URL, FN_BASE);
+const ALL_CHECKS = buildChecks(BASE, RTDB_URL, FN_BASE);
+const { active: CHECKS, skipped: SKIPPED } = selectChecks(ALL_CHECKS);
 
 /* Longest the probe can possibly take, used to size the workflow's step cap.
  * This arithmetic is only sound because fetchUrl enforces a WALL-CLOCK
@@ -434,7 +494,14 @@ async function main(opts) {
   const log = o.log || console.log;
   const logErr = o.logErr || console.error;
 
+  const skipped = o.skipped || SKIPPED;
+
   log("Probing " + (o.base || BASE) + " at " + new Date().toISOString());
+  // Printed BEFORE the results, so a reader sees what was NOT covered before
+  // they see a green "all checks passed" and conclude everything is healthy.
+  for (const sk of skipped) {
+    log("[SKIP] " + String(sk.label).padEnd(20) + " " + sk.reason);
+  }
   const results = [];
   for (const c of checks) {
     const r = await runOne(c, o);
@@ -459,6 +526,8 @@ module.exports = {
   FN_BASE,
   APPCHECK_CANARY_ID,
   buildChecks,
+  selectChecks,
+  FUNCTIONS_EXPECTED,
   worstCaseMs,
   attemptOne,
   runOne,

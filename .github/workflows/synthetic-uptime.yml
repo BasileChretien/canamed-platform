@@ -146,3 +146,21 @@ jobs:
         run: node scripts/synthetic-uptime-check.js
         env:
           PROBE_URL: https://canamed-69785.web.app
+          # ── hfPatient check: OFF while the project is on Spark ───────────
+          # Cloud Functions v2 runs on Cloud Run and needs a Blaze plan. The
+          # billing trial ended 2026-08-27 and was deliberately not renewed,
+          # so hfPatient returns a front-end 500 with no application logs and
+          # CANNOT pass. Left armed it turned every run red and mailed the
+          # operator ~4x/day about something no code change can fix.
+          #
+          # The check is GATED, never silent: the probe prints an explicit
+          # "[SKIP] hfPatient <reason>" line above its results, so a green run
+          # cannot be read as "the callable was checked".
+          #
+          # ⚠ SET THIS TO "1" IN THE SAME CHANGE THAT RESTORES BILLING. It is
+          # also the only CLI-verifiable signal for whether App Check is
+          # ENFORCING on the callable (functions/.env is git-ignored), so
+          # leaving it off with a live function makes that state uncheckable —
+          # the stale-label failure the STATUS-CLAIM RULE in CLAUDE.md exists
+          # to prevent.
+          PROBE_EXPECT_FUNCTIONS: "0"

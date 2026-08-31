@@ -55,6 +55,7 @@ const { getDatabase } = require("firebase-admin/database");
 const { readSessionLocations, safeLabel } = require("./lib/session-trees");
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
+const { readBackupMarker, backupGateReport } = require("./lib/backup-marker");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -89,6 +90,31 @@ const OPEN_DAYS = retentionDays("CLEANUP_RETENTION_OPEN_DAYS", 90);
 const METRICS_DAYS = retentionDays("CLEANUP_RETENTION_METRICS_DAYS", 30);
 const CONFIRM = process.env.CLEANUP_CONFIRM === "1";
 const QUIET = process.env.CLEANUP_QUIET === "1";
+
+/* ── THE BACKUP INTERLOCK (2026-08-31) ────────────────────────────────────
+ * OPT-IN, and defaulting OFF is a deliberate decision, not an oversight.
+ *
+ * The hazard it addresses is real: this job runs on RTDB (free tier) while
+ * backup-sessions writes to GCS (needs billing). When the billing account
+ * closed on 2026-08-27 the backup job failed daily and THIS job kept
+ * succeeding, so a session ageing past its window would have been deleted
+ * with no archive and no warning anywhere.
+ *
+ * But arming it unconditionally would be worse than the hazard. Deletion is
+ * the LEGAL duty (GDPR storage limitation, and the 30/90-day windows this
+ * platform publishes); the backup is disaster recovery. With no Blaze plan
+ * there is no GCS at all, so an always-armed gate would block deletion
+ * permanently — trading a missing archive for a permanent retention breach.
+ *
+ * Hence: armed only when backups are actually expected to work. Disarmed, it
+ * still prints its state on every run, so "purging without an archive" can
+ * never be mistaken for "purging with one". See scripts/lib/backup-marker.js.
+ *
+ * NB the gate stops SESSION purges only. Metrics pruning has its own clock
+ * and is not covered by the session backup, so blocking it here would create
+ * a second retention gap while trying to prevent a data-loss one. */
+const REQUIRE_BACKUP = process.env.CLEANUP_REQUIRE_BACKUP === "1";
+const BACKUP_MAX_AGE_DAYS = retentionDays("CLEANUP_BACKUP_MAX_AGE_DAYS", 2);
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const closedCutoff = Date.now() - CLOSED_DAYS * MS_PER_DAY;
@@ -132,6 +158,31 @@ async function main() {
   const locations = await readSessionLocations(db);
   const orgCount = locations.filter(l => l.orgSlug).length;
   console.log(`Found ${locations.length} sessions (${locations.length - orgCount} default, ${orgCount} org-scoped).`);
+
+  /* Read the marker rather than the bucket — see backup-marker.js for why
+   * probing GCS to decide whether GCS is healthy fails in the exact state
+   * this guards against. A read failure is treated as NO marker: the gate
+   * must fail closed when armed, never open. */
+  let marker = null;
+  try {
+    marker = await readBackupMarker(db);
+  } catch (e) {
+    console.warn(`Could not read the backup marker: ${QUIET ? "(redacted)" : e.message}`);
+  }
+  const gate = backupGateReport({
+    armed: REQUIRE_BACKUP,
+    marker,
+    maxAgeDays: BACKUP_MAX_AGE_DAYS
+  });
+  console.log(gate.line);
+  if (gate.block) {
+    /* Exit 3, distinct from 1 (per-session errors) and 2 (fatal/misconfig), so
+     * the workflow log and any future alerting can tell "refused on purpose"
+     * from "broke". Nothing has been deleted at this point. */
+    console.error("BLOCKED: no sessions were purged.");
+    process.exit(3);
+  }
+  console.log("");
 
   let kept = 0, purged = 0, errors = 0;
   for (const loc of locations) {
