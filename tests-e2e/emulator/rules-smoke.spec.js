@@ -2004,3 +2004,110 @@ test("rules: roomOf peer-write denial + creator reassignment hold in the org tre
 
   await ctxB.close();
 });
+
+/* ── rateLimits: the self-hosted LLM proxy's counters ───────────────────
+ *
+ * The proxy writes these with the CALLER'S OWN token — it deliberately holds
+ * no service-account key — so the RULES are the whole security story. A
+ * structural test (tests/rules.test.js) checks the predicate is present; this
+ * one checks the emulator actually behaves that way.
+ *
+ * Every denial below is paired with an ALLOW of the same shape, per the
+ * standing rule that a denial is not evidence of a gate: without the allow
+ * legs these would all pass just as well on a node nothing can ever write.
+ */
+
+test("rules: a rateLimits counter is increment-only and cannot be reset", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const bucket = "h" + Math.floor(Date.now() / 3600000);
+  const p = `rateLimits/uid/${uid}/${bucket}`;
+
+  // ALLOW: the first write must be exactly 1.
+  expect(await tryWrite(page, p, 1), "a first write of 1 must be allowed").toBe("ALLOWED");
+  // ALLOW: +1 steps.
+  expect(await tryWrite(page, p, 2)).toBe("ALLOWED");
+  expect(await tryWrite(page, p, 3)).toBe("ALLOWED");
+
+  /* DENY: the whole point. If a participant could reset their own counter the
+   * rate limit would be decorative — they would zero it and keep going. */
+  expect(await tryWrite(page, p, 0), "resetting a counter must be denied").not.toBe("ALLOWED");
+  expect(await tryWrite(page, p, 1), "rewinding a counter must be denied").not.toBe("ALLOWED");
+  expect(await tryWrite(page, p, null), "deleting a counter must be denied").not.toBe("ALLOWED");
+
+  /* DENY: skipping ahead is refused too. This is what makes the increment
+   * ATOMIC — a concurrent writer whose read is stale computes the same value
+   * as the winner and is rejected, then retries. */
+  expect(await tryWrite(page, p, 99), "a jump must be denied").not.toBe("ALLOWED");
+  expect(await tryWrite(page, p, 5), "skipping 4 must be denied").not.toBe("ALLOWED");
+
+  // Non-numbers are refused by .validate.
+  expect(await tryWrite(page, p, "4"), "a string must be denied").not.toBe("ALLOWED");
+
+  // The value really is 3 — proving the denials above changed nothing.
+  expect(await dbReadAsOwner(p)).toBe(3);
+
+  // ALLOW again afterwards: the node is still usable, not bricked.
+  expect(await tryWrite(page, p, 4)).toBe("ALLOWED");
+});
+
+test("rules: a participant cannot inflate ANOTHER participant's counter", async ({ page, browser }) => {
+  /* A second CONTEXT, not a second page: a second page shares storage and so
+   * reuses the first anonymous session, which would make this test assert
+   * nothing (see the CLAUDE.md note about that exact trap). */
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+
+  const ctx = await browser.newContext();
+  const pageB = await ctx.newPage();
+  /* useEmulator() BEFORE the first navigation: a fresh context does not
+   * inherit the emulator wiring, so without this Firebase never initialises
+   * and waitForUid just times out. */
+  await useEmulator(pageB);
+  await pageB.goto("/");
+  const uidB = await waitForUid(pageB);
+  expect(uidB, "the two participants must be different users").not.toBe(uidA);
+
+  const bucket = "h" + Math.floor(Date.now() / 3600000);
+  const victim = `rateLimits/uid/${uidA}/${bucket}`;
+
+  // A establishes their own counter — the ALLOW leg.
+  expect(await tryWrite(page, victim, 1)).toBe("ALLOWED");
+
+  // B may not touch it, in either direction.
+  const peerWrite = await tryWrite(pageB, victim, 2);
+  expect(peerWrite, "a peer must not be able to inflate someone else's counter")
+    .not.toBe("ALLOWED");
+  expect(String(peerWrite)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+  expect(await tryWrite(pageB, victim, 0),
+    "…nor reset it").not.toBe("ALLOWED");
+
+  // B's OWN counter still works, so the denial is about ownership, not about
+  // the node being unwritable.
+  expect(await tryWrite(pageB, `rateLimits/uid/${uidB}/${bucket}`, 1)).toBe("ALLOWED");
+
+  await ctx.close();
+});
+
+test("rules: the session counter needs a roomOf claim in THAT session", async ({ page }) => {
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const code = "rl-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const bucket = "h" + Math.floor(Date.now() / 3600000);
+  const p = `rateLimits/session/${code}/${bucket}`;
+
+  // DENY before joining: knowing a session code is not membership.
+  expect(await tryWrite(page, p, 1),
+    "a non-member must not write a session counter").not.toBe("ALLOWED");
+
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
+
+  // ALLOW after joining — the positive control.
+  expect(await tryWrite(page, p, 1),
+    "a member of the session must be able to meter it").toBe("ALLOWED");
+  expect(await tryWrite(page, p, 2)).toBe("ALLOWED");
+  // …and it is still increment-only here.
+  expect(await tryWrite(page, p, 0)).not.toBe("ALLOWED");
+});

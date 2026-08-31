@@ -213,46 +213,9 @@ test("an upstream error body is never forwarded to the client", async () => {
 
 /* ── metering: the only ceiling on the bill ───────────────────────────── */
 
-test("with NO rate-limit store the proxy refuses to serve", async () => {
-  /* Serving unmetered would make the global cap look enforced while enforcing
-   * nothing — worse than no limit, because it invites trust. */
-  const { deps } = world();
-  deps.store = null;
-  deps.verifyToken = async () => ({ uid: UID });
-  const res = await proxy.handleRequest(req({}), Object.assign({}, ENV), deps);
-  const body = await res.json();
-  assert.equal(res.status, 500);
-  assert.equal(body.result.state, "error");
-});
 
-test("the global daily cap degrades to the stub instead of erroring the room", async () => {
-  const store = stores.memoryStore(() => NOW);
-  const env = { HF_GLOBAL_DAILY_CAP: "2" };
-  let last;
-  for (let i = 0; i < 4; i++) last = await run({ store, env });
-  assert.equal(last.res.status, 200, "an in-progress workshop must keep running");
-  assert.equal(last.body.result.state, "disabled");
-});
 
-test("the per-uid hourly limit returns 429", async () => {
-  const store = stores.memoryStore(() => NOW);
-  let last;
-  for (let i = 0; i < proxy.LIMITS.RATE_LIMIT_TURNS + 2; i++) last = await run({ store });
-  assert.equal(last.res.status, 429);
-  assert.match(last.body.error.message, /rate limit/);
-});
 
-test("counters are shared across callers of the same session, not per-request", async () => {
-  const store = stores.memoryStore(() => NOW);
-  const a = await proxy.checkRateLimits(store, "u1", "sess", NOW, proxy.LIMITS);
-  const b = await proxy.checkRateLimits(store, "u1", "sess", NOW, proxy.LIMITS);
-  assert.ok(a.ok && b.ok);
-  const s = stores.memoryStore(() => NOW);
-  await proxy.checkRateLimits(s, "u1", "sess", NOW, { ...proxy.LIMITS, GLOBAL_DAILY_CAP: 1 });
-  const second = await proxy.checkRateLimits(s, "u2", "sess", NOW, { ...proxy.LIMITS, GLOBAL_DAILY_CAP: 1 });
-  assert.equal(second.ok, false, "the global cap must span DIFFERENT uids");
-  assert.equal(second.scope, "global-daily");
-});
 
 /* ── the panic button ─────────────────────────────────────────────────── */
 
@@ -323,28 +286,6 @@ test("a malformed provider fails CLOSED rather than sending unpinned", async () 
   assert.equal(body.result.state, "error");
 });
 
-test("the limits match the callable's", async () => {
-  /* Two deployments of the same feature with different ceilings is a bill
-   * waiting to happen. Read from the function's own source. */
-  const fn = fs.readFileSync(P("docs/Third_session/PBL_platform/functions/index.js"), "utf8");
-  /* Reads `const NAME = 123` and `const NAME = defineInt("X", { default: 123 })`
-   * alike. Built from a literal source string rather than an interpolated one
-   * so the escaping stays readable — and anchored on `const ` so a NAME that
-   * is a suffix of another (GLOBAL_DAILY_CAP inside HF_GLOBAL_DAILY_CAP) can
-   * only match its own declaration. */
-  const num = (name) => {
-    const pattern = String.raw`const\s+NAME\s*=\s*(?:defineInt\([^,]+,\s*\{\s*default:\s*)?(\d+)`
-      .replace("NAME", name);
-    const m = new RegExp(pattern).exec(fn);
-    assert.ok(m, `could not read ${name} from functions/index.js`);
-    return Number(m[1]);
-  };
-  assert.equal(proxy.LIMITS.MAX_REPLY_CHARS, num("MAX_REPLY_CHARS"));
-  assert.equal(proxy.LIMITS.RATE_LIMIT_TURNS, num("RATE_LIMIT_TURNS"));
-  assert.equal(proxy.LIMITS.SESSION_RATE_LIMIT_TURNS, num("SESSION_RATE_LIMIT_TURNS"));
-  assert.equal(proxy.LIMITS.RATE_LIMIT_DAILY_TURNS, num("RATE_LIMIT_DAILY_TURNS"));
-  assert.equal(proxy.LIMITS.GLOBAL_DAILY_CAP, num("GLOBAL_DAILY_CAP"));
-});
 
 /* ── reply hygiene ────────────────────────────────────────────────────── */
 
@@ -496,39 +437,7 @@ test("a genuinely signed token VERIFIES — and aud/iss are still enforced", asy
 
 /* ── regressions found by review on #350 ──────────────────────────────── */
 
-test("a rate-limited caller does NOT consume the shared global budget", async () => {
-  /* The global counter used to be bumped BEFORE the per-caller limits, so a
-   * single participant could spend the entire GLOBAL_DAILY_CAP on requests
-   * that were then refused at their own per-uid limit and cost nothing at
-   * Hugging Face — flipping every OTHER participant to state:"disabled" for
-   * the rest of the UTC day. Anonymous sign-in makes getting a token cheap,
-   * so that was a one-caller denial of service against the whole platform. */
-  const store = stores.memoryStore(() => NOW);
-  const caps = { ...proxy.LIMITS, RATE_LIMIT_TURNS: 2, GLOBAL_DAILY_CAP: 10 };
 
-  // One caller burns well past their own hourly limit.
-  for (let i = 0; i < 20; i++) await proxy.checkRateLimits(store, "greedy", "sess", NOW, caps);
-
-  // A DIFFERENT participant must still be served: the global budget should
-  // have been charged only for the 2 turns that actually reached HF.
-  const victim = await proxy.checkRateLimits(store, "innocent", "sess2", NOW, caps);
-  assert.equal(victim.ok, true,
-    "one rate-limited caller must not be able to exhaust everyone else's budget");
-  assert.equal(Number(await store.get("g:" + NOW_DAY)), 3,
-    "only requests that passed every per-caller limit may charge the global counter");
-});
-
-test("the global cap still bites once real traffic reaches it", async () => {
-  /* Positive control for the test above: reordering the checks must not have
-   * disabled the ceiling itself. */
-  const store = stores.memoryStore(() => NOW);
-  const caps = { ...proxy.LIMITS, GLOBAL_DAILY_CAP: 3 };
-  const seen = [];
-  for (let i = 0; i < 5; i++) {
-    seen.push((await proxy.checkRateLimits(store, "u" + i, "s" + i, NOW, caps)).scope || "ok");
-  }
-  assert.deepEqual(seen, ["ok", "ok", "ok", "global-daily", "global-daily"]);
-});
 
 test("a BLANK HF_PROVIDER keeps the EU pin instead of silently unpinning it", async () => {
   /* applyProviderPin treats "" as a deliberate opt-out and returns the
@@ -554,4 +463,163 @@ test("an explicit opt-out is still possible, but only in code", async () => {
   const { calls } = await run({ env: { HF_PROVIDER: null } });
   const sent = JSON.parse(calls.hf[0].init.body);
   assert.equal(sent.model, "Qwen/Qwen3.5-9B", "an explicit null means router auto");
+});
+
+/* ── metering ─────────────────────────────────────────────────────────── */
+
+test("with NO usable store the proxy refuses to serve", async () => {
+  /* Serving unmetered would make the limits look enforced while enforcing
+   * nothing — worse than no limit, because it invites trust. Both shapes of
+   * "no store" must refuse: nothing bound at all, and something bound that
+   * does not implement the contract. */
+  // (a) something bound that does not implement the contract. RTDB_URL stays
+  //     set so the request reaches the store check rather than being denied
+  //     earlier at the membership read.
+  {
+    const { deps } = world();
+    deps.store = { get() {}, put() {} };          // the OLD interface
+    deps.verifyToken = async () => ({ uid: UID });
+    const res = await proxy.handleRequest(req({}), ENV, deps);
+    const body = await res.json();
+    assert.equal(res.status, 500, "a store without increment() must refuse");
+    assert.equal(body.result.state, "error");
+  }
+
+  // (b) nothing bound and no RTDB_URL to build the default from — caught by
+  //     the up-front config guard, before any work.
+  {
+    const { deps, calls } = world();
+    deps.store = null;
+    deps.verifyToken = async () => ({ uid: UID });
+    const res = await proxy.handleRequest(req({}), { ...ENV, RTDB_URL: undefined }, deps);
+    const body = await res.json();
+    assert.equal(res.status, 500, "no store and no RTDB_URL must refuse");
+    assert.equal(body.result.state, "error");
+    assert.equal(calls.hf.length, 0, "and must not reach Hugging Face");
+  }
+});
+
+test("a store that THROWS fails closed, it does not serve unmetered", async () => {
+  const { deps } = world();
+  deps.store = { increment: async () => { throw new Error("rtdb unreachable"); } };
+  deps.verifyToken = async () => ({ uid: UID });
+  const res = await proxy.handleRequest(req({}), ENV, deps);
+  const body = await res.json();
+  assert.equal(res.status, 500);
+  assert.equal(body.result.state, "error");
+});
+
+test("the per-uid hourly limit returns 429", async () => {
+  const store = stores.memoryStore(() => NOW);
+  let last;
+  for (let i = 0; i < proxy.LIMITS.RATE_LIMIT_TURNS + 2; i++) last = await run({ store });
+  assert.equal(last.res.status, 429);
+  assert.match(last.body.error.message, /rate limit/);
+});
+
+test("the per-uid limit is PER UID — one participant cannot exhaust another", async () => {
+  /* The counters are keyed by uid, and the database rule binds each subtree to
+   * its owner, so this is the property the whole design rests on. */
+  const store = stores.memoryStore(() => NOW);
+  for (let i = 0; i < proxy.LIMITS.RATE_LIMIT_TURNS + 2; i++) {
+    await proxy.checkRateLimits(store, "greedy", "sess-a", NOW, proxy.LIMITS);
+  }
+  const greedy = await proxy.checkRateLimits(store, "greedy", "sess-a", NOW, proxy.LIMITS);
+  assert.equal(greedy.ok, false, "the heavy caller must be limited");
+
+  const other = await proxy.checkRateLimits(store, "innocent", "sess-b", NOW, proxy.LIMITS);
+  assert.equal(other.ok, true, "a different participant must be unaffected");
+});
+
+test("the session counter is shared across the participants of one session", async () => {
+  const store = stores.memoryStore(() => NOW);
+  const caps = { ...proxy.LIMITS, SESSION_RATE_LIMIT_TURNS: 3 };
+  const seen = [];
+  for (let i = 0; i < 5; i++) {
+    seen.push((await proxy.checkRateLimits(store, "u" + i, "same-session", NOW, caps)).scope || "ok");
+  }
+  assert.deepEqual(seen, ["ok", "ok", "ok", "session-hourly", "session-hourly"],
+    "distinct uids must accumulate against the same session bucket");
+});
+
+test("THE GLOBAL DAILY CAP IS DELIBERATELY NOT ENFORCED HERE", async () => {
+  /* Not an omission — a relocation, and the reasoning has to survive in a
+   * test or someone will "restore" it.
+   *
+   * The proxy's counters live in RTDB and are written with the CALLER'S OWN
+   * token. A cross-user counter would therefore be forgeable UPWARD by any
+   * participant, who could push it past the cap and switch the chat off for
+   * the entire platform for the rest of the day — turning a cost control into
+   * a one-caller denial of service. (Per-uid counters do not have this
+   * problem: inflating your own only restricts you.) A counter only the proxy
+   * could write would require a Google service-account key on a third-party
+   * host, which handler.js's header refuses on purpose.
+   *
+   * The ceiling therefore lives on the HUGGING FACE ACCOUNT'S SPEND LIMIT,
+   * which is enforced by the party doing the billing and bounds the real
+   * quantity (money) rather than a proxy for it (turns). */
+  assert.ok(!("GLOBAL_DAILY_CAP" in proxy.LIMITS),
+    "a global cap in LIMITS would be forgeable by any participant — see the comment above LIMITS");
+
+  const src = fs.readFileSync(P("proxy/src/handler.js"), "utf8");
+  assert.match(src, /SPEND LIMIT ON THE HUGGING FACE ACCOUNT/,
+    "the relocation must be documented where the limits are defined");
+
+  const readme = fs.readFileSync(P("proxy/README.md"), "utf8");
+  assert.match(readme, /spend limit/i,
+    "README must carry the spend limit as a setup step — it is now the only cost ceiling");
+});
+
+test("the per-caller limits still match the callable's", async () => {
+  /* Two deployments of the same feature with different ceilings is a support
+   * problem waiting to happen. Read from the function's own source. */
+  const fn = fs.readFileSync(P("docs/Third_session/PBL_platform/functions/index.js"), "utf8");
+  const num = (name) => {
+    const pattern = String.raw`const\s+NAME\s*=\s*(?:defineInt\([^,]+,\s*\{\s*default:\s*)?(\d+)`
+      .replace("NAME", name);
+    const m = new RegExp(pattern).exec(fn);
+    assert.ok(m, `could not read ${name} from functions/index.js`);
+    return Number(m[1]);
+  };
+  assert.equal(proxy.LIMITS.MAX_REPLY_CHARS, num("MAX_REPLY_CHARS"));
+  assert.equal(proxy.LIMITS.RATE_LIMIT_TURNS, num("RATE_LIMIT_TURNS"));
+  assert.equal(proxy.LIMITS.SESSION_RATE_LIMIT_TURNS, num("SESSION_RATE_LIMIT_TURNS"));
+  assert.equal(proxy.LIMITS.RATE_LIMIT_DAILY_TURNS, num("RATE_LIMIT_DAILY_TURNS"));
+});
+
+test("RTDB_URL is required unconditionally, and must be https", async () => {
+  /* Two distinct bugs, both found by review on #351.
+   *
+   * (a) The guard used to demand RTDB_URL only when no store was bound. But
+   *     verifyMembership ALWAYS reads the roomOf claim over RTDB, so binding a
+   *     KV store without RTDB_URL gave every legitimate caller a
+   *     "not a member of the claimed room" 403 — pointing the operator at
+   *     entirely the wrong problem.
+   *
+   * (b) The RTDB REST calls carry the caller's Firebase ID token as a QUERY
+   *     PARAMETER (?auth=...), which is how that API takes credentials. Over
+   *     plaintext that token is readable by anything on the path, and it is
+   *     the credential the entire membership check rests on. */
+  const bad = [
+    [undefined, "missing"],
+    ["", "empty"],
+    ["http://rtdb.example.invalid", "plaintext — would leak the ID token in the query string"]
+  ];
+  for (const [url, why] of bad) {
+    const { deps, calls } = world();
+    // A store IS bound, so this cannot pass by falling back to the store check.
+    deps.store = stores.memoryStore(() => NOW);
+    deps.verifyToken = async () => ({ uid: UID });
+    const res = await proxy.handleRequest(req({}), { ...ENV, RTDB_URL: url }, deps);
+    const body = await res.json();
+    assert.equal(res.status, 500, why);
+    assert.equal(body.result.state, "error", why);
+    assert.equal(body.error, undefined, "must not masquerade as a membership denial");
+    assert.equal(calls.hf.length, 0, why);
+  }
+
+  // ALLOW leg: an https URL still works, so the check is about the scheme and
+  // not about the endpoint being unreachable.
+  const ok = await run({});
+  assert.equal(ok.res.status, 200);
 });

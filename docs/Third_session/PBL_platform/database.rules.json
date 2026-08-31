@@ -832,6 +832,28 @@
       }
     },
 
+    "rateLimits": {
+      "uid": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid",
+          "$bucket": {
+            ".write": "auth != null && auth.uid === $uid && newData.isNumber() && (!data.exists() ? newData.val() === 1 : newData.val() === data.val() + 1)",
+            ".validate": "newData.isNumber() && newData.val() > 0"
+          }
+        }
+      },
+      "session": {
+        "$code": {
+          ".read": "auth != null && root.child('sessions/' + $code + '/roomOf/' + auth.uid).exists()",
+          "$bucket": {
+            ".write": "auth != null && root.child('sessions/' + $code + '/roomOf/' + auth.uid).exists() && newData.isNumber() && (!data.exists() ? newData.val() === 1 : newData.val() === data.val() + 1)",
+            ".validate": "newData.isNumber() && newData.val() > 0"
+          }
+        }
+      },
+      "$other": { ".validate": false }
+    },
+
     "orgs": {
       "$orgSlug": {
         ".validate": "$orgSlug.matches(/^[a-z0-9-]+$/)",

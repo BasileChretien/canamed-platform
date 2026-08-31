@@ -43,6 +43,7 @@
 
 import helpers from "../../docs/Third_session/PBL_platform/functions/lib/hf-helpers.js";
 import { verifyFirebaseIdToken } from "./firebase-jwt.js";
+import { rtdbStore } from "./stores.js";
 
 const {
   isAllowedHfUrl, validateMessages, buildMessages, normLang,
@@ -57,9 +58,37 @@ export const LIMITS = {
   RATE_LIMIT_TURNS: 40,              // per uid, per hour
   RATE_LIMIT_WINDOW_MS: 60 * 60 * 1000,
   SESSION_RATE_LIMIT_TURNS: 250,     // per session, per hour
-  RATE_LIMIT_DAILY_TURNS: 200,       // per uid, per UTC day
-  GLOBAL_DAILY_CAP: 4000             // hard ceiling across everyone
+  RATE_LIMIT_DAILY_TURNS: 200        // per uid, per UTC day
 };
+
+/* ⚠ THE GLOBAL DAILY CAP IS NOT ENFORCED HERE — IT MOVED TO HUGGING FACE.
+ *
+ * The callable held a cross-user counter (HF_GLOBAL_DAILY_CAP, 4000/day) as a
+ * ceiling on the inference bill. It could do that because the admin SDK gave
+ * it a store NO CLIENT could write. The proxy has no such store, and that is
+ * not an oversight to route around:
+ *
+ *   - Its counters live in RTDB, written with the CALLER'S OWN token. A
+ *     shared, client-writable counter is forgeable UPWARD, so any participant
+ *     could push it past the cap and switch the chat off for the whole
+ *     platform for the rest of the day — trading a cost control for a
+ *     one-caller denial of service. (The per-uid counters do not have this
+ *     problem: inflating your own only restricts you.)
+ *   - A store only the proxy can write means a proxy-held secret with write
+ *     access to the database — i.e. a Google service-account key on a
+ *     third-party host, which is the thing handler.js's header refuses to do.
+ *
+ * So the ceiling moved to the layer that can actually enforce it: the
+ * SPEND LIMIT ON THE HUGGING FACE ACCOUNT. That is a hard cap set by the
+ * party doing the billing, it cannot be forged by a participant, and it
+ * bounds the real quantity (money) rather than a proxy for it (turns).
+ *
+ * ⚠ IT IS THEREFORE A REQUIRED SETUP STEP, not an optional hardening — see
+ * proxy/README.md. Skip it and there is no cost ceiling at all: the per-uid
+ * limits still bound one participant to 200 turns/day, but nothing bounds
+ * 30 participants x N sessions.
+ *
+ * The per-uid and per-session limits below are unchanged and still enforced. */
 
 const HF_DEFAULT_URL = "https://router.huggingface.co/v1/chat/completions";
 const HF_DEFAULT_MODEL = "Qwen/Qwen3.5-9B";
@@ -111,58 +140,39 @@ function withHeaders(res, extra) {
 
 /* ── rate limiting ────────────────────────────────────────────────────────
  * The callable kept counters in RTDB via the admin SDK. The proxy has no
- * admin credentials (see the header), so it needs its own store — Cloudflare
- * KV, Scaleway's equivalent, or anything with get/put.
+ * admin credentials (see the header), so it drives a store with what it does
+ * hold — the caller's own token. stores.js has the backends.
  *
- * REQUIRED, not optional. Without a shared store each instance counts only
- * its own traffic, so the global cap would silently become per-instance — the
+ * REQUIRED, not optional. Without a SHARED store each instance counts only
+ * its own traffic, so the limits would silently become per-instance — the
  * kind of control that looks present and enforces nothing. An absent store
  * therefore refuses service rather than serving unmetered, mirroring
  * BACKUP_REQUIRE_GCS elsewhere in this repo.
  *
- * ⚠ IT IS AN APPROXIMATE CEILING, NOT A HARD ONE, and the difference is worth
- * stating because an earlier draft of this file claimed the latter. bump() is
- * a read-modify-write, and Cloudflare KV — like most edge KV — is eventually
- * consistent with no atomic increment, so concurrent requests can overwrite
- * each other's increments and the true count can run BELOW the recorded one.
- * At workshop scale (tens of concurrent participants) the slippage is a
- * handful of calls, not a blown budget, and approximate metering beats none.
- * If it ever needs to be exact the counter must move to a backend with an
- * atomic increment — Durable Objects, Redis INCR, or a real database. The
- * store interface is where that swap happens; nothing else changes.
+ * The counters are structured ({scope, id, bucket}) rather than flat keys
+ * because rtdbStore has to turn them into PATHS whose ownership the database
+ * rules can check; a flat "u:<uid>:<hour>" string cannot be authorised.
  *
- * ORDER MATTERS. The global counter is bumped LAST, after every per-caller
- * limit has passed. Bumping it FIRST — as this did originally — let a single
- * authenticated participant spend the WHOLE global cap on requests that were
- * then refused at their own per-uid limit and cost nothing at Hugging Face,
- * flipping every other participant to state:"disabled" for the rest of the
- * UTC day. Anonymous sign-in makes getting a token cheap, so that was a
- * one-caller denial of service against the whole platform. */
-async function bump(store, key, ttlSeconds) {
-  const cur = Number((await store.get(key)) || 0) + 1;
-  await store.put(key, String(cur), ttlSeconds);
-  return cur;
-}
+ * The BUCKET is the window — an hour or a UTC day is baked into the key — so
+ * a counter simply stops being consulted when its window passes. No sliding
+ * window, no reset logic. See the global-cap note above LIMITS for what is
+ * deliberately NOT enforced here. */
 
 export async function checkRateLimits(store, uid, sessionCode, now, caps) {
   const c = caps || LIMITS;
-  const hourBucket = Math.floor(now / c.RATE_LIMIT_WINDOW_MS);
-  const day = dayKey(now);
+  const hourBucket = "h" + Math.floor(now / c.RATE_LIMIT_WINDOW_MS);
+  const day = "d" + dayKey(now);
 
-  // Per-caller limits FIRST — see the ORDER MATTERS note above.
-  const perUidHour = await bump(store, `u:${uid}:${hourBucket}`, 2 * 3600);
+  /* Counters are structured rather than flat strings so rtdbStore can turn
+   * them into paths the database rules can authorise — see stores.js. */
+  const perUidHour = await store.increment({ scope: "uid", id: uid, bucket: hourBucket }, 2 * 3600);
   if (perUidHour > c.RATE_LIMIT_TURNS) return { ok: false, scope: "uid-hourly" };
 
-  const perUidDay = await bump(store, `ud:${uid}:${day}`, 2 * 24 * 3600);
+  const perUidDay = await store.increment({ scope: "uid", id: uid, bucket: day }, 2 * 24 * 3600);
   if (perUidDay > c.RATE_LIMIT_DAILY_TURNS) return { ok: false, scope: "uid-daily" };
 
-  const perSession = await bump(store, `s:${sessionCode}:${hourBucket}`, 2 * 3600);
+  const perSession = await store.increment({ scope: "session", id: sessionCode, bucket: hourBucket }, 2 * 3600);
   if (perSession > c.SESSION_RATE_LIMIT_TURNS) return { ok: false, scope: "session-hourly" };
-
-  // Only requests that will actually reach Hugging Face count against the
-  // shared budget.
-  const global = await bump(store, `g:${day}`, 2 * 24 * 3600);
-  if (global > c.GLOBAL_DAILY_CAP) return { ok: false, scope: "global-daily", degrade: true };
 
   return { ok: true };
 }
@@ -182,6 +192,7 @@ export async function verifyMembership(idToken, body, env, deps) {
   if (!/^[^.#$[\]/]{1,40}$/.test(roomId)) return null;
   if (orgSlug && !/^[A-Za-z0-9_-]{1,40}$/.test(orgSlug)) return null;
 
+  if (!env.RTDB_URL) return null;   // misconfigured: deny, never default-allow
   const uid = d.uid;
   const path = roomClaimPath(code, orgSlug, uid);
   const url = `${env.RTDB_URL.replace(/\/$/, "")}/${path}.json?auth=${encodeURIComponent(idToken)}`;
@@ -257,6 +268,29 @@ export async function handleRequest(request, env, deps) {
     return reply({ result: { reply: "", state: "disabled", error: "MODA_LLM_ENABLED is off" } });
   }
 
+  /* 1b) Required configuration, checked UP FRONT.
+   *
+   * RTDB_URL is required UNCONDITIONALLY, not just when the default store is
+   * in use. An earlier version only demanded it when no store was bound, but
+   * verifyMembership ALWAYS reads the roomOf claim over RTDB — so binding a
+   * KV store without RTDB_URL left every legitimate caller with a
+   * "not a member of the claimed room" 403, which points the operator at the
+   * wrong problem entirely.
+   *
+   * It must also be HTTPS. The RTDB REST calls carry the caller's Firebase ID
+   * token as a QUERY PARAMETER (?auth=...), which is how that API takes
+   * credentials; over plaintext that token is readable by anything on the
+   * path, and it is the credential the whole membership check rests on. */
+  const rtdbUrl = String(env.RTDB_URL || "");
+  if (!rtdbUrl || !/^https:\/\//i.test(rtdbUrl)) {
+    console.error("[hfPatient-proxy] RTDB_URL must be set and must be https");
+    return reply({ result: { reply: "", state: "error", error: "proxy misconfigured" } }, 500);
+  }
+  if (!env.FIREBASE_PROJECT_ID) {
+    console.error("[hfPatient-proxy] FIREBASE_PROJECT_ID is not configured — cannot verify tokens");
+    return reply({ result: { reply: "", state: "error", error: "proxy misconfigured" } }, 500);
+  }
+
   let payload;
   try {
     payload = await request.json();
@@ -296,19 +330,26 @@ export async function handleRequest(request, env, deps) {
   const member = await verifyMembership(idToken, body, env, { fetch: doFetch, uid });
   if (!member) return fail("not a member of the claimed room", "PERMISSION_DENIED", 403);
 
-  // 5) Rate limits + the global cost ceiling. FAIL CLOSED with no store.
-  const store = d.store || env.RATE_STORE;
-  if (!store || typeof store.get !== "function" || typeof store.put !== "function") {
+  // 5) Per-caller rate limits. FAIL CLOSED when no store is bound.
+  /* Default to RTDB, driven with the caller's own token. Nothing extra to
+   * provision, no new sub-processor, and the increment-only rule makes it
+   * atomic — see stores.js. A host with its own KV can inject one instead. */
+  const store = d.store ||
+    (env.RATE_STORE || (env.RTDB_URL ? rtdbStore(env.RTDB_URL, idToken, { fetch: doFetch }) : null));
+  if (!store || typeof store.increment !== "function") {
     console.error("[hfPatient-proxy] no rate-limit store bound — refusing to serve unmetered");
     return reply({ result: { reply: "", state: "error", error: "proxy misconfigured" } }, 500);
   }
-  const caps = Object.assign({}, LIMITS,
-    env.HF_GLOBAL_DAILY_CAP ? { GLOBAL_DAILY_CAP: Number(env.HF_GLOBAL_DAILY_CAP) } : null);
-  const rl = await checkRateLimits(store, uid, member.code, now, caps);
+  let rl;
+  try {
+    rl = await checkRateLimits(store, uid, member.code, now, LIMITS);
+  } catch (e) {
+    /* A store that cannot be read or written is NOT a reason to serve
+     * unmetered — it is the same state as having no store. Fail closed. */
+    console.error("[hfPatient-proxy] rate-limit store unavailable:", e.message);
+    return reply({ result: { reply: "", state: "error", error: "proxy misconfigured" } }, 500);
+  }
   if (!rl.ok) {
-    // Over the GLOBAL cap the callable degraded to the stub rather than
-    // erroring, so a workshop in progress keeps running. Same here.
-    if (rl.degrade) return reply({ result: { reply: "", state: "disabled" } });
     return fail("rate limit exceeded (" + rl.scope + ")", "RESOURCE_EXHAUSTED", 429);
   }
 

@@ -88,7 +88,7 @@ ticked, so that box cannot be a free choice: treat it as an acknowledgement of
 reading, and say so (section 3 does).
 
 **B5 — Resolve the Hugging Face transfer, or turn the AI chat off.**
-The `hfPatient` function runs in **`europe-west1`** (verified in
+⚠️ **STALE AS OF 2026-08-31 — the `hfPatient` Cloud Function no longer runs at all.** The project left Google's paid plan on 2026-08-27, and Cloud Functions v2 need one; the chat relay moved to **Scaleway `fr-par` (Paris)**. The paragraph below is kept because its reasoning about the Hugging Face leg is unchanged — only the leg BEFORE it moved. Historic text: the `hfPatient` function ran in **`europe-west1`** (verified in
 `functions/index.js` ≈110; it ran in `us-central1` and was moved — corrected
 2026-08-19), **so the Google leg is no longer the problem.** The next hop was
 the problem, and it has changed: Hugging Face used to route each request onward
@@ -478,7 +478,7 @@ universities and **email addresses**.
 rely on further companies; those are listed too. Everything is in **Appendix A**.
 In summary: Google (hosting, database, sign-in, serverless functions, backups,
 and the software libraries loaded by your browser — **not** the reCAPTCHA check,
-which is consent-gated and not currently loaded), **Hugging Face and the inference providers it routes to** (the AI
+which is consent-gated and not currently loaded), **Scaleway** (which relays your AI-chat messages from Paris; it does not store them), **Hugging Face and the inference providers it routes to** (the AI
 character chat), GitHub (runs our automated deletion, backup and export jobs),
 and [SMTP PROVIDER — only if you enable session emails; the email feature is
 switched **off** by default].
@@ -515,15 +515,31 @@ them as a teaching prop, never as clinical information.
 2. Your message — together with the hidden scenario instructions and **at most
    15 recent turns of the conversation, capped at about 12,000 characters
    in total** — is sent to a server function operated for us by Google. **That
-   function runs in Belgium (`europe-west1`)**, co-located with the database, so
-   your text does **not** leave Europe at this step. *(An earlier version of this
-   notice said the function ran in the United States. It did; it was moved to
-   `europe-west1`, and `tests/hf-region-lockstep.test.js` now pins the client and
-   the function to the same region so they cannot drift apart.)*
+   relay runs in **Paris, France (`fr-par`), on Scaleway**, so your text does
+   **not** leave Europe at this step. *(This step has moved twice. It first ran
+   in the United States; it was moved to Google's `europe-west1` in Belgium; and
+   on 2026-08-31 it moved again, to Scaleway in Paris, because the platform left
+   Google's paid plan and Google Cloud Functions stopped working. Scaleway was
+   chosen over the other free option, Cloudflare, because a free Cloudflare
+   service runs wherever the visitor happens to be and could not be kept in
+   Europe.)*
+
+   > ⚠️ **[TO DO BEFORE PUBLISHING — Scaleway is a new recipient.]** Scaleway SAS
+   > (Paris) must be named in the recipients list below and in the record of
+   > processing, and a data-processing agreement with Scaleway must be in place.
+   > It only relays your message — it does not store it and does not run the AI
+   > model — but it is a recipient nonetheless, and this notice may not be
+   > published while it goes unnamed.
 3. From there it is sent to **Hugging Face**, which routes it onward to a
-   third-party inference provider. **Which provider handles any given message
-   varies from request to request, and we are not told in advance** — the
-   platform only learns which one answered *after* the reply comes back.
+   third-party inference provider. **Since 2026-08-20 that provider is pinned
+   to OVHcloud, which runs the model in Gravelines, France**, so the recipient
+   no longer varies from request to request — which is what made this leg
+   impossible to describe before. The platform records which provider actually
+   answered (from the `x-inference-provider` response header), so the pin is
+   verifiable after the fact rather than merely configured.
+   **Hugging Face itself remains a separate recipient in the middle**, and
+   pinning the provider does not establish where Hugging Face processes the
+   request or under what contract.
    [TO VERIFY before publishing — the set of providers Hugging Face may route
    to, the countries in which they process data, how long they keep what you
    typed, whether they use it for training, and the transfer safeguard relied
@@ -664,8 +680,9 @@ Rules</sub>
 
 | What | Where it goes | Why it leaves | Safeguard we rely on |
 |---|---|---|---|
-| The main database, the email function, and the private archive bucket | **Belgium** (Google, `europe-west1`) | Hosting | Stays in the EEA |
-| **The AI-character chat function** | **Belgium** (Google, `europe-west1`) — *corrected 2026-08-19; it ran in `us-central1` and was moved, with `tests/hf-region-lockstep.test.js` pinning the client and function to one region* | Co-located with the database | [TRANSFER MECHANISM — see the note below] |
+| The main database and the private archive bucket | **Belgium** (Google, `europe-west1`) | Hosting | Stays in the EEA |
+| The email function | **Not running.** Cloud Functions need a paid Google plan and the project returned to the free plan on 2026-08-27 | n/a | n/a — the email feature is disabled |
+| **The AI-character chat relay** | **Paris, France** (Scaleway, `fr-par`) — *moved 2026-08-31. It ran in `us-central1`, then Google `europe-west1` (corrected 2026-08-19), and moved again when the project left Google's paid plan. Scaleway was chosen over Cloudflare because a free Cloudflare service cannot be kept in the EU* | Relays the message to Hugging Face; stores nothing | Stays in the EEA. ⚠️ **Scaleway SAS is a NEW recipient — it must be named in §[X] and a DPA signed before this notice is published** |
 | **The AI chat text, onward from Hugging Face** | **OVHcloud AI Endpoints, Gravelines, FRANCE** — pinned since 21 August 2026. Until then it was not identifiable in advance: the router chose one of several providers per request and we only learned which after the reply | The AI character | [TRANSFER MECHANISM — the *naming* half of blocking precondition **B5** is now satisfied; an agreement with the named provider is not, so B5 stays open. If the pin is ever removed, the recipient becomes unnameable again and the chat must be switched off] |
 | The automated deletion, backup and research-export jobs — **including the full identified copy of the session and the file linking pseudonyms back to real names**, which are written to the machine running the job before being stored in Belgium | **GitHub-hosted runners** (United States infrastructure) [TO VERIFY the runner region with the operator] | Automation | [TRANSFER MECHANISM] |
 | Your IP address and browser details, on every load of the **application page** | Google — `gstatic.com` (the Firebase software libraries), `identitytoolkit.googleapis.com` (**contacted on every visit**, because sign-in happens anonymously at startup), and `apis.google.com` **only** if you choose to sign in with a Google account. **The reCAPTCHA check is NOT in this row any more** — consent-gated since 21 August 2026 and not loaded, so no data reaches Google by that route | Two purposes, not one: **delivering the platform's software** (`gstatic.com`) and **signing you in** (`identitytoolkit.googleapis.com`, and `apis.google.com` for a Google account). *Bot protection is no longer among them — that was reCAPTCHA.* | [TRANSFER MECHANISM] |
@@ -1001,7 +1018,8 @@ add only if your institution requires it.]
 
 | Who | What they receive | Where | Role |
 |---|---|---|---|
-| **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | Everything in section 2 | Database, email function, storage **and the AI-chat function** all in **Belgium** (`europe-west1`; the chat proxy moved from `us-central1` on 2026-07-24). *An earlier draft placed the AI-chat function in the United* States** | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
+| **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Storage | Everything in section 2 | Database and storage in **Belgium** (`europe-west1`). **Cloud Functions are no longer used**: the project returned to Google's free plan on 2026-08-27, so the AI-chat relay moved to Scaleway (row below) and the email function is disabled. *Earlier drafts placed the AI-chat function in the United States, then in Belgium* | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
+| **Scaleway SAS** (Paris, France) — Serverless Functions | Your AI-chat messages, **in transit only** | **Paris (`fr-par`)** — inside the EEA | ⚠️ **NEW RECIPIENT, DPA NOT YET SIGNED.** This notice may not be published until it is |
 | **Google (software libraries)** — the core JavaScript is downloaded from `gstatic.com` on every load of the **application page** and the certificate-verification page (not the privacy or compliance pages) | Your IP address and browser details | [TO VERIFY — served from a global network, not region-pinned] | Content delivery |
 | **Google (Firebase Authentication)** — `identitytoolkit.googleapis.com`, contacted on **every visit**, because the platform signs you in anonymously at startup | Your IP address and browser details at that moment; then, if you create an account, the email address and account identifier it returns | [TO VERIFY — Firebase Authentication is not pinned to a region in this project's configuration, unlike the database. See the EEA → US row in the DPA] | **Authentication, not content delivery.** Listed separately from `gstatic.com` for that reason: it is a Firebase Authentication API, and it falls under the same Google Cloud transfer-mechanism question as the rest of Firebase — not under the software-delivery row above |
 | **Google reCAPTCHA / App Check** — *not currently active* | Nothing. Consent-gated since 21 August 2026 and not loaded, so it receives no data. Previously: your IP address and browser signals, on every page load | [TO VERIFY if re-enabled — not region-pinned] | Anti-abuse |
@@ -1020,10 +1038,12 @@ No advertising networks, no third-party analytics. Fonts and PDF libraries are
 served from the platform itself, not from an outside network.
 
 *(Where this table names a technical region, the underlying platform identifier
-for Belgium is `europe-west1`. The US rows are GitHub Actions runners and
-Google's global edge — **not** a Cloud Function region: the chat proxy moved
-from `us-central1` to `europe-west1`, corrected 2026-08-19. reCAPTCHA was on
-this list until 2026-08-21 and is no longer loaded at all.)*
+for Belgium is `europe-west1` and for Paris is `fr-par`. The US rows are GitHub
+Actions runners and Google's global edge — **not** a Cloud Function region. The
+chat relay moved `us-central1` → `europe-west1` (corrected 2026-08-19) → Scaleway
+`fr-par` (2026-08-31, when the project returned to Google's free plan and Cloud
+Functions stopped being available). reCAPTCHA was on this list until 2026-08-21
+and is no longer loaded at all.)*
 
 ---
 
