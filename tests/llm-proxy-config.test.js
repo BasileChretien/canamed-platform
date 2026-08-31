@@ -40,11 +40,26 @@ function configuredProxy() {
   return new Function("return (" + literal + ");").call(sandbox);
 }
 
-function connectSrc() {
-  const html = read("index.html");
-  const m = /connect-src([^;]*);/.exec(html);
-  assert.ok(m, "index.html has no connect-src directive in its CSP");
-  return m[1].split(/\s+/).map(s => s.trim()).filter(Boolean);
+/* ⚠ THE CSP LIVES IN TWO PLACES, and the one that matters in production is
+ * NOT the one in index.html.
+ *
+ * index.html carries a <meta> CSP as a fallback; firebase.json sets the real
+ * Content-Security-Policy RESPONSE HEADER, and a header overrides the meta
+ * tag. An earlier version of this file checked only index.html — so it passed
+ * while the deployed CSP still blocked the proxy, which would have shown up as
+ * every room silently getting the stub patient. That is precisely the failure
+ * this test exists to catch, and it walked straight past it.
+ *
+ * Both surfaces are now returned, and the caller requires the origin in EACH. */
+function connectSrcSurfaces() {
+  const out = {};
+  for (const [label, file] of [["index.html meta", "index.html"],
+                               ["firebase.json header", "firebase.json"]]) {
+    const m = /connect-src([^;]*);/.exec(read(file));
+    assert.ok(m, `${file} has no connect-src directive`);
+    out[label] = m[1].split(/\s+/).map(s => s.trim()).filter(Boolean);
+  }
+  return out;
 }
 
 test("a configured proxy URL is https and not a placeholder", () => {
@@ -75,7 +90,7 @@ test("if a proxy IS configured, its origin is in the CSP connect-src", () => {
   if (!cfg || !cfg.url) return;   // inert while off — see the header
 
   const origin = new URL(cfg.url).origin;
-  const sources = connectSrc();
+  for (const [label, sources] of Object.entries(connectSrcSurfaces())) {
   const allowed = sources.some((s) => {
     if (s === origin) return true;
     // Wildcard host form, e.g. https://*.workers.dev
@@ -93,8 +108,9 @@ test("if a proxy IS configured, its origin is in the CSP connect-src", () => {
   });
   assert.ok(allowed,
     `CANAMED_LLM_PROXY points at ${origin}, which no connect-src source in ` +
-    `index.html permits. The browser will block every chat request and the ` +
-    `room will silently get the stub patient. Add ${origin} to connect-src.`);
+    `${label} permits. The browser will block every chat request and the room ` +
+    `will silently get the stub patient. Add ${origin} to connect-src there.`);
+  }
 });
 
 test("if a proxy IS configured, the unsafe-path acknowledgement is explicit", () => {
@@ -144,4 +160,38 @@ test("the proxy path sends the room context the membership check needs", () => {
     assert.ok(branch.includes(field),
       `the proxy request omits ${field}; the server would refuse every call as "not a member"`);
   }
+});
+
+test("the proxy branch requires an INITIALISED Firebase app, not just the SDK", () => {
+  /* In LOCAL mode the compat SDK script still loads, so `firebase.auth` IS a
+   * function — but `initializeApp()` is never called, and `fb.auth()` then
+   * throws "No Firebase App '[DEFAULT]' has been created" SYNCHRONOUSLY.
+   *
+   * A synchronous throw inside the callable escapes the bridge's promise
+   * chain, so its stub-patient `.catch` never runs and the turn gets NO reply
+   * at all — strictly worse than the degraded reply the fallback exists to
+   * provide. `firebase.apps` is the SDK's own record of initialised apps, so a
+   * non-empty array is the honest test. Caught by
+   * tests-e2e/modA-chat-controls.spec.js on every browser. */
+  const src = read("modA-llm-init.js");
+  assert.match(src, /fb\.apps\s*&&\s*fb\.apps\.length\s*>\s*0/,
+    "the proxy branch must require firebase.apps.length > 0");
+
+  const branch = src.slice(src.indexOf("proxyCfg && proxyCfg.url"),
+    src.indexOf('} else if (fb && typeof fb.functions === "function") {'));
+  assert.ok(!/if \(proxyCfg && proxyCfg\.url && proxyCfg\.acknowledgeUnsafe === true &&\s*\n\s*fb && typeof fb\.auth === "function"\) \{/.test(branch),
+    "the old SDK-presence-only gate must not come back");
+});
+
+test("nothing in the proxy wrapper can throw synchronously", () => {
+  /* Belt and braces for the same failure class: the bridge converts a
+   * REJECTED promise into the stub patient, but a synchronous throw bypasses
+   * that entirely. The wrapper therefore funnels everything through a
+   * try/catch that turns any throw into a rejection. */
+  const src = read("modA-llm-init.js");
+  const wrapper = src.slice(src.indexOf("bridge.setCallable(function (body)"),
+    src.indexOf("function _proxyCall(body)"));
+  assert.match(wrapper, /try\s*\{/, "the wrapper body must be wrapped in try/catch");
+  assert.match(wrapper, /return Promise\.reject\(e\)/,
+    "a caught throw must become a rejected promise so the bridge can fall back");
 });

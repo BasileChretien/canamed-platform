@@ -518,10 +518,37 @@
      * the roomOf membership check, per-uid/per-session/global rate limits,
      * and the HF token never reaching the browser.
      */
-    if (proxyCfg && proxyCfg.url && proxyCfg.acknowledgeUnsafe === true &&
-        fb && typeof fb.auth === "function") {
+    /* ⚠ `fb.apps.length` — NOT just `typeof fb.auth === "function"`.
+     *
+     * In LOCAL mode the Firebase compat SDK is still loaded from the page, so
+     * `firebase.auth` IS a function, but `initializeApp()` is never called.
+     * Calling `fb.auth()` then THROWS SYNCHRONOUSLY with "No Firebase App
+     * '[DEFAULT]' has been created" — and a synchronous throw inside the
+     * callable escapes the bridge's promise chain entirely, so its
+     * stub-patient `.catch` never runs and the room gets NO reply at all
+     * rather than a degraded one. Caught by
+     * tests-e2e/modA-chat-controls.spec.js, which is the only place that
+     * exercises the real send path. `firebase.apps` is the compat SDK's own
+     * record of initialised apps, so a non-empty array is the honest test for
+     * "there is an app to authenticate against". */
+    var fbAppReady = !!(fb && typeof fb.auth === "function" &&
+      fb.apps && fb.apps.length > 0);
+    if (proxyCfg && proxyCfg.url && proxyCfg.acknowledgeUnsafe === true && fbAppReady) {
       var proxyUrl = String(proxyCfg.url);
       bridge.setCallable(function (body) {
+        /* EVERYTHING here must reject rather than throw. The bridge turns a
+         * rejected promise into the stub patient (its .catch), but a
+         * synchronous throw bypasses that chain and leaves the turn with no
+         * reply at all. The guard above should make fb.auth() safe; this
+         * makes the whole wrapper safe regardless of what else changes. */
+        try {
+          return _proxyCall(body);
+        } catch (e) {
+          return Promise.reject(e);
+        }
+      });
+
+      function _proxyCall(body) {
         var user = fb.auth().currentUser;
         if (!user) return Promise.reject(new Error("not signed in"));
         return user.getIdToken().then(function (idToken) {
@@ -550,7 +577,7 @@
             return { data: (j && j.result) ? j.result : j };
           });
         });
-      });
+      }
     } else if (fb && typeof fb.functions === "function") {
       try {
         // REGION MUST MATCH functions/index.js. `fb.functions()` with no
