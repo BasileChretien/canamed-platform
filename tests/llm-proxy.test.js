@@ -586,3 +586,40 @@ test("the per-caller limits still match the callable's", async () => {
   assert.equal(proxy.LIMITS.SESSION_RATE_LIMIT_TURNS, num("SESSION_RATE_LIMIT_TURNS"));
   assert.equal(proxy.LIMITS.RATE_LIMIT_DAILY_TURNS, num("RATE_LIMIT_DAILY_TURNS"));
 });
+
+test("RTDB_URL is required unconditionally, and must be https", async () => {
+  /* Two distinct bugs, both found by review on #351.
+   *
+   * (a) The guard used to demand RTDB_URL only when no store was bound. But
+   *     verifyMembership ALWAYS reads the roomOf claim over RTDB, so binding a
+   *     KV store without RTDB_URL gave every legitimate caller a
+   *     "not a member of the claimed room" 403 — pointing the operator at
+   *     entirely the wrong problem.
+   *
+   * (b) The RTDB REST calls carry the caller's Firebase ID token as a QUERY
+   *     PARAMETER (?auth=...), which is how that API takes credentials. Over
+   *     plaintext that token is readable by anything on the path, and it is
+   *     the credential the entire membership check rests on. */
+  const bad = [
+    [undefined, "missing"],
+    ["", "empty"],
+    ["http://rtdb.example.invalid", "plaintext — would leak the ID token in the query string"]
+  ];
+  for (const [url, why] of bad) {
+    const { deps, calls } = world();
+    // A store IS bound, so this cannot pass by falling back to the store check.
+    deps.store = stores.memoryStore(() => NOW);
+    deps.verifyToken = async () => ({ uid: UID });
+    const res = await proxy.handleRequest(req({}), { ...ENV, RTDB_URL: url }, deps);
+    const body = await res.json();
+    assert.equal(res.status, 500, why);
+    assert.equal(body.result.state, "error", why);
+    assert.equal(body.error, undefined, "must not masquerade as a membership denial");
+    assert.equal(calls.hf.length, 0, why);
+  }
+
+  // ALLOW leg: an https URL still works, so the check is about the scheme and
+  // not about the endpoint being unreachable.
+  const ok = await run({});
+  assert.equal(ok.res.status, 200);
+});

@@ -270,13 +270,20 @@ export async function handleRequest(request, env, deps) {
 
   /* 1b) Required configuration, checked UP FRONT.
    *
-   * RTDB_URL backs BOTH the room-membership read and the default rate-limit
-   * store, so a deployment missing it cannot do either. Discovering that
-   * halfway through — as an exception thrown out of verifyMembership — turns
-   * a plain misconfiguration into an unhandled 500 with a confusing log, and
-   * the client falls back to the stub either way. Refuse clearly instead. */
-  if (!env.RTDB_URL && !env.RATE_STORE && !d.store) {
-    console.error("[hfPatient-proxy] RTDB_URL is not configured and no store is bound");
+   * RTDB_URL is required UNCONDITIONALLY, not just when the default store is
+   * in use. An earlier version only demanded it when no store was bound, but
+   * verifyMembership ALWAYS reads the roomOf claim over RTDB — so binding a
+   * KV store without RTDB_URL left every legitimate caller with a
+   * "not a member of the claimed room" 403, which points the operator at the
+   * wrong problem entirely.
+   *
+   * It must also be HTTPS. The RTDB REST calls carry the caller's Firebase ID
+   * token as a QUERY PARAMETER (?auth=...), which is how that API takes
+   * credentials; over plaintext that token is readable by anything on the
+   * path, and it is the credential the whole membership check rests on. */
+  const rtdbUrl = String(env.RTDB_URL || "");
+  if (!rtdbUrl || !/^https:\/\//i.test(rtdbUrl)) {
+    console.error("[hfPatient-proxy] RTDB_URL must be set and must be https");
     return reply({ result: { reply: "", state: "error", error: "proxy misconfigured" } }, 500);
   }
   if (!env.FIREBASE_PROJECT_ID) {
