@@ -1667,7 +1667,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 | 4 | **The inference provider behind Hugging Face** — **OVHcloud AI Endpoints** (OVH SAS) | Actual model execution | Same as #3 | **Pinned to `ovhcloud`, served from Gravelines, FRANCE — DEPLOYED 2026-08-21.** The running function now sends an explicit provider, so the recipient no longer varies per request. Note the deploy also had to correct `functions/.env`, which is git-ignored and was still naming the previous models: `.env` overrides the code defaults, so deploying without that fix would have paired the old models with the new provider, 404ing every call | **Art. 28 foreign provision.** The recipient becomes nameable when the pin is deployed, which is what Art. 28(2) requires and what this row previously could not supply. **Still not authorised under clause 6.1** — and the reason is no longer the deploy, which happened on 2026-08-21. Pinning names the recipient; it does not by itself produce the contract or the transfer record, and those remain outstanding. The runtime evidence is outstanding too: confirm from `metrics/hfPatient/events` (`provider` field, taken from the `x-inference-provider` response header) that a live turn records `ovhcloud` |
 | 5 | GitHub (GitHub Actions) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Runs the scheduled retention, backup, export and cost-monitoring jobs | **Receives and processes on US infrastructure a nightly copy of the entire identified `/sessions` tree, including free-text chat, writes it to the runner's local disk, and generates the real-name → pseudonym linkage table there.** Job logs are configured to contain no PII | US | **Candidate cloud exception is doubtful** — the runner materially handles the data, not merely stores it [TO VERIFY with Japanese counsel] |
 | 6 | [SMTP PROVIDER IDENTITY — Controller/Processor to confirm before enabling email] | Transactional email | Recipient email address, subject, message body | [TO VERIFY] | [TO VERIFY] |
-| 7 | **Scaleway SAS** — 8 rue de la Ville l'Évêque, 75008 Paris, France [ENTITY AND ADDRESS TO CONFIRM AGAINST THE SIGNED TERMS] | Serverless Functions: hosts the simulated-patient proxy that **replaced** the Google Cloud Function | The scenario system prompt plus **participant free-text chat turns** (same payload as row #3), in transit; plus the caller's Firebase ID token and the session code and room name needed to authorise the call. **No persistent storage** — the function holds nothing after the response | **`fr-par` (Paris, FRANCE)** — inside the EEA | **Candidate cloud exception** — it relays rather than analyses the content; the model execution happens at #4. [TO VERIFY with Japanese counsel] |
+| 7 | **Scaleway S.A.S.** — 8 rue de la Ville l'Évêque, 75008 Paris, France; share capital EUR 214,410.50; R.C.S. Paris 433 115 904. *Entity, address and registration verified 2026-09-01 from the footer of Scaleway's own* Data Processing Agreement, *version of 1 June 2024 — the instrument that constitutes this row's Art. 28 contract (see the conditions note below). No separate signature exists or is required.* | Serverless Functions: hosts the simulated-patient proxy that **replaced** the Google Cloud Function | The scenario system prompt plus **participant free-text chat turns** (same payload as row #3), in transit; plus the caller's Firebase ID token and the session code and room name needed to authorise the call. **No persistent storage** — the function holds nothing after the response | **`fr-par` (Paris, FRANCE)** — inside the EEA | **Candidate cloud exception** — it relays rather than analyses the content; the model execution happens at #4. [TO VERIFY with Japanese counsel] |
 
 **Notes.**
 
@@ -1719,9 +1719,55 @@ produce output — as Hugging Face and its downstream providers do — falls
     visitor and **cannot** be pinned to the EU — Regional Services / the Data
     Localization Suite is an Enterprise add-on. That would have broken the EEA
     statement this document and the CER dossier both rely on.
-  - **Row #7 is a NEW recipient and needs the same paperwork as any other**: a
-    signed DPA with Scaleway, an entry in the Controller's record of processing,
-    and disclosure in the participant-facing notice. **None of that is done.**
+  - **Row #7's Art. 28 contract EXISTS, and there is nothing to sign.** Checked
+    2026-09-01 against the source document rather than assumed, because this
+    document had been carrying "DPA not yet signed" as a publication blocker.
+    Scaleway's *Data Processing Agreement*, version of **1 June 2024**, opens:
+    "This Data Processing Agreement (hereinafter "DPA") **forms an integral part
+    of the contract** relating to the provision of Scaleway Services concluded
+    between Scaleway and the Client". It is **incorporated, not separately
+    executed**: the document runs to Article 15 (Contact) and ends with **no
+    signature block**, and the only signature it requires anywhere is at
+    Art. 14.2, for *amendments* — "Any amendment of this DPA shall only be valid
+    if it is in writing and signed by authorized representatives of the Client
+    and Scaleway." The Art. 28 contract therefore came into force when the
+    account was opened and Serverless Functions subscribed (2026-08-31), and
+    Art. 3.1 covers this topology in terms: "As a Data Processor **or Data
+    Sub-Processor**, Scaleway undertakes to…".
+    Terms that bear on this Annex: **Art. 11.1** (Services located in the EU by
+    default; the Client selects the region at order — `fr-par` was selected);
+    **Art. 11.2.2** (Scaleway will not transmit or store Personal Data outside
+    the EU without expressly informing the Client in advance); **Art. 11.3.1**
+    (if data does reach a third country and the Client is Controller, the
+    Controller-to-Processor SCCs apply); **Art. 7.1/7.3** (general sub-processor
+    authorisation; the list is published on Scaleway's website); **Art. 9.1.1**
+    (Scaleway informs the Client of a breach, the Client remains the notifying
+    party); **Art. 12.2** (audit, once a year, 30 days' notice); **Art. 13.1**
+    (deletion at end of contract); **Art. 14.1** (French law, Paris Court of
+    Appeal); **Art. 15** (DPO `dpo@iliad.fr`, `privacy@scaleway.com`,
+    `security@scaleway.com`). *A reading of a standard-form contract is not
+    legal advice — but every proposition above is a direct quotation or a
+    clause reference, so counsel can confirm it without re-deriving it.*
+  - ⚠️ **Two duties this places on the CLIENT side, and both are still open.**
+    They are the real residue of row #7, and they replace the "sign the DPA"
+    item that turned out not to exist:
+    **(a) Art. 7.4 — sub-processor change notifications are OPT-IN.** Scaleway
+    undertakes to give 30 days' notice of a change to its sub-processor list
+    *"providing that it has previously subscribed to updates notifications using
+    the feature available on the dedicated page"*. Nobody has subscribed, so as
+    matters stand a change would reach us only if someone re-read the page. The
+    subscription is an account action, so it is the operator's to perform.
+    **(b) Art. 5.3.3 — the Client must "keep a register of the Data Processing
+    activities identifying Scaleway as a Data Processor or Sub-processor".**
+    Annex III row #7 is that entry in draft; it is not yet in the Controller's
+    own record of processing.
+  - **Disclosure in the participant-facing notice is DONE (2026-09-01).** The
+    published Art. 13 notice now names Scaleway, Hugging Face and OVHcloud in
+    section 6 and records the non-EEA routing step in section 7, in all three
+    published languages, under notice version **PIS v4 · 2026-09**. Before that
+    date the notice described the simulated-patient chat **nowhere at all** —
+    the gap was wider than the missing Scaleway line, and it existed while the
+    chat was live.
   - **App Check no longer applies to this leg.** A browser cannot mint an App
     Check token for a non-Google endpoint and Scaleway could not verify one, so
     that control is absent here. The controls that remain are Firebase
