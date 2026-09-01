@@ -326,7 +326,7 @@
       "lobby.consent-research": "I additionally consent to my contributions — my answers, the questions and examinations I choose and their order, my votes, my scores and my free-text — being recorded and linked to me (identifiably) for the CaNaMED education-research project (analysis and publication). Only the study facilitators see my identity; other participants do not. I understand that I can take part in the workshop without ticking this second box — refusing has no effect on my participation, my grades or my standing at my university.",
       "lobby.consent-transcript": "I additionally consent to the written transcript AND the audio/video recording of the video-conference sessions being kept and analysed for the CaNaMED study. The transcript is produced automatically by the video-conference tool (Microsoft Teams) and carries my name against each of my utterances; the recording of the session is kept as well, not only the transcript. Both are kept for 5 years after publication, with the same restricted access as the rest of the research dataset, and I can ask for them to be deleted at any time. No photograph is taken and I am not required to turn my camera on. I can take part in the workshop without ticking this third box, and without ticking the research box above — refusing has no effect on my participation, my grades or my standing at my university.",
       "lobby.consent-verification": "Your certificate of attendance is independently verifiable. A verification ID and QR code printed on it link — in a separate registry — to a one-way hash of your name and session, so that anyone you give BOTH the ID AND the name to can confirm, on a public CaNaMED page, that they match a genuine CaNaMED certificate. Your name is never published — the page only answers \"valid\" or \"no match\". The registry stores only the hash, for up to 5 years, and you can ask for your entry to be removed at any time (see section 18 of the privacy policy).",
-      "lobby.consent-version": "Notice version PIS v7 · 2026-09. Full ",
+      "lobby.consent-version": "Notice version PIS v8 · 2026-09. Full ",
       "lobby.consent-version-link": "privacy policy",
       "lobby.consent-version-suffix": ".",
       "lobby.consent-required-hint": "Please read the data-use notice and tick the consent box above to take part.",
@@ -1008,7 +1008,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v18";  // PIS v7: no scheduled job reads session bodies
+  const LOCALE_VERSION = "v19";  // PIS v8: GitHub transfer rests on DPF adequacy
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
