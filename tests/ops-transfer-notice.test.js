@@ -19,15 +19,30 @@
  * So the test derives from what is SCHEDULED and what those scripts READ,
  * rather than from any job's name. Disable the backup and nothing here changes.
  *
- * ONE of those two has since been fixed (2026-09-01, PIS v6): the purge job now
- * enumerates by key over `?shallow=true` and reads two timestamps per session,
- * because that is all it ever used — the full read was an Art. 5(1)(c) defect,
- * not a requirement. `scripts/firebase-cost-monitor.js` still deep-reads, and
- * genuinely needs to: it measures the tree's serialised size.
+ * BOTH have since been fixed — the purge in PIS v6, the storage monitor in
+ * PIS v7 — so NO scheduled job reads session content any more. The monitor's
+ * case was the more interesting one: sizing a tree means reading it, RTDB
+ * exposes no size API, and the number it produced was 0.003% of the cap it
+ * guarded. The measurement cost more than it bought, so it became opt-in and a
+ * content-free count tripwire took over the alarm.
  *
- * That fix is why `enumeratesShallowly()` exists below, and why there is now a
- * test asserting the purge is NOT in the list. The notice makes a positive claim
- * about what the purge reads, so a regression has to fail something.
+ * THE OBLIGATION DID NOT GO AWAY WITH IT, and that is why this file is now
+ * shaped around two derivations rather than one:
+ *
+ *   A. Scheduled jobs that touch the database AT ALL. Session identifiers, the
+ *      two lifecycle dates and the certificate records still reach a US runner,
+ *      and those are still personal data — session codes are treated as
+ *      semi-sensitive elsewhere in this repo (CLEANUP_QUIET exists so they never
+ *      reach a world-readable log). So GitHub stays a named recipient and
+ *      section 7 must still describe a transfer.
+ *
+ *   B. Scheduled jobs that read session BODIES. This must now be EMPTY, and the
+ *      notice says so in three languages. A regression puts a job back in the
+ *      set and fails here.
+ *
+ * An earlier version of this file keyed everything on B alone. When B emptied,
+ * its anti-vacuity test fired — correctly, as a prompt to revisit the notice
+ * rather than to relax the test. This is that revision.
  */
 
 const test = require("node:test");
@@ -107,12 +122,47 @@ function enumeratesShallowly(rel) {
   }
 }
 
-function jobsReadingTheSessionTree() {
+/* DERIVATION A — scheduled jobs that reach the database at all, by any route.
+   Enumerating by key still sends session identifiers to a US runner, so this is
+   the set that keeps GitHub a disclosed recipient. */
+function jobsTouchingTheDatabase() {
   const out = [];
   for (const w of scheduledWorkflows()) {
-    for (const s of scriptsOf(w.yml)) {
-      if (deepReadsSessions(s) && !enumeratesShallowly(s)) {
-        out.push({ workflow: w.file, script: s });
+    for (const rel of scriptsOf(w.yml)) {
+      if (touchesDatabase(rel)) out.push({ workflow: w.file, script: rel });
+    }
+  }
+  return out;
+}
+
+function touchesDatabase(rel, seen = new Set()) {
+  if (seen.has(rel)) return false;
+  seen.add(rel);
+  let src;
+  try {
+    src = read(ROOT, rel);
+  } catch {
+    return false;
+  }
+  if (/firebase-admin\/database|readSessionLocations|db\.ref\(/.test(src)) return true;
+  for (const m of src.matchAll(/require\(["'](\.\/[\w./-]+)["']\)/g)) {
+    const dep = path.posix.join(path.posix.dirname(rel), m[1]);
+    if (touchesDatabase(dep.endsWith(".js") ? dep : dep + ".js", seen)) return true;
+  }
+  return false;
+}
+
+/* DERIVATION B — scheduled jobs that read session BODIES. Expected to be empty
+   since PIS v7. A script that enumerates shallowly does not qualify even though
+   the deep reader is still reachable from the module it imports: both the purge
+   and the monitor keep it behind an explicit opt-out env var, and
+   backup/export genuinely need it. */
+function jobsReadingSessionBodies() {
+  const out = [];
+  for (const w of scheduledWorkflows()) {
+    for (const rel of scriptsOf(w.yml)) {
+      if (deepReadsSessions(rel) && !enumeratesShallowly(rel)) {
+        out.push({ workflow: w.file, script: rel });
       }
     }
   }
@@ -143,22 +193,46 @@ function recipientsAndTransfers(body, lang) {
 
 // ---- tests -----------------------------------------------------------------
 
-test("the derivation finds the scheduled jobs that read the session tree", () => {
-  /* Anti-vacuity. Every assertion below is conditional on this list being
-     non-empty, so if the derivation silently broke — a renamed script, a
-     reworded `node` invocation — the rest would pass by doing nothing. */
-  const jobs = jobsReadingTheSessionTree();
+test("the derivation finds the scheduled jobs that touch the database", () => {
+  /* Anti-vacuity for derivation A. The disclosure tests below are conditional
+     on this being non-empty, so a renamed script or a reworded `node`
+     invocation would otherwise make them pass by doing nothing. */
+  const jobs = jobsTouchingTheDatabase();
   assert.ok(
     jobs.length > 0,
-    "no scheduled workflow was found to deep-read the session tree.\n" +
-      "If that is genuinely true now, this file's obligation has lapsed and the " +
-      "notice can be revisited. If it is not true, the derivation is broken and " +
-      "every other test here is passing vacuously."
+    "no scheduled workflow was found to touch the database at all.\n" +
+      "If that is genuinely true, GitHub has stopped being a recipient and the " +
+      "notice can be revisited. If it is not, the derivation is broken and the " +
+      "disclosure tests here are passing vacuously."
   );
 });
 
+test("no scheduled job reads session bodies — the notice says so in three languages", () => {
+  /* The PIS v7 claim, and the reason the two derivations are separate: this one
+     asserts an ABSENCE, so it cannot share the anti-vacuity guard above. */
+  const offenders = jobsReadingSessionBodies();
+  assert.deepStrictEqual(
+    offenders, [],
+    "a scheduled job reads session bodies again: " +
+      offenders.map((o) => o.script).join(", ") + "\n" +
+      "privacy.html section 6 tells participants that none of them reads session " +
+      "content. Either narrow the job or correct the notice."
+  );
+
+  const s = privacySections();
+  const claim = {
+    en: /None of them reads your session content/i,
+    fr: /Aucune d'elles ne lit le contenu de vos séances/i,
+    ja: /いずれの処理もセッションの内容は読み込みません/
+  };
+  for (const lang of ["en", "fr", "ja"]) {
+    assert.ok(claim[lang].test(recipientsAndTransfers(s[lang], lang)),
+      "privacy.html [" + lang + "] no longer states that no job reads session content");
+  }
+});
+
 test("GitHub is named as a recipient, in every published language", () => {
-  if (jobsReadingTheSessionTree().length === 0) return;
+  if (jobsTouchingTheDatabase().length === 0) return;
   const s = privacySections();
   for (const lang of ["en", "fr", "ja"]) {
     const sec = recipientsAndTransfers(s[lang], lang);
@@ -172,7 +246,7 @@ test("GitHub is named as a recipient, in every published language", () => {
 });
 
 test("the transfer out of the EEA is disclosed, not just the recipient", () => {
-  if (jobsReadingTheSessionTree().length === 0) return;
+  if (jobsTouchingTheDatabase().length === 0) return;
   const s = privacySections();
   /* Each body says it in its own language; matching an English token against
      the JA body would pass for the wrong reason. */
@@ -195,7 +269,7 @@ test("the notice does not claim a transfer safeguard the DPA calls unresolved", 
      mechanism as UNRESOLVED. The published notice must not get ahead of that.
      This test fails if the DPA still says unresolved while the notice has
      started claiming coverage. */
-  if (jobsReadingTheSessionTree().length === 0) return;
+  if (jobsTouchingTheDatabase().length === 0) return;
   const dpa = read(PLATFORM, "legal", "dpa-draft.md");
   const unresolved = /Transfer mechanism UNRESOLVED/.test(dpa);
   if (!unresolved) return; // the question was settled; this guard steps aside
@@ -210,7 +284,7 @@ test("the notice does not claim a transfer safeguard the DPA calls unresolved", 
 });
 
 test("the notice version moved past the one that omitted this", () => {
-  if (jobsReadingTheSessionTree().length === 0) return;
+  if (jobsTouchingTheDatabase().length === 0) return;
   const declared = [...privacyHtml.matchAll(/PIS v(\d+)\s*·/g)].map((m) => Number(m[1]));
   assert.ok(declared.length > 0, "privacy.html declares no notice version");
   for (const v of declared) {
@@ -220,32 +294,15 @@ test("the notice version moved past the one that omitted this", () => {
   }
 });
 
-test("the purge job is NOT one of them — the notice says so in three languages", () => {
-  /* Section 6 states that the job which deletes old sessions "reads only a list
-     of session identifiers and two dates for each". That is a published factual
-     claim about processing, so it needs a guard of its own: if the purge ever
-     goes back to enumerating deeply, the notice becomes untrue and this fails.
-
-     Asserted separately from the list above because the two say different
-     things — that one is "somebody still does this", this one is "and it is not
-     the purge". */
+test("the purge job in particular still enumerates shallowly", () => {
+  /* Kept as its own case even though the absence test above would also catch a
+     regression: this one names the file, so a failure says which job changed
+     rather than only that one did. */
   const purge = "scripts/cleanup-stale-sessions.js";
-  assert.ok(enumeratesShallowly(purge),
-    purge + " no longer enumerates shallowly, but privacy.html section 6 still " +
-      "tells participants it reads only identifiers and dates.");
-
-  const named = jobsReadingTheSessionTree().map((j) => j.script);
-  assert.ok(!named.includes(purge),
-    "the purge is being counted as a full-database transfer again");
-
-  const s = privacySections();
-  const claim = {
-    en: /reads only a list of session\s+identifiers and two dates/i,
-    fr: /ne lit qu'une liste d'identifiants de séance et deux\s+dates/i,
-    ja: /セッション識別子の\s*一覧と各セッションの2つの日付だけです/
-  };
-  for (const lang of ["en", "fr", "ja"]) {
-    assert.ok(claim[lang].test(recipientsAndTransfers(s[lang], lang)),
-      "privacy.html [" + lang + "] no longer states what the purge job reads");
+  const monitor = "scripts/firebase-cost-monitor.js";
+  for (const job of [purge, monitor]) {
+    assert.ok(enumeratesShallowly(job),
+      job + " no longer enumerates shallowly, but privacy.html section 6 still " +
+        "tells participants that no scheduled job reads session content.");
   }
 });

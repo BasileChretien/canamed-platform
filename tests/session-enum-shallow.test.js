@@ -190,6 +190,22 @@ test("the purge enumerates shallowly; backup and export still read bodies", () =
   assert.match(cleanup, /readSessionLocationsShallow\(/,
     "the purge must enumerate by key — it uses only created/at and closed/at");
 
+  /* The storage monitor followed in PIS v7. Its case was different and worth
+     stating: it genuinely needed the bodies, because serialised size cannot be
+     obtained without reading the data. What made the read unjustified was the
+     ratio — 32.3 KB measured against a 1 GB cap — not the absence of a use. So
+     the measurement survives behind COST_MONITOR_MEASURE_SIZE and a
+     content-free count tripwire took over the alarm. */
+  const monitor = read("scripts/firebase-cost-monitor.js");
+  assert.match(monitor, /readSessionLocationsShallow\(/,
+    "the storage monitor must enumerate by key by default");
+  assert.match(monitor, /COST_MONITOR_MEASURE_SIZE/,
+    "the deep measurement must remain available to an operator");
+  assert.match(monitor, /COST_MONITOR_MAX_SESSIONS/,
+    "removing the byte alarm requires a replacement alarm");
+  assert.ok(!/db\.ref\(["'`]sessions["'`]\)\s*\.once\(/.test(monitor),
+    "the monitor must not deep-read /sessions directly any more");
+
   /* These two genuinely need the bodies: one archives them, the other
      pseudonymises them. Pointing either at the shallow enumerator would
      produce an empty backup or an empty export, which is worse than the
@@ -210,4 +226,23 @@ test("the deep-enumeration escape hatch is opt-in and never automatic", () => {
      transfer and hide whatever broke. */
   assert.ok(!/catch[\s\S]{0,200}readSessionLocations\(db\)/.test(src),
     "the deep read must not be reachable from a catch — that is a silent fallback");
+});
+
+test("the monitor's storage alarm was replaced, not merely deleted", () => {
+  /* Dropping the byte measurement drops an alert that exits 1 and emails the
+     operator. Losing that silently would be the wrong trade: the point was to
+     stop an unjustified transfer, not to stop watching. Assert both halves of
+     the replacement exist — the tripwire comparison AND a non-zero exit. */
+  const src = read("scripts/firebase-cost-monitor.js");
+  assert.match(src, /locations\.length > MAX_SESSIONS/,
+    "no count tripwire — the storage alarm was deleted rather than replaced");
+  const block = src.slice(src.indexOf("locations.length > MAX_SESSIONS"));
+  assert.match(block.slice(0, 400), /process\.exit\(1\)/,
+    "the tripwire must fail the run; a console line alone emails nobody");
+
+  /* And the byte alarm must not fire on a null measurement — pctStarts as null
+     when the deep read is skipped, and `null > 0.8` is false in JS but reads as
+     a bug. The explicit guard is the readable form and is asserted so it stays. */
+  assert.match(src, /pctStorage !== null && pctStorage > WARN_THRESHOLD/,
+    "guard the byte alarm explicitly against the not-measured case");
 });
