@@ -43,7 +43,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const fs = require("fs");
 const path = require("path");
-const { uploadToGcs } = require("./lib/gcs-archive");
+const { chooseDestination, uploadArchive, describeDestination } = require("./lib/archive");
 const { writeBackupMarker } = require("./lib/backup-marker");
 const { readSessionLocations } = require("./lib/session-trees");
 
@@ -64,10 +64,15 @@ const OUT_PATH = process.env.BACKUP_OUT_PATH
   || path.join(process.env.RUNNER_TEMP || ".", `canamed-backup-${isoDate()}.json`);
 
 async function main() {
-  if (REQUIRE_GCS && !GCS_BUCKET) {
+  /* The guard asks "is there ANY archive destination", not "is the GCS
+   * bucket set". Checking GCS alone would refuse to run a perfectly good
+   * S3-backed run — which is the configuration this job now uses. */
+  if (REQUIRE_GCS && !chooseDestination({ gcsBucket: GCS_BUCKET })) {
     console.error(
-      "FATAL: BACKUP_REQUIRE_GCS=1 but BACKUP_GCS_BUCKET is empty.\n" +
-      "       Set the PII_ARCHIVE_BUCKET repo variable to a PRIVATE GCS bucket.\n" +
+      "FATAL: BACKUP_REQUIRE_GCS=1 but no archive destination is configured.\n" +
+      "       Set BACKUP_S3_BUCKET (+ SCW_ACCESS_KEY / SCW_SECRET_KEY) for\n" +
+      "       Scaleway Object Storage, or PII_ARCHIVE_BUCKET for a private\n" +
+      "       GCS bucket if billing is ever restored.\n" +
       "       Refusing to run a backup whose only copy would vanish with the runner."
     );
     process.exit(2);
@@ -117,9 +122,15 @@ async function main() {
   const sizeKb = (Buffer.byteLength(json, "utf8") / 1024).toFixed(1);
   console.log(`Wrote ${OUT_PATH} (${sizeKb} KB).`);
 
-  if (GCS_BUCKET) {
+  /* S3-compatible (Scaleway Object Storage, fr-par) when configured, else GCS.
+   * GCS stopped working when the project left the paid plan on 2026-08-27, so
+   * every nightly purge since has deleted with no archive standing behind it. */
+  const dest = chooseDestination({ gcsBucket: GCS_BUCKET });
+  console.log(`Archive destination: ${describeDestination(dest)}`);
+
+  if (dest) {
     const destination = `${GCS_PREFIX}/canamed-backup-${isoDate()}.json`;
-    const uri = await uploadToGcs({ bucket: GCS_BUCKET, localPath: OUT_PATH, destination });
+    const uri = await uploadArchive(dest, { localPath: OUT_PATH, destination });
     console.log(`Uploaded to ${uri}`);
 
     /* AFTER the upload resolves, never before. This marker is what

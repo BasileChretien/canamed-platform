@@ -60,7 +60,7 @@ const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const fs = require("fs");
 const path = require("path");
-const { uploadToGcs } = require("./lib/gcs-archive");
+const { chooseDestination, uploadArchive, describeDestination } = require("./lib/archive");
 const { pseudonymiseSession, sessionHasConsent, hasResearchConsent } = require("./lib/pseudonymise");
 const { readSessionLocations } = require("./lib/session-trees");
 
@@ -79,10 +79,15 @@ function isoDate() {
 }
 
 async function main() {
-  if (REQUIRE_GCS && !GCS_BUCKET) {
+  /* The guard asks "is there ANY archive destination", not "is the GCS
+   * bucket set". Checking GCS alone would refuse to run a perfectly good
+   * S3-backed run — which is the configuration this job now uses. */
+  if (REQUIRE_GCS && !chooseDestination({ gcsBucket: GCS_BUCKET })) {
     console.error(
-      "FATAL: EXPORT_REQUIRE_GCS=1 but EXPORT_GCS_BUCKET is empty.\n" +
-      "       Set the PII_ARCHIVE_BUCKET repo variable to a PRIVATE GCS bucket.\n" +
+      "FATAL: EXPORT_REQUIRE_GCS=1 but no archive destination is configured.\n" +
+      "       Set BACKUP_S3_BUCKET (+ SCW_ACCESS_KEY / SCW_SECRET_KEY) for\n" +
+      "       Scaleway Object Storage, or PII_ARCHIVE_BUCKET for a private\n" +
+      "       GCS bucket if billing is ever restored.\n" +
       "       Refusing to run an export whose only copy would vanish with the runner."
     );
     process.exit(2);
@@ -177,15 +182,16 @@ async function main() {
   console.log("Wrote " + pseudoPath + " (" + pseudoKb + " KB)");
   console.log("Wrote " + linkagePath + " (" + linkageKb + " KB)");
 
-  if (GCS_BUCKET) {
-    const pseudoUri = await uploadToGcs({
-      bucket: GCS_BUCKET,
+  const dest = chooseDestination({ gcsBucket: GCS_BUCKET });
+  console.log("Archive destination: " + describeDestination(dest));
+
+  if (dest) {
+    const pseudoUri = await uploadArchive(dest, {
       localPath: pseudoPath,
       destination: GCS_PSEUDO_PREFIX + "/canamed-pseudonymised-" + isoDate() + ".json"
     });
     console.log("Uploaded to " + pseudoUri);
-    const linkageUri = await uploadToGcs({
-      bucket: GCS_BUCKET,
+    const linkageUri = await uploadArchive(dest, {
       localPath: linkagePath,
       destination: GCS_LINKAGE_PREFIX + "/canamed-linkage-" + isoDate() + ".json"
     });

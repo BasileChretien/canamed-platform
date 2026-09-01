@@ -171,17 +171,20 @@ test("the marker is written only AFTER a successful upload", () => {
   /* Ordering is the entire security property: a marker written before the
    * upload records an attempt, and an attempt must never authorise a purge. */
   const src = read("scripts/backup-sessions.js").split("\r\n").join("\n");
-  const upload = src.indexOf("await uploadToGcs(");
+  const upload = src.indexOf("await uploadArchive(");
   // "await writeBackupMarker(", not the bare name: more precise than matching
   // the import, and it additionally fails if a future edit drops the `await`
   // (an un-awaited marker write can lose the race with process.exit(0)).
   const mark = src.indexOf("await writeBackupMarker(");
-  assert.ok(upload > 0, "no uploadToGcs call found");
+  assert.ok(upload > 0, "no uploadArchive call found");
   assert.ok(mark > 0, "no writeBackupMarker call found");
-  assert.ok(mark > upload, "writeBackupMarker must come after the awaited uploadToGcs");
-  // and inside the `if (GCS_BUCKET)` branch — the local-artifact path leaves
-  // nothing durable and must not vouch for an archive.
-  const branch = src.slice(src.indexOf("if (GCS_BUCKET)"), src.indexOf("process.exit(0)"));
+  assert.ok(mark > upload, "writeBackupMarker must come after the awaited uploadArchive");
+  // and inside the `if (dest)` branch — the no-archive path leaves nothing
+  // durable and must not vouch for an archive. (Was `if (GCS_BUCKET)` until
+  // 2026-09-01, when the provider choice moved behind chooseDestination() so
+  // that backups could resume on Scaleway object storage after GCS became
+  // unwritable on the Spark plan.)
+  const branch = src.slice(src.indexOf("if (dest)"), src.indexOf("process.exit(0)"));
   assert.ok(branch.includes("writeBackupMarker("),
     "the marker write escaped the GCS_BUCKET branch");
 });

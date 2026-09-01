@@ -69,9 +69,14 @@ on:
   # (CLEANUP_REQUIRE_BACKUP: "1") in the SAME change. While this job is off,
   # nothing writes the ops/lastBackup marker, so the purge job is deleting
   # sessions with no archive behind them — see scripts/lib/backup-marker.js.
-  # schedule:
-  #   - cron: "47 2 * * *"  # daily 02:47 UTC — 30 min before cleanup (03:17)
+  schedule:
+    - cron: "47 2 * * *"  # daily 02:47 UTC — 30 min before cleanup (03:17)
   workflow_dispatch:
+    inputs:
+      bucket:
+        description: "Archive bucket to use (blank = the PII_ARCHIVE_BUCKET variable)"
+        required: false
+        default: ""
 
 concurrency:
   group: backup-sessions
@@ -113,7 +118,21 @@ jobs:
       - name: Backup /sessions to private GCS (no artifact upload)
         env:
           FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
-          BACKUP_GCS_BUCKET: ${{ vars.PII_ARCHIVE_BUCKET }}
+          # An override lets an operator point a run at a different bucket without
+          # touching the repo variable -- used to test whether a candidate bucket is
+          # writable at all before committing the schedule to it.
+          # Scaleway Object Storage (fr-par, Paris). Added 2026-09-01 because GCS
+          # needs an active billing account and the project is on Spark, so the
+          # backup had produced nothing since 2026-08-27 while the nightly purge
+          # kept deleting. Scaleway was already a disclosed sub-processor with a
+          # DPA in force, so this adds no new vendor and no new paperwork.
+          # A blank BACKUP_S3_BUCKET falls back to the GCS path below.
+          BACKUP_S3_BUCKET: ${{ vars.PII_ARCHIVE_S3_BUCKET }}
+          BACKUP_S3_ENDPOINT: ${{ vars.PII_ARCHIVE_S3_ENDPOINT || 'https://s3.fr-par.scw.cloud' }}
+          BACKUP_S3_REGION: ${{ vars.PII_ARCHIVE_S3_REGION || 'fr-par' }}
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          BACKUP_GCS_BUCKET: ${{ github.event.inputs.bucket != '' && github.event.inputs.bucket || vars.PII_ARCHIVE_BUCKET }}
           BACKUP_GCS_PREFIX: backups
           # PUBLIC repo: fail loudly if the bucket isn't configured, so a
           # missing PII_ARCHIVE_BUCKET never becomes a backup that vanishes

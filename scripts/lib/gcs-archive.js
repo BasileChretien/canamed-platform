@@ -21,7 +21,14 @@
 
 "use strict";
 
-const { getStorage } = require("firebase-admin/storage");
+/* Required LAZILY, for the same reason as the S3 sibling. scripts/lib/archive.js
+ * imports BOTH providers in order to choose between them, so a top-level require
+ * here would make every S3-only run — and every test that touches the dispatcher
+ * — load firebase-admin/storage and fail wherever it is not installed. The
+ * provider is chosen at runtime; its SDK should be loaded at runtime too. */
+function getStorage() {
+  return require("firebase-admin/storage").getStorage();
+}
 
 /**
  * @param {object}  opts

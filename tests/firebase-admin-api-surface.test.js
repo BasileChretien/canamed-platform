@@ -73,20 +73,40 @@ function jsFilesUnder(dir) {
   return out;
 }
 
-/** Map of "firebase-admin/<sub>" -> { names:Set, files:[] }, derived from
- *  `const { a, b } = require("firebase-admin/sub")` in scripts/. */
+/** Map of "firebase-admin/<sub>" -> { names:Set, files:[] }, derived from the
+ *  scripts' own requires. TWO shapes are recognised, because both are in use:
+ *
+ *    const { getDatabase } = require("firebase-admin/database")   // top level
+ *    require("firebase-admin/storage").getStorage()               // lazy
+ *
+ *  The lazy form arrived when scripts/lib/archive.js began importing BOTH
+ *  storage providers to choose between them: a top-level require would then load
+ *  firebase-admin/storage on every S3-only run, and fail wherever it is not
+ *  installed. It is still an import that must resolve at runtime, so it still
+ *  belongs in this guard — matching only the destructured form would have
+ *  quietly stopped covering it. */
 function entryPointsUsedByScripts() {
   const used = new Map();
-  const re = /const\s*\{([^}]*)\}\s*=\s*require\(\s*["'](firebase-admin\/[a-z-]+)["']\s*\)/g;
+  const destructured =
+    /const\s*\{([^}]*)\}\s*=\s*require\(\s*["'](firebase-admin\/[a-z-]+)["']\s*\)/g;
+  const lazyMember =
+    /require\(\s*["'](firebase-admin\/[a-z-]+)["']\s*\)\s*\.\s*([A-Za-z_$][\w$]*)/g;
+
+  const add = (sub, names, rel) => {
+    if (!used.has(sub)) used.set(sub, { names: new Set(), files: [] });
+    const e = used.get(sub);
+    names.forEach((n) => e.names.add(n));
+    if (!e.files.includes(rel)) e.files.push(rel);
+  };
+
   for (const file of jsFilesUnder(SCRIPTS)) {
     const src = fs.readFileSync(file, "utf8");
     const rel = path.relative(ROOT, file).replace(/\\/g, "/");
-    for (const m of src.matchAll(re)) {
-      const names = m[1].split(",").map((s) => s.trim().split(":")[0].trim()).filter(Boolean);
-      if (!used.has(m[2])) used.set(m[2], { names: new Set(), files: [] });
-      const e = used.get(m[2]);
-      names.forEach((n) => e.names.add(n));
-      if (!e.files.includes(rel)) e.files.push(rel);
+    for (const m of src.matchAll(destructured)) {
+      add(m[2], m[1].split(",").map((x) => x.trim().split(":")[0].trim()).filter(Boolean), rel);
+    }
+    for (const m of src.matchAll(lazyMember)) {
+      add(m[1], [m[2]], rel);
     }
   }
   return used;
