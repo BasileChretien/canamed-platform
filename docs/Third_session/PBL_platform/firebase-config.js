@@ -81,24 +81,39 @@ window.CANAMED_RECAPTCHA_SITE_KEY = "6Lemg-wsAAAAAKIkv6KorbZu0iUz_q3e36wrlFiQ";
  * Cloud Functions v2 run on Cloud Run and need a Blaze (billing) plan.
  *
  *   window.CANAMED_LLM_PROXY = {
- *     url: "https://canamed-hf-patient.<subdomain>.workers.dev",
+ *     url: "https://<function>.functions.fnc.fr-par.scw.cloud",
  *     acknowledgeUnsafe: true
  *   };
  *
  * `acknowledgeUnsafe` is REQUIRED and is not a formality: a raw fetch cannot
  * mint a Firebase App Check token, and a proxy off Google's platform could
  * not verify one anyway. Everything else still applies server-side —
- * Firebase Auth, the roomOf room-membership check, the per-uid / per-session
- * / global rate limits, and the HF token never reaching the browser — but
+ * Firebase Auth, the roomOf room-membership check, and the per-uid and
+ * per-session rate limits, with the HF token never reaching the browser — but
  * the App Check layer is genuinely absent, so it has to be opted into rather
- * than acquired silently.
+ * than acquired silently. (There is no GLOBAL cap in the proxy: a cross-user
+ * counter written with the caller's own token is forgeable upward, so one
+ * participant could have disabled the chat for everyone. That cap lives on
+ * the Hugging Face account's spend limit instead.)
  *
- * ⚠ TWO PLACES, ONE ORIGIN. The URL's origin must ALSO be added to the
- * `connect-src` directive of the Content-Security-Policy in index.html, or
- * the browser blocks every request and the chat falls back to the stub
- * patient with nothing in the UI to say why. tests/llm-proxy-config.test.js
- * fails the build when these two disagree, because that failure is otherwise
- * invisible.
+ * ⚠ THE HOST IS A DISCLOSED RECIPIENT, not just an endpoint. Whoever operates
+ * it receives participants' free-text chat turns, so changing it changes the
+ * Art. 13 notice: privacy.html sections 6 and 7 in ALL THREE languages, and
+ * the in-product modA.chat.disclosure banner. tests/llm-recipients-notice.js
+ * derives the host from this very assignment and fails until the notice names
+ * its operator. Pick the region deliberately too — the EEA commitment in the
+ * privacy notice and the CER dossier depends on it (this is why a free
+ * Cloudflare Worker was rejected: it cannot be pinned to the EU).
+ *
+ * ⚠ THREE PLACES, ONE ORIGIN. The URL's origin must ALSO be added to the
+ * `connect-src` directive of the Content-Security-Policy in BOTH
+ * index.html (the <meta> fallback) AND firebase.json (the response header,
+ * which is the one browsers actually enforce — a header overrides the meta
+ * tag, so editing only index.html works locally and is silently blocked in
+ * production). Miss either and the browser blocks every request and the chat
+ * falls back to the stub patient with nothing in the UI to say why.
+ * tests/llm-proxy-config.test.js fails the build when they disagree, because
+ * that failure is otherwise invisible.
  */
 window.CANAMED_LLM_PROXY = {
   // Scaleway Serverless Functions, fr-par (Paris) — deployed 2026-08-31.

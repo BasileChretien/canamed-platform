@@ -69,7 +69,7 @@
     <!-- ================== ENGLISH (canonical, legally binding) ===================== -->
     <section data-priv-lang="en">
     <p class="meta">
-      Notice version <strong>PIS v3 · 2026-07</strong>.
+      Notice version <strong>PIS v4 · 2026-09</strong>.
       <a href="index.html">← Back to the platform</a>
     </p>
 
@@ -150,11 +150,32 @@
       and for the audio/video recording of the session. The transcript
       carries each speaker's name against each utterance.</p>
 
+    <p>Module A includes a <strong>simulated patient voiced by a language
+      model</strong>. What you type into that chat leaves the platform. It goes
+      first to <strong>Scaleway SAS</strong> (Paris, France), which relays the
+      request and stores nothing; then through <strong>Hugging Face</strong>,
+      which routes it to a model provider; and finally to
+      <strong>OVHcloud</strong> (Gravelines, France), which runs the model and
+      writes the reply. All three act for us as processors or sub-processors.
+      Scaleway additionally receives your sign-in token and the session and room
+      names, used only to check that you belong to the room; these are not
+      passed on. Hugging Face and OVHcloud receive the conversation and the
+      scenario's instructions, and nothing else. Please type only what you would
+      ask in a real consultation.</p>
+
     <h2>7. International transfers</h2>
     <p>The database is hosted in <strong>Belgium
       (Google <code>europe-west1</code>)</strong>. For Japanese participants
       this is a cross-border transfer under APPI Art. 28, protected by the
       2019 EU–Japan mutual adequacy decision (PPC).</p>
+
+    <p>The <strong>simulated-patient chat</strong> travels a separate path. The
+      relay (Scaleway, Paris) and the model that writes the reply (OVHcloud,
+      Gravelines) are both in <strong>France</strong>, inside the EEA. The
+      <strong>Hugging Face</strong> routing step between them is
+      <strong>outside the EEA</strong>, so what you type in that chat crosses
+      that border and comes back. Until 2026-08-31 the relay ran on Google
+      Cloud; it moved to Scaleway when the platform left Google's paid plan.</p>
 
     <h2>8. Retention</h2>
     <ul>
@@ -214,17 +235,13 @@
       filled in per cohort).</p>
 
     <h2>16. Versioning</h2>
-    <p>Version <strong>PIS v3 · 2026-07</strong>. <strong>Material changes since PIS v2:</strong>
-      disclosed that the sessions are held by video conference on Microsoft Teams
-      and named Microsoft as a processor (section 6); disclosed that the tool
-      produces a written transcript automatically, carrying each speaker's name
-      against each utterance, and that the audio/video recording of the session
-      is retained as well; added a third, optional consent box on the join form
-      covering retention of that transcript and recording &mdash; independent of
-      the research-consent box, kept 5 years after publication with the same
-      restricted access as the rest of the research dataset, and deleted on
-      request (section 8). No photograph is taken and turning your camera on is
-      not required.
+    <p>Version <strong>PIS v4 · 2026-09</strong>. <strong>Material changes since PIS v3:</strong>
+      disclosed the simulated-patient chat in Module A and the three recipients
+      it passes through &mdash; Scaleway (Paris), Hugging Face and OVHcloud
+      (Gravelines) &mdash; together with what each of them receives (section 6),
+      and recorded that the Hugging Face routing step sits outside the EEA
+      (section 7). That processing was already running: it was not described in
+      earlier versions of this notice, and this version corrects the omission.
       Material changes are issued under a new version with re-consent on next join.
       Older versions on file at
       <a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a>.</p>
@@ -254,7 +271,7 @@
     <!-- ================== FRANÇAIS ===================== -->
     <section data-priv-lang="fr" hidden>
     <p class="meta">
-      Version de la notice <strong>PIS v3 · 2026-07</strong>.
+      Version de la notice <strong>PIS v4 · 2026-09</strong>.
       <a href="index.html">← Retour à la plateforme</a>
     </p>
 
@@ -336,11 +353,36 @@
       transcription porte le nom de chaque personne à côté de chacune de ses
       prises de parole.</p>
 
+    <p>Le module A comporte un <strong>patient simulé incarné par un modèle de
+      langage</strong>. Ce que vous saisissez dans cette conversation quitte la
+      plateforme. Le texte est transmis d'abord à <strong>Scaleway SAS</strong>
+      (Paris, France), qui relaie la requête et ne conserve rien ; puis à
+      <strong>Hugging Face</strong>, qui l'achemine vers un fournisseur de
+      modèle ; enfin à <strong>OVHcloud</strong> (Gravelines, France), qui
+      exécute le modèle et rédige la réponse. Ces trois entités interviennent
+      pour notre compte comme sous-traitants ou sous-traitants ultérieurs.
+      Scaleway reçoit en outre votre jeton de connexion ainsi que les noms de
+      séance et de salle, utilisés uniquement pour vérifier que vous appartenez
+      bien à la salle ; ces éléments ne sont pas transmis plus loin. Hugging Face
+      et OVHcloud reçoivent la conversation et les instructions du scénario, et
+      rien d'autre. Ne saisissez que ce que vous demanderiez lors d'une
+      consultation réelle.</p>
+
     <h2>7. Transferts internationaux</h2>
     <p>La base est hébergée en <strong>Belgique (région Google
       <code>europe-west1</code>)</strong>. Pour les participants japonais,
       transfert transfrontalier au sens de l'art. 28 APPI, protégé par
       la décision d'adéquation mutuelle UE-Japon de 2019 (PPC).</p>
+
+    <p>La <strong>conversation avec le patient simulé</strong> emprunte un
+      chemin distinct. Le relais (Scaleway, Paris) et le modèle qui rédige la
+      réponse (OVHcloud, Gravelines) se trouvent tous deux en
+      <strong>France</strong>, dans l'EEE. L'étape d'acheminement par
+      <strong>Hugging Face</strong>, entre les deux, se situe <strong>hors
+      EEE</strong> : ce que vous saisissez dans cette conversation franchit donc
+      cette frontière, puis revient. Jusqu'au 31/08/2026 le relais fonctionnait
+      sur Google Cloud ; il a été déplacé vers Scaleway lorsque la plateforme a
+      quitté l'offre payante de Google.</p>
 
     <h2>8. Durée de conservation</h2>
     <ul>
@@ -407,20 +449,15 @@
       cohorte).</p>
 
     <h2>16. Versionnement</h2>
-    <p>Version <strong>PIS v3 · 2026-07</strong>.
-      <strong>Modifications substantielles depuis la version PIS v2 :</strong>
-      mention du fait que les séances se tiennent en visioconférence sur
-      Microsoft Teams et que Microsoft est sous-traitant (section 6) ; mention
-      du fait que l'outil produit automatiquement une transcription écrite,
-      portant le nom de chaque personne à côté de chacune de ses prises de
-      parole, et que l'enregistrement audio/vidéo de la séance est lui aussi
-      conservé ; ajout d'une troisième case de consentement, facultative, sur le
-      formulaire d'inscription, portant sur la conservation de cette
-      transcription et de cet enregistrement &mdash; indépendante de la case de
-      consentement à la recherche, conservation 5 ans après la publication avec
-      les mêmes accès restreints que le reste du jeu de données de recherche, et
-      suppression sur demande (section 8). Aucune photographie n'est prise et
-      l'allumage de la caméra n'est pas obligatoire.
+    <p>Version <strong>PIS v4 · 2026-09</strong>.
+      <strong>Modifications substantielles depuis la version PIS v3 :</strong>
+      mention de la conversation avec le patient simulé du module A et des trois
+      destinataires par lesquels elle transite &mdash; Scaleway (Paris), Hugging
+      Face et OVHcloud (Gravelines) &mdash; avec le détail de ce que chacun
+      reçoit (section 6), et mention du fait que l'étape d'acheminement par
+      Hugging Face se situe hors EEE (section 7). Ce traitement était déjà en
+      fonctionnement : il n'était pas décrit dans les versions antérieures de la
+      présente notice, et la présente version corrige cette omission.
       Toute modification substantielle donne lieu à un nouveau numéro de version
       avec re-consentement à la prochaine inscription. Versions antérieures
       conservées à
@@ -452,7 +489,7 @@
     <!-- ================== 日本語 ===================== -->
     <section data-priv-lang="ja" hidden>
     <p class="meta">
-      通知バージョン <strong>PIS v3 · 2026-07</strong>。
+      通知バージョン <strong>PIS v4 · 2026-09</strong>。
       <a href="index.html">← プラットフォームへ戻る</a>
     </p>
 
@@ -525,11 +562,30 @@
       <strong>Microsoft</strong>が当方の委託先となります。書き起こしには、
       各発言ごとに発言者の名前が付きます。</p>
 
+    <p>モジュールAには、<strong>言語モデルが演じる模擬患者</strong>が含まれます。
+      このチャットに入力した内容はプラットフォームの外に送信されます。まず
+      <strong>Scaleway SAS</strong>（フランス・パリ）に送られ、同社は要求を中継
+      するだけで何も保存しません。次に<strong>Hugging Face</strong>がモデル提供者へ
+      振り分け、最後に<strong>OVHcloud</strong>（フランス・グラヴリーヌ）が
+      モデルを実行して返答を生成します。これら3社はいずれも当方の委託先または
+      再委託先です。Scalewayはさらに、ログイン用トークンとセッション名・ルーム名を
+      受け取りますが、これはあなたが当該ルームの参加者であることの確認のみに用いられ、
+      その先へは渡されません。Hugging FaceとOVHcloudが受け取るのは、会話の内容と
+      シナリオの指示だけです。実際の診察で尋ねる内容のみを入力してください。</p>
+
     <h2>7. 越境移転</h2>
     <p>データベースは<strong>ベルギー（Google <code>europe-west1</code>
       リージョン）</strong>にホストされています。日本の参加者にとっては
       APPI第28条に基づく越境移転であり、2019年のEU・日本相互十分性
       認定（PPC）により保護されます。</p>
+
+    <p><strong>模擬患者とのチャット</strong>は別の経路をたどります。中継
+      （Scaleway、パリ）と返答を生成するモデル（OVHcloud、グラヴリーヌ）は
+      いずれも<strong>フランス</strong>国内、すなわちEEA域内にあります。ただし、
+      その間を取り次ぐ<strong>Hugging Face</strong>の段階は<strong>EEA域外</strong>
+      であるため、このチャットに入力した内容は一度EEAの外に出て戻ってきます。
+      2026年8月31日までこの中継はGoogle Cloud上で稼働していましたが、本プラット
+      フォームがGoogleの有料プランを離れたことに伴いScalewayへ移行しました。</p>
 
     <h2>8. 保有期間</h2>
     <ul>
@@ -586,15 +642,14 @@
       審査・承認されています（番号と日付はコホート毎に記入）。</p>
 
     <h2>16. バージョン管理</h2>
-    <p>バージョン<strong>PIS v3 · 2026-07</strong>。
-      <strong>PIS v2からの重要な変更：</strong>セッションが Microsoft Teams の
-      ビデオ会議で実施されること、および Microsoft が委託先であることを明記しました
-      （第6条）。ツールが書き起こし（文字起こし）を自動生成し、各発言ごとに発言者の
-      名前が付くこと、ならびにセッションの音声・映像の記録も保持されることを明記
-      しました。参加登録フォームに、この書き起こしと記録の保持に関する3つ目の任意の
-      同意欄を追加しました。研究への同意欄とは独立しており、公表から5年間、研究
-      データセットの他の部分と同じ制限されたアクセス範囲で保持し、ご請求により削除
-      します（第8条）。写真は撮影されず、カメラをオンにする義務もありません。
+    <p>バージョン<strong>PIS v4 · 2026-09</strong>。
+      <strong>PIS v3からの重要な変更：</strong>モジュールAの模擬患者との
+      チャット、およびそれが経由する3つの提供先 &mdash; Scaleway（パリ）、
+      Hugging Face、OVHcloud（グラヴリーヌ）&mdash; と、各社が受け取る情報の
+      内訳を明記しました（第6条）。あわせて、Hugging Faceによる取次ぎの段階が
+      EEA域外であることを明記しました（第7条）。この処理は既に稼働していたものであり、
+      本通知の従来のバージョンには記載されていませんでした。本バージョンはその欠落を
+      補うものです。
       重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。旧
       バージョンは
       <a href="mailto:canamed-ethics@unicaen.fr">canamed-ethics@unicaen.fr</a>

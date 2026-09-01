@@ -524,12 +524,19 @@ them as a teaching prop, never as clinical information.
    service runs wherever the visitor happens to be and could not be kept in
    Europe.)*
 
-   > ⚠️ **[TO DO BEFORE PUBLISHING — Scaleway is a new recipient.]** Scaleway SAS
-   > (Paris) must be named in the recipients list below and in the record of
-   > processing, and a data-processing agreement with Scaleway must be in place.
-   > It only relays your message — it does not store it and does not run the AI
-   > model — but it is a recipient nonetheless, and this notice may not be
-   > published while it goes unnamed.
+   > ✅ **[RESOLVED 2026-09-01 — Scaleway is named, and its DPA was already in
+   > force.]** Scaleway SAS (Paris) is now named in the recipients list below and
+   > in the published notice (sections 6 and 7, all three languages, PIS v4).
+   > The data-processing agreement did not need to be signed: Scaleway's DPA
+   > (version of 1 June 2024) states that it "forms an integral part of the
+   > contract relating to the provision of Scaleway Services", has no signature
+   > block, and requires signature only for amendments (Art. 14.2) — so it took
+   > effect when the account was opened. It only relays the message — it does
+   > not store it and does not run the model — but it is a recipient
+   > nonetheless. **Still owed on the Client side:** subscribe to Scaleway's
+   > sub-processor change notifications (Art. 7.4 makes the 30-day notice
+   > conditional on subscribing) and add row #7 to the Controller's record of
+   > processing (Art. 5.3.3).
 3. From there it is sent to **Hugging Face**, which routes it onward to a
    third-party inference provider. **Since 2026-08-20 that provider is pinned
    to OVHcloud, which runs the model in Gravelines, France**, so the recipient
@@ -1019,7 +1026,7 @@ add only if your institution requires it.]
 | Who | What they receive | Where | Role |
 |---|---|---|---|
 | **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Storage | Everything in section 2 | Database and storage in **Belgium** (`europe-west1`). **Cloud Functions are no longer used**: the project returned to Google's free plan on 2026-08-27, so the AI-chat relay moved to Scaleway (row below) and the email function is disabled. *Earlier drafts placed the AI-chat function in the United States, then in Belgium* | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
-| **Scaleway SAS** (Paris, France) — Serverless Functions | Your AI-chat messages, **in transit only** | **Paris (`fr-par`)** — inside the EEA | ⚠️ **NEW RECIPIENT, DPA NOT YET SIGNED.** This notice may not be published until it is |
+| **Scaleway S.A.S.** (8 rue de la Ville l'Évêque, 75008 Paris, France; R.C.S. Paris 433 115 904) — Serverless Functions | Your AI-chat messages, **in transit only**, plus the sign-in token and session/room names used to check room membership | **Paris (`fr-par`)** — inside the EEA | Our processor. Art. 28 contract in force via Scaleway's DPA v1 June 2024, which "forms an integral part of the contract" and needs no separate signature. Named in the published notice since **PIS v4 · 2026-09** |
 | **Google (software libraries)** — the core JavaScript is downloaded from `gstatic.com` on every load of the **application page** and the certificate-verification page (not the privacy or compliance pages) | Your IP address and browser details | [TO VERIFY — served from a global network, not region-pinned] | Content delivery |
 | **Google (Firebase Authentication)** — `identitytoolkit.googleapis.com`, contacted on **every visit**, because the platform signs you in anonymously at startup | Your IP address and browser details at that moment; then, if you create an account, the email address and account identifier it returns | [TO VERIFY — Firebase Authentication is not pinned to a region in this project's configuration, unlike the database. See the EEA → US row in the DPA] | **Authentication, not content delivery.** Listed separately from `gstatic.com` for that reason: it is a Firebase Authentication API, and it falls under the same Google Cloud transfer-mechanism question as the rest of Firebase — not under the software-delivery row above |
 | **Google reCAPTCHA / App Check** — *not currently active* | Nothing. Consent-gated since 21 August 2026 and not loaded, so it receives no data. Previously: your IP address and browser signals, on every page load | [TO VERIFY if re-enabled — not region-pinned] | Anti-abuse |
