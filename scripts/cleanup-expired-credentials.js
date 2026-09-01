@@ -114,8 +114,23 @@ async function main() {
 
   if (res.errors) {
     console.error(`Errors:      ${res.errors} deletion(s) failed`);
-    process.exitCode = 1;
   }
+
+  /* EXIT EXPLICITLY. Setting process.exitCode and falling off the end does NOT
+   * end this process: firebase-admin holds an open Realtime Database
+   * connection, which keeps the event loop alive indefinitely. The job then
+   * runs until `timeout-minutes: 10` kills it, and GitHub records that as
+   * "cancelled" rather than "failure" — so it sends no failure mail and does
+   * not read as red at a glance.
+   *
+   * The effect: this job had NEVER completed. All 11 scheduled runs since it
+   * was introduced were cancelled at this same step, so expired certificate
+   * records were never actually purged, and nothing said so. Found 2026-09-01
+   * only by reading the run list while waiting on an unrelated deploy.
+   *
+   * Every sibling ops script already ended with an explicit process.exit();
+   * this one was the outlier. */
+  process.exit(res.errors ? 1 : 0);
 }
 
 main().catch(e => {
