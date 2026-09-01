@@ -214,27 +214,68 @@ test("the derivation finds the scheduled jobs that touch the database", () => {
   );
 });
 
-test("no scheduled job reads session bodies — the notice says so in three languages", () => {
-  /* The PIS v7 claim, and the reason the two derivations are separate: this one
-     asserts an ABSENCE, so it cannot share the anti-vacuity guard above. */
-  const offenders = jobsReadingSessionBodies();
+test("the DAILY jobs read no session content — the notice says so in three languages", () => {
+  /* The claim in section 6 is scoped, and the scoping is the whole point.
+     Between PIS v7 and v9 it read "None of them reads your session content",
+     which was true only while the backup and the research export were switched
+     off. Re-enabling them on 2026-09-01 made the unqualified version FALSE, and
+     this test is what caught it — the notice and the schedule had moved in
+     opposite directions inside one change.
+
+     So: the jobs that run every day must read no bodies; the full-copy jobs are
+     allowed to, and are disclosed separately (next test). */
+  const DAILY = [
+    "scripts/cleanup-stale-sessions.js",
+    "scripts/firebase-cost-monitor.js",
+    "scripts/cleanup-expired-credentials.js"
+  ];
+  const offenders = jobsReadingSessionBodies()
+    .map((j) => j.script)
+    .filter((j) => DAILY.includes(j));
   assert.deepStrictEqual(
     offenders, [],
-    "a scheduled job reads session bodies again: " +
-      offenders.map((o) => o.script).join(", ") + "\n" +
-      "privacy.html section 6 tells participants that none of them reads session " +
-      "content. Either narrow the job or correct the notice."
+    "a DAILY maintenance job reads session bodies again: " + offenders.join(", ") +
+      "\nprivacy.html section 6 tells participants the daily jobs do not read " +
+      "session content."
   );
 
   const s = privacySections();
   const claim = {
-    en: /None of them reads your session content/i,
-    fr: /Aucune d'elles ne lit le contenu de vos séances/i,
-    ja: /いずれの処理もセッションの内容は読み込みません/
+    en: /jobs that run every day do not read your session\s+content/i,
+    fr: /tâches qui s'exécutent chaque jour ne lisent pas le contenu\s+de vos séances/i,
+    ja: /毎日実行される処理は、セッションの内容を読み込みません/
   };
   for (const lang of ["en", "fr", "ja"]) {
     assert.ok(claim[lang].test(recipientsAndTransfers(s[lang], lang)),
-      "privacy.html [" + lang + "] no longer states that no job reads session content");
+      "privacy.html [" + lang + "] no longer scopes the no-content claim to the " +
+        "daily jobs");
+  }
+});
+
+test("if a scheduled job DOES copy the database, the notice says so and says where", () => {
+  /* The backup and the pseudonymised export copy everything — that is their
+     purpose, and they were re-enabled on 2026-09-01 after five days in which the
+     nightly purge deleted with no archive behind it. A full copy of the
+     identified database leaving on a schedule is exactly the kind of processing
+     Art. 13 exists to surface, so it may run only while the notice describes it
+     AND names the destination. */
+  const bulk = jobsReadingSessionBodies().map((j) => j.script);
+  if (bulk.length === 0) return; // both switched off again; nothing to disclose
+
+  const s = privacySections();
+  const disclosed = {
+    en: [/copy the database in full/i, /Scaleway/, /Paris/],
+    fr: [/copient la base intégralement/i, /Scaleway/, /Paris/],
+    ja: [/データベース全体を\s*複製/, /Scaleway/, /パリ/]
+  };
+  for (const lang of ["en", "fr", "ja"]) {
+    const sec = recipientsAndTransfers(s[lang], lang);
+    for (const re of disclosed[lang]) {
+      assert.ok(re.test(sec),
+        "privacy.html [" + lang + "] does not disclose the full-copy jobs and where " +
+          "they write, but these are scheduled: " + bulk.join(", ") +
+          " (missing: " + re + ")");
+    }
   }
 });
 

@@ -69,7 +69,7 @@
     <!-- ================== ENGLISH (canonical, legally binding) ===================== -->
     <section data-priv-lang="en">
     <p class="meta">
-      Notice version <strong>PIS v8 · 2026-09</strong>.
+      Notice version <strong>PIS v9 · 2026-09</strong>.
       <a href="index.html">← Back to the platform</a>
     </p>
 
@@ -164,8 +164,8 @@
       ask in a real consultation.</p>
 
     <p>The platform's scheduled maintenance jobs run on <strong>GitHub
-      Actions</strong> (GitHub, Inc., United States). <strong>None of them reads your session content.</strong> They read a
-      list of session identifiers and, for each session, the two dates that
+      Actions</strong> (GitHub, Inc., United States). <strong>The jobs that run every day do not read your session
+      content.</strong> They read a list of session identifiers and, for each session, the two dates that
       decide when it is deleted; one also reads the certificate records. Until
       2026-09-01 two of these jobs copied the <strong>whole live session
       database</strong> onto a GitHub machine every day &mdash; one to decide
@@ -173,8 +173,13 @@
       needed the contents to do its work, and neither does it any more. These jobs report only counts and dates &mdash; no personal
       data is written into their logs. Two
       further jobs that copy the database in full, a backup and the
-      pseudonymised research export, are switched off at present and run only if
-      started by hand.</p>
+      pseudonymised research export, are running again as of
+      2026-09-01. They write to <strong>Scaleway</strong> object storage in
+      <strong>Paris</strong>, the same processor that relays the AI chat; the
+      copies stay inside the EEA and are readable only by the platform
+      administrator. They had been switched off since 2026-08-27, when the
+      platform left Google's paid plan and the storage they used stopped
+      accepting writes.</p>
 
     <h2>7. International transfers</h2>
     <p>The database is hosted in <strong>Belgium
@@ -264,7 +269,15 @@
       filled in per cohort).</p>
 
     <h2>16. Versioning</h2>
-    <p>Version <strong>PIS v8 · 2026-09</strong>. <strong>Material changes since PIS v7:</strong>
+    <p>Version <strong>PIS v9 · 2026-09</strong>. <strong>Material changes since PIS v8:</strong>
+      the nightly backup and the pseudonymised research export are running again,
+      and they now write to Scaleway object storage in Paris rather than to
+      Google (section 6). Scaleway was already handling the AI chat, so this is
+      an existing processor doing an additional job, not a new recipient; the
+      copies stay in the EEA. Between 2026-08-27 and 2026-09-01 no backup was
+      being taken at all, while old sessions continued to be deleted on schedule.
+      Material changes are issued under a new version with re-consent on next join.
+      <strong>Material changes since PIS v7, carried forward:</strong>
       the outstanding question about the safeguard for the GitHub transfer is
       answered. GitHub, Inc. is an active participant in the EU&ndash;US Data
       Privacy Framework and its certification covers free-account users' data,
@@ -333,7 +346,7 @@
     <!-- ================== FRANÇAIS ===================== -->
     <section data-priv-lang="fr" hidden>
     <p class="meta">
-      Version de la notice <strong>PIS v8 · 2026-09</strong>.
+      Version de la notice <strong>PIS v9 · 2026-09</strong>.
       <a href="index.html">← Retour à la plateforme</a>
     </p>
 
@@ -431,8 +444,8 @@
       consultation réelle.</p>
 
     <p>Les tâches de maintenance planifiées de la plateforme s'exécutent sur
-      <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). <strong>Aucune d'elles ne lit le contenu de vos séances.</strong> Elles
-      lisent une liste d'identifiants de séance et, pour chaque séance, les deux
+      <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). <strong>Les tâches qui s'exécutent chaque jour ne lisent pas le contenu
+      de vos séances.</strong> Elles lisent une liste d'identifiants de séance et, pour chaque séance, les deux
       dates qui déterminent le moment de sa suppression ; l'une lit également les
       enregistrements de certificats. Jusqu'au 01/09/2026, deux de ces tâches
       copiaient <strong>l'intégralité de la base de session en cours</strong> sur
@@ -440,8 +453,14 @@
       l'autre pour mesurer la taille de la base. Ni l'une ni l'autre n'avait
       besoin du contenu pour accomplir sa tâche, et ce n'est plus le cas. Ces tâches ne consignent que des décomptes et des dates
       &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base intégralement,
-      une sauvegarde et l'export de recherche pseudonymisé, sont actuellement
-      désactivées et ne s'exécutent que si elles sont lancées manuellement.</p>
+      une sauvegarde et l'export de recherche pseudonymisé, sont de nouveau actives
+      depuis le 01/09/2026. Elles écrivent sur le stockage objet de
+      <strong>Scaleway</strong> à <strong>Paris</strong>, le même sous-traitant
+      que celui qui relaie la conversation avec le patient simulé ; les copies
+      restent dans l'EEE et ne sont accessibles qu'à l'administrateur de la
+      plateforme. Elles étaient désactivées depuis le 27/08/2026, date à laquelle
+      la plateforme a quitté l'offre payante de Google et le stockage qu'elles
+      utilisaient a cessé d'accepter les écritures.</p>
 
     <h2>7. Transferts internationaux</h2>
     <p>La base est hébergée en <strong>Belgique (région Google
@@ -543,8 +562,19 @@
       cohorte).</p>
 
     <h2>16. Versionnement</h2>
-    <p>Version <strong>PIS v8 · 2026-09</strong>.
-      <strong>Modifications substantielles depuis la version PIS v7 :</strong>
+    <p>Version <strong>PIS v9 · 2026-09</strong>.
+      <strong>Modifications substantielles depuis la version PIS v8 :</strong>
+      la sauvegarde quotidienne et l'export de recherche pseudonymisé sont de
+      nouveau actifs et écrivent désormais sur le stockage objet de Scaleway à
+      Paris, et non plus chez Google (section 6). Scaleway traitait déjà la
+      conversation avec le patient simulé : il s'agit donc d'un sous-traitant
+      existant assurant une tâche supplémentaire, et non d'un nouveau
+      destinataire ; les copies restent dans l'EEE. Entre le 27/08/2026 et le
+      01/09/2026, aucune sauvegarde n'a été effectuée, alors que la suppression
+      des séances anciennes se poursuivait.
+      Toute modification substantielle donne lieu à un nouveau numéro de version
+      avec re-consentement à la prochaine inscription.
+      <strong>Modifications substantielles depuis la version PIS v7, reprises :</strong>
       la question en suspens concernant la garantie encadrant le transfert vers
       GitHub est tranchée. GitHub, Inc. est un participant actif au cadre de
       protection des données UE&ndash;États-Unis et sa certification couvre les
@@ -624,7 +654,7 @@
     <!-- ================== 日本語 ===================== -->
     <section data-priv-lang="ja" hidden>
     <p class="meta">
-      通知バージョン <strong>PIS v8 · 2026-09</strong>。
+      通知バージョン <strong>PIS v9 · 2026-09</strong>。
       <a href="index.html">← プラットフォームへ戻る</a>
     </p>
 
@@ -709,15 +739,20 @@
       シナリオの指示だけです。実際の診察で尋ねる内容のみを入力してください。</p>
 
     <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>
-      （GitHub, Inc.、米国）上で実行されます。<strong>いずれの処理もセッションの内容は読み込みません。</strong>読み込むのは、
+      （GitHub, Inc.、米国）上で実行されます。<strong>毎日実行される処理は、セッションの内容を読み込みません。</strong>
+      読み込むのは、
       セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付だけです。
       1つの処理は証明書レコードも読み込みます。2026年9月1日までは、このうち2つの処理が
       <strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ
       複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定の
       ためです）。いずれも本来その内容を必要としておらず、現在は複製していません。これらの処理が記録するのは件数と
-      日付だけで、実行ログに個人データが書き込まれることはありません。データベース全体を
-      複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は
-      現在停止しており、手動で起動した場合にのみ実行されます。</p>
+      日付だけで、実行ログに個人データが書き込まれることはありません。データベース全体を複製する残る2つの処理（バックアップと擬似匿名化された
+      研究用エクスポート）は、2026年9月1日に再開しました。保存先は
+      <strong>Scaleway</strong>の<strong>パリ</strong>のオブジェクトストレージで、
+      模擬患者チャットを中継しているのと同じ委託先です。複製はEEA域内に留まり、
+      アクセスできるのはプラットフォーム管理者のみです。これらの処理は
+      2026年8月27日以降停止していました。本プラットフォームがGoogleの有料プランを
+      離れ、それまで使用していたストレージが書き込みを受け付けなくなったためです。</p>
 
     <h2>7. 越境移転</h2>
     <p>データベースは<strong>ベルギー（Google <code>europe-west1</code>
@@ -803,8 +838,15 @@
       審査・承認されています（番号と日付はコホート毎に記入）。</p>
 
     <h2>16. バージョン管理</h2>
-    <p>バージョン<strong>PIS v8 · 2026-09</strong>。
-      <strong>PIS v7からの重要な変更：</strong>GitHubへの移転を担保する仕組みに
+    <p>バージョン<strong>PIS v9 · 2026-09</strong>。
+      <strong>PIS v8からの重要な変更：</strong>日次バックアップと擬似匿名化された
+      研究用エクスポートが再開し、保存先がGoogleからパリのScalewayオブジェクト
+      ストレージへ変更されました（第6条）。Scalewayは既に模擬患者チャットの中継を
+      担っており、新たな提供先ではなく既存の委託先が追加の役割を担うものです。
+      複製はEEA域内に留まります。2026年8月27日から9月1日までの間、古いセッションの
+      削除は継続していた一方で、バックアップは一切取得されていませんでした。
+      重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
+      <strong>PIS v7からの重要な変更（継続掲載）：</strong>GitHubへの移転を担保する仕組みに
       関する懸案が解決しました。GitHub, Inc. はEU・米国データプライバシー
       フレームワークの有効な参加者であり、その認証は無料アカウント利用者のデータを
       対象としています。したがってこの移転は、契約条項ではなく欧州委員会による
