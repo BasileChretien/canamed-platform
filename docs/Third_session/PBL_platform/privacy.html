@@ -69,7 +69,7 @@
     <!-- ================== ENGLISH (canonical, legally binding) ===================== -->
     <section data-priv-lang="en">
     <p class="meta">
-      Notice version <strong>PIS v6 · 2026-09</strong>.
+      Notice version <strong>PIS v7 · 2026-09</strong>.
       <a href="index.html">← Back to the platform</a>
     </p>
 
@@ -164,14 +164,14 @@
       ask in a real consultation.</p>
 
     <p>The platform's scheduled maintenance jobs run on <strong>GitHub
-      Actions</strong> (GitHub, Inc., United States). One of them reads the
-      <strong>whole live session database</strong> onto a GitHub machine once a
-      day: the storage monitor, which measures how large the database has
-      become. The job that deletes old sessions reads only a list of session
-      identifiers and two dates for each &mdash; it used to read everything, and
-      was narrowed on 2026-09-01. A third reads the certificate records. These jobs report only
-      counts and sizes &mdash; no personal data is written into their logs
-      &mdash; but your data is processed on those machines while they run. Two
+      Actions</strong> (GitHub, Inc., United States). <strong>None of them reads your session content.</strong> They read a
+      list of session identifiers and, for each session, the two dates that
+      decide when it is deleted; one also reads the certificate records. Until
+      2026-09-01 two of these jobs copied the <strong>whole live session
+      database</strong> onto a GitHub machine every day &mdash; one to decide
+      what to delete, one to weigh how large the database had become. Neither
+      needed the contents to do its work, and neither does it any more. These jobs report only counts and dates &mdash; no personal
+      data is written into their logs. Two
       further jobs that copy the database in full, a backup and the
       pseudonymised research export, are switched off at present and run only if
       started by hand.</p>
@@ -190,7 +190,9 @@
       that border and comes back. Until 2026-08-31 the relay ran on Google
       Cloud; it moved to Scaleway when the platform left Google's paid plan.</p>
 
-    <p>Those maintenance jobs are a transfer <strong>outside the EEA</strong>.
+    <p>Those maintenance jobs are still a transfer <strong>outside the
+      EEA</strong> &mdash; what crosses is session identifiers, two dates per
+      session and the certificate records, rather than your session content.
       GitHub, Inc. is established in the <strong>United States</strong>, and the
       jobs run on Microsoft Azure machines whose region GitHub does not publish
       and which we cannot choose. GitHub publishes a data-protection agreement
@@ -258,7 +260,16 @@
       filled in per cohort).</p>
 
     <h2>16. Versioning</h2>
-    <p>Version <strong>PIS v6 · 2026-09</strong>. <strong>Material changes since PIS v5:</strong>
+    <p>Version <strong>PIS v7 · 2026-09</strong>. <strong>Material changes since PIS v6:</strong>
+      no scheduled maintenance job reads your session content at all now. The
+      storage monitor was the last one that did &mdash; it read the whole
+      database each day only to measure its size &mdash; and it no longer does;
+      it watches the number of sessions instead. What still crosses to the
+      United States is session identifiers, two dates per session and the
+      certificate records (sections 6 and 7). Like the v6 change below, this
+      <strong>reduces</strong> what leaves the EEA.
+      Material changes are issued under a new version with re-consent on next join.
+      <strong>Material changes since PIS v5, carried forward:</strong>
       the job that deletes old sessions no longer reads your session data at
       all. It now reads only a list of session identifiers and two dates for
       each, so the daily copy of the whole database onto a machine in the United
@@ -310,7 +321,7 @@
     <!-- ================== FRANÇAIS ===================== -->
     <section data-priv-lang="fr" hidden>
     <p class="meta">
-      Version de la notice <strong>PIS v6 · 2026-09</strong>.
+      Version de la notice <strong>PIS v7 · 2026-09</strong>.
       <a href="index.html">← Retour à la plateforme</a>
     </p>
 
@@ -408,16 +419,15 @@
       consultation réelle.</p>
 
     <p>Les tâches de maintenance planifiées de la plateforme s'exécutent sur
-      <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). L'une d'elles lit <strong>l'intégralité de la base de session en
-      cours</strong> sur une machine GitHub une fois par jour : le moniteur de
-      stockage, qui mesure la taille de la base. La tâche qui supprime les
-      séances anciennes ne lit qu'une liste d'identifiants de séance et deux
-      dates pour chacune &mdash; elle lisait auparavant l'intégralité des
-      données, et a été restreinte le 01/09/2026. Une troisième lit les
-      enregistrements de certificats. Ces tâches ne consignent que des
-      décomptes et des tailles &mdash; aucune donnée personnelle n'est écrite
-      dans leurs journaux &mdash; mais vos données sont traitées sur ces machines
-      pendant leur exécution. Deux autres tâches qui copient la base intégralement,
+      <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). <strong>Aucune d'elles ne lit le contenu de vos séances.</strong> Elles
+      lisent une liste d'identifiants de séance et, pour chaque séance, les deux
+      dates qui déterminent le moment de sa suppression ; l'une lit également les
+      enregistrements de certificats. Jusqu'au 01/09/2026, deux de ces tâches
+      copiaient <strong>l'intégralité de la base de session en cours</strong> sur
+      une machine GitHub chaque jour &mdash; l'une pour décider quoi supprimer,
+      l'autre pour mesurer la taille de la base. Ni l'une ni l'autre n'avait
+      besoin du contenu pour accomplir sa tâche, et ce n'est plus le cas. Ces tâches ne consignent que des décomptes et des dates
+      &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base intégralement,
       une sauvegarde et l'export de recherche pseudonymisé, sont actuellement
       désactivées et ne s'exécutent que si elles sont lancées manuellement.</p>
 
@@ -437,8 +447,10 @@
       sur Google Cloud ; il a été déplacé vers Scaleway lorsque la plateforme a
       quitté l'offre payante de Google.</p>
 
-    <p>Ces tâches de maintenance constituent un transfert <strong>hors
-      EEE</strong>. GitHub, Inc. est établie aux <strong>États-Unis</strong>, et
+    <p>Ces tâches de maintenance constituent toujours un transfert
+      <strong>hors EEE</strong> &mdash; ce qui franchit la frontière, ce sont des
+      identifiants de séance, deux dates par séance et les enregistrements de
+      certificats, et non le contenu de vos séances. GitHub, Inc. est établie aux <strong>États-Unis</strong>, et
       les tâches s'exécutent sur des machines Microsoft Azure dont GitHub ne
       publie pas la région et que nous ne pouvons pas choisir. GitHub publie un
       accord de protection des données qui intègre les clauses contractuelles
@@ -514,8 +526,19 @@
       cohorte).</p>
 
     <h2>16. Versionnement</h2>
-    <p>Version <strong>PIS v6 · 2026-09</strong>.
-      <strong>Modifications substantielles depuis la version PIS v5 :</strong>
+    <p>Version <strong>PIS v7 · 2026-09</strong>.
+      <strong>Modifications substantielles depuis la version PIS v6 :</strong>
+      aucune tâche de maintenance planifiée ne lit plus le contenu de vos
+      séances. Le moniteur de stockage était la dernière à le faire &mdash; il
+      lisait chaque jour l'intégralité de la base uniquement pour en mesurer la
+      taille &mdash; et ce n'est plus le cas : il surveille désormais le nombre
+      de séances. Ce qui part encore vers les États-Unis, ce sont des
+      identifiants de séance, deux dates par séance et les enregistrements de
+      certificats (sections 6 et 7). Comme la modification v6 ci-dessous, celle-ci
+      <strong>réduit</strong> ce qui sort de l'EEE.
+      Toute modification substantielle donne lieu à un nouveau numéro de version
+      avec re-consentement à la prochaine inscription.
+      <strong>Modifications substantielles depuis la version PIS v5, reprises :</strong>
       la tâche qui supprime les séances anciennes ne lit plus du tout vos données
       de séance. Elle ne lit désormais qu'une liste d'identifiants et deux dates
       par séance : la copie quotidienne de l'intégralité de la base vers une
@@ -574,7 +597,7 @@
     <!-- ================== 日本語 ===================== -->
     <section data-priv-lang="ja" hidden>
     <p class="meta">
-      通知バージョン <strong>PIS v6 · 2026-09</strong>。
+      通知バージョン <strong>PIS v7 · 2026-09</strong>。
       <a href="index.html">← プラットフォームへ戻る</a>
     </p>
 
@@ -659,14 +682,13 @@
       シナリオの指示だけです。実際の診察で尋ねる内容のみを入力してください。</p>
 
     <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>
-      （GitHub, Inc.、米国）上で実行されます。そのうち1つは、1日1回、
-      <strong>稼働中のセッションデータベース全体</strong>をGitHubのマシン上に
-      読み込みます。データベースの容量を測定するストレージ監視の処理です。
-      古いセッションを削除する保有期間管理の処理が読み込むのは、セッション識別子の
-      一覧と各セッションの2つの日付だけです（従来は全データを読み込んでいましたが、
-      2026年9月1日に限定しました）。3つ目の処理は証明書レコードを読み込みます。これらの処理が記録するのは件数と
-      容量だけで、実行ログに個人データが書き込まれることはありません。ただし、
-      実行中はこれらのマシン上であなたのデータが取り扱われます。データベース全体を
+      （GitHub, Inc.、米国）上で実行されます。<strong>いずれの処理もセッションの内容は読み込みません。</strong>読み込むのは、
+      セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付だけです。
+      1つの処理は証明書レコードも読み込みます。2026年9月1日までは、このうち2つの処理が
+      <strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ
+      複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定の
+      ためです）。いずれも本来その内容を必要としておらず、現在は複製していません。これらの処理が記録するのは件数と
+      日付だけで、実行ログに個人データが書き込まれることはありません。データベース全体を
       複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は
       現在停止しており、手動で起動した場合にのみ実行されます。</p>
 
@@ -684,7 +706,9 @@
       2026年8月31日までこの中継はGoogle Cloud上で稼働していましたが、本プラット
       フォームがGoogleの有料プランを離れたことに伴いScalewayへ移行しました。</p>
 
-    <p>これらのメンテナンス処理は<strong>EEA域外</strong>への移転にあたります。
+    <p>これらのメンテナンス処理は現在も<strong>EEA域外</strong>への移転にあたります。
+      ただし国境を越えるのは、セッション識別子、各セッションの2つの日付、および
+      証明書レコードであり、セッションの内容ではありません。
       GitHub, Inc. は<strong>米国</strong>に所在し、処理はMicrosoft Azureの
       マシン上で実行されますが、そのリージョンをGitHubは公表しておらず、
       当方が選択することもできません。GitHubは欧州委員会の標準契約条項を
@@ -749,8 +773,16 @@
       審査・承認されています（番号と日付はコホート毎に記入）。</p>
 
     <h2>16. バージョン管理</h2>
-    <p>バージョン<strong>PIS v6 · 2026-09</strong>。
-      <strong>PIS v5からの重要な変更：</strong>古いセッションを削除する処理は、
+    <p>バージョン<strong>PIS v7 · 2026-09</strong>。
+      <strong>PIS v6からの重要な変更：</strong>定期メンテナンス処理は、
+      セッションの内容を一切読み込まなくなりました。最後まで読み込んでいたのは
+      ストレージ監視の処理で、容量を測定するためだけに毎日データベース全体を
+      読み込んでいましたが、現在はセッション数を監視する方式に変更しています。
+      引き続き米国へ渡るのは、セッション識別子、各セッションの2つの日付、および
+      証明書レコードです（第6条・第7条）。下記のv6の変更と同様、本変更はEEA域外へ
+      出るデータを<strong>減らす</strong>ものです。
+      重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
+      <strong>PIS v5からの重要な変更（継続掲載）：</strong>古いセッションを削除する処理は、
       あなたのセッションデータを一切読み込まなくなりました。現在読み込むのは
       セッション識別子の一覧と各セッションの2つの日付のみであり、データベース全体を
       毎日米国のマシンへ複製する処理はなくなりました（ストレージ監視の処理では
