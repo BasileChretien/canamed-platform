@@ -136,7 +136,7 @@ runtime **`node22`**, handler **`handler.handle`**, and these variables:
 | `RTDB_URL` | `https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app` |
 | `MODA_LLM_ENABLED` | `true` (the panic button — `false` + redeploy falls every client back to the stub) |
 | `HF_URL` | `https://router.huggingface.co/v1/chat/completions` |
-| `HF_MODEL`, `HF_MODEL_JA` | `Qwen/Qwen3.5-9B` |
+| `HF_MODEL`, `HF_MODEL_JA` | `meta-llama/Llama-3.3-70B-Instruct` — **not** Qwen3.5-9B, which reasons and returns nothing usable on this provider (see the note above HF_DEFAULT_MODEL in `src/handler.js`) |
 | `HF_PROVIDER` | `ovhcloud` — a **residency control**, not a tuning knob |
 | `ALLOWED_ORIGINS` | `https://canamed-69785.web.app,https://canamed-69785.firebaseapp.com` |
 
@@ -196,11 +196,20 @@ curl -s -X POST -H 'Content-Type: application/json' -d '{"data":{}}' \
 
 3. Confirm the EU pin took effect: the response carries `provider`, taken from
    the router's `x-inference-provider` header. It must read `ovhcloud`. This is
-   the only end-to-end proof the pin works; a stub reply instead usually means
-   the model is not served by the pinned provider — check with:
+   the only end-to-end proof the pin works.
+
+   ⚠️ **A plausible in-character reply is NOT proof the model answered.** The
+   stub is scenario-aware, so it also sounds like the patient. Ask something
+   unscripted the canned text could not cover — "if your pain were a colour,
+   which would it be?" — and see whether the answer engages with it. That, or
+   the `provider` field, is the real test.
+
+   If a call fails, the response now carries `upstreamStatus`; a stub reply
+   with `upstreamStatus: 400` usually means the model is not served by the
+   pinned provider, or the request carries a field it rejects — check with:
 
    ```bash
-   curl -s 'https://huggingface.co/api/models/Qwen/Qwen3.5-9B?expand[]=inferenceProviderMapping'
+   curl -s 'https://huggingface.co/api/models/meta-llama/Llama-3.3-70B-Instruct?expand[]=inferenceProviderMapping'
    ```
 
 ## Legal follow-ups

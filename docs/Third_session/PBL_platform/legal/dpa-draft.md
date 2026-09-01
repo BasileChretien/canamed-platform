@@ -1675,17 +1675,39 @@ produce output — as Hugging Face and its downstream providers do — falls
   configuration (`EMAIL_ENABLED=false`, no SMTP host set) and the function records
   jobs as `disabled`. It must not be enabled until a provider is named here and a
   DPA with that provider is in place.
-- The model used for every language is `Qwen/Qwen3.5-9B`, and the request **pins
-  the inference provider to `ovhcloud`** (OVHcloud AI Endpoints, served from
-  Gravelines, France). Until 2026-08-20 the request was unpinned, which is why
-  the transfer table could not name a recipient for this leg: the router selected
-  a provider per request. The previous models — `meta-llama/Llama-3.1-8B-Instruct`
-  (EN/FR) and `Qwen/Qwen2.5-7B-Instruct` (JA) — were replaced because neither is
-  served by any provider that can be pinned inside the EEA. **The pin resolves the
-  ONWARD leg only.** The request still passes through the Hugging Face router,
-  which remains a separate recipient with its own location and transfer basis (see
-  the EEA → Hugging Face row above); pinning the inference provider does not close
-  that row, it closes the one below it.
+- The model used for every language is **`meta-llama/Llama-3.3-70B-Instruct`**,
+  and the request **pins the inference provider to `ovhcloud`** (OVHcloud AI
+  Endpoints, served from Gravelines, France). Until 2026-08-20 the request was
+  unpinned, which is why the transfer table could not name a recipient for this
+  leg: the router selected a provider per request.
+
+  **Model history, because this row has now changed twice.** The original pair —
+  `meta-llama/Llama-3.1-8B-Instruct` (EN/FR) and `Qwen/Qwen2.5-7B-Instruct` (JA)
+  — was replaced on 2026-08-20 by `Qwen/Qwen3.5-9B`, on the ground that neither
+  original was served by any EEA-pinnable provider. `Qwen/Qwen3.5-9B` was in turn
+  replaced on **2026-09-01**: it is a hybrid-reasoning model, OVHcloud rejects the
+  only request field that switches reasoning off, and left reasoning it consumed
+  its whole token budget without producing a reply — so in practice the chat never
+  reached the model at all and every room silently received the local stub
+  patient. `meta-llama/Llama-3.3-70B-Instruct` is the only NON-reasoning instruct
+  model OVHcloud serves, and is therefore the single option that satisfies both
+  working replies and the EEA pin.
+
+  **This change does NOT alter the transfer analysis.** The recipients are
+  unchanged — the Hugging Face router (#3) and OVHcloud (#4) — as are their
+  locations and contractual status. Only the model executed at #4 differs, which
+  is a factual detail this Annex must state accurately rather than a new export.
+
+  ⚠️ **One factual caveat for the notice text.** Meta lists eight supported
+  languages for Llama 3.3 and **Japanese is not among them**. Live testing on
+  2026-09-01 produced natural, idiomatic Japanese, so this is an absence of a
+  vendor guarantee rather than an observed defect — but the Controller should
+  not represent Japanese-language quality as vendor-supported.
+
+  **The pin resolves the ONWARD leg only.** The request still passes through the
+  Hugging Face router, which remains a separate recipient with its own location
+  and transfer basis (see the EEA → Hugging Face row above); pinning the
+  inference provider does not close that row, it closes the one below it.
 - **Why the proxy left Google (2026-08-31).** Not a data-protection decision in
   origin — the billing trial closed and Cloud Functions stopped working — but it
   has data-protection consequences that must not be glossed:

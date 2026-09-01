@@ -91,9 +91,34 @@ export const LIMITS = {
  * The per-uid and per-session limits below are unchanged and still enforced. */
 
 const HF_DEFAULT_URL = "https://router.huggingface.co/v1/chat/completions";
-const HF_DEFAULT_MODEL = "Qwen/Qwen3.5-9B";
+/* Llama-3.3-70B-Instruct, NOT the callable's Qwen/Qwen3.5-9B.
+ *
+ * Qwen3.5-9B is a HYBRID-REASONING model, and OVHcloud — the EEA-pinned
+ * provider — rejects the only field that switches reasoning off
+ * (chat_template_kwargs, HTTP 400). Qwen's in-prompt `/no_think` did not
+ * suppress it either. Left reasoning, it spent its whole token budget
+ * thinking and returned nothing visible: ~28s per turn and an empty reply,
+ * which every room saw as the stub patient.
+ *
+ * Llama-3.3-70B-Instruct is the only NON-reasoning instruct model OVHcloud
+ * serves, so it is the one choice that satisfies both "no reasoning" and the
+ * EEA residency pin. Verified live from a real room on 2026-09-01: coherent
+ * in-character replies in ~8s (EN) and ~6s (JA), `provider: "ovhcloud"`
+ * echoed back, and a novel unscripted question answered — which no canned
+ * stub could do.
+ *
+ * ⚠ Its Japanese is unofficial (Meta lists 8 languages, not JA) but tested
+ * natural and idiomatic. Re-check if the JA cohort reports awkward phrasing.
+ * ⚠ The model is NAMED in the DPA and the privacy notice — changing it again
+ * means changing those too. */
+const HF_DEFAULT_MODEL = "meta-llama/Llama-3.3-70B-Instruct";
 const HF_DEFAULT_PROVIDER = "ovhcloud";
-const TOTAL_BUDGET_MS = 25_000;
+/* 45s, up from the callable's 25s. Measured against the live deployment:
+ * OVHcloud took 28s to return for this model, so 25s timed out every call.
+ * 45s leaves headroom without letting a wedged request hold an instance for
+ * long. If replies routinely approach this, the model is the problem, not the
+ * budget. */
+const TOTAL_BUDGET_MS = 45_000;
 
 /* Mirrors the callable's PROMPT_VERSION so the two can be told apart in the
  * metrics, and so "which deployment answered this turn" is answerable. */
@@ -324,7 +349,28 @@ export async function handleRequest(request, env, deps) {
   // 3) Input shape.
   const lang = normLang(body.lang);
   if (!validateMessages(body.messages)) return fail("bad messages", "INVALID_ARGUMENT", 400);
-  const messages = buildMessages(body.messages);
+  let messages = buildMessages(body.messages);
+  /* ── /no_think ────────────────────────────────────────────────────────
+   * Qwen3.5 is a HYBRID-REASONING model. The callable suppressed the
+   * reasoning pass with `chat_template_kwargs: { enable_thinking: false }`,
+   * but OVHcloud REJECTS that field outright (HTTP 400 on every call —
+   * measured on the live proxy), so it had to be removed.
+   *
+   * Without it the model reasons first, and at any sane token budget it
+   * spends the WHOLE budget thinking and never reaches the answer:
+   * stripReasoning then removes the unterminated <think> block and the
+   * handler returns "empty reply" — which the room sees as the stub patient.
+   * Measured: 900 tokens, 28 seconds, no visible reply.
+   *
+   * `/no_think` is Qwen's own in-prompt switch for the same thing. It travels
+   * in the message body, so unlike chat_template_kwargs it works with any
+   * provider that serves the model. stripReasoning stays as the backstop —
+   * this suppresses the block, that removes it if one appears anyway. */
+  messages = messages.map((m, i) =>
+    i === 0 && m.role === "system"
+      ? { role: "system", content: m.content + "\n\n/no_think" }
+      : m);
+
 
   // 4) Room membership.
   const member = await verifyMembership(idToken, body, env, { fetch: doFetch, uid });
@@ -382,21 +428,59 @@ export async function handleRequest(request, env, deps) {
       body: JSON.stringify({
         model,
         messages,
-        max_tokens: 320,
+        /* 900, not the callable's 320.
+         *
+         * Qwen3.5 is a HYBRID-REASONING model and, with chat_template_kwargs
+         * removed (OVHcloud rejects it — see below), it emits a <think> block
+         * before answering. At 320 tokens it spent the ENTIRE budget thinking
+         * and never reached the answer; stripReasoning then removed the
+         * unterminated block and the handler returned "empty reply", which the
+         * room saw as the stub patient. Observed live on the deployed proxy.
+         *
+         * The visible reply is still capped at MAX_REPLY_CHARS (600) by
+         * sanitiseReply, so this buys the model room to think WITHOUT making
+         * replies longer. */
+        max_tokens: 900,
         temperature: 0.55,
         top_p: 0.9,
         presence_penalty: 0.3,
         stop: ["\nDoctor:", "\n- ", "[INST]", "</s>"],
-        chat_template_kwargs: { enable_thinking: false },
+        /* `chat_template_kwargs: { enable_thinking: false }` was here, copied
+         * from the Cloud Function. OVHcloud's endpoint REJECTS it: the live
+         * proxy returned HTTP 400 from the router on EVERY call, which the
+         * client reported to the room as the stub patient. Hugging Face's docs
+         * say providers that do not understand the field ignore it — this one
+         * does not, so it is not safe to send unconditionally.
+         *
+         * Dropping it is safe because it was only ever the belt of a
+         * belt-and-braces pair: hf-helpers.stripReasoning removes any <think>
+         * block from the reply, and THAT is the guarantee. The flag merely
+         * asked the model not to emit one. */
         stream: false
       })
     });
 
     if (!res.ok) {
-      // The provider body is NOT forwarded (2026-05-30 round-2 review): it can
-      // carry account and routing detail the client has no business seeing.
+      /* The provider BODY is still not forwarded (2026-05-30 round-2 review):
+       * it can carry account and routing detail the client has no business
+       * seeing. The numeric STATUS is different — it is not sensitive, and
+       * without it a failing backend is undiagnosable from outside.
+       *
+       * That mattered immediately: the first live end-to-end test returned
+       * "backend unavailable" and there was no way to tell an expired token
+       * (401) from an exhausted allowance (402) from a bad model id (404)
+       * without redeploying to add a log line. The whole recurring failure in
+       * this project is silent degradation — the room gets the stub patient
+       * and nobody can see why. A status code is the cheapest possible cure.
+       *
+       * Scaleway's log tab needs Cockpit provisioned, so console.error alone
+       * was not reachable either; this travels back in the response. */
       console.error("[hfPatient-proxy] HF HTTP " + res.status);
-      return reply({ result: { reply: "", state: "error", error: "backend unavailable" } });
+      return reply({ result: {
+        reply: "", state: "error",
+        error: "backend unavailable",
+        upstreamStatus: res.status
+      } });
     }
     const data = await res.json();
     const raw = data && data.choices && data.choices[0] &&
@@ -408,6 +492,7 @@ export async function handleRequest(request, env, deps) {
       result: {
         reply: text,
         state: "ok",
+        elapsedMs: (d.now ? d.now() : Date.now()) - now,
         promptVersion: PROMPT_VERSION,
         // The header the router echoes is the only end-to-end proof the EU
         // provider pin actually took effect.
@@ -417,7 +502,12 @@ export async function handleRequest(request, env, deps) {
   } catch (e) {
     const aborted = e && (e.name === "AbortError" || /abort/i.test(String(e.message || "")));
     console.error("[hfPatient-proxy] " + (aborted ? "HF timeout" : "HF call failed"));
-    return reply({ result: { reply: "", state: "error", error: "backend unavailable" } });
+    // Same reasoning as above: name the SHAPE of the failure, never the body.
+    return reply({ result: {
+      reply: "", state: "error",
+      error: "backend unavailable",
+      upstreamStatus: aborted ? "timeout" : "network"
+    } });
   } finally {
     clearTimeout(timer);
   }
