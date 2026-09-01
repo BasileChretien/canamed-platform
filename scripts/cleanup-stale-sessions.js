@@ -52,7 +52,11 @@
 
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
-const { readSessionLocations, safeLabel } = require("./lib/session-trees");
+const {
+  readSessionLocations,
+  readSessionLocationsShallow,
+  safeLabel
+} = require("./lib/session-trees");
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
 const { readBackupMarker, backupGateReport } = require("./lib/backup-marker");
@@ -143,7 +147,7 @@ async function pruneMetrics(db) {
 
 async function main() {
   // initializeApp picks up GOOGLE_APPLICATION_CREDENTIALS automatically
-  initializeApp({ databaseURL: DB_URL });
+  const app = initializeApp({ databaseURL: DB_URL });
   const db = getDatabase();
 
   console.log("--- CaNaMED session cleanup ---");
@@ -153,9 +157,30 @@ async function main() {
   console.log(`Mode:        ${CONFIRM ? "LIVE — deletions WILL happen" : "DRY-RUN"}`);
   console.log("");
 
-  // BOTH trees: sessions/<code> and orgs/<slug>/sessions/<id>. Org sessions
-  // were previously invisible to this job and so were never purged.
-  const locations = await readSessionLocations(db);
+  /* BOTH trees: sessions/<code> and orgs/<slug>/sessions/<id>. Org sessions
+   * were previously invisible to this job and so were never purged.
+   *
+   * ENUMERATED BY KEY ONLY. This job reads `created/at` and `closed/at` per
+   * session and nothing else — the per-session read below has said so in a
+   * comment for a long time — but it used to get its list from
+   * readSessionLocations(), which deep-reads all of `sessions` and `orgs`.
+   * So the whole identified database, names and free-text chat included, was
+   * copied onto a GitHub Actions runner in the United States every night and
+   * discarded unused. The comment below was accurate about its own two reads
+   * and completely undone by the line above it. Art. 5(1)(c).
+   *
+   * CLEANUP_DEEP_ENUM=1 restores the old behaviour. It exists because this is
+   * a legally load-bearing job that cannot be exercised end-to-end outside
+   * production: if the shallow path ever misbehaves, an operator can revert
+   * without a deploy. It is NOT a fallback — nothing selects it automatically,
+   * because a silent fallback would hide exactly the breakage worth seeing. */
+  const deepEnum = process.env.CLEANUP_DEEP_ENUM === "1";
+  console.log(`Enumeration: ${deepEnum
+    ? "DEEP (CLEANUP_DEEP_ENUM=1) — reads every session body"
+    : "shallow — keys only, no session bodies leave the database"}`);
+  const locations = deepEnum
+    ? await readSessionLocations(db)
+    : await readSessionLocationsShallow({ app, databaseURL: DB_URL });
   const orgCount = locations.filter(l => l.orgSlug).length;
   console.log(`Found ${locations.length} sessions (${locations.length - orgCount} default, ${orgCount} org-scoped).`);
 

@@ -14,22 +14,20 @@
  * DID describe the transfer, but attributed it to the nightly BACKUP job. When
  * the backup was disabled on 2026-08-31 (no GCS on the Spark plan), it would
  * have been natural to conclude the transfer had stopped. It had not — two
- * OTHER jobs are still scheduled and each deep-reads the whole tree:
- *
- *   - scripts/firebase-cost-monitor.js  — db.ref("sessions").once("value")
- *   - scripts/cleanup-stale-sessions.js — via lib/session-trees.js, which reads
- *     `sessions` and `orgs` in full even though it uses only two timestamps
+ * OTHER scheduled jobs were each deep-reading the whole tree.
  *
  * So the test derives from what is SCHEDULED and what those scripts READ,
- * rather than from any job's name. Disable the backup and nothing here changes;
- * disable the cost monitor and the purge job, and the obligation genuinely goes
- * away and this test relaxes with it.
+ * rather than from any job's name. Disable the backup and nothing here changes.
  *
- * NB the second of those reads is a data-minimisation defect in its own right
- * (Art. 5(1)(c)): the purge job needs `created/at` and `closed/at`, not the
- * bodies. Narrowing it is a change to a live retention job, so it is tracked
- * separately rather than bundled into a notice fix — but if it ever lands, this
- * test is where the notice's claim should be revisited.
+ * ONE of those two has since been fixed (2026-09-01, PIS v6): the purge job now
+ * enumerates by key over `?shallow=true` and reads two timestamps per session,
+ * because that is all it ever used — the full read was an Art. 5(1)(c) defect,
+ * not a requirement. `scripts/firebase-cost-monitor.js` still deep-reads, and
+ * genuinely needs to: it measures the tree's serialised size.
+ *
+ * That fix is why `enumeratesShallowly()` exists below, and why there is now a
+ * test asserting the purge is NOT in the list. The notice makes a positive claim
+ * about what the purge reads, so a regression has to fail something.
  */
 
 const test = require("node:test");
@@ -90,11 +88,32 @@ function deepReadsSessions(rel, seen = new Set()) {
   return false;
 }
 
+/* A script that enumerates with readSessionLocationsShallow does NOT copy
+   session bodies, even though the deep reader is still reachable from the
+   module it imports: cleanup-stale-sessions keeps `readSessionLocations(db)`
+   behind CLEANUP_DEEP_ENUM=1 as an operator escape hatch, and backup/export
+   genuinely need it. Without this exclusion the derivation reports the purge
+   as a full-database transfer, which stopped being true on 2026-09-01 and
+   would make the notice's wording wrong in the other direction.
+
+   That the escape hatch really is opt-in — never a catch-block fallback — is
+   asserted in tests/session-enum-shallow.test.js, which is where that
+   invariant belongs. */
+function enumeratesShallowly(rel) {
+  try {
+    return /readSessionLocationsShallow\s*\(/.test(read(ROOT, rel));
+  } catch {
+    return false;
+  }
+}
+
 function jobsReadingTheSessionTree() {
   const out = [];
   for (const w of scheduledWorkflows()) {
     for (const s of scriptsOf(w.yml)) {
-      if (deepReadsSessions(s)) out.push({ workflow: w.file, script: s });
+      if (deepReadsSessions(s) && !enumeratesShallowly(s)) {
+        out.push({ workflow: w.file, script: s });
+      }
     }
   }
   return out;
@@ -198,5 +217,35 @@ test("the notice version moved past the one that omitted this", () => {
     assert.ok(v >= 5,
       "privacy.html still declares PIS v" + v + " · …; v4 and earlier predate the " +
         "GitHub Actions disclosure");
+  }
+});
+
+test("the purge job is NOT one of them — the notice says so in three languages", () => {
+  /* Section 6 states that the job which deletes old sessions "reads only a list
+     of session identifiers and two dates for each". That is a published factual
+     claim about processing, so it needs a guard of its own: if the purge ever
+     goes back to enumerating deeply, the notice becomes untrue and this fails.
+
+     Asserted separately from the list above because the two say different
+     things — that one is "somebody still does this", this one is "and it is not
+     the purge". */
+  const purge = "scripts/cleanup-stale-sessions.js";
+  assert.ok(enumeratesShallowly(purge),
+    purge + " no longer enumerates shallowly, but privacy.html section 6 still " +
+      "tells participants it reads only identifiers and dates.");
+
+  const named = jobsReadingTheSessionTree().map((j) => j.script);
+  assert.ok(!named.includes(purge),
+    "the purge is being counted as a full-database transfer again");
+
+  const s = privacySections();
+  const claim = {
+    en: /reads only a list of session\s+identifiers and two dates/i,
+    fr: /ne lit qu'une liste d'identifiants de séance et deux\s+dates/i,
+    ja: /セッション識別子の\s*一覧と各セッションの2つの日付だけです/
+  };
+  for (const lang of ["en", "fr", "ja"]) {
+    assert.ok(claim[lang].test(recipientsAndTransfers(s[lang], lang)),
+      "privacy.html [" + lang + "] no longer states what the purge job reads");
   }
 });
