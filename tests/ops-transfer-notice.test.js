@@ -184,11 +184,18 @@ function privacySections() {
 /* Sections 6-7 only. The section-16 changelog describes this very change, so a
    whole-body search would be satisfied by the changelog alone — the same
    false-pass that llm-recipients-notice.test.js had to be narrowed to avoid. */
+/* Collapse whitespace before matching. privacy.html is hand-wrapped source, so a
+   phrase like "Data Privacy Framework" can be split across a line break and an
+   indent — a literal multi-word regex then fails on correct content, and, worse,
+   a deletion could hide behind a re-wrap. Every match in this file runs against
+   the normalised text for that reason. */
+const flat = (t) => String(t).replace(/\s+/g, " ");
+
 function recipientsAndTransfers(body, lang) {
   const start = body.indexOf("<h2>6.");
   const end = body.indexOf("<h2>8.");
   assert.ok(start >= 0 && end > start, "sections 6-7 not found in the " + lang + " body");
-  return body.slice(start, end);
+  return flat(body.slice(start, end));
 }
 
 // ---- tests -----------------------------------------------------------------
@@ -261,27 +268,17 @@ test("the transfer out of the EEA is disclosed, not just the recipient", () => {
   }
 });
 
-test("the notice does not claim a transfer safeguard the DPA calls unresolved", () => {
-  /* The one thing worse than omitting the transfer is asserting a mechanism
-     that has not been established. GitHub's DPA does incorporate the SCCs, but
-     its scope is tied to the Customer Agreement and it is not established that
-     a free-plan public repo falls inside it — so Annex III row #5 records the
-     mechanism as UNRESOLVED. The published notice must not get ahead of that.
-     This test fails if the DPA still says unresolved while the notice has
-     started claiming coverage. */
-  if (jobsTouchingTheDatabase().length === 0) return;
-  const dpa = read(PLATFORM, "legal", "dpa-draft.md");
-  const unresolved = /Transfer mechanism UNRESOLVED/.test(dpa);
-  if (!unresolved) return; // the question was settled; this guard steps aside
+/* REMOVED 2026-09-01 — "the notice does not claim a transfer safeguard the DPA
+   calls unresolved". It was conditional on Annex III row #5 saying UNRESOLVED,
+   and stepped aside the moment that was settled, leaving a test that could never
+   fail again. A conditional wrapping the only assertion is a green test that
+   tests nothing, so it is deleted rather than left as decoration.
 
-  const en = recipientsAndTransfers(privacySections().en, "en");
-  assert.ok(
-    /(not yet been confirmed|being confirmed)/i.test(en),
-    "Annex III row #5 still records the GitHub transfer mechanism as UNRESOLVED, " +
-      "but privacy.html no longer says the safeguard is unconfirmed. Either the " +
-      "DPA row was settled and should say so, or the notice is overclaiming."
-  );
-});
+   Its job moved to tests/github-dpf-currency.test.js, running the other way
+   round: the transfer now rests on EU-US Data Privacy Framework adequacy, so the
+   notice must NAME that basis, must not still say the check is outstanding, and
+   the certification's expiry date is watched — an adequacy basis can lapse
+   without anything in this repo noticing. */
 
 test("the notice version moved past the one that omitted this", () => {
   if (jobsTouchingTheDatabase().length === 0) return;

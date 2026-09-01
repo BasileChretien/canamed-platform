@@ -116,12 +116,19 @@ function privacySections() {
    section 6, because the changelog still mentioned it. The heading NUMBER is
    the same in all three languages even though the wording is not, so slice on
    that. */
+/* Collapse whitespace before matching. privacy.html is hand-wrapped source, so a
+   phrase like "Data Privacy Framework" can be split across a line break and an
+   indent — a literal multi-word regex then fails on correct content, and, worse,
+   a deletion could hide behind a re-wrap. Every match in this file runs against
+   the normalised text for that reason. */
+const flat = (t) => String(t).replace(/\s+/g, " ");
+
 function recipientsAndTransfers(body, lang) {
   const start = body.indexOf("<h2>6.");
   const end = body.indexOf("<h2>8.");
   assert.ok(start >= 0, "no section 6 heading in the " + lang + " body");
   assert.ok(end > start, "no section 8 heading after section 6 in the " + lang + " body");
-  return body.slice(start, end);
+  return flat(body.slice(start, end));
 }
 
 test("privacy.html carries all three published language bodies", () => {
