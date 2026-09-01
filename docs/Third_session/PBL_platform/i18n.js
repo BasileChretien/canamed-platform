@@ -1008,7 +1008,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v15";  // Q1 asks only for the working diagnosis (plan deduped to the dec_plan vote)
+  const LOCALE_VERSION = "v15";  // PIS v4: the chat disclosure now names the real relay chain
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
