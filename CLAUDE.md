@@ -715,7 +715,17 @@ estimate; the two together are why Monitor stays.
    a $1 budget alert (volumes stay inside the Cloud Functions free tier);
    **(c)** `HF_TOKEN` set in Secret Manager + `functions/.env` with
    `MODA_LLM_ENABLED=true`, `HF_PROVIDER=ovhcloud`, `HF_MODEL=Qwen/Qwen3.5-9B`,
-   `HF_MODEL_JA=Qwen/Qwen3.5-9B` — **`HF_PROVIDER` is a DATA-RESIDENCY control,
+   `HF_MODEL_JA=Qwen/Qwen3.5-9B`
+   > ⚠️ **DO NOT REUSE THAT MODEL IF BLAZE IS EVER RESTORED.** Proven on the
+   > live proxy 2026-09-01: `Qwen/Qwen3.5-9B` does not work on `ovhcloud`. It
+   > is a hybrid-reasoning model, OVHcloud rejects `chat_template_kwargs`
+   > (HTTP 400) — the only field that switches reasoning off — and `/no_think`
+   > does not suppress it either, so it burns its whole token budget thinking
+   > and returns an empty reply. The Cloud Function's `.env.example` and
+   > `functions/index.js` still name it because that function cannot deploy at
+   > all right now; they are historical, not a recommendation. Use
+   > `meta-llama/Llama-3.3-70B-Instruct`, as `proxy/` does.
+   — **`HF_PROVIDER` is a DATA-RESIDENCY control,
    not a tuning knob** (2026-08-20): unpinned, the HF router picks a provider per
    request, so the recipient of the free-text chat varies turn to turn and cannot
    be named in the DPA; `ovhcloud` serves from Gravelines, FRANCE. **Careful with
