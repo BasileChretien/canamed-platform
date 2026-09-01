@@ -69,7 +69,7 @@
     <!-- ================== ENGLISH (canonical, legally binding) ===================== -->
     <section data-priv-lang="en">
     <p class="meta">
-      Notice version <strong>PIS v4 · 2026-09</strong>.
+      Notice version <strong>PIS v5 · 2026-09</strong>.
       <a href="index.html">← Back to the platform</a>
     </p>
 
@@ -163,6 +163,18 @@
       scenario's instructions, and nothing else. Please type only what you would
       ask in a real consultation.</p>
 
+    <p>The platform's scheduled maintenance jobs run on <strong>GitHub
+      Actions</strong> (GitHub, Inc., United States). Two of them read the
+      <strong>whole live session database</strong> onto a GitHub machine once a
+      day: the retention job, which works out which sessions are old enough to
+      delete, and the storage monitor, which measures how large the database has
+      become. A third reads the certificate records. These jobs report only
+      counts and sizes &mdash; no personal data is written into their logs
+      &mdash; but your data is processed on those machines while they run. Two
+      further jobs that copy the database in full, a backup and the
+      pseudonymised research export, are switched off at present and run only if
+      started by hand.</p>
+
     <h2>7. International transfers</h2>
     <p>The database is hosted in <strong>Belgium
       (Google <code>europe-west1</code>)</strong>. For Japanese participants
@@ -176,6 +188,16 @@
       <strong>outside the EEA</strong>, so what you type in that chat crosses
       that border and comes back. Until 2026-08-31 the relay ran on Google
       Cloud; it moved to Scaleway when the platform left Google's paid plan.</p>
+
+    <p>Those maintenance jobs are a transfer <strong>outside the EEA</strong>.
+      GitHub, Inc. is established in the <strong>United States</strong>, and the
+      jobs run on Microsoft Azure machines whose region GitHub does not publish
+      and which we cannot choose. GitHub publishes a data-protection agreement
+      that incorporates the European Commission's standard contractual clauses;
+      whether it covers this project's free-plan use has not yet been confirmed.
+      We are completing that check and you may ask us for its outcome. For
+      Japanese participants this is a cross-border transfer under APPI Art. 28
+      to a country outside the EU&ndash;Japan arrangement described above.</p>
 
     <h2>8. Retention</h2>
     <ul>
@@ -235,7 +257,15 @@
       filled in per cohort).</p>
 
     <h2>16. Versioning</h2>
-    <p>Version <strong>PIS v4 · 2026-09</strong>. <strong>Material changes since PIS v3:</strong>
+    <p>Version <strong>PIS v5 · 2026-09</strong>. <strong>Material changes since PIS v4:</strong>
+      disclosed that the platform's scheduled maintenance jobs run on GitHub
+      Actions in the United States, that two of them read the whole live session
+      database onto a GitHub machine daily, and that this is a transfer outside
+      the EEA whose safeguard is still being confirmed (sections 6 and 7). Like
+      the v4 change below, this processing was already running and had simply
+      never been described.
+      Material changes are issued under a new version with re-consent on next join.
+      <strong>Material changes since PIS v3, carried forward:</strong>
       disclosed the simulated-patient chat in Module A and the three recipients
       it passes through &mdash; Scaleway (Paris), Hugging Face and OVHcloud
       (Gravelines) &mdash; together with what each of them receives (section 6),
@@ -271,7 +301,7 @@
     <!-- ================== FRANÇAIS ===================== -->
     <section data-priv-lang="fr" hidden>
     <p class="meta">
-      Version de la notice <strong>PIS v4 · 2026-09</strong>.
+      Version de la notice <strong>PIS v5 · 2026-09</strong>.
       <a href="index.html">← Retour à la plateforme</a>
     </p>
 
@@ -368,6 +398,19 @@
       rien d'autre. Ne saisissez que ce que vous demanderiez lors d'une
       consultation réelle.</p>
 
+    <p>Les tâches de maintenance planifiées de la plateforme s'exécutent sur
+      <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). Deux d'entre
+      elles lisent <strong>l'intégralité de la base de session en cours</strong>
+      sur une machine GitHub une fois par jour : la tâche de purge, qui
+      détermine quelles séances sont assez anciennes pour être supprimées, et le
+      moniteur de stockage, qui mesure la taille de la base. Une troisième lit
+      les enregistrements de certificats. Ces tâches ne consignent que des
+      décomptes et des tailles &mdash; aucune donnée personnelle n'est écrite
+      dans leurs journaux &mdash; mais vos données sont traitées sur ces machines
+      pendant leur exécution. Deux autres tâches qui copient la base intégralement,
+      une sauvegarde et l'export de recherche pseudonymisé, sont actuellement
+      désactivées et ne s'exécutent que si elles sont lancées manuellement.</p>
+
     <h2>7. Transferts internationaux</h2>
     <p>La base est hébergée en <strong>Belgique (région Google
       <code>europe-west1</code>)</strong>. Pour les participants japonais,
@@ -383,6 +426,18 @@
       cette frontière, puis revient. Jusqu'au 31/08/2026 le relais fonctionnait
       sur Google Cloud ; il a été déplacé vers Scaleway lorsque la plateforme a
       quitté l'offre payante de Google.</p>
+
+    <p>Ces tâches de maintenance constituent un transfert <strong>hors
+      EEE</strong>. GitHub, Inc. est établie aux <strong>États-Unis</strong>, et
+      les tâches s'exécutent sur des machines Microsoft Azure dont GitHub ne
+      publie pas la région et que nous ne pouvons pas choisir. GitHub publie un
+      accord de protection des données qui intègre les clauses contractuelles
+      types de la Commission européenne ; il n'est pas encore confirmé qu'il
+      couvre l'usage de ce projet, qui relève d'une offre gratuite. Cette
+      vérification est en cours et vous pouvez nous en demander le résultat. Pour
+      les participants japonais, il s'agit d'un transfert transfrontalier au sens
+      de l'art. 28 APPI vers un pays non couvert par l'accord UE-Japon mentionné
+      ci-dessus.</p>
 
     <h2>8. Durée de conservation</h2>
     <ul>
@@ -449,8 +504,18 @@
       cohorte).</p>
 
     <h2>16. Versionnement</h2>
-    <p>Version <strong>PIS v4 · 2026-09</strong>.
-      <strong>Modifications substantielles depuis la version PIS v3 :</strong>
+    <p>Version <strong>PIS v5 · 2026-09</strong>.
+      <strong>Modifications substantielles depuis la version PIS v4 :</strong>
+      mention du fait que les tâches de maintenance planifiées de la plateforme
+      s'exécutent sur GitHub Actions aux États-Unis, que deux d'entre elles
+      lisent chaque jour l'intégralité de la base de session en cours sur une
+      machine GitHub, et qu'il s'agit d'un transfert hors EEE dont la garantie
+      reste à confirmer (sections 6 et 7). Comme pour la modification v4
+      ci-dessous, ce traitement était déjà en fonctionnement et n'avait
+      simplement jamais été décrit.
+      Toute modification substantielle donne lieu à un nouveau numéro de version
+      avec re-consentement à la prochaine inscription.
+      <strong>Modifications substantielles depuis la version PIS v3, reprises :</strong>
       mention de la conversation avec le patient simulé du module A et des trois
       destinataires par lesquels elle transite &mdash; Scaleway (Paris), Hugging
       Face et OVHcloud (Gravelines) &mdash; avec le détail de ce que chacun
@@ -489,7 +554,7 @@
     <!-- ================== 日本語 ===================== -->
     <section data-priv-lang="ja" hidden>
     <p class="meta">
-      通知バージョン <strong>PIS v4 · 2026-09</strong>。
+      通知バージョン <strong>PIS v5 · 2026-09</strong>。
       <a href="index.html">← プラットフォームへ戻る</a>
     </p>
 
@@ -573,6 +638,17 @@
       その先へは渡されません。Hugging FaceとOVHcloudが受け取るのは、会話の内容と
       シナリオの指示だけです。実際の診察で尋ねる内容のみを入力してください。</p>
 
+    <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>
+      （GitHub, Inc.、米国）上で実行されます。そのうち2つは、1日1回、
+      <strong>稼働中のセッションデータベース全体</strong>をGitHubのマシン上に
+      読み込みます。すなわち、どのセッションが削除対象となる古さかを判定する
+      保有期間管理の処理と、データベースの容量を測定するストレージ監視の処理です。
+      3つ目の処理は証明書レコードを読み込みます。これらの処理が記録するのは件数と
+      容量だけで、実行ログに個人データが書き込まれることはありません。ただし、
+      実行中はこれらのマシン上であなたのデータが取り扱われます。データベース全体を
+      複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は
+      現在停止しており、手動で起動した場合にのみ実行されます。</p>
+
     <h2>7. 越境移転</h2>
     <p>データベースは<strong>ベルギー（Google <code>europe-west1</code>
       リージョン）</strong>にホストされています。日本の参加者にとっては
@@ -586,6 +662,16 @@
       であるため、このチャットに入力した内容は一度EEAの外に出て戻ってきます。
       2026年8月31日までこの中継はGoogle Cloud上で稼働していましたが、本プラット
       フォームがGoogleの有料プランを離れたことに伴いScalewayへ移行しました。</p>
+
+    <p>これらのメンテナンス処理は<strong>EEA域外</strong>への移転にあたります。
+      GitHub, Inc. は<strong>米国</strong>に所在し、処理はMicrosoft Azureの
+      マシン上で実行されますが、そのリージョンをGitHubは公表しておらず、
+      当方が選択することもできません。GitHubは欧州委員会の標準契約条項を
+      組み込んだデータ保護契約を公開していますが、無料プランで利用している
+      本プロジェクトにそれが適用されるかは未確認です。現在確認を進めており、
+      結果はご請求いただければお知らせします。日本の参加者にとっては、
+      上記のEU・日本間の枠組みの対象外である国へのAPPI第28条に基づく
+      越境移転にあたります。</p>
 
     <h2>8. 保有期間</h2>
     <ul>
@@ -642,8 +728,15 @@
       審査・承認されています（番号と日付はコホート毎に記入）。</p>
 
     <h2>16. バージョン管理</h2>
-    <p>バージョン<strong>PIS v4 · 2026-09</strong>。
-      <strong>PIS v3からの重要な変更：</strong>モジュールAの模擬患者との
+    <p>バージョン<strong>PIS v5 · 2026-09</strong>。
+      <strong>PIS v4からの重要な変更：</strong>本プラットフォームの定期メンテナンス
+      処理が米国のGitHub Actions上で実行されること、そのうち2つが稼働中の
+      セッションデータベース全体を毎日GitHubのマシンに読み込むこと、および
+      これがEEA域外への移転であり、その保護措置は現在確認中であることを明記しました
+      （第6条・第7条）。下記のv4の変更と同様、この処理は既に稼働していたものであり、
+      単に記載されていなかっただけです。
+      重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
+      <strong>PIS v3からの重要な変更（継続掲載）：</strong>モジュールAの模擬患者との
       チャット、およびそれが経由する3つの提供先 &mdash; Scaleway（パリ）、
       Hugging Face、OVHcloud（グラヴリーヌ）&mdash; と、各社が受け取る情報の
       内訳を明記しました（第6条）。あわせて、Hugging Faceによる取次ぎの段階が
