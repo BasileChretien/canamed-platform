@@ -91,7 +91,27 @@ export const LIMITS = {
  * The per-uid and per-session limits below are unchanged and still enforced. */
 
 const HF_DEFAULT_URL = "https://router.huggingface.co/v1/chat/completions";
-const HF_DEFAULT_MODEL = "Qwen/Qwen3.5-9B";
+/* Llama-3.3-70B-Instruct, NOT the callable's Qwen/Qwen3.5-9B.
+ *
+ * Qwen3.5-9B is a HYBRID-REASONING model, and OVHcloud — the EEA-pinned
+ * provider — rejects the only field that switches reasoning off
+ * (chat_template_kwargs, HTTP 400). Qwen's in-prompt `/no_think` did not
+ * suppress it either. Left reasoning, it spent its whole token budget
+ * thinking and returned nothing visible: ~28s per turn and an empty reply,
+ * which every room saw as the stub patient.
+ *
+ * Llama-3.3-70B-Instruct is the only NON-reasoning instruct model OVHcloud
+ * serves, so it is the one choice that satisfies both "no reasoning" and the
+ * EEA residency pin. Verified live from a real room on 2026-09-01: coherent
+ * in-character replies in ~8s (EN) and ~6s (JA), `provider: "ovhcloud"`
+ * echoed back, and a novel unscripted question answered — which no canned
+ * stub could do.
+ *
+ * ⚠ Its Japanese is unofficial (Meta lists 8 languages, not JA) but tested
+ * natural and idiomatic. Re-check if the JA cohort reports awkward phrasing.
+ * ⚠ The model is NAMED in the DPA and the privacy notice — changing it again
+ * means changing those too. */
+const HF_DEFAULT_MODEL = "meta-llama/Llama-3.3-70B-Instruct";
 const HF_DEFAULT_PROVIDER = "ovhcloud";
 /* 45s, up from the callable's 25s. Measured against the live deployment:
  * OVHcloud took 28s to return for this model, so 25s timed out every call.

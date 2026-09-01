@@ -200,6 +200,40 @@ red probe means reading every failing workflow, not just the one that mailed.
   problem into a standing retention breach. Deletion is the legal duty; the
   backup is disaster recovery.
 
+### ✅ THE LLM PATIENT IS LIVE AGAIN (2026-09-01) — Scaleway fr-par + Llama-3.3-70B
+
+Verified end to end from a REAL room on the live site: coherent in-character
+replies in ~8 s (EN) and ~6 s (JA), `provider: "ovhcloud"` echoed back, and a
+novel unscripted question answered — which no canned stub could do.
+
+⚠️ **THE MODEL CHANGED: `Qwen/Qwen3.5-9B` → `meta-llama/Llama-3.3-70B-Instruct`.**
+Qwen3.5-9B is a HYBRID-REASONING model and OVHcloud — the EEA-pinned provider —
+**rejects `chat_template_kwargs` (HTTP 400)**, the only field that switches
+reasoning off. Qwen's in-prompt `/no_think` did not suppress it either. Left
+reasoning, it spent its entire token budget thinking and returned an empty
+reply: ~28 s per turn, and every room saw the stub patient. Llama-3.3-70B is
+the only NON-reasoning instruct model OVHcloud serves, so it is the single
+choice satisfying both "no reasoning" and EEA residency.
+⚠️ **The model is NAMED in the DPA (Annex III) and the privacy-notice draft** —
+those still say Qwen3.5-9B and must be corrected before either is published.
+Its Japanese is unofficial (Meta lists 8 languages, not JA) but tested natural.
+
+⚠️ **TWO TRAPS THAT COST HOURS, both worth knowing before touching this again:**
+1. **Scaleway's Settings save has a SECOND confirmation dialog.** Clicking
+   "Save function settings" opens a "Save settings" modal that must ALSO be
+   confirmed. Until that is clicked NOTHING is applied — the form keeps
+   showing your edits, so it looks saved. Several "changed the model, still
+   broken" conclusions were drawn from runs that had silently re-tested the
+   ORIGINAL model. Verify a settings change by RELOADING the page, or by an
+   observable behaviour change, never by the form's own contents.
+2. **A plausible in-character reply is NOT proof the model answered.** The stub
+   is scenario-aware, so it sounds like the patient too. Ask something
+   unscripted ("if your pain were a colour…") or read the `provider` field.
+
+`Verify:` a call now returns `upstreamStatus` on HF failure — the field that
+made this diagnosable at all, since Scaleway's log tab needs Cockpit
+provisioned and the handler deliberately never forwards the provider body.
+
 ### The LLM patient runs on a SELF-HOSTED PROXY now (2026-08-31)
 
 Rather than restore billing, Module A's chat was moved off Cloud Functions.
