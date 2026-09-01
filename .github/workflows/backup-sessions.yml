@@ -72,6 +72,11 @@ on:
   # schedule:
   #   - cron: "47 2 * * *"  # daily 02:47 UTC — 30 min before cleanup (03:17)
   workflow_dispatch:
+    inputs:
+      bucket:
+        description: "Archive bucket to use (blank = the PII_ARCHIVE_BUCKET variable)"
+        required: false
+        default: ""
 
 concurrency:
   group: backup-sessions
@@ -113,7 +118,10 @@ jobs:
       - name: Backup /sessions to private GCS (no artifact upload)
         env:
           FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
-          BACKUP_GCS_BUCKET: ${{ vars.PII_ARCHIVE_BUCKET }}
+          # An override lets an operator point a run at a different bucket without
+          # touching the repo variable -- used to test whether a candidate bucket is
+          # writable at all before committing the schedule to it.
+          BACKUP_GCS_BUCKET: ${{ github.event.inputs.bucket != '' && github.event.inputs.bucket || vars.PII_ARCHIVE_BUCKET }}
           BACKUP_GCS_PREFIX: backups
           # PUBLIC repo: fail loudly if the bucket isn't configured, so a
           # missing PII_ARCHIVE_BUCKET never becomes a backup that vanishes
