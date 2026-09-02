@@ -126,11 +126,20 @@ const RESEARCH_STORAGE = [
   { lang: "fr", must: /conservé\s+de\s+façon\s+nominative\s*\(identifiable\)/i, years: /5\s*ans/i },
   { lang: "ja", must: /紐づけた\s*\(\s*識別可能な\s*\)\s*形式/, years: /最長\s*5\s*年/ },
 ].map((spec, i) => {
-  const lis = sections8()[i].match(/<li>([\s\S]*?)<\/li>/g) || [];
-  assert.ok(lis.length >= 2,
-    `privacy.html section 8 variant ${i + 1} (${spec.lang}) lost its research-dataset <li>`);
+  /* Select the research-dataset item BY CONTENT, not by position. This read
+     `lis[1]` until 2026-09-02, when PIS v10 inserted a backup-persistence item
+     ahead of it and the test failed on a CORRECT notice. A positional selector
+     makes any future addition to section 8 look like a deleted disclosure. */
+  const lis = (sections8()[i].match(/<li>([\s\S]*?)<\/li>/g) || [])
+    .map((li) => li.replace(/<[^>]+>/g, ""));
+  const hits = lis.filter((t) => spec.must.test(t));
+  assert.strictEqual(hits.length, 1,
+    `privacy.html section 8 variant ${i + 1} (${spec.lang}): expected exactly ` +
+    `one <li> matching ${spec.must} for the research-dataset disclosure, found ` +
+    `${hits.length}. Zero means it was deleted or reworded; more than one means ` +
+    `the pattern no longer identifies it uniquely.`);
   return { ...spec, where: `privacy.html section 8 (${spec.lang}) research-dataset item`,
-           text: lis[1].replace(/<[^>]+>/g, "") };
+           text: hits[0] };
 });
 
 const PUBLISHED = publishedStrings();
@@ -206,4 +215,93 @@ test("retention: the research-storage claim is never described as pseudonymised 
       `${where} describes the research dataset as pseudonymised, but it is stored identifiably.\n` +
       `  got: ${text.replace(/\s+/g, " ").trim()}`);
   }
+});
+
+// ---- the archive half (PIS v10, 2026-09-02) --------------------------------
+//
+// The purge is not the end of the story: a copy of every session rides in the
+// nightly backups, whose objects expire on their own clock. Until PIS v10 the
+// notice said "purged within 30/90 days" and stopped there, so a participant
+// reading it would conclude their data was gone months before the last copy
+// actually expired. That is the SAME defect as the 7-day claim this file was
+// written for, one layer down — a published period contradicted by an enforcing
+// constant nothing linked it to.
+//
+// Deferred erasure from backups can be lawful; silently deferred erasure cannot.
+// So the horizon is derived here and every published surface must state it.
+
+const ARCHIVE_DAYS = (() => {
+  const doc = JSON.parse(read(ROOT, "scripts", "ops", "pii-bucket-lifecycle.json"));
+  const rule = (doc.rule || doc.rules || []).find((r) =>
+    (r.condition?.matchesPrefix || []).includes("backups/"));
+  assert.ok(rule, "pii-bucket-lifecycle.json has no rule for the backups/ prefix");
+  assert.strictEqual(rule.action?.type, "Delete",
+    "the backups/ lifecycle rule does not delete, so nothing bounds the archive");
+  return rule.condition.age;
+})();
+
+const CLOSED_HORIZON = CLOSED_DAYS + ARCHIVE_DAYS;
+const OPEN_HORIZON = OPEN_DAYS + ARCHIVE_DAYS;
+
+/* PUBLISHED takes only the FIRST <li> of each privacy.html section 8, because
+   that is where the purge window lives. The archive disclosure is a second <li>
+   beside it, so these checks read the whole <ul> for the long-form notice — the
+   participant reads the list, not one bullet. The nine short surfaces are
+   single strings and are used unchanged. Deliberately a separate list rather
+   than a widened PUBLISHED: the existing assertions are calibrated to the
+   narrow one, and widening it silently would change what they mean. */
+const ARCHIVE_SURFACES = [
+  ...PUBLISHED.filter((p) => !p.where.startsWith("privacy.html")),
+  ...sections8().map((s, i) => ({
+    where: `privacy.html section 8 variant ${i + 1} (whole list)`,
+    text: s.replace(/<[^>]+>/g, " "),
+  })),
+];
+
+test("archive: the horizon actually exceeds the published purge window", () => {
+  /* Anti-vacuity. If the archive were ever shortened to nothing, every
+     assertion below would be describing a disclosure that should be REMOVED
+     rather than kept — and a test demanding stale text is worse than none. */
+  assert.ok(ARCHIVE_DAYS > 0,
+    `archive lifetime is ${ARCHIVE_DAYS} days; the disclosure this file pins ` +
+    `assumes backups outlive the purge. If that stopped being true, delete the ` +
+    `archive sentences from all 12 surfaces instead of updating them.`);
+  assert.ok(CLOSED_HORIZON > CLOSED_DAYS && OPEN_HORIZON > OPEN_DAYS,
+    "the archive no longer extends the retention horizon");
+});
+
+test("archive: all 12 published surfaces state the real erasure horizon", () => {
+  const missing = ARCHIVE_SURFACES.filter(
+    (p) => !p.text.includes(String(CLOSED_HORIZON))
+  );
+  assert.deepStrictEqual(missing.map((m) => m.where), [],
+    `these surfaces do not state the ${CLOSED_HORIZON}-day horizon ` +
+    `(${CLOSED_DAYS}-day purge + ${ARCHIVE_DAYS}-day archive). A participant ` +
+    `reading them would believe their data is gone ${CLOSED_DAYS} days after a ` +
+    `session closes. If you changed either constant, every one of the 12 ` +
+    `surfaces needs the new figure — and PIS/LOCALE/SHELL versions need bumping ` +
+    `or returning browsers keep serving the old text.`);
+});
+
+test("archive: the long-form notice also states the never-closed horizon", () => {
+  // Only privacy.html has room for both figures; the join-screen summary
+  // deliberately carries the common case only.
+  const longForm = ARCHIVE_SURFACES.filter((p) => p.where.startsWith("privacy.html"));
+  assert.strictEqual(longForm.length, 3, "expected 3 privacy.html variants");
+  const missing = longForm.filter((p) => !p.text.includes(String(OPEN_HORIZON)));
+  assert.deepStrictEqual(missing.map((m) => m.where), [],
+    `privacy.html must also state the ${OPEN_HORIZON}-day horizon for sessions ` +
+    `that are never closed (${OPEN_DAYS}-day purge + ${ARCHIVE_DAYS}-day archive).`);
+});
+
+test("archive: no surface still promises deletion without mentioning backups", () => {
+  /* The failure mode is not a wrong number, it is a TRUE number presented as
+     the whole truth — which is exactly how the 7-day claim survived for months.
+     Each surface stating a purge window must also carry a backup word. */
+  const BACKUP_WORDS =
+    /backup|sauvegarde|sicherung|copias de seguridad|backups|バックアップ|백업|备份/i;
+  const bad = ARCHIVE_SURFACES.filter((p) => !BACKUP_WORDS.test(p.text));
+  assert.deepStrictEqual(bad.map((b) => b.where), [],
+    "these surfaces state a retention period without disclosing that a copy " +
+    "survives in the nightly backups");
 });
