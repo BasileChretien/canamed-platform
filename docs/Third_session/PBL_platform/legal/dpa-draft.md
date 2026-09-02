@@ -24,6 +24,14 @@
 > source code and must be checked against the live system or a vendor contract
 > before anyone asserts it. Do not delete these markers by guessing.
 >
+> **Five internal conflicts were resolved on 2026-09-02 — register at clause
+> 2.7.** Resolving them made the draft self-consistent. It did **not** close
+> the underlying gaps: four of the five remain BLOCKING under clause 5.4(a),
+> and one is an accepted non-compliance (Annex VI R9). A self-consistent
+> draft is easier to review, not closer to signature — and one of the five
+> (C5) got **bigger** when checked, because the pack had been reading a stale
+> comment instead of the workflow it described.
+>
 > **This draft is not in a signable state.** Annex VI lists **seventeen BLOCKING
 > items**, of which **two are now closed** (L3 in 2026-07, G1 in 2026-08) —
 > fifteen remain open. G1 previously described processing happening without the
@@ -352,6 +360,24 @@ Controller must be able to reference **its own** notice and version. See
 Annex VI, item L1. (`compliance.html` carries no controller allocation at all,
 but has its own defects — see Annex VI, item L2.)
 
+> ✅ **RESOLVED 2026-09-02 — by clause 5.4(a), which was already in this
+> document and merely not cross-referenced here.** The conflict cannot bite.
+> **L1 is BLOCKING**, and clause 5.4(a) suspends *all* processing under this
+> DPA until every BLOCKING row is closed and the closure countersigned. So
+> there is no state in which a participant is shown a notice naming one
+> controller while a different allocation operates: either L1 closes first —
+> the notice, the join-screen strings and the consent-version string are made
+> controller-specific — or no session runs under this DPA at all.
+>
+> ⚠️ **What this does NOT do: decide which document is wrong.** Today the
+> platform runs under the **published joint-controller notice** (Caen ×
+> Nagoya), which is live, governs real participants, and is untouched by this
+> draft — an unsigned draft cannot contradict a live notice, it can only be
+> inconsistent with it *as at signature*. The allocation in this DPA is the
+> **target** model for facilitator-run sessions; adopting it means changing
+> the notice, not the reverse. **L1 stays BLOCKING** and is the precondition
+> to signature, not a formality to be closed by editing this clause.
+
 2.6 **Art. 28(10) risk — the operator determines a purpose of its own.** GDPR
 Art. 28(10) converts a "processor" that determines the purposes or the essential
 means of processing into a **controller by operation of law**, whatever the
@@ -378,9 +404,55 @@ contract says. Two features of the platform put this DPA's allocation at risk:
    Controller instruction, scoped to that Controller's own sessions; **or**
 3. **[ALTERNATIVE PROPOSED BY COUNSEL: ____ ]**
 
+**Current state, verified against the workflow on 2026-09-02 — the exposure in
+(a) is LIVE.** `.github/workflows/pseudonymise-export.yml` runs on a live
+`schedule:` (daily 03:47 UTC). It was schedule-disabled on 2026-08-31, when its
+Google Cloud Storage destination became unwritable with billing closed, and
+**re-enabled on 2026-09-01** when it was migrated to Scaleway object storage
+(#363). The pause lasted two days and is over. So every night the operator's own
+schedule produces a research dataset **and a real-name → pseudonym linkage
+table** spanning every closed, research-consented session of every facilitator —
+precisely the processing (a) describes.
+
+> ⚠️ **This entry replaces a first draft of itself that said the opposite**, and
+> the reason is worth keeping. The workflow's header comment still read
+> "SCHEDULE DISABLED 2026-08-31" — the `schedule:` block was uncommented in #363
+> without the comment above it being updated, so the file asserted its own
+> inverse. Reading the comment rather than the YAML produced a clause claiming
+> the export had stopped. **Both are corrected here**, and
+> `tests/dpa-export-lockstep.test.js` now derives the real state from the `on:`
+> block and fails if either this clause or that header disagrees with it.
+
+**So the election is not merely unmade — it is unmade while the processing it
+governs runs nightly.** Two things stop that being an emergency, and neither
+substitutes for the election: the export is **consent-gated** (only sessions
+carrying research consent are exported — Annex VI G1), and this DPA is unsigned,
+so nothing runs "under" it (clause 5.4(a)). What follows is narrower and still
+true: **the Art. 28(10) question must be answered before signature, not after**,
+because signing while (a) runs would place the Parties in a contract whose
+allocation the operator's own schedule contradicts on the first night.
+
+**Part (b) — essential means — is untouched by any of this** and remains open
+(Annex VI G10). Stopping the export would not give the Controller the power to
+set retention, the sub-processor set or the hosting region.
+
 Independently of the choice, the essential-means problem in (b) is addressed by
 making retention, language-model enablement and sub-processor scope
 **per-session parameters** — see clause 3.3 and Annex VI, item G10.
+
+2.7 **Conflict register (resolved 2026-09-02).** This draft accumulated five
+places where it asserted two incompatible things — against itself, or against
+the running system. Each is now resolved *as a drafting matter*. **None of
+these resolutions closes a compliance gap**, and the register exists partly so
+that nobody later reads a self-consistent document as a clean one.
+
+| # | The conflict | How it is resolved | What remains |
+| --- | --- | --- | --- |
+| C1 | Clause 6.3 covenants that no sub-processor is engaged without an Art. 28(4) contract. **GitHub is engaged and no such contract can be obtained** on this plan. | **Express carve-out — new clause 6.3.1.** The covenant is disapplied for GitHub alone, on the disclosed basis in Annex VI R9, and the Controller's signature is the operative acceptance. | The **gap itself**: an accepted non-compliance (R9), reviewable, and **not the Processor's to accept alone**. |
+| C2 | The clause 6.3 note said Annex IV records "None identified" for Hugging Face. **Annex IV has not said that since 2026-08-20.** | **Stale cross-reference corrected** in the 6.3 note. A publicly offered HF DPA exists, incorporated by reference; HF SAS's main establishment is Paris. | **Evidence** — which Agreement/DPA version this account accepted, and when. An owner action, not a negotiation. BLOCKING until produced. |
+| C3 | Clause 12.6 says the language model "shall be disabled by default", and it is **live**. | **No conflict once scope is read**: 12.6 binds sessions run *under this DPA*, and 5.4(a) means none is. The clause's **stale facts** (a `us-central1` mitigation, a US chat leg, a function that no longer runs) are corrected. | (i)–(iii) in 12.6 stay open. Enabling the chat *after* signature with them open **would** be a breach. |
+| C4 | Clause 2.5 — the **live notice names Caen × Nagoya as joint controllers**; this DPA allocates controller to the facilitator's institution. | **Resolved by clause 5.4(a)**, now cross-referenced: L1 is BLOCKING, so no session can run under this DPA until the notice is aligned. | **L1**, unchanged and BLOCKING. Which document changes is a decision for the institutions, not a drafting choice. |
+| C5 | Clause 2.6 — the Art. 28(10) election was never made, while the operator runs a central export over every facilitator's sessions. **And the workflow asserted its own inverse**: a "SCHEDULE DISABLED" header above a live `schedule:` block. | **State verified from the YAML, not the comment**: the export is **running** (re-enabled 2026-09-01). Clause 2.6 and the workflow header now both say so, and `tests/dpa-export-lockstep.test.js` derives the truth from the `on:` block. | The **election** — unmade while the processing runs — and part (b) **essential means** (G10). This resolution made the item *larger*, not smaller. |
 
 ---
 
@@ -693,31 +765,78 @@ fine-tune or evaluate any model**, and shall flow that prohibition down to the
 sub-processor's own sub-processors. The Processor remains fully liable to the
 Controller for each sub-processor's performance.
 
-> **Disclosed — as at the draft date this is not satisfied.** No sub-processor
-> contract is evidenced anywhere in the repository (Annex III note; Annex IV).
-> For Hugging Face, Annex IV records the transfer mechanism as **"None
-> identified"**. The language-model feature must therefore remain **disabled**
-> until clause 6.3 is satisfied for that leg — see clause 12.6.
+> **Disclosed — as at the draft date this covenant is not satisfied in two
+> places, and they are NOT the same kind of problem.** Conflating them was the
+> defect corrected on 2026-09-02; one has a route and one does not.
 >
-> ⚠️ **GitHub (Annex III row #5) is a SECOND instance, and it cannot be cured.**
-> Established 2026-09-02 from the primary instruments: GitHub's Data Protection
-> Agreement is confined to services provided "under a written and executed
-> agreement" and forms part of a Customer Agreement covering "Your legal
-> entity's use"; the Terms of Service that actually govern this account contain
-> **no Art. 28 language whatsoever**; and GitHub's own Privacy Statement casts
-> it as **Controller**, not Processor, for direct users. There is no self-serve
-> route to a contract. Full reasoning in Annex III row #5; the Processor's
-> acceptance and its limits in **Annex VI R9**.
+> **(a) Hugging Face — a gap with a route. ⚠️ Stale cross-reference corrected
+> 2026-09-02.** This note used to say that Annex IV records the transfer
+> mechanism for Hugging Face as **"None identified"**, and concluded that the
+> language-model feature "must therefore remain disabled". **Annex IV has not
+> said that since 2026-08-20**, and the note was contradicting the annex it
+> cited. Annex IV now records a **publicly offered Hugging Face DPA**,
+> incorporated by reference into the Hugging Face Agreement and taking effect
+> with it — so there is **no separate document to sign** — and that **Hugging
+> Face SAS's main establishment is Paris, France** (CNIL as lead supervisory
+> authority). What is missing is therefore not a contract but **evidence**:
+> which Agreement/DPA version this account accepted, and on what date. That is
+> an owner action, not a negotiation. The row stays **BLOCKING** until the
+> evidence is produced, and clause 12.6 states what follows meanwhile.
 >
-> ⚠️ **THIS CONFLICTS WITH THE CLAUSE ABOVE, AND THE CONFLICT IS LEFT OPEN ON
-> PURPOSE.** Clause 6.3 is a covenant — the Processor "shall **not engage** a
-> sub-processor until" a compliant contract is in force. GitHub is engaged and
-> such a contract is not in force and cannot be obtained on this plan. An
-> accepted risk in Annex VI cannot quietly override an operative covenant, so
-> the Parties must resolve it at signature by one of: carving GitHub out of 6.3
-> expressly, moving the affected jobs off GitHub, or declining to sign this
-> clause as drafted. **Do not treat R9 as having resolved it** — R9 records a
-> decision about risk, not a repair to the contract.
+> **(b) GitHub (Annex III row #5) — a gap with NO route.** Established
+> 2026-09-02 from the primary instruments: GitHub's Data Protection Agreement is
+> confined to services provided "under a written and executed agreement" and
+> forms part of a Customer Agreement covering "Your legal entity's use"; the
+> Terms of Service that actually govern this account contain **no Art. 28
+> language whatsoever**; and GitHub's own Privacy Statement casts it as
+> **Controller**, not Processor, for direct users. There is no self-serve route
+> to a contract. Full reasoning in Annex III row #5; the Processor's acceptance
+> and its limits in **Annex VI R9**.
+>
+> ✅ **The covenant conflict this created is RESOLVED at clause 6.3.1
+> (2026-09-02).** It previously stood open on purpose, on the reasoning that an
+> accepted risk in an annex must not quietly override an operative covenant —
+> which was right. The repair is to stop the covenant saying something the
+> Processor is already and permanently breaching, **visibly**, by carving GitHub
+> out in the operative text where a signatory cannot miss it. That is one of the
+> three routes this note used to list; the other two (move the jobs, decline the
+> clause) remain available and are named in R9.
+>
+> ⚠️ **A carve-out is not a cure.** It makes the contract honest about what the
+> Processor does; it does not supply the Art. 28(3) contract, and R9 must not be
+> cited as though it did.
+
+6.3.1 **Disclosed exception to clause 6.3 — GitHub, Inc.** By way of express
+exception, clause 6.3 does **not** apply to **GitHub, Inc.** in respect of the
+scheduled maintenance jobs described in Annex III row #5. The Processor
+discloses, and the Controller acknowledges by signing, that:
+
+(a) GitHub, Inc. processes personal data on the Processor's instructions when
+those jobs run on GitHub Actions runners, and that **no GDPR Art. 28(3) contract
+governs that processing**, none being obtainable on the account plan in use;
+
+(b) this is an **accepted non-compliance**, recorded with its reasoning, its
+counterweight and its review triggers at **Annex VI R9** — not a cured item, and
+not something the adequacy decision in Annex IV supplies (that decision covers
+the *transfer*, which is separately lawful; it does not create a processor
+contract);
+
+(c) the Processor remains **fully liable to the Controller** for GitHub's
+performance under clause 6.3 and GDPR Art. 28(4), which this exception does not
+limit in any way; and
+
+(d) the exception **lapses automatically** on any of the R9 review triggers, and
+in particular **before any real-participant cohort** — the acceptance is
+calibrated to a pre-pilot platform holding four sessions at the date of this
+clause.
+
+⚠️ **If the Controller does not accept (a)–(d), this exception must be struck
+before signature**, and the affected jobs moved to an EEA host or a self-hosted
+runner (both of which also remove the United States transfer, and the latter of
+which additionally keeps the Firebase admin credential off third-party
+hardware). Striking the exception without moving the jobs leaves the Processor
+in immediate breach of clause 6.3 — so this is a choice to be made, not a clause
+to be deleted quietly.
 
 6.4 **Onward sub-processing by Hugging Face — specifically disclosed.** The
 Module A language-model character is served through Hugging Face Inference
@@ -1234,22 +1353,41 @@ not pending. Scope must include, at minimum:
 - the certificate-verification page's disclosure of third-party visitors' IP
   addresses to Google (clause 2.4).
 
-12.6 **Default state, not an option.** Until (i) an Art. 28(4) contract with
-Hugging Face and (ii) an executed Chapter V mechanism are in force, and (iii) the
-APPI Art. 28 route in 12.4(e) is documented, the language-model character shall
-be **disabled by default** — server flag `MODA_LLM_ENABLED=false` and the client
-default flipped off — for all sessions run under this DPA. Disabling it removes
-the US leg for chat content entirely: all remaining processing then sits in
-`europe-west1` plus the GitHub Actions and reCAPTCHA legs. A one-line change of
-`region:` on `hfPatient` from `us-central1` to `europe-west1` would additionally
-remove the **Google** US leg for chat, independently of the Hugging Face
-question; the Parties should treat that as a near-term mitigation.
-**✅ That mitigation was implemented (verified 2026-08-19).** `hfPatient` runs in
-`europe-west1`, the client pins the same region, and
-`tests/hf-region-lockstep.test.js` holds the pair so the two cannot drift apart.
-The Google US leg for chat content is therefore closed. **The Hugging Face leg is
-not** — that remains the open question, and closing the Google leg does not
-touch it.
+12.6 **Default state, not an option.** Until (i) the Hugging Face Agreement and
+the DPA it incorporates are **evidenced for this account** — version and
+acceptance date, per the clause 6.3 note (a) — (ii) any Chapter V mechanism that
+leg requires is in place, and (iii) the APPI Art. 28 route in 12.4(e) is
+documented, the language-model character shall be **disabled by default** —
+server flag `MODA_LLM_ENABLED=false` and the client default flipped off — for
+all sessions run under this DPA.
+
+> ✅ **This is NOT in conflict with the chat being live today, and the
+> distinction is the whole of the resolution (2026-09-02).** The clause binds
+> sessions run **under this DPA**. This DPA is unsigned, and clause 5.4(a)
+> suspends all processing under it until every BLOCKING row closes — so it
+> governs no session at present. The chat that runs today runs under the
+> platform's own published notice, not under this instrument. What **would** be a
+> breach is signing this DPA and then running sessions with the chat enabled
+> while (i)–(iii) are open. Read as a conflict, this clause invites the wrong
+> repair — deleting it.
+>
+> ⚠️ **The mitigation this clause used to recommend no longer exists, and the
+> architecture it assumed is gone (corrected 2026-09-02).** The original text
+> recommended moving `hfPatient` from `us-central1` to `europe-west1`, then
+> recorded that as done and closed. **`hfPatient` does not run at all**: the
+> project returned to the Spark plan on 2026-08-27 and Cloud Functions v2
+> require billing. The chat path is now browser → **Scaleway Serverless
+> Functions, `fr-par` (Paris)** → the **Hugging Face router** → **OVHcloud AI
+> Endpoints, Gravelines (France)**. So "disabling it removes the US leg for chat
+> content" is obsolete: on the current path **no US leg for chat content is
+> identified at all**.
+>
+> ⚠️ **That is a smaller claim than it sounds, and must not be quoted as the
+> larger one.** "No identified US leg" is not "no US leg": Hugging Face's own
+> processing location for the router step remains `[TO VERIFY]` (Annex IV), and
+> the OVHcloud entity and location are taken from published material rather than
+> from a contract (clause 6.4). What closing the Google leg never did, and still
+> does not do, is answer the Hugging Face question.
 
 12.7 **No reliance on derogations.** The Parties record that **GDPR Art. 49
 derogations are not relied on** for any route in Annex IV. Systematic,
@@ -2659,6 +2797,14 @@ plainly disproportionate at this scale.
 4. Loss of the DPF adequacy basis, which `tests/github-dpf-currency.test.js`
    flags 90 days ahead — that would leave the transfer *and* the contract
    unsupported at once, which is a materially different position.
+
+✅ **The clause 6.3 covenant conflict this item created is RESOLVED as of
+2026-09-02 — see the new clause 6.3.1**, an express carve-out in the
+operative text. That repair is a drafting one and changes nothing here: the
+acceptance still requires the **Controller's** signature to close, the four
+review triggers below still apply, and the item is still an accepted
+**non-compliance**. If the Controller declines the carve-out, 6.3.1 is struck
+and the jobs must move — the routes are named in this item and in 6.3.1.
 
 **R8 — Persistent research identifier in the browser (new).**
 `canamed_stable_id` is **two identifiers under one name**: for anonymous

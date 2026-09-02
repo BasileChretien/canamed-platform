@@ -1,0 +1,139 @@
+/* tests/dpa-export-lockstep.test.js
+ *
+ * Keeps three statements about ONE fact in lockstep: is the central
+ * pseudonymised research export on a live schedule?
+ *
+ *   1. `.github/workflows/pseudonymise-export.yml` — the `on:` block. THE TRUTH.
+ *   2. The prose comment sitting directly above it in the same file.
+ *   3. Clause 2.6 of `legal/dpa-draft.md`, whose GDPR Art. 28(10) analysis turns
+ *      on whether the operator runs a central export over every facilitator's
+ *      sessions.
+ *
+ * WHY THIS EXISTS, precisely. On 2026-08-31 the schedule was commented out (its
+ * GCS destination had become unwritable) and a long header comment was written
+ * explaining that. On 2026-09-01, #363 migrated the destination to Scaleway and
+ * UNCOMMENTED the schedule — without touching the comment. For a day the file
+ * asserted its own inverse: "⚠ SCHEDULE DISABLED 2026-08-31" printed directly
+ * above a live `schedule:` block.
+ *
+ * That is not a cosmetic defect. On 2026-09-02 a reader trusting the comment
+ * over the YAML drafted a DPA clause recording that the central export had
+ * stopped and that the Art. 28(10) exposure had lapsed — when it runs nightly,
+ * producing a real-name -> pseudonym linkage table. A legal instrument was one
+ * review away from resting on a stale code comment. The correction made the
+ * finding LARGER, which is the direction stale status claims usually hide.
+ *
+ * The test derives the state from the YAML and requires the other two to agree.
+ * It is deliberately symmetric: disabling the schedule again fails just as
+ * loudly until the prose follows, because "stopped" going stale is the exact
+ * failure that happened.
+ */
+
+const test = require("node:test");
+const assert = require("node:assert");
+const fs = require("node:fs");
+const path = require("node:path");
+
+const ROOT = path.join(__dirname, "..");
+const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
+
+const WF = ".github/workflows/pseudonymise-export.yml";
+const DPA = "docs/Third_session/PBL_platform/legal/dpa-draft.md";
+
+/* Both files are hand-wrapped prose. A literal regex over raw text fails the
+   moment an editor re-flows a line, which is a false failure on correct
+   content — the whitespace bug already found in the notice guards. Flatten. */
+const flat = (s) => s.replace(/\s+/g, " ");
+
+/* The `on:` block: from the `on:` key to the first line at column 0 after it. */
+function onBlock(yml) {
+  const lines = yml.split(/\r?\n/);
+  const start = lines.findIndex((l) => /^on:\s*$/.test(l));
+  assert.notStrictEqual(start, -1, `${WF}: no top-level 'on:' block found`);
+  const rest = lines.slice(start + 1);
+  const end = rest.findIndex((l) => /^\S/.test(l));
+  return (end === -1 ? rest : rest.slice(0, end)).join("\n");
+}
+
+const block = onBlock(read(WF));
+
+/* A cron line that is NOT commented out. */
+const scheduleLive = block
+  .split(/\r?\n/)
+  .some((l) => /^\s*-\s*cron:/.test(l) && !/^\s*#/.test(l));
+
+test("anti-vacuity: the `on:` block still mentions cron at all", () => {
+  /* Without this, deleting the schedule entirely (rather than commenting it)
+     would make `scheduleLive` false forever and every assertion below would
+     pass by describing a job that no longer exists. */
+  assert.ok(
+    /cron:/.test(block),
+    `${WF}: the 'on:' block mentions no cron in any form. If the scheduled ` +
+      `export was removed on purpose, delete this test in the same commit and ` +
+      `rewrite clause 2.6 of the DPA — do not leave it silently green.`
+  );
+});
+
+/* A designated marker, not prose. The first version of this test matched the
+   words "SCHEDULE DISABLED" anywhere in the block — and failed on the corrected
+   header, because the corrected header NARRATES the old claim in order to
+   explain it. A guard that cannot survive being described is the wrong guard. */
+test("the workflow's SCHEDULE-STATE marker agrees with its own schedule", () => {
+  const markers = block.match(/^\s*#\s*SCHEDULE-STATE:\s*(\S+)/gm) || [];
+  assert.strictEqual(
+    markers.length,
+    1,
+    `${WF}: expected exactly one '# SCHEDULE-STATE: <live|disabled>' line in ` +
+      `the 'on:' block, found ${markers.length}. It is the one place a reader ` +
+      `— or this test — can learn the state without parsing YAML.`
+  );
+  const declared = markers[0].split(":")[1].trim().toLowerCase();
+  assert.ok(
+    declared === "live" || declared === "disabled",
+    `${WF}: SCHEDULE-STATE is "${declared}"; permitted values are exactly ` +
+      `"live" and "disabled".`
+  );
+  assert.strictEqual(
+    declared,
+    scheduleLive ? "live" : "disabled",
+    `${WF}: SCHEDULE-STATE says "${declared}" while the 'on:' block is ` +
+      `actually ${scheduleLive ? "scheduled" : "not scheduled"}. This is the ` +
+      `exact 2026-09-01 defect — the schedule was changed and the header was ` +
+      `not. Change both in the same commit.`
+  );
+});
+
+test("DPA clause 2.6 agrees with the workflow", () => {
+  const dpa = flat(read(DPA));
+  const LIVE_CLAIM = "the exposure in (a) is LIVE";
+  const STOPPED_CLAIM = "The central export is **not running**";
+
+  if (scheduleLive) {
+    assert.ok(
+      dpa.includes(LIVE_CLAIM),
+      `${DPA}: the export runs on a live schedule, but clause 2.6 does not ` +
+        `record it. Expected the phrase "${LIVE_CLAIM}". The Art. 28(10) ` +
+        `election in 2.6 turns on this fact.`
+    );
+    assert.ok(
+      !dpa.includes(flat(STOPPED_CLAIM)),
+      `${DPA}: clause 2.6 still claims the central export is not running, ` +
+        `while ${WF} schedules it nightly. That understates the Art. 28(10) ` +
+        `exposure in a document intended for counsel.`
+    );
+  } else {
+    assert.ok(
+      dpa.includes(flat(STOPPED_CLAIM)),
+      `${DPA}: the export schedule is disabled, but clause 2.6 does not say ` +
+        `so. Expected "${STOPPED_CLAIM}". Note that stopping the job is NOT ` +
+        `the Art. 28(10) election — 2.6 must still record that the election ` +
+        `is owed, and part (b) essential means is unaffected either way.`
+    );
+    assert.ok(
+      !dpa.includes(LIVE_CLAIM),
+      `${DPA}: clause 2.6 says the exposure is live while ${WF} has no ` +
+        `active schedule. Overstating it is a smaller error than the reverse, ` +
+        `but it is still a false statement in a legal draft.`
+    );
+  }
+});

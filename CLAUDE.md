@@ -176,8 +176,8 @@ therefore not merely broken but **unfixable in code**:
 | --- | --- |
 | `hfPatient` (Module A LLM patient) | **DOWN.** 500 from the Google front end, no application logs at all — the container is never started. Last invocation logged 2026-08-27T00:16:12Z. |
 | `sendQueuedMail` | same class — a v2 function on Cloud Run. Facilitator mail cannot send. |
-| `backup-sessions` → GCS | **DISABLED.** Failed daily 2026-08-27 → 08-31: `ApiError: The billing account for the owning project is disabled in state closed`. |
-| `pseudonymise-export` → GCS | **DISABLED**, same error. |
+| `backup-sessions` → ~~GCS~~ **Scaleway** | ✅ **LIVE AGAIN since 2026-09-01** — destination moved to Scaleway Object Storage (`fr-par`), schedule re-enabled, first archive verified. It was disabled 2026-08-27 → 09-01 after `ApiError: The billing account for the owning project is disabled in state closed`. |
+| `pseudonymise-export` → ~~GCS~~ **Scaleway** | ✅ **LIVE AGAIN since 2026-09-01**, same migration, same commit (#363). |
 | Hosting, RTDB, Auth, App Check | **unaffected** — all free tier. The site serves normally, which is exactly why this went unnoticed. |
 
 How it surfaced: five identical *Synthetic uptime probe* failure emails. The
@@ -193,6 +193,16 @@ red probe means reading every failing workflow, not just the one that mailed.
   out; `workflow_dispatch` kept. This stops ~4 failure emails a day about a
   condition no code change can fix — the alert-fatigue state item 3 below
   already warns about.
+  ⚠️ **SUPERSEDED 2026-09-01 — both schedules are LIVE again**, writing to
+  Scaleway instead of GCS (#363). The bullet is kept because the *reasoning*
+  still applies to any job that cannot pass; it is no longer a description of
+  these two. **`pseudonymise-export.yml`'s own header went stale in exactly
+  this way** — #363 uncommented the `schedule:` and left a
+  "disabled" paragraph above it, so the file asserted its own inverse for a
+  day and a DPA clause was drafted from the comment rather than the YAML.
+  Fixed 2026-09-02 with a machine-readable `# SCHEDULE-STATE:` marker and
+  `tests/dpa-export-lockstep.test.js`, which fails if the marker, the
+  schedule and DPA clause 2.6 disagree.
 - A **backup↔purge interlock** was added (`scripts/lib/backup-marker.js`),
   because `cleanup-stale-sessions` runs on RTDB and kept succeeding — and
   deleting — while backups failed. It is **disarmed** today on purpose: with no
@@ -620,17 +630,25 @@ estimate; the two together are why Monitor stays.
        **7.3.2** now and peers `^11.10.0 || ^12.0.0 || ^13.0.0 || ^14.0.0`, so
        that precondition is **met** — the blocker moved from the peer range to
        the code.
-   - ⚠️ **"all 4 active" STOPPED BEING TRUE 2026-08-31.** `backup-sessions` and
-     `pseudonymise-export` write to GCS, which needs billing; the Blaze trial
-     closed 2026-08-27 and both failed daily until their schedules were
-     commented out. Expect **2 scheduled** (cleanup, cost-monitor) and **2
-     dispatch-only** (backup, pseudonymise-export) until Blaze returns — see
-     the Spark-plan banner at the top of this section. The `npm ci` and
-     lockfile halves of the check below are unaffected and still apply.
-   - `Verify:` `gh workflow list` shows cleanup + cost-monitor **active**;
+   - ⚠️ **"all 4 active" stopped being true 2026-08-31 — and is TRUE AGAIN
+     since 2026-09-01.** `backup-sessions` and `pseudonymise-export` wrote to
+     GCS, which needs billing; the Blaze trial closed 2026-08-27 and both
+     failed daily until their schedules were commented out. **#363 then moved
+     both to Scaleway Object Storage (`fr-par`) and re-enabled both
+     schedules**, so the expectation is once again **all 4 scheduled** — do
+     not restore billing on the belief that two are waiting on it. (This
+     paragraph read "2 scheduled / 2 dispatch-only" until 2026-09-02: a
+     one-day-old status claim that was already false, which is why the rule
+     above says verify before relaying.) The `npm ci` and lockfile halves of
+     the check below are unaffected and still apply.
+   - `Verify:` `gh workflow list` shows **all four** active;
      `.github/workflows/*.yml` have live
-     (uncommented) `schedule:` blocks; `gcloud storage ls gs://canamed-pii-archive/`
-     lists recent objects under `backups/`, `pseudonymised/`, `linkage/`;
+     (uncommented) `schedule:` blocks — and note the archive now lives on
+     **Scaleway, not GCS**, so `gcloud storage ls gs://canamed-pii-archive/`
+     no longer proves anything (it will fail on closed billing whatever the
+     jobs did). Check the objects with an S3 client against
+     `https://s3.fr-par.scw.cloud`, or read a run's log, which prints the
+     destination URI it wrote;
      `grep -EL '^[[:space:]]*run:[[:space:]]*npm ci([[:space:]]|$)' .github/workflows/{backup-sessions,cleanup-stale-sessions,cost-monitor,pseudonymise-export}.yml`
      prints nothing (any file listed there has drifted back to a floating
      install) and `grep -c firebase-admin package-lock.json` > 0. The pattern
