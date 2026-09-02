@@ -9,12 +9,40 @@
 # only the service account and project admins can read it.
 #
 # ───────────────────────────────────────────────────────────────────────
-# LIVE since 2026-05-30. The one-time bucket setup below was completed
-# (private gs://canamed-pii-archive in europe-west1, SA objectAdmin grant,
-# lifecycle rules) and the daily `schedule:` is enabled. The setup steps
-# are kept here for disaster-recovery / re-provisioning reference.
+# ⚠ THE DESTINATION IS SCALEWAY OBJECT STORAGE, NOT GCS (since 2026-09-02).
+# GCS needs an active billing account and the project is on Spark, so it is
+# unwritable; see scripts/lib/s3-archive.js for the two probes that
+# established that. The GCS steps further down are kept as HISTORICAL
+# reference, for if billing is ever restored — they are not the current
+# configuration.
 #
-# One-time setup (a human with GCP project access) — DONE 2026-05-30:
+# CURRENT SETUP (done 2026-09-02, working and verified):
+#   Bucket   canamed-pii-archive · region fr-par (Paris) · visibility PRIVATE
+#   Lifecycle  backups/ 90d · pseudonymised/ 90d · linkage/ 14d
+#   Variable   PII_ARCHIVE_S3_BUCKET = canamed-pii-archive
+#   Secrets    SCW_ACCESS_KEY / SCW_SECRET_KEY (Scaleway API key)
+#
+# ⚠ THE API KEY EXPIRES. Scaleway caps API keys at 12 months, so this one
+# dies and the nightly backup starts failing — silently, from the operator's
+# point of view, because a credential does not announce its own expiry. The
+# date below is machine-read by tests/scaleway-key-currency.test.js, which
+# goes red ~45 days ahead with rotation instructions. Update it in the SAME
+# change that rotates the key.
+#
+#   SCW_KEY_EXPIRES: 2027-09-02
+#
+# The key's ACCESS KEY ID is deliberately not recorded here: this repo is
+# public, and while an access key id is not a credential on its own, there
+# is no reason to publish one. Identify the key in the Scaleway console by
+# its description, "GitHub Actions - nightly PII archive to
+# canamed-pii-archive".
+#
+# ⚠ When generating a replacement, the dialog's "Will this API key be used
+# for Object Storage?" defaults to "No, skip for now". It MUST be "Yes" with
+# the Canamed project selected, or the key is valid but cannot resolve the
+# bucket.
+#
+# HISTORICAL — the GCS setup, completed 2026-05-30, unusable while on Spark:
 #   1. Create a PRIVATE bucket in the EU (data residency = the RTDB's
 #      europe-west1), uniform bucket-level access, no public IAM:
 #        gcloud storage buckets create gs://canamed-pii-archive \
@@ -42,33 +70,20 @@
 name: Backup sessions
 
 on:
-  # ⚠ SCHEDULE DISABLED 2026-08-31 — NOT a pause, and not a decision about
-  # whether daily backups matters.
+  # ✅ SCHEDULE RE-ENABLED 2026-09-01, and the destination moved to Scaleway
+  # object storage the same day. It had been disabled since 2026-08-27, when
+  # the Blaze trial ended and GCS became unwritable — five days during which
+  # the nightly purge deleted sessions with NO archive behind it.
   #
-  # This job writes to Google Cloud Storage (gs://canamed-pii-archive), and
-  # GCS requires a billing account. The project's Blaze trial ended on
-  # 2026-08-27 and was deliberately not renewed, so the billing account is in
-  # state `closed` and every run since has died with:
+  # The purge interlock (CLEANUP_REQUIRE_BACKUP in cleanup-stale-sessions.yml)
+  # was armed on 2026-09-02, AFTER a backup had actually succeeded and been
+  # verified in the bucket. Order matters: arming it against a destination
+  # that has never worked stops the purge on its first run, which turns a
+  # missing-archive problem into a retention breach.
   #
-  #     FATAL: ApiError: The billing account for the owning project is
-  #            disabled in state closed
-  #
-  # It failed daily for four days, mailing the operator each time about a
-  # condition no code change can fix. CLAUDE.md already records what that
-  # costs — four failure emails a day from jobs believed retired was called
-  # out as "pure alert fatigue, which is exactly the condition under which a
-  # real failure gets ignored". Leaving this on rebuilds that state knowingly.
-  #
-  # `workflow_dispatch` is KEPT so the job can be run by hand the moment
-  # billing is restored — which is also the test that it still works.
-  #
-  # TO RESTORE: re-attach a billing account to canamed-69785, then uncomment
-  # the schedule below.
-  #
-  # ⚠ AND re-arm the purge interlock in cleanup-stale-sessions.yml
-  # (CLEANUP_REQUIRE_BACKUP: "1") in the SAME change. While this job is off,
-  # nothing writes the ops/lastBackup marker, so the purge job is deleting
-  # sessions with no archive behind them — see scripts/lib/backup-marker.js.
+  # So this job and that gate are now coupled — if this schedule is ever
+  # disabled again, disarm the interlock in the SAME change, or the purge
+  # stops within CLEANUP_BACKUP_MAX_AGE_DAYS.
   schedule:
     - cron: "47 2 * * *"  # daily 02:47 UTC — 30 min before cleanup (03:17)
   workflow_dispatch:
