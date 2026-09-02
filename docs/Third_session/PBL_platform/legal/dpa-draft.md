@@ -344,7 +344,7 @@ retention rule, which the Processor must supply:
 | **Language-model usage log (`metrics/hfPatient/*`)** | Records auth UID + session code per turn, on a path with no database rule, for the operator's own cost/abuse monitoring. Not reachable by any in-product access flow. | **[TO CLASSIFY — processor-held or operator-controlled. Whichever is chosen, it must appear in the Art. 15 runbook (clause 7.6) and acquire a retention rule.]** |
 | **Visitors to the public certificate-verification page (`verify.html`)** | Certificate verifiers (employers, registrars) are **not** participants and have no relationship with the facilitator. The page loads the Firebase SDK from `www.gstatic.com`, disclosing the visitor's IP address to Google, with no notice. | **[TO ALLOCATE — no role is assigned to this processing today.]** |
 | **The pseudonymised research export** | The operator determines its purpose, schedule, population and retention (GDPR Art. 28(10)). | ✅ **RESOLVED 2026-09-02 — operator is an independent controller.** Option 1 elected at clause 2.6. Art. 30(1) record at `record-of-processing.md` §2A. |
-| **The nightly identified backup** | Operational disaster recovery for the platform the operator runs, deliberately **not** consent-gated because it is not research reuse. | **[STILL TO RESOLVE — see clause 2.6.]** The 2026-09-02 election covered the export only. The backup was bundled into the same row without argument; it has a different purpose and needs its own allocation. |
+| ~~The nightly identified backup~~ | ~~Operational disaster recovery.~~ | ✅ **ALLOCATED 2026-09-02 — and it does NOT belong in this table.** The backup is carried out **on the Controller's behalf**, as an Art. 32(1)(c) availability measure. It is processing under this DPA, not outside it. Reasoning at **clause 2.8**; the row is struck rather than deleted so the decision stays visible. |
 
 2.5 **Conflict with the live privacy notice — must be resolved before
 signature.** The privacy notice currently served by the platform
@@ -519,6 +519,83 @@ that nobody later reads a self-consistent document as a clean one.
 | C3 | Clause 12.6 says the language model "shall be disabled by default", and it is **live**. | **No conflict once scope is read**: 12.6 binds sessions run *under this DPA*, and 5.4(a) means none is. The clause's **stale facts** (a `us-central1` mitigation, a US chat leg, a function that no longer runs) are corrected. | (i)–(iii) in 12.6 stay open. Enabling the chat *after* signature with them open **would** be a breach. |
 | C4 | Clause 2.5 — the **live notice names Caen × Nagoya as joint controllers**; this DPA allocates controller to the facilitator's institution. | **Resolved by clause 5.4(a)**, now cross-referenced: L1 is BLOCKING, so no session can run under this DPA until the notice is aligned. | **L1**, unchanged and BLOCKING. Which document changes is a decision for the institutions, not a drafting choice. |
 | C5 | Clause 2.6 — the Art. 28(10) election was never made, while the operator runs a central export over every facilitator's sessions. **And the workflow asserted its own inverse**: a "SCHEDULE DISABLED" header above a live `schedule:` block. | **State verified from the YAML, not the comment**: the export is **running** (re-enabled 2026-09-01), and the **election was then MADE — option 1**, on 2026-09-02. Clause 2.6, clause 2.4 and the Art. 30(1) record now agree; `tests/dpa-export-lockstep.test.js` derives the truth from the `on:` block and holds the register in lockstep. | The **APPI Art. 27/28 analysis** (Annex V.10), the notice's controller identification (**L1**), part (b) **essential means** (**G10**), and the **identified backup**, which shared C5's row without ever being argued. |
+
+2.8 **Allocation of the nightly identified backup — ✅ DECIDED 2026-09-02: the
+operator acts as PROCESSOR, on the Controller's behalf.** This is the **opposite**
+conclusion from the research export in clause 2.6, reached on the same test one
+day apart — which is exactly why the two had to be separated out of the single
+clause 2.4 row that had carried them together without argument.
+
+**The difference is purpose, and it is the whole of the reasoning.** Art. 28(10)
+turns on who determines the **purposes**. The export pursues a *new* purpose —
+the operator's own research — and so makes the operator a controller. The backup
+pursues the *same* purpose in recoverable form: the availability of the
+Controller's own data. Nothing is analysed, nothing is produced for the operator,
+and no participant's data is put to a use it was not already being put to.
+
+Three supports for treating it as processor processing:
+
+1. **Art. 32(1)(c) makes it a duty, not a discretion.** That article names "the
+   ability to restore the availability and access to personal data in a timely
+   manner in the event of a physical or technical incident", and Art. 28(3)(c)
+   binds the Processor to the Art. 32 measures. **A processor does not become a
+   controller by discharging an obligation this DPA imposes on it as processor** —
+   if it did, the obligation would be self-defeating.
+2. **What the operator decides here are non-essential means.** Under EDPB
+   Guidelines 07/2020 the frequency, medium and technical retention of a backup
+   are the textbook examples of means a processor may determine for itself. The
+   essential means — whether the data is collected, for what, and how long the
+   **live** data is kept — stay with the Controller.
+3. **The counterfactual.** If keeping a restorable copy made the keeper a
+   controller, every processor that complies with Art. 32(1)(c) would be one.
+   That reading collapses the distinction the GDPR draws.
+
+⚠️ **Three qualifications, and the second is a defect rather than a caveat.**
+
+**(a) An express purpose restriction, without which this allocation would not
+hold.** The archive is **not** consent-gated — deliberately, because it is
+disaster recovery and not research reuse — so it holds a full identified copy of
+**every** session, including participants who declined research and sessions that
+have since been purged. The allocation therefore depends on the archive being
+used for one thing only. **The Processor shall use the backup archive solely to
+restore the live service following an incident, on the Controller's instruction,
+and shall not read, mine, export, publish or otherwise use it as a data source —
+in particular not as a research source.** If that restriction were breached, the
+operator would be determining a new purpose and the Art. 28(10) analysis in 2.6
+would apply to the archive as well.
+
+**(b) ⚠️ THE ARCHIVE DEFEATS BOTH ERASURE AND THE RETENTION PURGE, and nothing
+in this pack said so before 2026-09-02.** Established from the code, not
+inferred: `scripts/ops/pii-bucket-lifecycle.json` deletes `backups/` objects at
+**90 days**, each nightly snapshot carries the whole identified `/sessions` tree,
+and **no code path erases a participant, or a session, from the archive** —
+there is no selective deletion at all. Consequences:
+
+- The published retention promise is **30 days after closure / 90 days after
+  creation**. But the last snapshot containing a session is taken the night
+  before its purge and then lives a further 90 days. So the last identified copy
+  of a closed session disappears at roughly **closure + 120 days**, and of a
+  never-closed session at roughly **creation + 180 days** — not at 30 and 90.
+- Art. 17 erasure and Art. 7(3) withdrawal are affected the same way: once
+  Annex VI **G12** is fixed for the live database, up to 90 nightly copies of the
+  withdrawn participant remain.
+
+Deferred erasure from backups **can** be defensible — data put beyond use,
+overwritten in the ordinary cycle, never selectively restored — but that position
+has to be **stated to the data subject**, and it is not stated anywhere. This is
+recorded as a limb of **G12**, and the participant-facing correction it needs is
+recorded there too. It is not fixed by this clause.
+
+**(c) The archive window is an essential-means residue.** The 90-day figure is
+set by the operator for every facilitator alike, so a Controller cannot exercise
+its own Art. 5(1)(e) judgement over it. That is the same defect as clause 2.6(b)
+and belongs to **Annex VI G10**, not to this allocation.
+
+> **Where this is recorded.** The backup already sat in the Art. 30(2) record as
+> **P4** (`record-of-processing.md` §2). This decision **confirms** that
+> placement rather than moving anything — the entry was correct, and is now
+> correct *for a stated reason*. It has been removed from the reserved list in
+> §2A, which had listed it among the operator's own controllerships.
 
 ---
 
@@ -2676,6 +2753,31 @@ provides a parallel route. Clause 10.1 promises Art. 28(3)(g) deletion that the
 system cannot presently perform in full. **Fix:** an in-product withdrawal that
 removes the participant across `pool`, the room subtrees and `rosters`, plus the
 sweepers in G6 and G7.
+
+⚠️ **SECOND LIMB, added 2026-09-02 while allocating the backup (clause 2.8): the
+NIGHTLY ARCHIVE, which this item did not mention and the fix above does not
+reach.** Each nightly snapshot holds the whole identified `/sessions` tree, the
+objects live **90 days** (`scripts/ops/pii-bucket-lifecycle.json`), and **no code
+path erases a participant or a session from the archive** — there is no selective
+deletion at all. So the in-product withdrawal above, once built, would clear the
+live database and leave up to 90 copies standing.
+
+The same arithmetic breaks the **published retention promise**. The notice states
+30 days after closure / 90 days after creation. The last snapshot containing a
+session is taken the night before its purge and then lives a further 90 days, so
+the last identified copy survives to roughly **closure + 120 days**, or
+**creation + 180 days** for a session never closed.
+`tests/retention-notice-consistency.test.js` cannot see this: it pins the notice
+to `cleanup-stale-sessions.js`'s constants, and the archive is not one of them.
+
+**Additional fix, and it is two separate things — do not do only the easy one:**
+(i) a technical route that removes a withdrawn participant from, or blocks
+restoration of, archived snapshots; **and** (ii) a **participant-facing
+correction**, because deferred erasure from backups is defensible only when it is
+disclosed — put beyond use, overwritten on the ordinary cycle, never selectively
+restored. Neither exists today. (ii) touches all twelve published notice surfaces
+in eight languages and needs a PIS and shell bump, so it is the larger half and
+the one more likely to be deferred indefinitely.
 
 ## Residual risks accepted by design
 

@@ -49,7 +49,7 @@ contract it records.
 | P1 | **Running a live PBL session** — join, room assignment, clinical reasoning, votes, tests, wrap-up questionnaire | Name, e-mail, university, free-text answers, test and questionnaire responses; special-category data where a participant volunteers health opinions (Annex I §6) | Deliver the teaching session on the Controller's instruction |
 | P2 | **Simulated-patient chat (Module A)** | Participant free-text turns and the scenario system prompt | Provide the language-model character. Relayed via Scaleway, routed by Hugging Face, executed by OVHcloud — see §4 |
 | P3 | **Retention purge** (nightly) | Session identifiers and two lifecycle timestamps per session; the deletion itself reaches the whole session subtree | Discharge storage limitation (Art. 5(1)(e)) |
-| P4 | **Backup** (nightly) | The identified `/sessions` tree in full | Disaster recovery. NOT research reuse, and deliberately not consent-gated for that reason |
+| P4 | **Backup** (nightly) | The identified `/sessions` tree in full | Disaster recovery — an **Art. 32(1)(c)** availability measure. NOT research reuse, and deliberately not consent-gated for that reason. ✅ **Placement CONFIRMED 2026-09-02** (DPA clause 2.8): this is processing on the Controller's behalf, not the operator's own controllership — the opposite answer to the export, on the same test, because the purpose is unchanged. ⚠️ The allocation depends on an **express purpose restriction** (2.8(a)): the archive may be used only to restore the service, never as a data source. ⚠️ Its objects live **90 days**, so it outlives the live retention — see G12's second limb |
 | ~~P5~~ | **MOVED TO §2A on 2026-09-02.** The central research export is the operator's **own** controllership (DPA clause 2.6, option 1 elected), so it is not processing on behalf of a Controller and does not belong in an Art. 30(2) record. The row is kept struck rather than deleted so P6–P8 do not silently renumber, and so the move is visible. | — | — |
 | P6 | **Certificate issue and verification** | Name hash, session code, dates | Issue and verify completion certificates |
 | P7 | **Credential-expiry purge** (daily) | `credentials` records | Retention of certificate records |
@@ -106,11 +106,16 @@ onto the operator.**
 
 **A2 — [RESERVED].** DPA clause 2.4 lists further processing the operator carries
 out as a controller (operational security logs, facilitator accounts, the
-certificate registry, the language-model usage log, visitors to the public
-verification page, and the nightly identified backup). **None of those has been
-elected or worked through**, and several carry open classification questions in
+certificate registry, the language-model usage log, and visitors to the public
+verification page). **None of those has been elected or worked through**, and several carry open classification questions in
 clause 2.4 itself. They are named here so that this record's silence about them
 reads as *unfinished*, not as *nothing to record*.
+
+⚠️ **The nightly identified backup was on this list until 2026-09-02 and has been
+removed** — not because it was worked through and dropped, but because clause 2.8
+allocated it the **other** way: it is processing on the Controller's behalf and is
+filed at **P4** in §2. It is recorded here so the removal does not read as an
+omission.
 
 ---
 
