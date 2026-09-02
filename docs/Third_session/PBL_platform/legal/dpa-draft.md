@@ -1067,10 +1067,12 @@ unless the audit finds material non-compliance.
 
 11.5 **Record of processing — covenant.** The Processor shall create and maintain
 a record of processing carried out on the Controller's behalf (GDPR Art. 30(2))
-and make it available to the Controller on request. **Disclosed:** no such record
-(ROPA) existed at the draft date — none was found in the repository — so this is
-a forward obligation, not a description of the present. Creating it is a
-remediation item (Annex VI, L11).
+and make it available to the Controller on request. **Disclosed, and updated
+2026-09-02:** no such record existed at the draft date. One now does —
+`legal/record-of-processing.md` — so this covenant is discharged as to the
+register itself. ⚠️ It is a register, not a compliance statement: the **DPIA**
+and the **signed processor contract** that L11 also names remain absent, and
+creating the register closes neither.
 
 ---
 
@@ -1831,16 +1833,28 @@ produce output — as Hugging Face and its downstream providers do — falls
   - ⚠️ **Two duties this places on the CLIENT side, and both are still open.**
     They are the real residue of row #7, and they replace the "sign the DPA"
     item that turned out not to exist:
-    **(a) Art. 7.4 — sub-processor change notifications are OPT-IN.** Scaleway
-    undertakes to give 30 days' notice of a change to its sub-processor list
-    *"providing that it has previously subscribed to updates notifications using
-    the feature available on the dedicated page"*. Nobody has subscribed, so as
-    matters stand a change would reach us only if someone re-read the page. The
-    subscription is an account action, so it is the operator's to perform.
-    **(b) Art. 5.3.3 — the Client must "keep a register of the Data Processing
-    activities identifying Scaleway as a Data Processor or Sub-processor".**
-    Annex III row #7 is that entry in draft; it is not yet in the Controller's
-    own record of processing.
+    **(a) Art. 7.4 — the notice is conditional, and ⚠️ THE CONDITION CANNOT BE
+    MET.** Scaleway undertakes to give 30 days' notice of a change to its
+    sub-processor list *"providing that it has previously subscribed to updates
+    notifications using the feature available on the dedicated page"*.
+    **Checked 2026-09-02: no such feature could be located.** The dedicated page
+    (`scaleway.com/en/subprocessorlist/`) offers a change-history link and no
+    subscription; the console's Notification Manager is a history view with no
+    categories; and account Personal notifications offers exactly two entries,
+    both marketing newsletters. ⚠️ **A marketing newsletter is not a
+    sub-processor-change notification and must not be recorded as satisfying
+    Art. 7.4** — ticking one would convert an unmet condition into a false
+    claim of compliance, which is worse than the gap. **Consequence: do not rely
+    on the 30-day advance notice.** Changes are discoverable only by checking
+    the history page, so Scaleway's list as at 2026-09-02 is recorded in
+    `legal/record-of-processing.md` §3 to make an eye-diff possible. If the
+    notice ever matters contractually, ask Scaleway where the feature is — this
+    is a defect in their page or in the clause, not in our configuration.
+    **(b) Art. 5.3.3 — DONE 2026-09-02.** The register now exists:
+    `legal/record-of-processing.md`, an Art. 30(2) record whose §3 carries the
+    Scaleway entry this clause requires, naming the entity, both purposes
+    (relay and archive), the `fr-par` location and the lifecycle rules. It also
+    partly discharges clause 11.5 above.
   - **Disclosure in the participant-facing notice is DONE (2026-09-01).** The
     published Art. 13 notice now names Scaleway, Hugging Face and OVHcloud in
     section 6 and records the non-EEA routing step in section 7, in all three
@@ -2248,8 +2262,12 @@ France set the GDPR Art. 8 digital-consent age at 15, not the Art. 8 default of
 the statements, confirm the correct national threshold, and either add an age
 attestation at join or rely on the clause 3.6(e) Controller warranty.
 
-**L11 — HIGH. There is no DPIA, no record of processing activities, no signed
-processor contract, and no confidentiality undertakings on file.** The operator
+**L11 — HIGH. There is no DPIA, no signed processor contract, and no
+confidentiality undertakings on file.** ⚠️ *Amended 2026-09-02: this item also
+said there was no record of processing activities. There now is —
+`legal/record-of-processing.md`, Art. 30(2), which also carries the entry
+Scaleway's own DPA Art. 5.3.3 requires. The item stays **HIGH**: the register was
+the most mechanical of the four and its creation does not touch the other three.* The operator
 policy still carries `[to be added]` placeholders for the DPO and the responsible
 investigators, while the live notice names "the DPO" as the single rights contact.
 
