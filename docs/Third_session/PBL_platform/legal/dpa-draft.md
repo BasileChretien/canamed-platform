@@ -34,6 +34,32 @@
 >
 > ## ⚠️ READ FIRST — the US transfer this draft analyses has MOVED (2026-08-19)
 >
+> ⚠️ **SUPERSEDED IN PART, 2026-09-02 — read this before the paragraphs below.**
+> Two of their factual premises have since stopped being true, and because this
+> is the banner a reviewer reads first, the corrections belong here rather than
+> only in the annexes:
+>
+> 1. **`hfPatient` does not run in `europe-west1`. It does not run at all.**
+>    The project returned to the Spark plan on 2026-08-27 and Cloud Functions
+>    v2 require billing, so the function cannot start. The simulated-patient
+>    chat now goes through a **self-hosted proxy on Scaleway Serverless
+>    Functions in `fr-par` (Paris)** — Annex III row #7. The region-lockstep
+>    reasoning below is therefore about a component that no longer exists.
+> 2. **The archive bucket is no longer `europe-west1`.** GCS became unwritable
+>    with billing closed; the nightly backup and the pseudonymised export now
+>    write to **Scaleway Object Storage in `fr-par`** (row #7, purpose 2).
+>
+> **What survives unchanged, and is the point of the banner:** the scheduled
+> jobs still run on **GitHub Actions runners in the United States**, so that
+> transfer is real. Its two legs are now separately resolved — the transfer
+> rests on **DPF adequacy** (Annex IV), while the **Art. 28 contract is absent
+> and has been accepted as a disclosed non-compliance** (Annex VI **R9**, and
+> the conflict note at clause 6.3). Keep those two apart.
+>
+> As with the banner itself, this is a factual correction and not a rewrite of
+> the transfer analysis: which mechanism covers which leg remains a legal
+> determination for review.
+>
 > **`hfPatient` no longer runs in `us-central1`. It runs in `europe-west1`**, and
 > the client pins the same region (`modA-llm-init.js :: HF_FUNCTIONS_REGION`), with
 > `tests/hf-region-lockstep.test.js` holding the pair so they cannot drift apart.
@@ -672,6 +698,26 @@ Controller for each sub-processor's performance.
 > For Hugging Face, Annex IV records the transfer mechanism as **"None
 > identified"**. The language-model feature must therefore remain **disabled**
 > until clause 6.3 is satisfied for that leg — see clause 12.6.
+>
+> ⚠️ **GitHub (Annex III row #5) is a SECOND instance, and it cannot be cured.**
+> Established 2026-09-02 from the primary instruments: GitHub's Data Protection
+> Agreement is confined to services provided "under a written and executed
+> agreement" and forms part of a Customer Agreement covering "Your legal
+> entity's use"; the Terms of Service that actually govern this account contain
+> **no Art. 28 language whatsoever**; and GitHub's own Privacy Statement casts
+> it as **Controller**, not Processor, for direct users. There is no self-serve
+> route to a contract. Full reasoning in Annex III row #5; the Processor's
+> acceptance and its limits in **Annex VI R9**.
+>
+> ⚠️ **THIS CONFLICTS WITH THE CLAUSE ABOVE, AND THE CONFLICT IS LEFT OPEN ON
+> PURPOSE.** Clause 6.3 is a covenant — the Processor "shall **not engage** a
+> sub-processor until" a compliant contract is in force. GitHub is engaged and
+> such a contract is not in force and cannot be obtained on this plan. An
+> accepted risk in Annex VI cannot quietly override an operative covenant, so
+> the Parties must resolve it at signature by one of: carving GitHub out of 6.3
+> expressly, moving the affected jobs off GitHub, or declining to sign this
+> clause as drafted. **Do not treat R9 as having resolved it** — R9 records a
+> decision about risk, not a repair to the contract.
 
 6.4 **Onward sub-processing by Hugging Face — specifically disclosed.** The
 Module A language-model character is served through Hugging Face Inference
@@ -1685,7 +1731,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 
 `legal/github-art28-enquiry.md` is kept but is now OPTIONAL — the analysis no longer depends on it. It remains the way to convert "probably not" into "confirmed" for the Team question, if that ever becomes worth the message.
 
-**Options, for the Controller to decide:** (a) take a paid plan carrying a Customer Agreement so the DPA attaches; (b) move these jobs to a self-hosted runner inside the EEA; (c) reduce further so no personal data reaches a runner — not achievable on the current architecture, since the purge must at least name the sessions it deletes; (d) record and accept the gap. ⚠️ **CORRECTION 2026-09-02 — an earlier version of this row said the exposure is "bounded to session identifiers, two dates per session and the credentials records". That is true of the DATA THE JOBS READ, and incomplete about what the runner HOLDS.** Six workflows write the Firebase **admin service-account key** to the runner (`SA_JSON` → `${RUNNER_TEMP}/sa.json`): backup-sessions, pseudonymise-export, cleanup-stale-sessions, cleanup-expired-credentials, cost-monitor and firebase-deploy. That credential is not scoped to a path — the Admin SDK bypasses the database rules entirely — so it can read and write the whole identified tree, free-text chat included, plus Storage. The 2026-09-01/02 data-minimisation work narrowed what the SCRIPTS read; it did not and could not narrow the CREDENTIAL, and a key on the runner is inherently full-power (an override such as `databaseAuthVariableOverride` constrains the connection the code opens, not what the key file could do in other hands). A credential is not itself personal data, but its presence is why Art. 28 and Art. 32 bite here: the processor is technically able to access everything, and there is no contract constraining it. State the exposure that way, not as "identifiers and dates" |
+✅ **DECIDED 2026-09-02: ACCEPTED AND RECORDED — see Annex VI R9 and the conflict note at clause 6.3.** The operator elected to accept the gap rather than move the jobs or buy Enterprise. R9 records it as an accepted NON-COMPLIANCE (Art. 28(3) is mandatory; nothing substitutes for it), sets out why acceptance is proportionate at pre-pilot scale, carries the counterweight that the runners hold a full-database credential, and lists four review triggers — the first being any real-participant cohort. ⚠️ It is the PROCESSOR's decision and a DISCLOSURE: clause 6.3 imposes the flow-down on the Processor for the Controller's benefit, so it closes only when the Controller accepts it in signing. **Options that remain available, for the Controller:** (a) take a paid plan carrying a Customer Agreement so the DPA attaches; (b) move these jobs to a self-hosted runner inside the EEA; (c) reduce further so no personal data reaches a runner — not achievable on the current architecture, since the purge must at least name the sessions it deletes; (d) record and accept the gap. ⚠️ **CORRECTION 2026-09-02 — an earlier version of this row said the exposure is "bounded to session identifiers, two dates per session and the credentials records". That is true of the DATA THE JOBS READ, and incomplete about what the runner HOLDS.** Six workflows write the Firebase **admin service-account key** to the runner (`SA_JSON` → `${RUNNER_TEMP}/sa.json`): backup-sessions, pseudonymise-export, cleanup-stale-sessions, cleanup-expired-credentials, cost-monitor and firebase-deploy. That credential is not scoped to a path — the Admin SDK bypasses the database rules entirely — so it can read and write the whole identified tree, free-text chat included, plus Storage. The 2026-09-01/02 data-minimisation work narrowed what the SCRIPTS read; it did not and could not narrow the CREDENTIAL, and a key on the runner is inherently full-power (an override such as `databaseAuthVariableOverride` constrains the connection the code opens, not what the key file could do in other hands). A credential is not itself personal data, but its presence is why Art. 28 and Art. 32 bite here: the processor is technically able to access everything, and there is no contract constraining it. State the exposure that way, not as "identifiers and dates" |
 | 6 | [SMTP PROVIDER IDENTITY — Controller/Processor to confirm before enabling email] | Transactional email | Recipient email address, subject, message body | [TO VERIFY] | [TO VERIFY] |
 | 7 | **Scaleway S.A.S.** — 8 rue de la Ville l'Évêque, 75008 Paris, France; share capital EUR 214,410.50; R.C.S. Paris 433 115 904. *Entity, address and registration verified 2026-09-01 from the footer of Scaleway's own* Data Processing Agreement, *version of 1 June 2024 — the instrument that constitutes this row's Art. 28 contract (see the conditions note below). No separate signature exists or is required.* | **Two purposes.** (1) Serverless Functions: hosts the simulated-patient proxy that **replaced** the Google Cloud Function. (2) **Object Storage, added 2026-09-01: holds the nightly `/sessions` backup and the pseudonymised research export, including the real-name to pseudonym linkage table.** Purpose (2) is a NEW processing activity for an EXISTING processor, not a new recipient — chosen precisely because Scaleway's DPA is already in force and its Annex III row already exists, so restoring backups needed no new vendor, no new contract and no new disclosure surface | The scenario system prompt plus **participant free-text chat turns** (same payload as row #3), in transit; plus the caller's Firebase ID token and the session code and room name needed to authorise the call. For purpose (2) the artefacts ARE persisted: the identified `/sessions` tree and the linkage table. Bucket `fr-par`, 75 GB free allowance against an artefact of tens of KB. WARNING: the bucket must be PRIVATE with a lifecycle rule matching the retention policy — an object ACL cannot rescue a world-readable bucket. For purpose (1) there is still **no persistent storage** — the function holds nothing after the response | **`fr-par` (Paris, FRANCE)** — inside the EEA, for BOTH purposes. This is why the backup moved here rather than to any other free provider: the archive is identified participant data and must not leave the EEA | **Candidate cloud exception** — it relays rather than analyses the content; the model execution happens at #4. [TO VERIFY with Japanese counsel] |
 
@@ -2521,6 +2567,80 @@ Controller must weigh this in its DPIA. Under APPI the export is neither
 **Recommended fix (not accepted as permanent):** apply the same drop-or-review
 treatment to the long free-text items as to chat, or hold the export to a
 reviewed-release process.
+
+**R9 — No Art. 28 contract with GitHub, accepted by the Processor and put to
+the Controller (2026-09-02).** GitHub, Inc. processes personal data on the
+Processor's instructions — the scheduled retention, credential-expiry and
+cost-monitoring jobs run on GitHub Actions runners in the United States — and
+**no Art. 28(3) contract governs it**. See Annex III row #5 for the four
+primary-source supports; in short, GitHub's DPA is confined to services under a
+"written and executed agreement" forming part of a Customer Agreement covering
+a "legal entity's use", the Terms of Service that govern this account contain no
+Art. 28 language at all, and GitHub's Privacy Statement casts it as **Controller**
+for direct users. A paid self-serve plan probably does not change this and must
+not be bought on the assumption that it does.
+
+⚠️ **THIS IS AN ACCEPTED NON-COMPLIANCE, NOT A RESOLVED ITEM.** Art. 28(3) is
+mandatory and nothing substitutes for it — not the adequacy decision, not
+minimisation, not the absence of harm to date. Recording it here makes the
+position documented, reasoned and reviewable; it does not make it compliant, and
+this entry must not be cited as though it did.
+
+⚠️ **THE PROCESSOR CANNOT ACCEPT THIS ALONE.** Clause 6.3 imposes the
+sub-processor flow-down on the **Processor for the Controller's benefit**, and
+Art. 28(4) leaves the Processor fully liable for its sub-processors. So what is
+recorded here is the Processor's operational decision **and a disclosure**: the
+item is closed only if the **Controller** accepts it in signing, having seen the
+conflict flagged at clause 6.3. Until then it is disclosed, not settled. It must
+also appear in the CER Unicaen dossier and in the Controller's record of
+processing, not solely in this annex.
+
+**What is NOT at issue.** The international transfer is separately lawful:
+GitHub, Inc. is an active EU–U.S. Data Privacy Framework participant whose
+certification expressly covers "GitHub Free and Subscription Users Data", so the
+transfer rests on the Commission's adequacy decision of 10 July 2023 (Annex IV).
+Adequacy answers *where* data may go; it supplies no Art. 28 contract. Keep the
+two apart — conflating them is the error this analysis began with.
+
+**Why acceptance is nevertheless proportionate today**, and each limb is a fact
+that can be checked rather than an assurance:
+- The platform is **pre-pilot**: four sessions existed on the date of this entry.
+- What the jobs read has been minimised to **session identifiers and two
+  lifecycle dates per session**, plus the `credentials` records. **No session
+  bodies have reached a runner since PIS v7** (2026-09-01/02) — before that, two
+  jobs copied the whole identified tree daily.
+- Job logs carry no PII by configuration (`CLEANUP_QUIET=1`), so the world-
+  readable Actions logs of a public repository do not expose session codes.
+- The processing is ordinary infrastructure execution, not analysis: GitHub is
+  running our code, not deriving anything from the data.
+
+⚠️ **The honest counterweight, which the Controller must see.** Six workflows
+write the **Firebase admin service-account key** to the runner. The Admin SDK
+bypasses the database rules, so that credential can read and write the entire
+identified tree — free-text chat included — and Storage. The minimisation above
+narrowed what the code reads; it did not and could not narrow the credential. So
+the *actual* data handled is small, while the *potential* access is total, and it
+is exactly that combination — total technical access, no contractual constraint —
+that Art. 28 and Art. 32 exist to address. Do not present the minimisation
+without this.
+
+**Exit routes remain open and are cheaper than they look.** Moving the four
+scheduled jobs to an EEA host (Scaleway is already an authorised sub-processor
+with a DPA in force) or to a self-hosted runner would remove this gap *and* the
+US transfer; a self-hosted runner would additionally keep the admin credential
+off third-party hardware. GitHub Enterprise Cloud would also cure it and is
+plainly disproportionate at this scale.
+
+**Review triggers — any one of these reopens this item:**
+1. **Before any real-participant cohort.** This acceptance is calibrated to a
+   pre-pilot platform and does not carry over to live research use.
+2. Any expansion of what the jobs process — in particular, restoring a job that
+   reads session bodies, which `tests/ops-transfer-notice.test.js` would surface.
+3. Any change in GitHub's terms, or evidence that the DPA does reach this
+   account after all.
+4. Loss of the DPF adequacy basis, which `tests/github-dpf-currency.test.js`
+   flags 90 days ahead — that would leave the transfer *and* the contract
+   unsupported at once, which is a materially different position.
 
 **R8 — Persistent research identifier in the browser (new).**
 `canamed_stable_id` is **two identifiers under one name**: for anonymous
