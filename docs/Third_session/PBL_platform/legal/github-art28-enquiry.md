@@ -1,5 +1,15 @@
 # Draft enquiry to GitHub — does the DPA cover this account?
 
+⚠️ **STATUS 2026-09-02: OPTIONAL, AND NOT THE BASIS OF THE ANSWER.** The operator
+declined to send it, so the question was settled from the primary documents instead —
+see Annex III row #5 of `dpa-draft.md`. The answer is that the DPA does **not** apply to
+a free personal account, established from the DPA's own definitions, the Terms of
+Service (which contain no Art. 28 language at all), and GitHub's Privacy Statement.
+
+This draft is kept for one purpose only: turning "a paid Team plan probably would not
+help either" into a confirmed answer, if that ever becomes worth a message. Nothing
+else depends on it.
+
 **Status: DRAFT, NOT SENT.** Written 2026-09-02 for the platform operator to
 send. Nothing here commits anyone to anything; it asks three questions and
 creates a written record of having asked, which is itself worth having.
