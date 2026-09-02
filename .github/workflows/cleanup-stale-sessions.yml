@@ -171,11 +171,22 @@ jobs:
           # "Backup gate: DISARMED … purging WITHOUT a verified archive" on
           # every run, so the state cannot be mistaken for a healthy one.
           #
-          # ⚠ FLIP THIS TO "1" IN THE SAME CHANGE THAT RE-ENABLES
-          # backup-sessions.yml. Leaving it at "0" with backups running gives
-          # the worst of both: an archive nobody checks, and a purge that
-          # proceeds when it silently stops.
-          CLEANUP_REQUIRE_BACKUP: "0"
+          # ARMED 2026-09-02, once a backup had actually succeeded and been
+          # verified in the bucket -- not before, because arming it against a
+          # destination that has never worked stops the purge on its first run,
+          # turning a missing-archive problem into a retention breach.
+          #
+          # Now read from a repo VARIABLE so an operator can disarm without a
+          # deploy, defaulting to "1" (fail-closed: do not delete without an
+          # archive). That default is the decision taken when the interlock was
+          # built -- block the purge when backups are stale -- and it only
+          # became safe to honour once backups were real.
+          #
+          # ⚠ Setting the variable alone does nothing if this line is hardcoded:
+          # that is exactly what happened on the first attempt to arm it, where
+          # `gh variable set CLEANUP_REQUIRE_BACKUP 1` left the job still
+          # printing "DISARMED" because the value never reached the script.
+          CLEANUP_REQUIRE_BACKUP: ${{ vars.CLEANUP_REQUIRE_BACKUP || '1' }}
           # How stale a backup may be before an ARMED gate blocks. 2d, not 1d:
           # the backup runs 30 min before this job, so a single missed night
           # must not halt retention.
