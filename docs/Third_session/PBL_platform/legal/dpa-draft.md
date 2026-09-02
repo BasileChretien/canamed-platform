@@ -582,9 +582,27 @@ there is no selective deletion at all. Consequences:
 
 Deferred erasure from backups **can** be defensible — data put beyond use,
 overwritten in the ordinary cycle, never selectively restored — but that position
-has to be **stated to the data subject**, and it is not stated anywhere. This is
-recorded as a limb of **G12**, and the participant-facing correction it needs is
-recorded there too. It is not fixed by this clause.
+has to be **stated to the data subject**.
+✅ **It is now stated (PIS v10, 2026-09-02).** All twelve published retention
+surfaces carry the archive, the 120-day figure and the restriction that backups
+are used only to restore the service; `privacy.html` §8 also carries the 180-day
+case, and §16 records that **our practice did not change — only the disclosure
+did**. `tests/retention-notice-consistency.test.js` derives the horizon from the
+lifecycle record and the purge constants and fails if any surface drops it.
+
+⚠️ **Do not restate that as "disclosed in eight languages" — it would overclaim.**
+Twelve *files* in eight languages were updated, but since 2026-06-25 `i18n.js`'s
+`t()` renders the workshop UI in **English for everyone**; the seven
+`locales/*.js` tables are maintained and tested but never displayed. What a
+participant actually reads today is **English** in the lobby, and
+`privacy.html` in **English, French or Japanese**. That is a pre-existing,
+separately recorded defect (**Annex VI L7**), not one this change introduced —
+but it bounds what this disclosure achieves for a participant who reads neither
+English, French nor Japanese.
+⚠️ **The DISCLOSURE half is done; the TECHNICAL half is not.** There is still no
+route to remove a withdrawn participant from, or block restoration of, archived
+snapshots. See **G12**, which now carries both halves and stays BLOCKING on the
+technical one.
 
 **(c) The archive window is an essential-means residue.** The 90-day figure is
 set by the operator for every facilitator alike, so a Controller cannot exercise
@@ -2775,9 +2793,31 @@ to `cleanup-stale-sessions.js`'s constants, and the archive is not one of them.
 restoration of, archived snapshots; **and** (ii) a **participant-facing
 correction**, because deferred erasure from backups is defensible only when it is
 disclosed — put beyond use, overwritten on the ordinary cycle, never selectively
-restored. Neither exists today. (ii) touches all twelve published notice surfaces
-in eight languages and needs a PIS and shell bump, so it is the larger half and
-the one more likely to be deferred indefinitely.
+restored.
+
+✅ **(ii) IS DONE — PIS v10, 2026-09-02.** All twelve published retention
+surfaces now state the archive, the 120-day horizon (180 for a session never
+closed, in the long-form notice) and the restore-only restriction, and §16
+records that the practice did not change, only the disclosure. Pinned by
+`tests/retention-notice-consistency.test.js`, which derives the horizon from
+`pii-bucket-lifecycle.json` plus the purge constants — so it cannot go stale the
+way the 7-day claim did.
+
+⚠️ **Reach, stated precisely.** Twelve files in eight languages were updated, but
+`t()` has rendered the UI in **English for everyone** since 2026-06-25, so the
+seven `locales/*.js` tables are maintained and tested rather than displayed. A
+participant reads **English** in the lobby and `privacy.html` in **EN/FR/JA**.
+That limit is **L7**, not a defect of this fix — but it means the disclosure does
+not reach a participant who reads none of those three.
+
+❌ **(i) IS NOT DONE, and this item stays BLOCKING on it.** ⚠️ Do not read the
+notice fix as closing G12: disclosing that copies persist makes the position
+*honest*, not *compliant*. Art. 17 still requires erasure, and the archive still
+has no selective deletion. The prediction in the previous sentence of this item —
+that the disclosure half was "the one more likely to be deferred indefinitely" —
+turned out backwards, which is itself worth remembering: the half that touches
+published text got done because it was asked for, and the half that touches
+storage is now the one with no owner.
 
 ## Residual risks accepted by design
 

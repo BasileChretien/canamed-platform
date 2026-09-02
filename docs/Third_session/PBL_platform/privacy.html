@@ -69,7 +69,7 @@
     <!-- ================== ENGLISH (canonical, legally binding) ===================== -->
     <section data-priv-lang="en">
     <p class="meta">
-      Notice version <strong>PIS v9 · 2026-09</strong>.
+      Notice version <strong>PIS v10 · 2026-09</strong>.
       <a href="index.html">← Back to the platform</a>
     </p>
 
@@ -215,6 +215,15 @@
     <ul>
       <li>Live session data is purged within 30 days of the session closing,
         or within 90 days of creation if the session is never closed.</li>
+      <li>A copy also remains in our <strong>nightly backups</strong>, which
+        are deleted automatically 90 days after they are taken. So the last
+        copy of a session disappears about <strong>120 days</strong> after it
+        closes &mdash; about 180 days if it was never closed. Backups exist to
+        restore the service after an incident (a database fault, an accidental
+        deletion); we do not search them, and we do not take data out of them.
+        If you ask us to delete your data, we delete it from the live platform
+        and the remaining backup copies expire on that schedule &mdash; they are
+        not used in the meantime.</li>
       <li>The research dataset is stored <strong>linked to you
         (identifiable)</strong>, accessible only to the named CaNaMED study
         team, and retained up to 5 years after publication, then deleted.</li>
@@ -269,7 +278,17 @@
       filled in per cohort).</p>
 
     <h2>16. Versioning</h2>
-    <p>Version <strong>PIS v9 · 2026-09</strong>. <strong>Material changes since PIS v8:</strong>
+    <p>Version <strong>PIS v10 · 2026-09</strong>. <strong>Material changes since PIS v9:</strong>
+      we have corrected what section 8 says about deletion. Live session
+      data is still purged 30 days after a session closes (90 days if it is
+      never closed), but a copy remains in our nightly backups, which delete
+      themselves 90 days after they are taken &mdash; so the last copy of a
+      session disappears about 120 days after it closes, not 30.
+      <strong>Nothing about our practice has changed:</strong> this was
+      always the case and the notice did not say so. Backups are used only
+      to restore the service after an incident.
+      Material changes are issued under a new version with re-consent on next join.
+      <strong>Material changes since PIS v8, carried forward:</strong>
       the nightly backup and the pseudonymised research export are running again,
       and they now write to Scaleway object storage in Paris rather than to
       Google (section 6). Scaleway was already handling the AI chat, so this is
@@ -346,7 +365,7 @@
     <!-- ================== FRANÇAIS ===================== -->
     <section data-priv-lang="fr" hidden>
     <p class="meta">
-      Version de la notice <strong>PIS v9 · 2026-09</strong>.
+      Version de la notice <strong>PIS v10 · 2026-09</strong>.
       <a href="index.html">← Retour à la plateforme</a>
     </p>
 
@@ -502,6 +521,17 @@
       <li>Données de session en direct supprimées sous 30 jours après la
         clôture de la séance, ou sous 90 jours après sa création si elle
         n'est jamais clôturée.</li>
+      <li>Une copie subsiste également dans nos <strong>sauvegardes
+        nocturnes</strong>, supprimées automatiquement 90 jours après leur
+        création. La dernière copie d'une séance disparaît donc environ
+        <strong>120 jours</strong> après sa clôture &mdash; environ 180 jours si
+        elle n'a jamais été clôturée. Les sauvegardes servent à rétablir le
+        service après un incident (panne de base de données, suppression
+        accidentelle) ; nous ne les consultons pas et n'en extrayons aucune
+        donnée. Si vous demandez la suppression de vos données, nous les
+        supprimons de la plateforme en service et les copies de sauvegarde
+        restantes expirent selon ce calendrier &mdash; elles ne sont pas
+        utilisées entre-temps.</li>
       <li>Le jeu de données de recherche est conservé <strong>de façon
         nominative (identifiable)</strong>, accessible uniquement à l'équipe
         de recherche CaNaMED désignée, jusqu'à 5 ans après publication, puis
@@ -562,8 +592,19 @@
       cohorte).</p>
 
     <h2>16. Versionnement</h2>
-    <p>Version <strong>PIS v9 · 2026-09</strong>.
-      <strong>Modifications substantielles depuis la version PIS v8 :</strong>
+    <p>Version <strong>PIS v10 · 2026-09</strong>.
+      <strong>Modifications substantielles depuis la version PIS v9 :</strong>
+      nous avons corrigé ce que la section 8 indique sur la suppression. Les
+      données de séance en direct sont toujours purgées 30 jours après la
+      clôture (90 jours si la séance n'est jamais clôturée), mais une copie
+      subsiste dans nos sauvegardes nocturnes, supprimées automatiquement 90
+      jours après leur création &mdash; la dernière copie d'une séance
+      disparaît donc environ 120 jours après sa clôture, et non 30.
+      <strong>Notre pratique n'a pas changé :</strong> c'était déjà le cas et
+      la notice ne le disait pas. Les sauvegardes servent uniquement à
+      rétablir le service après un incident.
+      Les modifications substantielles font l'objet d'une nouvelle version avec re-consentement à la prochaine participation.
+      <strong>Modifications substantielles depuis la version PIS v8, reprises :</strong>
       la sauvegarde quotidienne et l'export de recherche pseudonymisé sont de
       nouveau actifs et écrivent désormais sur le stockage objet de Scaleway à
       Paris, et non plus chez Google (section 6). Scaleway traitait déjà la
@@ -654,7 +695,7 @@
     <!-- ================== 日本語 ===================== -->
     <section data-priv-lang="ja" hidden>
     <p class="meta">
-      通知バージョン <strong>PIS v9 · 2026-09</strong>。
+      通知バージョン <strong>PIS v10 · 2026-09</strong>。
       <a href="index.html">← プラットフォームへ戻る</a>
     </p>
 
@@ -786,6 +827,14 @@
     <h2>8. 保有期間</h2>
     <ul>
       <li>ライブセッションのデータはセッション終了から30日以内に削除。終了操作が行われないまま放置された場合は、作成から90日以内に削除。</li>
+      <li>複製は<strong>毎晩のバックアップ</strong>にも残り、作成から90日後に
+        自動削除されます。したがって、セッションの最後の複製が消えるのは終了から
+        約<strong>120日後</strong>（終了操作が行われないまま放置された場合は
+        約180日後）です。バックアップは障害（データベースの不具合、誤削除など）
+        からのサービス復旧のために存在します。検索したり、データを取り出したり
+        することはありません。データの削除をご請求いただいた場合、稼働中の
+        プラットフォームからは削除し、残るバックアップの複製は上記の期間で
+        失効します。その間、それらが使用されることはありません。</li>
       <li>研究データセットは<strong>あなたと紐づけた(識別可能な)形式</strong>で、
         指名されたCaNaMED研究チームのみがアクセスできる状態で、公表から
         最長5年保持し、その後削除します。</li>
@@ -838,8 +887,18 @@
       審査・承認されています（番号と日付はコホート毎に記入）。</p>
 
     <h2>16. バージョン管理</h2>
-    <p>バージョン<strong>PIS v9 · 2026-09</strong>。
-      <strong>PIS v8からの重要な変更：</strong>日次バックアップと擬似匿名化された
+    <p>バージョン<strong>PIS v10 · 2026-09</strong>。
+      <strong>PIS v9からの重要な変更：</strong>第8条の削除に関する記載を訂正
+      しました。ライブセッションのデータは従来どおりセッション終了から30日
+      以内（終了操作が行われない場合は作成から90日以内）に削除しますが、
+      その複製が毎晩のバックアップに残り、バックアップは作成から90日後に
+      自動削除されます。したがって、セッションの最後の複製が消えるのは終了
+      から約120日後であり、30日後ではありません。<strong>運用が変わった
+      わけではありません。</strong>以前からこの状態であったにもかかわらず、
+      通知に記載がありませんでした。バックアップは障害からのサービス復旧
+      のみに使用します。
+      重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
+      <strong>PIS v8からの重要な変更（継続掲載）：</strong>日次バックアップと擬似匿名化された
       研究用エクスポートが再開し、保存先がGoogleからパリのScalewayオブジェクト
       ストレージへ変更されました（第6条）。Scalewayは既に模擬患者チャットの中継を
       担っており、新たな提供先ではなく既存の委託先が追加の役割を担うものです。
