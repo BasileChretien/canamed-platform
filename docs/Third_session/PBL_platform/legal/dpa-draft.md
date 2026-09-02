@@ -343,7 +343,8 @@ retention rule, which the Processor must supply:
 | **Certificate registry (`credentials/<certId>`)** | World-readable **without authentication**, outlives the session, served by the operator's own public verification page. It is not the facilitator's to control or delete. | **[FOR COUNSEL: this may be GDPR Art. 26 joint controllership. If so, an Art. 26 arrangement is needed and its essence must be made available to participants.]** |
 | **Language-model usage log (`metrics/hfPatient/*`)** | Records auth UID + session code per turn, on a path with no database rule, for the operator's own cost/abuse monitoring. Not reachable by any in-product access flow. | **[TO CLASSIFY — processor-held or operator-controlled. Whichever is chosen, it must appear in the Art. 15 runbook (clause 7.6) and acquire a retention rule.]** |
 | **Visitors to the public certificate-verification page (`verify.html`)** | Certificate verifiers (employers, registrars) are **not** participants and have no relationship with the facilitator. The page loads the Firebase SDK from `www.gstatic.com`, disclosing the visitor's IP address to Google, with no notice. | **[TO ALLOCATE — no role is assigned to this processing today.]** |
-| **The nightly identified backup and the pseudonymised research export** | See clause 2.6. | **[TO RESOLVE — see 2.6]** |
+| **The pseudonymised research export** | The operator determines its purpose, schedule, population and retention (GDPR Art. 28(10)). | ✅ **RESOLVED 2026-09-02 — operator is an independent controller.** Option 1 elected at clause 2.6. Art. 30(1) record at `record-of-processing.md` §2A. |
+| **The nightly identified backup** | Operational disaster recovery for the platform the operator runs, deliberately **not** consent-gated because it is not research reuse. | **[STILL TO RESOLVE — see clause 2.6.]** The 2026-09-02 election covered the export only. The backup was bundled into the same row without argument; it has a different purpose and needs its own allocation. |
 
 2.5 **Conflict with the live privacy notice — must be resolved before
 signature.** The privacy notice currently served by the platform
@@ -393,16 +394,81 @@ contract says. Two features of the platform put this DPA's allocation at risk:
   a single shared deployment (clause 3.3). Under EDPB Guidelines 07/2020 these
   are *essential means*, reserved to the controller.
 
-**Required resolution before signature — the Parties must choose one:**
+**The Parties had to choose one of three. ✅ ELECTED 2026-09-02: OPTION 1.**
 
-1. **Carve the export out.** Document the operator as an **independent
-   controller** for the research export, with its own GDPR Art. 6 / Art. 9 basis,
-   its own Arts. 13–14 notice, its own retention, and (for Japan) its own
-   Art. 27/28 analysis under Annex V.10. This DPA then covers only session
-   delivery; **or**
-2. **Stop the central export** and run exports only on a specific written
-   Controller instruction, scoped to that Controller's own sessions; **or**
-3. **[ALTERNATIVE PROPOSED BY COUNSEL: ____ ]**
+1. ✅ **ELECTED — carve the export out.** The operator is an **independent
+   controller** for the central research export, with its own GDPR Art. 6 /
+   Art. 9 basis, its own Arts. 13–14 notice, its own retention, and (for Japan)
+   its own Art. 27/28 analysis under Annex V.10. **This DPA covers session
+   delivery only**, and the export is outside it — see clause 2.4, which now
+   carries the export in its list of processing the operator does as a
+   controller in its own right.
+2. ~~Stop the central export~~ and run exports only on a specific written
+   Controller instruction, scoped to that Controller's own sessions. **Not
+   elected** — see the reasoning below.
+3. ~~[ALTERNATIVE PROPOSED BY COUNSEL]~~ — none proposed.
+
+**Why option 1, in four steps.**
+
+1. **It states what Art. 28(10) has already done; option 2 would change the
+   facts.** Art. 28(10) makes a processor that determines the purposes a
+   controller **by operation of law**, whatever the contract says. The operator
+   determines the purpose (its own study), the schedule, the population (every
+   closed consented session of every facilitator), the retention and the
+   linkage-table lifetime. It is therefore already a controller for this
+   processing. Option 1 records that; option 2 is the only one of the three that
+   is a genuine choice about *behaviour*, and it means giving up the operator's
+   own research.
+2. **It agrees with the live participant-facing notice; option 2 would
+   contradict it.** `privacy.html` already tells participants the research is
+   carried out by *"the named CaNaMED research team"* on **Art. 6(1)(a)** and
+   **Art. 9(2)(a) explicit consent** (Art. 9(2)(j) also cited), retained up to
+   five years after publication. Option 2 would tell each facilitator's
+   institution that it controls a study it does not run. So option 1 **narrows**
+   the divergence recorded at clause 2.5 and Annex VI L1 rather than widening it.
+3. **The consent architecture already separates the purpose.** Research consent
+   is a distinct box a participant can decline while still taking part, and the
+   export is consent-gated in code (Annex VI G1). A separate purpose carrying its
+   own separately-refusable consent is the shape of a separate controllership.
+4. **It puts responsibility where the decisions are made.** A facilitator cannot
+   set this job's schedule, scope, retention or linkage lifetime — that is the
+   essential-means problem in (b) below. Naming them its controller would be a
+   fiction, and a fiction that would leave the real decision-maker unaccountable.
+
+**What option 1 requires, and where each stands.** Electing it is not free; it
+imports a controller's full obligations for this activity:
+
+| Requirement | Status |
+| --- | --- |
+| Own GDPR Art. 6 / Art. 9 basis | ✅ **Satisfied and published** — Art. 6(1)(a) + Art. 9(2)(a) explicit consent, with Art. 9(2)(j) also cited. |
+| Own Arts. 13–14 notice | ⚠️ **Partly.** The *content* is published (purpose, recipients, retention), but the notice does not identify the research controller **distinctly** from the session controller. Folded into **L1**; not a new blocking item. |
+| Own retention rule | ✅ **Satisfied and published** — dataset 5 years after publication; linkage table 14 days, enforced by an object-storage lifecycle rule. |
+| Own record of processing | ✅ **Created 2026-09-02** — `legal/record-of-processing.md` §2A, an **Art. 30(1)** record. It is a different instrument from the Art. 30(2) record in §2, and the export was moved out of the latter. |
+| Own APPI Art. 27/28 analysis | ❌ **Still owed.** Annex V.10 establishes the output is neither 匿名加工情報 nor 仮名加工情報 and **remains 個人データ**; the transfer analysis for Japan-resident participants is not done. |
+
+⚠️ **Three consequences that follow from the election and must not be lost.**
+
+- **The hand-off becomes a disclosure, not a sub-processing.** Once the operator
+  is a controller here, session data moving from session-delivery into the
+  research export is a **controller-to-controller disclosure**, which needs its
+  own basis. That basis is the participant's explicit research consent — which
+  is why breaking the consent gate would not merely breach this clause but
+  remove the lawfulness of the disclosure itself.
+- **Annex VI G12 lands on the operator.** G12 records that **withdrawal does not
+  produce erasure**. Where consent is the basis and the operator is the
+  controller, that is now the operator's own Art. 7(3) / Art. 17 defect, not an
+  inherited one. The election does not create the defect; it names its owner.
+- **Nothing here is anonymised.** The dataset stays personal data under the GDPR
+  and 個人データ under APPI (Annex V.10). "Pseudonymised export" is the job's
+  name, not a legal characterisation, and must not be quoted as one.
+
+⚠️ **What the election does NOT do.** It does not make the export lawful by
+itself; it does not close part (b) below (essential means — Annex VI G10); it
+does not touch the GitHub or transfer analysis; and it does not relieve the
+facilitator of its own Art. 13 duty at the point of collection. It settles
+**who is answerable for this activity**, which was the open question, and it
+should be countersigned rather than assumed — though a Controller who declines
+it is choosing option 2, which stops the job.
 
 **Current state, verified against the workflow on 2026-09-02 — the exposure in
 (a) is LIVE.** `.github/workflows/pseudonymise-export.yml` runs on a live
@@ -452,7 +518,7 @@ that nobody later reads a self-consistent document as a clean one.
 | C2 | The clause 6.3 note said Annex IV records "None identified" for Hugging Face. **Annex IV has not said that since 2026-08-20.** | **Stale cross-reference corrected** in the 6.3 note. A publicly offered HF DPA exists, incorporated by reference; HF SAS's main establishment is Paris. | **Evidence** — which Agreement/DPA version this account accepted, and when. An owner action, not a negotiation. BLOCKING until produced. |
 | C3 | Clause 12.6 says the language model "shall be disabled by default", and it is **live**. | **No conflict once scope is read**: 12.6 binds sessions run *under this DPA*, and 5.4(a) means none is. The clause's **stale facts** (a `us-central1` mitigation, a US chat leg, a function that no longer runs) are corrected. | (i)–(iii) in 12.6 stay open. Enabling the chat *after* signature with them open **would** be a breach. |
 | C4 | Clause 2.5 — the **live notice names Caen × Nagoya as joint controllers**; this DPA allocates controller to the facilitator's institution. | **Resolved by clause 5.4(a)**, now cross-referenced: L1 is BLOCKING, so no session can run under this DPA until the notice is aligned. | **L1**, unchanged and BLOCKING. Which document changes is a decision for the institutions, not a drafting choice. |
-| C5 | Clause 2.6 — the Art. 28(10) election was never made, while the operator runs a central export over every facilitator's sessions. **And the workflow asserted its own inverse**: a "SCHEDULE DISABLED" header above a live `schedule:` block. | **State verified from the YAML, not the comment**: the export is **running** (re-enabled 2026-09-01). Clause 2.6 and the workflow header now both say so, and `tests/dpa-export-lockstep.test.js` derives the truth from the `on:` block. | The **election** — unmade while the processing runs — and part (b) **essential means** (G10). This resolution made the item *larger*, not smaller. |
+| C5 | Clause 2.6 — the Art. 28(10) election was never made, while the operator runs a central export over every facilitator's sessions. **And the workflow asserted its own inverse**: a "SCHEDULE DISABLED" header above a live `schedule:` block. | **State verified from the YAML, not the comment**: the export is **running** (re-enabled 2026-09-01), and the **election was then MADE — option 1**, on 2026-09-02. Clause 2.6, clause 2.4 and the Art. 30(1) record now agree; `tests/dpa-export-lockstep.test.js` derives the truth from the `on:` block and holds the register in lockstep. | The **APPI Art. 27/28 analysis** (Annex V.10), the notice's controller identification (**L1**), part (b) **essential means** (**G10**), and the **identified backup**, which shared C5's row without ever being argued. |
 
 ---
 

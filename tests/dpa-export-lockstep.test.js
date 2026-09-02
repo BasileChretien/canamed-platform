@@ -1,13 +1,17 @@
 /* tests/dpa-export-lockstep.test.js
  *
- * Keeps three statements about ONE fact in lockstep: is the central
- * pseudonymised research export on a live schedule?
+ * Keeps four statements about the central pseudonymised research export in
+ * lockstep — three about whether it runs, one about who answers for it:
  *
  *   1. `.github/workflows/pseudonymise-export.yml` — the `on:` block. THE TRUTH.
- *   2. The prose comment sitting directly above it in the same file.
+ *   2. The `# SCHEDULE-STATE:` marker sitting directly above it.
  *   3. Clause 2.6 of `legal/dpa-draft.md`, whose GDPR Art. 28(10) analysis turns
  *      on whether the operator runs a central export over every facilitator's
  *      sessions.
+ *   4. `legal/record-of-processing.md` — which of the two records (Art. 30(2),
+ *      on a Controller's behalf, or Art. 30(1), the operator's own) the activity
+ *      is filed under. Clause 2.6's election decides that, and the two must not
+ *      drift apart. See the block above that test.
  *
  * WHY THIS EXISTS, precisely. On 2026-08-31 the schedule was commented out (its
  * GCS destination had become unwritable) and a long header comment was written
@@ -39,6 +43,7 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), "utf8");
 
 const WF = ".github/workflows/pseudonymise-export.yml";
 const DPA = "docs/Third_session/PBL_platform/legal/dpa-draft.md";
+const ROPA = "docs/Third_session/PBL_platform/legal/record-of-processing.md";
 
 /* Both files are hand-wrapped prose. A literal regex over raw text fails the
    moment an editor re-flows a line, which is a false failure on correct
@@ -136,4 +141,58 @@ test("DPA clause 2.6 agrees with the workflow", () => {
         `but it is still a false statement in a legal draft.`
     );
   }
+});
+
+/* ---------------------------------------------------------------------------
+ * The Art. 28(10) election (DPA clause 2.6, made 2026-09-02).
+ *
+ * Electing option 1 — the operator is an INDEPENDENT CONTROLLER for the central
+ * research export — has a filing consequence that is easy to forget and
+ * embarrassing to be caught by: the activity stops belonging in the Art. 30(2)
+ * record (processing on behalf of a controller) and starts belonging in an
+ * Art. 30(1) one. An activity sitting in both records, or in neither, is the
+ * exact defect a register exists to prevent, and no reader would notice.
+ * ------------------------------------------------------------------------- */
+
+const OPTION_1_ELECTED = "✅ ELECTED 2026-09-02: OPTION 1";
+
+test("the Art. 28(10) election and the two processing records agree", () => {
+  const dpa = flat(read(DPA));
+  const ropa = read(ROPA);
+
+  /* Anti-vacuity: if the register is renamed or its Art. 30(2) section
+     restructured, every assertion below would pass by matching nothing. */
+  assert.ok(
+    /##\s*2\.\s*Categories of processing carried out on behalf of each Controller/.test(
+      ropa
+    ),
+    `${ROPA}: the Art. 30(2) section heading is gone. If the register was ` +
+      `restructured, update this test in the same commit — silently green here ` +
+      `means nothing is checking where the export is filed.`
+  );
+
+  if (!dpa.includes(flat(OPTION_1_ELECTED))) {
+    /* Option 2 (or a counsel alternative) — the export must NOT be filed as the
+       operator's own controllership, because it would no longer be one. */
+    assert.ok(
+      !/##\s*2A\./.test(ropa),
+      `${ROPA}: it carries an Art. 30(1) record for the export while ${DPA} no ` +
+        `longer elects option 1. Whoever changed the election must move the ` +
+        `activity back into the Art. 30(2) record in the same commit.`
+    );
+    return;
+  }
+
+  assert.ok(
+    /##\s*2A\./.test(ropa) && /A1 — Central pseudonymised research export/.test(ropa),
+    `${ROPA}: DPA clause 2.6 elects option 1 — the operator is an independent ` +
+      `controller for the research export — but the register has no §2A ` +
+      `Art. 30(1) entry for it. An election with no record is not made.`
+  );
+  assert.ok(
+    !/\|\s*P5\s*\|\s*\*\*Pseudonymised research export\*\*/.test(ropa),
+    `${ROPA}: the export is still listed as an ACTIVE row in the Art. 30(2) ` +
+      `record (§2) while also being the operator's own controllership. It must ` +
+      `appear in exactly one of the two records — see §2A.`
+  );
 });
