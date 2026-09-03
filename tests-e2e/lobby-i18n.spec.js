@@ -1,14 +1,22 @@
 /* tests-e2e/lobby-i18n.spec.js
  *
- * English-only lobby contract (user 2026-06-25: "delete all the French and
- * Japanese inside the website; keep only the dictionaries"). The whole UI —
- * consent + privacy notice included — renders in English regardless of the
- * language picker. The picker now only re-targets the in-page reading-aid's
- * per-word hover gloss (lang-reader.js), never any UI string. These tests pin
- * that: selecting French or Japanese leaves the lobby English and joinable, and
- * the localized strings that used to appear (e.g. "responsables conjoints",
- * "共同管理者") must NOT leak through. The translation TABLES stay intact for the
- * standalone privacy.html legal page + the i18n parity unit tests.
+ * The lobby language contract, REWRITTEN 2026-09-03 for Annex VI L7.
+ *
+ * It used to pin an English-only lobby, consent included — the 2026-06-25
+ * instruction ("delete all the French and Japanese inside the website; keep
+ * only the dictionaries") applied to every string. That instruction still holds
+ * for CONTENT, and this file still proves it: the workshop chrome around the
+ * consent block stays English whatever the picker says.
+ *
+ * But a consent form is not content. GDPR Art. 12(1) and APPI Art. 21 require
+ * information in an intelligible form, and consent that is not informed is not
+ * consent — which would undercut the Art. 6(1)(a) basis the live notice relies
+ * on. So the consent surface (the privacy summary, the consent rows, the notice
+ * version, the data-rights controls) localizes again, and NOTHING ELSE does.
+ *
+ * Both halves are asserted in every test here. Checking only that French
+ * appears would pass just as well on a fully re-translated UI, which is exactly
+ * what the 2026-06-25 decision rules out.
  *
  * Strategy: stub localStorage.canamed_lang BEFORE the i18n module's
  * auto-detect runs, so the page boots with that language selected.
@@ -54,31 +62,22 @@ async function openLobbyInLanguage(page, context, lang) {
   return { tab, code };
 }
 
-test.describe("Lobby i18n — English-only, picker drives the reader not the UI", () => {
-  test("French selected: the lobby + consent stay English and still join", async ({ page, context }) => {
+test.describe("Lobby i18n — the consent surface localizes, the workshop UI does not", () => {
+  test("French selected: consent is French, the surrounding UI is English, join works", async ({ page, context }) => {
     const { tab } = await openLobbyInLanguage(page, context, "fr");
 
-    // The privacy <details> summary renders the English canonical…
+    // THE CONSENT SURFACE IS FRENCH — this is the L7 fix.
     await expect(tab.locator(".privacy-note summary"))
-      .toContainText(/How your data is used/i);
-    // …and the old French renditions must NOT leak through.
-    await expect(tab.locator(".privacy-note summary"))
-      .not.toContainText(/Utilisation de vos données/i);
-
-    // P1 — controllers paragraph in English ("joint controllers"), not the
-    // French "responsables conjoints".
+      .toContainText(/Utilisation de vos données/i);
     await expect(tab.locator(".privacy-note p").first())
-      .toContainText(/joint controllers/i);
-    await expect(tab.locator(".privacy-note"))
-      .not.toContainText(/responsables conjoints/i);
-
-    // Consent-version line is English now (consent is no longer localized).
+      .toContainText(/responsables conjoints/i);
     await expect(tab.locator("#consent-version"))
-      .toContainText(/Notice version/i);
-    await expect(tab.locator("#consent-version"))
-      .not.toContainText(/Version de la notice/i);
+      .toContainText(/Version de la notice/i);
 
-    // Grade-note stays English (as it always did).
+    /* …AND THE WORKSHOP UI IS NOT. The grade-note sits inside the lobby, right
+       beside the consent block, and is deliberately outside the localized
+       prefixes — so it is the sharpest available check that the exception did
+       not widen into a general re-translation. */
     await expect(tab.locator(".lobby-grade-note"))
       .toContainText(/not affected/i);
 
@@ -94,20 +93,16 @@ test.describe("Lobby i18n — English-only, picker drives the reader not the UI"
     await tab.close();
   });
 
-  test("Japanese selected: the lobby + consent stay English and still join", async ({ page, context }) => {
+  test("Japanese selected: consent is Japanese, the surrounding UI is English, join works", async ({ page, context }) => {
     const { tab } = await openLobbyInLanguage(page, context, "ja");
 
     await expect(tab.locator(".privacy-note summary"))
-      .toContainText(/How your data is used/i);
-    await expect(tab.locator(".privacy-note p").first())
-      .toContainText(/joint controllers/i);
-    // No Japanese must leak into the consent / privacy block.
-    await expect(tab.locator(".privacy-note"))
-      .not.toContainText(/共同管理者|データの利用方法/);
+      .toContainText(/データの利用方法/);
     await expect(tab.locator("#consent-version"))
-      .toContainText(/Notice version/i);
-    await expect(tab.locator("#consent-version"))
-      .not.toContainText(/説明文書のバージョン/);
+      .toContainText(/説明文書のバージョン/);
+    // The workshop chrome beside it stays English.
+    await expect(tab.locator(".lobby-grade-note"))
+      .toContainText(/not affected/i);
 
     await tab.locator("#name-input").fill("Yuki");
     const realUni = await tab.locator("#uni-input option:not([disabled])").first().getAttribute("value");
@@ -120,13 +115,14 @@ test.describe("Lobby i18n — English-only, picker drives the reader not the UI"
     await tab.close();
   });
 
-  test("Join button lock-tooltip is English and clears once consent ticked", async ({ page, context }) => {
+  test("Join button lock-tooltip follows the consent surface and clears once ticked", async ({ page, context }) => {
     const { tab } = await openLobbyInLanguage(page, context, "fr");
     const joinBtn = tab.locator("#join-btn");
-    // Disabled at first, with the English tooltip (not the old French one).
+    /* The tooltip explains WHY the button is locked — it is part of the consent
+       surface, so it localizes with it. A French participant told in English
+       why they cannot proceed is the same Art. 12(1) problem one control down. */
     await expect(joinBtn).toBeDisabled();
-    await expect(joinBtn).toHaveAttribute("title", /workshop-consent box/i);
-    await expect(joinBtn).not.toHaveAttribute("title", /Cochez la case de consentement/i);
+    await expect(joinBtn).toHaveAttribute("title", /consentement/i);
     // Ticking consent clears the tooltip and enables the button.
     await tab.locator("#consent-workshop").check();
     await expect(joinBtn).toBeEnabled();
