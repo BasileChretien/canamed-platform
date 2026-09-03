@@ -2171,3 +2171,51 @@ test("rules: withdrawal is possible AFTER the session closes, and only by its ow
     { research: false, at: Date.now() })).toBe("ALLOWED");
   await ctx.close();
 });
+
+test("rules: the roomChat author index records who spoke and is unreadable by everyone", async ({ page, browser }) => {
+  /* Annex VI G12's roomChat limb. Two properties, and they pull against each
+   * other — which is why the index is a separate tree rather than a field on
+   * the turn:
+   *   (a) the author is RECORDED, so a participant's chat can be erased;
+   *   (b) NO CLIENT CAN READ IT, so recording it does not tell the room who
+   *       said what. roomChat itself is room-readable and RTDB .read cascades,
+   *       so a uid on the turn would have been visible to every roommate.
+   * (b) cannot be shown by inspecting the rules — an absent .read is a denial
+   * only if the root really is .read:false, which is what this proves. */
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const code = "RCA" + Date.now().toString(36).slice(-4).toUpperCase();
+  const room = "Room 1";
+  const turn = "t" + Date.now().toString(36);
+  const authorPath = `roomChatAuthors/${code}/${room}/${turn}`;
+
+  // ALLOW — a participant records themselves as the author. Positive control.
+  expect(await tryWrite(page, authorPath, uidA),
+    "writing one's own uid as the author must be allowed").toBe("ALLOWED");
+  expect(await dbReadAsOwner(authorPath)).toBe(uidA);
+
+  // DENY — the reads. Not even the writer may read it back.
+  expect(await tryRead(page, authorPath),
+    "the author of a turn must not be readable, even by its own author")
+    .not.toBe("ALLOWED");
+  expect(await tryRead(page, `roomChatAuthors/${code}/${room}`),
+    "the room's author map must not be readable").not.toBe("ALLOWED");
+
+  // DENY — write-once, so an author cannot be reassigned after the fact.
+  expect(await tryWrite(page, authorPath, uidA),
+    "overwriting an author row must be denied").not.toBe("ALLOWED");
+
+  // DENY — attributing a turn to somebody else.
+  const ctx = await browser.newContext();
+  const p2 = await ctx.newPage();
+  await useEmulator(p2);
+  await p2.goto("/");
+  const uidB = await waitForUid(p2);
+  expect(uidB, "the second context must be a different user").not.toBe(uidA);
+  expect(await tryWrite(p2, `roomChatAuthors/${code}/${room}/other`, uidA),
+    "claiming a turn was written by someone else must be denied").not.toBe("ALLOWED");
+  // ...while B attributing a turn to THEMSELVES still works, so the denial
+  // above is about the forged uid and not about the path being unwritable.
+  expect(await tryWrite(p2, `roomChatAuthors/${code}/${room}/mine`, uidB)).toBe("ALLOWED");
+  await ctx.close();
+});

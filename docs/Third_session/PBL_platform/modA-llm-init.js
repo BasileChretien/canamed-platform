@@ -324,8 +324,15 @@
       ? window.roomChatPath(window.sessionNum, window.myRoom)
       : null;
     if (!chatPath) return null;
+    // Author index for erasure — a separate, client-unreadable tree, so
+    // recording who spoke does not tell the room. See roomChatAuthorsPath().
+    var authorPath = (typeof window.roomChatAuthorsPath === "function")
+      ? window.roomChatAuthorsPath(window.sessionNum, window.myRoom)
+      : null;
     return {
       chat:           db.ref(chatPath),
+      chatPath:       chatPath,
+      authorPath:     authorPath,
       awarded:        db.ref(modABase + "/scoring/awarded"),
       points:         db.ref(modABase + "/scoring/points"),
       // ALSO write to the platform-wide score subtree so:
@@ -458,7 +465,31 @@
         // the red-flag screen is scoring-only now, not a gate.
       },
       persistTurn: function (role, content) {
-        refs.chat.push({ role: role, content: content, at: Date.now() });
+        var turn = { role: role, content: content, at: Date.now() };
+        var uid = null;
+        try {
+          uid = (window.firebase && firebase.auth && firebase.auth().currentUser)
+            ? firebase.auth().currentUser.uid : null;
+        } catch (_) { uid = null; }
+        /* ONE multi-path update, not two pushes. If the turn landed and the
+           author row did not, that turn would be permanently unerasable and
+           nothing would say so — the exact defect this change exists to fix,
+           recreated intermittently. Either both land or neither does.
+           Falls back to the plain push when there is no uid or no author path
+           (solo/LOCAL mode has no auth at all), because dropping the message
+           itself would be a worse failure than an unattributed one. */
+        if (!uid || !refs.authorPath || !window.db) {
+          refs.chat.push(turn);
+          return;
+        }
+        var key = refs.chat.push().key;
+        var updates = {};
+        updates[refs.chatPath + "/" + key] = turn;
+        updates[refs.authorPath + "/" + key] = uid;
+        window.db.ref().update(updates)["catch"](function () {
+          /* A denied author write must not cost the student their message. */
+          try { refs.chat.child(key).set(turn); } catch (_) { /* defensive */ }
+        });
       },
       logError: function (err) {
         if (window.CanamedTelemetry && window.CanamedTelemetry.record) {

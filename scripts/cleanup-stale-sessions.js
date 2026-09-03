@@ -283,6 +283,22 @@ async function main() {
         // it must not outlive its session. A no-op on deployments that predate
         // the move.
         purge[loc.roomChatPath] = null;
+        // The chat's author index (roomChatAuthors/<code>), added so a
+        // participant's turns can be erased individually. Same clock as the
+        // chat it indexes — leaving it behind would keep a map of who said
+        // what after the words themselves were deleted, which is the worse
+        // half to retain.
+        purge[loc.roomChatAuthorsPath] = null;
+        // ⚠️ Withdrawal records (withdrawals/<code>/<uid>). These were added
+        // on 2026-09-03 for GDPR Art. 7(3) and NOTHING purged them — a
+        // retention gap introduced by that change and caught here. They
+        // exist to keep a participant out of the research export, and the
+        // export only ever reads LIVE sessions, so once the session is gone
+        // the record protects nothing and is just a retained fact about a
+        // person. NB this is the opposite of the `erasures/` suppression
+        // records, which must OUTLIVE the snapshots they suppress and are
+        // deliberately not purged here.
+        purge[loc.withdrawalsPath] = null;
         // Certificate-id map (certIds/<code>): another out-of-cascade top-level
         // tree, so it needs the same explicit purge or it orphans a map of
         // published cert ids after its session is gone. A no-op on deployments

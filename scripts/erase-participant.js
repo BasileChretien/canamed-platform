@@ -17,12 +17,22 @@
  *   users/<uid>                    profile + history
  *   erasures/<id>                  the suppression record written for the archive
  *
- * WHAT IT CANNOT REACH, and says so on every run rather than in a footnote:
- *   roomChat/…   turns carry role/content/at and NO author, so one
- *                participant's chat cannot be separated from their roommates'.
- *                Erasing it means erasing the whole room's conversation, which
- *                is other people's data. Reported as UNERASABLE; deciding what
- *                to do is a human call, and the schema is the thing to fix.
+ *   roomChat/…                     via the roomChatAuthors index (below)
+ *
+ * ROOMCHAT, WHICH THIS TOOL COULD NOT REACH UNTIL 2026-09-03. Turns carried
+ * role/content/at and no author, so one participant's conversation with the
+ * simulated patient could not be separated from their roommates'. The schema
+ * fix was to record the author in a SEPARATE tree, `roomChatAuthors`, which has
+ * no `.read` rule and is therefore readable only by the Admin SDK — putting a
+ * `uid` on the turn itself would have told the whole room who said what, since
+ * roomChat is room-readable and RTDB `.read` cascades.
+ *
+ * ⚠️ TURNS WRITTEN BEFORE THAT CHANGE HAVE NO AUTHOR ROW and remain
+ * unerasable individually. They are counted and reported on every run: a
+ * legacy turn is not a bug to be hidden, it is a fact the requester may need
+ * to be told.
+ *
+ * WHAT IT STILL CANNOT REACH:
  *   the nightly archive — snapshots are not rewritten. A suppression record is
  *                written instead so a restore cannot bring the participant
  *                back, and the snapshots expire on their own cycle. This is the
@@ -146,13 +156,39 @@ async function main() {
   }
   for (const p of outside) updates[p] = null;
 
+  /* roomChat, via the author index. Both the turn and its author row go: a
+     surviving author row would be a record of who said something that no
+     longer exists. */
+  let chatTurns = 0;
+  let legacyTurns = 0;
+  for (const entry of suppressed) {
+    const loc = locations.find((l) => l.key === entry.locationKey);
+    if (!loc || !loc.roomChatAuthorsPath) continue;
+    const snap = await db.ref(loc.roomChatAuthorsPath).get();
+    const rooms = snap.exists() ? (snap.val() || {}) : {};
+    const chatSnap = await db.ref(loc.roomChatPath).get();
+    const chatRooms = chatSnap.exists() ? (chatSnap.val() || {}) : {};
+    for (const roomId of Object.keys(chatRooms)) {
+      const authors = rooms[roomId] || {};
+      for (const turnId of Object.keys(chatRooms[roomId] || {})) {
+        const author = authors[turnId];
+        if (author === undefined || author === null) { legacyTurns++; continue; }
+        if (!uid || author !== uid) continue;
+        updates[`${loc.roomChatPath}/${roomId}/${turnId}`] = null;
+        updates[`${loc.roomChatAuthorsPath}/${roomId}/${turnId}`] = null;
+        chatTurns++;
+      }
+    }
+  }
+
   console.log("PLAN");
   for (const r of report) {
     console.log(`  ${r.session}: ${r.count} path(s) — uid=${r.identity.uid || "-"} ` +
                 `cids=[${r.identity.clientIds.join(",")}] sids=[${r.identity.stableIds.join(",")}]`);
   }
   console.log(`  outside sessions: ${outside.length} path(s) (rosters, certIds, users)`);
-  console.log(`  TOTAL: ${totalPaths + outside.length} path(s)`);
+  console.log(`  roomChat: ${chatTurns} turn(s) (+ their author rows)`);
+  console.log(`  TOTAL: ${Object.keys(updates).length} path(s)`);
   console.log("");
 
   if (allAmbiguous.length) {
@@ -164,12 +200,16 @@ async function main() {
     console.log("");
   }
 
-  console.log("UNERASABLE — reported on every run, not a footnote:");
-  console.log("  roomChat/…  the simulated-patient conversation. Turns carry no " +
-              "author (role/content/at), so this participant's messages cannot be " +
-              "separated from their roommates'. Erasing them means erasing other " +
-              "people's data. The fix is a schema change, not a flag here.");
-  console.log("");
+  if (legacyTurns) {
+    console.log(`UNERASABLE — ${legacyTurns} chat turn(s) predate the author index:`);
+    console.log("  Written before 2026-09-03, when roomChat turns carried no author " +
+                "at all. They cannot be attributed to anyone, so they cannot be " +
+                "erased individually — deleting them would delete other people's " +
+                "messages. They disappear with the session on the ordinary " +
+                "retention clock. Tell the requester this rather than implying " +
+                "their chat is fully gone.");
+    console.log("");
+  }
 
   if (!CONFIRM) {
     console.log("DRY RUN — nothing was written. Re-run with ERASE_CONFIRM=1 to apply.");
