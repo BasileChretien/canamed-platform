@@ -61,7 +61,8 @@ const { getDatabase } = require("firebase-admin/database");
 const fs = require("fs");
 const path = require("path");
 const { chooseDestination, uploadArchive, describeDestination } = require("./lib/archive");
-const { pseudonymiseSession, sessionHasConsent, hasResearchConsent } = require("./lib/pseudonymise");
+const { pseudonymiseSession, sessionHasConsent, hasResearchConsent,
+        applyWithdrawals } = require("./lib/pseudonymise");
 const { readSessionLocations } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -108,7 +109,35 @@ async function main() {
   // location key, not bare code — two orgs may reuse the same session code.
   const locations = await readSessionLocations(db);
   const sessions = {};
-  for (const loc of locations) sessions[loc.key] = loc.data;
+  /* WITHDRAWALS ARE APPLIED BEFORE ANYTHING ELSE LOOKS AT CONSENT.
+     A participant who withdraws (GDPR Art. 7(3)) writes withdrawals/<code>/<uid>,
+     which stays writable after the session closes — pool/<cid>/consent does not,
+     so on a closed session the pool flag CANNOT have been updated and the
+     withdrawals node is the only truthful record. Folding it into the pool flag
+     here means the consent gate below, sessionHasConsent() and
+     pseudonymiseSession() all honour it without any of them knowing this node
+     exists. A parallel code path that had to be remembered is exactly how this
+     export came to ignore consent altogether (Annex VI G1). */
+  let withdrawnParticipants = 0;
+  for (const loc of locations) {
+    let recs = {};
+    try {
+      const snap = await db.ref(loc.withdrawalsPath).get();
+      recs = snap.exists() ? (snap.val() || {}) : {};
+    } catch (e) {
+      /* Fail CLOSED. An unreadable withdrawals node is indistinguishable from
+         an empty one, and guessing "empty" exports people who asked to be left
+         out — the one error this gate exists to prevent. */
+      console.error("FATAL: could not read " + loc.withdrawalsPath + " — " +
+                    (e && e.message));
+      console.error("Refusing to export: an unreadable withdrawal list looks " +
+                    "exactly like nobody having withdrawn.");
+      process.exit(4);
+    }
+    const n = Object.keys(recs).filter(u => recs[u] && recs[u].research === false).length;
+    withdrawnParticipants += n;
+    sessions[loc.key] = n ? applyWithdrawals(loc.data, recs) : loc.data;
+  }
   const codes = Object.keys(sessions);
   const orgCount = locations.filter(l => l.orgSlug).length;
 
@@ -127,6 +156,8 @@ async function main() {
   // rather than exported as a participant-free husk.
   const consentedCodes = closedCodes.filter(c => sessionHasConsent(sessions[c]));
   const noConsentCount = closedCodes.length - consentedCodes.length;
+  console.log("Withdrawn (Art. 7(3)): " + withdrawnParticipants +
+              " participant record(s) applied before the gate");
 
   let participantsIn = 0;
   let participantsOut = 0;

@@ -608,7 +608,37 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     STILL BANKED: the 347 -> 316 reclaim handed back 31 KB; this spends 4 of
 //     them and the lazy split earned most of that back. The next entry here
 //     should again be a reclaim, not another bump.
-const FIRST_PARTY_BYTES_LIMIT_KB = 320;
+//   2026-09-03: RAISED 320 -> 324 for the in-product withdrawal control
+//     (GDPR Art. 7(3) / Annex VI G12). ⚠️ THIS IS A BUMP WITHOUT A RECLAIM,
+//     which is exactly what the entry above says the next one should not be.
+//     Recorded plainly rather than dressed up.
+//     Measured LF-normalised (the served-response figure is ~1.6 KB higher on
+//     Windows because of CRLF): main 318.6 -> 320.2, a delta of 1.6 KB, of
+//     which ~1.4 is script.js and ~0.2 the eight i18n strings. Note main was
+//     ALREADY at 318.6 against a cap of 320 — the 3.5 KB working margin the
+//     entry above set aside had been spent down to 1.4 before this branch
+//     started, so this feature is not what consumed it.
+//     WHAT WAS DONE FIRST, so the bump is for the code and not for prose: the
+//     new comment block in script.js was cut from ~25 lines to 13 (the full
+//     reasoning lives in the DPA G12 item and tests/withdrawal.test.js, neither
+//     of which ships), and four i18n strings were shortened by pointing at
+//     privacy.html section 8 instead of restating its arithmetic. Together
+//     0.2 KB. Not enough, and said so rather than trimming further.
+//     WHY NO LAZY SPLIT, which is the option the entry above would prefer.
+//     It was considered: withdrawResearchConsent/runWithdrawalFlow are only
+//     reachable from two click handlers, so they fit the modA-triage pattern.
+//     It was rejected because the property this feature exists to establish is
+//     EFFORT PARITY — Art. 7(3) requires withdrawal to be as easy as the
+//     tick-box that gave consent — and putting the control behind an extra
+//     network fetch that can fail weakens precisely that. A lazily-loaded right
+//     is a worse right. This is a judgement, not a measurement, and a reviewer
+//     is free to disagree and split it.
+//     THE DEBT IS REAL AND UNPAID. 324 leaves ~3.8 KB, the same working margin
+//     as before. The next entry here should be a reclaim, and the obvious
+//     candidate is now concrete: downloadMyData() is ~6.4 KB raw of eager code
+//     reachable only from one click on the same row as this feature's button,
+//     so a data-rights lazy chunk would hand back more than both cost.
+const FIRST_PARTY_BYTES_LIMIT_KB = 324;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {

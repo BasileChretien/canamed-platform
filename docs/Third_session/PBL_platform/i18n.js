@@ -401,6 +401,15 @@
       "waiting.late-join.dismiss": "Got it",
 
       // data-rights — GDPR Art. 15 (right of access) participant self-export
+      "data-rights.withdraw-btn": "Withdraw my research consent",
+      "data-rights.withdraw-btn-short": "Withdraw consent",
+      "data-rights.withdraw-title": "Withdraw research consent?",
+      "data-rights.withdraw-confirm": "Your contributions will be excluded from the research dataset. This does not affect the session, your grades, or your university.",
+      "data-rights.withdraw-detail": "We will also delete your data. A person does that, so it is not instant, and backup copies expire on the schedule in section 8 of the privacy notice. Withdrawal does not undo research already published.",
+      "data-rights.withdraw-ok": "Withdraw consent",
+      "data-rights.withdraw-done": "Withdrawn. You are excluded from the research dataset and your deletion request is recorded.",
+      "data-rights.withdraw-err": "Could not record your withdrawal — please try again, or contact the facilitator.",
+      "data-rights.withdraw-err-auth": "Sign-in has not completed yet. Please try again in a moment.",
       "data-rights.export-btn": "Download my data (JSON) ⤓",
       "data-rights.err.no-session": "Join a session first — there's nothing to export yet.",
       "data-rights.err.not-ready": "The platform is still initialising. Please try again in a moment.",
@@ -1008,7 +1017,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v21";  // PIS v10: the nightly backup keeps a copy for 90 days after the purge
+  const LOCALE_VERSION = "v22";  // in-product withdrawal of research consent (Art. 7(3))
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

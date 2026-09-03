@@ -88,6 +88,50 @@ function sessionHasConsent(sess) {
   return Object.keys(pool).some(cid => hasResearchConsent(pool[cid]));
 }
 
+/**
+ * Apply a session's withdrawal records to its pool, in memory.
+ *
+ * A participant who withdraws (GDPR Art. 7(3)) writes
+ * `withdrawals/<code>/<uid>`, which the rules keep writable AFTER the session
+ * closes — unlike `pool/<cid>/consent`, which is closed-guarded and so cannot
+ * be flipped once the session ends. Since withdrawal is exercised precisely
+ * then, the withdrawals node is the authoritative record and the pool flag is
+ * only a best-effort mirror.
+ *
+ * Flipping the pool flag here rather than teaching every caller about
+ * withdrawals is deliberate: `sessionHasConsent`, `hasResearchConsent` and
+ * `pseudonymiseSession` all read that one flag, so one transformation at the
+ * front makes every downstream gate honour the withdrawal. A second code path
+ * that had to be remembered is how the export came to ignore consent entirely
+ * in the first place (Annex VI G1).
+ *
+ * @param {object} session the raw session subtree
+ * @param {object} withdrawals `withdrawals/<code>` — { uid: {research, at} }
+ * @returns {object} a NEW session; the input is not mutated
+ */
+function applyWithdrawals(session, withdrawals) {
+  const out = JSON.parse(JSON.stringify(session === undefined ? null : session));
+  if (!out || typeof out !== "object") return out;
+  const recs = withdrawals && typeof withdrawals === "object" ? withdrawals : {};
+  const withdrawn = new Set(
+    Object.keys(recs).filter(uid => recs[uid] && recs[uid].research === false));
+  if (!withdrawn.size) return out;
+
+  const mapping = (out.clientMapping && typeof out.clientMapping === "object")
+    ? out.clientMapping : {};
+  const pool = (out.pool && typeof out.pool === "object") ? out.pool : {};
+  for (const cid of Object.keys(pool)) {
+    /* A withdrawal is by uid; the pool is keyed by clientId, and one person can
+       hold several. Every clientId mapped to a withdrawn uid loses consent. */
+    if (!withdrawn.has(mapping[cid])) continue;
+    const entry = pool[cid];
+    if (entry && typeof entry === "object") {
+      entry.consent = Object.assign({}, entry.consent, { research: false });
+    }
+  }
+  return out;
+}
+
 function normName(s) {
   return typeof s === "string" ? s.normalize("NFC").trim() : s;
 }
@@ -253,6 +297,7 @@ function pseudonymiseSession(sess, sessionCode, linkage) {
 }
 
 module.exports = {
+  applyWithdrawals,
   pseudonymiseSession,
   pseudoCode,
   normName,
