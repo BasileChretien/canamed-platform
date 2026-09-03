@@ -15,7 +15,8 @@
  *
  *   2. On switching to a non-English language, EXACTLY that one locale chunk
  *      is fetched on demand, the consent block localizes, and consent + join
- *      still work. No other locale is pulled.
+ *      still work. No other locale is pulled. The workshop UI around it
+ *      stays English — see the test body for why both halves are asserted.
  *
  * Selector strategy mirrors lobby-i18n.spec.js: stable IDs (#consent-workshop,
  * #consent-version, #join-btn, #name-input) + short language-specific
@@ -111,11 +112,22 @@ test.describe("Lazy-loaded locales — consent first-paint safety (#48)", () => 
     await tab.close();
   });
 
-  test("switching language keeps the consent block in English and still joinable", async ({ page, context }) => {
-    // User 2026-06-25: the whole UI is English-only now — consent included. The
-    // language picker no longer localizes any UI string; it only re-targets the
-    // in-page reading-aid's per-word hover gloss (lang-reader.js). So switching
-    // to French must NOT translate the consent block, and must not break join.
+  test("switching language localizes the CONSENT block only, and join still works", async ({ page, context }) => {
+    /* REWRITTEN 2026-09-03 for Annex VI L7. This test used to assert the
+       opposite — that switching to French left the consent block in English —
+       pinning the 2026-06-25 "delete all the French and Japanese" instruction as
+       applied to every string.
+
+       That instruction stands for CONTENT: the teaching material is
+       English-canonical and this test still proves it. But a consent form is not
+       content. GDPR Art. 12(1) and APPI Art. 21 require information in an
+       intelligible form, and consent that is not informed is not consent — which
+       would undercut the Art. 6(1)(a) basis the live notice relies on. So the
+       consent surface localizes again and nothing else does.
+
+       BOTH halves are asserted here. Checking only that French appears would
+       pass equally well if the whole UI had been re-translated, which is exactly
+       what the 2026-06-25 decision rules out. */
     const code = await createSession(page, "lazy FR run");
     const { tab } = await openLobbyTab(context, code);
 
@@ -126,10 +138,20 @@ test.describe("Lazy-loaded locales — consent first-paint safety (#48)", () => 
     await tab.evaluate(() => window.setLang("fr"));
     await expect(tab.locator("html")).toHaveAttribute("lang", "fr");
 
-    // Consent text stays ENGLISH (the old French "Version de la notice" must NOT
-    // appear) — the picker drives the reader, not the UI copy.
-    await expect(tab.locator("#consent-version")).toContainText(/Notice version/i);
-    await expect(tab.locator("#consent-version")).not.toContainText(/Version de la notice/i);
+    // The consent surface IS in French now — this is the L7 fix.
+    await expect(tab.locator("#consent-version")).toContainText(/Version de la notice/i);
+    await expect(tab.locator('[data-i18n="lobby.consent-workshop"]'))
+      .toContainText(/consens|donn/i);
+
+    /* …and the workshop UI is NOT. `waiting.leave` is chrome, so it must still
+       read English even with the picker on French. Without this the test would
+       pass on a fully re-translated UI. */
+    const leave = tab.locator("#waiting-leave");
+    if (await leave.count()) {
+      await expect(leave).toHaveText(/Leave/i);
+    }
+    expect(await tab.evaluate(() => window.CanamedI18n.t("room.call-facilitator")))
+      .toMatch(/Call a facilitator/i);
 
     // Consent still works after the switch: tick enables Join.
     await tab.locator("#consent-workshop").check();

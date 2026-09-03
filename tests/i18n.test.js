@@ -396,35 +396,79 @@ test("i18n English-only: workshop chrome renders English even under fr/ja", () =
   }
 });
 
-test("i18n: the consent block ALSO renders English (no language exception left)", () => {
-  // User 2026-06-25 (overrides the earlier consent-only-translation rule):
-  // "delete all the French and Japanese inside the website; keep only the
-  // dictionaries." t() now resolves EVERY key to canonical English — consent
-  // included. The only FR/JA left is the in-page reading aid's per-word hover
-  // gloss (lang-reader.js), not any UI string. The translation TABLES stay
-  // intact (parity tests above still pass + privacy.html still uses them).
-  const CONSENT = [
-    "lobby.consent-workshop",   // consent checkbox — formerly localized
-    "lobby.privacy.p1",         // data/privacy notice — formerly localized
-    "modA.chat.consentCta"      // LLM-chat consent — formerly localized
+test("i18n: consent, privacy and data-rights localise — and NOTHING else does", () => {
+  /* REPLACES "the consent block ALSO renders English", 2026-09-03, for Annex VI
+     L7. That test pinned the 2026-06-25 instruction — "delete all the French and
+     Japanese inside the website; keep only the dictionaries" — applied to every
+     key including consent.
+
+     The instruction is untouched for CONTENT, which is what it was about: the
+     teaching material stays English-canonical. But a consent form is not
+     content. GDPR Art. 12(1) requires information in an intelligible form and
+     APPI Art. 21 is parallel; consent that is not informed is not consent, which
+     would undercut the Art. 6(1)(a) basis the live notice relies on. So the
+     exception is reinstated for the consent block, the privacy summary and the
+     data-rights controls, and for nothing else.
+
+     Both halves are asserted. A test that only checked the localised half would
+     pass just as well if the whole UI had been re-translated, which is the thing
+     the 2026-06-25 decision rules out. */
+  const LOCALIZED = [
+    "lobby.consent-workshop",   // the checkbox that gates joining
+    "lobby.privacy.p1",         // the join-screen privacy summary
+    "lobby.privacy.p3",         // storage, retention and the backup tail
+    "data-rights.export-btn",   // Art. 15
+    "data-rights.withdraw-btn"  // Art. 7(3)
   ];
-  const CHROME = [
-    "data-rights.export-btn",   // GDPR self-export
-    "room.call-facilitator",    // call a facilitator
-    "stage.welcome.grade-note", // anti-coercion grade note
-    "splash.enter.submit"       // chrome
+  const ENGLISH_ONLY = [
+    "modA.chat.consentCta",     // in-exercise chrome, despite the name
+    "room.call-facilitator",
+    "stage.welcome.grade-note",
+    "splash.enter.submit"
   ];
   try {
     for (const lang of ["fr", "ja"]) {
       i18n.setLang(lang);
-      for (const k of [...CONSENT, ...CHROME]) {
-        // The table still carries a differing fr/ja string (kept for privacy.html)…
+      for (const k of LOCALIZED) {
+        assert.notStrictEqual(T[lang][k], T.en[k],
+          `${k} ${lang} must differ in the table, or this proves nothing`);
+        assert.strictEqual(i18n.t(k), T[lang][k],
+          `${k} must render in ${lang} — it is part of the consent surface, and ` +
+          `an English-only consent form is not informed consent (L7)`);
+      }
+      for (const k of ENGLISH_ONLY) {
         assert.notStrictEqual(T[lang][k], T.en[k], `${k} ${lang} should differ in the table`);
-        // …but t() renders the English canonical for everything now, consent included.
-        assert.strictEqual(i18n.t(k), T.en[k], `${k} should render English under ${lang}`);
+        assert.strictEqual(i18n.t(k), T.en[k],
+          `${k} rendered in ${lang}. The workshop UI stays English-canonical — ` +
+          `the L7 exception is for the consent surface only.`);
       }
     }
   } finally {
     i18n.setLang("en"); // reset shared module state even if an assertion throws
   }
+});
+
+test("i18n: the localised set is a PREFIX list, so new consent strings are covered", () => {
+  /* A hand-maintained key list would silently leave a newly added consent
+     string in English, and that omission is invisible in an English review. */
+  assert.ok(Array.isArray(i18n.LOCALIZED_PREFIXES) && i18n.LOCALIZED_PREFIXES.length,
+    "LOCALIZED_PREFIXES is not exported — tests would have to copy the list, " +
+    "which is how it goes stale");
+  assert.ok(i18n.isLocalizedKey("lobby.consent-brand-new-2027"),
+    "a new key under an existing consent prefix is not covered");
+  assert.ok(!i18n.isLocalizedKey("room.anything"),
+    "the prefix list has widened beyond the consent surface");
+
+  /* Every key under a localised prefix must actually HAVE fr and ja, or the
+     exception silently falls back to English for it. */
+  const missing = [];
+  for (const k of Object.keys(T.en)) {
+    if (!i18n.isLocalizedKey(k)) continue;
+    for (const lang of ["fr", "ja"]) {
+      if (!Object.prototype.hasOwnProperty.call(T[lang], k)) missing.push(`${lang}:${k}`);
+    }
+  }
+  assert.deepStrictEqual(missing, [],
+    "these consent-surface keys have no fr/ja translation, so they render " +
+    "English while appearing to be localised");
 });

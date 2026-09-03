@@ -1017,7 +1017,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v22";  // in-product withdrawal of research consent (Art. 7(3))
+  const LOCALE_VERSION = "v23";  // L7: the consent surface renders in the participant's language again
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
@@ -1085,20 +1085,59 @@
   }
 
   // ── English-only UI ───────────────────────────────────────────────────────
-  // The ENTIRE workshop UI renders in English for everyone — consent included
-  // (user 2026-06-25: "delete all the French and Japanese inside the website;
-  // keep only the dictionaries"). The earlier consent/safety whitelist is gone.
-  // The only FR/JA left is the in-page reading aid's per-word hover gloss
-  // (lang-reader.js + the bundled dictionaries), whose target language the
-  // picker (getLang()) still selects. The full SUPPORTED locale tables remain
-  // loaded for the standalone privacy POLICY page (privacy.html, which keeps its
-  // reviewed FR/JA legal bodies via its own data-priv-lang mechanism), but t()
-  // never reads them.
+  // The workshop UI renders in English for everyone (user 2026-06-25: "delete
+  // all the French and Japanese inside the website; keep only the
+  // dictionaries") — WITH ONE NARROW EXCEPTION, reinstated 2026-09-03 for
+  // Annex VI L7.
+  //
+  // ── WHY THE EXCEPTION, AND WHY IT IS THIS NARROW ─────────────────────────
+  // That instruction was about CONTENT: the teaching material is
+  // English-canonical, which is a pedagogical decision and is untouched here.
+  // A consent form is not content. GDPR Art. 12(1) requires information to be
+  // given "in a concise, transparent, intelligible and easily accessible form,
+  // using clear and plain language", and APPI Art. 21 is parallel. A French or
+  // Japanese medical student consenting to health-adjacent processing through
+  // an English-only form is not informed within the meaning of either, and
+  // consent that is not informed is not consent — which would undercut the
+  // Art. 6(1)(a) basis the live notice relies on.
+  //
+  // So LOCALIZED_PREFIXES covers the consent block, the privacy summary and
+  // the data-rights controls, and NOTHING ELSE. Everything a participant reads
+  // while doing the exercise stays English. The translations were never
+  // deleted — the tables are complete for fr/ja and the parity tests enforce
+  // it — so this reconnects text that has been maintained all along.
+  //
+  // ⚠️ It is deliberately a PREFIX list rather than a key list: a new consent
+  // string added under one of these prefixes is localised automatically,
+  // whereas a hand-maintained key list would silently leave it English. That
+  // failure would be invisible in an English-language review.
+  //
+  // The full SUPPORTED tables also remain loaded for privacy.html, which keeps
+  // its reviewed FR/JA legal bodies via its own data-priv-lang mechanism.
+  const LOCALIZED_PREFIXES = [
+    "lobby.consent",   // the consent checkboxes, their detail text and version
+    "lobby.privacy",   // the join-screen privacy summary
+    "data-rights.",    // Art. 15 export, Art. 7(3) withdrawal
+    "privacy."         // the notice's own subtitle / language hints
+  ];
+  function isLocalizedKey(key) {
+    for (let i = 0; i < LOCALIZED_PREFIXES.length; i++) {
+      if (key.indexOf(LOCALIZED_PREFIXES[i]) === 0) return true;
+    }
+    return false;
+  }
   function t(key) {
-    // Always English — the selected language no longer changes any UI string.
-    const useLang = "en";
+    /* English for the workshop UI; the participant's language for the consent
+       and data-rights surfaces only. */
+    const useLang = isLocalizedKey(key) ? getLang() : "en";
     let raw;
-    if (Object.prototype.hasOwnProperty.call(T.en, key)) raw = T.en[key];
+    const table = (useLang !== "en" && T[useLang]) ? T[useLang] : null;
+    if (table && Object.prototype.hasOwnProperty.call(table, key)) raw = table[key];
+    /* Fall back to English rather than to the key. fr/ja are complete and the
+       parity test keeps them so; the second-wave locales (es/pt/de/ko/zh) are
+       best-effort, and for those an English consent string is a real problem
+       recorded in L7 — but it is a smaller one than rendering a raw key. */
+    else if (Object.prototype.hasOwnProperty.call(T.en, key)) raw = T.en[key];
     else return key;  // last-ditch: return the key so a missing string is visible
     // R3 deep-i18n: substitute {cohortPair} from the active COHORTS via
     // lib.js's buildCohortPair, so a Berlin-Tokyo partnership renders
@@ -1375,5 +1414,6 @@
     }
   }
 
-  return { t, getLang, setLang, applyI18n, localizedHref, ensureLang, register, SUPPORTED, _T: T };
+  return { t, getLang, setLang, applyI18n, localizedHref, ensureLang, register, SUPPORTED, _T: T,
+           LOCALIZED_PREFIXES, isLocalizedKey };
 });
