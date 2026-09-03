@@ -432,9 +432,22 @@ test("i18n: consent, privacy and data-rights localise — and NOTHING else does"
       for (const k of LOCALIZED) {
         assert.notStrictEqual(T[lang][k], T.en[k],
           `${k} ${lang} must differ in the table, or this proves nothing`);
-        assert.strictEqual(i18n.t(k), T[lang][k],
-          `${k} must render in ${lang} — it is part of the consent surface, and ` +
-          `an English-only consent form is not informed consent (L7)`);
+        const got = i18n.t(k);
+        if (/\{\w+\}/.test(T[lang][k])) {
+          /* Templated keys (lobby.privacy.p1 carries {controller}) are
+             SUBSTITUTED by t(), so the rendered string is deliberately not the
+             raw table entry. Assert the two things that actually matter: it is
+             not the English rendering, and no placeholder survived to the
+             participant. */
+          assert.ok(!/\{\w+\}/.test(got),
+            `${k} rendered with an unsubstituted placeholder in ${lang}`);
+          assert.notStrictEqual(got, T.en[k],
+            `${k} rendered the English table entry under ${lang}`);
+        } else {
+          assert.strictEqual(got, T[lang][k],
+            `${k} must render in ${lang} — it is part of the consent surface, ` +
+            `and an English-only consent form is not informed consent (L7)`);
+        }
       }
       for (const k of ENGLISH_ONLY) {
         assert.notStrictEqual(T[lang][k], T.en[k], `${k} ${lang} should differ in the table`);

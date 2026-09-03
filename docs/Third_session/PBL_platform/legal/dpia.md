@@ -235,9 +235,16 @@ A participant reading none of those three is not informed within Art. 12(1).
 *Severity: MODERATE. Likelihood: LIKELY in a Franco-Japanese cohort.* **Annex VI
 L7 — BLOCKING.**
 
-**E2. The notice names the wrong controller.** It declares Caen and Nagoya joint
-controllers, which contradicts the allocation in the DPA. **L1 — BLOCKING;
-clause 5.4(a) prevents any session running under the DPA until it is fixed.**
+**E2. The notice named the wrong controller. ✅ Naming fixed 2026-09-03.** It
+declared Caen and Nagoya joint controllers of every session, which is false for
+one any other facilitator runs — and any signed-in facilitator can. The join
+screen now quotes the institution the facilitator named at creation, and
+`privacy.html` §1 says so in all three languages (PIS v11); a session naming the
+platform's own institutions keeps the joint-controller clause and its Art. 26 /
+Art. 27(5) citations. ⚠️ **L1 stays BLOCKING** on its other half — the
+consent-version string is still literal in nine places rather than generated,
+and was found nine versions stale on 2026-09-02 — and clause 5.4(a) still
+prevents any session running under the DPA until it closes.
 
 **E3. Participants are not told there are two controllers** — the facilitator's
 institution for teaching, the operator for the research export (§2). *Severity:

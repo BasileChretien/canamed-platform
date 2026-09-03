@@ -115,7 +115,15 @@ test("dbInit clears the sticky long-poll flag BEFORE building firebase.database(
 test("sessionStatus races the read against a timeout and reports unreachable", () => {
   const fnIdx = SCRIPT.indexOf("function sessionStatus(");
   assert.ok(fnIdx !== -1, "sessionStatus must exist");
-  const body = SCRIPT.slice(fnIdx, fnIdx + 1400);
+  /* Slice to the NEXT top-level function rather than a fixed 1400 characters.
+     The fixed window broke on 2026-09-03: a comment added inside sessionStatus
+     pushed SESSION_STATUS_TIMEOUT_MS past the cut-off, so the test reported a
+     missing timeout on code that still had one. A guard that fails when a
+     function gains a comment trains people to widen it without reading it. */
+  const nextFn = SCRIPT.indexOf("\nfunction ", fnIdx + 1);
+  const body = SCRIPT.slice(fnIdx, nextFn === -1 ? undefined : nextFn);
+  assert.ok(body.length > 200 && body.length < 6000,
+    `sessionStatus body looks wrong (${body.length} chars) — the slice broke`);
   assert.match(body, /SESSION_STATUS_TIMEOUT_MS/,
     "sessionStatus must bound the read with a timeout constant");
   assert.match(body, /Promise\.race/,

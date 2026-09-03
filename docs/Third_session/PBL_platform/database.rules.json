@@ -127,6 +127,11 @@
           ".write": "auth != null && !data.exists() && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
           ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
         },
+        "controller": {
+          ".read": "auth != null",
+          ".write": "auth != null && !data.exists()",
+          ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 120)"
+        },
         "workshopLabel": {
           ".read": "auth != null",
           ".write": "auth != null && !data.exists()",
@@ -939,6 +944,11 @@
               ".read": "auth != null",
               ".write": "auth != null && !data.exists() && (root.child('facilitatorGate').child('enforce').val() != true || root.child('facilitatorGate').child('allow').child(auth.uid).val() == true)",
               ".validate": "newData.val() == null || (newData.hasChildren(['by','at']) && newData.child('by').isString() && newData.child('by').val().length > 0 && newData.child('by').val().length <= 40 && newData.child('at').isNumber())"
+            },
+            "controller": {
+              ".read": "auth != null",
+              ".write": "auth != null && !data.exists()",
+              ".validate": "newData.val() == null || (newData.isString() && newData.val().length > 0 && newData.val().length <= 120)"
             },
             "workshopLabel": {
               ".read": "auth != null",
