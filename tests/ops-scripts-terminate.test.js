@@ -127,3 +127,81 @@ test("the credential purge in particular exits, and passes its error state on", 
     "the credential purge must exit explicitly AND still report failed deletions " +
       "— exiting 0 unconditionally would hide them instead of hanging on them");
 });
+
+/* ---------------------------------------------------------------------------
+ * The same rule, widened beyond the cron (2026-09-03).
+ *
+ * The population above is "scripts a workflow runs on a cron", because a hang
+ * there is invisible — recorded as cancelled, no mail, nobody watching. But the
+ * HAZARD is the firebase-admin connection, not the schedule, and operator-run
+ * tools have it too: `scripts/erase-participant.js` and
+ * `scripts/restore-sessions.js` were added for Annex VI G12, are run by hand, and
+ * so appeared in no workflow and were covered by nothing.
+ *
+ * ⚠️ WHAT THIS CANNOT CATCH, stated because a guard read as stronger than it is
+ * becomes a reason not to look. These are text checks. They prove a script has
+ * *an* exit; they CANNOT prove the TERMINAL path exits. A script that exits in
+ * an early branch — a dry-run return, a validation failure — and then falls off
+ * the end of main() on the success path would satisfy every assertion here and
+ * still hang. Verified, not assumed: replacing the final
+ * `.then(() => process.exit(0))` in restore-sessions.js with `process.exitCode`
+ * leaves this file green, because its dry-run branch still exits.
+ * Distinguishing the two needs real parsing or an actual run against a
+ * database. The residual risk is named here instead of being papered over.
+ * ------------------------------------------------------------------------- */
+
+function allScriptsHoldingAConnection() {
+  const dir = path.join(ROOT, "scripts");
+  return fs.readdirSync(dir)
+    .filter((n) => n.endsWith(".js"))
+    .map((n) => "scripts/" + n)
+    .filter((rel) => holdsDatabaseConnection(rel))
+    .sort();
+}
+
+test("EVERY script holding a database connection exits explicitly, cron or not", () => {
+  const scripts = allScriptsHoldingAConnection();
+  /* Anti-vacuity, and a real check: this set must be a superset of the
+     scheduled one, or the derivation has broken rather than found nothing. */
+  assert.ok(scripts.length >= atRisk().length,
+    "the all-scripts derivation found fewer scripts than the scheduled one, " +
+    "which is impossible unless it is broken: " + JSON.stringify(scripts));
+  assert.ok(scripts.length >= 5, "derivation found almost nothing — it broke");
+
+  for (const rel of scripts) {
+    assert.match(read(rel), /process\.exit\(/,
+      rel + " holds a firebase-admin connection and never calls process.exit(). " +
+      "It will hang instead of finishing. `process.exitCode = n` is NOT enough — " +
+      "that is the exact trap that left cleanup-expired-credentials with 11 " +
+      "cancelled runs and zero completions.");
+  }
+});
+
+test("each of them can exit SUCCESSFULLY, not only on error", () => {
+  /* A script whose only exits are failure paths finishes a clean run by
+     hanging — the success case being the one that hangs is worse than the
+     reverse, because the failure case at least gets looked at.
+     The test accepts a computed code, because two scripts legitimately use one:
+     `process.exit(errors > 0 ? 1 : 0)` and `process.exit(res.errors ? 1 : 0)`.
+     So the rule is "an exit whose argument is not a non-zero literal". */
+  for (const rel of allScriptsHoldingAConnection()) {
+    const calls = [...read(rel).matchAll(/process\.exit\(([^)]*)\)/g)].map((m) => m[1].trim());
+    const nonFailure = calls.filter((arg) => !/^[1-9]\d*$/.test(arg));
+    assert.ok(nonFailure.length > 0,
+      rel + " only ever exits with a non-zero literal, so a successful run has " +
+      "no way to end. Found: " + JSON.stringify(calls));
+  }
+});
+
+test("the operator-run erasure tools are actually in that set", () => {
+  /* Named explicitly. The widening only helps if these two are what it caught,
+     and a derivation that quietly stopped matching them would stay green while
+     covering nothing new. */
+  const scripts = allScriptsHoldingAConnection();
+  for (const rel of ["scripts/erase-participant.js", "scripts/restore-sessions.js"]) {
+    assert.ok(scripts.includes(rel),
+      rel + " is not in the connection-holding set. If it stopped using " +
+      "firebase-admin that is fine — remove it from this list in the same " +
+      "change. If it still uses it, the derivation is broken.");
+  }
+});
