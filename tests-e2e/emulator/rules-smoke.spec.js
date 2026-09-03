@@ -2111,3 +2111,63 @@ test("rules: the session counter needs a roomOf claim in THAT session", async ({
   // …and it is still increment-only here.
   expect(await tryWrite(page, p, 0)).not.toBe("ALLOWED");
 });
+
+test("rules: withdrawal is possible AFTER the session closes, and only by its owner", async ({ page, browser }) => {
+  /* GDPR Art. 7(3), Annex VI G12. THE POINT OF THIS TEST is the closed-session
+   * leg. Every other participant-writable path is `!closed`-guarded, and a
+   * future edit "making withdrawals consistent" with them would make the right
+   * unexercisable exactly when it is used — after the session ends. Structural
+   * inspection cannot prove a rule ALLOWS something; only the emulator can. */
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const code = "WD" + Date.now().toString(36).slice(-5).toUpperCase();
+
+  // Close the session first, so every write below is against a CLOSED one.
+  await adminPut(`sessions/${code}/created`, { at: Date.now(), by: "t" });
+  await adminPut(`sessions/${code}/closed`, { at: Date.now() });
+
+  const mine = `withdrawals/${code}/${uidA}`;
+
+  // ALLOW — the leg that matters. A positive control, not only denials.
+  expect(await tryWrite(page, mine, { research: false, at: Date.now() }),
+    "withdrawal must be allowed on a CLOSED session").toBe("ALLOWED");
+  expect(await dbReadAsOwner(`${mine}/research`)).toBe(false);
+
+  // ALLOW — with the optional erasure request alongside.
+  expect(await tryWrite(page, mine,
+    { research: false, at: Date.now(), erasure: true })).toBe("ALLOWED");
+
+  // DENY — the node may never ASSERT consent, or it becomes a forging channel.
+  expect(await tryWrite(page, mine, { research: true, at: Date.now() }),
+    "research:true must be denied").not.toBe("ALLOWED");
+
+  // DENY — unknown keys, and a future timestamp.
+  expect(await tryWrite(page, mine,
+    { research: false, at: Date.now(), sneaky: 1 })).not.toBe("ALLOWED");
+  expect(await tryWrite(page, mine,
+    { research: false, at: Date.now() + 3600000 })).not.toBe("ALLOWED");
+  expect(await tryWrite(page, mine, { at: Date.now() }),
+    "a record without `research` must be denied").not.toBe("ALLOWED");
+
+  // The stored value is still the good one — the denials changed nothing.
+  expect(await dbReadAsOwner(`${mine}/erasure`)).toBe(true);
+
+  // DENY — a peer cannot withdraw on someone else's behalf. A second CONTEXT,
+  // because a second page would reuse this anonymous session and prove nothing.
+  const ctx = await browser.newContext();
+  const p2 = await ctx.newPage();
+  /* useEmulator() BEFORE the first navigation — a fresh context does not
+     inherit the emulator wiring, and without it Firebase never initialises and
+     waitForUid simply times out. */
+  await useEmulator(p2);
+  await p2.goto("/");
+  const uidB = await waitForUid(p2);
+  expect(uidB, "the second context must be a different user").not.toBe(uidA);
+  expect(await tryWrite(p2, mine, { research: false, at: Date.now() }),
+    "withdrawing for another participant must be denied").not.toBe("ALLOWED");
+  // ...and B withdrawing for THEMSELVES still works, so the denial above is
+  // about ownership and not about the node being unwritable.
+  expect(await tryWrite(p2, `withdrawals/${code}/${uidB}`,
+    { research: false, at: Date.now() })).toBe("ALLOWED");
+  await ctx.close();
+});

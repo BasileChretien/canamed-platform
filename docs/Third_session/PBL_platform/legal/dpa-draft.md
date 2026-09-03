@@ -2843,10 +2843,27 @@ now exists; that is not the same as the duty being discharged.
    simulated patient cannot be separated from their roommates'. The tool reports
    this on *every* run rather than in a footnote. **The fix is a schema change**
    — an author field on each turn — not a flag.
-2. **There is still no in-product withdrawal.** GDPR **Art. 7(3)** requires
-   withdrawal to be as easy as giving consent, and a participant e-mailing an
-   operator who then runs a CLI is not that. Art. 17 is now satisfiable; Art.
-   7(3) is not.
+2. ✅ **In-product withdrawal SHIPPED 2026-09-03 — Art. 7(3) is met for the
+   withdrawal itself.** A control sits beside the Art. 15 export on the waiting
+   screen (the one screen every participant passes through, including anonymous
+   ones) and on each row of the account dialog's session history (for someone
+   withdrawing weeks later). It writes `withdrawals/<code>/<uid>`, a node the
+   rules keep writable **even on a closed session** — every other
+   participant-writable path is `!closed`-guarded, and withdrawal is exercised
+   precisely once a session is over. `scripts/pseudonymise-export.js` folds
+   those records into the consent flag before its gate runs, and **fails closed**
+   if the node cannot be read, so withdrawing has immediate effect on the
+   research dataset rather than queuing a request.
+   ⚠️ **What it does NOT do: delete.** The control records an erasure request;
+   the deletion is still `scripts/erase-participant.js`, run by an operator.
+   Art. 17 remains satisfiable-by-operator, not self-service — deleting a
+   participant touches shared room content and the public certificate registry,
+   which no client should be able to do.
+   ⚠️ **Anonymous participants have the waiting-screen route only.** They have
+   no account history by design (anonymous joiners stopped getting a permanent
+   history record on privacy grounds), so once they leave the session they are
+   back to contacting the operator. That is a real limit of the design, not an
+   oversight, and it is the reason the notice must keep naming a human contact.
 3. **Entries attributed by display name alone are never auto-deleted.** Two
    students with the same name in one cohort is ordinary, and deleting a
    namesake's work while honouring someone else's request would be a worse

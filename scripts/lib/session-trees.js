@@ -24,7 +24,8 @@
  * @param {object} orgsVal     value of `orgs` (may be null/undefined)
  * @returns {Array<{key:string, code:string, orgSlug:string|null, path:string,
  *                  adminSecretPath:string, roomChatPath:string,
- *                  certIdsPath:string, rosterPath:string, data:object}>}
+ *                  certIdsPath:string, withdrawalsPath:string,
+ *                  rosterPath:string, data:object}>}
  *   `key` is unique across trees and is what exports should be keyed by — two
  *   orgs can legitimately use the same session code, so keying an export by the
  *   bare code would silently overwrite one with the other.
@@ -44,6 +45,7 @@ function locationFor(orgSlug, code) {
       adminSecretPath: "adminSecrets/" + code,
       roomChatPath: "roomChat/" + code,
       certIdsPath: "certIds/" + code,
+      withdrawalsPath: "withdrawals/" + code,
       // rosters/ mirrors the session path exactly — the client writes
       // "rosters/" + sPath(uid), and sPath is _sessionPrefix(org) + code, so
       // this is that same prefix with the uid left off.
@@ -58,6 +60,7 @@ function locationFor(orgSlug, code) {
     adminSecretPath: "adminSecrets/orgs/" + orgSlug + "/" + code,
     roomChatPath: "roomChat/orgs/" + orgSlug + "/" + code,
     certIdsPath: "certIds/orgs/" + orgSlug + "/" + code,
+    withdrawalsPath: "withdrawals/orgs/" + orgSlug + "/" + code,
     rosterPath: "rosters/orgs/" + orgSlug + "/sessions/" + code
   };
 }

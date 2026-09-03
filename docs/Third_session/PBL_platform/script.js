@@ -1965,6 +1965,74 @@ function certIdBasePath(code) {
 function certIdPath(code, clientId) {
   return certIdBasePath(code) + "/" + clientId;
 }
+/* Where a participant records that they are withdrawing research consent
+   (GDPR Art. 7(3)). Same out-of-cascade placement as roomChat/certIds, for a
+   different reason: this one must stay writable AFTER the session is closed.
+   Every participant-writable path under sessions/<code> is guarded by
+   `!closed`, because those paths carry session WORK. Withdrawal is not work —
+   it is a right, and it is exercised precisely once the session is over, so it
+   cannot live anywhere that a closed session locks. */
+function withdrawalPath(code, uid) {
+  const base = (_sessionPrefix(currentOrg) === "sessions/")
+    ? "withdrawals/" + code
+    : "withdrawals/orgs/" + currentOrg + "/" + code;
+  return base + "/" + uid;
+}
+/* GDPR Art. 7(3): withdraw research consent, in the product. Annex VI G12.
+ *
+ * Writes withdrawals/<code>/<uid>, which the rules allow EVEN ON A CLOSED
+ * SESSION — see withdrawalPath() above for why that node sits outside
+ * sessions/<code>. Also best-effort flips pool/<cid>/consent/research; that
+ * write IS closed-guarded, so its failure is expected and ignored, and the
+ * withdrawals node is what scripts/pseudonymise-export.js actually reads.
+ *
+ * It deletes NOTHING: erasure touches shared room content and the certificate
+ * registry, so it belongs to scripts/erase-participant.js, not to a client.
+ * `erasure: true` records the ask. The full reasoning is in the DPA's G12 item
+ * and in tests/withdrawal.test.js — deliberately not restated here, because
+ * this file ships to every visitor in the eager bundle.
+ */
+function withdrawResearchConsent(code, uid, opts) {
+  opts = opts || {};
+  if (!db || !code || !uid) return Promise.reject(new Error("not ready"));
+  const payload = { research: false, at: Date.now() };
+  if (opts.alsoRequestErasure) payload.erasure = true;
+  return db.ref(withdrawalPath(code, uid)).set(payload).then(() => {
+    /* Best effort, and its failure is expected on a closed session. */
+    if (!clientId) return null;
+    return db.ref(sPath("pool/" + clientId + "/consent/research")).set(false)
+      .catch(() => null);
+  });
+}
+
+/* Confirm, write, and report — shared by the waiting-screen button and the
+   per-session rows in the account dialog. */
+function runWithdrawalFlow(code, hintNode) {
+  const uid = (typeof currentUser !== "undefined" && currentUser) ? currentUser.uid : null;
+  if (!uid) {
+    if (hintNode) splashHintErr(hintNode, t("data-rights.withdraw-err-auth"));
+    return Promise.resolve(false);
+  }
+  return canamedConfirm({
+    title: t("data-rights.withdraw-title"),
+    message: t("data-rights.withdraw-confirm"),
+    detail: t("data-rights.withdraw-detail"),
+    okLabel: t("data-rights.withdraw-ok"),
+    danger: true
+  }).then(ok => {
+    if (!ok) return false;
+    return withdrawResearchConsent(code, uid, { alsoRequestErasure: true })
+      .then(() => {
+        if (hintNode) splashHintOk(hintNode, t("data-rights.withdraw-done"));
+        return true;
+      })
+      .catch(() => {
+        if (hintNode) splashHintErr(hintNode, t("data-rights.withdraw-err"));
+        return false;
+      });
+  });
+}
+
 function randomAdminMarker() {
   // 32 random bytes -> 64 lowercase hex, which satisfies the existing
   // adminPasswordHash .validate (legacy SHA-256 shape) while revealing
@@ -3277,6 +3345,16 @@ function joinParticipant() {
   if (gdprBtn && !gdprBtn.dataset.wired) {
     gdprBtn.dataset.wired = "1";
     gdprBtn.addEventListener("click", downloadMyData);
+  }
+  /* GDPR Art. 7(3) withdrawal, beside the Art. 15 export — the two rights
+     belong in the same place, and this is the one screen every participant
+     passes through. Same wired-once guard. */
+  const wdBtn = el("gdpr-withdraw-btn");
+  if (wdBtn && !wdBtn.dataset.wired) {
+    wdBtn.dataset.wired = "1";
+    wdBtn.addEventListener("click", () => {
+      runWithdrawalFlow(sessionNum, el("gdpr-withdraw-hint"));
+    });
   }
   focusHeading("waiting");
   updateWaitingStatus();   // show status immediately, not only once refStarted fires
@@ -12482,6 +12560,20 @@ function loadHistoryForDialog() {
       const sc = it.scenarioName ? " · " + it.scenarioName : "";
       meta.textContent = when + sc;
       li.appendChild(code); li.appendChild(meta);
+      /* The waiting-screen button only exists while someone is IN a session.
+         A signed-in participant who wants to withdraw a month later needs a
+         route too, and their history is the only place that lists the sessions
+         they were in. Anonymous participants have no history by design, so for
+         them the waiting-screen control is the only in-product route — stated
+         in Annex VI G12 rather than glossed. */
+      const wd = document.createElement("button");
+      wd.type = "button";
+      wd.className = "splash-link account-history-withdraw";
+      wd.textContent = t("data-rights.withdraw-btn-short");
+      wd.addEventListener("click", () => {
+        runWithdrawalFlow(it.code, el("account-action-hint"));
+      });
+      li.appendChild(wd);
       list.appendChild(li);
     });
   });

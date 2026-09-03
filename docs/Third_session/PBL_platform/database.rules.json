@@ -721,6 +721,34 @@
         }
       }
     },
+    "withdrawals": {
+      "$sessionId": {
+        "$uid": {
+          ".read": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid",
+          ".validate": "newData.hasChildren(['research','at'])",
+          "research": { ".validate": "newData.isBoolean() && newData.val() === false" },
+          "at": { ".validate": "newData.isNumber() && newData.val() <= now" },
+          "erasure": { ".validate": "newData.isBoolean()" },
+          "$other": { ".validate": false }
+        }
+      },
+      "orgs": {
+        "$orgSlug": {
+          "$sessionId": {
+            "$uid": {
+              ".read": "auth != null && auth.uid == $uid",
+              ".write": "auth != null && auth.uid == $uid",
+              ".validate": "newData.hasChildren(['research','at'])",
+              "research": { ".validate": "newData.isBoolean() && newData.val() === false" },
+              "at": { ".validate": "newData.isNumber() && newData.val() <= now" },
+              "erasure": { ".validate": "newData.isBoolean()" },
+              "$other": { ".validate": false }
+            }
+          }
+        }
+      }
+    },
     "certIds": {
       "$sessionId": {
         ".read": "auth != null && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()))",
