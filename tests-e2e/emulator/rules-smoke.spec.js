@@ -2219,3 +2219,52 @@ test("rules: the roomChat author index records who spoke and is unreadable by ev
   expect(await tryWrite(p2, `roomChatAuthors/${code}/${room}/mine`, uidB)).toBe("ALLOWED");
   await ctx.close();
 });
+
+test("rules: a participant cannot claim a room they were not assigned to (B1)", async ({ page, browser }) => {
+  /* THE FIX FOR DPIA RISK B1, and the reason it needed a functional test: the
+   * old rule was `auth.uid == $uid && !data.exists()` and nothing checked the
+   * claimant had been PUT in that room. A participant who knew a session code
+   * could claim any room and then read its simulated-patient chat, because
+   * roomChat's own .read is expressed in terms of this claim.
+   *
+   * Structural inspection cannot show that the new predicate actually binds —
+   * only that it mentions `pool`. So this drives both legs against the engine. */
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  const code = "B1" + Date.now().toString(36).slice(-5).toUpperCase();
+  const cidA = "cid-" + uidA.slice(0, 8);
+
+  await adminPut(`sessions/${code}/created`, { at: Date.now(), by: "t" });
+  await adminPut(`sessions/${code}/members/${uidA}`, true);
+  await adminPut(`sessions/${code}/clientMapping/${cidA}`, uidA);
+  await adminPut(`sessions/${code}/pool/${cidA}`, {
+    name: "A", university: "Caen", year: 4, english: "B2", at: Date.now(),
+    room: "Room 1",
+  });
+
+  const claim = `sessions/${code}/roomOf/${uidA}`;
+
+  // DENY — the whole point. Assigned to Room 1, claiming Room 2.
+  expect(await tryWrite(page, claim, { room: "Room 2", cid: cidA }),
+    "claiming a room you were not assigned to must be denied").not.toBe("ALLOWED");
+
+  // DENY — claiming with a clientId that is not yours, even for the right room.
+  await adminPut(`sessions/${code}/clientMapping/cid-someone-else`, "uid-OTHER");
+  await adminPut(`sessions/${code}/pool/cid-someone-else`, {
+    name: "B", university: "Caen", year: 4, english: "B2", at: Date.now(),
+    room: "Room 2",
+  });
+  expect(await tryWrite(page, claim, { room: "Room 2", cid: "cid-someone-else" }),
+    "claiming via somebody else's clientId must be denied").not.toBe("ALLOWED");
+
+  // ALLOW — the room they were actually put in. A positive control: without it
+  // every denial above could be explained by the node being unwritable.
+  expect(await tryWrite(page, claim, { room: "Room 1", cid: cidA }),
+    "claiming your OWN assigned room must be allowed").toBe("ALLOWED");
+  expect(await dbReadAsOwner(`${claim}/room`)).toBe("Room 1");
+
+  // DENY — still write-once, so the claim cannot be moved afterwards.
+  await adminPut(`sessions/${code}/pool/${cidA}/room`, "Room 2");
+  expect(await tryWrite(page, claim, { room: "Room 2", cid: cidA }),
+    "a claim must stay write-once even after the pool moves").not.toBe("ALLOWED");
+});

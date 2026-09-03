@@ -7,12 +7,14 @@
  * true on 2026-09-03, and nothing else in this repository would notice if they
  * stopped being true.
  *
- * The most valuable one is inverted on purpose. Risk **B1** says the room gate
- * is self-assertable. That is a defect, so the day someone fixes it this test
- * FAILS — forcing the DPIA to be updated by the same change that reduces the
- * risk. A DPIA still describing a fixed defect overstates risk, which sounds
- * harmless and is not: it is the same credibility problem as understating it,
- * and it is how a document stops being read.
+ * The B1 check was written INVERTED — it asserted the room gate was still
+ * self-assertable, so the day someone fixed it the test would fail and force
+ * the DPIA to be updated by the same change. That worked: the fix landed on
+ * 2026-09-03 and could not land quietly. It now guards the other direction —
+ * the binding must not be removed and the DPIA must not drift back to
+ * describing an open risk. A DPIA that overstates risk loses credibility
+ * exactly like one that understates it, and that is how a document stops being
+ * read.
  */
 
 "use strict";
@@ -58,28 +60,38 @@ test("it does not claim to be finished", () => {
     "was actually taken, record who took it and when rather than deleting the slot");
 });
 
-test("B1 — the DPIA and the rules agree on whether the room gate is self-assertable", () => {
-  /* THE LOCKSTEP THAT MATTERS. Fixing the gate must update the DPIA. */
-  const write = String(
-    rules.sessions.$sessionId.rooms.$roomId.uidMembers.$uid[".write"] || "");
-  /* Self-assertable means: nothing in the predicate checks that the claimant was
-     actually ASSIGNED to this room. The decided fix (2026-08-03) binds the claim
-     to the participant's own pool entry, so a reference to pool or clientMapping
-     is what "fixed" looks like. */
-  const bound = /pool|clientMapping/.test(write);
-  const dpiaSaysUnfixed = flat(dpia).includes("has not been implemented");
+test("B1 — the room claim is bound to the pool assignment, and the DPIA says so", () => {
+  /* INVERTED ONCE ALREADY, AND THAT IS THE POINT. Until 2026-09-03 this test
+     asserted the gate was still self-assertable and FAILED the moment someone
+     fixed it — so the fix could not land without updating the DPIA. It did
+     exactly that. Now it guards the other direction: the binding must not be
+     removed, and the DPIA must not drift back to describing an open risk.
 
-  if (bound) {
-    assert.fail(
-      "The room gate is now bound to the pool assignment — risk B1 has been " +
-      "FIXED. Update legal/dpia.md: B1's severity, the residual-risk table in " +
-      "§8, and the Art. 36 recommendation in §9 all rest on it being open, and " +
-      "a DPIA that overstates risk loses credibility exactly like one that " +
-      "understates it. Then delete this branch of the test.");
+     ⚠️ It also watches the RIGHT node now. The DPIA originally named
+     `uidMembers`, which was vestigial and gated nothing; the load-bearing claim
+     is `roomOf`, which is what roomChat's .read is expressed in terms of. */
+  const write = String(rules.sessions.$sessionId.roomOf.$uid[".write"] || "");
+  const orgWrite = String(
+    rules.orgs.$orgSlug.sessions.$sessionId.roomOf.$uid[".write"] || "");
+
+  for (const [label, w] of [["default", write], ["orgs", orgWrite]]) {
+    assert.match(w, /clientMapping/,
+      `${label}: the roomOf self-claim no longer checks the clientId belongs to ` +
+      `the claimant — a participant can claim a room through somebody else's id`);
+    assert.match(w, /child\('pool'\)/,
+      `${label}: the roomOf self-claim no longer checks the pool assignment, so ` +
+      `it is self-assertable again and DPIA risk B1 has reopened`);
+    assert.match(w, /!data\.exists\(\)/,
+      `${label}: the claim is no longer write-once`);
   }
-  assert.ok(dpiaSaysUnfixed,
-    "the rules still let a participant self-claim any room, but the DPIA no " +
-    "longer says so. Do not soften B1 without changing the rule.");
+
+  assert.ok(!JSON.stringify(rules).includes("uidMembers"),
+    "the vestigial uidMembers node is back. Nothing writes or gates on it; a " +
+    "self-assertable node that looks like a membership check is worse than none.");
+
+  assert.ok(flat(dpia).includes("B1. ✅ FIXED 2026-09-03"),
+    "the rules bind the claim but the DPIA still reports B1 as open. A DPIA " +
+    "that overstates risk loses credibility exactly like one that understates it.");
 });
 
 test("A1 — the DPIA and the client agree that the workshop consent gates joining", () => {

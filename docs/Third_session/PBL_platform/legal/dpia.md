@@ -144,17 +144,38 @@ regardless. **Residual: accepted, and it must stay disclosed.**
 
 ### B — Confidentiality
 
-**B1. ⚠️ The room gate is self-assertable — a participant can read another
-room's simulated-patient chat.** `rooms/$roomId/uidMembers/$uid` can be claimed
-by any authenticated user who knows the session code, with nothing checking they
-were assigned there. A fix was decided on 2026-08-03 — bind the claim to the
-participant's own `pool` assignment — **and has not been implemented**; verified
-against the current rules while writing this DPIA. *Severity: HIGH* — the chat is
-the most personal free text the platform holds, and the notice describes it as
-room-private. *Likelihood: LOW* (requires intent and developer tools in a
-supervised classroom) *but entirely available to a motivated classmate.*
-**Residual: HIGH until fixed. This is the most actionable finding in this
-document.**
+**B1. ✅ FIXED 2026-09-03 — the room claim is now bound to the assignment.**
+*The finding, kept because the reasoning still governs the design:* a
+participant could claim any room they liked and then read its
+simulated-patient chat, because nothing checked they had been **put** there. The
+notice describes that chat as room-private.
+
+⚠️ **The DPIA named the wrong node, and the real one was worse.** It cited
+`rooms/$roomId/uidMembers/$uid`. That node turned out to be **vestigial** — the
+client stopped writing it in #268, and it appeared exactly twice in the whole
+rules file, both times as its own declaration, gating nothing. The load-bearing
+claim is **`sessions/$id/roomOf/$uid`**, which is what `roomChat`'s `.read` and
+`.write` are expressed in terms of — and it was self-assertable in the same way.
+Fixing the node the DPIA named would have changed nothing.
+
+*The fix:* the self-write branch of `roomOf/$uid` now requires the `cid` in the
+claim to map to the claimant (`clientMapping/<cid> == auth.uid`) **and** the
+room claimed to equal that clientId's own pool assignment
+(`pool/<cid>/room == room`). The claim is verified rather than asserted. The
+vestigial `uidMembers` node was removed outright — audited first: nothing writes
+it, nothing gates on it, and the legacy-data handling in
+`scripts/lib/{erasure,pseudonymise}.js` stays, because old sessions still
+contain what it used to hold.
+
+*Proven functionally, not by inspection*
+(`tests-e2e/emulator/rules-smoke.spec.js`): claiming an unassigned room is
+denied, claiming through somebody else's clientId is denied, claiming your own
+assigned room is **allowed** (the positive control, without which every denial
+could be explained by an unwritable node), and the claim stays write-once even
+after the pool assignment moves.
+
+**Residual: LOW.** A facilitator can still reassign rooms, which is the intended
+admin path and is separately identity-bound.
 
 **B2. Whole-session visibility of structured work.** Any session member can read
 every room's scores, hypotheses and votes. *Severity: LOW* — intentional
@@ -267,8 +288,9 @@ Summarised; the detail is Annex II and the code it cites.
 
 ⚠️ **What is deliberately NOT mitigated** belongs here too, or the table is
 marketing: App Check is in *Monitor* rather than *Enforce* (R5), so attestation
-is observed and not required; Module A scoring is client-writable within bounds
-(accepted for formative use); and the room gate in **B1** is not fixed.
+is observed and not required, and Module A scoring is client-writable within
+bounds (accepted for formative use). *The room gate was in this list until
+2026-09-03; it is now bound to the pool assignment — see B1.*
 
 ---
 
@@ -279,8 +301,8 @@ input:
 
 | | |
 | --- | --- |
-| Risks reduced to low by the measures in §7 | B2, B3, C3, and the erasure/rectification limbs of A2 |
-| Risks that remain **HIGH** | **A1** (basis), **B1** (room gate), **E1/E2** (transparency), **B4** (admin credential + no Art. 28 contract) |
+| Risks reduced to low by the measures in §7 | **B1** (fixed 2026-09-03), B2, B3, C3, and the erasure/rectification limbs of A2 |
+| Risks that remain **HIGH** | **A1** (basis), **E1/E2** (transparency), **B4** (admin credential + no Art. 28 contract) |
 | Risks that are **accepted and disclosed** | B2, B3, B4 (as R9), A2's anonymous-participant limb |
 
 **The honest summary: residual risk is not low today.** Four BLOCKING Annex VI
@@ -298,8 +320,10 @@ Japan the PPC's own route) where a DPIA indicates the processing **would result
 in a high risk in the absence of measures taken to mitigate it**.
 
 **The Processor's reading:** the measures in §7 are substantial and most risks
-are mitigated, but **A1 is not a risk that measures address** — if consent is not
-freely given, no security control repairs it — and **B1 is unmitigated today**.
+are mitigated. **B1 was fixed on 2026-09-03**, which removes the largest
+unmitigated confidentiality risk. What remains is **A1, and A1 is not a risk that
+measures address** — if consent is not freely given, no security control repairs
+it.
 
 ⚠️ **Two of the accepted items make this a real question rather than a
 rhetorical one.** An accepted absence of an Art. 28(3) contract (R9), combined
@@ -307,11 +331,11 @@ with a credential that grants total access to the identified database, is exactl
 the shape of thing a supervisory authority expects to be consulted about — or, at
 minimum, to find fully documented if it asks.
 
-**Recommendation:** do not consult yet. Fix **B1**, close **L1/L2/L7/L10**, and
-obtain the DPO's position on **A1**. Then re-run §8. If A1 is resolved by moving
-to Art. 6(1)(e) and B1 is fixed, prior consultation is very unlikely to be
-required. If consent is retained *and* the DPO cannot conclude it is freely
-given, consultation becomes the conservative course.
+**Recommendation:** do not consult yet. **B1 is now done**; what is left of the
+condition is to close **L1/L2/L7/L10** and obtain the DPO's position on **A1**.
+Then re-run §8. If A1 is resolved by moving to Art. 6(1)(e), prior consultation
+is very unlikely to be required. If consent is retained *and* the DPO cannot
+conclude it is freely given, consultation becomes the conservative course.
 
 **This is a recommendation from the Processor. The decision is the controller's,
 and it must be recorded here with a date and a name.**
@@ -335,7 +359,9 @@ where the risk changes:
    document and in Annex VI is calibrated to a pre-pilot platform holding four
    sessions.
 2. A change of lawful basis, or a DPO position on **A1**.
-3. **B1 being fixed** — it is the largest single reduction available.
+3. ~~B1 being fixed~~ — **done 2026-09-03.** The next largest single reduction
+   available is closing **L1** and **L7**, which together determine whether a
+   participant is informed at all.
 4. A new sub-processor, a new transfer, or the loss of a transfer mechanism
    (`tests/github-dpf-currency.test.js` flags the DPF renewal 90 days ahead).
 5. A change to what the language model receives, or to the provider pin.

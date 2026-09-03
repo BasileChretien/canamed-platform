@@ -1308,7 +1308,38 @@ all seven `locales/*.js`, and the hardcoded fallback `<p>` in `index.html`.
 - `credentials/$certId.retentionUntil` now capped (`<= now + ~5y`) so a client
   can't set retention indefinitely and defeat GDPR cleanup.
 
-### ⚠️ THE ROOM GATE IS SELF-ASSERTABLE — every `uidMembers` rule is a speed bump, not a boundary (found 2026-08-03)
+### ✅ THE ROOM GATE IS BOUND — fixed 2026-09-03 (found 2026-08-03)
+
+**Fixed.** The self-write branch of `sessions/$id/roomOf/$uid` now requires the
+`cid` in the claim to map to the claimant (`clientMapping/<cid> == auth.uid`)
+**and** the room claimed to equal that clientId's own pool assignment
+(`pool/<cid>/room == room`), in both trees. Proven functionally in
+`tests-e2e/emulator/rules-smoke.spec.js` ("a participant cannot claim a room they
+were not assigned to (B1)"), with an ALLOW leg so a denial cannot be explained by
+an unwritable node, and pinned structurally by `tests/dpia-facts.test.js`.
+
+⚠️ **THE ORIGINAL FINDING NAMED THE WRONG NODE, and the real one was worse.**
+Everything below is about `uidMembers`. That node turned out to be **vestigial** —
+the client stopped writing it in #268 and it appeared exactly twice in the whole
+rules file, both times as its own declaration, gating nothing. The load-bearing
+claim is **`roomOf`**, which is what `roomChat`'s `.read` and `.write` are
+expressed in terms of, and it was self-assertable in the same way. **Fixing the
+node the finding named would have changed nothing.** `uidMembers` has been
+removed outright; the legacy-data handling in
+`scripts/lib/{erasure,pseudonymise}.js` stays, because old sessions still contain
+what it held.
+
+⚠️ **The client had to change too, for the reason PR #223 records.** The claim
+was a `.transaction()`, which runs the rule CLIENT-SIDE against the local cache;
+the new predicate reads `clientMapping` and `pool`, so a transaction would be
+pre-rejected in the browser whenever those were not yet cached. It is now a
+read-then-`set()`, evaluated on the server. Write-once is unaffected — the rule's
+`!data.exists()` is what enforced it all along.
+
+*The original finding, kept because its reasoning still governs every future
+per-room rule:*
+
+### (historical) THE ROOM GATE WAS SELF-ASSERTABLE — every `uidMembers` rule was a speed bump, not a boundary (found 2026-08-03)
 
 **Do not describe any per-room rule as "room-private" or "cross-room tampering is
 denied" until this is fixed.** `rooms/$roomId/uidMembers/$uid` has
