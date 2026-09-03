@@ -1121,6 +1121,14 @@
     "privacy."         // the notice's own subtitle / language hints
   ];
   function isLocalizedKey(key) {
+    /* Non-string keys reach t() in real code paths — a lookup built from an
+       optional field, an undefined variable in a template. Before the L7
+       change t() handled that harmlessly: hasOwnProperty(T.en, undefined) is
+       false, so it returned the key. Calling .indexOf on it instead threw, and
+       CI caught it across every Playwright project (the unit suite did not —
+       nothing passed t() a non-string). Guard here, so the predicate is safe
+       for any caller rather than only for t(). */
+    if (typeof key !== "string") return false;
     for (let i = 0; i < LOCALIZED_PREFIXES.length; i++) {
       if (key.indexOf(LOCALIZED_PREFIXES[i]) === 0) return true;
     }

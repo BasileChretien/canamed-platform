@@ -472,3 +472,20 @@ test("i18n: the localised set is a PREFIX list, so new consent strings are cover
     "these consent-surface keys have no fr/ja translation, so they render " +
     "English while appearing to be localised");
 });
+
+test("i18n: t() survives a non-string key, as it always did", () => {
+  /* REGRESSION, caught by CI on 2026-09-03 and not by this suite. The L7 change
+     routed every key through isLocalizedKey(), which called key.indexOf() — and
+     `t(undefined)` throws on that, where before it fell through to
+     hasOwnProperty(T.en, undefined) === false and returned the key. Real call
+     sites do pass undefined (a lookup built from an optional field), so four
+     Playwright projects went red on a change the unit tests called green.
+     Nothing here passed t() a non-string; now something does. */
+  for (const bad of [undefined, null, 0, 123, {}, [], true]) {
+    assert.doesNotThrow(() => i18n.t(bad), `t(${String(bad)}) threw`);
+    assert.strictEqual(i18n.t(bad), bad,
+      "a non-string key must come back unchanged, as it did before L7");
+  }
+  assert.strictEqual(i18n.isLocalizedKey(undefined), false);
+  assert.strictEqual(i18n.isLocalizedKey(null), false);
+});
