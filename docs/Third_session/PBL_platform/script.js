@@ -10236,12 +10236,23 @@ function sessionStatus(code) {
   const read = ensureSignedIn()
     .then(() => Promise.all([
       db.ref(oPath(code, "created")).once("value"),
-      db.ref(oPath(code, "closed")).once("value")
+      db.ref(oPath(code, "closed")).once("value"),
+      db.ref(oPath(code, "controller")).once("value")
     ]))
-    .then(snaps => ({
-      exists: snaps[0].val() != null,
-      closed: snaps[1].val() != null
-    }))
+    .then(snaps => {
+      /* WHO IS THE CONTROLLER OF THIS SESSION (Annex VI L1). Read here because
+         this is the first thing that runs when a participant enters a code —
+         before the lobby renders, so the notice never paints the wrong
+         institution and then corrects itself. i18n substitutes it into
+         lobby.privacy.p1 and escapes it; when the session has none (every
+         session predating this field) the sentence keeps the per-language
+         default it has always had. */
+      const ctrl = snaps[2].val();
+      window.CANAMED_SESSION_CONTROLLER =
+        (typeof ctrl === "string" && ctrl.trim()) ? ctrl.trim() : "";
+      try { if (typeof applyI18n === "function") applyI18n(); } catch (e) {}
+      return { exists: snaps[0].val() != null, closed: snaps[1].val() != null };
+    })
     .catch(() => ({ exists: false, closed: false, unreachable: true }));
   // Race the read against a timeout so a hung realtime connection surfaces a
   // distinguishable `unreachable` result instead of leaving callers pending.
@@ -11411,7 +11422,26 @@ function wireSplash() {
   };
   if (form) form.addEventListener("submit", e => { e.preventDefault(); tryEnter(); });
   if (el("splash-go-create")) el("splash-go-create")
-    .addEventListener("click", () => splashShowView("create"));
+    .addEventListener("click", () => {
+      splashShowView("create");
+      /* Prefill the controller from the facilitator's saved profile, so naming
+         it is a glance rather than another thing to type. Only when empty — a
+         facilitator who typed something else must not have it overwritten by
+         re-opening the form. */
+      /* PREFILLED, not blank. A blank required field would break every existing
+         session-creation path (including ~500 e2e tests) and, worse, would push
+         a facilitator to type something hurried into a legal field. The default
+         is the platform's own institutions — exactly what the notice said
+         before this change, so the canonical deployment is unaffected — and a
+         facilitator from anywhere else overwrites it. Profile first when the
+         facilitator has saved one. */
+      const c = el("splash-create-controller");
+      if (c && !c.value) {
+        c.value = (currentProfile && currentProfile.university) ||
+          tFallback("lobby.privacy.controller-plain",
+            "Université de Caen Normandie × Nagoya University");
+      }
+    });
 
   // VIEW 2: create
   const cForm = el("splash-create-form");
@@ -11469,6 +11499,16 @@ function wireSplash() {
         _snapshot.oversized);
       return;
     }
+    /* Art. 13(1)(a): the participant must be told WHO is responsible. Required
+       rather than optional — a blank here means the notice silently names the
+       platform's own institutions for somebody else's session. */
+    const _controller = ((el("splash-create-controller") || {}).value || "").trim();
+    if (!_controller) {
+      splashHintErr(cHint, tFallback("splash.create.controller-required",
+        "Name the institution responsible for this session's data — participants " +
+        "are told who it is before they join."));
+      return;
+    }
     cHint.textContent = "Creating session…";
     cHint.className = "splash-hint";
     const _sectionBodies = _snapshot.bodies;
@@ -11477,7 +11517,7 @@ function wireSplash() {
        revisit/exports, and scenarioCustomJson remains how a snapshot is pinned.
        Passing null is what retires the create-time path, not deleting them. */
     createSession(name, label, pass, null, null, null,
-                  null, _sectionCsv, _sectionBodies).then(result => {
+                  null, _sectionCsv, _sectionBodies, _controller).then(result => {
       // createSession resolves { code, recoveryCode }. The recoveryCode is
       // a one-time secret we surface ONCE on the created view and never
       // persist (it cannot be read back from the DB), so the facilitator
@@ -11801,7 +11841,7 @@ function showRecoveryCode(recoveryCode) {
    admin password hash. `scenarioId` is a key from window.CANAMED_SCENARIOS,
    or null when a custom-JSON scenario is being saved instead. `customJson` is
    the validated raw JSON string for a custom scenario (or null). */
-function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections, sectionBodies) {
+function createSession(creatorName, workshopLabel, password, scenarioId, customJson, scenarioRef, modules, sections, sectionBodies, controller) {
   try { dbInit(); } catch (e) {}
   if (!db) return Promise.reject(new Error("No database"));
   // Round-2 rules require auth != null on every write; wait for the
@@ -11873,6 +11913,12 @@ function createSession(creatorName, workshopLabel, password, scenarioId, customJ
       }
       if (workshopLabel) {
         writes.push(db.ref(oPath(code, "workshopLabel")).set(workshopLabel));
+      }
+      /* Who is the data controller for THIS session (Annex VI L1). The join
+         screen quotes it; without it the notice falls back to the platform's
+         own institutions, which is only true for sessions they run. */
+      if (controller) {
+        writes.push(db.ref(oPath(code, "controller")).set(controller));
       }
       if (customJson) {
         writes.push(db.ref(oPath(code, "scenarioCustomJson")).set(customJson));

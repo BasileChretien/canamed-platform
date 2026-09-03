@@ -231,6 +231,11 @@
       // splash — create-session view (facilitator)
       "splash.create.title": "Create a CANAMED session",
       "splash.create.subtitle": "You will get a short code to share with your students. You become its facilitator (admin) — keep the password you set here to control it later.",
+      "splash.create.controller-label": "Data controller (your institution)",
+      "splash.create.controller-placeholder": "e.g. Université de Caen Normandie",
+      "splash.create.controller-hint": "Shown to participants as the organisation responsible for their data in this session.",
+      "splash.create.controller-required": "Name the institution responsible for this session's data — participants are told who it is before they join.",
+      "lobby.privacy.controller-plain": "Université de Caen Normandie × Nagoya University",
       "splash.create.name-label": "Your name",
       "splash.create.name-placeholder": "e.g. Dr Smith",
       "splash.create.workshop-label": "Workshop label",
@@ -326,7 +331,7 @@
       "lobby.consent-research": "I additionally consent to my contributions — my answers, the questions and examinations I choose and their order, my votes, my scores and my free-text — being recorded and linked to me (identifiably) for the CaNaMED education-research project (analysis and publication). Only the study facilitators see my identity; other participants do not. I understand that I can take part in the workshop without ticking this second box — refusing has no effect on my participation, my grades or my standing at my university.",
       "lobby.consent-transcript": "I additionally consent to the written transcript AND the audio/video recording of the video-conference sessions being kept and analysed for the CaNaMED study. The transcript is produced automatically by the video-conference tool (Microsoft Teams) and carries my name against each of my utterances; the recording of the session is kept as well, not only the transcript. Both are kept for 5 years after publication, with the same restricted access as the rest of the research dataset, and I can ask for them to be deleted at any time. No photograph is taken and I am not required to turn my camera on. I can take part in the workshop without ticking this third box, and without ticking the research box above — refusing has no effect on my participation, my grades or my standing at my university.",
       "lobby.consent-verification": "Your certificate of attendance is independently verifiable. A verification ID and QR code printed on it link — in a separate registry — to a one-way hash of your name and session, so that anyone you give BOTH the ID AND the name to can confirm, on a public CaNaMED page, that they match a genuine CaNaMED certificate. Your name is never published — the page only answers \"valid\" or \"no match\". The registry stores only the hash, for up to 5 years, and you can ask for your entry to be removed at any time (see section 18 of the privacy policy).",
-      "lobby.consent-version": "Notice version PIS v10 · 2026-09. Full ",
+      "lobby.consent-version": "Notice version PIS v11 · 2026-09. Full ",
       "lobby.consent-version-link": "privacy policy",
       "lobby.consent-version-suffix": ".",
       "lobby.consent-required-hint": "Please read the data-use notice and tick the consent box above to take part.",
@@ -374,7 +379,9 @@
       // legally meaningful emphasis survives translation. Author-controlled
       // content only — safe under CSP.
       "lobby.privacy.summary": "How your data is used (please read before joining)",
-      "lobby.privacy.p1": "The CaNaMED research team (<strong>Université de Caen Normandie × Nagoya University</strong>, joint controllers under GDPR Art. 26 / joint users under APPI Art. 27(5)) collects your first name or nickname, university, year of study and self-assessed English level. Your name is visible to everyone in your room and appears next to the points you contribute.",
+      "lobby.privacy.controller-default": "The CaNaMED research team (<strong>Université de Caen Normandie × Nagoya University</strong>, joint controllers under GDPR Art. 26 / joint users under APPI Art. 27(5))",
+      "lobby.privacy.controller-named": "<strong>{name}</strong>, the data controller for this session,",
+      "lobby.privacy.p1": "{controller} collects your first name or nickname, university, year of study and self-assessed English level. Your name is visible to everyone in your room and appears next to the points you contribute.",
       "lobby.privacy.p2": "The free-text answers you write may disclose health-related, religious or philosophical opinions about clinical scenarios — <strong>special-category data</strong> under GDPR Art. 9 and <strong>要配慮個人情報</strong> under APPI Art. 2(3). The optional second consent box below covers this.",
       "lobby.privacy.p3": "Data is stored on Google Firebase Realtime Database in <strong>europe-west1 (Belgium, EU)</strong>. For Japanese participants this is a cross-border transfer protected by the EU–Japan mutual adequacy decision (PPC, 2019). Live session data is purged within 30 days of the session closing, or within 90 days of creation if the session is never closed; if you ticked the research-consent box your contributions are kept linked to you (identifiable) for up to 5 years after publication. A copy also stays in our nightly backups for up to 90 days after they are taken, so the last copy of a session disappears about 120 days after it closes; backups are used only to restore the service after an incident, never to look data up.",
       "lobby.privacy.transcript": "Sessions are held by <strong>video conference on Microsoft Teams</strong>, under your university's subscription — <strong>Microsoft</strong> is a processor for this alongside Google. The tool produces a <strong>written transcript automatically</strong>, and that transcript carries your name against each thing you say; the audio/video recording of the session is kept as well, not only the transcript. The transcript and the recording are kept <strong>only if you tick the third consent box</strong> — for 5 years after publication, with the same restricted access as the rest of the research dataset, and you can ask for them to be deleted at any time. <strong>No photograph is taken, and you are not required to turn your camera on.</strong>",
@@ -1017,7 +1024,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v23";  // L7: the consent surface renders in the participant's language again
+  const LOCALE_VERSION = "v24";  // L7: the consent surface renders in the participant's language again
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
@@ -1154,6 +1161,78 @@
     // template contains the placeholder) and gated on lib.js being
     // present so the existing tests/i18n.test.js direct-table reads
     // still pin the raw template form.
+    /* {controller} — WHO IS THE DATA CONTROLLER FOR THIS SESSION (Annex VI L1).
+       The join screen used to state as a fact that Caen and Nagoya are the joint
+       controllers of every session. Any signed-in facilitator can create one
+       (facilitatorGate is inert by default), so a session run by a third
+       institution told its participants the wrong controller at the moment of
+       collection.
+
+       ⚠️ THE WHOLE CLAUSE IS THE UNIT, not the institution name. Substituting
+       only the name produced "Universiteit Leiden, joint controllers under
+       GDPR Art. 26" — nonsense for a single institution, and still wrong about
+       the CaNaMED research team. So `controller-default` holds the sentence
+       opening exactly as it was, and `controller-named` is the phrasing used
+       when a session names its own.
+
+       ⚠️ ESCAPED, unlike {cohortPair}. That interpolates trusted config; this
+       interpolates a string a facilitator typed, into a key that reaches the
+       DOM through data-i18n-html — i.e. innerHTML. */
+    if (typeof raw === "string" && raw.indexOf("{controller}") >= 0) {
+      /* ⚠️ Substituted WITHOUT applyTemplate, unlike {cohortPair}. That helper
+         lives in lib.js, and when it is not present the cohortPair path leaves
+         the placeholder in the string. Acceptable there; not here. This key is
+         the sentence telling a participant who is responsible for their data,
+         and rendering a literal "{controller}" to them would be worse than any
+         of the wordings this change exists to fix. A two-line replace has no
+         load-order dependency and is why the unit tests can exercise it at
+         all. */
+      const dTable = (useLang !== "en" && T[useLang]) ? T[useLang] : T.en;
+      const pick = (k) => (Object.prototype.hasOwnProperty.call(dTable, k)
+        ? dTable[k] : T.en[k]) || "";
+      /* root → window → global: the same lookup order used above, so this works
+         in the browser and under the UMD-loaded unit tests alike. */
+      let named =
+        (typeof root !== "undefined" && root && root.CANAMED_SESSION_CONTROLLER) ||
+        (typeof window !== "undefined" && window && window.CANAMED_SESSION_CONTROLLER) ||
+        (typeof global !== "undefined" && global && global.CANAMED_SESSION_CONTROLLER) || "";
+      named = (typeof named === "string" ? named : "").trim();
+      /* A session whose controller IS the platform's own institutions keeps the
+         joint-controller clause, citations and all. The create form prefills
+         that value, so without this comparison every canonical session would
+         silently lose "joint controllers under GDPR Art. 26 / joint users under
+         APPI Art. 27(5)" — which the CER dossier relies on. Compared against
+         the plain (unmarked-up) form of the same names, in whatever language
+         the reader has chosen. */
+      /* Compared against EVERY language's plain form, not just the reader's.
+         The value was typed by the FACILITATOR in whatever language they had
+         selected, and the participant may be reading in another — a French
+         reader joining a session created in English is the ordinary case here.
+         Comparing only the reader's form missed exactly that, and the canonical
+         sessions lost their citations for anyone not reading English. */
+      if (named) {
+        const lc = named.toLowerCase();
+        const langs = Object.keys(T);
+        for (let i = 0; i < langs.length; i++) {
+          const plain = T[langs[i]]["lobby.privacy.controller-plain"];
+          if (typeof plain === "string" && plain.trim().toLowerCase() === lc) {
+            named = "";
+            break;
+          }
+        }
+      }
+      let clause;
+      if (named) {
+        /* ESCAPED. p1 reaches the DOM through data-i18n-html — innerHTML — and
+           this value is a string a facilitator typed. */
+        const safe = named.replace(/&/g, "&amp;").replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+        clause = pick("lobby.privacy.controller-named").split("{name}").join(safe);
+      } else {
+        clause = pick("lobby.privacy.controller-default");
+      }
+      raw = raw.split("{controller}").join(clause);
+    }
     if (typeof raw === "string" && raw.indexOf("{cohortPair}") >= 0) {
       const tplFn = (typeof root !== "undefined" && root.applyTemplate) ||
         (typeof window !== "undefined" && window.applyTemplate) ||

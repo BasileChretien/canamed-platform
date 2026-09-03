@@ -2424,7 +2424,31 @@ standing disclosure and is **not** deleted at signature (clause 5.5).
 
 ## Legal-text gaps
 
-**L1 — BLOCKING. The live privacy notice names the wrong controller.**
+**L1 — BLOCKING (the naming half was fixed 2026-09-03; the version-string half
+was not). The live privacy notice names the wrong controller.**
+
+> **What changed.** The join screen no longer asserts that Caen and Nagoya are
+> the controllers of every session. A facilitator names their own institution
+> when they create one (`sessions/<code>/controller`, write-once), and
+> `lobby.privacy.p1` quotes it — escaped, because that key reaches the DOM
+> through `data-i18n-html`. `privacy.html` §1 says the same in all three
+> languages, at **PIS v11**. When the named institution IS the platform's own —
+> which the create form prefills — the joint-controller clause with its Art. 26
+> and Art. 27(5) citations is kept, so nothing changes for the canonical
+> deployment or for sessions predating the field.
+>
+> ⚠️ **The first attempt substituted only the institution NAME** and rendered
+> "Universiteit Leiden, joint controllers under GDPR Art. 26" — a single body
+> described as joint controllers, still attributed to the CaNaMED research team.
+> The replaceable unit is the whole clause. `tests/controller-notice.test.js`
+> exists mostly to stop that returning.
+>
+> ⚠️ **STILL OPEN, and it is why this item is not closed:** L1 also requires the
+> **consent-version string to be generated rather than literal**. It is still a
+> hand-maintained string in nine places — and it was found **nine versions
+> stale** in `index.html` on 2026-09-02, which is exactly the failure the
+> requirement anticipates. The rights contact in the notice is likewise still
+> Caen's DPO regardless of who runs the session.
 `privacy.html` §1 declares Caen and Nagoya joint controllers under GDPR Art. 26
 and 共同利用 under APPI Art. 27(5), with Caen's DPO as the sole rights contact.
 The same framing appears in the join-screen string `lobby.privacy.p1` (`i18n.js`)
