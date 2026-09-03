@@ -182,7 +182,39 @@ the live platform is cleared immediately; backup copies are put beyond use and
 expire within 90 days; and if their room used the simulated-patient chat, that
 conversation cannot be separated out.
 
-## 5. Document version
+## 5. Rectification requests (GDPR Art. 16, APPI Art. 34)
+
+```bash
+node scripts/rectify-participant.js --uid <uid> --set name="Correct Name"
+RECTIFY_CONFIRM=1 node scripts/rectify-participant.js --uid <uid> --set name="Correct Name"
+```
+
+Correctable fields are `name`, `university`, `year`, `english` — the values a
+participant typed about themselves. **Answers are deliberately not correctable**:
+Art. 16 is about factual accuracy, and rewriting someone's clinical reasoning
+after the fact falsifies the record rather than correcting it.
+
+The tool writes the pool entry and the roster together, so the two cannot end up
+disagreeing. ⚠️ It will not CREATE a roster row — if a mistyped uid matches
+nobody it does nothing, rather than inventing a participant with a name in it.
+
+⚠️ **Tell the requester the archive is not rewritten.** Snapshots taken before
+the correction still hold the old value and expire on their own 90-day cycle;
+they are never used except to restore after an incident.
+
+## 6. The data-rights deadline monitor
+
+`Data-rights monitor` runs daily and **fails only when an erasure request has
+passed the GDPR Art. 12(3) one-month limit**. A red run there is a real legal
+deadline missed, not a flaky job — treat it as the highest-priority alert this
+repository produces, and clear it by running the erasure tool in §4.
+
+It warns in the log from day 21, so there is time to act before a breach. Its
+output carries counts and ages only — **never a uid or a session code**, because
+these logs are world-readable. Read the open requests from `withdrawals/` in the
+database.
+
+## 7. Document version
 
 **v1 · 2026-05** — initial publication.
 

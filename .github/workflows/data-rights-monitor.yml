@@ -1,0 +1,73 @@
+# Are outstanding data-subject requests being acted on in time?
+#
+# Runs scripts/data-rights-monitor.js daily. It fails ONLY when an erasure
+# request has passed the GDPR Art. 12(3) one-month limit, so a red run here is
+# a real legal deadline missed, not "the job ran".
+#
+# WHY IT EXISTS. Participants can record an erasure request in the product and
+# an operator can perform one, but until 2026-09-03 nothing connected them: the
+# queue sat in the database and no human or job read it. An unread queue
+# discharges no duty, and the failure is silent — every other part of the
+# system keeps reporting success while the clock runs. That gap is the reason
+# Annex VI G12 could not close.
+#
+# QUIET BY DESIGN. This repository has twice lost a real failure to alert
+# fatigue (four failing jobs a day from workflows believed retired; a purge
+# that had never completed in 11 runs and was recorded as "cancelled"). So this
+# one says nothing on a normal day, warns at 21 days in the log, and only exits
+# non-zero at the deadline.
+#
+# ⚠ ITS LOGS ARE WORLD-READABLE — this is a public repo. The script prints
+# COUNTS AND AGES ONLY, never a uid or a session code. Whose request is late
+# comes from the database, not from CI. Same reasoning as CLEANUP_QUIET=1 in
+# cleanup-stale-sessions.yml.
+#
+# Scheduled 04:11 UTC — after the nightly purge (03:17) and export (03:47), so
+# a request erased overnight is already reflected and does not report as open
+# for one more day. Off the other crons to avoid a stampede.
+
+name: Data-rights monitor
+
+on:
+  schedule:
+    - cron: "11 4 * * *"   # daily at 04:11 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: data-rights-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    name: Art. 12(3) deadline check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          # Root lock only — the functions/ lockfile must not evict this cache.
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # npm ci, never a floating install: a floating transitive dependency
+      # broke all four ops workflows for five days (2026-07-31 → 08-04).
+      - name: Install from the committed lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Write service-account credentials
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Check for overdue data-subject requests
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+          DATA_RIGHTS_DEADLINE_DAYS: "30"
+          DATA_RIGHTS_WARN_DAYS: "21"
+        run: node scripts/data-rights-monitor.js
