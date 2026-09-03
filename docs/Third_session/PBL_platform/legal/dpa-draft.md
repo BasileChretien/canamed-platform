@@ -2561,12 +2561,37 @@ France set the GDPR Art. 8 digital-consent age at 15, not the Art. 8 default of
 the statements, confirm the correct national threshold, and either add an age
 attestation at join or rely on the clause 3.6(e) Controller warranty.
 
-**L11 — HIGH. There is no DPIA, no signed processor contract, and no
+**L11 — HIGH. There is no ~~DPIA~~, no signed processor contract, and no
 confidentiality undertakings on file.** ⚠️ *Amended 2026-09-02: this item also
 said there was no record of processing activities. There now is —
 `legal/record-of-processing.md`, Art. 30(2), which also carries the entry
-Scaleway's own DPA Art. 5.3.3 requires. The item stays **HIGH**: the register was
-the most mechanical of the four and its creation does not touch the other three.* The operator
+Scaleway's own DPA Art. 5.3.3 requires.*
+
+⚠️ *Amended again 2026-09-03: **`legal/dpia.md` now exists** — a full Art. 35
+assessment, with the systematic description, the necessity and proportionality
+analysis, a risk register scored for the DATA SUBJECT, the measures, a residual-
+risk section and an Art. 36 determination slot. Every factual claim in it is
+drawn from code, rules or workflows in this repository and cross-referenced.*
+
+**THE ITEM STAYS HIGH, and specifically not because the DPIA is thin.** Two of
+the four things it names are still missing — a **signed processor contract** and
+**confidentiality undertakings** — and the DPIA itself is structurally
+incomplete in two ways only the Controller can fix: **Art. 35(2)** requires the
+DPO's advice, which has not been sought, and **Art. 35(9)** requires the views of
+data subjects, which have not been sought either. §6 of the DPIA lists the four
+questions the DPO actually needs to answer.
+
+⚠️ **Read the DPIA before treating this item as nearly done.** It concludes that
+**residual risk is not low today**, identifies the room-gate defect (**B1**) as
+the largest single unmitigated risk and the one most worth fixing next, and
+declines to recommend Art. 36 prior consultation only on the condition that B1
+and L1/L2/L7/L10 are closed first. It also records what this pack had not stated
+plainly before: that a participant now faces **two controllers** — the
+facilitator's institution for teaching and the operator for the research export
+(clause 2.6) — and is not told so.
+
+The operator policy still carries `[to be added]` placeholders for the DPO and the responsible
+investigators, while the live notice names "the DPO" as the single rights contact. The operator
 policy still carries `[to be added]` placeholders for the DPO and the responsible
 investigators, while the live notice names "the DPO" as the single rights contact.
 
