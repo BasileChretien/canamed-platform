@@ -1092,35 +1092,12 @@
   }
 
   // ── English-only UI ───────────────────────────────────────────────────────
-  // The workshop UI renders in English for everyone (user 2026-06-25: "delete
-  // all the French and Japanese inside the website; keep only the
-  // dictionaries") — WITH ONE NARROW EXCEPTION, reinstated 2026-09-03 for
-  // Annex VI L7.
-  //
-  // ── WHY THE EXCEPTION, AND WHY IT IS THIS NARROW ─────────────────────────
-  // That instruction was about CONTENT: the teaching material is
-  // English-canonical, which is a pedagogical decision and is untouched here.
-  // A consent form is not content. GDPR Art. 12(1) requires information to be
-  // given "in a concise, transparent, intelligible and easily accessible form,
-  // using clear and plain language", and APPI Art. 21 is parallel. A French or
-  // Japanese medical student consenting to health-adjacent processing through
-  // an English-only form is not informed within the meaning of either, and
-  // consent that is not informed is not consent — which would undercut the
-  // Art. 6(1)(a) basis the live notice relies on.
-  //
-  // So LOCALIZED_PREFIXES covers the consent block, the privacy summary and
-  // the data-rights controls, and NOTHING ELSE. Everything a participant reads
-  // while doing the exercise stays English. The translations were never
-  // deleted — the tables are complete for fr/ja and the parity tests enforce
-  // it — so this reconnects text that has been maintained all along.
-  //
-  // ⚠️ It is deliberately a PREFIX list rather than a key list: a new consent
-  // string added under one of these prefixes is localised automatically,
-  // whereas a hand-maintained key list would silently leave it English. That
-  // failure would be invisible in an English-language review.
-  //
-  // The full SUPPORTED tables also remain loaded for privacy.html, which keeps
-  // its reviewed FR/JA legal bodies via its own data-priv-lang mechanism.
+  // English for the workshop UI; the participant's language for the consent
+  // surface only (Annex VI L7). The 2026-06-25 instruction — "delete all the
+  // French and Japanese inside the website" — stands for CONTENT; a consent
+  // form is not content, and GDPR Art. 12(1) / APPI Art. 21 require an
+  // intelligible one. A PREFIX list, so a new consent string is covered
+  // automatically. Full reasoning: tests/i18n.test.js.
   const LOCALIZED_PREFIXES = [
     "lobby.consent",   // the consent checkboxes, their detail text and version
     "lobby.privacy",   // the join-screen privacy summary
@@ -1179,37 +1156,23 @@
        interpolates a string a facilitator typed, into a key that reaches the
        DOM through data-i18n-html — i.e. innerHTML. */
     if (typeof raw === "string" && raw.indexOf("{controller}") >= 0) {
-      /* ⚠️ Substituted WITHOUT applyTemplate, unlike {cohortPair}. That helper
-         lives in lib.js, and when it is not present the cohortPair path leaves
-         the placeholder in the string. Acceptable there; not here. This key is
-         the sentence telling a participant who is responsible for their data,
-         and rendering a literal "{controller}" to them would be worse than any
-         of the wordings this change exists to fix. A two-line replace has no
-         load-order dependency and is why the unit tests can exercise it at
-         all. */
+      /* Annex VI L1. Substituted WITHOUT applyTemplate on purpose: that
+         helper lives in lib.js and its absence would leave a literal
+         "{controller}" in the sentence naming who is responsible for a
+         participant's data. Reasoning: tests/controller-notice.test.js. */
       const dTable = (useLang !== "en" && T[useLang]) ? T[useLang] : T.en;
       const pick = (k) => (Object.prototype.hasOwnProperty.call(dTable, k)
         ? dTable[k] : T.en[k]) || "";
-      /* root → window → global: the same lookup order used above, so this works
-         in the browser and under the UMD-loaded unit tests alike. */
+      /* root → window → global, as elsewhere in this function. */
       let named =
         (typeof root !== "undefined" && root && root.CANAMED_SESSION_CONTROLLER) ||
         (typeof window !== "undefined" && window && window.CANAMED_SESSION_CONTROLLER) ||
         (typeof global !== "undefined" && global && global.CANAMED_SESSION_CONTROLLER) || "";
       named = (typeof named === "string" ? named : "").trim();
-      /* A session whose controller IS the platform's own institutions keeps the
-         joint-controller clause, citations and all. The create form prefills
-         that value, so without this comparison every canonical session would
-         silently lose "joint controllers under GDPR Art. 26 / joint users under
-         APPI Art. 27(5)" — which the CER dossier relies on. Compared against
-         the plain (unmarked-up) form of the same names, in whatever language
-         the reader has chosen. */
-      /* Compared against EVERY language's plain form, not just the reader's.
-         The value was typed by the FACILITATOR in whatever language they had
-         selected, and the participant may be reading in another — a French
-         reader joining a session created in English is the ordinary case here.
-         Comparing only the reader's form missed exactly that, and the canonical
-         sessions lost their citations for anyone not reading English. */
+      /* A session naming the platform's own institutions keeps the
+         joint-controller clause and its Art. 26 / 27(5) citations. */
+      /* Every language's plain form, not just the reader's: the value was
+         typed by the FACILITATOR, who may have been in another language. */
       if (named) {
         const lc = named.toLowerCase();
         const langs = Object.keys(T);
@@ -1223,8 +1186,8 @@
       }
       let clause;
       if (named) {
-        /* ESCAPED. p1 reaches the DOM through data-i18n-html — innerHTML — and
-           this value is a string a facilitator typed. */
+        /* ESCAPED: p1 reaches innerHTML via data-i18n-html and this is a
+           string a facilitator typed. */
         const safe = named.replace(/&/g, "&amp;").replace(/</g, "&lt;")
           .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
         clause = pick("lobby.privacy.controller-named").split("{name}").join(safe);
