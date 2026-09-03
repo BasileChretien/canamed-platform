@@ -749,6 +749,28 @@
         }
       }
     },
+    "roomChatAuthors": {
+      "$sessionId": {
+        "$roomId": {
+          "$turnId": {
+          ".write": "auth != null && !data.exists() && newData.val() === auth.uid",
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+        }
+        }
+      },
+      "orgs": {
+        "$orgSlug": {
+          "$sessionId": {
+            "$roomId": {
+              "$turnId": {
+                ".write": "auth != null && !data.exists() && newData.val() === auth.uid",
+                ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+              }
+            }
+          }
+        }
+      }
+    },
     "certIds": {
       "$sessionId": {
         ".read": "auth != null && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || (root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()))",

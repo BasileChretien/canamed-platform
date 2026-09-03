@@ -119,17 +119,49 @@ test("the org tree keys participants the same way as the default tree", () => {
   }
 });
 
-test("roomChat still carries no author — the stated reason it is unerasable", () => {
-  /* scripts/erase-participant.js prints, on every run, that a participant's
-     simulated-patient chat cannot be separated from their roommates'. If the
-     schema ever gains an author field that claim becomes false and the chat
-     becomes erasable — at which point the message is the thing to fix. */
+test("roomChat turns still carry no author — the ROOM must not learn who spoke", () => {
+  /* Rewritten 2026-09-03. This used to assert the same thing for the opposite
+     reason: that the absence of an author is why the chat is unerasable, and
+     that gaining one would make the "unerasable" notice stale. The chat IS
+     erasable now — but the fix deliberately did NOT put a uid on the turn.
+     roomChat is readable by the whole room, RTDB .read cascades and cannot be
+     revoked on a child, and any session member can map a uid to a name via
+     clientMapping and pool. Attributing turns in place would have told every
+     roommate who typed what. So the absence is now a PRIVACY invariant rather
+     than a limitation, and it is still worth pinning. */
   const turn = rules.roomChat.$sessionId.$roomId.$turnId;
   const v = String(turn[".validate"] || "");
   assert.ok(!/child\('(uid|cid|clientId|by)'\)/.test(v),
-    "roomChat turns now record an author. The 'unerasable' notice in " +
-    "scripts/erase-participant.js is out of date, and the chat should be " +
-    "added to the planner instead.");
+    "roomChat turns now record an author IN THE TURN. That makes authorship " +
+    "readable by every member of the room. If it was intended, the privacy " +
+    "notice and the DPA need to say so; erasure does not require it — see " +
+    "the roomChatAuthors tree.");
+});
+
+test("the roomChatAuthors index exists, in both trees, and NO CLIENT CAN READ IT", () => {
+  /* The other half of the same design. The index is what makes a
+     participant's chat erasable; its unreadability is what stops that
+     costing the room's anonymity. A `.read` appearing here would silently
+     undo the reason the index was put in a separate tree at all. */
+  for (const [label, node] of [
+    ["default", rules.roomChatAuthors && rules.roomChatAuthors.$sessionId],
+    ["orgs", rules.roomChatAuthors && rules.roomChatAuthors.orgs
+      && rules.roomChatAuthors.orgs.$orgSlug && rules.roomChatAuthors.orgs.$orgSlug.$sessionId],
+  ]) {
+    assert.ok(node, `${label}: roomChatAuthors branch is missing`);
+    const leaf = node.$roomId.$turnId;
+    assert.ok(leaf, `${label}: no $turnId leaf`);
+    assert.match(leaf[".write"], /newData\.val\(\) === auth\.uid/,
+      `${label}: the author is not pinned to the writer, so a participant ` +
+      `could attribute a turn to someone else`);
+    assert.match(leaf[".write"], /!data\.exists\(\)/,
+      `${label}: the author row is not write-once`);
+  }
+  assert.ok(!/"\.read"/.test(JSON.stringify(rules.roomChatAuthors)),
+    "roomChatAuthors declares a .read. The whole point of a separate tree is " +
+    "that no client can read it — with a .read, recording the author tells " +
+    "the room who spoke, which is exactly what putting a uid on the turn " +
+    "would have done.");
 });
 
 test("ACKNOWLEDGED carries no exception for a node the rules do not have", () => {

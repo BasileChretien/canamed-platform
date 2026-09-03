@@ -1949,6 +1949,28 @@ function roomChatPath(code, roomId) {
     : "roomChat/orgs/" + currentOrg + "/" + code;
   return base + "/" + roomId;
 }
+/* Who wrote each chat turn, kept in a SEPARATE tree that no client can read.
+ *
+ * The turns themselves carry role/content/at and no author, which made a
+ * participant's conversation with the simulated patient impossible to erase
+ * individually (Annex VI G12). The obvious fix — a `uid` field on the turn —
+ * would have worked and cost something real: `roomChat` is readable by the
+ * whole room, RTDB .read CASCADES and cannot be revoked on a child, and any
+ * session member can already map a uid to a name through clientMapping and
+ * pool. So attributing turns in place would have newly told every roommate who
+ * typed what, in exchange for erasability. The chat UI deliberately does not
+ * label authors today.
+ *
+ * This tree has NO .read rule at all, and the root is .read:false, so it is
+ * denied to every client including its own writer. Only the Admin SDK — i.e.
+ * scripts/erase-participant.js — can read it. Erasability without a new
+ * disclosure. */
+function roomChatAuthorsPath(code, roomId) {
+  const base = (_sessionPrefix(currentOrg) === "sessions/")
+    ? "roomChatAuthors/" + code
+    : "roomChatAuthors/orgs/" + currentOrg + "/" + code;
+  return base + "/" + roomId;
+}
 /* Published-certificate id → participant map. Same out-of-cascade rationale as
    roomChatPath: it must live OUTSIDE sessions/<code> or a classmate could read
    a peer's id straight from the map (RTDB .read cascades and can't be revoked
@@ -5332,6 +5354,7 @@ function startRoom() {
   // The chat lives in the top-level roomChat/ tree (out of the session
   // read-cascade — see roomChatPath), so the LLM init needs the resolver too.
   window.roomChatPath = roomChatPath;
+  window.roomChatAuthorsPath = roomChatAuthorsPath;
   window.viewStage = viewStage;
   // SYNTH_ID / prereqsMet are re-exported for the chat bridge's red-flag
   // SCORING (it reveals legacy history items so prereqsMet/SYNTH_PREREQS stay

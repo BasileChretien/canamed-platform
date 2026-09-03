@@ -2838,11 +2838,24 @@ planner drives both so they cannot diverge:
 ⚠️ **THIS ITEM STAYS OPEN, on three things the tool cannot do.** The capability
 now exists; that is not the same as the duty being discharged.
 
-1. **`roomChat` cannot be erased per participant.** Turns carry `role`,
-   `content`, `at` and **no author**, so one participant's conversation with the
-   simulated patient cannot be separated from their roommates'. The tool reports
-   this on *every* run rather than in a footnote. **The fix is a schema change**
-   — an author field on each turn — not a flag.
+1. ✅ **`roomChat` IS now erasable per participant — schema fix 2026-09-03.**
+   Turns still carry only `role`, `content`, `at`; the author is recorded in a
+   **separate `roomChatAuthors` tree with no `.read` rule at all**, so the Admin
+   SDK can resolve it and no client can — not even its own writer.
+   ⚠️ **The obvious fix was rejected for a privacy reason worth keeping.** Putting
+   a `uid` on the turn would have worked and cost something real: `roomChat` is
+   readable by the whole room, RTDB `.read` **cascades and cannot be revoked on a
+   child**, and any session member can map a uid to a name through
+   `clientMapping` and `pool`. So attributing turns in place would have newly
+   told every roommate who typed what — the chat UI deliberately shows no author
+   — in exchange for erasability. The separate tree buys the erasability without
+   the disclosure. Proven against the emulator: the author write is allowed, and
+   every read of the index is denied.
+   ⚠️ **Turns written before this change have no author row and remain
+   unerasable individually.** They cannot be attributed to anyone, so deleting
+   them would delete other people's messages. `erase-participant.js` counts and
+   reports them on every run, and the operator must tell the requester rather
+   than implying the chat is fully gone. They expire with the session.
 2. ✅ **In-product withdrawal SHIPPED 2026-09-03 — Art. 7(3) is met for the
    withdrawal itself.** A control sits beside the Art. 15 export on the waiting
    screen (the one screen every participant passes through, including anonymous
