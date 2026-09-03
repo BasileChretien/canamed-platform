@@ -53,6 +53,7 @@ contract it records.
 | ~~P5~~ | **MOVED TO §2A on 2026-09-02.** The central research export is the operator's **own** controllership (DPA clause 2.6, option 1 elected), so it is not processing on behalf of a Controller and does not belong in an Art. 30(2) record. The row is kept struck rather than deleted so P6–P8 do not silently renumber, and so the move is visible. | — | — |
 | P6 | **Certificate issue and verification** | Name hash, session code, dates | Issue and verify completion certificates |
 | P7 | **Credential-expiry purge** (daily) | `credentials` records | Retention of certificate records |
+| P9 | **Erasure on request** (on demand, operator-run) | Identifiers only — the `erasures` node records clientId/uid/stableId and the session, never a name and never content | Discharge Art. 17 / Art. 7(3) and APPI Art. 35(5). `scripts/erase-participant.js` removes the participant from the live tree; the record is what stops a restore from the nightly archive bringing them back (`scripts/restore-sessions.js`). ⚠️ The record must OUTLIVE the snapshots it suppresses — deleting it early re-exposes the person it protects |
 | P8 | **Storage/cost monitoring** (daily) | Session identifiers and lifecycle dates only | Keep the deployment inside free-tier limits |
 
 Retention: closed sessions purged 30 days after closure, never-closed sessions

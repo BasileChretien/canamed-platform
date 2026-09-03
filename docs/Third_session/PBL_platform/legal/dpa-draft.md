@@ -2771,6 +2771,9 @@ provides a parallel route. Clause 10.1 promises Art. 28(3)(g) deletion that the
 system cannot presently perform in full. **Fix:** an in-product withdrawal that
 removes the participant across `pool`, the room subtrees and `rosters`, plus the
 sweepers in G6 and G7.
+⚠️ **Partly built 2026-09-03 — see the ✅ under the second limb below.** The
+*removal* exists as an operator tool; the *in-product* half does not, and
+clause 10.1's Art. 28(3)(g) promise is now performable rather than performed.
 
 ⚠️ **SECOND LIMB, added 2026-09-02 while allocating the backup (clause 2.8): the
 NIGHTLY ARCHIVE, which this item did not mention and the fix above does not
@@ -2810,14 +2813,44 @@ participant reads **English** in the lobby and `privacy.html` in **EN/FR/JA**.
 That limit is **L7**, not a defect of this fix — but it means the disclosure does
 not reach a participant who reads none of those three.
 
-❌ **(i) IS NOT DONE, and this item stays BLOCKING on it.** ⚠️ Do not read the
-notice fix as closing G12: disclosing that copies persist makes the position
-*honest*, not *compliant*. Art. 17 still requires erasure, and the archive still
-has no selective deletion. The prediction in the previous sentence of this item —
-that the disclosure half was "the one more likely to be deferred indefinitely" —
-turned out backwards, which is itself worth remembering: the half that touches
-published text got done because it was asked for, and the half that touches
-storage is now the one with no owner.
+✅ **(i) IS NOW BUILT — 2026-09-03.** Erasure exists, in both places, and one
+planner drives both so they cannot diverge:
+
+- **Live tree** — `scripts/erase-participant.js` resolves the participant across
+  all three identifiers (clientId, uid, stableId — one person may hold several
+  clientIds in one session) and deletes them from both session trees, `rosters`,
+  `certIds` **and the `credentials/<certId>` records those point at**, and
+  `users/<uid>`. **Dry-run by default**; `ERASE_CONFIRM=1` to write.
+- **Archive** — `scripts/lib/suppression.js` records identifiers only (never a
+  name or content: keeping the erased values in order to know what to suppress
+  would defeat the erasure), and `scripts/restore-sessions.js` applies them
+  before writing a byte. Snapshots are **not** rewritten — that would create
+  fresh copies of everyone else's data as the price of erasing one person's —
+  so the "put beyond use" position the notice describes at PIS v10 now has a
+  mechanism behind it instead of a promise. **There was no restore path at all
+  before this**, which is why the promise had nothing to attach to.
+- Guarded by `tests/erasure.test.js` (19) and
+  `tests/erasure-node-coverage.test.js` (8), the latter **deriving the
+  participant-keyed node list from `database.rules.json`** so a node added to
+  the rules and forgotten in the planner fails the suite instead of silently
+  surviving every future erasure.
+
+⚠️ **THIS ITEM STAYS OPEN, on three things the tool cannot do.** The capability
+now exists; that is not the same as the duty being discharged.
+
+1. **`roomChat` cannot be erased per participant.** Turns carry `role`,
+   `content`, `at` and **no author**, so one participant's conversation with the
+   simulated patient cannot be separated from their roommates'. The tool reports
+   this on *every* run rather than in a footnote. **The fix is a schema change**
+   — an author field on each turn — not a flag.
+2. **There is still no in-product withdrawal.** GDPR **Art. 7(3)** requires
+   withdrawal to be as easy as giving consent, and a participant e-mailing an
+   operator who then runs a CLI is not that. Art. 17 is now satisfiable; Art.
+   7(3) is not.
+3. **Entries attributed by display name alone are never auto-deleted.** Two
+   students with the same name in one cohort is ordinary, and deleting a
+   namesake's work while honouring someone else's request would be a worse
+   defect than the one being fixed. They are reported as AMBIGUOUS for a human.
 
 ## Residual risks accepted by design
 

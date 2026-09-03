@@ -142,7 +142,47 @@ billing account before flipping to Blaze.
 
 ---
 
-## 4. Document version
+## 4. Erasure requests (GDPR Art. 17 / Art. 7(3), APPI Art. 35(5))
+
+A participant asking to be erased is an **operator action** today — there is no
+in-product withdrawal button, which is itself an open item (Annex VI **G12**).
+
+```bash
+# 1. ALWAYS look first. Dry run is the default; nothing is written.
+node scripts/erase-participant.js --uid <uid>
+```
+
+Read the whole report before confirming. It prints three things:
+
+- **PLAN** — every path that will be deleted, per session.
+- **AMBIGUOUS** — entries attributed by display name with no id beside them.
+  These are **not** deleted. Two students with the same name in one cohort is
+  ordinary, so confirm identity by hand before touching them.
+- **UNERASABLE** — `roomChat`. Turns carry no author, so this participant's
+  conversation with the simulated patient cannot be separated from their
+  roommates'. Erasing it means erasing other people's data.
+
+```bash
+# 2. Then, and only then:
+ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> --reason "Art. 17 request"
+```
+
+The run writes a **suppression record** at `erasures/`. ⚠️ **Do not delete
+that record.** The nightly snapshots are not rewritten — they expire on their
+own 90-day cycle — and the record is the only thing stopping a restore from
+bringing the participant back. It must outlive the last snapshot that contains
+them, which is up to 90 days after the erasure.
+
+`scripts/restore-sessions.js` applies the list before writing, and refuses to
+run if it cannot read it. Restore is likewise dry-run by default
+(`RESTORE_CONFIRM=1` to write).
+
+**Tell the requester what actually happened**, including the parts that did not:
+the live platform is cleared immediately; backup copies are put beyond use and
+expire within 90 days; and if their room used the simulated-patient chat, that
+conversation cannot be separated out.
+
+## 5. Document version
 
 **v1 · 2026-05** — initial publication.
 
