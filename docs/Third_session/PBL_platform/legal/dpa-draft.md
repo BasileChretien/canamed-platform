@@ -2761,10 +2761,57 @@ the periodic verification report in clause 10.3. Consider moving the jobs to
 Cloud Run / Cloud Scheduler in `europe-west1`, which also removes the US GitHub
 leg from Annex IV.
 
-**G12 — BLOCKING (new). Withdrawal does not produce erasure.** Consent flags are
+**G12 — ✅ REMEDIATION COMPLETE 2026-09-03; STATUS: awaiting countersignature.
+Withdrawal does not produce erasure.** Consent flags are
 recorded per participant, but withdrawing research consent deletes nothing, there
 is no per-participant restriction flag, and there is no post-session
-rectification. Where consent is the asserted basis (as the live notice asserts),
+rectification.
+
+> ⚠️ **READ THIS BEFORE RECORDING G12 AS CLOSED.** Every limb the item names has
+> been built and exercised against a real database. That is not the same as the
+> item being closed: clause **5.4(a)** closes a BLOCKING row only when the
+> closure is **countersigned by both Parties**, so this is the Processor
+> reporting completion, not the Parties agreeing it. It is deliberately marked
+> as awaiting that rather than ticked, because a self-certified BLOCKING item is
+> exactly the kind of claim this pack keeps having to un-tick.
+>
+> **The three limbs, and where each was answered:**
+>
+> | limb | answered by |
+> | --- | --- |
+> | withdrawing deletes nothing | the erasure engine (#375), the in-product control (#376), the chat author index (#377) |
+> | no per-participant restriction flag | `withdrawals/<code>/<uid>` **is** that flag — the research export folds it into the consent gate before the gate runs, and fails closed if it cannot read it |
+> | no post-session rectification | `scripts/rectify-participant.js` (Art. 16), which corrects the pool and the roster together so the two cannot disagree |
+>
+> **And the piece that was missing between them: nobody was reading the queue.**
+> A participant could record an erasure request and an operator could perform
+> one, with nothing connecting the two. An unread queue discharges no duty, and
+> it fails silently while every other part of the system reports success.
+> `scripts/data-rights-monitor.js` runs daily and **fails only when a request
+> passes the GDPR Art. 12(3) one-month limit** — quiet by design, because this
+> project has twice lost a real failure to alert fatigue. Its logs carry counts
+> and ages only, never a uid or a session code, since they are world-readable.
+>
+> ⚠️ **What remains true and must be said to a requester**, none of it fixable
+> by more code:
+> - **Rectification does not reach the nightly archive.** Snapshots taken before
+>   a correction still hold the old value and expire on their own cycle. They are
+>   never used except to restore after an incident.
+> - **Chat turns written before 2026-09-03 have no author row** and cannot be
+>   erased individually — deleting them would delete other people's messages.
+>   They are counted and reported on every erasure run.
+> - **Anonymous participants have no route after they leave the session.** They
+>   have no account history by design, so the waiting-screen control is their
+>   only in-product one. The notice must keep naming a human contact.
+> - **Erasure and rectification are performed by an operator**, not by the
+>   participant. That is a deliberate design choice — both touch shared room
+>   content, the roster and the public certificate registry — and it makes the
+>   monitor above load-bearing rather than decorative.
+>
+> `Verify:` `node --test tests/erasure.test.js tests/data-rights.test.js`;
+> `gh workflow list` shows **Data-rights monitor** active; and
+> `grep -n "cron" .github/workflows/data-rights-monitor.yml` is uncommented — a
+> disabled schedule silently restores the exact defect this item is about. Where consent is the asserted basis (as the live notice asserts),
 GDPR **Art. 17(1)(b)** makes erasure the automatic consequence of withdrawal and
 **Art. 7(3)** requires withdrawal to be as easy as giving it; APPI **Art. 35(5)**
 provides a parallel route. Clause 10.1 promises Art. 28(3)(g) deletion that the
