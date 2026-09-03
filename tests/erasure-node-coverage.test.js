@@ -99,9 +99,23 @@ test("every room node keyed by clientId is handled by the planner", () => {
 });
 
 test("every room node keyed by uid is handled by the planner", () => {
+  /* There are NONE as of 2026-09-03, and that is correct rather than a broken
+     derivation: `uidMembers` was the only one and it was removed with the B1
+     fix — vestigial, gating nothing, and self-assertable. So this test cannot
+     use the "found at least one" anti-vacuity floor the others use. Instead it
+     asserts the derivation still WORKS by checking it finds the session-level
+     uid nodes, which do exist, and then covers whatever it finds at room level.
+     The planner keeps ROOM_BY_UID populated on purpose — LEGACY sessions still
+     contain uidMembers data that an erasure must reach. */
+  assert.ok(keyedChildren(session, UID_KEYS).length >= 2,
+    "the derivation itself is broken — it finds no uid-keyed session nodes " +
+    "either, so a room-level result of zero proves nothing");
   const found = keyedChildren(room, UID_KEYS);
-  assert.ok(found.length >= 1, "derivation found almost nothing — it broke");
   assertCovered(found, ROOM_BY_UID, "room");
+  assert.ok(ROOM_BY_UID.includes("uidMembers"),
+    "the planner stopped handling uidMembers. The RULE is gone, but sessions " +
+    "created before 2026-09-03 still hold the data, and erasure must still " +
+    "reach it — a rule being deleted does not delete what it guarded.");
 });
 
 test("the org tree keys participants the same way as the default tree", () => {

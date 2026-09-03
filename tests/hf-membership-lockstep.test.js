@@ -34,8 +34,19 @@ const { roomClaimPath, roomClaimMatches } =
 /* The node the CLIENT claims, read out of the real write site rather than
    hard-coded here — otherwise this test pins a constant instead of the code. */
 function clientClaimNode(src) {
-  const m = src.match(/db\.ref\(sPath\("([A-Za-z]+)\/"\s*\+\s*uid\)\)\s*\n?\s*\.transaction/);
-  assert.ok(m, "could not find the client's write-once room claim in script.js");
+  /* Scoped to the claim FUNCTION rather than to the call shape. The first
+     version matched `db.ref(sPath("<node>/" + uid)).transaction(...)`, which
+     stopped matching on 2026-09-03 when the claim became a read-then-set — the
+     transaction had to go because the rule now reads clientMapping and pool to
+     verify the claim (DPIA risk B1), and a transaction pre-checks the rule
+     CLIENT-SIDE against a cache that may not hold them. Pinning the call shape
+     made this test fail on a correct change; pinning the function does not. */
+  const at = src.indexOf("const _claimRoomOf");
+  assert.ok(at > 0, "could not find _claimRoomOf in script.js — if the room " +
+    "claim moved or was renamed, point this lockstep test at it again");
+  const body = src.slice(at, at + 1200);
+  const m = body.match(/sPath\("([A-Za-z]+)\/"\s*\+\s*uid\)/);
+  assert.ok(m, "could not find the claimed node inside _claimRoomOf");
   return m[1];
 }
 

@@ -5317,9 +5317,24 @@ function startRoom() {
          PERMISSION_DENIED is TERMINAL: with a write-once claim it means this
          uid already holds a different room, and retrying can never succeed.
          Anything else wrote nothing, so one retry is worth it. */
+      /* READ-THEN-SET, not a transaction — and the reason is the same one that
+         forced the same change on setRoomStage in #223. A transaction runs the
+         rule CLIENT-SIDE first, against whatever happens to be in the local
+         cache. Since 2026-09-03 this rule reads `clientMapping/<cid>` and
+         `pool/<cid>/room` to verify the claim (B1), so a transaction would be
+         pre-rejected in the browser whenever those are not yet cached — an
+         intermittent failure that looks exactly like a denial. A `.set()` is
+         evaluated on the SERVER, against the real data.
+         Write-once is not lost by dropping the transaction: the rule's
+         `!data.exists()` is what enforces it, and it always did. The read below
+         only avoids attempting a write that would be denied for the ordinary
+         reason (this participant already holds a room). */
       const _claimRoomOf = (retry) => {
-        db.ref(sPath("roomOf/" + uid))
-          .transaction(cur => (cur == null ? { room: myRoom, cid: clientId } : undefined))
+        const ref = db.ref(sPath("roomOf/" + uid));
+        ref.once("value")
+          .then(snap => (snap.exists()
+            ? null
+            : ref.set({ room: myRoom, cid: clientId })))
           .catch(e => {
             const code = String((e && (e.code || e.message)) || "");
             const denied = /permission[_ ]denied/i.test(code);
