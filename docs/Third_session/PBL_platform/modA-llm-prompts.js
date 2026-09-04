@@ -161,6 +161,34 @@ if (typeof window === "undefined") { var window = globalThis; }
     return (c && _tc(c.name, L)) || DEFAULT_NAME[L];
   }
 
+  /* moduleACharacters() → the cast the Module A switchboard offers, in
+   * authored order: every character whose `module` includes "A" (or declares
+   * none — a legacy single-patient cast) and who is present from the start.
+   * `present: "onCue"` entrances are reserved by the design and not offered
+   * yet, so a character an author marks that way simply does not appear
+   * rather than appearing early. An empty list means "no declared cast":
+   * the chat then runs its generic single patient exactly as before. */
+  function moduleACharacters() {
+    var list = characters();
+    var out = [];
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (!c || !c.id) continue;
+      if (Array.isArray(c.module) && c.module.indexOf("A") < 0) continue;
+      if (c.present === "onCue") continue;
+      out.push(c);
+    }
+    return out;
+  }
+
+  /* defaultCharacterId() → the id a turn with NO `character` field belongs
+   * to: the index patient. Every transcript written before the switchboard
+   * carries no field, so this is also what keeps those transcripts readable. */
+  function defaultCharacterId() {
+    var c = findCharacter();
+    return (c && c.id) ? String(c.id) : "patient";
+  }
+
   /* Collect the patient-voice facts this character is allowed to draw on.
    *
    * INCLUDED: CASE.history[] items whose `.a` is genuine first-person patient
@@ -181,11 +209,17 @@ if (typeof window === "undefined") { var window = globalThis; }
   function _collectFacts(caseObj, lang, character) {
     var bag = [];
     var id = (character && character.id) || "patient";
+    /* An item with no `who` belongs to the INDEX PATIENT (design: "an item
+       with no `who` belongs to the character whose role is patient"). Until the
+       switchboard this read `item.who && item.who !== id`, which handed every
+       unowned item to every character — so a relative's prompt carried the
+       patient's own symptoms. Resolve the owner explicitly instead. */
+    var patientId = defaultCharacterId();
     if (caseObj && Array.isArray(caseObj.history)) {
       for (var i = 0; i < caseObj.history.length; i++) {
         var item = caseObj.history[i];
         if (!item || item.narratorOnly) continue;
-        if (item.who && item.who !== id) continue;
+        if (String(item.who || patientId) !== String(id)) continue;
         var text = _tc(item.a, lang);
         if (text) bag.push("- " + text.replace(/\s+/g, " ").trim());
       }
@@ -297,7 +331,9 @@ if (typeof window === "undefined") { var window = globalThis; }
     buildPatientPrompt: buildPatientPrompt,
     buildChatMessages: buildChatMessages,
     findCharacter: findCharacter,
-    characterName: characterName
+    characterName: characterName,
+    moduleACharacters: moduleACharacters,
+    defaultCharacterId: defaultCharacterId
   };
 
   if (typeof module !== "undefined" && module.exports) {

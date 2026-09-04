@@ -857,6 +857,19 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   being interviewed. Exactly one character per scenario carries `role:"patient"`.
   A scenario declaring none falls back to a generic patient — it must never
   inherit the previous scenario's cast.
+- **Multi-character switchboard — SHIPPED 2026-09-04 (shell v165).** A
+  section declaring several Module A characters gets one chip per character
+  above the chat; each character is its own thread on screen AND at the model
+  (one persona per call). Persisted turns carry an optional validated
+  `character` field on the existing `roomChat/…/$turnId` node (both rule
+  trees); **a turn with no field is the index patient's** — that is what keeps
+  every pre-existing transcript readable, so never make the field required.
+  Facts route by `who`, and an item with no `who` now belongs to the index
+  patient ONLY (it used to reach every character). Scoring families may carry
+  `askOf: "<characterId>"|[…]`. Single-character sections are unchanged.
+  ⚠️ Still owed before the six-section Mayumi session can run: the chat store
+  is NOT per-slot — two PBL sections share one `roomChat` transcript. See
+  "Slice 2 as shipped" in the design record.
 - **⚠ `hfPatient` needs `firebase deploy --only functions` to pick this up.**
   `SERVER_GUARD` was generalised from "simulated patient" to "simulated
   character", and the reply-prefix stripper is now driven by the character's

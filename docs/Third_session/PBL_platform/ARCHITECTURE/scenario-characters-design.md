@@ -90,10 +90,59 @@ index physically cannot contain a `correct` flag.
 |---|---|---|
 | **0** | Per-scenario personas. Fixes the production bug where every scenario voices Mr Lefebvre. Generalise `SERVER_GUARD` and the reply-prefix stripper. | client + functions |
 | **1** | Server-side prompt assembly. Client sends `{roomCode, roomId, characterId, transcript, userText}`; `hfPatient` derives the scenario from `sessions/<code>/scenarioRef` and builds the prompt. One compat release still accepting `messages`, because `sw.js` serves old clients until the shell version propagates. | functions + client |
-| **2** | Switchboard in Module A. `moduleA/chat/$characterId/$turnId`. Cues, `askOf`, raised rate caps, counter UI. | client + rules |
+| **2** | Switchboard in Module A. ~~`moduleA/chat/$characterId/$turnId`~~ → an optional `character` field on the existing `roomChat/…/$turnId` (see below). `askOf`. **SHIPPED 2026-09-04 (shell v165)** — cues, raised rate caps and the counter UI are NOT in it. | client + rules |
 | **3** | Characters in Module B. | client + rules |
 | **4** | Authoring UI: English-only form, `schemaVersion: 2` with a v1 migration, characters / `moduleA_questions` / penalties / pre+post-test sections. | client |
 | **5** | Sharing tiers, `setFacilitator` callable, `getIdToken(true)` refresh. | rules + functions + client |
+
+## Slice 2 as shipped (2026-09-04) — what the switchboard is, and is not
+
+Built for the Nagoya *"A Difficult Child (Mayumi)"* PBL, whose steps put the
+student in front of the patient, her father and her mother. The Module A chat
+panel now shows one chip per character above the transcript when a section
+declares more than one Module A character; the student picks who they are
+speaking to. **Every single-character section is byte-for-byte unchanged**:
+no chip row, the same persisted turn shape, the same placeholder.
+
+- **One thread per character, at every layer.** The bridge keeps
+  `threads[characterId]` and an active addressee (`setCharacter()`); each
+  model call carries THAT character's persona and THAT thread only (decision
+  1 — one persona per call). On screen each character has its own
+  `.moda-chat-thread[data-character]` inside the transcript; only the active
+  one is shown, and a reply landing in another thread dots that chip.
+- **Facts route by owner.** `_collectFacts` now resolves an item with no
+  `who` to the INDEX PATIENT instead of handing it to everyone — the reading
+  the schema section above always stated, but the code did not enforce:
+  before this a relative's prompt carried the patient's own symptoms.
+- **Storage: a field, not a path.** The design named
+  `moduleA/chat/$characterId/$turnId`; what shipped is an OPTIONAL, validated
+  `character` field (`/^[a-z0-9_-]{1,40}$/`, both rule trees) on the existing
+  `roomChat/$session/$room/$turnId`. Reasons: the chat had already moved to
+  `roomChat/` for privacy (gap 3) and to `roomChatAuthors/` for erasure, both
+  keyed by `$turnId`, and a new path would have re-opened both; and a turn
+  with NO field is the index patient's, which keeps every existing transcript
+  readable with no migration. The client writes the field only when the cast
+  is plural.
+- **`askOf` on scoring families** (`moduleA_questions` /
+  `moduleA_question_penalties`): `askOf: "mother"` or `["mother","father"]`
+  makes a family score only when the question was put to one of those
+  characters. A family with no `askOf` scores whoever was asked, as before.
+- **The cast follows the section.** `applySectionContent()` dispatches
+  `canamed:castchange` when it republishes `CURRENT_SCENARIO_CHARACTERS`; the
+  panel re-renders its chips and falls back to the new section's patient.
+- **Not shipped, still owed:** `present: "onCue"` entrances (such a
+  character is simply not offered), the raised rate caps and the visible
+  turn counter, secrets with a hard gate, and — found while planning the
+  six-section Mayumi session — **the chat store is not per-slot**: two PBL
+  sections in one session share one `roomChat` transcript, so the earlier
+  section's conversation replays in the later one. That is the next engine
+  piece for that session.
+
+Proof: `tests/modA-switchboard.test.js` (scorer, prompts, bridge, rules,
+init wiring, CSS), `tests-e2e/modA-switchboard.spec.js` in a real LOCAL-mode
+room on chromium + the three mobile projects, and the emulator case *"a
+roomChat turn may name its addressee"* in `rules-smoke.spec.js` (every denial
+paired with an ALLOW of the same shape).
 
 ## The bug slice 0 fixes
 
