@@ -2268,3 +2268,83 @@ test("rules: a participant cannot claim a room they were not assigned to (B1)", 
   expect(await tryWrite(page, claim, { room: "Room 2", cid: cidA }),
     "a claim must stay write-once even after the pool moves").not.toBe("ALLOWED");
 });
+
+/* ── G9: the last three session-only nodes, mirrored into the org tree ──
+ *
+ * `poll`, `rooms/$roomId/answerReplies` and `rooms/$roomId/observers` existed
+ * only under `sessions/`. In the org tree they had no rule at all, so every
+ * write to them failed CLOSED — a denial, not a hole, which is exactly why it
+ * survived three separate hand audits without being noticed: an org-scoped
+ * session simply lost the feature, silently.
+ *
+ * THE ALLOW LEGS ARE THE POINT HERE, not the denials. The bug was that nothing
+ * could be written; a test that only asserted denials would have passed before
+ * this change as well as after it. Each denial below is still paired with an
+ * allow of the SAME payload, per the standing rule.
+ */
+test("rules: poll, answerReplies and observers work in the org tree (G9 parity)", async ({ page, browser }) => {
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const sid = "s" + Math.floor(Math.random() * 1e6);
+  const base = `orgs/${slug}/sessions/${sid}`;
+  const room = "Room 1";
+
+  await page.goto("/");
+  const uidA = await waitForUid(page);
+  expect(await tryWrite(page, `${base}/creatorUid`, uidA)).toBe("ALLOWED");
+  const cidA = await claimRoom(page, base, room, uidA);
+
+  const now = Date.now();
+  const poll = { hardest: "the differential", feeling: "ok", by: "A", at: now };
+  const observer = { at: now };
+  const reply = { text: "a reply", by: "A", cid: cidA, at: now };
+
+  // ── ALLOW: the owner can write all three. Before the mirror, every one of
+  //    these was PERMISSION_DENIED for want of any rule.
+  expect(await tryWrite(page, `${base}/poll/${cidA}`, poll),
+    "org poll must be writable by its owner").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/rooms/${room}/observers/${cidA}`, observer),
+    "org observers must be writable by its owner").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/rooms/${room}/answerReplies/e1/r1`, reply),
+    "org answerReplies must be writable by a member").toBe("ALLOWED");
+
+  // …and they really landed, read back with the owner bypass (OBSERVATION only).
+  expect((await dbReadAsOwner(`${base}/poll/${cidA}`)).feeling).toBe("ok");
+  expect((await dbReadAsOwner(`${base}/rooms/${room}/answerReplies/e1/r1`)).text).toBe("a reply");
+
+  // ── DENY: a peer cannot write to another participant's cid-keyed slots.
+  const ctxB = await browser.newContext();
+  const tabB = await ctxB.newPage();
+  await useEmulator(tabB);
+  await tabB.goto("/");
+  const uidB = await waitForUid(tabB);
+  expect(uidB).not.toBe(uidA);
+
+  const spoofPoll = await tryWrite(tabB, `${base}/poll/${cidA}`, { ...poll, feeling: "bad" });
+  expect(spoofPoll, "a peer must not overwrite another participant's org poll answer")
+    .not.toBe("ALLOWED");
+  expect(String(spoofPoll)).toMatch(/PERMISSION_DENIED|permission_denied|denied/i);
+
+  const spoofObs = await tryWrite(tabB, `${base}/rooms/${room}/observers/${cidA}`, observer);
+  expect(spoofObs, "a peer must not write another participant's org observer mark")
+    .not.toBe("ALLOWED");
+
+  // The payload B was denied is valid — A lands it. Without this the two
+  // denials above would also pass on an unsatisfiable rule.
+  expect(await tryWrite(page, `${base}/poll/${cidA}`, { ...poll, feeling: "bad" }),
+    "the owner lands the payload the peer was denied").toBe("ALLOWED");
+
+  /* ⚠️ answerReplies has NO ownership gate — `auth != null && !closed` — so a
+     peer CAN write one, in the org tree exactly as in the default tree. That is
+     asserted here rather than glossed over: the mirror is faithful, and this
+     records the real contract. It is pre-existing weakness, tracked in the DPA
+     under the "$other sentinels on participant-writable per-room nodes"
+     hardening item, and hardening it belongs in BOTH trees at once — not
+     smuggled into a parity change. */
+  expect(await tryWrite(tabB, `${base}/rooms/${room}/answerReplies/e1/r2`,
+    { text: "peer reply", by: "B", cid: "cB", at: Date.now() }),
+    "answerReplies is deliberately un-gated in BOTH trees; if this now denies, " +
+    "the node was hardened and this expectation should be updated, not deleted")
+    .toBe("ALLOWED");
+
+  await ctxB.close();
+});

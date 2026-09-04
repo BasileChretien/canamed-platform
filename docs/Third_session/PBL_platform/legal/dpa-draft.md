@@ -757,10 +757,32 @@ operative obligation on the Processor, not a recommendation.
 
 3.8 **Operative prohibition — org-scoped sessions.** The Processor shall **not
 enable, and the Controller shall not use, organisation-scoped sessions
-(`orgs/<slug>/**`)** under this DPA. No retention, backup or pseudonymisation job
-touches that tree — verified: no script under `scripts/` references `orgs` at all
-— and several security rules present in the `sessions/` tree are absent there.
-See Annex VI, item G9.
+(`orgs/<slug>/**`)** under this DPA.
+
+> ⚠️ **The two grounds originally given for this clause are now BOTH remedied,
+> and one of them was stated as a fact that has since become false.** As drafted
+> it read "no retention, backup or pseudonymisation job touches that tree —
+> verified: no script under `scripts/` references `orgs` at all". Eight files do:
+> `backup-sessions`, `cleanup-stale-sessions`, `pseudonymise-export`,
+> `erase-participant`, `restore-sessions`, `serve-platform`, and the shared
+> `lib/session-trees` and `lib/suppression`, all walking both trees through
+> `readSessionLocations()`. The second ground — rules present under `sessions/`
+> and absent under `orgs/` — was closed on 2026-09-04 (G9). **The clause is
+> therefore no longer supported by the reasons it gives.**
+>
+> **It is nevertheless left IN FORCE, on a narrower and still-valid ground**, for
+> the Parties to lift rather than the Processor to drop unilaterally: no
+> org-scoped session has ever been exercised against the real rules. The
+> end-to-end org run of 2026-08-05 was in LOCAL mode, which models no rules at
+> all and therefore proves routing only; and `orgs.js` registers exactly one
+> organisation, `caen-nagoya`, which IS `CANAMED_DEFAULT_ORG` and so maps back to
+> the legacy `sessions/` prefix — meaning **no shipped client can currently emit
+> an `orgs/…` path**. Parity of rules is not the same as evidence they behave
+> correctly under load, and the second is what this clause should now turn on.
+>
+> **To lift:** run the emulator suite against a real org-scoped session covering
+> the same ground the default tree is covered on, then strike this clause by
+> amendment under clause 14. See Annex VI, item G9 (closed).
 
 ---
 
@@ -1688,7 +1710,7 @@ widely than participants are told.
 | Authored and shared scenarios | `scenarios/<ownerUid>`, `sharedScenarios/<shareId>` | Owner; shared ones readable by **any signed-in user** | Shared scenarios carry the author's display name (capped 80 chars) — confirm the facilitator consent flow discloses that |
 | Abuse reports and moderation records | `reports/*`, `moderation/*` | Admin-gated | Retains the reporting user's UID |
 | **LLM usage log** | `metrics/hfPatient/*` | **No one via the client** — the path has no rule, so it is unreadable from any browser and reachable only via the Admin SDK | Per turn: auth UID, timestamp, language, message count, reply length, latency, HTTP status, inference provider, token counts, session code. Not in the notice; no job deletes it |
-| Org-scoped mirror of all of the above | `orgs/<slug>/sessions/<id>/**` | As above within the org | **No retention, backup or pseudonymisation job touches it.** Prohibited under clause 3.8 |
+| Org-scoped mirror of all of the above | `orgs/<slug>/sessions/<id>/**` | As above within the org | Retention, backup, pseudonymisation and erasure all walk this tree (since Phase-4e gap 2); rule parity closed 2026-09-04. Still prohibited under clause 3.8, now on the narrower ground stated there |
 
 ### Data stored in the participant's own browser
 
@@ -2855,8 +2877,8 @@ is deliberate rather than incidental.
 **G8 — MEDIUM. Account profiles, admin secrets, recovery records, authored
 scenarios, abuse reports and moderation records** have no automated deletion.
 
-**G9 — BLOCKING (HALVED 2026-09-03 by verification pass). The entire `orgs/` tree
-is outside every safeguard.**
+**G9 — ✅ CLOSED 2026-09-04. The entire `orgs/` tree is outside every
+safeguard.**
 
 > ⚠️ **The headline claim is no longer true.** "No script references `orgs` at
 > all" was correct when written; **eight files do now** — `backup-sessions`,
@@ -2866,21 +2888,46 @@ is outside every safeguard.**
 > walk both trees through `readSessionLocations()`. That half was closed by the
 > Phase-4e gap-2 work and extended since.
 >
-> ⚠️ **The rule-parity half stands, and is now precisely three nodes**, re-derived
-> by diffing the two subtrees: `poll` (session level), `answerReplies` and
-> `observers` (room level) exist only under `sessions/`. Writes to them fail
-> CLOSED in the org tree — a denial, not a hole — but org-scoped sessions would
-> silently lose those features. Clause 3.8's prohibition should stay until those
-> three are mirrored.
+> ✅ **The rule-parity half is now closed too.** `poll`, `answerReplies` and
+> `observers` were mirrored into the org tree on 2026-09-04. They were **cloned,
+> not retyped** — each is a pure re-prefix of its session original
+> (`root.child('sessions').child($sessionId)` →
+> `root.child('orgs').child($orgSlug).child('sessions').child($sessionId)`), and
+> a test asserts exactly that, so an edit to one copy alone now fails.
+>
+> **Proven functionally, not just structurally.** The emulator case
+> ("poll, answerReplies and observers work in the org tree (G9 parity)") was run
+> against the rules WITHOUT the change and **fails**, and against the rules WITH
+> it and passes. That inversion is the evidence — and it is the reason the case
+> leads with ALLOW legs rather than denials: the defect was that nothing could be
+> written at all, so a denial-only test would have passed equally well before and
+> after.
+>
+> **Guard: `tests/rule-tree-parity.test.js`.** This gap was found by hand three
+> times (2026-05-30, 2026-08-05, 2026-09-03) and each pass found a DIFFERENT set
+> of nodes, because nothing linked the two trees between audits. The test now
+> asserts the key sets are identical at both levels, and that no org rule still
+> addresses `root.child('sessions')` — a mis-copied prefix would fail **open**,
+> which is worse than the missing rule it replaced. A deliberate asymmetry must
+> be declared in its `ASYMMETRIC` map with a reason.
+>
+> ⚠️ **One thing the mirror faithfully reproduces: `answerReplies` has NO
+> ownership gate** in either tree (`auth != null && !closed`). The emulator case
+> asserts that a peer CAN write one, so the real contract is recorded rather than
+> implied. Hardening it belongs to the `$other`-sentinel item and must happen in
+> **both** trees at once — not smuggled into a parity change.
 
 It mirrors
 the same participant, answer, chat and questionnaire model. *(Original finding:
 no script referenced `orgs` at all — the only database paths any retention
-script touched were under `sessions`.)* If organisation-scoped sessions are used,
-retention, backup and pseudonymisation silently do not happen. Some rules are also
-absent in the org tree (the qualitative poll, answer replies, observers), so those
-writes fail closed. Clause 3.8 makes the prohibition operative: **do not enable
-org-scoped sessions under this DPA until this is fixed.**
+script touched were under `sessions`.)* Both halves are now fixed: retention, backup,
+pseudonymisation and erasure walk the org tree, and the three missing rules (the
+qualitative poll, answer replies, observers) were mirrored on 2026-09-04.
+**Clause 3.8's prohibition nevertheless remains in force**, on the narrower
+ground recorded there — no org session has ever been exercised against the real
+rules, and no shipped client can currently emit an `orgs/…` path at all — and
+should be lifted by amendment rather than by treating this item's closure as
+self-executing.
 
 **G10 — BLOCKING (new). There is no per-session configuration, so no Controller's
 instruction can be executed in isolation.** `MODA_LLM_ENABLED`,
