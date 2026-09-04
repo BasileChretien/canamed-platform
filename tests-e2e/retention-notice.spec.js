@@ -144,3 +144,49 @@ test.describe("Retention notice — what the participant actually reads", () => 
     await tab.close();
   });
 });
+
+/* ── Annex VI L6: the pre-test, post-test and questionnaire intros ──────
+ *
+ * These three said the tests were "anonymous within your university" and the
+ * questionnaire was "a short, anonymous questionnaire", while the canonical
+ * strings they stand in for say the answers are "linked to you for the CaNaMED
+ * study". They are HARD-CODED FALLBACKS, so they are what the browser paints
+ * FIRST — before i18n.js has loaded and swapped the runtime string in. On a
+ * cold load, a slow link, or a failed locale chunk they are the ONLY text a
+ * participant reads, and the one they click Start on.
+ *
+ * tests/fallback-contradiction.test.js proves the same thing at source level and
+ * more generally (it derives the rule from the whole i18n table). This spec adds
+ * the four supported viewports, per the project's standing per-device rule.
+ *
+ * ⚠️ WHAT THIS DELIBERATELY DOES NOT COVER, and why. Each replacement sentence
+ * is LONGER than the text it replaced, so the obvious companion test is that it
+ * still wraps on a 375px phone without pushing the page into horizontal overflow
+ * (the PR #172 failure mode). That test was WRITTEN AND THEN REMOVED: these
+ * cards are hidden until their stage, and forcing them visible from the spec
+ * does not reveal them — `boundingBox()` stays null — so the test failed for a
+ * reason with nothing to do with its subject. A check that cannot distinguish
+ * the healthy state from the broken one is worse than no check: it manufactures
+ * a bug report about working code. Covering the layout honestly means driving a
+ * session to the pre-test stage, which belongs in a spec that already does so,
+ * not here.
+ */
+test.describe("Test and questionnaire intros — Annex VI L6", () => {
+  const INTROS = ["#pretest-card-intro", "#posttest-card-intro", "#survey-card-intro"];
+
+  test("no intro claims anonymity, and each states the linkage", async ({ page }) => {
+    await page.goto("/");
+    for (const sel of INTROS) {
+      const node = page.locator(sel);
+      await expect(node, `${sel} is missing from the page`).toHaveCount(1);
+      // textContent, not innerText: these cards are hidden until their stage,
+      // and the claim is in the markup regardless of visibility.
+      const text = (await node.textContent()).trim();
+      expect(text.length, `${sel} is empty`).toBeGreaterThan(40);
+      expect(text, `${sel} still tells the participant their answers are anonymous`)
+        .not.toMatch(/anonym/i);
+      expect(text, `${sel} does not disclose that answers are linked to the participant`)
+        .toMatch(/linked to you/i);
+    }
+  });
+});
