@@ -162,7 +162,9 @@ test("scoring was never exposed to this race, and still is not", () => {
      continuation, that WOULD introduce the reported-but-nonexistent bug. */
   const submitAt = BRIDGE_SRC.indexOf("function submit(text)");
   const body = BRIDGE_SRC.slice(submitAt, submitAt + 1600);
-  const scoreAt = body.indexOf("_runScoring(clean)");
+  // The switchboard added the addressee as a second argument; match the call
+  // by its first argument so the check survives that without weakening.
+  const scoreAt = body.indexOf("_runScoring(clean");
   const awaitAt = body.indexOf("_getPatientReply(clean, req)");
   assert.ok(scoreAt > 0 && awaitAt > scoreAt,
     "scoring must run synchronously at submit time, before the reply is awaited");

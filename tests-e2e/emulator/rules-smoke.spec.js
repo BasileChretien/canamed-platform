@@ -1242,6 +1242,38 @@ test("rules: roomChat is room-private — a session member in another room canno
   await ctx.close();
 });
 
+test("rules: a roomChat turn may name its addressee — a valid character id is ALLOWED, a malformed one DENIED, none still ALLOWED (switchboard)", async ({ page }) => {
+  // The switchboard tags each turn with the character it was addressed to, so
+  // a teammate's client can route it to the right thread. The field is
+  // OPTIONAL (every pre-switchboard turn lacks it) and, when present, an
+  // authored slug. Every denial below is paired with an ALLOW of the same
+  // shape minus the offending field, by the SAME identity — otherwise a
+  // denial could just mean the node is unwritable (CLAUDE.md, 2026-08-06).
+  const code = "swb-" + Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  expect(await tryWrite(page, `sessions/${code}/members/${uid}`, { at: Date.now() })).toBe("ALLOWED");
+  await claimRoom(page, `sessions/${code}`, "Room 1", uid);
+  const base = `roomChat/${code}/Room 1`;
+  const turn = (extra) => Object.assign({ role: "user", content: "to whom it may concern", at: Date.now() }, extra || {});
+
+  expect(await tryWrite(page, `${base}/t1`, turn({ character: "mother" })), "a slug id").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/t2`, turn({ character: "patient_2-b" })), "digits, _ and - are fine").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/t3`, turn()), "no field at all — the pre-switchboard shape").toBe("ALLOWED");
+
+  expect(await tryWrite(page, `${base}/t4`, turn({ character: "Mayumi's Mother" })), "a display name is not an id").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/t5`, turn({ character: "MOTHER" })), "upper case").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/t6`, turn({ character: "" })), "empty").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/t7`, turn({ character: "x".repeat(41) })), "over 40").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/t8`, turn({ character: 7 })), "not a string").not.toBe("ALLOWED");
+
+  // Positive control for the denials: the identical turn without the field.
+  expect(await tryWrite(page, `${base}/t9`, turn())).toBe("ALLOWED");
+  // And the stored shape is what the client will read back.
+  const back = await dbReadAsOwner(`${base}/t1`);
+  expect(back && back.character).toBe("mother");
+});
+
 test("rules: certIds/$id — random cert-id map is owner write-once + owner-read, PEER-DENIED, admin-lists, closed-blocked", async ({ page, browser }) => {
   // The published certificate id is now crypto-random and persisted here (was a
   // deterministic hash any classmate could recompute from the pool keys). This

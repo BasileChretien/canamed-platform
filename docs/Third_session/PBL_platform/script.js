@@ -2274,7 +2274,11 @@ function applySectionContent(slot) {
      penalties, and blanking them would strip the board the PBL slot next door
      still needs when the student walks back to it. */
   if (c.case) window.CASE = c.case;
-  if (Array.isArray(c.characters)) window.CURRENT_SCENARIO_CHARACTERS = c.characters;
+  if (Array.isArray(c.characters)) {
+    window.CURRENT_SCENARIO_CHARACTERS = c.characters;
+    // The chat switchboard (modA-llm-init.js) re-renders its chips on this.
+    window.dispatchEvent(new CustomEvent("canamed:castchange"));
+  }
   if (Array.isArray(c.penalties)) window.PENALTIES = c.penalties;
   if (c.synthId) { window.SYNTH_ID = c.synthId; SYNTH_ID = c.synthId; }
   if (Array.isArray(c.synthPrereqs) && c.synthPrereqs.length) {

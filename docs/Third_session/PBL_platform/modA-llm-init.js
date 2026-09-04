@@ -16,6 +16,16 @@
  * The HF backend still degrades gracefully: if the `hfPatient` function is
  * disabled (`MODA_LLM_ENABLED=false`) or errors, the bridge falls back to a
  * canned stub patient, so the chat never leaves Module A dead.
+ *
+ * SWITCHBOARD (scenario-characters design, slice 2 — 2026-09-04). A section
+ * may declare several Module A characters (a patient, a parent, a colleague).
+ * The panel then shows one chip per character above the transcript; the
+ * student picks who they are speaking to, and each character has its OWN
+ * thread — its own bubbles on screen and its own conversation at the model.
+ * A section with a single character (every pre-switchboard scenario) shows no
+ * chips and behaves exactly as before. Turns persisted to roomChat carry a
+ * `character` id only when the cast has more than one member, so existing
+ * transcripts stay byte-identical; a turn with no id is the index patient's.
  */
 
 (function () {
@@ -152,6 +162,15 @@
                          _t("modA.chat.consentCta", "I understand — start the consultation"));
     consentRow.appendChild(consentBtn);
 
+    // The switchboard's character chips. Filled by init()'s _renderCast() and
+    // kept hidden while the cast has fewer than two members, so a single-
+    // patient scenario renders no new chrome at all.
+    var cast = _ce("div", {
+      "class": "moda-chat-cast", id: "modA-chat-cast", role: "group",
+      "aria-label": _t("modA.chat.castLabel", "Who are you speaking to?")
+    });
+    cast.hidden = true;
+
     var transcript = _ce("div", {
       "class": "moda-chat-transcript", id: "modA-chat-transcript",
       "aria-live": "polite", "aria-busy": "false"
@@ -172,6 +191,7 @@
 
     panel.appendChild(notice);
     panel.appendChild(consentRow);
+    panel.appendChild(cast);
     panel.appendChild(transcript);
     panel.appendChild(form);
     panel.appendChild(status);
@@ -206,13 +226,24 @@
     return panel;
   }
 
-  function _renderTurn(transcriptEl, role, content) {
-    if (!transcriptEl) return;
+  /* Append one bubble to a thread (or, pre-switchboard, straight into the
+   * transcript). The SCROLL container is the transcript, so scroll whichever
+   * ancestor is the transcript rather than the thread itself. */
+  function _scrollHost(el) {
+    if (!el) return null;
+    if (el.classList && el.classList.contains("moda-chat-transcript")) return el;
+    var host = (typeof el.closest === "function") ? el.closest(".moda-chat-transcript") : null;
+    return host || el;
+  }
+
+  function _renderTurn(threadEl, role, content) {
+    if (!threadEl) return;
     var bub = document.createElement("div");
     bub.className = "moda-chat-bub moda-chat-bub-" + role;
     bub.textContent = content;
-    transcriptEl.appendChild(bub);
-    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    threadEl.appendChild(bub);
+    var host = _scrollHost(threadEl);
+    host.scrollTop = host.scrollHeight;
   }
 
   function _setStatus(el, text, kind) {
@@ -262,8 +293,8 @@
     return lbl ? String(lbl) : "";
   }
 
-  function _renderScoreChip(transcriptEl, kind, points, label) {
-    if (!transcriptEl) return;
+  function _renderScoreChip(threadEl, kind, points, label) {
+    if (!threadEl) return;
     var chip = _ce("div", {
       "class": "moda-chat-score " + (kind === "award" ? "is-award" : "is-penalty"),
       "aria-hidden": "true"
@@ -273,8 +304,9 @@
     var lab = _ce("span", { "class": "moda-chat-score-label" }, label);
     chip.appendChild(pts);
     chip.appendChild(lab);
-    transcriptEl.appendChild(chip);
-    transcriptEl.scrollTop = transcriptEl.scrollHeight;
+    threadEl.appendChild(chip);
+    var host = _scrollHost(threadEl);
+    host.scrollTop = host.scrollHeight;
   }
 
   function _showScoreFeedback(res, transcriptEl) {
@@ -381,10 +413,146 @@
     document.body.classList.add("moda-llm-active");
     var panel = _mountChatUI(host);
     var transcriptEl = panel.querySelector("#modA-chat-transcript");
+    var castEl = panel.querySelector("#modA-chat-cast");
     var inputEl = panel.querySelector("#modA-chat-input");
     var sendEl = panel.querySelector("#modA-chat-send");
     var statusEl = panel.querySelector("#modA-chat-status");
     var formEl = panel.querySelector("#modA-chat-form");
+    var consentBtnEl = panel.querySelector("#modA-chat-consent-btn");
+
+    /* ── Switchboard state ──────────────────────────────────────────────── */
+    var prompts = window.modALLMPrompts;
+    function _defaultId() {
+      try { return String(prompts.defaultCharacterId() || "patient"); } catch (_) { return "patient"; }
+    }
+    function _cast() {
+      try { return prompts.moduleACharacters() || []; } catch (_) { return []; }
+    }
+    function _isMulti() { return _cast().length > 1; }
+    function _nameFor(id) {
+      try { return prompts.characterName(_curLang(), id); } catch (_) { return ""; }
+    }
+    var activeId = _defaultId();
+
+    /* i18n substitutes the INDEX patient's name into these two strings. For any
+       other character, swap that name for theirs; a locale whose string does
+       not carry the patient's name keeps the substituted copy. */
+    function _forCharacter(key, fallback, id) {
+      var base = _t(key, fallback);
+      if (!id || id === _defaultId()) return base;
+      var patient = _nameFor(_defaultId());
+      var mine = _nameFor(id);
+      if (!patient || !mine || base.indexOf(patient) < 0) return base;
+      return base.split(patient).join(mine);
+    }
+    function _placeholderFor(id) { return _forCharacter("modA.chat.placeholder", "Ask the patient a question…", id); }
+    function _thinkingFor(id)    { return _forCharacter("modA.chat.thinking", "The patient is thinking…", id); }
+
+    /* One thread element per character inside the transcript, created on first
+       use. Only the active character's thread is visible. */
+    function _threadEl(id) {
+      var el = null;
+      var kids = transcriptEl.children;
+      for (var i = 0; i < kids.length; i++) {
+        if (kids[i].getAttribute && kids[i].getAttribute("data-character") === id) { el = kids[i]; break; }
+      }
+      if (!el) {
+        el = _ce("div", { "class": "moda-chat-thread", "data-character": id });
+        el.hidden = (id !== activeId);
+        transcriptEl.appendChild(el);
+      }
+      return el;
+    }
+
+    function _chipFor(id) {
+      var chips = castEl.querySelectorAll(".moda-chat-chip");
+      for (var i = 0; i < chips.length; i++) {
+        if (chips[i].getAttribute("data-character") === id) return chips[i];
+      }
+      return null;
+    }
+    function _bumpChipBadge(id) {
+      var chip = _chipFor(id);
+      if (!chip) return;
+      var badge = chip.querySelector(".moda-chat-chip-badge");
+      if (!badge) return;
+      var n = (parseInt(badge.dataset.count || "0", 10) || 0) + 1;
+      badge.dataset.count = String(n);
+      badge.textContent = String(n);
+      badge.hidden = false;
+    }
+    function _clearChipBadge(id) {
+      var chip = _chipFor(id);
+      var badge = chip && chip.querySelector(".moda-chat-chip-badge");
+      if (!badge) return;
+      badge.dataset.count = "0";
+      badge.textContent = "";
+      badge.hidden = true;
+    }
+
+    /* Address the chat to `id`: the bridge's next submit(), the visible thread,
+       the pressed chip and the input placeholder all follow. */
+    function _activate(id, focus) {
+      id = (id == null || id === "") ? _defaultId() : String(id);
+      activeId = id;
+      bridge.setCharacter(id);
+      var threads = transcriptEl.querySelectorAll(".moda-chat-thread");
+      for (var i = 0; i < threads.length; i++) {
+        threads[i].hidden = (threads[i].getAttribute("data-character") !== id);
+      }
+      _threadEl(id).hidden = false;
+      var chips = castEl.querySelectorAll(".moda-chat-chip");
+      for (var j = 0; j < chips.length; j++) {
+        var on = chips[j].getAttribute("data-character") === id;
+        chips[j].setAttribute("aria-pressed", on ? "true" : "false");
+        chips[j].classList.toggle("is-active", on);
+      }
+      _clearChipBadge(id);
+      if (!inputEl.disabled) inputEl.setAttribute("placeholder", _placeholderFor(id));
+      var host = _scrollHost(transcriptEl);
+      host.scrollTop = host.scrollHeight;
+      if (focus) { try { inputEl.focus(); } catch (_) { /* hidden tab */ } }
+    }
+
+    /* (Re)build the chip row from the live cast. Hidden below two members. A
+       cast change (the session moved to another section) that drops the
+       active character falls back to that section's index patient. */
+    function _renderCast() {
+      var list = _cast();
+      while (castEl.firstChild) castEl.removeChild(castEl.firstChild);
+      if (list.length < 2) {
+        castEl.hidden = true;
+        _activate(_defaultId(), false);
+        return;
+      }
+      var stillThere = false;
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        var id = String(c.id);
+        if (id === activeId) stillThere = true;
+        var chip = _ce("button", {
+          type: "button", "class": "moda-chat-chip", "data-character": id,
+          "aria-pressed": "false"
+        });
+        var label = _ce("span", { "class": "moda-chat-chip-name" }, _nameFor(id));
+        chip.appendChild(label);
+        var blurb = c.blurb;
+        if (blurb && typeof blurb === "object") blurb = blurb[_curLang()] || blurb.en || "";
+        if (blurb) chip.setAttribute("title", String(blurb));
+        var badge = _ce("span", { "class": "moda-chat-chip-badge", "aria-hidden": "true" });
+        badge.hidden = true;
+        chip.appendChild(badge);
+        chip.addEventListener("click", _onChipClick);
+        castEl.appendChild(chip);
+      }
+      castEl.hidden = false;
+      _activate(stillThere ? activeId : _defaultId(), false);
+    }
+    function _onChipClick(ev) {
+      var id = ev.currentTarget && ev.currentTarget.getAttribute("data-character");
+      if (id) _activate(id, true);
+    }
+    function _onCastChange() { _renderCast(); }
 
     // Local cache of the awarded map (mirrors RTDB; the bridge reads it
     // synchronously). The .on() subscription below keeps it fresh.
@@ -402,10 +570,17 @@
     function _onChatChild(snap) {
       var t = snap.val();
       if (!t || !t.role || !t.content) return;
-      _renderTurn(transcriptEl, t.role, t.content);
+      // A turn with no `character` is the index patient's — every transcript
+      // written before the switchboard, and every single-cast section since.
+      var who = t.character ? String(t.character) : _defaultId();
+      _renderTurn(_threadEl(who), t.role, t.content);
       // If the patient answered while the student is on the Examination /
       // Investigations tab, dot the Dialogue tab so the reply isn't missed.
-      if (t.role === "assistant" && Number(t.at || 0) >= initStartedAt) _flagDialogueUnread();
+      if (t.role === "assistant" && Number(t.at || 0) >= initStartedAt) {
+        _flagDialogueUnread();
+        // …and if they were speaking to someone ELSE, dot that character's chip.
+        if (who !== activeId) _bumpChipBadge(who);
+      }
       // Seed the local context ring lazily — bridge has its own copy.
     }
     refs.chat.on("child_added", _onChatChild);
@@ -464,8 +639,11 @@
         // The ≥1-hypothesis phase gate (phaseGateOpen) drives the Debate reveal;
         // the red-flag screen is scoring-only now, not a gate.
       },
-      persistTurn: function (role, content) {
+      persistTurn: function (role, content, characterId) {
         var turn = { role: role, content: content, at: Date.now() };
+        /* Only a plural cast tags its turns: a single-patient section keeps
+           writing the exact shape it always did, and the rules accept both. */
+        if (characterId && _isMulti()) turn.character = String(characterId);
         var uid = null;
         try {
           uid = (window.firebase && firebase.auth && firebase.auth().currentUser)
@@ -503,6 +681,16 @@
     // each participant's browser language — see _patientLang(). The chat chrome
     // stays localised; only Mr. Lefebvre's replies are pinned.
     bridge.setLang(_patientLang());
+
+    // Switchboard: chips for a plural cast, and follow the cast when the
+    // session moves to another section (script.js applySectionContent()).
+    _renderCast();
+    window.addEventListener("canamed:castchange", _onCastChange);
+    // The consent click resets the placeholder to the index patient's; keep
+    // it addressed to whoever is active. Registered after mount's own handler,
+    // so it runs second.
+    function _onConsentClick() { inputEl.setAttribute("placeholder", _placeholderFor(activeId)); }
+    if (consentBtnEl) consentBtnEl.addEventListener("click", _onConsentClick);
 
     // Wire the patient endpoint. Priority order:
     //   1. Self-hosted proxy via window.CANAMED_LLM_PROXY. Takes precedence
@@ -680,7 +868,7 @@
       inputEl.value = "";
       inputEl.disabled = true;
       sendEl.disabled = true;
-      _setStatus(statusEl, _t("modA.chat.thinking", "The patient is thinking…"), "pending");
+      _setStatus(statusEl, _thinkingFor(activeId), "pending");
       transcriptEl.setAttribute("aria-busy", "true");
 
       bridge.submit(text).then(function (res) {
@@ -699,7 +887,7 @@
         // Point-of-action feedback for any points the question just scored
         // (or cost). Runs on the fallback path too — scoring is local + already
         // applied, so the team still earns the points even if the LLM was down.
-        _showScoreFeedback(res, transcriptEl);
+        _showScoreFeedback(res, _threadEl((res && res.character) || activeId));
       }).catch(function (err) {
         _setStatus(statusEl, _t("modA.chat.error",
           "Something went wrong — try a different question."), "error");
@@ -734,10 +922,19 @@
       try { formEl.removeEventListener("submit", _onSubmit); } catch (_) {}
       try { inputEl.removeEventListener("keydown", _onKeydown); } catch (_) {}
       try { window.removeEventListener("canamed:langchange", _onLangChange); } catch (_) {}
+      try { window.removeEventListener("canamed:castchange", _onCastChange); } catch (_) {}
+      try { if (consentBtnEl) consentBtnEl.removeEventListener("click", _onConsentClick); } catch (_) {}
       try { if (transcriptEl) transcriptEl.textContent = ""; } catch (_) {}
+      try { if (castEl) { castEl.textContent = ""; castEl.hidden = true; } } catch (_) {}
     }
 
-    window.modALLMRuntime = { bridge: bridge, refs: refs, destroy: destroy };
+    window.modALLMRuntime = {
+      bridge: bridge, refs: refs, destroy: destroy,
+      // Switchboard surface (tests + facilitator tooling).
+      setCharacter: function (id) { _activate(id, false); },
+      getCharacter: function () { return activeId; },
+      refreshCast: _renderCast
+    };
     return true;
   }
 
