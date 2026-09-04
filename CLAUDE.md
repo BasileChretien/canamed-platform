@@ -1550,12 +1550,21 @@ observed — LOCAL mode models no rules — so these are static findings:**
   paths" asserts both branches exist in `database.rules.json`, and two sibling
   assertions pin the derived `rosterPath` values. A regression fails the unit
   suite instead of silently fail-closing org rosters again.
-- **`audit` is org-only — the DEFAULT tree has no rule for it.**
-  `logAdminAction()` writes `sPath("audit")` for both trees, but `audit` is
-  declared only under `orgs/$orgSlug/sessions/$sessionId`, and
-  `sessions/$sessionId` has no `.write` to cascade and no `$other`. So the
-  facilitator audit log has never worked on the default org (best-effort write,
-  warning only).
+- ~~**`audit` is org-only — the DEFAULT tree has no rule for it.**~~
+  **✅ NO LONGER TRUE — label was stale, corrected 2026-09-04.** `audit` is
+  declared under **both** `sessions/$sessionId` and
+  `orgs/$orgSlug/sessions/$sessionId`, each admin-gated by the same
+  creator-or-proof predicate as the rest of the Phase-4a nodes. So
+  `logAdminAction()`'s write works in the default tree too, and the "has never
+  worked on the default org" claim is wrong. The finding was real when written;
+  it was fixed at some point without this line being updated — the same failure
+  the STATUS-CLAIM RULE exists to catch, and the second sighting after
+  `rosters`.
+  `Verify:` `python -c "import json;r=json.load(open('docs/Third_session/PBL_platform/database.rules.json'))['rules'];print('audit' in r['sessions']['$sessionId'], 'audit' in r['orgs']['$orgSlug']['sessions']['$sessionId'])"`
+  prints `True True`. Now also covered structurally by
+  `tests/rule-tree-parity.test.js`, which asserts the two subtrees have
+  IDENTICAL key sets — so this particular claim cannot go stale again in either
+  direction.
 
 **Round-3 — TRACKED hardening (defense-in-depth, not active exploits):**
 - ~~**`answers/moduleA` + `answers/moduleB` are the weakest participant-writable
@@ -1587,16 +1596,30 @@ observed — LOCAL mode models no rules — so these are static findings:**
   node restructured to NAMED child rules first (a bare `$other` would reject the
   valid keys, which are checked in the parent `.validate`), so it's a focused
   change, not a one-liner.
-- **Org parity (remaining)**: `poll/$clientId`, `rooms/$roomId/answerReplies`,
-  `rooms/$roomId/observers` are still `sessions/`-only (fail-closed in org —
-  denied, not a hole). Mirror into the org tree before any org go-live.
-  ✅ **Re-verified 2026-08-05** by diffing the two rule subtrees mechanically —
-  those three, and only those three, are `sessions/`-only. The same diff turned
-  up **two gaps in the OTHER direction, both new** (see the 2026-08-05 org
-  section below): `audit` exists ONLY under `orgs/`, and `rosters`'s org branch
-  was mis-nested. **The `rosters` half is FIXED as of 2026-08-21** (see the
-  corrected entry above and its new test); the `audit` half stands. `Verify:` diff the key sets of `rules.sessions.$sessionId` and
-  `rules.orgs.$orgSlug.sessions.$sessionId` in `database.rules.json`.
+- ~~**Org parity (remaining)**~~ — **✅ CLOSED 2026-09-04 (PR #384).**
+  `poll/$clientId`, `rooms/$roomId/answerReplies` and `rooms/$roomId/observers`
+  were the last three `sessions/`-only nodes; they are now mirrored into the org
+  tree. **CLONED, not retyped** — each is a pure re-prefix of its session
+  original, and a test asserts exactly that, so editing one copy alone fails.
+  Proven by INVERSION on the emulator: the new case
+  ("poll, answerReplies and observers work in the org tree (G9 parity)") FAILS
+  against the rules without the change and passes with it. That is why it leads
+  with ALLOW legs — the defect was that nothing could be written, so a
+  denial-only test would have passed equally well before and after.
+  **This gap was found by hand three times (2026-05-30, 2026-08-05, 2026-09-03)
+  and each pass found a DIFFERENT set of nodes**, because nothing linked the two
+  trees between audits. It is now enforced rather than re-audited:
+  `tests/rule-tree-parity.test.js` requires identical key sets at both levels,
+  requires the three clones to stay pure re-prefixes, and fails if any org rule
+  still addresses `root.child('sessions')` — a mis-copied prefix would fail
+  **OPEN**, which is worse than the missing rule it replaced. A deliberate
+  asymmetry must be declared in its `ASYMMETRIC` map with a reason.
+  ⚠️ **The mirror faithfully reproduces one weakness:** `answerReplies` has NO
+  ownership gate in EITHER tree (`auth != null && !closed`). The emulator case
+  asserts a peer CAN write one, so the real contract is recorded rather than
+  implied. Hardening belongs to the `$other`-sentinel item and must happen in
+  both trees at once — not smuggled into a parity change.
+  `Verify:` `node --test tests/rule-tree-parity.test.js`.
 - `summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
   low value); `answers/.../edits/$editId` has no explicit owner check (possible
   collaborative-edit by design — decide + document).
