@@ -2480,12 +2480,31 @@ was not). The live privacy notice names the wrong controller.**
 > The replaceable unit is the whole clause. `tests/controller-notice.test.js`
 > exists mostly to stop that returning.
 >
-> ⚠️ **STILL OPEN, and it is why this item is not closed:** L1 also requires the
-> **consent-version string to be generated rather than literal**. It is still a
-> hand-maintained string in nine places — and it was found **nine versions
-> stale** in `index.html` on 2026-09-02, which is exactly the failure the
-> requirement anticipates. The rights contact in the notice is likewise still
-> Caen's DPO regardless of who runs the session.
+> ⚠️ **STILL OPEN, and it is why this item is not closed.** Two things remain.
+>
+> **(a) The consent-version string is still literal, not generated** — a
+> hand-maintained value in nine places. **The DRIFT it invites is now guarded**
+> (`tests/pis-version-lockstep.test.js`, 2026-09-04): every surface that
+> DECLARES a version — `privacy.html`, `index.html`'s fallback, `i18n.js` and
+> the seven locale files — must declare the same one, judged against the highest
+> version `privacy.html` is issued at. Bare mentions are left alone, because
+> §16's changelog has to keep naming older versions to describe what changed.
+>
+> Why a new test when one already checked the version: the existing guard in
+> `llm-recipients-notice.test.js` asserts only `>= 4`, which is blind to a
+> PARTIAL bump — and a partial bump is exactly what produced the nine-version
+> gap found on 2026-09-02. Measured, not assumed: under a mutation raising
+> `privacy.html` to v12 while the locales stay at v11, the existing guard passes
+> **6/0** and the new one fails **2 of 3**.
+>
+> This closes the *recurrence* risk, not the requirement. Generating the string
+> from one constant would still be better, and would make the guard redundant
+> rather than necessary.
+>
+> **(b) The rights contact is still Caen's DPO** regardless of who runs the
+> session — so a participant in a third institution's session is directed to the
+> wrong controller to exercise their rights. Untouched, and on its own enough to
+> keep this item BLOCKING.
 `privacy.html` §1 declares Caen and Nagoya joint controllers under GDPR Art. 26
 and 共同利用 under APPI Art. 27(5), with Caen's DPO as the sole rights contact.
 The same framing appears in the join-screen string `lobby.privacy.p1` (`i18n.js`)
