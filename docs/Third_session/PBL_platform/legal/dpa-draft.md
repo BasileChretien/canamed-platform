@@ -1699,8 +1699,8 @@ widely than participants are told.
 | **Free-text conversation with the simulated patient** | `roomChat/<code>/<room>/chat/<turnId>` — org sessions: `roomChat/orgs/<slug>/<code>/<room>/chat/<turnId>`. **Outside the session subtree since 2026-07-24 (PR #235)**; it was `rooms/<room>/moduleA/chat/<turnId>` before that | **Room members only, and genuinely so** — its own `.read`, granted per room plus the facilitator. Before the move the room-scoped rule restricted *writing* only, because `.read` cascades from `sessions/$sessionId` | Up to 600 characters per turn; **the highest-risk field** because it is unconstrained student writing |
 | Votes and committed decisions | `rooms/<room>/votes/*` | Every session member | |
 | Presence, typing indicators, role choices, observer list | `rooms/<room>/*` | Every session member | |
-| **Knowledge-test results** | `rooms/<room>/tests/<clientId>` | **Every session member** — the node has no read rule of its own and inherits the session-wide member grant | Per-item answers, score, timestamps, `stableId`. Participants are told the test is "anonymous within your university". It is not. See Annex VI, G2 and L6 |
-| **Wrap-up questionnaire** | `rooms/<room>/survey/<clientId>` | **Every session member** — same inheritance | Demographic items, Likert learning and intercultural items, and **five free-text items allowing up to 2,000 characters each**, which may name and evaluate the facilitator. Participants are told it is "a short, anonymous questionnaire". It is not. See Annex VI, G2 and L6 |
+| **Knowledge-test results** | `rooms/<room>/tests/<clientId>` | **Every session member** — the node has no read rule of its own and inherits the session-wide member grant | Per-item answers, score, timestamps, `stableId`. Participants were told the test was "anonymous within your university" until 2026-09-04; that text is corrected (L6) but the peer-readability it misdescribed is unchanged. See Annex VI, G2 |
+| **Wrap-up questionnaire** | `rooms/<room>/survey/<clientId>` | **Every session member** — same inheritance | Demographic items, Likert learning and intercultural items, and **five free-text items allowing up to 2,000 characters each**, which may name and evaluate the facilitator. Participants were told it was "a short, anonymous questionnaire" until 2026-09-04; that text is corrected (L6), the exposure is not. See Annex VI, G2 |
 | Qualitative poll | `sessions/<code>/poll/<clientId>` | Every session member | "What was hardest" free text up to 280 characters, plus a feeling rating |
 | **Session metadata: creator UID, facilitator display name (`created.by`), workshop label, scenario id, `scenarioCustomJson` (up to 262,144 characters of authored scenario), scenario reference, closed marker, summary, admin-hash marker** | `sessions/<code>/*` | **Any authenticated user of the platform** (`".read": "auth != null"`, with **no membership test**) — including participants of a *different* facilitator's session | Session codes are 6 characters from a 31-character alphabet (~30 bits) and are explicitly not secret ("read aloud to a room"). See Annex VI, G3 |
 | **Participant email addresses** | `rosters/sessions/<code>/<uid>` | Session creator only | Email, name, university. Written only for signed-in (non-anonymous) participants who gave research consent. Exportable by the facilitator as CSV |
@@ -2576,24 +2576,34 @@ therefore reading an inaccurate description of both the basis and the period.
 "English governs if there is a conflict" does not cure a GDPR Art. 12(1) or APPI
 Art. 21 defect (clause 13.4).
 
-**L6 — BLOCKING (narrowed 2026-09-03 by verification pass — one row of four is
-fixed, three stand). Hard-coded fallback text in the page contradicts the
-runtime strings, on exactly the claims that matter.**
+**L6 — ✅ CLOSED 2026-09-04. Hard-coded fallback text in the page contradicts
+the runtime strings, on exactly the claims that matter.**
 
-> **Row 1 is fixed.** The `lobby.privacy.p3` fallback no longer says
-> "pseudonymised" — corrected during the PIS v10 retention work and now held by
-> `tests/retention-notice-consistency.test.js`, which fails if any of the twelve
-> retention surfaces says it. *(The one surviving "pseudonymised" in
-> `index.html` is in `consent-research`, where it is accurate: analysis and
-> publication ARE in pseudonymised form. That string is deliberately left
-> alone.)*
+> **All four rows are fixed.** Row 1 (`lobby.privacy.p3`) was corrected during
+> the PIS v10 retention work and is held by
+> `tests/retention-notice-consistency.test.js`. Rows 2–4 (`test.pre.intro`,
+> `test.post.intro`, `survey.intro`) were corrected on 2026-09-04, shell v164:
+> each fallback is now **byte-identical to its canonical English string**, copied
+> from `i18n._T.en` at fix time rather than retyped, so the two copies cannot
+> drift by a stray edit to one of them.
 >
-> ⚠️ **Rows 2–4 still stand, verified.** `test.pre.intro`, `test.post.intro` and
-> `survey.intro` still ship hard-coded fallbacks claiming the tests are
-> "anonymous within your university" and the questionnaire is "a short,
-> **anonymous** questionnaire", while the runtime strings say the answers are
-> **linked to you**. The fix in the original text — a unit test asserting no
-> fallback contradicts its canonical string — is still owed. The runtime
+> *(The one surviving "pseudonymised" in `index.html` is in `consent-research`,
+> where it is accurate: analysis and publication ARE in pseudonymised form. That
+> string is deliberately left alone.)*
+>
+> **Guard: `tests/fallback-contradiction.test.js`**, and it is derived rather
+> than hand-listed — it reads the canonical `i18n._T.en` table and fails if ANY
+> `data-i18n` fallback claims an anonymity its canonical string does not, or
+> drops a "linked to you" disclosure the canonical carries. A list of the three
+> known-bad keys would have passed forever once they were fixed and caught
+> nothing new. Mutation-verified: restoring the old wording fails 3 of its 4
+> tests, and the fourth is an anti-vacuity check that the scan still finds >100
+> fallbacks at all.
+>
+> ⚠️ **This closes the false STATEMENT, not the underlying exposure.** The tests
+> and questionnaire remain readable by every session member — that is **G2**,
+> which is still BLOCKING and is a different fix (narrowing the read gate).
+> Saying nothing false is not the same as saying enough. The runtime
 i18n values are correct in every case; the literal HTML that ships in
 `index.html` — which is what a participant reads if the i18n layer fails to apply
 — is not. Verified:
@@ -2763,9 +2773,12 @@ it. **Nothing inside the subtree is narrowed** — the AI chat, once the sole
 exception, was MOVED OUT to `roomChat/` on 2026-07-24 precisely because a deeper
 rule could not narrow it. A classmate with developer
 tools can therefore read another student's pre/post-test score and their
-**2,000-character written reflection** on the session and the facilitator —
-while the product tells them (L6) the test is "anonymous within your university"
-and the questionnaire is "anonymous". **Fix:** narrow the read gate on `tests`
+**2,000-character written reflection** on the session and the facilitator.
+Until 2026-09-04 the product also *told* them the test was "anonymous within
+your university" and the questionnaire "anonymous"; that statement is now
+corrected (L6, closed), **which removes the false claim and leaves the exposure
+exactly as it was**. Do not read L6's closure as progress on this item.
+**Fix:** narrow the read gate on `tests`
 and `survey` to the writer plus the facilitator before any session runs under this
 DPA. *(This is listed as a functional gap, not a residual risk: whole-session
 visibility is a deliberate design choice for collaborative room work — see R1 —
