@@ -892,6 +892,21 @@ a standing disclosure for the term, updated by the Processor whenever an item is
 closed or a new limitation is found, and re-issued to the Controller at least
 [ANNEX VI REFRESH CADENCE — suggested every 6 months].
 
+> ✅ **Last verification pass: 2026-09-03.** Every one of the 14 items then
+> marked BLOCKING was re-checked **against the code**, not relayed from this
+> file. Five labels were contradicted by reality and corrected in the same
+> change: **L4** substantially closed (the notice now names Hugging Face,
+> Scaleway and OVHcloud; only the usage log survives, tracked at G7), **L5**
+> closed outright (all three languages agree on Art. 6(1)(f) and 5 years, and
+> the third consent box exists), **L6** narrowed to three of its four rows,
+> **G9** halved (eight files walk `orgs` now; the parity gap is three nodes),
+> and **G3 WIDENED** — thirteen bare-read children, not nine.
+>
+> ⚠️ **A label's age is part of its meaning.** Two of these had been wrong for
+> weeks, and one had grown worse while nobody re-counted. Record the date of the
+> next pass here, whatever it finds — an item list with no audit date invites
+> exactly the trust this pack keeps having to withdraw.
+
 5.6 **Assumed operating context.** The security design assumes a **supervised
 classroom**: a facilitator is physically or virtually present, participants are
 identified students of a known cohort, and the disruption caused by a misbehaving
@@ -2484,7 +2499,25 @@ the job to 7 days would have destroyed sessions still in use. Guarded since by
 of the job and the workflow and fails if any of the twelve published surfaces
 drifts. Re-verified 2026-08-19.
 
-**L4 — BLOCKING. The language model and its providers are not in the notice.**
+**L4 — ✅ SUBSTANTIALLY CLOSED 2026-09-03 (verification pass); one limb moved
+to G7. The language model and its providers are not in the notice.**
+
+> **Re-checked against `privacy.html`, not relayed.** The claim below — "a search
+> for 'language model', 'LLM', 'chat' or 'sub-processor' returns nothing; the
+> recipients section lists only Google" — is **no longer true**. The notice now
+> names **Hugging Face** (14 mentions), **Scaleway** (24) and **OVHcloud** (12),
+> describes the chat and all three recipients with what each receives, and
+> records that the Hugging Face routing step sits outside the EEA. **Roster
+> e-mail is disclosed** too ("your name and university, and — if you sign in with
+> Google — your email").
+>
+> ⚠️ **One limb survives and is NOT closed: the LLM usage log**
+> (`metrics/hfPatient`) is still absent from the notice — zero mentions. That is
+> already the subject of **G7**, which covers it more fully (undisclosed,
+> unbounded, unreachable by an access request), so it is tracked there rather
+> than duplicated here.
+>
+> *The original text is kept below as the record of what was wrong.*
 A search of `privacy.html` for "language model", "LLM", "chat" or "sub-processor"
 returns nothing; the recipients section lists only Google. Hugging Face is
 disclosed **only** in an in-product banner. The notice must disclose: that a
@@ -2496,8 +2529,20 @@ emails** (`rosters/`) and the **LLM usage log** (`metrics/hfPatient`).
 disclosed as sub-processor)". That claim is true of the banner only, not of the
 notice, and should be corrected in the same change.)*
 
-**L5 — BLOCKING. The French and Japanese notices state a different legal basis
-and a different retention period from the English one.** For the certificate
+**L5 — ✅ CLOSED 2026-09-03 (verification pass). The French and Japanese notices
+state a different legal basis and a different retention period from the English
+one.**
+
+> **Re-checked against `privacy.html` in all three languages.** All three now
+> state the same basis for the certificate registry — **GDPR Art. 6(1)(f)
+> legitimate interests** (`intérêt légitime`, `正当な利益`) — and the same
+> retention, **5 years** (`5 ans`, `最長5年`). The phrase "10 years" / "10 ans" /
+> "10年" appears **nowhere** in the file. And the third consent control the French
+> and Japanese texts described now **exists**: `consent-transcript` shipped with
+> PIS v3, so `index.html` carries three checkboxes, not two, and the Japanese
+> text refers to it correctly as "ロビーの3つ目の同意欄".
+>
+> *The original text is kept below as the record of what was wrong.* For the certificate
 registry, English states verification is on by default under legitimate
 interests with up to 5 years' retention; French and Japanese describe a third
 optional consent checkbox, explicit consent, and up to **10 years**. **The user
@@ -2509,8 +2554,24 @@ therefore reading an inaccurate description of both the basis and the period.
 "English governs if there is a conflict" does not cure a GDPR Art. 12(1) or APPI
 Art. 21 defect (clause 13.4).
 
-**L6 — BLOCKING (widened from v0.1). Hard-coded fallback text in the page
-contradicts the runtime strings, on exactly the claims that matter.** The runtime
+**L6 — BLOCKING (narrowed 2026-09-03 by verification pass — one row of four is
+fixed, three stand). Hard-coded fallback text in the page contradicts the
+runtime strings, on exactly the claims that matter.**
+
+> **Row 1 is fixed.** The `lobby.privacy.p3` fallback no longer says
+> "pseudonymised" — corrected during the PIS v10 retention work and now held by
+> `tests/retention-notice-consistency.test.js`, which fails if any of the twelve
+> retention surfaces says it. *(The one surviving "pseudonymised" in
+> `index.html` is in `consent-research`, where it is accurate: analysis and
+> publication ARE in pseudonymised form. That string is deliberately left
+> alone.)*
+>
+> ⚠️ **Rows 2–4 still stand, verified.** `test.pre.intro`, `test.post.intro` and
+> `survey.intro` still ship hard-coded fallbacks claiming the tests are
+> "anonymous within your university" and the questionnaire is "a short,
+> **anonymous** questionnaire", while the runtime strings say the answers are
+> **linked to you**. The fix in the original text — a unit test asserting no
+> fallback contradicts its canonical string — is still owed. The runtime
 i18n values are correct in every case; the literal HTML that ships in
 `index.html` — which is what a participant reads if the i18n layer fails to apply
 — is not. Verified:
@@ -2688,7 +2749,24 @@ DPA. *(This is listed as a functional gap, not a residual risk: whole-session
 visibility is a deliberate design choice for collaborative room work — see R1 —
 but a false statement made at the moment of collection is not a risk to accept.)*
 
-**G3 — BLOCKING (new). Session metadata is readable across tenants.** Nine child
+**G3 — BLOCKING (WIDENED 2026-09-03 by verification pass: THIRTEEN children, not
+nine). Session metadata is readable across tenants.**
+
+> ⚠️ **Re-counted from the rules: 13 children of `sessions/$sessionId` now carry
+> a bare `".read": "auth != null"`.** The four added since this item was written
+> are `sections`, `sectionBodies` and `modules` (the section-model work) and
+> `controller` (added 2026-09-03 for L1 — by me, in the change that fixed a
+> different transparency defect).
+>
+> **`controller` is a defensible member of that list and the others are not.**
+> The join screen must name the controller *before* a participant joins, so
+> `sessionStatus()` reads it pre-membership by design; a membership test there
+> would make the Art. 13(1)(a) disclosure unreadable at exactly the moment it is
+> required. `scenarioCustomJson` — up to 262,144 characters of authored
+> scenario — has no such justification. **Whoever fixes this must sort the list
+> rather than gate it wholesale.**
+
+Nine child
 paths of `sessions/$sessionId` carry a bare `".read": "auth != null"` with **no
 membership test**: `adminPasswordHash`, `creatorUid`, `created` (containing the
 facilitator's display name), `workshopLabel`, `scenarioId`, **`scenarioCustomJson`
@@ -2777,10 +2855,28 @@ is deliberate rather than incidental.
 **G8 — MEDIUM. Account profiles, admin secrets, recovery records, authored
 scenarios, abuse reports and moderation records** have no automated deletion.
 
-**G9 — BLOCKING. The entire `orgs/` tree is outside every safeguard.** It mirrors
-the same participant, answer, chat and questionnaire model, but **no script
-references `orgs` at all** — verified: the only database paths any retention
-script touches are under `sessions`. If organisation-scoped sessions are used,
+**G9 — BLOCKING (HALVED 2026-09-03 by verification pass). The entire `orgs/` tree
+is outside every safeguard.**
+
+> ⚠️ **The headline claim is no longer true.** "No script references `orgs` at
+> all" was correct when written; **eight files do now** — `backup-sessions`,
+> `cleanup-stale-sessions`, `pseudonymise-export`, `erase-participant`,
+> `restore-sessions`, `serve-platform`, and the shared `lib/session-trees` and
+> `lib/suppression`. Retention, backup, pseudonymisation, erasure and restore all
+> walk both trees through `readSessionLocations()`. That half was closed by the
+> Phase-4e gap-2 work and extended since.
+>
+> ⚠️ **The rule-parity half stands, and is now precisely three nodes**, re-derived
+> by diffing the two subtrees: `poll` (session level), `answerReplies` and
+> `observers` (room level) exist only under `sessions/`. Writes to them fail
+> CLOSED in the org tree — a denial, not a hole — but org-scoped sessions would
+> silently lose those features. Clause 3.8's prohibition should stay until those
+> three are mirrored.
+
+It mirrors
+the same participant, answer, chat and questionnaire model. *(Original finding:
+no script referenced `orgs` at all — the only database paths any retention
+script touched were under `sessions`.)* If organisation-scoped sessions are used,
 retention, backup and pseudonymisation silently do not happen. Some rules are also
 absent in the org tree (the qualitative poll, answer replies, observers), so those
 writes fail closed. Clause 3.8 makes the prohibition operative: **do not enable
