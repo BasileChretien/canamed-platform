@@ -2793,13 +2793,52 @@ nine). Session metadata is readable across tenants.**
 > `controller` (added 2026-09-03 for L1 — by me, in the change that fixed a
 > different transparency defect).
 >
-> **`controller` is a defensible member of that list and the others are not.**
-> The join screen must name the controller *before* a participant joins, so
-> `sessionStatus()` reads it pre-membership by design; a membership test there
-> would make the Art. 13(1)(a) disclosure unreadable at exactly the moment it is
-> required. `scenarioCustomJson` — up to 262,144 characters of authored
-> scenario — has no such justification. **Whoever fixes this must sort the list
-> rather than gate it wholesale.**
+> ⚠️ **The prescribed fix does not work, and the sort was done: 2026-09-04.**
+> This item asks for the reads to be gated on membership. **They cannot be** —
+> ten of the thirteen are read BEFORE the participant is a member, so gating
+> them would break entering a session outright. Traced in `script.js`:
+>
+> | node | read by | when |
+> |---|---|---|
+> | `created`, `closed`, `controller` | `sessionStatus()` | on code entry — before the lobby renders |
+> | `scenarioId`, `scenarioCustomJson`, `scenarioRef`, `modules`, `sections`, `sectionBodies` | `loadSessionScenario()` | in `enterUnlockedSession()`, **before `initLobby()`** |
+> | `adminPasswordHash` | `legacyVerify()` | during admin login, also pre-membership |
+> | `workshopLabel`, `creatorUid`, `summary` | no direct read site | reached via subtree reads |
+>
+> At each of those moments the reader has no `clientMapping`, no `roomOf` and no
+> `members` entry. So the sort yields **at most three** candidates, none with a
+> direct read to verify against — a marginal gain for a real risk of breaking
+> every join. **Do not ship a membership gate here.**
+>
+> **What the item is really about, restated.** The parent
+> `sessions/$sessionId` DOES require membership
+> (`auth != null && data.child('members').hasChild(auth.uid)`). These thirteen
+> children each carry a bare `".read": "auth != null"`, which **widens** that —
+> RTDB reads cascade downward, so a deeper rule can only add. The effective
+> access control on a session's metadata and its **entire authored scenario** is
+> therefore **knowledge of the session code**, not membership.
+>
+> **That capability is ~29.7 bits.** `generateSessionCode()` (lib.js) draws 6
+> characters from a 31-symbol unambiguous alphabet
+> (`abcdefghjkmnpqrstuvwxyz23456789`) using `crypto.getRandomValues` with
+> rejection sampling — properly uniform, so 31⁶ = **887,503,681** possibilities.
+> Sound generation; the question is whether ~2³⁰ is the right strength for a
+> value that is read aloud in class, and that alone unlocks a scenario body of up
+> to 262,144 characters belonging to another institution.
+>
+> **This is a design decision, not a rules edit, and it is OPEN.** The two real
+> options: **(a)** accept code-as-capability and say so plainly in the notice and
+> in this DPA — the honest framing of the status quo; or **(b)** stop exposing
+> the scenario pre-join, by deferring `loadSessionScenario()` until after the
+> join commits, which is a client change with UX consequences (the lobby
+> currently renders scenario-derived content) and would then let six of the
+> thirteen be gated properly. Option (b) is the only one that reduces exposure.
+>
+> ⚠️ One of the four nodes added since this item was written is `controller`,
+> added on 2026-09-04 for L1 — and it belongs in the pre-membership set on
+> purpose: the join screen must name the controller *before* a participant
+> joins, so a membership test there would make the Art. 13(1)(a) disclosure
+> unreadable at exactly the moment it is required.
 
 Nine child
 paths of `sessions/$sessionId` carry a bare `".read": "auth != null"` with **no
