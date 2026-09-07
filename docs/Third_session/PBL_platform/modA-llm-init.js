@@ -26,6 +26,16 @@
  * chips and behaves exactly as before. Turns persisted to roomChat carry a
  * `character` id only when the cast has more than one member, so existing
  * transcripts stay byte-identical; a turn with no id is the index patient's.
+ *
+ * PER-SLOT (section model, 2026-09-07). The panel is mounted ONCE per room and
+ * borrows the PBL view for EVERY PBL section, while the room has ONE roomChat
+ * tree. So every turn carries the `slot` it was spoken in, the panel shows
+ * only the active slot's turns (rebuilt when script.js announces
+ * `canamed:slotchange`), the bridge keeps its threads per slot, and the
+ * once-only award map lives at rooms/$room/sections/$slot/scoring/awarded —
+ * the per-slot node S2a added — so the same scoring family can fire once in
+ * each section. A turn with no slot belongs to the session's FIRST PBL slot:
+ * every transcript written before this change.
  */
 
 (function () {
@@ -344,7 +354,6 @@
     var sPath = window.sPath;
     if (!db || typeof sPath !== "function" || !window.myRoom) return null;
     var roomBase  = sPath("rooms/" + window.myRoom);
-    var modABase  = roomBase + "/moduleA";
     var scoreBase = roomBase + "/score";
     // The chat is deliberately NOT under the room subtree. `sessions/<code>`
     // grants .read to every session member and RTDB .read CASCADES, so a
@@ -365,8 +374,10 @@
       chat:           db.ref(chatPath),
       chatPath:       chatPath,
       authorPath:     authorPath,
-      awarded:        db.ref(modABase + "/scoring/awarded"),
-      points:         db.ref(modABase + "/scoring/points"),
+      // The once-only award map is PER SLOT (rooms/$room/sections/$slot/…):
+      // the module-literal moduleA/scoring/awarded node is no longer read, like
+      // every other module-literal room node since S2b-2.
+      awardedFor:     function (slot) { return db.ref(roomBase + "/sections/" + slot + "/scoring/awarded"); },
       // ALSO write to the platform-wide score subtree so:
       //   - the existing scoreTotal() helper sums chat points into the room total
       //   - the existing refScore listener fires → renderScore() → renderObjectives()
@@ -433,6 +444,29 @@
       try { return prompts.characterName(_curLang(), id); } catch (_) { return ""; }
     }
     var activeId = _defaultId();
+
+    /* ── Per-slot state ─────────────────────────────────────────────────── */
+    /* script.js publishes the slot on screen and the session's first PBL slot
+       (refreshActiveSlotState). Absent — a room mounted outside the stage
+       machine, as the LOCAL specs do — everything is slot 1. */
+    function _firstPblSlot() {
+      var n = Number(window.CANAMED_FIRST_PBL_SLOT);
+      return (n >= 1) ? Math.floor(n) : 1;
+    }
+    function _currentSlot() {
+      var n = Number(window.CANAMED_ACTIVE_SLOT);
+      return (n >= 1) ? Math.floor(n) : _firstPblSlot();
+    }
+    /* A turn with no `slot` was written before slots existed: first PBL slot. */
+    function _slotOf(t) {
+      var n = Number(t && t.slot);
+      return (n >= 1) ? Math.floor(n) : _firstPblSlot();
+    }
+    var activeSlotId = _currentSlot();
+    var _scoreEventId = (typeof window.chatScoreEventId === "function")
+      ? window.chatScoreEventId : function (slot, famId) { return "chatA_s" + slot + "_" + famId; };
+    var _penaltyEventId = (typeof window.chatPenaltyEventId === "function")
+      ? window.chatPenaltyEventId : function (slot, famId) { return "s" + slot + "_" + famId; };
 
     /* i18n substitutes the INDEX patient's name into these two strings. For any
        other character, swap that name for theirs; a locale whose string does
@@ -554,12 +588,26 @@
     }
     function _onCastChange() { _renderCast(); }
 
-    // Local cache of the awarded map (mirrors RTDB; the bridge reads it
-    // synchronously). The .on() subscription below keeps it fresh.
-    var awarded = {};
-    // Named handlers (not anonymous) so destroy() can detach them precisely.
-    function _onAwardedValue(snap) { awarded = snap.val() || {}; }
-    refs.awarded.on("value", _onAwardedValue);
+    // Local cache of the awarded maps, ONE PER SLOT (mirrors RTDB; the bridge
+    // reads it synchronously). A slot's subscription is opened the first time
+    // it is shown and kept until destroy(), so walking Back into a section
+    // keeps its dedupe state without a re-read.
+    var awardedBySlot = {};
+    var awardedSubs = {};
+    function _awardedFor(slot) {
+      var k = String(slot);
+      if (!awardedBySlot[k]) awardedBySlot[k] = {};
+      return awardedBySlot[k];
+    }
+    function _watchAwarded(slot) {
+      var k = String(slot);
+      if (awardedSubs[k]) return;
+      var ref = refs.awardedFor(slot);
+      var handler = function (snap) { awardedBySlot[k] = snap.val() || {}; };
+      ref.on("value", handler);
+      awardedSubs[k] = { ref: ref, handler: handler };
+    }
+    _watchAwarded(activeSlotId);
 
     // Replay existing transcript when a teammate refreshes mid-session.
     // init() can re-run (e.g. re-entering Module A), which re-subscribes and
@@ -567,9 +615,16 @@
     // started as "new" — otherwise a re-init while the student is away from
     // Dialogue would inflate the badge to the whole transcript's history.
     var initStartedAt = Date.now();
+    // Every turn of the room, all slots, in arrival order — the source the
+    // panel is rebuilt from when the student moves to another section.
+    var turns = [];
     function _onChatChild(snap) {
       var t = snap.val();
       if (!t || !t.role || !t.content) return;
+      turns.push(t);
+      // Another section's conversation: kept for when the student walks there,
+      // not shown now, and not flagged — a reply there is not "unread" here.
+      if (_slotOf(t) !== activeSlotId) return;
       // A turn with no `character` is the index patient's — every transcript
       // written before the switchboard, and every single-cast section since.
       var who = t.character ? String(t.character) : _defaultId();
@@ -585,44 +640,70 @@
     }
     refs.chat.on("child_added", _onChatChild);
 
+    /* Show another slot's conversations: drop every thread and badge, replay
+       that slot's cached turns (no badges — a replay is not news), and let the
+       cast re-render for whatever section is now on screen. */
+    function _rebuildForSlot() {
+      try { transcriptEl.textContent = ""; } catch (_) {}
+      for (var i = 0; i < turns.length; i++) {
+        var t = turns[i];
+        if (_slotOf(t) !== activeSlotId) continue;
+        var who = t.character ? String(t.character) : _defaultId();
+        _renderTurn(_threadEl(who), t.role, t.content);
+      }
+      _renderCast();
+    }
+    function _onSlotChange() {
+      var next = _currentSlot();
+      if (next === activeSlotId) return;
+      activeSlotId = next;
+      bridge.setSlot(next);
+      _watchAwarded(next);
+      _rebuildForSlot();
+    }
+
     var bridge = window.modALLMBridge.create({
-      getAwarded: function () { return awarded; },
-      onAward: function (famId, fam) {
+      getAwarded: function (slot) { return _awardedFor(slot || activeSlotId); },
+      onAward: function (famId, fam, slot) {
         // Once-only guard at RTDB level via write-with-condition. We mirror
         // the value locally + write the family id; rules enforce write-once
-        // (see database.rules.json updates in task 8).
+        // PER SLOT, so a family fires once in each section it belongs to.
+        var sl = slot || activeSlotId;
+        var awarded = _awardedFor(sl);
         if (awarded[famId]) return;
         awarded[famId] = true;
         var pts = (fam && fam.points) || 0;
         var now = Date.now();
         // 1. Fine-grained inspection log (one record per family, with at + points)
-        refs.awarded.child(famId).transaction(function (cur) {
+        refs.awardedFor(sl).child(famId).transaction(function (cur) {
           return cur == null ? { at: now, points: pts } : undefined;
         });
         // 2. Platform-wide score path: makes the chat award count toward the
         //    team total via the existing scoreTotal() helper, AND triggers
         //    renderObjectives() so the row shows up in the right-column sidebar.
-        //    Event id `chatA_<famId>` mirrors the existing `conceptA_<famId>`
-        //    convention used by SCORING.moduleA concepts.
-        refs.scoreAuto.child("chatA_" + famId).transaction(function (cur) {
+        //    The event id is namespaced per slot (chatScoreEventId in
+        //    script.js): score/auto is per ROOM and write-once, so two sections
+        //    sharing a family id would otherwise collide on the second award.
+        refs.scoreAuto.child(_scoreEventId(sl, famId)).transaction(function (cur) {
           return cur == null ? { points: pts, at: now } : undefined;
         });
       },
-      onPenalty: function (famId, fam) {
+      onPenalty: function (famId, fam, slot) {
+        var sl = slot || activeSlotId;
+        var awarded = _awardedFor(sl);
         if (awarded[famId]) return;
         awarded[famId] = true;
         var pts = (fam && fam.points) || 0;
         var now = Date.now();
         // 1. Fine-grained inspection log (negative points to mark it as penalty)
-        refs.awarded.child(famId).transaction(function (cur) {
+        refs.awardedFor(sl).child(famId).transaction(function (cur) {
           return cur == null ? { at: now, points: -pts } : undefined;
         });
         // 2. Platform-wide penalty path: scoreTotal() subtracts the sum of
         //    score/penalties from the team total. Stored as a POSITIVE value
-        //    (the math is `auto + min(manual,cap) - pen`). The renderObjectives
-        //    penalty section picks it up automatically once penaltyMeta() is
-        //    taught to look up chat-penalty IDs in SCORING.moduleA_question_penalties.
-        refs.scorePenalties.child(famId).transaction(function (cur) {
+        //    (the math is `auto + min(manual,cap) - pen`). penaltyMeta() strips
+        //    the per-slot prefix before looking the family up.
+        refs.scorePenalties.child(_penaltyEventId(sl, famId)).transaction(function (cur) {
           return cur == null ? { points: pts, at: now } : undefined;
         });
       },
@@ -639,11 +720,14 @@
         // The ≥1-hypothesis phase gate (phaseGateOpen) drives the Debate reveal;
         // the red-flag screen is scoring-only now, not a gate.
       },
-      persistTurn: function (role, content, characterId) {
+      persistTurn: function (role, content, characterId, slot) {
         var turn = { role: role, content: content, at: Date.now() };
-        /* Only a plural cast tags its turns: a single-patient section keeps
-           writing the exact shape it always did, and the rules accept both. */
+        /* Only a plural cast tags its turns with a character: a single-patient
+           section keeps the shape it always wrote, and the rules accept both. */
         if (characterId && _isMulti()) turn.character = String(characterId);
+        /* Every turn carries the section it was spoken in, so a teammate's
+           client (and a later re-entry) files it under the right slot. */
+        turn.slot = slot || activeSlotId;
         var uid = null;
         try {
           uid = (window.firebase && firebase.auth && firebase.auth().currentUser)
@@ -684,8 +768,10 @@
 
     // Switchboard: chips for a plural cast, and follow the cast when the
     // session moves to another section (script.js applySectionContent()).
+    bridge.setSlot(activeSlotId);
     _renderCast();
     window.addEventListener("canamed:castchange", _onCastChange);
+    window.addEventListener("canamed:slotchange", _onSlotChange);
     // The consent click resets the placeholder to the index patient's; keep
     // it addressed to whoever is active. Registered after mount's own handler,
     // so it runs second.
@@ -917,7 +1003,11 @@
     // instead of stacking a second copy of every turn. Called by the next
     // modALLMInit() (idempotency, above) and by teardownRoom() on room exit.
     function destroy() {
-      try { refs.awarded.off("value", _onAwardedValue); } catch (_) {}
+      Object.keys(awardedSubs).forEach(function (k) {
+        try { awardedSubs[k].ref.off("value", awardedSubs[k].handler); } catch (_) {}
+      });
+      awardedSubs = {};
+      try { window.removeEventListener("canamed:slotchange", _onSlotChange); } catch (_) {}
       try { refs.chat.off("child_added", _onChatChild); } catch (_) {}
       try { formEl.removeEventListener("submit", _onSubmit); } catch (_) {}
       try { inputEl.removeEventListener("keydown", _onKeydown); } catch (_) {}
@@ -933,6 +1023,7 @@
       // Switchboard surface (tests + facilitator tooling).
       setCharacter: function (id) { _activate(id, false); },
       getCharacter: function () { return activeId; },
+      getSlot: function () { return activeSlotId; },
       refreshCast: _renderCast
     };
     return true;

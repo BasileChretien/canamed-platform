@@ -1272,6 +1272,17 @@ test("rules: a roomChat turn may name its addressee — a valid character id is 
   // And the stored shape is what the client will read back.
   const back = await dbReadAsOwner(`${base}/t1`);
   expect(back && back.character).toBe("mother");
+
+  // ── per-slot (2026-09-07): `slot` is optional too, and bounded like
+  //    sections/$slot — 1..9. Same allow/deny pairing.
+  expect(await tryWrite(page, `${base}/s1`, turn({ slot: 1 })), "slot 1").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/s2`, turn({ slot: 9, character: "mother" })), "slot 9 with a character").toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/s3`, turn({ slot: 0 })), "slot 0").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/s4`, turn({ slot: 10 })), "slot 10").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/s5`, turn({ slot: "2" })), "a string is not a slot").not.toBe("ALLOWED");
+  expect(await tryWrite(page, `${base}/s6`, turn()), "positive control").toBe("ALLOWED");
+  const s2 = await dbReadAsOwner(`${base}/s2`);
+  expect(s2 && s2.slot).toBe(9);
 });
 
 test("rules: certIds/$id — random cert-id map is owner write-once + owner-read, PEER-DENIED, admin-lists, closed-blocked", async ({ page, browser }) => {

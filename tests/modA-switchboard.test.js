@@ -303,7 +303,7 @@ test("rules: the character regex is the same one the prompt builder's ids satisf
 /* ── init + script wiring (source-level) ───────────────────────────────────── */
 
 test("init: a turn is tagged with its addressee only when the cast is plural", () => {
-  const at = INIT.indexOf("persistTurn: function (role, content, characterId)");
+  const at = INIT.indexOf("persistTurn: function (role, content, characterId, slot)");
   assert.ok(at > 0, "persistTurn must accept the addressee");
   const body = INIT.slice(at, at + 600);
   assert.match(body, /if \(characterId && _isMulti\(\)\) turn\.character = String\(characterId\);/,

@@ -23,6 +23,13 @@
  * thread. A turn with no id belongs to the index patient, which is what every
  * pre-switchboard transcript is.
  *
+ * PER-SLOT (section model, 2026-09-07). A session may run several PBL
+ * sections, each with its own case and cast, and the room's ONE roomChat
+ * tree holds all of them. So threads are keyed by SLOT first, then character:
+ * setSlot(n) is called as the student moves between sections, and every
+ * persisted turn carries the slot it was spoken in. A turn with no slot is
+ * the session's first PBL slot — every transcript written before this change.
+ *
  * No Firebase calls in here. No reveal() calls. All side effects go through
  * the host-supplied hooks.
  *
@@ -245,22 +252,39 @@ if (typeof window === "undefined") { var window = globalThis; }
        at contextTurns*4. `active` is the addressee of the next submit(); null
        resolves to the index patient at call time, so a host that never calls
        setCharacter() gets exactly the single-patient behaviour. */
-    var threads = {};
+    var threads = {};        // { [slot]: { [characterId]: [{role, content}, …] } }
     var active = null;
+    var activeSlot = 1;      // the section the next submit() is spoken in
     var callable = null;     // alternative to endpointUrl: a function (body) => Promise<{reply}>
 
     function _activeId() { return active || _defaultCharacterId(); }
-    function _thread(id) {
-      if (!threads[id]) threads[id] = [];
-      return threads[id];
+    function _slotThreads(slot) {
+      var k = String(slot || activeSlot);
+      if (!threads[k]) threads[k] = {};
+      return threads[k];
     }
-    function _pushTurns(id, userText, reply) {
-      var t = _thread(id);
+    function _thread(id, slot) {
+      var st = _slotThreads(slot);
+      if (!st[id]) st[id] = [];
+      return st[id];
+    }
+    function _pushTurns(id, slot, userText, reply) {
+      var st = _slotThreads(slot);
+      var t = _thread(id, slot);
       t.push({ role: "user", content: userText });
       t.push({ role: "assistant", content: reply });
       var maxKeep = cfg.contextTurns * 4;
-      if (t.length > maxKeep) threads[id] = t.slice(t.length - maxKeep);
+      if (t.length > maxKeep) st[id] = t.slice(t.length - maxKeep);
     }
+
+    /* setSlot(n) — the section the next submit() belongs to. Threads of other
+       slots are kept, so walking Back into an earlier section resumes its
+       conversations. A non-numeric or sub-1 value resets to slot 1. */
+    function setSlot(n) {
+      var v = Number(n);
+      activeSlot = (isFinite(v) && v >= 1) ? Math.floor(v) : 1;
+    }
+    function getSlot() { return activeSlot; }
 
     /* setCharacter(id) — address the next submit() to this character. Pass
        null to return to the index patient. Threads are kept, so switching
@@ -292,37 +316,46 @@ if (typeof window === "undefined") { var window = globalThis; }
       if (partial && typeof partial === "object") Object.assign(cfg, partial);
     }
 
-    /* loadTranscript(turns) — seed the threads from persisted turns
-       [{role, content, character?}]. A turn with no `character` is the index
-       patient's. Replaces every thread. */
-    function loadTranscript(turns) {
+    /* loadTranscript(turns, defaultSlot?) — seed the threads from persisted
+       turns [{role, content, character?, slot?}]. A turn with no `character`
+       is the index patient's; a turn with no `slot` belongs to `defaultSlot`
+       (the session's first PBL slot; falls back to the active slot). Replaces
+       every thread. */
+    function loadTranscript(turns, defaultSlot) {
       threads = {};
       if (!Array.isArray(turns)) return;
       var defaultId = _defaultCharacterId();
+      var fallbackSlot = (Number(defaultSlot) >= 1) ? Math.floor(Number(defaultSlot)) : activeSlot;
       var maxKeep = cfg.contextTurns * 4;
       for (var i = 0; i < turns.length; i++) {
         var t = turns[i];
         if (!t || !t.role || !t.content) continue;
-        _thread(t.character ? String(t.character) : defaultId)
+        var slot = (Number(t.slot) >= 1) ? Math.floor(Number(t.slot)) : fallbackSlot;
+        _thread(t.character ? String(t.character) : defaultId, slot)
           .push({ role: t.role, content: t.content });
       }
-      for (var id in threads) if (Object.prototype.hasOwnProperty.call(threads, id)) {
-        if (threads[id].length > maxKeep) threads[id] = threads[id].slice(-maxKeep);
+      for (var k in threads) if (Object.prototype.hasOwnProperty.call(threads, k)) {
+        var st = threads[k];
+        for (var id in st) if (Object.prototype.hasOwnProperty.call(st, id)) {
+          if (st[id].length > maxKeep) st[id] = st[id].slice(-maxKeep);
+        }
       }
     }
 
-    function _runScoring(text, characterId) {
+    function _runScoring(text, characterId, slot) {
       var SC = W.modAQuestionScoring;
       if (!SC || typeof SC.scoreQuestion !== "function") return null;
-      var awarded = (typeof hooks.getAwarded === "function") ? (hooks.getAwarded() || {}) : {};
+      // The awarded map is PER SLOT: the same family may fire once in each
+      // section, so the host is asked for the map of the slot being scored.
+      var awarded = (typeof hooks.getAwarded === "function") ? (hooks.getAwarded(slot) || {}) : {};
       var result = SC.scoreQuestion(text, awarded, characterId);
 
       var familyById = SC.familyById || function () { return null; };
       (result.award || []).forEach(function (id) {
-        if (typeof hooks.onAward === "function") hooks.onAward(id, familyById(id));
+        if (typeof hooks.onAward === "function") hooks.onAward(id, familyById(id), slot);
       });
       (result.penalty || []).forEach(function (id) {
-        if (typeof hooks.onPenalty === "function") hooks.onPenalty(id, familyById(id));
+        if (typeof hooks.onPenalty === "function") hooks.onPenalty(id, familyById(id), slot);
       });
       (result.unlocks || []).forEach(function (legacyId) {
         if (typeof hooks.onUnlock === "function") hooks.onUnlock(legacyId);
@@ -352,6 +385,7 @@ if (typeof window === "undefined") { var window = globalThis; }
         lang: cfg.lang,
         maxReplyLen: cfg.maxReplyLen,
         characterId: id,
+        slot: activeSlot,
         charName: _characterName(cfg.lang, id)
       };
     }
@@ -363,7 +397,7 @@ if (typeof window === "undefined") { var window = globalThis; }
       // The thread and the persona are BOTH the addressee's: one character
       // per call, never a merged cast.
       var msgs = (W.modALLMPrompts && W.modALLMPrompts.buildChatMessages)
-        ? W.modALLMPrompts.buildChatMessages(req.lang, _thread(req.characterId), userText,
+        ? W.modALLMPrompts.buildChatMessages(req.lang, _thread(req.characterId, req.slot), userText,
                                             { characterId: req.characterId })
         : [{ role: "user", content: userText }];
       // Sent so the server strips "<Name>:" prefixes it cannot otherwise know.
@@ -438,10 +472,11 @@ if (typeof window === "undefined") { var window = globalThis; }
          _captureRequestContext. */
       var req = _captureRequestContext();
       var who = req.characterId;
+      var slot = req.slot;
 
-      var score = _runScoring(clean, who);
+      var score = _runScoring(clean, who, slot);
       if (typeof hooks.persistTurn === "function") {
-        try { hooks.persistTurn("user", clean, who); }
+        try { hooks.persistTurn("user", clean, who, slot); }
         catch (e) { if (typeof hooks.logError === "function") hooks.logError(e); }
       }
       // Note: clean is NOT pushed onto the thread before _getPatientReply
@@ -452,21 +487,21 @@ if (typeof window === "undefined") { var window = globalThis; }
 
       return _getPatientReply(clean, req).then(function (reply) {
         if (typeof hooks.persistTurn === "function") {
-          try { hooks.persistTurn("assistant", reply, who); }
+          try { hooks.persistTurn("assistant", reply, who, slot); }
           catch (e) { if (typeof hooks.logError === "function") hooks.logError(e); }
         }
-        _pushTurns(who, clean, reply);
-        return { userText: clean, reply: reply, score: score, character: who };
+        _pushTurns(who, slot, clean, reply);
+        return { userText: clean, reply: reply, score: score, character: who, slot: slot };
       }).catch(function (err) {
         if (typeof hooks.logError === "function") hooks.logError(err);
         // Network/timeout failure: emit a stub reply locally so the team
         // can keep going. The host UI surfaces the fallback notice.
         var reply = _stubReply(clean, req.caseObj, req.lang, who);
         if (typeof hooks.persistTurn === "function") {
-          try { hooks.persistTurn("assistant", reply, who); } catch (e) { /* ignore */ }
+          try { hooks.persistTurn("assistant", reply, who, slot); } catch (e) { /* ignore */ }
         }
-        _pushTurns(who, clean, reply);
-        return { userText: clean, reply: reply, score: score, character: who, fallback: true };
+        _pushTurns(who, slot, clean, reply);
+        return { userText: clean, reply: reply, score: score, character: who, slot: slot, fallback: true };
       });
     }
 
@@ -478,18 +513,25 @@ if (typeof window === "undefined") { var window = globalThis; }
       setConfig: setConfig,
       setCharacter: setCharacter,
       getCharacter: getCharacter,
+      setSlot: setSlot,
+      getSlot: getSlot,
       loadTranscript: loadTranscript,
       _internal: {                 // exposed for tests only
         runScoring: _runScoring,
-        // The ACTIVE character's thread — what pre-switchboard tests read.
-        getTranscript: function () { return _thread(_activeId()).slice(); },
-        getThreads: function () {
+        // The ACTIVE character's thread in the ACTIVE slot — what
+        // pre-switchboard tests read.
+        getTranscript: function () { return _thread(_activeId(), activeSlot).slice(); },
+        // The threads of ONE slot (the active one by default), keyed by
+        // character — the pre-per-slot shape.
+        getThreads: function (slot) {
+          var st = _slotThreads(slot);
           var out = {};
-          for (var id in threads) if (Object.prototype.hasOwnProperty.call(threads, id)) {
-            out[id] = threads[id].slice();
+          for (var id in st) if (Object.prototype.hasOwnProperty.call(st, id)) {
+            out[id] = st[id].slice();
           }
           return out;
         },
+        getSlots: function () { return Object.keys(threads); },
         getLang: function () { return cfg.lang; },
         sanitiseReply: _sanitiseReply,
         stubReply: function (t, c, l, id) { return _stubReply(t, c, l, id); }

@@ -132,11 +132,10 @@ no chip row, the same persisted turn shape, the same placeholder.
   panel re-renders its chips and falls back to the new section's patient.
 - **Not shipped, still owed:** `present: "onCue"` entrances (such a
   character is simply not offered), the raised rate caps and the visible
-  turn counter, secrets with a hard gate, and — found while planning the
-  six-section Mayumi session — **the chat store is not per-slot**: two PBL
-  sections in one session share one `roomChat` transcript, so the earlier
-  section's conversation replays in the later one. That is the next engine
-  piece for that session.
+  turn counter, and secrets with a hard gate.
+- ~~The chat store is not per-slot~~ — **DONE 2026-09-07 (shell v166)**: see
+  "Per-slot chat store" in
+  [section-model-design.md](section-model-design.md).
 
 Proof: `tests/modA-switchboard.test.js` (scorer, prompts, bridge, rules,
 init wiring, CSS), `tests-e2e/modA-switchboard.spec.js` in a real LOCAL-mode

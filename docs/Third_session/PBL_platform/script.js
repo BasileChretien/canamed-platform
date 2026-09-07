@@ -1353,7 +1353,9 @@ function penaltyMeta(ev) {
   // PENALTIES list so the renderObjectives penalty section displays them
   // with the right label.
   if (typeof SCORING !== "undefined" && SCORING.moduleA_question_penalties) {
-    const chatPen = SCORING.moduleA_question_penalties.find(pp => pp.id === ev);
+    // per-slot id `s<slot>_<famId>`; older rooms wrote the bare id
+    const famId = ev.replace(/^s\d+_/, "");
+    const chatPen = SCORING.moduleA_question_penalties.find(pp => pp.id === famId);
     if (chatPen) {
       return {
         id: ev,
@@ -1949,6 +1951,11 @@ function roomChatPath(code, roomId) {
     : "roomChat/orgs/" + currentOrg + "/" + code;
   return base + "/" + roomId;
 }
+/* Chat score-event ids, namespaced PER SLOT: score/* is per ROOM and write-once,
+ * so two PBL sections sharing a family id would collide. The pre-slot ids are
+ * still read (renderObjectives, penaltyMeta). */
+function chatScoreEventId(slot, famId) { return "chatA_s" + slot + "_" + famId; }
+function chatPenaltyEventId(slot, famId) { return "s" + slot + "_" + famId; }
 /* Who wrote each chat turn, kept in a SEPARATE tree that no client can read.
  *
  * The turns themselves carry role/content/at and no author, which made a
@@ -2206,6 +2213,7 @@ function _legacySlotFor(type) {
 }
 let sectionState = {};     // slot → { revealed: {…}, hypotheses: {…} }
 let activeSlot = 1;        // the slot whose state the pointers below refer to
+let _lastAnnouncedSlot = null; // last slot canamed:slotchange fired for
 function slotState(slot) {
   const k = String(slot);
   if (!sectionState[k]) sectionState[k] = { revealed: {}, hypotheses: {}, triage: {}, answers: {} };
@@ -2227,6 +2235,13 @@ function refreshActiveSlotState() {
   if (typeof pointSectionRefs === "function") pointSectionRefs();
   /* S3c — and so does the CONTENT. */
   applySectionContent(slot);
+  // Per-slot chat: the panel is mounted once per room; tell it the slot on screen.
+  window.CANAMED_ACTIVE_SLOT = activeSlot;
+  window.CANAMED_FIRST_PBL_SLOT = _legacySlotFor("pbl");
+  if (activeSlot !== _lastAnnouncedSlot) {
+    _lastAnnouncedSlot = activeSlot;
+    window.dispatchEvent(new CustomEvent("canamed:slotchange", { detail: { slot: activeSlot } }));
+  }
   /* Replay the slot's last-seen synced values. Without this the shared UI keeps
      the PREVIOUS slot's phase/role draw, because the listener that would have
      corrected it already fired while this slot was inactive. */
@@ -4802,7 +4817,7 @@ function enterRoom(roomName, asAdmin) {
   /* S2b-1 — clear the per-slot store too. Clearing only the pointer would
      leave the previous room's reveals in sectionState, and the next room's
      first refreshActiveSlotState() would hand them straight back. */
-  sectionState = {}; activeSlot = 1; _appliedSectionId = null;
+  sectionState = {}; activeSlot = 1; _appliedSectionId = null; _lastAnnouncedSlot = null;
   revealed = {}; hypotheses = {};
   presence = {}; typingState = {}; seenFindingIds = {};
   myPendingReveal = null;
@@ -5374,6 +5389,8 @@ function startRoom() {
   // read-cascade — see roomChatPath), so the LLM init needs the resolver too.
   window.roomChatPath = roomChatPath;
   window.roomChatAuthorsPath = roomChatAuthorsPath;
+  window.chatScoreEventId = chatScoreEventId;
+  window.chatPenaltyEventId = chatPenaltyEventId;
   window.viewStage = viewStage;
   // SYNTH_ID / prereqsMet are re-exported for the chat bridge's red-flag
   // SCORING (it reveals legacy history items so prereqsMet/SYNTH_PREREQS stay
@@ -7581,7 +7598,8 @@ function renderObjectives() {
     // from the existing `earned[ev]` check below.
     if (mod === "A") {
       (SCORING.moduleA_questions || []).forEach(f =>
-        rows.push({ ev: "chatA_" + f.id, points: f.points, label: tc(f.label, lang) }));
+        rows.push({ ev: chatScoreEventId(activeSlot, f.id), legacy: "chatA_" + f.id,
+                    points: f.points, label: tc(f.label, lang) }));
     }
   }
   let got = 0, max = 0;
@@ -7593,7 +7611,7 @@ function renderObjectives() {
   list.setAttribute("role", "list");
   rows.forEach(o => {
     max += o.points;
-    const done = !!earned[o.ev];
+    const done = !!earned[o.ev] || !!(o.legacy && earned[o.legacy]);
     if (done) got += o.points;
     const row = document.createElement("li");
     row.className = "obj-row" + (done ? " done" : "");
