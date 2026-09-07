@@ -580,7 +580,12 @@
         castEl.appendChild(chip);
       }
       castEl.hidden = false;
-      _activate(stillThere ? activeId : _defaultId(), false);
+      /* Fall back to the section's index patient — unless she is not OFFERED
+         (declared `present:"onCue"`, e.g. a step the parents attend alone), in
+         which case address the first character who is. */
+      var offered = list.map(function (c) { return String(c.id); });
+      var fallback = offered.indexOf(_defaultId()) >= 0 ? _defaultId() : offered[0];
+      _activate(stillThere ? activeId : fallback, false);
     }
     function _onChipClick(ev) {
       var id = ev.currentTarget && ev.currentTarget.getAttribute("data-character");
@@ -659,6 +664,11 @@
       activeSlotId = next;
       bridge.setSlot(next);
       _watchAwarded(next);
+      /* A new section opens on ITS default addressee (the index patient when
+         she is offered, else the first character who is), not on whoever the
+         student was speaking to in the previous one. A cast change WITHIN a
+         section keeps the addressee; only a slot change resets it. */
+      activeId = _defaultId();
       _rebuildForSlot();
     }
 

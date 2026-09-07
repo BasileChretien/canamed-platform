@@ -206,6 +206,18 @@ if (typeof window === "undefined") { var window = globalThis; }
    *     examination by asking the patient.
    *   - `labs[]` — investigation results, not patient knowledge.
    */
+  /* Does character `id` own an item whose `who` is a string, an array of ids,
+     or absent (the index patient)? A parent's shared fact is `who: ["father",
+     "mother"]` — one item, two owners — rather than two items. */
+  function _ownedBy(who, id, patientId) {
+    if (who == null || who === "") return String(id) === String(patientId);
+    if (Array.isArray(who)) {
+      for (var i = 0; i < who.length; i++) if (String(who[i]) === String(id)) return true;
+      return false;
+    }
+    return String(who) === String(id);
+  }
+
   function _collectFacts(caseObj, lang, character) {
     var bag = [];
     var id = (character && character.id) || "patient";
@@ -219,7 +231,7 @@ if (typeof window === "undefined") { var window = globalThis; }
       for (var i = 0; i < caseObj.history.length; i++) {
         var item = caseObj.history[i];
         if (!item || item.narratorOnly) continue;
-        if (String(item.who || patientId) !== String(id)) continue;
+        if (!_ownedBy(item.who, id, patientId)) continue;
         var text = _tc(item.a, lang);
         if (text) bag.push("- " + text.replace(/\s+/g, " ").trim());
       }
@@ -332,6 +344,7 @@ if (typeof window === "undefined") { var window = globalThis; }
     buildChatMessages: buildChatMessages,
     findCharacter: findCharacter,
     characterName: characterName,
+    ownedBy: _ownedBy,
     moduleACharacters: moduleACharacters,
     defaultCharacterId: defaultCharacterId
   };

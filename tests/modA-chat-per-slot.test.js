@@ -195,6 +195,8 @@ test("init: a turn from another slot is cached, not rendered; a slot change rebu
   const change = fnOf(INIT, "_onSlotChange");
   assert.match(change, /bridge\.setSlot\(next\)/);
   assert.match(change, /_watchAwarded\(next\)/);
+  assert.match(change, /activeId = _defaultId\(\);/,
+    "a new section opens on its own default addressee, not the previous section's");
 });
 
 test("init: an untagged turn belongs to the session's FIRST PBL slot", () => {

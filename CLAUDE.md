@@ -875,6 +875,17 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `moduleA/scoring/awarded` is no longer read), and chat score events are
   `chatA_s<slot>_<famId>` / `s<slot>_<famId>`. See "Per-slot chat store" in
   `ARCHITECTURE/section-model-design.md`.
+- **"A Difficult Child (Mayumi)" — the Nagoya PBL No. 57 as SIX PBL-only
+  sections (2026-09-07, shell v167).** Content lives in `mayumi-seed.js` (a
+  lazy chunk merged into `CANAMED_SCENARIOS` after `branched-seed.js`, in the
+  loader, `sw.js` and `revisit.html`), registered as `mayumi-1-pbl` …
+  `mayumi-6-pbl` in `section-registry.js`. Facts are CUMULATIVE per reveal and
+  routed by `who` (which may now be an ARRAY of ids); Mayumi is
+  `present:"onCue"` in sections 1–2, so the chat opens on the first OFFERED
+  character there; a slot change resets the addressee to the new section's
+  default. The clinical content is **awaiting review by Dr Branko / the Nagoya
+  tutors** — checklist in `ARCHITECTURE/mayumi-pbl-content.md`. The handout
+  wins over his app where they differ (escitalopram, not fluoxetine).
 - **⚠ `hfPatient` needs `firebase deploy --only functions` to pick this up.**
   `SERVER_GUARD` was generalised from "simulated patient" to "simulated
   character", and the reply-prefix stripper is now driven by the character's
