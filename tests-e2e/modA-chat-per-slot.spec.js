@@ -103,10 +103,19 @@ async function tap(locator) {
   await locator.click();
 }
 
+/* Send with Enter (the chat's keyboard path), not the Send button. On CI's
+   mobile-android project the button tap went missing three runs in a row
+   (main after #391 and two Dependabot PRs) at the FIRST question, the input
+   still holding its text — the collapsing room header moving the button after
+   Playwright's pre-click scroll, the same class as the WebKit hang the
+   chat-controls spec documents. This spec is about the per-slot STORE; the
+   button's tap geometry on every device is proven by
+   modA-chat-controls.spec.js and modA-switchboard.spec.js, which keep it. */
 async function ask(student, text) {
   const input = student.locator("#modA-chat-input");
+  await input.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
   await input.fill(text);
-  await tap(student.locator("#modA-chat-send"));
+  await input.press("Enter");
   await expect(input).toHaveValue("", { timeout: 10_000 });
 }
 
