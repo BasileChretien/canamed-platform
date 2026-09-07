@@ -2400,6 +2400,81 @@ body.session-closed .leaderboard-card[open] { /* no behaviour change yet */ }
 }
 
 
+/* ── Switchboard (scenario-characters slice 2) ─────────────────────────────
+   One chip per Module A character above the transcript, one thread per
+   character inside it. The cast row and every non-active thread carry the
+   `hidden` attribute; the explicit [hidden] rules are needed because the
+   flex display below would otherwise win over the UA stylesheet's
+   display:none and un-hide them. A single-character section never shows the
+   row at all. */
+.moda-chat-cast {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+
+.moda-chat-cast[hidden] { display: none; }
+
+
+.moda-chat-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--r-btn);
+  border: 1px solid var(--line-strong);
+  background: var(--card);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: var(--fw-semibold);
+  line-height: 1.3;
+}
+
+
+.moda-chat-chip:hover { border-color: var(--primary); }
+
+
+/* Same white-on-primary pattern as .moda-chat-consent-btn (AA in light; the
+   dark palette swaps --on-primary to a dark ink for the cyan --primary). */
+.moda-chat-chip[aria-pressed="true"] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+
+
+/* Unread-reply count on a chip that is NOT the active one. */
+.moda-chat-chip-badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--r-pill);
+  background: var(--key);
+  color: var(--on-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}
+
+
+.moda-chat-chip-badge[hidden] { display: none; }
+
+
+.moda-chat-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+.moda-chat-thread[hidden] { display: none; }
+
 .moda-chat-bub {
   max-width: 86%;
   padding: 6px 10px;

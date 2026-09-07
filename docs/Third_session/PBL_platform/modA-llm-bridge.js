@@ -10,10 +10,18 @@
  * Providers API, Mistral, a local stub) without re-touching DOM code.
  *
  * RUNTIME CONTRACT (the only globals it touches):
- *   - window.modAQuestionScoring.scoreQuestion(text, awarded) → {award,penalty,unlocks}
- *   - window.modALLMPrompts.buildChatMessages(lang, transcript, userText)
+ *   - window.modAQuestionScoring.scoreQuestion(text, awarded, characterId) → {award,penalty,unlocks}
+ *   - window.modALLMPrompts.buildChatMessages(lang, transcript, userText, {characterId})
  *   - window.CASE                — fact lookup for the local stub fallback
  *   - DOM in the container the host passes to init()
+ *
+ * SWITCHBOARD (scenario-characters design, slice 2). The bridge keeps ONE
+ * transcript thread PER CHARACTER and an "active" character the next
+ * submit() is addressed to. Each thread is its own LLM conversation — one
+ * persona per call, never several — and a turn persisted through the host
+ * carries the character id so a teammate's client can route it to the same
+ * thread. A turn with no id belongs to the index patient, which is what every
+ * pre-switchboard transcript is.
  *
  * No Firebase calls in here. No reveal() calls. All side effects go through
  * the host-supplied hooks.
@@ -69,13 +77,23 @@ if (typeof window === "undefined") { var window = globalThis; }
   // same way functions/lib/hf-helpers.js does it.
   var _GENERIC_ROLES = "patient|le\\s+patient|réponse|response|回答|患者(?:さん)?|彼";
 
-  function _characterName(lang) {
+  function _characterName(lang, characterId) {
     try {
       if (W.modALLMPrompts && typeof W.modALLMPrompts.characterName === "function") {
-        return W.modALLMPrompts.characterName(lang || "en");
+        return W.modALLMPrompts.characterName(lang || "en", characterId || undefined);
       }
     } catch (_) { /* prompts module absent — generic roles only */ }
     return "";
+  }
+
+  /* The id a turn with no `character` belongs to — the index patient. */
+  function _defaultCharacterId() {
+    try {
+      if (W.modALLMPrompts && typeof W.modALLMPrompts.defaultCharacterId === "function") {
+        return String(W.modALLMPrompts.defaultCharacterId() || "patient");
+      }
+    } catch (_) { /* prompts module absent */ }
+    return "patient";
   }
 
   function _rolePrefixRe(name) {
@@ -116,16 +134,22 @@ if (typeof window === "undefined") { var window = globalThis; }
    * falling back to a generic "I'm not sure, doctor" line. This is also
    * what the E2E suite stubs, so test code doesn't need a network mock. */
 
-  function _stubReply(userText, caseObj, lang) {
+  function _stubReply(userText, caseObj, lang, characterId) {
     if (!caseObj || !Array.isArray(caseObj.history)) {
       return _genericStubReply(lang);
     }
     var lowered = String(userText || "").toLowerCase();
     var best = null;
     var bestScore = 0;
+    // Route by owner exactly as the prompt builder's _collectFacts does: an
+    // item with no `who` belongs to the index patient. Only applied when a
+    // character is named, so the legacy single-patient stub is unchanged.
+    var who = characterId ? String(characterId) : null;
+    var defaultId = who ? _defaultCharacterId() : null;
     for (var i = 0; i < caseObj.history.length; i++) {
       var it = caseObj.history[i];
       if (!it || !it.q || !it.a) continue;
+      if (who && String(it.who || defaultId) !== who) continue;
       // Skip narratorOnly entries — these are third-person stage directions
       // ("He flinches and pulls away") for the click-mode UI's bad-move
       // consequences, not first-person patient speech. Letting the stub
@@ -205,7 +229,10 @@ if (typeof window === "undefined") { var window = globalThis; }
      *   onAward(famId, family)     - apply points + persist
      *   onPenalty(famId, family)   - apply penalty + persist
      *   onUnlock(legacyItemId)     - call existing reveal()
-     *   persistTurn(role, content) - write to .../modA/chat/{turn}
+     *   persistTurn(role, content, characterId) - write to roomChat/…/{turn};
+     *                              characterId is the addressee (null = index
+     *                              patient, the only value pre-switchboard hosts
+     *                              ever saw)
      *   logError(err)              - optional, host-side logging
      *   getAwarded()               - returns { famId: true } map
      * }
@@ -214,8 +241,34 @@ if (typeof window === "undefined") { var window = globalThis; }
      */
     var hooks = hostHooks || {};
     var cfg = Object.assign({}, DEFAULTS);
-    var transcript = [];     // [{role, content}], capped at contextTurns*2
+    /* One thread per character id: { [id]: [{role, content}, …] }, each capped
+       at contextTurns*4. `active` is the addressee of the next submit(); null
+       resolves to the index patient at call time, so a host that never calls
+       setCharacter() gets exactly the single-patient behaviour. */
+    var threads = {};
+    var active = null;
     var callable = null;     // alternative to endpointUrl: a function (body) => Promise<{reply}>
+
+    function _activeId() { return active || _defaultCharacterId(); }
+    function _thread(id) {
+      if (!threads[id]) threads[id] = [];
+      return threads[id];
+    }
+    function _pushTurns(id, userText, reply) {
+      var t = _thread(id);
+      t.push({ role: "user", content: userText });
+      t.push({ role: "assistant", content: reply });
+      var maxKeep = cfg.contextTurns * 4;
+      if (t.length > maxKeep) threads[id] = t.slice(t.length - maxKeep);
+    }
+
+    /* setCharacter(id) — address the next submit() to this character. Pass
+       null to return to the index patient. Threads are kept, so switching
+       back resumes that conversation where it was. */
+    function setCharacter(id) {
+      active = (id == null || id === "") ? null : String(id);
+    }
+    function getCharacter() { return _activeId(); }
 
     function setEndpoint(url, headers) {
       cfg.endpointUrl = url || null;
@@ -239,18 +292,30 @@ if (typeof window === "undefined") { var window = globalThis; }
       if (partial && typeof partial === "object") Object.assign(cfg, partial);
     }
 
+    /* loadTranscript(turns) — seed the threads from persisted turns
+       [{role, content, character?}]. A turn with no `character` is the index
+       patient's. Replaces every thread. */
     function loadTranscript(turns) {
-      transcript = Array.isArray(turns)
-        ? turns.filter(function (t) { return t && t.role && t.content; })
-              .slice(-cfg.contextTurns * 4)
-        : [];
+      threads = {};
+      if (!Array.isArray(turns)) return;
+      var defaultId = _defaultCharacterId();
+      var maxKeep = cfg.contextTurns * 4;
+      for (var i = 0; i < turns.length; i++) {
+        var t = turns[i];
+        if (!t || !t.role || !t.content) continue;
+        _thread(t.character ? String(t.character) : defaultId)
+          .push({ role: t.role, content: t.content });
+      }
+      for (var id in threads) if (Object.prototype.hasOwnProperty.call(threads, id)) {
+        if (threads[id].length > maxKeep) threads[id] = threads[id].slice(-maxKeep);
+      }
     }
 
-    function _runScoring(text) {
+    function _runScoring(text, characterId) {
       var SC = W.modAQuestionScoring;
       if (!SC || typeof SC.scoreQuestion !== "function") return null;
       var awarded = (typeof hooks.getAwarded === "function") ? (hooks.getAwarded() || {}) : {};
-      var result = SC.scoreQuestion(text, awarded);
+      var result = SC.scoreQuestion(text, awarded, characterId);
 
       var familyById = SC.familyById || function () { return null; };
       (result.award || []).forEach(function (id) {
@@ -281,11 +346,13 @@ if (typeof window === "undefined") { var window = globalThis; }
      * So the request captures its context ONCE, here, and every continuation
      * below uses the capture rather than re-reading the global. */
     function _captureRequestContext() {
+      var id = _activeId();
       return {
         caseObj: W.CASE,
         lang: cfg.lang,
         maxReplyLen: cfg.maxReplyLen,
-        charName: _characterName(cfg.lang)
+        characterId: id,
+        charName: _characterName(cfg.lang, id)
       };
     }
 
@@ -293,8 +360,11 @@ if (typeof window === "undefined") { var window = globalThis; }
       req = req || _captureRequestContext();
       // Build messages even when stubbing — keeps the contract identical
       // across stub and real endpoint, so the stub catches prompt bugs too.
+      // The thread and the persona are BOTH the addressee's: one character
+      // per call, never a merged cast.
       var msgs = (W.modALLMPrompts && W.modALLMPrompts.buildChatMessages)
-        ? W.modALLMPrompts.buildChatMessages(req.lang, transcript, userText)
+        ? W.modALLMPrompts.buildChatMessages(req.lang, _thread(req.characterId), userText,
+                                            { characterId: req.characterId })
         : [{ role: "user", content: userText }];
       // Sent so the server strips "<Name>:" prefixes it cannot otherwise know.
       var charName = req.charName;
@@ -321,14 +391,14 @@ if (typeof window === "undefined") { var window = globalThis; }
           .then(function (clean) {
             if (!clean) {
               if (typeof hooks.logError === "function") hooks.logError(new Error("empty reply"));
-              return _stubReply(userText, req.caseObj, req.lang);
+              return _stubReply(userText, req.caseObj, req.lang, req.characterId);
             }
             return clean;
           });
       }
 
       if (!cfg.endpointUrl) {
-        return Promise.resolve(_stubReply(userText, req.caseObj, req.lang));
+        return Promise.resolve(_stubReply(userText, req.caseObj, req.lang, req.characterId));
       }
       return _callEndpoint(cfg.endpointUrl, cfg.endpointHeaders,
                            { messages: msgs, lang: req.lang, characterName: charName },
@@ -339,7 +409,7 @@ if (typeof window === "undefined") { var window = globalThis; }
           // continue. Host logs the error.
           if (!clean) {
             if (typeof hooks.logError === "function") hooks.logError(new Error("empty reply"));
-            return _stubReply(userText, req.caseObj, req.lang);
+            return _stubReply(userText, req.caseObj, req.lang, req.characterId);
           }
           return clean;
         });
@@ -367,13 +437,14 @@ if (typeof window === "undefined") { var window = globalThis; }
          of the case and language the student actually asked in. See
          _captureRequestContext. */
       var req = _captureRequestContext();
+      var who = req.characterId;
 
-      var score = _runScoring(clean);
+      var score = _runScoring(clean, who);
       if (typeof hooks.persistTurn === "function") {
-        try { hooks.persistTurn("user", clean); }
+        try { hooks.persistTurn("user", clean, who); }
         catch (e) { if (typeof hooks.logError === "function") hooks.logError(e); }
       }
-      // Note: clean is NOT pushed onto `transcript` before _getPatientReply
+      // Note: clean is NOT pushed onto the thread before _getPatientReply
       // — buildChatMessages appends userText as the final {role:"user"}
       // itself. Pushing first would duplicate the new turn in the network
       // payload. We update the local ring once the reply lands so the
@@ -381,27 +452,21 @@ if (typeof window === "undefined") { var window = globalThis; }
 
       return _getPatientReply(clean, req).then(function (reply) {
         if (typeof hooks.persistTurn === "function") {
-          try { hooks.persistTurn("assistant", reply); }
+          try { hooks.persistTurn("assistant", reply, who); }
           catch (e) { if (typeof hooks.logError === "function") hooks.logError(e); }
         }
-        transcript.push({ role: "user", content: clean });
-        transcript.push({ role: "assistant", content: reply });
-        var maxKeep = cfg.contextTurns * 4;
-        if (transcript.length > maxKeep) {
-          transcript = transcript.slice(transcript.length - maxKeep);
-        }
-        return { userText: clean, reply: reply, score: score };
+        _pushTurns(who, clean, reply);
+        return { userText: clean, reply: reply, score: score, character: who };
       }).catch(function (err) {
         if (typeof hooks.logError === "function") hooks.logError(err);
         // Network/timeout failure: emit a stub reply locally so the team
         // can keep going. The host UI surfaces the fallback notice.
-        var reply = _stubReply(clean, req.caseObj, req.lang);
+        var reply = _stubReply(clean, req.caseObj, req.lang, who);
         if (typeof hooks.persistTurn === "function") {
-          try { hooks.persistTurn("assistant", reply); } catch (e) { /* ignore */ }
+          try { hooks.persistTurn("assistant", reply, who); } catch (e) { /* ignore */ }
         }
-        transcript.push({ role: "user", content: clean });
-        transcript.push({ role: "assistant", content: reply });
-        return { userText: clean, reply: reply, score: score, fallback: true };
+        _pushTurns(who, clean, reply);
+        return { userText: clean, reply: reply, score: score, character: who, fallback: true };
       });
     }
 
@@ -411,13 +476,23 @@ if (typeof window === "undefined") { var window = globalThis; }
       setCallable: setCallable,
       setLang: setLang,
       setConfig: setConfig,
+      setCharacter: setCharacter,
+      getCharacter: getCharacter,
       loadTranscript: loadTranscript,
       _internal: {                 // exposed for tests only
         runScoring: _runScoring,
-        getTranscript: function () { return transcript.slice(); },
+        // The ACTIVE character's thread — what pre-switchboard tests read.
+        getTranscript: function () { return _thread(_activeId()).slice(); },
+        getThreads: function () {
+          var out = {};
+          for (var id in threads) if (Object.prototype.hasOwnProperty.call(threads, id)) {
+            out[id] = threads[id].slice();
+          }
+          return out;
+        },
         getLang: function () { return cfg.lang; },
         sanitiseReply: _sanitiseReply,
-        stubReply: function (t, c, l) { return _stubReply(t, c, l); }
+        stubReply: function (t, c, l, id) { return _stubReply(t, c, l, id); }
       }
     };
   }

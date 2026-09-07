@@ -38,10 +38,19 @@ if (typeof window === "undefined") { var window = globalThis; }
     return false;
   }
 
-  /* scoreQuestion(text, awardedMap)
-   *   text       - the student's typed question (any language)
-   *   awardedMap - { [familyId]: truthy } of families already counted in this
-   *                room. Pass `{}` if you don't dedupe (rare — see below).
+  /* scoreQuestion(text, awardedMap, characterId?)
+   *   text        - the student's typed question (any language)
+   *   awardedMap  - { [familyId]: truthy } of families already counted in this
+   *                 room. Pass `{}` if you don't dedupe (rare — see below).
+   *   characterId - who the question was addressed TO (the switchboard's
+   *                 active character). Omitted/null means the index patient.
+   *
+   * `askOf` (scenario-characters design, decision 4): a family may declare
+   * `askOf: "mother"` (or an array of ids) and then only scores when the
+   * question was put to one of THOSE characters — a family history taken from
+   * the mother earns the points; the same words typed at the patient do not.
+   * A family with no `askOf` scores whoever it was asked of, so every
+   * pre-switchboard family behaves exactly as before.
    *
    * Returns { award, penalty, unlocks } — each an array of ids the caller
    * should now persist + apply. Empty arrays when nothing matched (or when
@@ -52,7 +61,31 @@ if (typeof window === "undefined") { var window = globalThis; }
    * not stack 24 points. The bridge persists the awarded map at
    * `…/modA/scoring/awarded/<familyId>` so all team members share it.
    */
-  function scoreQuestion(text, awardedMap) {
+  /* The id a question with NO addressee was put to: the scenario's index
+     patient. Read lazily from the prompt builder (it loads AFTER this file),
+     so a scenario whose patient is not literally `id:"patient"` still
+     resolves; "patient" is only the fallback when no cast is declared. */
+  function _defaultCharacterId() {
+    try {
+      var PR = W.modALLMPrompts;
+      if (PR && typeof PR.defaultCharacterId === "function") return String(PR.defaultCharacterId() || "patient");
+    } catch (_) { /* prompts not loaded */ }
+    return "patient";
+  }
+
+  function _askOfMatches(family, characterId) {
+    var spec = family && family.askOf;
+    if (spec == null || spec === "") return true;          // no restriction
+    var list = Array.isArray(spec) ? spec : [spec];
+    if (!list.length) return true;                          // askOf: [] — an authoring slip, not "nobody"
+    var who = (characterId == null || characterId === "") ? _defaultCharacterId() : String(characterId);
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i]) === who) return true;
+    }
+    return false;
+  }
+
+  function scoreQuestion(text, awardedMap, characterId) {
     var out = { award: [], penalty: [], unlocks: [] };
     var SC = W.SCORING;
     if (!SC) return out;
@@ -65,6 +98,7 @@ if (typeof window === "undefined") { var window = globalThis; }
     for (var i = 0; i < awardFams.length; i++) {
       var fam = awardFams[i];
       if (!fam || !fam.id || awarded[fam.id]) continue;
+      if (!_askOfMatches(fam, characterId)) continue;
       if (_hits(fam, lowered)) {
         out.award.push(fam.id);
         if (fam.unlocks) out.unlocks.push(fam.unlocks);
@@ -75,6 +109,7 @@ if (typeof window === "undefined") { var window = globalThis; }
     for (var j = 0; j < penFams.length; j++) {
       var pen = penFams[j];
       if (!pen || !pen.id || awarded[pen.id]) continue;
+      if (!_askOfMatches(pen, characterId)) continue;
       if (_hits(pen, lowered)) out.penalty.push(pen.id);
     }
 
@@ -97,7 +132,8 @@ if (typeof window === "undefined") { var window = globalThis; }
 
   W.modAQuestionScoring = {
     scoreQuestion: scoreQuestion,
-    familyById: familyById
+    familyById: familyById,
+    askOfMatches: _askOfMatches
   };
 
   if (typeof module !== "undefined" && module.exports) {
