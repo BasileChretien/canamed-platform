@@ -910,6 +910,14 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   modA-llm-init.js; ≤2.5 s, replays and reduced-motion render whole). It is a
   reveal after the reply ARRIVES — the proxy still returns whole replies; true
   token streaming would be a proxy change.
+- **WebKit counts a `<select>`'s LONGEST OPTION TEXT toward the page's scroll
+  width, whatever the box is sized to** (measured 2026-09-07, PR #396). A
+  112-char option in the create form's flat section list pushed the splash to
+  ~500 px at 320 — `splash-overflow.spec` red on webkit/iPhone/iPad, green on
+  chromium/Android, and green locally because only chromium had run it.
+  `min-width:0`, `width:100%` and `overflow:hidden` on the containers change
+  nothing. Keep option text short and disambiguate with `<optgroup>`. Run
+  that spec on webkit before pushing any splash markup change.
 - **The Android "lost Send tap" is NOT a product defect** (diagnosed
   2026-09-07 with every scroll API instrumented): in the failing runs no app
   code scrolled and no submit fired; a bare scroll EVENT moved the page ~400 px
