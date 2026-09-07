@@ -26,7 +26,7 @@ const REG = require(path.join(P, "section-registry.js"));
    case-content.js — the same order script-loader.js uses. */
 function loadScenarios() {
   const win = {};
-  ["case-content.js", "branched-seed.js"].forEach(f => {
+  ["case-content.js", "branched-seed.js", "mayumi-seed.js"].forEach(f => {
     const p = path.join(P, f);
     if (!fs.existsSync(p)) return;
     // eslint-disable-next-line no-new-func
@@ -119,7 +119,8 @@ test("test items are partitioned, never duplicated or dropped", () => {
       const items = SCENARIOS[sid][pair[1]];
       const slug = REG.SECTION_SOURCES.find(s => s.scenarioId === sid).slug;
       const inPbl = SECTIONS[slug + "-pbl"][pair[0] + "Test"];
-      const inRp = SECTIONS[slug + "-roleplay"][pair[0] + "Test"];
+      /* A PBL-only case (the Mayumi sections) yields no roleplay half. */
+      const inRp = SECTIONS[slug + "-roleplay"] ? SECTIONS[slug + "-roleplay"][pair[0] + "Test"] : [];
       assert.equal(inPbl.length + inRp.length, items.length,
         sid + " " + pair[0] + "-test must partition exactly");
       const ids = inPbl.concat(inRp).map(i => i.id);
@@ -135,6 +136,13 @@ test("every section has a blurb of its own, not the case-wide one", () => {
     assert.equal(s.summaryIsCaseWide, false,
       id + " must not inherit the case summary — stage 0 prints one blurb per " +
       "picked section, and a case summary advertises the other half too");
+    /* A case that yields ONE section (the Mayumi steps are PBL-only) has no
+       "other half" its summary could advertise: its case summary IS the
+       section's own, and the flag above says so. The inequality only means
+       something for a two-section case. */
+    const halves = REG.sectionsForScenario(SCENARIOS[s.source],
+      (REG.SECTION_SOURCES.find(x => x.scenarioId === s.source) || {}).slug).length;
+    if (halves < 2) return;
     const caseSummary = (SCENARIOS[s.source].summary || {}).en || "";
     assert.notEqual(s.summary.en, caseSummary);
   });

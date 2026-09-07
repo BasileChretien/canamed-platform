@@ -732,6 +732,10 @@ test.describe("Perf budget — splash", () => {
       // the built-in branched scenario into CANAMED_SCENARIOS). Same class as
       // case-content.js — off the splash critical path.
       "branched-seed.js",
+      // "A Difficult Child (Mayumi)" (2026-09-07): mayumi-seed.js is chained
+      // after branched-seed.js in the same idle prefetch and merges six PBL
+      // sections into the registry — room content, never splash code.
+      "mayumi-seed.js",
       // branched-render.js (2026-06-29): the lazy in-room branched render
       // helpers (documents → final-diagnosis), chained after branched-seed.js
       // in ensureCaseContent(). Room-only, off the splash critical path.

@@ -52,7 +52,16 @@
     { scenarioId: "chronic-pain-opioids",          slug: "chronic-pain" },
     { scenarioId: "breaking-bad-news-disclosure",  slug: "jaundice" },
     { scenarioId: "respiratory-stewardship",       slug: "sore-throat" },
-    { scenarioId: "ward-escalation-branched",      slug: null /* keeps its id */ }
+    { scenarioId: "ward-escalation-branched",      slug: null /* keeps its id */ },
+    /* "A Difficult Child (Mayumi)" — Nagoya PBL No. 57, six PBL-only sections,
+       one per reveal (mayumi-seed.js). Listed in reveal order so the picker
+       offers them in the order the tutorial hands them out. */
+    { scenarioId: "mayumi-1", slug: "mayumi-1" },
+    { scenarioId: "mayumi-2", slug: "mayumi-2" },
+    { scenarioId: "mayumi-3", slug: "mayumi-3" },
+    { scenarioId: "mayumi-4", slug: "mayumi-4" },
+    { scenarioId: "mayumi-5", slug: "mayumi-5" },
+    { scenarioId: "mayumi-6", slug: "mayumi-6" }
   ];
 
   /* ── Per-item test classification (decision 3 + 10) ───────────────────────
@@ -156,6 +165,20 @@
               q9: "pbl" }      /* first-line agent once GAS confirmed */
     }
   };
+
+  /* A PBL-ONLY case has no split to make: every item belongs to its one
+     section. Still written out per scenario, item by item, so a NEW item added
+     without a decision fails assertClassified() exactly as for the split cases
+     — "q5" on a section listed with four items is unclassified, not assumed. */
+  function pblOnly(ids) {
+    const m = {};
+    ids.forEach(id => { m[id] = "pbl"; });
+    return m;
+  }
+  ["mayumi-1", "mayumi-2", "mayumi-3", "mayumi-4", "mayumi-5", "mayumi-6"].forEach(sid => {
+    TEST_SPLIT[sid] = { pre: pblOnly(["q1", "q2", "q3", "q4"]),
+                        post: pblOnly(["q1", "q2", "q3", "q4"]) };
+  });
 
   /* ── Per-section blurbs ───────────────────────────────────────────────────
      A case summary describes BOTH of its halves ("Module A is the workup;
@@ -339,7 +362,12 @@
       /* Falls back to the case-wide summary only for a section with no blurb of
          its own — an authored one, until S5 gives the author a blurb field. */
       summary: SECTION_SUMMARIES[id] || scenario.summary || null,
-      summaryIsCaseWide: !SECTION_SUMMARIES[id],
+      /* A case-wide blurb describes BOTH halves of a two-section case, so it is
+         not the section's own — unless the case yields only ONE section (a
+         PBL-only case such as the Mayumi steps, or an authored single-format
+         scenario), whose summary is exactly that section's. */
+      summaryIsCaseWide: !SECTION_SUMMARIES[id] &&
+        sectionTypesFor(scenario).filter(t => sectionYields(scenario, t)).length > 1,
       content: { scoring: scoring, decisions: decisions,
                  characters: byModule(scenario.characters, mod) },
       preTest: [],

@@ -93,6 +93,19 @@ if (typeof window === "undefined") { var window = globalThis; }
     return "";
   }
 
+  /* Ownership of a history item — shared with the prompt builder (a `who`
+     that is a string, an array of ids, or absent = the index patient). */
+  function _ownedBy(who, id, defaultId) {
+    try {
+      if (W.modALLMPrompts && typeof W.modALLMPrompts.ownedBy === "function") {
+        return W.modALLMPrompts.ownedBy(who, id, defaultId);
+      }
+    } catch (_) { /* prompts module absent */ }
+    if (who == null || who === "") return String(id) === String(defaultId);
+    if (Array.isArray(who)) return who.map(String).indexOf(String(id)) >= 0;
+    return String(who) === String(id);
+  }
+
   /* The id a turn with no `character` belongs to — the index patient. */
   function _defaultCharacterId() {
     try {
@@ -156,7 +169,7 @@ if (typeof window === "undefined") { var window = globalThis; }
     for (var i = 0; i < caseObj.history.length; i++) {
       var it = caseObj.history[i];
       if (!it || !it.q || !it.a) continue;
-      if (who && String(it.who || defaultId) !== who) continue;
+      if (who && !_ownedBy(it.who, who, defaultId)) continue;
       // Skip narratorOnly entries — these are third-person stage directions
       // ("He flinches and pulls away") for the click-mode UI's bad-move
       // consequences, not first-person patient speech. Letting the stub
