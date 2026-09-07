@@ -2919,6 +2919,11 @@ body.locked > footer { display: none !important; }
 .splash-section-row .splash-section-up { margin-left: var(--s-2); }
 .splash-section-row .splash-section-remove { margin-left: var(--s-1); }
 .splash-section-row .splash-link[disabled] { opacity: 0.35; cursor: default; }
+/* NB (2026-09-07): no CSS on these selects prevents phone overflow in WebKit —
+   it counts a <select>'s longest OPTION TEXT toward the document's scroll
+   width whatever the box is sized to (overflow:hidden on the container does
+   not help either; measured). Keep option text short: section-picker.js groups
+   the flat list with <optgroup> for that reason. */
 .splash-case-add { display: grid; gap: var(--s-2); margin-top: var(--s-2); }
 .splash-case-add select { min-width: 0; }
 .splash-case-parts { display: grid; gap: var(--s-1); }

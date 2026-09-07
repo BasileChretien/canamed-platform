@@ -187,6 +187,12 @@ test("the create form has the case block above the list, and the strings exist",
     assert.ok(I18N.includes('"' + k + '"'), k));
   assert.match(fnOf(PICKER, "wireSectionPicker"), /wireCasePicker\(\);/);
   assert.match(fnOf(PICKER, "populateSectionPicker", 4000), /populateCasePicker\(\);/);
+  // The flat list is grouped by case with <optgroup>, never prefixed in the
+  // option text (WebKit counts the longest option toward the page width).
+  const pop = fnOf(PICKER, "populateSectionPicker", 4000);
+  assert.match(pop, /document\.createElement\("optgroup"\)/);
+  assert.match(pop, /og\.label = _caseTitle\(g, lang\);/);
+  assert.ok(!/cn \+ ": "/.test(pop), "no case-name prefix in the option text");
   // The slot cap is REPORTED, never silently applied: one click can ask for six.
   const addOne = fnOf(PICKER, "addSectionPick");
   assert.match(addOne, /return true;/); assert.match(addOne, /return false;/);

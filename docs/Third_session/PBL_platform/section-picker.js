@@ -363,16 +363,29 @@ function populateSectionPicker() {
     splashSectionPick.push(list[0].id);
   }
   add.textContent = "";
-  list.forEach(sec => {
+  /* The flat list is grouped by case with <optgroup>, so "Initial information"
+     reads under "A Difficult Child (Mayumi)" and needs no prefix. The prefix
+     was tried first and broke every phone: WebKit counts a <select>'s LONGEST
+     OPTION TEXT toward the document's scroll width whatever the box's width —
+     a 112-char option pushed the splash to ~500px at 320 (caught by
+     splash-overflow.spec on webkit/iPhone/iPad; chromium does not). Keep each
+     option's own text short; a group label is not counted the same way. */
+  const groups = caseGroups() || [];
+  const mkOption = sec => {
     const o = document.createElement("option");
     o.value = sec.id;
-    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, lang) : sec.name.en))
-      || sec.id;
-    /* A part whose case is named separately (the Mayumi steps) is prefixed with
-       its case in the flat list, or "Initial information" would be ambiguous. */
-    const cn = sec.caseName ? (typeof tc === "function" ? tc(sec.caseName, lang) : sec.caseName.en) : "";
-    o.textContent = sectionTypeLabel(sec.type) + " — " + (cn && cn !== title ? cn + ": " : "") + title;
-    add.appendChild(o);
+    o.textContent = sectionTypeLabel(sec.type) + " — " + _secTitle(sec, lang);
+    return o;
+  };
+  groups.forEach(g => {
+    if (g.sections.length > 1) {
+      const og = document.createElement("optgroup");
+      og.label = _caseTitle(g, lang);
+      g.sections.forEach(sec => og.appendChild(mkOption(sec)));
+      add.appendChild(og);
+    } else {
+      g.sections.forEach(sec => add.appendChild(mkOption(sec)));
+    }
   });
   populateCasePicker();
   renderSectionPick();

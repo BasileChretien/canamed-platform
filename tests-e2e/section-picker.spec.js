@@ -78,10 +78,17 @@ test.describe("S3b — the section picker", () => {
     // The single-section add still mixes in a part of another case.
     await add(page, "jaundice-roleplay");
     expect((await ids(page)).slice(-1)).toEqual(["jaundice-roleplay"]);
-    // The flat list names the case for a part whose title alone is ambiguous.
-    const flat = await page.locator("#splash-section-add option")
-      .evaluateAll(els => els.map(e => e.textContent.trim()));
-    expect(flat.some(o => /^PBL — A Difficult Child \(Mayumi\): /.test(o))).toBe(true);
+    // The flat list groups a multi-part case under its name, so a part whose
+    // title alone is ambiguous ("Initial information") reads under its case.
+    // A group label rather than a prefix: WebKit counts a select's longest
+    // option text toward the page's scroll width, and a prefixed option
+    // overflowed every phone (splash-overflow.spec, webkit/iPhone/iPad).
+    const mayumiGroup = page.locator('#splash-section-add optgroup[label*="Mayumi"]');
+    await expect(mayumiGroup).toHaveCount(1);
+    await expect(mayumiGroup.locator("option")).toHaveCount(6);
+    const longest = await page.locator("#splash-section-add option")
+      .evaluateAll(els => Math.max(...els.map(e => e.textContent.trim().length)));
+    expect(longest).toBeLessThan(70);
 
     // Six picked; asking for Mayumi's six again can only fit two more (cap 8),
     // and the button SAYS so rather than quietly adding part of the list.
