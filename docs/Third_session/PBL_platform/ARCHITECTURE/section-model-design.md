@@ -633,6 +633,42 @@ of the slot's refs, with teardown included.
   scoped to a slot — tracked, not done here.
 - 1187 unit + 636 chromium/mobile E2E + 32 emulator green.
 
+### Per-slot chat store ← DONE 2026-09-07 (shell v165→v166)
+
+The LLM chat was the last room state still shared across slots. The panel
+is mounted ONCE per room and borrows the PBL view for every PBL slot, and the
+room has ONE `roomChat/$session/$room` tree (moved out of the session
+read-cascade for privacy, gap 3), so two PBL sections in one session shared a
+transcript — the earlier section's conversation replayed inside the later one
+— and, because the once-only award map and the `score/auto` event ids were
+per ROOM, a scoring family that fired in section 1 could never fire in
+section 2. Found while planning the six-section Mayumi session.
+
+- **A field, not a path** (same reasoning as the switchboard's `character`):
+  every turn now carries `slot` (optional in the rules, `1..9` like
+  `sections/$slot`), the panel filters the room's turns by the slot on screen
+  and rebuilds when `refreshActiveSlotState()` announces `canamed:slotchange`
+  (after `applySectionContent()`, so the rebuild sees the new cast), and the
+  bridge keeps its threads keyed by slot then character. **A turn with no
+  `slot` belongs to the session's first PBL slot** — every transcript written
+  before this change — so nothing migrates and the erasure/cleanup tooling,
+  keyed by `$turnId`, is untouched.
+- **The award map moves to `rooms/$room/sections/$slot/scoring/awarded`**,
+  the per-slot node S2a added in both trees. `moduleA/scoring/awarded` joins
+  the module-literal nodes the client no longer reads (S2b-2). A room that
+  scored under the old node before the deploy can re-earn a family once —
+  the same class of one-off the S2b-2 move accepted.
+- **Score events are namespaced**: `chatA_s<slot>_<famId>` in `score/auto`
+  and `s<slot>_<famId>` in `score/penalties` (`chatScoreEventId` /
+  `chatPenaltyEventId`, script.js). `renderObjectives` still honours the
+  pre-slot `chatA_<famId>` and `penaltyMeta` strips the prefix, so an older
+  room keeps showing what it earned; the room TOTAL never keyed on ids.
+- Proof: `tests/modA-chat-per-slot.test.js` (bridge, rules in both trees,
+  init + script wiring); `tests-e2e/modA-chat-per-slot.spec.js` in a REAL
+  room built from the SAME PBL section twice — identical cast and families,
+  so only the slot keeps them apart — on chromium + the three mobile
+  projects; the emulator's roomChat case gained the `slot` allow/deny pairs.
+
 ### END-TO-END VERIFICATION — `tests-e2e/mixed-session-e2e.spec.js`
 
 Every phase was verified in its own layer; this asserts the thing the user asked

@@ -867,9 +867,14 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   Facts route by `who`, and an item with no `who` now belongs to the index
   patient ONLY (it used to reach every character). Scoring families may carry
   `askOf: "<characterId>"|[…]`. Single-character sections are unchanged.
-  ⚠️ Still owed before the six-section Mayumi session can run: the chat store
-  is NOT per-slot — two PBL sections share one `roomChat` transcript. See
-  "Slice 2 as shipped" in the design record.
+  **Per-slot chat store — SHIPPED 2026-09-07 (shell v166):** every turn also
+  carries `slot` (optional, 1..9; a turn with none is the session's FIRST PBL
+  slot), the panel shows only the active slot's turns and rebuilds on
+  `canamed:slotchange`, the once-only award map is
+  `rooms/$room/sections/$slot/scoring/awarded` (the module-literal
+  `moduleA/scoring/awarded` is no longer read), and chat score events are
+  `chatA_s<slot>_<famId>` / `s<slot>_<famId>`. See "Per-slot chat store" in
+  `ARCHITECTURE/section-model-design.md`.
 - **⚠ `hfPatient` needs `firebase deploy --only functions` to pick this up.**
   `SERVER_GUARD` was generalised from "simulated patient" to "simulated
   character", and the reply-prefix stripper is now driven by the character's
