@@ -2348,10 +2348,20 @@ function applySectionContent(slot) {
   /* The roleplay's authorable content travels with its section. */
   window.CURRENT_SECTION_ROLEPLAY = (sec.roleplay && typeof sec.roleplay === "object")
     ? sec.roleplay : null;
+  /* A PBL section's reference panels (historical context / guidelines / recap)
+     and its vignette travel with it the same way; null = keep the shipped
+     markup. The room DOM that depends on them — the workup board, the "patient
+     in front of you" card, the {patientName} strings — is rebuilt by the lazy
+     section-content.js (renderPblView), so refresh() must run AFTER the CASE
+     is rebuilt, not before. */
+  window.CURRENT_SECTION_REFERENCES = (c.references && typeof c.references === "object")
+    ? c.references : null;
+  window.CURRENT_SECTION_VIGNETTE = sec.vignette || sec.summary || null;
+  window.CURRENT_SECTION_TYPE = slot.type || null;
+  try { rebuildCaseDerived(); } catch (e) {}
   if (typeof document !== "undefined" && window.CanamedSectionContent) {
     try { window.CanamedSectionContent.refresh(); } catch (e) {}
   }
-  try { rebuildCaseDerived(); } catch (e) {}
 }
 /* A slot's TYPE maps back to the module key the scoring/decision engine uses. */
 const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" };

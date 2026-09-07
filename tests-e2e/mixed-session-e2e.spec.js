@@ -89,6 +89,47 @@ test.describe("A mixed session, end to end", () => {
     expect(onStage2.scoringB).toBeGreaterThan(0);
   });
 
+  test("each stage shows ITS OWN section's BOARD and vignette in the DOM, not just in the globals", async ({ page }) => {
+    /* Found live on the first six-section session (2026-09-07): the globals
+       moved per section but buildButtons() had only ever run at room entry, so
+       every PBL slot showed the FIRST section's examination/investigation
+       buttons, and the "patient in front of you" card stayed Mr Lefebvre's.
+       Two PBL sections of different cases make it visible: their item counts
+       and their vignettes differ. */
+    await page.goto("/");
+    await page.evaluate(() => window.CanamedLoader.ensureRoomStyles());
+    await page.evaluate(() => window.CanamedLoader.ensureCaseContent());
+    await page.waitForFunction(() => !!window.CANAMED_SECTIONS);
+    await page.evaluate(() => {
+      window.setSessionSections("chronic-pain-pbl,jaundice-pbl");
+      document.body.classList.remove("locked");
+    });
+    const boardAt = (stage) => page.evaluate((st) => {
+      window._test_setViewStage(st);
+      window.renderStage();
+      return {
+        exam: document.querySelectorAll("#group-exam .req-btn").length,
+        labs: document.querySelectorAll("#group-labs .req-btn").length,
+        examExpected: window.CASE.exam.length,
+        labsExpected: window.CASE.labs.length - 1,      // labs:0, the synthesis, is not a button
+        vignette: (document.getElementById("modA-vignette-text") || {}).textContent || ""
+      };
+    }, stage);
+    const s1 = await boardAt(1);
+    const s2 = await boardAt(2);
+    expect(s1.exam).toBe(s1.examExpected);
+    expect(s2.exam).toBe(s2.examExpected);
+    expect(s1.labs).toBe(s1.labsExpected);
+    expect(s2.labs).toBe(s2.labsExpected);
+    expect([s1.exam, s1.labs]).not.toEqual([s2.exam, s2.labs]);
+    expect(s1.vignette).toMatch(/45-year-old|oxycodone/);
+    expect(s2.vignette).toMatch(/75-year-old|jaundice/);
+    expect(s2.vignette).not.toMatch(/Lefebvre|oxycodone/);
+    // Back to stage 1 restores stage 1's board and card.
+    const again = await boardAt(1);
+    expect([again.exam, again.labs, again.vignette]).toEqual([s1.exam, s1.labs, s1.vignette]);
+  });
+
   test("vote ids are namespaced per slot — two sections cannot share a tally",
     async ({ page }) => {
       await mixedSession(page);

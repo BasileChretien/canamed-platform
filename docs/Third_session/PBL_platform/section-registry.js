@@ -327,6 +327,9 @@
         source: scenario.id,
         name: stripModulePrefix(scenario.name),
         summary: SECTION_SUMMARIES[scenario.id] || scenario.summary || null,
+        vignette: scenario.vignette || null,
+        caseId: scenario.caseId || scenario.id,
+        caseName: scenario.caseName || stripModulePrefix(scenario.name) || null,
         summaryIsCaseWide: !SECTION_SUMMARIES[scenario.id],
         /* A branched section is the whole case: its graph, its deliverable and
            its documents already live at the top level, and the branched engine
@@ -362,6 +365,14 @@
       /* Falls back to the case-wide summary only for a section with no blurb of
          its own — an authored one, until S5 gives the author a blurb field. */
       summary: SECTION_SUMMARIES[id] || scenario.summary || null,
+      /* The long "patient in front of you" text, when the case writes one apart
+         from its blurb (the Mayumi steps do); the room falls back to the blurb. */
+      vignette: scenario.vignette || null,
+      /* The CASE this section belongs to, for the picker's case-first flow: the
+         six Mayumi steps share one case; a built-in case's two halves share
+         theirs. Falls back to the scenario itself. */
+      caseId: scenario.caseId || slug || scenario.id,
+      caseName: scenario.caseName || stripModulePrefix(scenario.name) || null,
       /* A case-wide blurb describes BOTH halves of a two-section case, so it is
          not the section's own — unless the case yields only ONE section (a
          PBL-only case such as the Mayumi steps, or an authored single-format
@@ -414,6 +425,12 @@
       }
       if (Array.isArray(sc.moduleA_question_penalties) && sc.moduleA_question_penalties.length) {
         section.content.scoringQuestionPenalties = sc.moduleA_question_penalties;
+      }
+      /* The reference panels behind the PBL toolbar (historical context /
+         guidelines / recap). Optional, like the roleplay's: absent = the
+         shipped markup; declared = full control, unfilled panels disappear. */
+      if (scenario.references && typeof scenario.references === "object") {
+        section.content.references = scenario.references;
       }
     }
 

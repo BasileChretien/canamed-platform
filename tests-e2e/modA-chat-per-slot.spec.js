@@ -158,9 +158,26 @@ test.describe("Module A chat — per-slot store", () => {
     await expect(student.locator("#modA-chat-panel")).toBeVisible({ timeout: 10_000 });
     expect(await student.evaluate(() => window.modALLMRuntime.getSlot())).toBe(1);
     await expect(student.locator("#modA-chat-input")).toHaveAttribute("placeholder", /Lefebvre/);
+    /* The reply is TYPED OUT word by word (user request 2026-09-07), so watch
+       the transcript while it arrives: the assistant bubble must be seen with
+       the typing caret and with a partial text before it is complete. */
+    await student.evaluate(() => {
+      window.__typing = { seenTyping: false, lengths: new Set() };
+      const host = document.getElementById("modA-chat-transcript");
+      new MutationObserver(() => {
+        const b = host.querySelector(".moda-chat-bub-assistant");
+        if (!b) return;
+        if (b.classList.contains("is-typing")) window.__typing.seenTyping = true;
+        window.__typing.lengths.add(b.textContent.length);
+      }).observe(host, { subtree: true, childList: true, characterData: true, attributes: true });
+    });
     await ask(student, QUESTION);
     await expect(bubbles(student)).toHaveCount(2, { timeout: 10_000 });
     await expect(bubbles(student).first()).toHaveText(QUESTION);
+    await expect(bubbles(student).nth(1)).not.toHaveClass(/is-typing/, { timeout: 10_000 });
+    const typing = await student.evaluate(() => ({ seen: window.__typing.seenTyping, steps: window.__typing.lengths.size }));
+    expect(typing.seen, "the reply carried the typing caret while arriving").toBe(true);
+    expect(typing.steps, "the reply grew in more than one step").toBeGreaterThan(1);
 
     // 2. Section 2 — the same workup again — starts EMPTY.
     await advance.click();

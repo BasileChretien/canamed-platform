@@ -669,6 +669,34 @@ section 2. Found while planning the six-section Mayumi session.
   so only the slot keeps them apart — on chromium + the three mobile
   projects; the emulator's roomChat case gained the `slot` allow/deny pairs.
 
+### The room DOM follows the section ← FIXED 2026-09-07 (shell v167→v168)
+
+Found live on the first six-section session, not by any test: a picked
+section re-pointed the content globals (CASE, SCORING, the cast) but the ROOM
+kept the first section's DOM. Four surfaces, one cause — each was built ONCE
+at room entry and never re-rendered on a section change:
+
+| surface | built by | what stayed stale |
+| --- | --- | --- |
+| history / examination / investigation buttons | `buildButtons()` (room entry, language change) | the default case's workup |
+| "the patient in front of you" card | static index.html markup | Mr Lefebvre's vignette |
+| `{patientName}` strings (chart title, shared-chart note, chat placeholder…) | `applyI18n()` at load | the first cast's name |
+| PBL toolbar's history / guidelines / recap panels | static index.html prose | opioid history |
+
+`applySectionContent()` now, after `rebuildCaseDerived()`, rebuilds the board,
+renders `sec.vignette || sec.summary` into `#modA-vignette-text`, re-applies
+i18n on `#stage-1`, and publishes `CURRENT_SECTION_REFERENCES` so
+`renderPblPanels()` (section-content.js, mirror of the roleplay's panels) can
+fill the three panels from a PBL section's optional `references`. A section
+therefore carries `vignette` and `caseId`/`caseName` in the registry.
+`tests/per-section-rendering.test.js` pins each contract, and the mixed-session
+e2e now asserts the DOM, which is the assertion that would have caught this.
+
+Two product changes rode along, from the same feedback: the create form is
+CASE-FIRST (a Case select grouping sections by `caseId`, a ticked checklist of
+its parts, "+ Add the ticked parts"; the flat single-section add stays below
+for mixing), and a new chat reply is typed out word by word after it arrives.
+
 ### END-TO-END VERIFICATION — `tests-e2e/mixed-session-e2e.spec.js`
 
 Every phase was verified in its own layer; this asserts the thing the user asked

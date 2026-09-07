@@ -246,14 +246,52 @@
     return host || el;
   }
 
-  function _renderTurn(threadEl, role, content) {
+  /* Word-by-word reveal of a NEW reply (user request, 2026-09-07: "we shall see
+     the AI writing word by word, not suddenly a block of text"). The reply
+     arrives WHOLE from the proxy — this is a reveal after arrival, not token
+     streaming — so it adds at most TYPE_MAX_MS on top of the model's latency,
+     scaling the words-per-tick so a long reply never drags. Replayed turns (a
+     re-entry, another slot) and reduced-motion users get the text at once. */
+  var TYPE_MS_PER_TICK = 35;
+  var TYPE_MAX_MS = 2500;
+  function _reducedMotion() {
+    try { return !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+    catch (_) { return false; }
+  }
+  function _typewrite(bub, text, host) {
+    var tokens = String(text).split(/(\s+)/).filter(Boolean);   // words AND their separators
+    var words = 0;
+    for (var k = 0; k < tokens.length; k++) if (!/^\s+$/.test(tokens[k])) words++;
+    var perTick = Math.max(1, Math.ceil(words * TYPE_MS_PER_TICK / TYPE_MAX_MS));
+    var i = 0;
+    bub.textContent = "";
+    bub.classList.add("is-typing");
+    function tick() {
+      var n = 0;
+      while (i < tokens.length && n < perTick) {
+        var tok = tokens[i++];
+        bub.textContent += tok;
+        if (!/^\s+$/.test(tok)) n++;
+      }
+      if (host) host.scrollTop = host.scrollHeight;
+      if (i < tokens.length) setTimeout(tick, TYPE_MS_PER_TICK);
+      else bub.classList.remove("is-typing");
+    }
+    tick();
+  }
+
+  function _renderTurn(threadEl, role, content, animate) {
     if (!threadEl) return;
     var bub = document.createElement("div");
     bub.className = "moda-chat-bub moda-chat-bub-" + role;
-    bub.textContent = content;
     threadEl.appendChild(bub);
     var host = _scrollHost(threadEl);
-    host.scrollTop = host.scrollHeight;
+    if (animate && role === "assistant" && !_reducedMotion()) {
+      _typewrite(bub, content, host);
+    } else {
+      bub.textContent = content;
+      host.scrollTop = host.scrollHeight;
+    }
   }
 
   function _setStatus(el, text, kind) {
@@ -633,7 +671,10 @@
       // A turn with no `character` is the index patient's — every transcript
       // written before the switchboard, and every single-cast section since.
       var who = t.character ? String(t.character) : _defaultId();
-      _renderTurn(_threadEl(who), t.role, t.content);
+      // Only a reply that is NEW (not a replay) and in the VISIBLE thread is
+      // typed out; everything else renders whole.
+      var fresh = t.role === "assistant" && Number(t.at || 0) >= initStartedAt;
+      _renderTurn(_threadEl(who), t.role, t.content, fresh && who === activeId);
       // If the patient answered while the student is on the Examination /
       // Investigations tab, dot the Dialogue tab so the reply isn't missed.
       if (t.role === "assistant" && Number(t.at || 0) >= initStartedAt) {

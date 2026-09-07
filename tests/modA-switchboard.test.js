@@ -312,9 +312,9 @@ test("init: a turn is tagged with its addressee only when the cast is plural", (
 
 test("init: a persisted turn with no character renders into the index patient's thread", () => {
   const at = INIT.indexOf("function _onChatChild(snap)");
-  const body = INIT.slice(at, at + 700);
+  const body = INIT.slice(at, at + 1400);
   assert.match(body, /var who = t\.character \? String\(t\.character\) : _defaultId\(\);/);
-  assert.match(body, /_renderTurn\(_threadEl\(who\)/);
+  assert.match(body, /_renderTurn\(_threadEl\(who\), t\.role, t\.content/);
 });
 
 test("init: the cast follows the section — castchange is listened for and detached on destroy", () => {

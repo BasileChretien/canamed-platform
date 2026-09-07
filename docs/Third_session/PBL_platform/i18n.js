@@ -428,10 +428,15 @@
       // (decision 8 of the section model). The two ends are keyed by role; the
       // numeric .0/.4 keys stay only as a fallback for a cached older bundle.
       "splash.create.sections-label": "Sections to run",
-      "splash.create.sections-help": "Add the parts this session runs, in the order you want them. They can come from different clinical cases. An opening and a wrap-up are always included.",
+      "splash.create.sections-help": "Today's sections, in running order. An opening and a wrap-up are always included.",
+      "splash.create.case-label": "Case",
+      "splash.create.case-help": "Pick a case, tick the parts you will run today, and add them. You can still reorder or remove them below, and mix in parts from other cases.",
+      "splash.create.case-add": "+ Add the ticked parts",
+      "splash.create.case-full": "Added {added} of {wanted} — a session holds at most {max} sections",
+      "splash.create.sections-full": "The session is full — at most {max} sections",
       "splash.create.sections-empty": "No sections yet — add at least one.",
-      "splash.create.sections-add-label": "Add a section",
-      "splash.create.sections-add": "+ Add section",
+      "splash.create.sections-add-label": "Add a single section",
+      "splash.create.sections-add": "+ Add one section",
       "splash.create.author-link": "Need a section that isn't listed? Build one on the authoring board →",
       "splash.create.sections-change": "Change this section",
       "splash.create.sections-required": "Add at least one section to this session.",
@@ -1024,7 +1029,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v24";  // L7: the consent surface renders in the participant's language again
+  const LOCALE_VERSION = "v25";  // L7: the consent surface renders in the participant's language again
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

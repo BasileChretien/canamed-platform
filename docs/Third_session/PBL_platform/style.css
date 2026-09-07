@@ -2919,6 +2919,12 @@ body.locked > footer { display: none !important; }
 .splash-section-row .splash-section-up { margin-left: var(--s-2); }
 .splash-section-row .splash-section-remove { margin-left: var(--s-1); }
 .splash-section-row .splash-link[disabled] { opacity: 0.35; cursor: default; }
+.splash-case-add { display: grid; gap: var(--s-2); margin-top: var(--s-2); }
+.splash-case-add select { min-width: 0; }
+.splash-case-parts { display: grid; gap: var(--s-1); }
+.splash-case-part { display: flex; align-items: center; gap: var(--s-2); cursor: pointer; }
+.splash-case-part input { margin: 0; }
+.splash-case-part-name { flex: 1 1 auto; min-width: 0; }
 .splash-section-add { display: flex; gap: var(--s-2); margin-top: var(--s-2); }
 .splash-section-add select { flex: 1 1 auto; min-width: 0; }
 

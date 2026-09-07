@@ -160,6 +160,16 @@ test.describe("A Difficult Child (Mayumi) — six sections, end to end", () => {
     await expect(chips(student).nth(0)).toHaveAttribute("aria-pressed", "true");
     expect(await student.evaluate(() => window.modALLMRuntime.getCharacter())).toBe("father");
     await expect(student.locator("#modA-chat-input")).toHaveAttribute("placeholder", /Mayumi's father/);
+    // The card, the shared-chart note, the board and the reference panels are
+    // THIS section's — not the default case's (found live, 2026-09-07).
+    await expect(student.locator("#modA-vignette-text")).toContainText("Mayumi");
+    await expect(student.locator("#modA-vignette-text")).not.toContainText("Lefebvre");
+    await expect(student.locator(".vignette-shared-note")).toContainText("Mayumi");
+    await expect(student.locator(".vignette-shared-note")).not.toContainText("Lefebvre");
+    expect(await student.locator("#group-exam .req-btn").count()).toBe(1);   // the observation item
+    await expect(student.locator("#refA-panel-history")).toContainText(/depress/i);
+    await expect(student.locator("#refA-panel-history")).not.toContainText(/opioid|opium/i);
+    await expect(student.locator("#refA-panel-recap")).toContainText("HEADSS");
 
     // 3. A question the father can answer from his facts, and which scores.
     await ask(student, "Why isn't Mayumi with you today?");
@@ -200,9 +210,13 @@ test.describe("A Difficult Child (Mayumi) — six sections, end to end", () => {
     await advanceFrom(page, 3);
     await expect.poll(() => slotOf(student), { timeout: 10_000 }).toBe(4);
     const s4 = await student.evaluate(() => ({
-      exam: window.CASE.exam.length, labs: window.CASE.labs.map(l => l.q.en)
+      exam: window.CASE.exam.length, labs: window.CASE.labs.map(l => l.q.en),
+      examButtons: document.querySelectorAll("#group-exam .req-btn").length,
+      labButtons: document.querySelectorAll("#group-labs .req-btn").length
     }));
     expect(s4.exam).toBe(6);
+    expect(s4.examButtons, "the board was rebuilt for section 4").toBe(6);
+    expect(s4.labButtons, "trap + MFQ (the synthesis is not a button)").toBe(2);
     expect(s4.labs.some(q => /Mood and Feelings Questionnaire/.test(q))).toBe(true);
     await advanceFrom(page, 4);
     await expect.poll(() => slotOf(student), { timeout: 10_000 }).toBe(5);
