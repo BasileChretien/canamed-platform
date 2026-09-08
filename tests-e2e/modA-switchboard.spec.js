@@ -228,6 +228,10 @@ test.describe("Module A chat switchboard", () => {
     await publishCast(student, [{ id: "patient", role: "patient", name: "Mrs Tanaka", persona: "…" }], null);
     await expect(cast).toBeHidden();
     await expect(input).toHaveAttribute("placeholder", /Mrs Tanaka/);
+    // The beta disclosure names the patient the model voices, and it must follow
+    // the cast too: on the first six-section session it kept naming the default
+    // case's patient for the whole afternoon (seen live 2026-09-08).
+    await expect(student.locator(".moda-chat-disclosure")).toContainText("Mrs Tanaka");
     expect(await student.evaluate(() => window.modALLMRuntime.bridge.getCharacter())).toBe("patient");
   });
 });

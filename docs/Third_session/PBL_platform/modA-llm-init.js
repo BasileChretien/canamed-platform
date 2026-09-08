@@ -133,15 +133,18 @@
    * <a href="privacy.html"> link (operator-controlled i18n), so we set its
    * innerHTML once with the trusted translation; everything else is
    * createElement + textContent. (M1 from the 2026-05-28 review.) */
-  function _mountChatUI(host) {
-    if (host.querySelector("#modA-chat-panel")) return host.querySelector("#modA-chat-panel");
-
-    var panel  = _ce("div", { id: "modA-chat-panel", "class": "moda-chat-panel" });
-    var notice = _ce("div", { "class": "moda-chat-disclosure", role: "note" });
-    // The string carries <strong> / <a> from the translation table, but now also
-    // interpolates {patientName} from the scenario — which a facilitator authors.
-    // Sanitise before innerHTML, mirroring i18n.js _setHTML; without DOMPurify,
-    // degrade to textContent rather than trust the name.
+  /* The beta disclosure names the patient the model voices. It interpolates
+     {patientName} at RENDER time, so it must be re-rendered whenever the cast
+     changes (a picked section landed) — the placeholder and the "thinking" line
+     already follow the cast; this did not, and on the first six-section session
+     the notice kept naming the DEFAULT case's patient for the whole afternoon
+     (seen live 2026-09-08). _renderCast() calls it on every cast change.
+     The string carries <strong> / <a> from the translation table, but now also
+     interpolates {patientName} from the scenario — which a facilitator authors.
+     Sanitise before innerHTML, mirroring i18n.js _setHTML; without DOMPurify,
+     degrade to textContent rather than trust the name. */
+  function _renderDisclosure(notice) {
+    if (!notice) return;
     var disclosure = _t("modA.chat.disclosure",
       "Beta: a language model voices the patient. Your typed questions are sent to our server and to Hugging Face as a third-party sub-processor. Do not type names, contact details, or anything personal.");
     if (window.DOMPurify && typeof window.DOMPurify.sanitize === "function") {
@@ -166,6 +169,14 @@
     } else {
       notice.textContent = disclosure.replace(/<[^>]*>/g, "");
     }
+  }
+
+  function _mountChatUI(host) {
+    if (host.querySelector("#modA-chat-panel")) return host.querySelector("#modA-chat-panel");
+
+    var panel  = _ce("div", { id: "modA-chat-panel", "class": "moda-chat-panel" });
+    var notice = _ce("div", { "class": "moda-chat-disclosure", role: "note" });
+    _renderDisclosure(notice);
 
     var consentRow = _ce("div", { "class": "moda-chat-consent", id: "modA-chat-consent" });
     var consentBtn = _ce("button", { type: "button", "class": "moda-chat-consent-btn", id: "modA-chat-consent-btn" },
@@ -591,6 +602,8 @@
        active character falls back to that section's index patient. */
     function _renderCast() {
       var list = _cast();
+      // The disclosure names the index patient; a cast change means a new one.
+      _renderDisclosure(panel.querySelector(".moda-chat-disclosure"));
       while (castEl.firstChild) castEl.removeChild(castEl.firstChild);
       if (list.length < 2) {
         castEl.hidden = true;
