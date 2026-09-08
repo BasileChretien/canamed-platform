@@ -31,6 +31,9 @@ const PLATFORM = path.join(__dirname, "..", "docs", "Third_session", "PBL_platfo
    reading script.js alone would silently stop seeing the dashboard code. */
 const SCRIPT_JS = fs.readFileSync(path.join(PLATFORM, "script.js"), "utf8") + "\n" +
   fs.readFileSync(path.join(PLATFORM, "script-admin.js"), "utf8");
+// downloadMyData moved to the LAZY data-rights.js on 2026-09-08 (perf reclaim);
+// the R3-A2 source invariants read it from there.
+const DATA_RIGHTS_JS = fs.readFileSync(path.join(PLATFORM, "data-rights.js"), "utf8");
 // roomNames() was extracted into pure-utils.js (bestRoomFor in script.js still
 // depends on it), so the sandbox below pulls its source from there.
 const PURE_UTILS = fs.readFileSync(path.join(PLATFORM, "pure-utils.js"), "utf8");
@@ -114,22 +117,22 @@ test("R3-A2: downloadMyData declares tests / manualScoresAboutMe / helpCallsByMe
   // The export envelope must reserve the three new fields up-front so the
   // shape is stable even for participants who have not contributed any
   // test answers / manual scores / help calls.
-  assert.match(SCRIPT_JS, /tests:\s*\{\s*\}/,
+  assert.match(DATA_RIGHTS_JS, /tests:\s*\{\s*\}/,
     "downloadMyData must initialise tests: {} so empty exports keep stable shape");
-  assert.match(SCRIPT_JS, /manualScoresAboutMe:\s*\[\s*\]/,
+  assert.match(DATA_RIGHTS_JS, /manualScoresAboutMe:\s*\[\s*\]/,
     "downloadMyData must initialise manualScoresAboutMe: []");
-  assert.match(SCRIPT_JS, /helpCallsByMe:\s*\[\s*\]/,
+  assert.match(DATA_RIGHTS_JS, /helpCallsByMe:\s*\[\s*\]/,
     "downloadMyData must initialise helpCallsByMe: []");
 });
 
 test("R3-A2: downloadMyData reads tests/{cid}/{pre|post} from rooms tree", () => {
   // The rooms-loop must pull r.tests[clientId] so pre/post-test answers
   // belonging to this participant are included in the SAR export.
-  assert.match(SCRIPT_JS, /r\.tests\s*&&\s*r\.tests\[clientId\]/,
+  assert.match(DATA_RIGHTS_JS, /r\.tests\s*&&\s*r\.tests\[clientId\]/,
     "downloadMyData must read r.tests[clientId] from each room");
-  assert.match(SCRIPT_JS, /pre:\s*tests\.pre\s*\|\|\s*null/,
+  assert.match(DATA_RIGHTS_JS, /pre:\s*tests\.pre\s*\|\|\s*null/,
     "downloadMyData must export pre-test sub-tree");
-  assert.match(SCRIPT_JS, /post:\s*tests\.post\s*\|\|\s*null/,
+  assert.match(DATA_RIGHTS_JS, /post:\s*tests\.post\s*\|\|\s*null/,
     "downloadMyData must export post-test sub-tree");
 });
 
@@ -322,7 +325,7 @@ test("R3-E4: archive header includes scenarioId alongside scenarioName", () => {
 test("R3-E2: downloadMyData mirrors the schema fields", () => {
   // Two related artefacts (full archive + per-participant SAR export)
   // should validate against parallel schemas — pipelines pin both.
-  const block = SCRIPT_JS.match(/canamedSchema:\s*"https:\/\/canamed\.web\.app\/schema\/participant-export-v1\.json"/);
+  const block = DATA_RIGHTS_JS.match(/canamedSchema:\s*"https:\/\/canamed\.web\.app\/schema\/participant-export-v1\.json"/);
   assert.ok(block,
     "downloadMyData must declare participant-export-v1 schema URL");
 });

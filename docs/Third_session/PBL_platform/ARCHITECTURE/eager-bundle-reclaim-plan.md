@@ -222,6 +222,18 @@ radius. **Do this one first even though it is the smallest.**
 `Verify:` `ls docs/Third_session/PBL_platform/takehome.js`; `grep -c
 ensureTakeHome docs/Third_session/PBL_platform/script-loader.js` > 0; `node
 --test tests/takehome-lazy-split.test.js`.
+**Slice 1b — `downloadMyData` (the piece slice 1 left behind). ✅ DONE
+2026-09-08 as `data-rights.js` (PR #396),** after two consecutive cap bumps
+without a reclaim (320 → 324 → 327). Loaded on the one `#gdpr-export-btn`
+click through a typeof-guarded shim (`_wireDataRightsExport`); the takehome
+mechanism carried over unchanged — a classic script reads `sessionNum` / `db`
+/ `clientId` / `currentUser` / `myName` by bare name, so the "bindings seam"
+the budget header feared was never needed. −1.8 KB gz (324.4 → 322.6); cap
+327 → **326**, spent on margin. Four unit files that read the function body
+were re-pointed (admin-lazy-split, archive-export-v2, r3-blockers,
+anonymous-history-guard) — again the test surface, not the code, was the cost.
+`Verify:` `node --test tests/data-rights-lazy-split.test.js`; the survey
+mount (`_mountSurveyForm`) is now the only slice-1 item still eager.
 
 **Slice 2 — Admin dashboard. ✅ DONE 2026-08-05 as `script-admin.js`** (see the
 status note at the top for what it actually cost and what was left behind).

@@ -669,7 +669,25 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     ALSO: the measurement is now CRLF-robust (see the gzip site). Before
 //     it, a Windows checkout read up to ~1.6 KB above CI for the same bytes,
 //     and every local run on main was red while CI was green.
-const FIRST_PARTY_BYTES_LIMIT_KB = 327;
+//   2026-09-08: THE RECLAIM — downloadMyData() (the GDPR Art. 15 self-export,
+//     ~135 lines, reachable from ONE click on the waiting screen) moved out of
+//     the eager script.js into the LAZY data-rights.js, loaded on that click
+//     by CanamedLoader.ensureDataRights() through a typeof-guarded shim
+//     (_wireDataRightsExport). Same mechanism as takehome.js: a classic script
+//     shares the global script scope, so the block reads sessionNum / db /
+//     clientId / currentUser / myName by bare name — no bindings seam after
+//     all, which the 2026-09-07 entry had assumed it would need.
+//     Measured (CRLF-robust, i.e. the CI figure): 324.4 -> 322.6 KB gz
+//     (script.js 192.5 -> 190.7). CAP 327 -> 326: the reclaim is spent on
+//     MARGIN, not on a lower number — 326 leaves ~3.4 KB, the working margin
+//     the 316/320/324 entries each set aside, where 327 had left 2.6 and the
+//     entry above had called the budget the thinnest since 313. Both bumps
+//     above stay recorded as what they were. Guards:
+//     tests/data-rights-lazy-split.test.js (no eager copy, no duplicate
+//     declaration, loader/sw/LAZY_CHUNKS registrations, guarded click site)
+//     and tests-e2e/data-rights-lazy.spec.js (absent on the splash, the real
+//     join flow's click still downloads the real export, 4 viewports).
+const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
   test("FCP, TTI, and first-party JS+CSS bytes are within budget", async ({ page }) => {
@@ -796,6 +814,9 @@ test.describe("Perf budget — splash", () => {
       // from initEndPoll(), so the splash never fetches it at all; listed here
       // so that stays true even if it is ever prefetched.
       "takehome.js",
+      // data-rights.js (2026-09-08): the GDPR Art. 15 self-export, behind ONE
+      // click on the waiting screen — the reclaim the header entries name.
+      "data-rights.js",
       /* Module A appropriateness triage (2026-08-19): the feature is gated
          behind ?triage=1 and default-off, so shipping it eagerly cost every
          splash ~5 KB gz for a path almost no session takes — which is what

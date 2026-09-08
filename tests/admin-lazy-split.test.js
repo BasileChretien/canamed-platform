@@ -145,11 +145,10 @@ const STAYS_EAGER = [
   "closeMySession",          // renderMySessions — the SPLASH "My sessions" list
   "renderStudentDebrief",    // renderClosedState ← startRoom
   "renderClosedState",       // startRoom, subscribeClosedListener
-  "downloadMyData",          // joinParticipant — the Art. 15 participant export
   "logEvent",                // reveal, castVote, addAnswer … the whole room
   "getTheme",                // wireLanguageSwitcher — the splash
   "setTheme",                // wireLanguageSwitcher — the splash
-  "roomSlotBuckets",         // downloadMyData
+  "roomSlotBuckets",         // the archive readers + downloadMyData (data-rights.js)
   "_debriefT",               // renderStudentDebrief
   "_debriefBucket",          // renderStudentDebrief
   "showLateBanner",          // startRoom

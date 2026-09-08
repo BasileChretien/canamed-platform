@@ -111,7 +111,7 @@
   // index.html, so a deploy that bumps the version forces every chunk
   // to be re-fetched. The constant must be updated in lockstep with the
   // ?v= strings in index.html AND sw.js SHELL_VERSION.
-  var SHELL_VERSION = "v168";
+  var SHELL_VERSION = "v169";
   // ROOT-ABSOLUTE, and the leading "/" is load-bearing (2026-08-06).
   // firebase.json rewrites `/o/**` -> /index.html for the multi-tenant org
   // entry point, so on a page served at /o/<slug>/ a BARE filename resolves to
@@ -218,6 +218,10 @@
      Classic script — see its header for why that matters (it reads script.js
      top-level `let`s under their bare names). */
   function ensureTakeHome() { return loadScript(v("takehome.js")); }
+  /* data-rights.js (2026-09-08) — the GDPR Art. 15 self-export, behind the one
+     #gdpr-export-btn click on the waiting screen. Same shape as takehome.js:
+     loaded ON CLICK from _wireDataRightsExport(), never on the splash. */
+  function ensureDataRights() { return loadScript(v("data-rights.js")); }
   /* modA-triage.js + .css — the ?triage=1 slice, LAZY because the feature is
      default-off and cost ~5 KB gz on every splash. Resolves only when BOTH are
      in (ensureRoomStyles shape). No-ops when the flag is off. */
@@ -457,6 +461,7 @@
     ensurePdfmake,
     ensureStudentPdf,
     ensureTakeHome,
+    ensureDataRights,
     ensureModATriage,
     triageFlagOn,
     ensureAdminApp,

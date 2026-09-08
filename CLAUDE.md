@@ -1037,17 +1037,19 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `<link>`ed `room.css` (`CanamedLoader.ensureRoomStyles()`, same pattern as
   admin.css/branched.css), taking the splash budget **337 → 325 KB gz**. The cap
   stayed 337 at the time, so that was ~12 KB of banked headroom, not a licence to
-  grow. **⚠️ SUPERSEDED — the cap is now 327** (`FIRST_PARTY_BYTES_LIMIT_KB`,
+  grow. **⚠️ SUPERSEDED — the cap is now 326** (`FIRST_PARTY_BYTES_LIMIT_KB`,
   `tests-e2e/perf.spec.js`): it rose 337 → 345 → 348 across the section-model
   work, FELL to 316 when #285 lazy-split the facilitator dashboard out of
   `script.js`, and rose 316 -> 320 on 2026-08-19 for the Module A triage slice
   — a bump taken AFTER lazy-splitting that feature (321.3 -> 316.5 KB gz), not
   instead of it; then 320 -> 324 (2026-09-03, withdrawal control) and 324 -> 327
-  (2026-09-07, per-section rendering fix) — **two consecutive bumps WITHOUT a
-  reclaim**; the designated reclaim is the `downloadMyData()` lazy chunk and
-  the header says a third bump is not acceptable. The measurement is CRLF-robust
-  since 2026-09-07, so a Windows checkout now reads the CI figure. Each step is
-  logged in that file's header. (This paragraph said
+  (2026-09-07, per-section rendering fix) — two consecutive bumps without a
+  reclaim — then **the reclaim landed in the same PR (#396, 2026-09-08):**
+  `downloadMyData()` moved into the lazy `data-rights.js` (−1.8 KB gz, 324.4 →
+  322.6) and the cap came back to **326**, spending the reclaim on margin
+  (~3.4 KB) rather than on a lower number. The measurement is CRLF-robust since
+  2026-09-07, so a Windows checkout reads the CI figure. Each step is logged in
+  that file's header. (This paragraph said
   348 until 2026-08-05 — exactly the drift it warns about, and in the more
   dangerous direction: a stale HIGH cap reads as headroom that does not exist.)
   Quote the CONSTANT, never this paragraph — a reviewer citing the stale 337

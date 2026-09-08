@@ -29,6 +29,12 @@ const SRC = fs.readFileSync(
   path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "script.js"),
   "utf8"
 );
+// downloadMyData (the data export) moved to the LAZY data-rights.js on
+// 2026-09-08 (perf reclaim); its anonymous-user gate is asserted there.
+const DATA_RIGHTS = fs.readFileSync(
+  path.join(__dirname, "..", "docs", "Third_session", "PBL_platform", "data-rights.js"),
+  "utf8"
+);
 
 /** Body of a named function declaration, by brace matching. */
 function bodyOf(name) {
@@ -76,7 +82,7 @@ test("the write path is the ONLY thing that changed — reads stay gated", () =>
   // These were already correct, and the fix must not have disturbed them.
   // If a future change relaxes one, anonymous history becomes visible as well
   // as stored, which is a different and worse bug.
-  assert.match(SRC, /if \(currentUser && !currentUser\.isAnonymous\) \{/,
+  assert.match(DATA_RIGHTS, /if \(currentUser && !currentUser\.isAnonymous\) \{/,
     "the data export must keep excluding anonymous users from profile/history");
   const chip = bodyOf("paintUserChip");
   assert.match(chip, /!currentUser \|\| currentUser\.isAnonymous/,
