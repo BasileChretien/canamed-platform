@@ -208,6 +208,121 @@ function sectionLibraryList() {
     .map(a => Object.assign({}, a.section, { id: a.key, _authored: a }));
   return builtIn.concat(authored);
 }
+/* ── Case-first picking (user request 2026-09-07) ─────────────────────────────
+   "Select Mayumi's case, then the detail of what we want to do the same day —
+   not one by one from the start." The library stays flat (a session can still
+   mix parts of different cases), but the primary control is now a CASE select
+   whose parts appear as a ticked checklist; "Add the ticked parts" appends them
+   in order. The single-section select below it remains for mixing. */
+/* The picker's own string lookup: the English canonical via t(), or the
+   fallback when i18n has not landed. Top-level, because the add paths are. */
+function _pickT(k, f) {
+  return (typeof window !== "undefined" && typeof window.t === "function") ? window.t(k) : f;
+}
+function caseGroups() {
+  const list = sectionLibraryList();
+  if (!list) return null;
+  const groups = [];
+  const byId = Object.create(null);
+  list.forEach(sec => {
+    /* A built-in case's halves share its caseId; the six Mayumi steps share
+       theirs; an authored section is its own case (its key is unique). */
+    const key = String(sec.caseId || (sec._authored ? sec.id : (sec.source || sec.id)));
+    let g = byId[key];
+    if (!g) {
+      g = { id: key, name: sec.caseName || sec.name || null, sections: [] };
+      byId[key] = g;
+      groups.push(g);
+    }
+    g.sections.push(sec);
+  });
+  return groups;
+}
+function _secTitle(sec, lang) {
+  return (sec.name && (typeof tc === "function" ? tc(sec.name, lang) : sec.name.en)) || sec.id;
+}
+function _caseTitle(g, lang) {
+  return (g.name && (typeof tc === "function" ? tc(g.name, lang) : g.name.en)) || g.id;
+}
+function populateCasePicker() {
+  const sel = el("splash-case-add");
+  if (!sel) return;
+  const groups = caseGroups();
+  if (!groups) return;
+  const lang = _curLang();
+  const keep = sel.value;
+  sel.textContent = "";
+  groups.forEach(g => {
+    const o = document.createElement("option");
+    o.value = g.id;
+    o.textContent = _caseTitle(g, lang) +
+      (g.sections.length > 1 ? " (" + g.sections.length + ")" : "");
+    sel.appendChild(o);
+  });
+  if (keep && groups.some(g => g.id === keep)) sel.value = keep;
+  renderCaseParts(sel.value);
+}
+/* The ticked checklist of one case's parts, all ticked by default: the common
+   day runs a whole case, and the facilitator unticks what they will not reach. */
+function renderCaseParts(caseId) {
+  const box = el("splash-case-parts");
+  if (!box) return;
+  box.textContent = "";
+  const groups = caseGroups() || [];
+  const g = groups.find(x => x.id === caseId) || groups[0];
+  if (!g) return;
+  const lang = _curLang();
+  g.sections.forEach(sec => {
+    const label = document.createElement("label");
+    label.className = "splash-case-part";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = true;
+    cb.value = sec.id;
+    cb.className = "splash-case-part-cb";
+    label.appendChild(cb);
+    const name = document.createElement("span");
+    name.className = "splash-case-part-name";
+    name.textContent = _secTitle(sec, lang);      // textContent — may be facilitator-authored
+    label.appendChild(name);
+    const type = document.createElement("span");
+    type.className = "splash-section-type";
+    type.textContent = sectionTypeLabel(sec.type);
+    label.appendChild(type);
+    box.appendChild(label);
+  });
+}
+function addCasePartsPick() {
+  const box = el("splash-case-parts");
+  if (!box) return;
+  /* One click can ask for six slots at once, so the cap is REPORTED here: a
+     button that quietly does part of what it promised is a lost section the
+     facilitator only discovers in the room. */
+  let wanted = 0, added = 0;
+  box.querySelectorAll(".splash-case-part-cb").forEach(cb => {
+    if (!cb.checked) return;
+    wanted++;
+    if (addSectionPick(cb.value)) added++;
+  });
+  if (added < wanted && typeof toast === "function") {
+    toast(_pickT("splash.create.case-full", "Added {added} of {wanted} — a session holds at most {max} sections")
+      .replace("{added}", String(added)).replace("{wanted}", String(wanted))
+      .replace("{max}", String(MAX_SECTION_SLOTS)));
+  }
+}
+function wireCasePicker() {
+  const sel = el("splash-case-add");
+  const btn = el("splash-case-add-btn");
+  if (sel && !sel._wired) {
+    sel._wired = true;
+    sel.addEventListener("change", () => renderCaseParts(sel.value));
+  }
+  if (btn && !btn._wired) {
+    btn._wired = true;
+    btn.addEventListener("click", addCasePartsPick);
+  }
+}
+
 function populateSectionPicker() {
   const add = el("splash-section-add");
   if (!add) return;
@@ -248,14 +363,31 @@ function populateSectionPicker() {
     splashSectionPick.push(list[0].id);
   }
   add.textContent = "";
-  list.forEach(sec => {
+  /* The flat list is grouped by case with <optgroup>, so "Initial information"
+     reads under "A Difficult Child (Mayumi)" and needs no prefix. The prefix
+     was tried first and broke every phone: WebKit counts a <select>'s LONGEST
+     OPTION TEXT toward the document's scroll width whatever the box's width —
+     a 112-char option pushed the splash to ~500px at 320 (caught by
+     splash-overflow.spec on webkit/iPhone/iPad; chromium does not). Keep each
+     option's own text short; a group label is not counted the same way. */
+  const groups = caseGroups() || [];
+  const mkOption = sec => {
     const o = document.createElement("option");
     o.value = sec.id;
-    const title = (sec.name && (typeof tc === "function" ? tc(sec.name, lang) : sec.name.en))
-      || sec.id;
-    o.textContent = sectionTypeLabel(sec.type) + " — " + title;
-    add.appendChild(o);
+    o.textContent = sectionTypeLabel(sec.type) + " — " + _secTitle(sec, lang);
+    return o;
+  };
+  groups.forEach(g => {
+    if (g.sections.length > 1) {
+      const og = document.createElement("optgroup");
+      og.label = _caseTitle(g, lang);
+      g.sections.forEach(sec => og.appendChild(mkOption(sec)));
+      add.appendChild(og);
+    } else {
+      g.sections.forEach(sec => add.appendChild(mkOption(sec)));
+    }
   });
+  populateCasePicker();
   renderSectionPick();
 }
 function renderSectionPick() {
@@ -374,16 +506,26 @@ function moveSectionPick(i, dir) {
   splashSectionPick[j] = t;
   renderSectionPick();
 }
+/* Returns whether the section was added — false at the slot cap, so a caller
+   adding several at once can say how many it dropped. */
 function addSectionPick(id) {
-  if (!id) return;
+  if (!id) return false;
   /* Duplicates are ALLOWED — running the same section twice is legitimate (a
      replay), and the slot model keys state by position, not by section id. The
      only bound is the physical slot cap the DB rules enforce. */
-  if (splashSectionPick.length >= MAX_SECTION_SLOTS) return;
+  if (splashSectionPick.length >= MAX_SECTION_SLOTS) {
+    if (typeof toast === "function") {
+      toast(_pickT("splash.create.sections-full", "The session is full — at most {max} sections")
+        .replace("{max}", String(MAX_SECTION_SLOTS)));
+    }
+    return false;
+  }
   splashSectionPick.push(id);
   renderSectionPick();
+  return true;
 }
 function wireSectionPicker() {
+  wireCasePicker();
   const btn = el("splash-section-add-btn");
   if (!btn || btn._wired) return;
   btn._wired = true;

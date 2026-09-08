@@ -886,6 +886,46 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   default. The clinical content is **awaiting review by Dr Branko / the Nagoya
   tutors** — checklist in `ARCHITECTURE/mayumi-pbl-content.md`. The handout
   wins over his app where they differ (escitalopram, not fluoxetine).
+- **THE ROOM DOM FOLLOWS THE SECTION (fixed 2026-09-07, shell v168).** Found live
+  on the first six-section session: `applySectionContent()` re-pointed CASE /
+  SCORING / characters but the ROOM kept the first section's DOM — the workup
+  buttons (`buildButtons()` had only ever run at room entry and on a language
+  change), the "patient in front of you" card (static Lefebvre markup), the
+  `{patientName}` strings (interpolated once at load) and the PBL reference
+  panels (static opioid prose). Every multi-section session had this; the
+  mixed-session e2e asserted the GLOBALS, never the DOM. Now
+  `applySectionContent()` rebuilds the board, renders `sec.vignette || summary`
+  into `#modA-vignette-text`, re-applies i18n on `#stage-1`, and publishes
+  `CURRENT_SECTION_REFERENCES` (a PBL section's optional
+  `references.{history,guidelines,recap}`, rendered like the roleplay panels:
+  absent = shipped markup, declared = only what is declared). **Assert the
+  DOM, not the globals**, when testing per-section content
+  (`tests-e2e/mixed-session-e2e.spec.js` "BOARD and vignette in the DOM").
+- **Picker is CASE-FIRST (2026-09-07):** a Case select (sections grouped by
+  `caseId`, which a scenario may declare; a built-in case's halves and the six
+  Mayumi steps share theirs), a ticked checklist of its parts, "+ Add the
+  ticked parts". The flat single-section add stays below for mixing, and
+  prefixes a part with its case name when the title alone is ambiguous.
+- **A NEW chat reply is typed out word by word** (`_typewrite` in
+  modA-llm-init.js; ≤2.5 s, replays and reduced-motion render whole). It is a
+  reveal after the reply ARRIVES — the proxy still returns whole replies; true
+  token streaming would be a proxy change.
+- **WebKit counts a `<select>`'s LONGEST OPTION TEXT toward the page's scroll
+  width, whatever the box is sized to** (measured 2026-09-07, PR #396). A
+  112-char option in the create form's flat section list pushed the splash to
+  ~500 px at 320 — `splash-overflow.spec` red on webkit/iPhone/iPad, green on
+  chromium/Android, and green locally because only chromium had run it.
+  `min-width:0`, `width:100%` and `overflow:hidden` on the containers change
+  nothing. Keep option text short and disambiguate with `<optgroup>`. Run
+  that spec on webkit before pushing any splash markup change.
+- **The Android "lost Send tap" is NOT a product defect** (diagnosed
+  2026-09-07 with every scroll API instrumented): in the failing runs no app
+  code scrolled and no submit fired; a bare scroll EVENT moved the page ~400 px
+  ~200 ms after the click began — the browser's own scroll-into-view, driven
+  by Playwright over CDP, animating under the settling layout, so the pointer
+  landed off the button. Specs send with Enter (#395); a real finger does not
+  race a programmatic scroll. Do not re-open this from a CI Android failure
+  on a Send tap alone.
 - **⚠ `hfPatient` needs `firebase deploy --only functions` to pick this up.**
   `SERVER_GUARD` was generalised from "simulated patient" to "simulated
   character", and the reply-prefix stripper is now driven by the character's
@@ -997,12 +1037,19 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `<link>`ed `room.css` (`CanamedLoader.ensureRoomStyles()`, same pattern as
   admin.css/branched.css), taking the splash budget **337 → 325 KB gz**. The cap
   stayed 337 at the time, so that was ~12 KB of banked headroom, not a licence to
-  grow. **⚠️ SUPERSEDED — the cap is now 320** (`FIRST_PARTY_BYTES_LIMIT_KB`,
+  grow. **⚠️ SUPERSEDED — the cap is now 326** (`FIRST_PARTY_BYTES_LIMIT_KB`,
   `tests-e2e/perf.spec.js`): it rose 337 → 345 → 348 across the section-model
   work, FELL to 316 when #285 lazy-split the facilitator dashboard out of
   `script.js`, and rose 316 -> 320 on 2026-08-19 for the Module A triage slice
   — a bump taken AFTER lazy-splitting that feature (321.3 -> 316.5 KB gz), not
-  instead of it; each step is logged in that file's header. (This paragraph said
+  instead of it; then 320 -> 324 (2026-09-03, withdrawal control) and 324 -> 327
+  (2026-09-07, per-section rendering fix) — two consecutive bumps without a
+  reclaim — then **the reclaim landed in the same PR (#396, 2026-09-08):**
+  `downloadMyData()` moved into the lazy `data-rights.js` (−1.8 KB gz, 324.4 →
+  322.6) and the cap came back to **326**, spending the reclaim on margin
+  (~3.4 KB) rather than on a lower number. The measurement is CRLF-robust since
+  2026-09-07, so a Windows checkout reads the CI figure. Each step is logged in
+  that file's header. (This paragraph said
   348 until 2026-08-05 — exactly the drift it warns about, and in the more
   dangerous direction: a stale HIGH cap reads as headroom that does not exist.)
   Quote the CONSTANT, never this paragraph — a reviewer citing the stale 337

@@ -55,6 +55,51 @@ test.describe("S3b — the section picker", () => {
     expect(opts.join(" ")).not.toMatch(/Module [AB]/);
   });
 
+  test("case first, then the parts: pick a case, untick a part, add the rest in order", async ({ page }) => {
+    /* User request 2026-09-07: "select Mayumi's case, then the detail of what
+       we want to do the same day — not one by one from the start". */
+    await openCreate(page);
+    const cases = await page.locator("#splash-case-add option")
+      .evaluateAll(els => els.map(e => [e.value, e.textContent.trim()]));
+    // Every built-in case is one entry, however many parts it has.
+    expect(cases.map(c => c[0])).toEqual(expect.arrayContaining(["chronic-pain", "jaundice", "sore-throat", "ward-escalation-branched", "mayumi"]));
+    expect(cases.find(c => c[0] === "mayumi")[1]).toMatch(/Mayumi.*\(6\)/);
+    expect(cases.find(c => c[0] === "chronic-pain")[1]).toMatch(/\(2\)/);
+
+    await page.selectOption("#splash-case-add", "mayumi");
+    const parts = page.locator("#splash-case-parts .splash-case-part");
+    await expect(parts).toHaveCount(6);
+    // All ticked by default; untick the fifth (the results step) for a shorter day.
+    for (let i = 0; i < 6; i++) await expect(parts.nth(i).locator("input")).toBeChecked();
+    await parts.nth(4).locator("input").uncheck();
+    await page.locator("#splash-case-add-btn").click();
+    expect(await ids(page)).toEqual(["mayumi-1-pbl", "mayumi-2-pbl", "mayumi-3-pbl", "mayumi-4-pbl", "mayumi-6-pbl"]);
+
+    // The single-section add still mixes in a part of another case.
+    await add(page, "jaundice-roleplay");
+    expect((await ids(page)).slice(-1)).toEqual(["jaundice-roleplay"]);
+    // The flat list groups a multi-part case under its name, so a part whose
+    // title alone is ambiguous ("Initial information") reads under its case.
+    // A group label rather than a prefix: WebKit counts a select's longest
+    // option text toward the page's scroll width, and a prefixed option
+    // overflowed every phone (splash-overflow.spec, webkit/iPhone/iPad).
+    const mayumiGroup = page.locator('#splash-section-add optgroup[label*="Mayumi"]');
+    await expect(mayumiGroup).toHaveCount(1);
+    await expect(mayumiGroup.locator("option")).toHaveCount(6);
+    const longest = await page.locator("#splash-section-add option")
+      .evaluateAll(els => Math.max(...els.map(e => e.textContent.trim().length)));
+    expect(longest).toBeLessThan(70);
+
+    // Six picked; asking for Mayumi's six again can only fit two more (cap 8),
+    // and the button SAYS so rather than quietly adding part of the list.
+    await page.selectOption("#splash-case-add", "chronic-pain");
+    await page.selectOption("#splash-case-add", "mayumi");
+    await expect(parts.nth(4).locator("input")).toBeChecked();   // re-rendered: all ticked again
+    await page.locator("#splash-case-add-btn").click();
+    expect((await ids(page)).length).toBe(8);
+    await expect(page.locator("#toast .toast-msg")).toContainText("Added 2 of 6");
+  });
+
   test("the empty state tells the facilitator what to do", async ({ page }) => {
     await openCreate(page);
     await expect(page.locator("#splash-section-empty")).toBeVisible();

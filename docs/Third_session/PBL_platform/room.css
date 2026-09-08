@@ -2475,6 +2475,24 @@ body.session-closed .leaderboard-card[open] { /* no behaviour change yet */ }
 
 .moda-chat-thread[hidden] { display: none; }
 
+
+/* A reply being typed out word by word carries a caret. */
+.moda-chat-bub.is-typing::after {
+  content: "\258D";
+  margin-left: 2px;
+  animation: moda-caret 1s steps(1, end) infinite;
+}
+
+
+@keyframes moda-caret {
+  50% { opacity: 0; }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .moda-chat-bub.is-typing::after { animation: none; }
+}
+
 .moda-chat-bub {
   max-width: 86%;
   padding: 6px 10px;

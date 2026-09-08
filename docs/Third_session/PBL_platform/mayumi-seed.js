@@ -437,8 +437,48 @@
 
   /* ── The six scenarios ────────────────────────────────────────────────── */
 
+  /* ── Reference panels (shared by all six steps) — the tutor handout's own
+     background reading, so the PBL toolbar shows adolescent depression, not
+     the default case's opioid history. Text only; rendered via textContent. */
+  const REFERENCES = {
+    history: {
+      label: "Depression, and how this scenario came to be",
+      paragraphs: [
+        "Two thirds of all people suffer depressive symptoms at some time in their lives. Around 5% of the adult population has an episode of major depression in any given year; women are affected twice as often as men, and the average age at presentation is 27. Around 5% of consecutive general-practice consultations meet the criteria for major depression, another 5% have minor depression, and a further 10% have depressive symptoms not severe enough to warrant active intervention.",
+        "Depression in adolescence is a spectrum, from subsyndromal to syndromal. The full syndrome is met when a child or adolescent presents with at least two weeks of a persistent change in mood — depressed OR irritable — that is impairing, is a change from baseline functioning, and is not attributable to another psychiatric or medical cause, bereavement or substance use. It can present with atypical features: increased reactivity to rejection, lethargy ('leaden paralysis'), increased appetite, carbohydrate craving, hypersomnia.",
+        "This scenario (Nagoya University PBL No. 57, 'A difficult child') follows a 15-year-old brought to the child psychiatry department by her parents. It was written for two core-time sessions with self-study on the group channel between them, and is run here as six sections, one per reveal."
+      ]
+    },
+    guidelines: {
+      label: "Treatment — what the tutor guide teaches",
+      bullets: [
+        "Treat depression, not unhappiness: antidepressants are effective for major depressive episodes and not at the very mild end of the range.",
+        "Antidepressants are first-line when severity is moderate to severe, psychotic features exist, psychotherapy is not available, there was a previous positive response, or the patient prefers medication.",
+        "Treatment of adolescent depression is psychotherapy, pharmacotherapy or both, matched to severity, preference, developmental level, risk factors and available services; a complete physical work-up comes first.",
+        "Talk therapy and/or CBT are often good initial treatments for mild to moderate depression. Group therapy builds support networks beyond family and close friends.",
+        "SSRIs can benefit adolescents with major depressive disorder. All antidepressants carry a boxed warning for increased suicidality: close monitoring — weekly telephone calls, scheduled visits in the first month — for suicidality and for gastrointestinal effects, nervousness, headache and restlessness.",
+        "CBT is short-term, goal-oriented and practical: it changes the patterns of thinking and behaviour behind the difficulties, and so changes how the person feels.",
+        "In this case: after consulting the child and adolescent psychiatry outpatient unit, an SSRI (escitalopram) plus weekly CBT-based consultations."
+      ]
+    },
+    recap: {
+      label: "Recap — the frameworks this case uses",
+      bullets: [
+        "HEADSS for the adolescent interview, confidentiality first: Home (can you talk to your parents?), Education, Activities, Drugs and alcohol (explain why you are asking), Sex (ditto), Suicidal thoughts (if indicated).",
+        "History of the present illness: timing, onset, precipitating factors; what relieves the agitation; specific psychotic features; potential for harm to self or others.",
+        "Risk factors — child: male gender, low intelligence, difficult temperament, physical illness, developmental delay. Family: traumatic stress, ineffective or punitive parenting, disharmony or separation, parental ill-health (especially mental), isolation. Environment: social deprivation, peer problems, stresses, screen exposure.",
+        "Mood and Feelings Questionnaire (Angold & Costello, 1987), ages 6–17: not true 0 / somewhat true 1 / true 2, summed. Long version 0–66 (27 or more may indicate depression); short version 0–26 (12 or more). No cut-point is best in all circumstances; it screens, it does not diagnose.",
+        "Nagoya CAP additions to the differential: ASD, ADHD, conduct and oppositional-defiant disorder (often comorbid; ADHD/CD/ODD with MDD or anxiety carry higher suicide and substance-dependence risk); a prodromal psychotic state; premenstrual dysphoric disorder.",
+        "Investigations that exclude organic mimics: full blood count, CRP, Monospot, glucose, TSH/free T4, ferritin, B12, folate, vitamin D; imaging or EEG when examination or history indicate them."
+      ]
+    }
+  };
+
   const COMMON = {
     modules: ["A"],
+    caseId: "mayumi",
+    caseName: en("A Difficult Child (Mayumi)"),
+    references: REFERENCES,
     synthId: "labs:0",
     synthPrereqs: []
   };
@@ -447,7 +487,8 @@
     id: "mayumi-1",
     name: en("A difficult child — 1. Initial information"),
     moduleAName: en("A difficult child — 1. Initial information"),
-    summary: en(
+    summary: en("The parents come without Mayumi: six months of absence, falling grades, a changed girl."),
+    vignette: en(
       "Mayumi's parents have made an appointment for their 15-year-old daughter, who refused to come. " +
       "The school says six months of absence and falling grades; at home she is careless and hot-tempered. " +
       "Take the history from the parents, keep the differential wide, and plan how you will reach Mayumi herself."),
@@ -515,7 +556,8 @@
     id: "mayumi-2",
     name: en("A difficult child — 2. Chief complaint and the interview plan"),
     moduleAName: en("A difficult child — 2. Chief complaint and the interview plan"),
-    summary: en(
+    summary: en("The formal chief complaint — which narrows nothing. Plan the adolescent interview."),
+    vignette: en(
       "Mayumi, 15, presented to the child psychiatry department by her parents: careless, defiant and negative, " +
       "increasingly absent, school performance deteriorating. The formal chief complaint adds no new fact — " +
       "and that is the point: the differential does not narrow. Structure the history of the present illness and plan the adolescent interview."),
@@ -585,7 +627,8 @@
     id: "mayumi-3",
     name: en("A difficult child — 3. The home visit"),
     moduleAName: en("A difficult child — 3. The home visit"),
-    summary: en(
+    summary: en("Meet Mayumi at home; interview her and, separately, her parents."),
+    vignette: en(
       "The parents ask you to meet Mayumi at home. Her stereo is at full volume; her father switches it off and she explodes. " +
       "After you sit down and explain why you are there, she is willing to talk. Interview Mayumi — and, separately, her parents — " +
       "and decide what the new information does to your differential."),
@@ -663,7 +706,8 @@
     id: "mayumi-4",
     name: en("A difficult child — 4. Examination and the MFQ"),
     moduleAName: en("A difficult child — 4. Examination and the MFQ"),
-    summary: en(
+    summary: en("A normal examination and the MFQ, item by item. Choose the investigations."),
+    vignette: en(
       "Mayumi agrees to come to your office a week later. You examine her — normal findings — and she fills in the Mood and Feelings " +
       "Questionnaire. Interpret the MFQ item by item, decide what it does and does not establish, and choose the investigations that exclude organic mimics."),
     characters: cast({ mayumi: true }),
@@ -746,7 +790,8 @@
     id: "mayumi-5",
     name: en("A difficult child — 5. Investigation results"),
     moduleAName: en("A difficult child — 5. Investigation results"),
-    summary: en(
+    summary: en("Every result is back — normal. What does the work-up exclude, and what leads now?"),
+    vignette: en(
       "The results are back: a full blood count, CRP, Monospot, glucose, thyroid function, ferritin, B12, folate and vitamin D, " +
       "a cerebral MRI and an EEG. Review each against its reference range, say what the work-up excludes, and rank your differential."),
     characters: cast({ mayumi: true }),
@@ -814,7 +859,8 @@
     id: "mayumi-6",
     name: en("A difficult child — 6. Management and outcome"),
     moduleAName: en("A difficult child — 6. Management and outcome"),
-    summary: en(
+    summary: en("Escitalopram and weekly CBT; Mayumi improves — and her mother is diagnosed too."),
+    vignette: en(
       "After consulting the child and adolescent psychiatry outpatient unit, an SSRI (escitalopram) is started and weekly consultations " +
       "using a cognitive behaviour therapy approach begin. Mayumi improves — and her mother is diagnosed with depression too. " +
       "Decide on treatment, monitoring and safeguarding, and on what relapse prevention looks like for this family."),

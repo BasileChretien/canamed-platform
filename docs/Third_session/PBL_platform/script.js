@@ -2348,10 +2348,20 @@ function applySectionContent(slot) {
   /* The roleplay's authorable content travels with its section. */
   window.CURRENT_SECTION_ROLEPLAY = (sec.roleplay && typeof sec.roleplay === "object")
     ? sec.roleplay : null;
+  /* A PBL section's reference panels (historical context / guidelines / recap)
+     and its vignette travel with it the same way; null = keep the shipped
+     markup. The room DOM that depends on them — the workup board, the "patient
+     in front of you" card, the {patientName} strings — is rebuilt by the lazy
+     section-content.js (renderPblView), so refresh() must run AFTER the CASE
+     is rebuilt, not before. */
+  window.CURRENT_SECTION_REFERENCES = (c.references && typeof c.references === "object")
+    ? c.references : null;
+  window.CURRENT_SECTION_VIGNETTE = sec.vignette || sec.summary || null;
+  window.CURRENT_SECTION_TYPE = slot.type || null;
+  try { rebuildCaseDerived(); } catch (e) {}
   if (typeof document !== "undefined" && window.CanamedSectionContent) {
     try { window.CanamedSectionContent.refresh(); } catch (e) {}
   }
-  try { rebuildCaseDerived(); } catch (e) {}
 }
 /* A slot's TYPE maps back to the module key the scoring/decision engine uses. */
 const SECTION_MODULE_FOR_TYPE = { pbl: "A", roleplay: "B", branched: "branched" };
@@ -3385,7 +3395,7 @@ function joinParticipant() {
   const gdprBtn = el("gdpr-export-btn");
   if (gdprBtn && !gdprBtn.dataset.wired) {
     gdprBtn.dataset.wired = "1";
-    gdprBtn.addEventListener("click", downloadMyData);
+    _wireDataRightsExport(gdprBtn);
   }
   /* GDPR Art. 7(3) withdrawal, beside the Art. 15 export — the two rights
      belong in the same place, and this is the one screen every participant
@@ -5822,161 +5832,28 @@ function _debriefBucket(roomData) {
   return { total: Math.max(0, auto + manual - pen), auto: auto,
            manual: manual, pen: pen };
 }
-/* GDPR Art. 15 (right of access) participant data export.
- *
- * Self-service "download everything you have on me" for the current
- * session. Runs entirely in the browser:
- *   - reads /sessions/{code}/pool/{clientId}
- *   - reads /sessions/{code}/rooms/{room}/presence/{clientId}
- *   - reads /sessions/{code}/rooms/{room}/typing/{clientId}
- *   - reads /sessions/{code}/rooms/{room}/answers/{module}/{*} and
- *     filters by cid === clientId
- *   - reads /sessions/{code}/rooms/{room}/votes/{*}/ballots/{clientId}
- *   - if Google-signed-in, also reads /users/{uid}/profile + history
- *
- * No admin involvement; rules already permit the participant to read
- * their own pool/presence/answers (the session-level .read is
- * auth != null, and the participant IS auth'd). Triggers a JSON
- * download via Blob.
- *
- * If the platform is in MODE === "local" (no Firebase), the function
- * walks the LocalDB the same way — useful for E2E + demos.
- */
-function downloadMyData() {
-  if (!sessionNum) {
-    alert(tFallback("data-rights.err.no-session",
-      "Join a session first — there's nothing to export yet."));
-    return;
-  }
-  if (!db || !clientId) {
-    alert(tFallback("data-rights.err.not-ready",
-      "The platform is still initialising. Please try again in a moment."));
-    return;
-  }
-  const stamp = new Date();
-  const out = {
-    // R3-E2 — keep canamedDataExport for back-compat; mirror the archive's
-    // schema fields so a single pipeline can validate both shapes.
-    canamedSchema: "https://canamed.web.app/schema/participant-export-v1.json",
-    canamedSchemaVersion: "1.0.0",
-    canamedDataExport: 1,
-    type: "participant-self-export-art-15-gdpr",
-    exportedAt: stamp.toISOString(),
-    sessionCode: sessionNum,
-    scenarioId: window.CURRENT_SCENARIO_ID || "",
-    clientId: clientId,
-    user: {
-      uid: (currentUser && currentUser.uid) || null,
-      email: (currentUser && currentUser.email) || null,
-      displayName: (currentUser && currentUser.displayName) || null,
-      isAnonymous: !!(currentUser && currentUser.isAnonymous)
-    },
-    pool: null,
-    presence: {},
-    typing: {},
-    /* moduleBranched included: LEGACY_SLOT_KEY maps a branched slot to it,
-       and an uninitialised bucket threw and rejected the WHOLE export. */
-    answers: { moduleA: [], moduleB: [], moduleBranched: [] },
-    votes: [],
-    // R3-A2 — pre/post-test answers belong to the participant and must be
-    // exported under GDPR Art. 15. Keyed by room then by 'pre'/'post' so a
-    // researcher can correlate test scores with the same room's discussion.
-    tests: {},
-    // R3-A2 — manual score entries the admin awarded to me, plus help calls
-    // I raised. Both reference the participant by name (`by`) so we filter
-    // post-hoc against myName.
-    manualScoresAboutMe: [],
-    helpCallsByMe: [],
-    profile: null,
-    history: null
-  };
-  const tasks = [];
-  // pool entry
-  tasks.push(db.ref(sPath("pool/" + clientId)).once("value").then(s => {
-    out.pool = s.val();
-  }));
-  // rooms — presence, typing, answers, votes, all filtered by clientId
-  tasks.push(db.ref(sPath("rooms")).once("value").then(s => {
-    const rooms = s.val() || {};
-    Object.keys(rooms).forEach(roomName => {
-      const r = rooms[roomName] || {};
-      if (r.presence && r.presence[clientId]) {
-        out.presence[roomName] = r.presence[clientId];
-      }
-      if (r.typing && r.typing[clientId]) {
-        out.typing[roomName] = r.typing[clientId];
-      }
-      /* S6 — walk the session's SLOTS, not the two retired module keys: a
-         participant's own answers must come back whatever slot they wrote them
-         in, or a GDPR export silently under-reports their data. */
-      roomSlotBuckets(r).forEach(b => {
-        const mod = LEGACY_SLOT_KEY[b.type] || "moduleA";
-        const ans = b.answers || {};
-        Object.keys(ans).forEach(entryId => {
-          if (ans[entryId] && ans[entryId].cid === clientId) {
-            out.answers[mod].push(Object.assign(
-              { room: roomName, slot: b.slot, sectionId: b.sectionId, entryId: entryId },
-              ans[entryId]));
-          }
-        });
-      });
-      const votes = r.votes || {};
-      Object.keys(votes).forEach(voteId => {
-        const ballot = votes[voteId] && votes[voteId].ballots && votes[voteId].ballots[clientId];
-        if (ballot) {
-          out.votes.push({ room: roomName, voteId: voteId, ballot: ballot });
-        }
-      });
-      // R3-A2 — pre/post-test answers under tests/{cid}/{pre|post}/...
-      const tests = (r.tests && r.tests[clientId]) || null;
-      if (tests) {
-        out.tests[roomName] = {
-          pre:  tests.pre  || null,
-          post: tests.post || null
-        };
-      }
-      // R3-A2 — manual scores the admin awarded that name the participant.
-      // The rule layer requires `by` to be the participant's name (string,
-      // <=40 chars), so a name match is the canonical filter. We also keep
-      // the room name so the participant knows which group it referred to.
-      const manual = (r.score && r.score.manual) || {};
-      Object.keys(manual).forEach(pid => {
-        const m = manual[pid];
-        if (m && typeof m.by === "string" && myName && m.by === myName) {
-          out.manualScoresAboutMe.push(Object.assign({ room: roomName, id: pid }, m));
-        }
-      });
-      // R3-A2 — help calls I raised. Same name-match rationale as manual
-      // scores; the room rule stores `by` as the participant's name.
-      const cfh = r.callForHelp;
-      if (cfh && typeof cfh.by === "string" && myName && cfh.by === myName) {
-        out.helpCallsByMe.push(Object.assign({ room: roomName }, cfh));
-      }
-    });
-  }));
-  // identified-user data — only if Google-signed-in
-  if (currentUser && !currentUser.isAnonymous) {
-    tasks.push(db.ref("users/" + currentUser.uid + "/profile").once("value").then(s => {
-      out.profile = s.val();
-    }));
-    tasks.push(db.ref("users/" + currentUser.uid + "/history").once("value").then(s => {
-      out.history = s.val();
-    }));
-  }
-  Promise.all(tasks).then(() => {
-    const ymd = stamp.toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    const blob = new Blob([JSON.stringify(out, null, 2)],
-      { type: "application/json;charset=utf-8" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "canamed-my-data-" + sessionNum + "-" + ymd + ".json";
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 250);
-  }).catch(e => {
-    console.error("Self-export failed", e);
-    alert(tFallback("data-rights.err.export-failed",
-      "Could not export your data — please try again, or contact the facilitator."));
+/* GDPR Art. 15 self-export — the function lives in the LAZY data-rights.js
+   (2026-09-08, the perf reclaim the budget header had named since 2026-09-03).
+   Loaded ON CLICK, from this one button, exactly like the take-home chunk:
+   a participant who never exports never fetches it, and the splash never can.
+   Guarded twice — a loader without the method (an older cached shell) and a
+   chunk that 404'd or is offline both degrade to the export-failed toast,
+   never a ReferenceError out of the click. */
+function _wireDataRightsExport(btn) {
+  const fail = () => toast(tFallback("data-rights.err.export-failed",
+    "Could not export your data — please try again, or contact the facilitator."));
+  btn.addEventListener("click", () => {
+    const run = () => {
+      const fn = window.downloadMyData;
+      if (typeof fn !== "function") { fail(); return; }
+      fn();
+    };
+    if (typeof window.downloadMyData === "function") { run(); return; }
+    const loader = window.CanamedLoader;
+    (loader && loader.ensureDataRights ? loader.ensureDataRights()
+      : Promise.reject(new Error("loader has no ensureDataRights")))
+      .then(run)
+      .catch(fail);
   });
 }
 

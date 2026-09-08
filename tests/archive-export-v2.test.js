@@ -34,6 +34,7 @@ const SCRIPT = fs.readFileSync(path.join(P, "script.js"), "utf8") + "\n" +
    in lazy chunks of their own — they were the readers this guard did not name,
    and both had drifted onto the retired module-literal address. */
 const TAKEHOME = fs.readFileSync(path.join(P, "takehome.js"), "utf8");
+const DATARIGHTS = fs.readFileSync(path.join(P, "data-rights.js"), "utf8");
 const TOOLS = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
 const { convertArchive } = require("../scripts/convert-archive-v2.js");
 
@@ -73,7 +74,7 @@ test("EVERY snapshot reader resolves addresses through ONE helper", () => {
      nothing protects. */
   const READERS = [
     [SCRIPT, "_sessionArchiveData"], [SCRIPT, "roomProgress"], [SCRIPT, "roomParticipation"],
-    [SCRIPT, "downloadMyData"],
+    [DATARIGHTS, "downloadMyData"],   // lazy since 2026-09-08
     [SCRIPT, "_debriefFunnelSection"], [SCRIPT, "_impactMetrics"],
     [TAKEHOME, "buildRoomTakeawayMarkdown"],
     [TOOLS, "_tallyByCid"], [TOOLS, "_revealRows"], [TOOLS, "_freetextRows"]

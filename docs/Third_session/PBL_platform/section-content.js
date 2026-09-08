@@ -125,6 +125,31 @@
       node.appendChild(ul);
     }
   }
+  /* ── The PBL toolbar's panels become optional section data too ────────────
+   * Same contract as the roleplay's above: `references` absent = the shipped
+   * chronic-pain prose stays (built-ins); declared = only the declared panels
+   * show, each { label, paragraphs, bullets }. Found live on the Mayumi steps,
+   * which showed opioid history and low-back-pain guidelines. */
+  const PBL_PANEL_IDS = ["history", "guidelines", "recap"];
+  function pblPanels() {
+    const refs = (typeof window !== "undefined") && window.CURRENT_SECTION_REFERENCES;
+    return (refs && typeof refs === "object") ? refs : null;
+  }
+  function renderPblPanels() {
+    const panels = pblPanels();
+    if (!panels) return;              // built-in: leave the shipped markup alone
+    PBL_PANEL_IDS.forEach(id => {
+      const node = el("refA-panel-" + id);
+      const btn = el("refA-btn-" + id);
+      const spec = panels[id];
+      const on = !!(spec && typeof spec === "object");
+      if (btn) btn.classList.toggle("hidden", !on);
+      if (!node) return;
+      if (!on) { node.hidden = true; node.textContent = ""; return; }
+      _fillRoleplayPanel(node, spec);
+    });
+  }
+
   function renderRoleplayPanels() {
     const panels = roleplayPanels();
     if (!panels) return;              // built-in: leave the shipped markup alone
@@ -413,6 +438,55 @@
     }
   }
 
+  /* ── The PBL view follows the section ───────────────────────────────────────
+     Found live on the first six-section session (Mayumi, 2026-09-07): a picked
+     section re-pointed CASE / SCORING / the cast but the ROOM kept the first
+     section's DOM. buildButtons() ran only from wireRoomUI() (room entry) and on
+     a language change; the "patient in front of you" card is static markup for
+     the default case; the {patientName} strings were interpolated once at load
+     — so section 3 greeted Mayumi's team with Mr Lefebvre's workup, vignette and
+     chart title. The globals were right, the DOM was stale. Lives here, not in
+     script.js, because it is room-only work (the eager bundle is under a byte
+     budget) and because the roleplay's twin, renderRoleplayVignette, is here. */
+  function renderPblBoard() {
+    /* No board on the splash before wireRoomUI(), none in Node. Rebuild from
+       the (already rebuilt) CASE, then re-apply this slot's revealed state. */
+    if (!document.getElementById("group-history")) return;
+    try { if (typeof buildButtons === "function") buildButtons(); } catch (e) {}
+    try { if (typeof renderButtons === "function") renderButtons(); } catch (e) {}
+    try { if (typeof renderFindings === "function") renderFindings(); } catch (e) {}
+  }
+  function renderPblVignette() {
+    /* A section supplies its own text (its `vignette`, else its blurb); one
+       with neither leaves the card alone. textContent — it can be authored. */
+    const raw = (typeof window !== "undefined") && window.CURRENT_SECTION_VIGNETTE;
+    const p = document.getElementById("modA-vignette-text");
+    if (!raw || !p) return;
+    const lang = (typeof _curLang === "function") ? _curLang() : "en";
+    const text = (typeof raw === "object" && typeof tc === "function") ? tc(raw, lang)
+      : (typeof raw === "object" ? raw.en : raw);
+    if (!text) return;
+    p.textContent = String(text);
+  }
+  function reapplyPblStrings() {
+    /* The strings that address the patient by name ({patientName}: the chart
+       title, the shared-chart note, the coach line) follow the cast. */
+    const I = (typeof window !== "undefined") && window.CanamedI18n;
+    const view = document.getElementById("stage-1");
+    if (!I || typeof I.applyI18n !== "function" || !view) return;
+    try { I.applyI18n(view); } catch (e) {}
+  }
+  function renderPblView() {
+    /* A roleplay or branched slot leaves the (hidden) PBL view alone: its
+       board would otherwise be rebuilt off whatever CASE the last PBL slot
+       left, and the next PBL slot re-renders anyway. */
+    const type = (typeof window !== "undefined") && window.CURRENT_SECTION_TYPE;
+    if (type && type !== "pbl") return;
+    renderPblBoard();
+    renderPblVignette();
+    reapplyPblStrings();
+  }
+
   /* Publish under bare names, and re-run the renderers once — applyScenario()
      may have run before this chunk landed, in which case its guarded calls
      were no-ops and an authored section would have rendered nothing. */
@@ -441,9 +515,18 @@
   root.modBProgressCfg = modBProgressCfg;
   root.renderPhaseStepper = renderPhaseStepper;
   root.renderRoleplayVignette = renderRoleplayVignette;
+  root.PBL_PANEL_IDS = PBL_PANEL_IDS;
+  root.pblPanels = pblPanels;
+  root.renderPblPanels = renderPblPanels;
+  root.renderPblBoard = renderPblBoard;
+  root.renderPblVignette = renderPblVignette;
+  root.reapplyPblStrings = reapplyPblStrings;
+  root.renderPblView = renderPblView;
   root.CanamedSectionContent = { refresh: function () {
     try { if (typeof root.renderRoleChips === "function") root.renderRoleChips(); } catch (e) {}
     try { renderRoleplayPanels(); } catch (e) {}
+    try { renderPblPanels(); } catch (e) {}
+    try { renderPblView(); } catch (e) {}
     try { renderObserverChecklist(); } catch (e) {}
     try { renderRoleplayVignette(); } catch (e) {}
   } };

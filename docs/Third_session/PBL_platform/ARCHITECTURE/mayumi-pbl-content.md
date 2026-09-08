@@ -70,6 +70,20 @@ Tick, correct in `mayumi-seed.js`, or annotate here.
 - [ ] **Escitalopram vs fluoxetine** — keep the handout's drug, or change it.
 - [ ] **Prompts** — the tutor questions, re-cut per section.
 
+## Live feedback, 2026-09-07 (first session) — addressed
+
+- The lobby agenda printed each step's long description: `summary` is now one
+  line per step and the long text is the step's `vignette` (the "patient in
+  front of you" card).
+- The card, the shared-chart note, the workup buttons and the reference
+  panels showed the DEFAULT case (Mr Lefebvre): an engine bug for every
+  multi-section session, fixed in `applySectionContent()`. The six steps now
+  carry `references` (history / guidelines / recap) drawn from the tutor
+  handout's background reading.
+- The picker: "select Mayumi's case, then the parts for today" — the six
+  steps share `caseId: "mayumi"` and the create form is case-first.
+- The reply is typed out word by word after it arrives.
+
 ## Engine changes made for this content
 
 - `who` may be an **array** of character ids (prompt builder and stub).
