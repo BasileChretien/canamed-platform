@@ -6029,6 +6029,17 @@ function renderClosedState(closed) {
   if (!banner || !ended) return;
   const isClosed = !!(closed && typeof closed === "object" && closed.at);
   const isAdminLike = !!(isRoomAdmin || role === "admin" || role === "superadmin");
+  /* Publish for the LAZY chunks, which have no view of `refClosed`. The chat
+     needs it most: once `closed` exists the rules refuse every roomChat write,
+     so a question typed after "End session" was relayed to the model and then
+     silently dropped — the status read "…is thinking", nothing appeared, and
+     the input stayed open (seen live 2026-09-09). Set BEFORE the event so a
+     listener can read the flag, and fired for admins too: their room view
+     cannot write turns either. */
+  window.CANAMED_SESSION_CLOSED = isClosed;
+  try {
+    window.dispatchEvent(new CustomEvent("canamed:sessionclosed", { detail: { closed: isClosed } }));
+  } catch (_) { /* CustomEvent unavailable — the flag alone still works */ }
 
   if (!isClosed) {
     banner.classList.add("hidden");

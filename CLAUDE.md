@@ -918,6 +918,23 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   `min-width:0`, `width:100%` and `overflow:hidden` on the containers change
   nothing. Keep option text short and disambiguate with `<optgroup>`. Run
   that spec on webkit before pushing any splash markup change.
+- **"It says thinking but no reply" = a CLOSED session (fixed 2026-09-09,
+  shell v171).** Once `closed` exists the rules refuse every `roomChat` write,
+  but the chat kept accepting questions: the proxy answered normally (200,
+  3–4 s), both turn writes were denied, the DB-driven transcript rendered
+  nothing, the status cleared, the input stayed open. Only trace: an SDK
+  `permission_denied` warning in the console. Now the chat locks and says
+  "This session has ended" (flag `CANAMED_SESSION_CLOSED` + event
+  `canamed:sessionclosed` from `renderClosedState()`), and a refused save
+  surfaces a status line. **Diagnosing a "no reply" report: check `closed`
+  first**, then the console for `permission_denied`, then the proxy (a
+  tokenless POST returns the handler's own 401 within ~10 s when it is up).
+  Two related hazards seen in the same investigation, NOT fixed: a room
+  entered directly at the Welcome/Wrap-up stage has no section applied, so
+  the hidden chat initialises against the DEFAULT case (the model answered as
+  Mr Lefebvre in a Mayumi session); and the transcript's `child_added`
+  listener has no cancel handler, so if it attaches before the room claim
+  lands (fresh identity re-entering) the transcript is dead for the tab.
 - **The Android "lost Send tap" is NOT a product defect** (diagnosed
   2026-09-07 with every scroll API instrumented): in the failing runs no app
   code scrolled and no submit fired; a bare scroll EVENT moved the page ~400 px
