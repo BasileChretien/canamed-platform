@@ -750,6 +750,8 @@
       "modA.chat.thinking": "{patientName} is thinking…",
       "modA.chat.fallbackNotice": "Patient endpoint unavailable — using a stub reply so the team can keep going.",
       "modA.chat.error": "Something went wrong — try a different question.",
+      "modA.chat.closed": "This session has ended — the chat is closed.",
+      "modA.chat.save-failed": "Your message could not be saved — this session may have ended. Reload to check.",
       // Points-scored feedback shown when a typed question earns (or costs) points.
       "modA.chat.score.awardSub": "Good question — points added to your team.",
       "modA.chat.score.penaltySub": "That cost your team points — see why in the score panel.",
@@ -1029,7 +1031,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v25";  // L7: the consent surface renders in the participant's language again
+  const LOCALE_VERSION = "v26";  // L7: the consent surface renders in the participant's language again
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

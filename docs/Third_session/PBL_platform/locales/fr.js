@@ -542,6 +542,8 @@
   "modA.chat.thinking": "{patientName} réfléchit…",
   "modA.chat.fallbackNotice": "Point d'accès patient indisponible — une réponse de secours est utilisée pour que l'équipe puisse continuer.",
   "modA.chat.error": "Une erreur est survenue — essayez une autre question.",
+  "modA.chat.closed": "Cette session est terminée — la discussion est fermée.",
+  "modA.chat.save-failed": "Votre message n'a pas pu être enregistré — la session est peut-être terminée. Rechargez la page pour vérifier.",
   "modA.chat.score.awardSub": "Bonne question — points ajoutés à votre équipe.",
   "modA.chat.score.penaltySub": "Cela a coûté des points à votre équipe — voyez pourquoi dans le panneau de score.",
   "modA.contrib.acted": "a participé",

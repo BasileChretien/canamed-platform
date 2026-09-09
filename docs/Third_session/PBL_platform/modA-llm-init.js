@@ -814,7 +814,18 @@
         updates[refs.authorPath + "/" + key] = uid;
         window.db.ref().update(updates)["catch"](function () {
           /* A denied author write must not cost the student their message. */
-          try { refs.chat.child(key).set(turn); } catch (_) { /* defensive */ }
+          var p = null;
+          try { p = refs.chat.child(key).set(turn); } catch (_) { /* defensive */ }
+          /* And a refused TURN must not vanish silently: the rules deny it in a
+             closed session (and for a uid with no room claim), and until now the
+             only trace was an SDK warning in the console — the student saw
+             "…is thinking" and then nothing. Say so where they are looking. */
+          if (p && typeof p["catch"] === "function") {
+            p["catch"](function () {
+              _setStatus(statusEl, _t("modA.chat.save-failed",
+                "Your message could not be saved — this session may have ended. Reload to check."), "error");
+            });
+          }
         });
       },
       logError: function (err) {
@@ -836,6 +847,24 @@
     _renderCast();
     window.addEventListener("canamed:castchange", _onCastChange);
     window.addEventListener("canamed:slotchange", _onSlotChange);
+    /* A closed session locks the chat and SAYS so. The rules refuse every
+       roomChat write once `closed` exists, so without this a question typed
+       after "End session" is relayed to the model, the reply comes back, and
+       neither is ever rendered — "…is thinking", then nothing, input still
+       open (seen live 2026-09-09). script.js publishes the flag and the event
+       from renderClosedState(); the chat may mount before or after it. */
+    function _applyClosedState() {
+      if (!window.CANAMED_SESSION_CLOSED) return;
+      var msg = _t("modA.chat.closed", "This session has ended — the chat is closed.");
+      inputEl.disabled = true;
+      sendEl.disabled = true;
+      inputEl.setAttribute("placeholder", msg);
+      var consent = panel.querySelector("#modA-chat-consent");
+      if (consent) consent.style.display = "none";
+      _setStatus(statusEl, msg, "warn");
+    }
+    window.addEventListener("canamed:sessionclosed", _applyClosedState);
+    _applyClosedState();
     // The consent click resets the placeholder to the index patient's; keep
     // it addressed to whoever is active. Registered after mount's own handler,
     // so it runs second.
@@ -1013,6 +1042,7 @@
 
     function _onSubmit(ev) {
       if (ev && ev.preventDefault) ev.preventDefault();
+      if (window.CANAMED_SESSION_CLOSED) { _applyClosedState(); return; }
       var text = (inputEl.value || "").trim();
       if (!text) return;
       inputEl.value = "";
@@ -1077,6 +1107,7 @@
       try { inputEl.removeEventListener("keydown", _onKeydown); } catch (_) {}
       try { window.removeEventListener("canamed:langchange", _onLangChange); } catch (_) {}
       try { window.removeEventListener("canamed:castchange", _onCastChange); } catch (_) {}
+      try { window.removeEventListener("canamed:sessionclosed", _applyClosedState); } catch (_) {}
       try { if (consentBtnEl) consentBtnEl.removeEventListener("click", _onConsentClick); } catch (_) {}
       try { if (transcriptEl) transcriptEl.textContent = ""; } catch (_) {}
       try { if (castEl) { castEl.textContent = ""; castEl.hidden = true; } } catch (_) {}

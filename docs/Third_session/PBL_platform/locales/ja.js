@@ -541,6 +541,8 @@
   "modA.chat.thinking": "{patientName}は考え中です…",
   "modA.chat.fallbackNotice": "患者エンドポイントを利用できません — チームが続けられるよう、代替の応答を表示しています。",
   "modA.chat.error": "問題が発生しました — 別の質問を試してください。",
+  "modA.chat.closed": "このセッションは終了しました — チャットは閉じられています。",
+  "modA.chat.save-failed": "メッセージを保存できませんでした — セッションが終了している可能性があります。ページを再読み込みして確認してください。",
   "modA.chat.score.awardSub": "良い質問です — チームに点数が加算されました。",
   "modA.chat.score.penaltySub": "チームの減点になりました — 理由はスコアパネルをご覧ください。",
   "modA.contrib.acted": "参加しました",
