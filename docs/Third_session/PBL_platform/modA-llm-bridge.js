@@ -205,6 +205,53 @@ if (typeof window === "undefined") { var window = globalThis; }
     return "I'm not sure, doctor. Nobody's ever asked me that.";
   }
 
+  /* ---------------- deadline ---------------- */
+  /* withDeadline(start, ms) → Promise
+   *
+   * Bounds ONE async operation by a wall-clock deadline. start(signal) is
+   * called once; the returned promise settles with its outcome, or REJECTS
+   * with an Error whose `code` is "timeout" once `ms` elapse — whichever comes
+   * first. At the deadline `signal` (an AbortSignal, or null where
+   * AbortController is missing) is aborted, so a fetch started inside is
+   * cancelled rather than left holding a socket — including one that has not
+   * started yet, since fetch() given an already-aborted signal rejects at once.
+   *
+   * Every failure is a REJECTION, never a synchronous throw (a throw inside
+   * start() is converted): the bridge turns a rejection into the stub patient,
+   * and a throw would bypass that. The timer is cleared the moment the
+   * operation settles, so a prompt reply leaves nothing pending.
+   *
+   * Used by modA-llm-init.js to bound the self-hosted proxy call, which had no
+   * client-side timeout at all (DEFAULTS.timeoutMs covers only setEndpoint). */
+  function withDeadline(start, ms) {
+    var AC = (W && typeof W.AbortController === "function") ? W.AbortController
+            : (typeof AbortController === "function") ? AbortController : null;
+    var ctrl = null;
+    try { ctrl = AC ? new AC() : null; } catch (_) { ctrl = null; }
+    return new Promise(function (resolve, reject) {
+      var settled = false;
+      var timer = null;
+      function finish(fn, value) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        fn(value);
+      }
+      timer = setTimeout(function () {
+        var err = new Error("timed out after " + ms + " ms");
+        err.code = "timeout";
+        finish(reject, err);
+        if (ctrl) { try { ctrl.abort(); } catch (_) { /* nothing left to cancel */ } }
+      }, ms);
+      var work;
+      try { work = start(ctrl ? ctrl.signal : null); }
+      catch (e) { finish(reject, e); return; }
+      Promise.resolve(work).then(
+        function (v) { finish(resolve, v); },
+        function (e) { finish(reject, e); });
+    });
+  }
+
   /* ---------------- endpoint call ---------------- */
   /* The endpoint is POST'd a JSON body of {messages, lang} and is expected
    * to return JSON {reply: "..."}. This shape works for a thin wrapper Space
@@ -554,7 +601,8 @@ if (typeof window === "undefined") { var window = globalThis; }
 
   W.modALLMBridge = {
     create: createBridge,
-    DEFAULTS: DEFAULTS
+    DEFAULTS: DEFAULTS,
+    withDeadline: withDeadline
   };
 
   if (typeof module !== "undefined" && module.exports) {

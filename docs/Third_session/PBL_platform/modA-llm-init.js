@@ -45,6 +45,14 @@
      `region:` in functions/index.js — see the note at the httpsCallable
      call site for why a mismatch fails silently rather than loudly. */
   var HF_FUNCTIONS_REGION = "europe-west1";
+  /* Client-side deadline for ONE self-hosted proxy turn: ID token, request and
+     response body together. Replies were measured live at 7–19 s (2026-09-11).
+     It MUST stay above the proxy's own upstream budget (TOTAL_BUDGET_MS in
+     proxy/src/handler.js, 45 s): the proxy verifies the token, reads the room
+     claim and bumps the rate-limit counters BEFORE that budget starts, so a
+     client deadline at or under it would abandon replies the proxy was still
+     entitled to send. tests/modA-chat-wait-feedback.test.js pins the order. */
+  var PROXY_TIMEOUT_MS = 50000;
   if (typeof window === "undefined") return;
 
   // Auto-promote ?llm=1 to localStorage as soon as this script loads.
@@ -289,6 +297,20 @@
       else bub.classList.remove("is-typing");
     }
     tick();
+  }
+
+  /* While a turn is pending — 7–19 s through the proxy, measured 2026-09-11 —
+     the thread shows three "typing" dots and, once the wait is long enough to
+     wonder about, the status line counts the seconds. The count waits for
+     WAIT_HINT_AFTER_MS so a quick reply never flashes a number.
+     window.CANAMED_CHAT_WAIT_HINT_MS overrides that threshold (read per turn):
+     tests-e2e/modA-chat-wait.spec.js sets 0 rather than sleep on every device. */
+  var WAIT_HINT_AFTER_MS = 5000;
+  var WAIT_TICK_MS = 1000;
+  function _waitHintAfterMs() {
+    var raw = window.CANAMED_CHAT_WAIT_HINT_MS;
+    var n = Number(raw);
+    return (raw != null && raw !== "" && isFinite(n) && n >= 0) ? n : WAIT_HINT_AFTER_MS;
   }
 
   function _renderTurn(threadEl, role, content, animate) {
@@ -547,6 +569,61 @@
       return el;
     }
 
+    /* ── Waiting feedback ───────────────────────────────────────────────── */
+    /* At most one pending turn: the input stays disabled until it settles.
+       The dots live in the thread the question was ASKED in, not whichever
+       chip is pressed later, so switching character mid-wait hides them with
+       that thread (and shows them again on the way back) rather than putting
+       a "typing" cue on someone who was not asked. They carry no bubble class,
+       so nothing that counts .moda-chat-bub counts them. */
+    var waiting = null;   // { bubble, startedAt, hintAfter, timer }
+    function _startWaiting(id) {
+      _stopWaiting();
+      var bubble = _ce("div", { "class": "moda-chat-typing", "aria-hidden": "true" });
+      for (var i = 0; i < 3; i++) bubble.appendChild(_ce("span", { "class": "moda-chat-typing-dot" }));
+      var thread = _threadEl(id);
+      thread.appendChild(bubble);
+      var host = _scrollHost(thread);
+      host.scrollTop = host.scrollHeight;
+      var w = { bubble: bubble, startedAt: Date.now(), hintAfter: _waitHintAfterMs(), timer: null };
+      w.timer = setInterval(function () { _tickWaiting(w); }, WAIT_TICK_MS);
+      waiting = w;
+    }
+    function _tickWaiting(w) {
+      if (waiting !== w) return;
+      var ms = Date.now() - w.startedAt;
+      /* Only while the line still says "thinking": a refused write or the
+         session closing mid-wait takes the line over, and must not get a
+         counter appended to it. */
+      if (ms < w.hintAfter || statusEl.dataset.kind !== "pending") return;
+      var el = statusEl.querySelector(".moda-chat-elapsed");
+      if (!el) {
+        /* aria-hidden: the status line is a polite live region, and a number
+           that changes every second would be re-announced every second. */
+        el = _ce("span", { "class": "moda-chat-elapsed", "aria-hidden": "true" });
+        statusEl.appendChild(el);
+      }
+      el.textContent = " " + Math.floor(ms / 1000) + " s";
+    }
+    /* Idempotent: stops the count and takes the dots and the number down. Runs
+       on settle, just before this client writes the reply (a local write
+       renders it at once through child_added, so the two never show together),
+       and from destroy(). The status TEXT belongs to whoever settles the turn. */
+    function _stopWaiting() {
+      var w = waiting;
+      if (!w) return;
+      waiting = null;
+      clearInterval(w.timer);
+      if (w.bubble.parentNode) w.bubble.parentNode.removeChild(w.bubble);
+      var el = statusEl.querySelector(".moda-chat-elapsed");
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    }
+    /* A teammate's turn landing in the thread we are waiting on must not push
+       the dots above it. */
+    function _keepWaitingLast(threadEl) {
+      if (waiting && waiting.bubble.parentNode === threadEl) threadEl.appendChild(waiting.bubble);
+    }
+
     function _chipFor(id) {
       var chips = castEl.querySelectorAll(".moda-chat-chip");
       for (var i = 0; i < chips.length; i++) {
@@ -688,6 +765,7 @@
       // typed out; everything else renders whole.
       var fresh = t.role === "assistant" && Number(t.at || 0) >= initStartedAt;
       _renderTurn(_threadEl(who), t.role, t.content, fresh && who === activeId);
+      _keepWaitingLast(_threadEl(who));
       // If the patient answered while the student is on the Examination /
       // Investigations tab, dot the Dialogue tab so the reply isn't missed.
       if (t.role === "assistant" && Number(t.at || 0) >= initStartedAt) {
@@ -785,6 +863,7 @@
         // the red-flag screen is scoring-only now, not a gate.
       },
       persistTurn: function (role, content, characterId, slot) {
+        if (role === "assistant") _stopWaiting();   // before the write renders the reply
         var turn = { role: role, content: content, at: Date.now() };
         /* Only a plural cast tags its turns with a character: a single-patient
            section keeps the shape it always wrote, and the rules accept both. */
@@ -949,6 +1028,17 @@
       function _proxyCall(body) {
         var user = fb.auth().currentUser;
         if (!user) return Promise.reject(new Error("not signed in"));
+        /* The WHOLE turn runs under one deadline — token, request and body.
+         * Without it a stalled request left "…is thinking" on screen and the
+         * input disabled for as long as the browser held the socket open. A
+         * timeout REJECTS and aborts the fetch, so the bridge serves the stub
+         * patient and the existing "endpoint unavailable" notice says so. */
+        return window.modALLMBridge.withDeadline(function (signal) {
+          return _proxyRequest(user, body, signal);
+        }, PROXY_TIMEOUT_MS);
+      }
+
+      function _proxyRequest(user, body, signal) {
         return user.getIdToken().then(function (idToken) {
           var payload = Object.assign({}, body, {
             roomCode: String(window.sessionNum || ""),
@@ -961,7 +1051,9 @@
               "Content-Type": "application/json",
               "Authorization": "Bearer " + idToken
             },
-            body: JSON.stringify({ data: payload })
+            body: JSON.stringify({ data: payload }),
+            // Aborted at the deadline, so a stalled request frees its socket.
+            signal: signal || undefined
           });
         }).then(function (r) {
           // Parse before checking r.ok: the proxy returns its error detail in
@@ -1048,10 +1140,16 @@
       inputEl.value = "";
       inputEl.disabled = true;
       sendEl.disabled = true;
-      _setStatus(statusEl, _thinkingFor(activeId), "pending");
+      var askedId = activeId;
+      _setStatus(statusEl, _thinkingFor(askedId), "pending");
       transcriptEl.setAttribute("aria-busy", "true");
 
-      bridge.submit(text).then(function (res) {
+      var turn = bridge.submit(text);
+      // AFTER submit(): it persists the question synchronously, so the
+      // question's bubble is already in the thread and the dots go below it.
+      _startWaiting(askedId);
+      turn.then(function (res) {
+        _stopWaiting();
         if (res && res.fallback) {
           _fallbackStreak += 1;
           var msg = _t("modA.chat.fallbackNotice",
@@ -1069,6 +1167,7 @@
         // applied, so the team still earns the points even if the LLM was down.
         _showScoreFeedback(res, _threadEl((res && res.character) || activeId));
       }).catch(function (err) {
+        _stopWaiting();
         _setStatus(statusEl, _t("modA.chat.error",
           "Something went wrong — try a different question."), "error");
         if (typeof window.toast === "function") {
@@ -1097,6 +1196,9 @@
     // instead of stacking a second copy of every turn. Called by the next
     // modALLMInit() (idempotency, above) and by teardownRoom() on room exit.
     function destroy() {
+      // First: a turn may still be pending, and its ticker must not outlive
+      // the wiring it writes into.
+      try { _stopWaiting(); } catch (_) {}
       Object.keys(awardedSubs).forEach(function (k) {
         try { awardedSubs[k].ref.off("value", awardedSubs[k].handler); } catch (_) {}
       });
