@@ -2521,6 +2521,48 @@ body.session-closed .leaderboard-card[open] { /* no behaviour change yet */ }
 }
 
 
+/* ── Waiting for a reply (2026-09-11) ─────────────────────────────────────
+   Three dots on the assistant side of the thread while a turn is pending
+   (modA-llm-init.js _startWaiting). Deliberately NOT a .moda-chat-bub, so
+   nothing that counts bubbles counts it; aria-hidden in markup, because the
+   status line carries the text. Reduced motion gets still dots. */
+.moda-chat-typing {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  padding: var(--s-2) var(--s-3);
+  border-radius: var(--r-lg);
+  border-bottom-left-radius: var(--r-sm);
+  background: var(--n-50);
+}
+
+
+.moda-chat-typing-dot {
+  width: var(--s-2);
+  height: var(--s-2);
+  border-radius: var(--r-pill);
+  background: var(--muted);
+  opacity: 0.35;
+  animation: moda-typing var(--dur-event) var(--ease-soft) infinite;
+}
+
+
+.moda-chat-typing-dot:nth-child(2) { animation-delay: calc(var(--dur-event) / 6); }
+.moda-chat-typing-dot:nth-child(3) { animation-delay: calc(var(--dur-event) / 3); }
+
+
+@keyframes moda-typing {
+  0%, 80%, 100% { opacity: 0.35; }
+  40% { opacity: 1; }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+  .moda-chat-typing-dot { animation: none; opacity: 0.7; }
+}
+
+
 .moda-chat-form {
   display: flex;
   gap: 6px;
@@ -2571,6 +2613,11 @@ body.session-closed .leaderboard-card[open] { /* no behaviour change yet */ }
 
 
 .moda-chat-status[data-kind="error"] { color: var(--key); }
+
+
+/* The seconds appended to "…is thinking" on a long wait: fixed-width digits,
+   so the line does not jitter as the count ticks. */
+.moda-chat-elapsed { font-variant-numeric: tabular-nums; }
 
 
 
