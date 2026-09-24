@@ -107,3 +107,33 @@ test("off() detaches child_removed subscriptions", async () => {
   await db.ref("r/chat/k1").remove();
   assert.strictEqual(calls, 0);
 });
+
+/* Re-entrancy (review of #414): a callback that WRITES must not make the
+   outer delivery fire an event twice, or for a child that is already gone.
+   No chat callback writes today; these keep the shim safe for the next user. */
+test("a child_removed callback that removes another child: each fires once, and later writes fire nothing", async () => {
+  const db = freshDB();
+  await db.ref("r/l").set({ a: 1, b: 2, c: 3 });
+  const ev = [];
+  db.ref("r/l").on("child_removed", (snap) => {
+    ev.push(snap.key);
+    if (snap.key === "a") db.ref("r/l/b").remove();   // re-entrant write
+  });
+  await db.ref("r/l/a").remove();
+  assert.deepStrictEqual(ev.sort(), ["a", "b"], "a and b once each; c is still there");
+  await db.ref("elsewhere/x").set(1);
+  assert.deepStrictEqual(ev.sort(), ["a", "b"], "an unrelated write must not re-fire anything");
+  await db.ref("r/l/c").remove();
+  assert.deepStrictEqual(ev.sort(), ["a", "b", "c"]);
+});
+
+test("a child_added callback that removes a later sibling does not fire child_added for the removed child", async () => {
+  const db = freshDB();
+  await db.ref("r/l").set({ a: 1, z: 2 });
+  const ev = [];
+  db.ref("r/l").on("child_added", (snap) => {
+    ev.push(snap.key);
+    if (snap.key === "a") db.ref("r/l/z").remove();   // re-entrant: z goes before the loop reaches it
+  });
+  assert.deepStrictEqual(ev, ["a"], "z was removed before its turn — it must not be announced");
+});

@@ -121,7 +121,11 @@ test("#2 toast() supports a green 'gain' variant", () => {
 test("#2 the chat renders point-of-action feedback for scored questions", () => {
   assert.match(INIT, /function _showScoreFeedback\(/,
     "modA-llm-init must define _showScoreFeedback");
-  assert.match(INIT, /_showScoreFeedback\(res, transcriptEl\)/,
+  // Scoped to _onSubmit: the old unscoped pattern only ever matched the
+  // function's own signature, never the call this assertion is about.
+  const at = INIT.indexOf("function _onSubmit(");
+  assert.ok(at > 0, "_onSubmit must exist");
+  assert.match(INIT.slice(at, at + 4000), /_showScoreFeedback\(res, /,
     "_onSubmit must call _showScoreFeedback after a turn");
   // award path → green toast (gain); penalty path → loss toast.
   assert.match(INIT, /"gain"\)/, "award feedback must use the gain toast");

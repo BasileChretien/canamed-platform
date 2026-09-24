@@ -60,8 +60,30 @@ test("the score chip is drawn only on the asked section, in the asked character'
   const f = fnOf("_onSubmit", 3400);
   assert.match(f, /var askedSlot = activeSlotId;/, "the section is captured at submit");
   assert.match(f,
-    /_showScoreFeedback\(res, activeSlotId === askedSlot \? _threadEl\(\(res && res\.character\) \|\| askedId\) : null\);/,
+    /_showScoreFeedback\(res, activeSlotId === askedSlot \? _threadEl\(\(res && res\.character\) \|\| askedId\) : null, askedFamilies\);/,
     "on another section there is no right thread to draw in — the toast alone reports the points");
   assert.doesNotMatch(f, /_showScoreFeedback\(res, _threadEl\(\(res && res\.character\) \|\| activeId\)\)/,
     "the old call drew into whatever section and character were on screen at settle");
+});
+
+/* Review of #414. */
+test("a turn taken back also takes back the unread badges it raised", () => {
+  assert.match(fnOf("_flagDialogueUnread", 900), /return true;/, "the flag reports whether it counted");
+  assert.match(fnOf("_bumpChipBadge", 600), /return true;/);
+  const child = fnOf("_onChatChild", 2000);
+  assert.match(child, /t\.__unread = \{ dialogue: _flagDialogueUnread\(\), chip: /,
+    "what this turn raised is recorded on it");
+  const removed = fnOf("_onChatRemoved", 1600);
+  assert.match(removed, /_unflagDialogueUnread\(\)/);
+  assert.match(removed, /_unbumpChipBadge\(/);
+});
+
+test("the toast names what the question scored in ITS section, not the section on screen at settle", () => {
+  const f = fnOf("_onSubmit", 3600);
+  const capAt = f.indexOf("var askedFamilies = _familiesNow();");
+  const submitAt = f.indexOf("var turn = bridge.submit(text);");
+  assert.ok(capAt > 0 && capAt < submitAt, "captured at submit — when the bridge scores the question");
+  assert.match(f, /_showScoreFeedback\(res, [^;]*, askedFamilies\);/);
+  assert.match(fnOf("_showScoreFeedback", 900), /var byId = lookup \|\|/,
+    "a captured lookup wins over the live SCORING global, which a section change replaces");
 });

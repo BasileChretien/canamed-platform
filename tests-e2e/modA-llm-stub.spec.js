@@ -253,18 +253,26 @@ test.describe("Module A — LLM-patient session-1 fixes (live init wiring)", () 
       // The chat lives in the TOP-LEVEL roomChat/ tree, not under the room
       // subtree: sessions/<code> grants .read to every session member and RTDB
       // .read cascades, so a room-scoped rule down there restricted nothing.
-      const chatSubs = () => (window.db._subs || [])
-        .filter((s) => /^roomChat\//.test(s.path)).length;
+      // Counted PER EVENT: the chat holds one child_added listener (renders a
+      // turn) and, since 2026-09-24, one child_removed listener (takes back a
+      // turn the rules refused — the SDK's optimistic add + revert).
+      const chatSubs = () => {
+        const subs = (window.db._subs || []).filter((s) => /^roomChat\//.test(s.path));
+        const by = (ev) => subs.filter((s) => s.event === ev).length;
+        return { total: subs.length, added: by("child_added"), removed: by("child_removed") };
+      };
       window.modALLMInit();
       const afterFirst = chatSubs();
       window.modALLMInit();   // a second enterRoom() (room switch / re-entry)
       window.modALLMInit();   // and a third, for good measure
       return { afterFirst, afterThird: chatSubs() };
     });
-    expect(counts.afterFirst, "exactly one chat listener after first init").toBe(1);
+    expect(counts.afterFirst, "exactly one child_added + one child_removed chat listener after first init")
+      .toEqual({ total: 2, added: 1, removed: 1 });
     // The bug: each init attached another child_added listener (teardownRoom
     // never detached them), so every chat turn rendered N×. The fix tears down
-    // the previous wiring before re-wiring.
-    expect(counts.afterThird, "still exactly one chat listener after re-entry").toBe(1);
+    // the previous wiring before re-wiring — child_removed included.
+    expect(counts.afterThird, "still exactly one of each after re-entry")
+      .toEqual({ total: 2, added: 1, removed: 1 });
   });
 });

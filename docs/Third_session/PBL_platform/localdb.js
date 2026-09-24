@@ -164,21 +164,37 @@
         const node = this._getAt(this._read(), sub.path);
         const kids = (node !== null && typeof node === "object") ? node : {};
         const has = (k) => Object.prototype.hasOwnProperty.call(kids, k);
+        /* RE-ENTRANCY: a callback may write, and that write delivers to this
+           same sub (nested) before the loop below resumes. So each event is
+           re-checked against a FRESH read just before it fires, and `known` is
+           rebuilt from a fresh read afterwards — never from the stale `kids`.
+           The extra reads only happen when something is actually announced. */
+        const fresh = () => {
+          const n = this._getAt(this._read(), sub.path);
+          return (n !== null && typeof n === "object") ? n : {};
+        };
+        const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
         if (sub.event === "child_removed") {
-          Object.keys(sub.known).forEach((k) => {
-            if (has(k)) return;
+          const gone = Object.keys(sub.known).filter((k) => !has(k));
+          gone.forEach((k) => {
+            if (!own(sub.known, k)) return;       // a nested delivery announced it
+            if (own(fresh(), k)) return;          // a callback put it back
             const last = sub.known[k];
             delete sub.known[k];   // BEFORE cb: a re-entrant write must not re-fire it
             sub.cb(makeSnap(k, last));
           });
-          Object.keys(kids).forEach((k) => { sub.known[k] = kids[k]; });
+          const now = gone.length ? fresh() : kids;   // no callback ran → kids is current
+          sub.known = Object.create(null);
+          Object.keys(now).forEach((k) => { sub.known[k] = now[k]; });
           return;
         }
         Object.keys(sub.seen).forEach((k) => { if (!has(k)) delete sub.seen[k]; });
         Object.keys(kids).sort(compareKeys).forEach((k) => {
-          if (Object.prototype.hasOwnProperty.call(sub.seen, k)) return;
+          if (own(sub.seen, k)) return;
+          const cur = fresh();
+          if (!own(cur, k)) return;   // removed by a callback before its turn came
           sub.seen[k] = true;   // mark BEFORE cb: a re-entrant write must not re-fire it
-          sub.cb(makeSnap(k, kids[k]));
+          sub.cb(makeSnap(k, cur[k]));
         });
         return;
       }
