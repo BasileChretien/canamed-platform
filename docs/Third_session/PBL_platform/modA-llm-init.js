@@ -576,7 +576,7 @@
        that thread (and shows them again on the way back) rather than putting
        a "typing" cue on someone who was not asked. They carry no bubble class,
        so nothing that counts .moda-chat-bub counts them. */
-    var waiting = null;   // { bubble, startedAt, hintAfter, timer }
+    var waiting = null;   // { bubble, askedId, slot, startedAt, hintAfter, timer }
     function _startWaiting(id) {
       _stopWaiting();
       var bubble = _ce("div", { "class": "moda-chat-typing", "aria-hidden": "true" });
@@ -585,7 +585,9 @@
       thread.appendChild(bubble);
       var host = _scrollHost(thread);
       host.scrollTop = host.scrollHeight;
-      var w = { bubble: bubble, startedAt: Date.now(), hintAfter: _waitHintAfterMs(), timer: null };
+      /* askedId + slot: a section change rebuilds the transcript, and the dots
+         must come back only in the section — and thread — they were asked in. */
+      var w = { bubble: bubble, askedId: id, slot: activeSlotId, startedAt: Date.now(), hintAfter: _waitHintAfterMs(), timer: null };
       w.timer = setInterval(function () { _tickWaiting(w); }, WAIT_TICK_MS);
       waiting = w;
     }
@@ -788,6 +790,10 @@
         var who = t.character ? String(t.character) : _defaultId();
         _renderTurn(_threadEl(who), t.role, t.content);
       }
+      /* Emptying the transcript took a pending turn's dots with it. They belong
+         to the section the question was ASKED in: back below that question
+         when the student returns there, and nowhere else. */
+      if (waiting && waiting.slot === activeSlotId) _threadEl(waiting.askedId).appendChild(waiting.bubble);
       _renderCast();
     }
     function _onSlotChange() {
@@ -901,6 +907,9 @@
              "…is thinking" and then nothing. Say so where they are looking. */
           if (p && typeof p["catch"] === "function") {
             p["catch"](function () {
+              /* Refused because the session HAS ended (a reply that landed
+                 after "End session"): say that, not "may have ended". */
+              if (window.CANAMED_SESSION_CLOSED) { _applyClosedState(); return; }
               _setStatus(statusEl, _t("modA.chat.save-failed",
                 "Your message could not be saved — this session may have ended. Reload to check."), "error");
             });
@@ -934,6 +943,11 @@
        from renderClosedState(); the chat may mount before or after it. */
     function _applyClosedState() {
       if (!window.CANAMED_SESSION_CLOSED) return;
+      /* A turn may be out when the session ends. Its reply can no longer be
+         saved (the rules refuse roomChat writes once `closed` exists), so the
+         typing cue would otherwise animate under this message until the turn
+         settles — up to the 50 s deadline. Take it down now. */
+      if (waiting) { _stopWaiting(); transcriptEl.setAttribute("aria-busy", "false"); }
       var msg = _t("modA.chat.closed", "This session has ended — the chat is closed.");
       inputEl.disabled = true;
       sendEl.disabled = true;
@@ -1174,9 +1188,13 @@
           window.toast(_t("modA.chat.error", "Chat error"), String(err && err.message || err));
         }
       }).then(function () {
+        transcriptEl.setAttribute("aria-busy", "false");
+        /* The session may have closed while the turn was out. Whatever the
+           settle path above just wrote, a closed chat stays locked and keeps
+           saying so — never re-opened under a stale status. */
+        if (window.CANAMED_SESSION_CLOSED) { _applyClosedState(); return; }
         inputEl.disabled = false;
         sendEl.disabled = false;
-        transcriptEl.setAttribute("aria-busy", "false");
         inputEl.focus();
       });
     }

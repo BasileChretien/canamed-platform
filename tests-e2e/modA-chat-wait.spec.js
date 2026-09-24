@@ -294,4 +294,102 @@ test.describe("Module A chat — waiting for a reply", () => {
     await expect(elapsed).toHaveCount(0);
     await student.close();
   });
+
+  /* ── Follow-up (2026-09-24): the edges the #399 review found ──────────────── */
+
+  test("the session closing mid-wait takes the dots and count down at once, and the settled turn leaves the chat locked", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const student = await reachStage1(page, context);
+    await student.evaluate(() => { /* @ts-ignore */ window.CANAMED_CHAT_WAIT_HINT_MS = 0; });
+    await holdReplies(student);
+
+    const input = student.locator("#modA-chat-input");
+    const send = student.locator("#modA-chat-send");
+    const status = student.locator("#modA-chat-status");
+    const elapsed = status.locator(".moda-chat-elapsed");
+    const transcript = student.locator("#modA-chat-transcript");
+    const dots = transcript.locator(".moda-chat-typing");
+
+    await input.fill("Where exactly does it hurt?");
+    await tap(send);
+    await expect(dots).toBeVisible({ timeout: 10_000 });
+    await expect(elapsed).toHaveText(/^\s\d+ s$/, { timeout: 5_000 });
+
+    // The facilitator ends the session while the reply is still out (same
+    // trigger as modA-chat-closed.spec.js: the closed node, then script.js's
+    // renderClosedState() publishes the flag + event the chat listens to).
+    await student.evaluate(() => {
+      // @ts-ignore — page globals (LOCAL mode, no rules)
+      db.ref(sPath("closed")).set({ at: Date.now(), by: "Wait Fac" });
+    });
+    await expect(status).toContainText(/session has ended/i, { timeout: 10_000 });
+    // …and the waiting cue goes with it, immediately — not when the turn settles.
+    await expect(dots).toHaveCount(0);
+    await expect(elapsed).toHaveCount(0);
+    await expect(transcript).toHaveAttribute("aria-busy", "false");
+    await expect(input).toBeDisabled();
+
+    // The late reply settles the turn. Before the fix this re-opened the input
+    // and wiped the "session has ended" line.
+    await release(student, "A reply that arrives after the end.");
+    await student.waitForTimeout(1_500);
+    await expect(status).toContainText(/session has ended/i);
+    await expect(input).toBeDisabled();
+    await expect(send).toBeDisabled();
+    await expect(input).toHaveAttribute("placeholder", /session has ended/i);
+    await expect(dots).toHaveCount(0);
+    await student.close();
+  });
+
+  test("a section change mid-wait: the dots stay with the section they were asked in", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const student = await reachStage1(page, context);
+    await student.evaluate(() => { /* @ts-ignore */ window.CANAMED_CHAT_WAIT_HINT_MS = 0; });
+    await holdReplies(student);
+
+    const input = student.locator("#modA-chat-input");
+    const send = student.locator("#modA-chat-send");
+    const status = student.locator("#modA-chat-status");
+    const transcript = student.locator("#modA-chat-transcript");
+    const dots = transcript.locator(".moda-chat-typing");
+    const thread = transcript.locator('.moda-chat-thread[data-character="patient"]');
+
+    /* The chat's contract with script.js is the CANAMED_ACTIVE_SLOT flag plus a
+       canamed:slotchange event (refreshActiveSlotState()); modA-chat-per-slot.spec.js
+       proves script.js publishes both on a real two-section walk. Driving the
+       contract here keeps the wait held across the move without a second
+       facilitator advance racing the held turn. */
+    const goToSlot = (n) => student.evaluate((slot) => {
+      // @ts-ignore
+      window.CANAMED_ACTIVE_SLOT = slot;
+      window.dispatchEvent(new CustomEvent("canamed:slotchange", { detail: { slot } }));
+    }, n);
+    const slot1 = await student.evaluate(() => /* @ts-ignore */ window.modALLMRuntime.getSlot());
+
+    await input.fill("Where exactly does it hurt?");
+    await tap(send);
+    await expect(thread.locator(".moda-chat-typing")).toBeVisible({ timeout: 10_000 });
+
+    // Move to another section: its transcript has neither the question nor the
+    // dots, but the turn is still pending, so the chat stays busy.
+    await goToSlot(slot1 + 1);
+    await expect.poll(() => student.evaluate(() => /* @ts-ignore */ window.modALLMRuntime.getSlot())).toBe(slot1 + 1);
+    await expect(dots).toHaveCount(0);
+    await expect(transcript.locator(".moda-chat-bub-user")).toHaveCount(0);
+    await expect(status).toContainText("is thinking…");
+    await expect(input).toBeDisabled();
+
+    // Back to the section the question was asked in: the dots return, below it.
+    await goToSlot(slot1);
+    await expect(thread.locator(".moda-chat-bub-user")).toHaveText("Where exactly does it hurt?", { timeout: 10_000 });
+    await expect(thread.locator(".moda-chat-typing")).toBeVisible();
+    await expect(dots).toHaveCount(1);
+    expect(await thread.evaluate((el) => el.lastElementChild && el.lastElementChild.className)).toBe("moda-chat-typing");
+
+    await release(student, "Just here, in my lower back.");
+    await expect(dots).toHaveCount(0);
+    await expect(thread.locator(".moda-chat-bub-assistant")).toHaveText("Just here, in my lower back.", { timeout: 10_000 });
+    await expect(input).toBeEnabled();
+    await student.close();
+  });
 });

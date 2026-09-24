@@ -246,3 +246,47 @@ test("css: the dots live in room.css with an animation, still dots under reduced
     assert.ok(TOKENS.includes(m[1] + ":"), m[1] + " must exist in tokens.css (an unknown custom property is silently dropped)");
   }
 });
+
+/* ── 3. follow-up (2026-09-24): the edges the #399 review found ──────────────
+   Behaviour per device is in tests-e2e/modA-chat-wait.spec.js ("the session
+   closing mid-wait…", "a section change mid-wait…"); the wiring is pinned here.
+   (The review also flagged " 12 s" as unnatural in Japanese. It never shows:
+   the workshop UI is English-only by design — i18n.js t() localises only the
+   consent / privacy / data-rights prefixes — so the whole status line, count
+   included, is English for every participant.) */
+test("init: a session closing mid-wait takes the dots and the count down at once", () => {
+  const closed = fnOf(INIT, "_applyClosedState", 900);
+  assert.match(closed, /_stopWaiting\(\);/,
+    "otherwise the dots animate under \"This session has ended\" until the turn settles (up to 50 s)");
+});
+
+test("init: a turn that settles after the session closed leaves the chat locked", () => {
+  const f = fnOf(INIT, "_onSubmit", 3200);
+  const tail = f.slice(f.lastIndexOf("}).then(function () {"));
+  const closedAt = tail.indexOf("if (window.CANAMED_SESSION_CLOSED) { _applyClosedState(); return; }");
+  const reopenAt = tail.indexOf("inputEl.disabled = false;");
+  assert.ok(closedAt > 0 && reopenAt > closedAt,
+    "the final settle step must re-check the closed flag BEFORE re-enabling the input");
+});
+
+test("init: returning to the section a question was asked in brings its dots back", () => {
+  const start = fnOf(INIT, "_startWaiting", 1100);
+  assert.match(start, /askedId: id, slot: activeSlotId/, "the wait remembers who was asked, and in which section");
+  const rebuild = fnOf(INIT, "_rebuildForSlot", 900);
+  assert.match(rebuild,
+    /if \(waiting && waiting\.slot === activeSlotId\) _threadEl\(waiting\.askedId\)\.appendChild\(waiting\.bubble\);/,
+    "the rebuild empties the transcript; only the asked section gets the dots back");
+});
+
+test("init: a turn refused because the session closed keeps the closed message, not \"may have ended\"", () => {
+  /* In production the rules refuse roomChat writes once `closed` exists, so a
+     reply landing after "End session" takes the refused-write path. LOCAL mode
+     has no rules, so no e2e can reach this branch — pinned here. */
+  const at = INIT.indexOf('p["catch"](function () {');
+  assert.ok(at > 0, "the refused-write handler must exist");
+  const handler = INIT.slice(at, at + 700);
+  const closedAt = handler.indexOf("if (window.CANAMED_SESSION_CLOSED) { _applyClosedState(); return; }");
+  const failedAt = handler.indexOf('_t("modA.chat.save-failed"');
+  assert.ok(closedAt > 0 && failedAt > closedAt,
+    "the closed state must win over the generic save-failed message");
+});
