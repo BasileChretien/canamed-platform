@@ -17,8 +17,10 @@
  * tests keep the table, the fail-loud guard, and the SAFE DIRECTION of the
  * remaining divergence from silently regressing. What they cannot do is prove
  * the emulator honours the result — only tests-e2e/emulator/rules-smoke.spec.js
- * ("mail queue is admin-gated") does that, by writing a real address through
- * the real rules and requiring it to be ALLOWED.
+ * ("the three session links are admin-gated and https-validated") does that, by
+ * writing a real https URL through the real rules and requiring it to be
+ * ALLOWED. (The mail queue that carried the address class, and its positive
+ * control, were removed 2026-09-24.)
  */
 "use strict";
 
@@ -34,16 +36,18 @@ const {
 const PLATFORM = path.resolve(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const PROD = fs.readFileSync(path.join(PLATFORM, "database.rules.json"), "utf8");
 
-test("the transform rewrites both \\s character classes and leaves valid JSON", () => {
+test("the transform rewrites every \\s character class and leaves valid JSON", () => {
   const out = transformRules(PROD);
   JSON.parse(out); // transformRules already does this; assert the contract too.
 
-  assert.equal(PROD.split("[^@\\\\s]").length - 1, 6,
-    "the mail `to` validator's three parts, in the sessions AND orgs trees");
+  /* The address class belonged to the mail `to` validator, removed with the
+     mail queue (2026-09-24). Its table entry is kept (it was probed), but no
+     production rule uses it any more. */
+  assert.equal(PROD.split("[^@\\\\s]").length - 1, 0,
+    "no rule uses the address class since the mail queue was removed");
   assert.equal(PROD.split("[^\\\\s]").length - 1, 6,
     "the three https:// link validators, in the sessions AND orgs trees");
 
-  assert.equal(out.split("[!-?A-~]").length - 1, 6);
   assert.equal(out.split("[!-~]").length - 1, 6);
   assert.ok(!out.includes("[^@\\\\s]") && !out.includes("[^\\\\s]"),
     "no production class may survive the transform");

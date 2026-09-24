@@ -89,8 +89,8 @@ reading, and say so (section 3 does).
 
 **B5 — Resolve the Hugging Face transfer, or turn the AI chat off.**
 ⚠️ **STALE AS OF 2026-08-31 — the `hfPatient` Cloud Function no longer runs at all.** The project left Google's paid plan on 2026-08-27, and Cloud Functions v2 need one; the chat relay moved to **Scaleway `fr-par` (Paris)**. The paragraph below is kept because its reasoning about the Hugging Face leg is unchanged — only the leg BEFORE it moved. Historic text: the `hfPatient` function ran in **`europe-west1`** (verified in
-`functions/index.js` ≈110; it ran in `us-central1` and was moved — corrected
-2026-08-19), **so the Google leg is no longer the problem.** The next hop was
+`functions/index.js`, the `hfPatient` options block's `region:`; it ran in
+`us-central1` and was moved — corrected 2026-08-19), **so the Google leg is no longer the problem.** The next hop was
 the problem, and it has changed: Hugging Face used to route each request onward
 to a provider **whose identity was only visible in the response header after the
 fact**, which made an Art. 13(1)(f) disclosure and Art. 46 safeguards impossible
@@ -479,9 +479,8 @@ rely on further companies; those are listed too. Everything is in **Appendix A**
 In summary: Google (hosting, database, sign-in, serverless functions, backups,
 and the software libraries loaded by your browser — **not** the reCAPTCHA check,
 which is consent-gated and not currently loaded), **Scaleway** (which relays your AI-chat messages from Paris; it does not store them), **Hugging Face and the inference providers it routes to** (the AI
-character chat), GitHub (runs our automated deletion, backup and export jobs),
-and [SMTP PROVIDER — only if you enable session emails; the email feature is
-switched **off** by default].
+character chat), and GitHub (runs our automated deletion, backup and export
+jobs). The platform sends no email.
 
 **Anyone who is given your certificate**, to the limited extent described in
 section 6.
@@ -688,7 +687,6 @@ Rules</sub>
 | What | Where it goes | Why it leaves | Safeguard we rely on |
 |---|---|---|---|
 | The main database and the private archive bucket | **Belgium** (Google, `europe-west1`) | Hosting | Stays in the EEA |
-| The email function | **Not running.** Cloud Functions need a paid Google plan and the project returned to the free plan on 2026-08-27 | n/a | n/a — the email feature is disabled |
 | **The AI-character chat relay** | **Paris, France** (Scaleway, `fr-par`) — *moved 2026-08-31. It ran in `us-central1`, then Google `europe-west1` (corrected 2026-08-19), and moved again when the project left Google's paid plan. Scaleway was chosen over Cloudflare because a free Cloudflare service cannot be kept in the EU* | Relays the message to Hugging Face; stores nothing | Stays in the EEA. ⚠️ **Scaleway SAS is a NEW recipient — it must be named in §[X] and a DPA signed before this notice is published** |
 | **The AI chat text, onward from Hugging Face** | **OVHcloud AI Endpoints, Gravelines, FRANCE** — pinned since 21 August 2026. Until then it was not identifiable in advance: the router chose one of several providers per request and we only learned which after the reply | The AI character | [TRANSFER MECHANISM — the *naming* half of blocking precondition **B5** is now satisfied; an agreement with the named provider is not, so B5 stays open. If the pin is ever removed, the recipient becomes unnameable again and the chat must be switched off] |
 | The automated deletion, backup and research-export jobs — **including the full identified copy of the session and the file linking pseudonyms back to real names**, which are written to the machine running the job before being stored in Belgium | **GitHub-hosted runners** (United States infrastructure) [TO VERIFY the runner region with the operator] | Automation | [TRANSFER MECHANISM] |
@@ -926,7 +924,7 @@ decision about you.
   and delete the entire database.
 
 **Where your data is handled, for the APPI Art. 32 disclosure.** Your data is
-handled in **Belgium** (the database, the email function and the archive
+handled in **Belgium** (the database and the archive
 bucket, **and the AI-chat function**), in the **United States** (the automation
 runners — the one confirmed US transfer; **not** reCAPTCHA, which is no longer
 loaded), on a **global content-delivery network whose location for these requests
@@ -1025,7 +1023,7 @@ add only if your institution requires it.]
 
 | Who | What they receive | Where | Role |
 |---|---|---|---|
-| **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Storage | Everything in section 2 | Database and storage in **Belgium** (`europe-west1`). **Cloud Functions are no longer used**: the project returned to Google's free plan on 2026-08-27, so the AI-chat relay moved to Scaleway (row below) and the email function is disabled. *Earlier drafts placed the AI-chat function in the United States, then in Belgium* | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
+| **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Storage | Everything in section 2 | Database and storage in **Belgium** (`europe-west1`). **Cloud Functions are no longer used**: the project returned to Google's free plan on 2026-08-27, so the AI-chat relay moved to Scaleway (row below). The platform sends no email. *Earlier drafts placed the AI-chat function in the United States, then in Belgium* | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
 | **Scaleway S.A.S.** (8 rue de la Ville l'Évêque, 75008 Paris, France; R.C.S. Paris 433 115 904) — Serverless Functions | Your AI-chat messages, **in transit only**, plus the sign-in token and session/room names used to check room membership | **Paris (`fr-par`)** — inside the EEA | Our processor. Art. 28 contract in force via Scaleway's DPA v1 June 2024, which "forms an integral part of the contract" and needs no separate signature. Named in the published notice since **PIS v4 · 2026-09** |
 | **Google (software libraries)** — the core JavaScript is downloaded from `gstatic.com` on every load of the **application page** and the certificate-verification page (not the privacy or compliance pages) | Your IP address and browser details | [TO VERIFY — served from a global network, not region-pinned] | Content delivery |
 | **Google (Firebase Authentication)** — `identitytoolkit.googleapis.com`, contacted on **every visit**, because the platform signs you in anonymously at startup | Your IP address and browser details at that moment; then, if you create an account, the email address and account identifier it returns | [TO VERIFY — Firebase Authentication is not pinned to a region in this project's configuration, unlike the database. See the EEA → US row in the DPA] | **Authentication, not content delivery.** Listed separately from `gstatic.com` for that reason: it is a Firebase Authentication API, and it falls under the same Google Cloud transfer-mechanism question as the rest of Firebase — not under the software-delivery row above |
@@ -1034,7 +1032,6 @@ add only if your institution requires it.]
 | **Hugging Face — Inference Providers** | Only the AI-character chat: the hidden scenario instructions plus at most 15 recent turns / about 12,000 characters of what participants typed | **Routes onward to OVHcloud AI Endpoints, Gravelines, France** — pinned since 21 August 2026, where it previously varied per request and was not known in advance. Hugging Face itself remains a separate recipient in the middle — [TO VERIFY which providers may be used, and in which countries. The platform's source code mentions some provider names only in a passing comment that ends "etc."; that is not a definitive or exhaustive list and must not be published as one.] | Sub-processor for the AI character |
 | **GitHub / GitHub Actions** | Runs the automated deletion, backup, export and cost-monitor jobs with an account that can read and delete the whole database. **The full identified copy of the session and the pseudonym-to-name linkage file are written on the job machine** before being stored in Belgium | United States infrastructure [TO VERIFY the runner region] | Automation |
 | **Google Cloud Storage (private archive bucket)** | Nightly identified backup of session data; pseudonymised research export; a short-lived re-identification key file | Belgium, private bucket, public access blocked. [TO VERIFY that the bucket and its expiry rules are actually provisioned for your project — the expiry rules are applied by hand and nothing in the software proves they are live] | Backup / research pipeline |
-| **[SMTP PROVIDER]** | Recipient address, subject and body of any session email | [LOCATION] | **Disabled by default.** Only applies if you switch session email on — name the provider before you do |
 
 **The AI model in use on the date of your session:**
 [MODEL NAME(S) — TO VERIFY with the operator on the day. The model is set by

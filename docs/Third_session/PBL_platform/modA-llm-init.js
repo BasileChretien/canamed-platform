@@ -1077,7 +1077,7 @@
         // "backend unavailable" (same symptom as the 2026-06-03 App Check
         // incident). hfPatient was moved to europe-west1 on 2026-07-24 to keep
         // participants' free text inside the EEA: the data is EEA-resident
-        // everywhere else (RTDB, Storage, sendQueuedMail), and routing the chat
+        // everywhere else (RTDB, Storage), and routing the chat
         // through a US region added a transfer to a country that is NOT on
         // Japan's APPI Art. 28 equivalent-protection list, for no benefit.
         // `fb.app` is standard in the v8 namespaced SDK. If it is somehow

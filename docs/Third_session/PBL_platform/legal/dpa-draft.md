@@ -71,9 +71,12 @@
 > **`hfPatient` no longer runs in `us-central1`. It runs in `europe-west1`**, and
 > the client pins the same region (`modA-llm-init.js :: HF_FUNCTIONS_REGION`), with
 > `tests/hf-region-lockstep.test.js` holding the pair so they cannot drift apart.
-> The code comment at `functions/index.js` ≈110 reads "co-located with the trigger
-> (EU-resident data)", and ≈333 refers to routing chat "through a US region" as a
-> problem that was fixed.
+> The `hfPatient` options block in `functions/index.js` declares
+> `region: "europe-west1"` (≈288) under the comment "EEA-resident, matching every
+> other data path (RTDB, Cloud Storage)", and the same comment refers to routing
+> chat "through a US region" as a problem that was fixed. (Earlier revisions of
+> this note quoted "co-located with the trigger (EU-resident data)" — that comment
+> belonged to the since-removed mail function, not to `hfPatient`.)
 >
 > **About twenty statements in this draft still describe the Google Cloud Function
 > leg as a US transfer.** They were true when written. They are not now, and the
@@ -133,7 +136,7 @@
 | [3. The Controller's instructions](#3-the-controllers-instructions) | What the Controller can and cannot instruct |
 | [4. Confidentiality](#4-confidentiality) | Who may touch the data |
 | [5. Security of processing](#5-security-of-processing-gdpr-art-32) | Art. 32 measures; conditions precedent |
-| [6. Sub-processors](#6-sub-processors-gdpr-art-282-and-284) | Google, Hugging Face, GitHub, SMTP |
+| [6. Sub-processors](#6-sub-processors-gdpr-art-282-and-284) | Google, Hugging Face, GitHub |
 | [7. Data subjects' rights](#7-assistance-with-data-subjects-rights-gdpr-art-283e) | What the platform can actually do |
 | [8. Other assistance (DPIA)](#8-assistance-with-the-controllers-other-obligations-gdpr-art-283f) | DPIA, prior consultation |
 | [9. Personal data breaches](#9-personal-data-breaches-gdpr-art-332-appi-art-26) | Notification, incl. the APPI Art. 26(1) proviso |
@@ -195,7 +198,7 @@ This agreement says who is responsible for what:
   of its own (security logs, staff/facilitator accounts, the public certificate
   registry, the language-model usage log) — see clause 2.4.
 - Some parts of the processing use other companies (Google, Hugging Face,
-  GitHub, and an email provider if enabled). They are **sub-processors**, and
+  and GitHub). They are **sub-processors**, and
   they are listed in Annex III.
 
 > ### ⚠️ Before you sign — three things this summary must not hide
@@ -1361,8 +1364,8 @@ mandates.
 
 - the database security rules (`database.rules.json`), which define who can read
   and write every path;
-- the Cloud Function source (`functions/`), including the LLM proxy and the mail
-  queue;
+- the Cloud Function source (`functions/`), i.e. the LLM proxy (the mail
+  function and its queue were removed on 2026-09-24);
 - the retention, backup and pseudonymisation scripts and their scheduled workflow
   definitions, **and the run history showing whether they executed**;
 - the pseudonymisation logic and its unit tests;
@@ -1400,8 +1403,7 @@ creating the register closes neither.
 | Component | Location | Verified in |
 |---|---|---|
 | Realtime Database (all session data) | **`europe-west1`** (Belgium, EU) | `firebase-config.js` — `canamed-69785-default-rtdb.europe-west1.firebasedatabase.app` |
-| `sendQueuedMail` Cloud Function | **`europe-west1`** (EU) | `functions/index.js` — explicitly "co-located with the trigger (EU-resident data)" |
-| **`hfPatient` Cloud Function (the LLM proxy)** | **`europe-west1`** (Belgium, EU) — *moved from `us-central1`; corrected 2026-08-19* | `functions/index.js` ≈110 ("co-located with the trigger (EU-resident data)"); client pinned in `modA-llm-init.js`, pair held by `tests/hf-region-lockstep.test.js` |
+| **`hfPatient` Cloud Function (the LLM proxy)** | **`europe-west1`** (Belgium, EU) — *moved from `us-central1`; corrected 2026-08-19* | `functions/index.js` — the `hfPatient` options block declares `region: "europe-west1"` (≈288) under the comment "EEA-resident, matching every other data path (RTDB, Cloud Storage)"; client pinned in `modA-llm-init.js`, pair held by `tests/hf-region-lockstep.test.js` |
 | Hugging Face router and downstream inference provider | **Router: outside the EU [TO VERIFY]. Downstream provider: OVHcloud AI Endpoints, Gravelines, FRANCE** — pinned 2026-08-21, where it previously varied per request | `functions/index.js`, `functions/lib/hf-helpers.js` |
 | Private PII archive bucket (`gs://canamed-pii-archive`) | `europe-west1` (EU), per the provisioning script | `scripts/ops/setup-pii-bucket.sh` — [TO VERIFY the bucket exists with these settings] |
 | **GitHub Actions runners (retention, backup and export jobs)** | GitHub-hosted infrastructure, **US** | `.github/workflows/*.yml` |
@@ -1704,7 +1706,6 @@ widely than participants are told.
 | Qualitative poll | `sessions/<code>/poll/<clientId>` | Every session member | "What was hardest" free text up to 280 characters, plus a feeling rating |
 | **Session metadata: creator UID, facilitator display name (`created.by`), workshop label, scenario id, `scenarioCustomJson` (up to 262,144 characters of authored scenario), scenario reference, closed marker, summary, admin-hash marker** | `sessions/<code>/*` | **Any authenticated user of the platform** (`".read": "auth != null"`, with **no membership test**) — including participants of a *different* facilitator's session | Session codes are 6 characters from a 31-character alphabet (~30 bits) and are explicitly not secret ("read aloud to a room"). See Annex VI, G3 |
 | **Participant email addresses** | `rosters/sessions/<code>/<uid>` | Session creator only | Email, name, university. Written only for signed-in (non-anonymous) participants who gave research consent. Exportable by the facilitator as CSV |
-| Outbound mail jobs | `sessions/<code>/mail/<mailId>` | Admin-gated | Recipient address, subject, body. **Feature currently disabled** (`EMAIL_ENABLED=false`) |
 | **Certificate records** | `credentials/<certId>` | **Anyone, with no authentication**, by exact ID | A SHA-256 **hash of the name** (not the name), the session code, a session label, timestamps, `retentionUntil` |
 | Account profile and session history | `users/<uid>/*` | Self only | Only for participants who create an optional account |
 | Authored and shared scenarios | `scenarios/<ownerUid>`, `sharedScenarios/<shareId>` | Owner; shared ones readable by **any signed-in user** | Shared scenarios carry the author's display name (capped 80 chars) — confirm the facilitator consent flow discloses that |
@@ -2045,7 +2046,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 
 | # | Sub-processor | Service | Personal data it receives | Location | APPI characterisation |
 |---|---|---|---|---|---|
-| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database in `europe-west1` (Belgium). ⚠️ **The mail function and the language-model proxy are no longer Google Cloud Functions at all** — the project's billing trial closed on 2026-08-27 and was not renewed, so Cloud Functions v2 (which require a Blaze plan) cannot run. The language-model proxy moved to Scaleway `fr-par`, row #7; the mail function is simply **unavailable** while the project is on the Spark plan, which reinforces row #6's "not active". *The proxy had earlier moved from `us-central1` to `europe-west1`; corrected 2026-08-19, superseded 2026-08-31.*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
+| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database in `europe-west1` (Belgium). ⚠️ **The language-model proxy is no longer a Google Cloud Function at all** — the project's billing trial closed on 2026-08-27 and was not renewed, so Cloud Functions v2 (which require a Blaze plan) cannot run. The language-model proxy moved to Scaleway `fr-par`, row #7. The mail function was removed on 2026-09-24 (see row #6). *The proxy had earlier moved from `us-central1` to `europe-west1`; corrected 2026-08-19, superseded 2026-08-31.*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
 | 2 | Google (reCAPTCHA v3 / App Check) — **INACTIVE since 2026-08-21** | Bot resistance | **Nothing.** Consent-gated and never loaded, so it receives no data. Previously: participant IP address and browser signals, on the application page | n/a while inactive; Google, not region-pinned, if re-enabled [TO VERIFY] | [TO VERIFY] |
 | 3 | **Hugging Face** — [EXACT LEGAL ENTITY AND ADDRESS TO CONFIRM] | Inference Providers router for the simulated-patient character | The scenario system prompt plus **participant free-text chat turns** (up to 16 messages / 12,000 characters per call) | Outside the EU [TO VERIFY exact location] | **Art. 28 foreign provision** — it processes the content to generate output, so the cloud exception does not apply |
 | 4 | **The inference provider behind Hugging Face** — **OVHcloud AI Endpoints** (OVH SAS) | Actual model execution | Same as #3 | **Pinned to `ovhcloud`, served from Gravelines, FRANCE — DEPLOYED 2026-08-21.** The running function now sends an explicit provider, so the recipient no longer varies per request. Note the deploy also had to correct `functions/.env`, which is git-ignored and was still naming the previous models: `.env` overrides the code defaults, so deploying without that fix would have paired the old models with the new provider, 404ing every call | **Art. 28 foreign provision.** The recipient becomes nameable when the pin is deployed, which is what Art. 28(2) requires and what this row previously could not supply. **Still not authorised under clause 6.1** — and the reason is no longer the deploy, which happened on 2026-08-21. Pinning names the recipient; it does not by itself produce the contract or the transfer record, and those remain outstanding. The runtime evidence is outstanding too: confirm from `metrics/hfPatient/events` (`provider` field, taken from the `x-inference-provider` response header) that a live turn records `ovhcloud` |
@@ -2070,15 +2071,15 @@ produce output — as Hugging Face and its downstream providers do — falls
 `legal/github-art28-enquiry.md` is kept but is now OPTIONAL — the analysis no longer depends on it. It remains the way to convert "probably not" into "confirmed" for the Team question, if that ever becomes worth the message.
 
 ✅ **DECIDED 2026-09-02: ACCEPTED AND RECORDED — see Annex VI R9 and the conflict note at clause 6.3.** The operator elected to accept the gap rather than move the jobs or buy Enterprise. R9 records it as an accepted NON-COMPLIANCE (Art. 28(3) is mandatory; nothing substitutes for it), sets out why acceptance is proportionate at pre-pilot scale, carries the counterweight that the runners hold a full-database credential, and lists four review triggers — the first being any real-participant cohort. ⚠️ It is the PROCESSOR's decision and a DISCLOSURE: clause 6.3 imposes the flow-down on the Processor for the Controller's benefit, so it closes only when the Controller accepts it in signing. **Options that remain available, for the Controller:** (a) take a paid plan carrying a Customer Agreement so the DPA attaches; (b) move these jobs to a self-hosted runner inside the EEA; (c) reduce further so no personal data reaches a runner — not achievable on the current architecture, since the purge must at least name the sessions it deletes; (d) record and accept the gap. ⚠️ **CORRECTION 2026-09-02 — an earlier version of this row said the exposure is "bounded to session identifiers, two dates per session and the credentials records". That is true of the DATA THE JOBS READ, and incomplete about what the runner HOLDS.** Six workflows write the Firebase **admin service-account key** to the runner (`SA_JSON` → `${RUNNER_TEMP}/sa.json`): backup-sessions, pseudonymise-export, cleanup-stale-sessions, cleanup-expired-credentials, cost-monitor and firebase-deploy. That credential is not scoped to a path — the Admin SDK bypasses the database rules entirely — so it can read and write the whole identified tree, free-text chat included, plus Storage. The 2026-09-01/02 data-minimisation work narrowed what the SCRIPTS read; it did not and could not narrow the CREDENTIAL, and a key on the runner is inherently full-power (an override such as `databaseAuthVariableOverride` constrains the connection the code opens, not what the key file could do in other hands). A credential is not itself personal data, but its presence is why Art. 28 and Art. 32 bite here: the processor is technically able to access everything, and there is no contract constraining it. State the exposure that way, not as "identifiers and dates" |
-| 6 | [SMTP PROVIDER IDENTITY — Controller/Processor to confirm before enabling email] | Transactional email | Recipient email address, subject, message body | [TO VERIFY] | [TO VERIFY] |
+| 6 | *(none — removed 2026-09-24)* | ~~Transactional email~~ — the platform sends no email; the mail function and its queue were removed. Row kept so later rows keep their numbers. | — | — | — |
 | 7 | **Scaleway S.A.S.** — 8 rue de la Ville l'Évêque, 75008 Paris, France; share capital EUR 214,410.50; R.C.S. Paris 433 115 904. *Entity, address and registration verified 2026-09-01 from the footer of Scaleway's own* Data Processing Agreement, *version of 1 June 2024 — the instrument that constitutes this row's Art. 28 contract (see the conditions note below). No separate signature exists or is required.* | **Two purposes.** (1) Serverless Functions: hosts the simulated-patient proxy that **replaced** the Google Cloud Function. (2) **Object Storage, added 2026-09-01: holds the nightly `/sessions` backup and the pseudonymised research export, including the real-name to pseudonym linkage table.** Purpose (2) is a NEW processing activity for an EXISTING processor, not a new recipient — chosen precisely because Scaleway's DPA is already in force and its Annex III row already exists, so restoring backups needed no new vendor, no new contract and no new disclosure surface | The scenario system prompt plus **participant free-text chat turns** (same payload as row #3), in transit; plus the caller's Firebase ID token and the session code and room name needed to authorise the call. For purpose (2) the artefacts ARE persisted: the identified `/sessions` tree and the linkage table. Bucket `fr-par`, 75 GB free allowance against an artefact of tens of KB. WARNING: the bucket must be PRIVATE with a lifecycle rule matching the retention policy — an object ACL cannot rescue a world-readable bucket. For purpose (1) there is still **no persistent storage** — the function holds nothing after the response | **`fr-par` (Paris, FRANCE)** — inside the EEA, for BOTH purposes. This is why the backup moved here rather than to any other free provider: the archive is identified participant data and must not leave the EEA | **Candidate cloud exception** — it relays rather than analyses the content; the model execution happens at #4. [TO VERIFY with Japanese counsel] |
 
 **Notes.**
 
-- Sub-processor #6 is **not active**: the mail feature is disabled in
-  configuration (`EMAIL_ENABLED=false`, no SMTP host set) and the function records
-  jobs as `disabled`. It must not be enabled until a provider is named here and a
-  DPA with that provider is in place.
+- Sub-processor #6 no longer exists: the transactional-mail function
+  (`sendQueuedMail`) and its `sessions/<code>/mail` queue were removed on
+  2026-09-24 — the platform sends no email. The row is kept only so that row #7
+  and later keep their numbers.
 - The model used for every language is **`meta-llama/Llama-3.3-70B-Instruct`**,
   and the request **pins the inference provider to `ovhcloud`** (OVHcloud AI
   Endpoints, served from Gravelines, France). Until 2026-08-20 the request was
@@ -2341,7 +2342,7 @@ where the data is handled. The countries engaged here are:
 
 | Country | What is handled there | Basis for knowing |
 |---|---|---|
-| **Belgium** (`europe-west1`) | The Realtime Database (all session data), the mail function, the private archive bucket | Verified in config |
+| **Belgium** (`europe-west1`) | The Realtime Database (all session data), the private archive bucket | Verified in config |
 | **United States** (GitHub Actions runners) — *the language-model proxy moved to `europe-west1` on the platform side; corrected 2026-08-19* | The nightly full identified `/sessions` dump and the linkage-table construction | Verified in code |
 | **France, per the provider's own documentation** `[TO VERIFY against contract]` | Hugging Face's downstream inference provider — the **`ovhcloud`** provider, pinned 2026-08-21 where it previously varied per request and was the entry that made this table say *Unidentifiable* | **Two different strengths of evidence, and they should not be conflated.** The PIN is verified in code (`applyProviderPin` appends `:ovhcloud`) and will be confirmed at runtime from the `x-inference-provider` header. The LOCATION and the LEGAL ENTITY are not: `ovhcloud` is an identifier, and Gravelines/OVH SAS comes from the provider's published material, not from a contract or an operator attestation. Obtain both before relying on France in a signed document |
 

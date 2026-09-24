@@ -1,15 +1,13 @@
 {
   "name": "canamed-functions",
-  "description": "CANAMED transactional email Cloud Function + Module A LLM-patient broker.",
+  "description": "CANAMED Module A LLM-patient broker (hfPatient Cloud Function).",
   "private": true,
   "engines": {
     "node": "22"
   },
   "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^14.3.0",
-    "firebase-functions": "^7.3.2",
-    "nodemailer": "^9.1.1",
-    "sanitize-html": "^2.17.7"
+    "firebase-admin": "^14.4.0",
+    "firebase-functions": "^7.4.0"
   }
 }
