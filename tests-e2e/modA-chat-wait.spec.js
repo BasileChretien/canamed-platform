@@ -392,4 +392,128 @@ test.describe("Module A chat — waiting for a reply", () => {
     await expect(input).toBeEnabled();
     await student.close();
   });
+
+  /* ── Follow-up 2 (2026-09-24): turns taken back, and points scored mid-wait ── */
+
+  test("a turn the store takes back leaves the chat — the refused reply's add-then-revert, twice", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const student = await reachStage1(page, context);
+    const transcript = student.locator("#modA-chat-transcript");
+    const refused = transcript.getByText("REFUSED-REPLY", { exact: true });
+    const bubblesBefore = await transcript.locator(".moda-chat-bub").count();
+    const chatPath = await student.evaluate(() => /* @ts-ignore */ window.roomChatPath(window.sessionNum, window.myRoom));
+    const key = "-zzrefused" + Date.now().toString(36);
+    /* What production does to a reply refused after "End session" (probed on
+       the emulator, tests/localdb-child-removed.test.js): the SDK applies the
+       update() locally, reverts it, applies the fallback set() locally, reverts
+       it. `at: 1` renders it whole (a replay-style turn), not typed out. */
+    const turn = { role: "assistant", content: "REFUSED-REPLY", at: 1 };
+    for (let i = 0; i < 2; i++) {
+      await student.evaluate(({ p, k, t }) => /* @ts-ignore */ window.db.ref(p + "/" + k).set(t), { p: chatPath, k: key, t: turn });
+      await expect(refused, "the local write shows (the SDK's optimistic event)").toHaveCount(1, { timeout: 10_000 });
+      await student.evaluate(({ p, k }) => /* @ts-ignore */ window.db.ref(p + "/" + k).remove(), { p: chatPath, k: key });
+      await expect(refused, "…and the revert takes it down again").toHaveCount(0, { timeout: 10_000 });
+    }
+    // A section rebuild replays the cache: the taken-back turn must not return.
+    const slot1 = await student.evaluate(() => /* @ts-ignore */ window.modALLMRuntime.getSlot());
+    for (const s of [slot1 + 1, slot1]) {
+      await student.evaluate((slot) => {
+        // @ts-ignore
+        window.CANAMED_ACTIVE_SLOT = slot;
+        window.dispatchEvent(new CustomEvent("canamed:slotchange", { detail: { slot } }));
+      }, s);
+    }
+    await expect.poll(() => student.evaluate(() => /* @ts-ignore */ window.modALLMRuntime.getSlot())).toBe(slot1);
+    await expect(refused).toHaveCount(0);
+    await expect(transcript.locator(".moda-chat-bub")).toHaveCount(bubblesBefore);
+    await student.close();
+  });
+
+  test("points scored while the student is on another section: no chip drawn there; on the asked section, one in the asked thread", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const student = await reachStage1(page, context);
+    await holdReplies(student);
+    const input = student.locator("#modA-chat-input");
+    const send = student.locator("#modA-chat-send");
+    const transcript = student.locator("#modA-chat-transcript");
+    const chips = transcript.locator(".moda-chat-score");
+    const goToSlot = (n) => student.evaluate((slot) => {
+      // @ts-ignore
+      window.CANAMED_ACTIVE_SLOT = slot;
+      window.dispatchEvent(new CustomEvent("canamed:slotchange", { detail: { slot } }));
+    }, n);
+    const slot1 = await student.evaluate(() => /* @ts-ignore */ window.modALLMRuntime.getSlot());
+
+    // A scoring question (malignancy red flags), then move to another section
+    // before the reply settles.
+    await input.fill("Have you lost weight recently?");
+    await tap(send);
+    await expect(transcript.locator(".moda-chat-typing")).toHaveCount(1, { timeout: 10_000 });
+    /* …and publish that section's chat scoring the way applySectionContent()
+       does for a section with none: the live SCORING global no longer holds the
+       asked section's families when the reply settles. */
+    await student.evaluate(() => {
+      // @ts-ignore
+      window.__askedSectionQs = window.SCORING.moduleA_questions;
+      // @ts-ignore
+      window.SCORING.moduleA_questions = [];
+    });
+    await goToSlot(slot1 + 1);
+    await expect.poll(() => student.evaluate(() => /* @ts-ignore */ window.modALLMRuntime.getSlot())).toBe(slot1 + 1);
+    await release(student, "No, my weight is stable.");
+    await expect(input).toBeEnabled({ timeout: 10_000 });
+    // Before the fix the chip was appended to THIS section's transcript.
+    await expect(chips, "no chip in a section the question was not asked in").toHaveCount(0);
+    // …but the toast still names what the question earned in ITS section
+    // (before: "+0 ✓ " and a blank label, looked up in this section's scoring).
+    const toastMsg = student.locator("#toast .toast-msg");
+    await expect(toastMsg).toContainText("+6");
+    await expect(toastMsg).toContainText("Screened malignancy red flags");
+
+    // Positive control on the asked section: a second scoring question
+    // (infection red flags) that settles in place draws its chip, in the
+    // asked character's thread.
+    await student.evaluate(() => { /* @ts-ignore */ window.SCORING.moduleA_questions = window.__askedSectionQs; });
+    await goToSlot(slot1);
+    await expect.poll(() => student.evaluate(() => /* @ts-ignore */ window.modALLMRuntime.getSlot())).toBe(slot1);
+    await input.fill("Any fever or night sweats?");
+    await tap(send);
+    await release(student, "No fever, no sweats.");
+    const thread = transcript.locator('.moda-chat-thread[data-character="patient"]');
+    await expect(thread.locator(".moda-chat-score"), "the chip mechanism works where it belongs").toHaveCount(1, { timeout: 10_000 });
+    await expect(thread.locator(".moda-chat-score")).toContainText("+");
+    await student.close();
+  });
+
+  test("a turn taken back takes back the unread badge it raised", async ({ page, context }) => {
+    test.setTimeout(120_000);
+    const student = await reachStage1(page, context);
+    const transcript = student.locator("#modA-chat-transcript");
+    const badge = student.locator("#chart-tab-badge-dialogue");
+    const dialogueTab = student.locator("#chart-tab-dialogue");
+    const chatPath = await student.evaluate(() => /* @ts-ignore */ window.roomChatPath(window.sessionNum, window.myRoom));
+    const key = "-zzunread" + Date.now().toString(36);
+    const tagged = transcript.locator(`[data-turn-key="${key}"]`);
+
+    // On the Examination tab, a NEW reply flags the Dialogue tab.
+    await student.locator("#chart-tab-exam-btn").dispatchEvent("click");
+    await expect(student.locator("#chart-section-history")).toBeHidden();
+    const turn = { role: "assistant", content: "REFUSED-REPLY", at: Date.now() + 60_000 };
+    for (let i = 0; i < 2; i++) {
+      await student.evaluate(({ p, k, t }) => /* @ts-ignore */ window.db.ref(p + "/" + k).set(t), { p: chatPath, k: key, t: turn });
+      await expect(tagged).toHaveCount(1, { timeout: 10_000 });
+      await expect(badge).toBeVisible();
+      await expect(badge).toHaveText("1");
+      await student.evaluate(({ p, k }) => /* @ts-ignore */ window.db.ref(p + "/" + k).remove(), { p: chatPath, k: key });
+      await expect(tagged).toHaveCount(0, { timeout: 10_000 });
+      await expect(badge, "the reverted reply's flag comes down with it").toBeHidden();
+      await expect(dialogueTab).not.toHaveClass(/has-attention/);
+    }
+    // A reply that stays still flags exactly once.
+    await student.evaluate(({ p, k, t }) => /* @ts-ignore */ window.db.ref(p + "/" + k).set(t),
+      { p: chatPath, k: key + "b", t: Object.assign({}, turn, { content: "A REAL REPLY" }) });
+    await expect(badge).toHaveText("1", { timeout: 10_000 });
+    await expect(dialogueTab).toHaveClass(/has-attention/);
+    await student.close();
+  });
 });

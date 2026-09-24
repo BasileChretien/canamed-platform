@@ -226,7 +226,7 @@ test("init: the dots are aria-hidden and not a bubble; the counter is aria-hidde
 
 test("init: a turn landing in the waited-on thread keeps the dots below it", () => {
   const child = fnOf(INIT, "_onChatChild", 1400);
-  assert.match(child, /_renderTurn\(_threadEl\(who\), t\.role, t\.content, fresh && who === activeId\);\s*_keepWaitingLast\(_threadEl\(who\)\);/);
+  assert.match(child, /_tagTurn\(_renderTurn\(_threadEl\(who\), t\.role, t\.content, fresh && who === activeId\), t\.__key\);\s*_keepWaitingLast\(_threadEl\(who\)\);/);
 });
 
 test("css: the dots live in room.css with an animation, still dots under reduced motion, tokens only", () => {
