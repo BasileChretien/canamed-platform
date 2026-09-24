@@ -94,12 +94,21 @@ async function reachStage1(page, context) {
   return tab2;
 }
 
-/* Instant pre-scroll before a tap: on the WebKit projects Playwright's own
-   "scrolling into view" step can hang while the collapsing room header shifts
-   the layout (modA-chat-controls.spec.js, 2026-07-21). */
+/* Instant pre-scroll, then a DISPATCHED click — never a coordinate click.
+   On the WebKit projects Playwright's own "scrolling into view" step can hang
+   while the collapsing room header shifts the layout (modA-chat-controls.spec.js,
+   2026-07-21). On CI's mobile-android layout it also misfires: the trace of the
+   first run of this spec shows the Send tap hit-tested onto the fixed
+   #global-lang-select ("intercepts pointer events"), retried while the header
+   settled, reported "click action done" — and the question was never sent (it
+   was still in the input), so the dots never appeared, 3/3 attempts. A
+   dispatched click runs the button's real activation (the form's `submit`
+   handler) with no hit-test; it is the suite's established fix for exactly this
+   (#119, the chip-jump spec). Every tap here is followed by an assertion on
+   its effect, so a click that did nothing still fails the test. */
 async function tap(locator) {
   await locator.evaluate((el) => el.scrollIntoView({ block: "center", behavior: "instant" }));
-  await locator.click();
+  await locator.dispatchEvent("click");
 }
 
 /* Every patient reply now waits for release(). */
