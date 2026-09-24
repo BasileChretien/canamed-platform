@@ -1,91 +1,21 @@
 # CANAMED Cloud Functions — operator setup
 
-Two functions live in [index.js](index.js):
+One function lives in [index.js](index.js):
 
-1. **`sendQueuedMail`** — consent-gated transactional email. Setup below.
-2. **`hfPatient`** — voices Mr. Lefebvre via Hugging Face Inference Providers
-   for the Module A LLM-patient pilot (2026-05-28). Setup section near the
-   bottom of this file.
+- **`hfPatient`** — voices Mr. Lefebvre via Hugging Face Inference Providers
+  for the Module A LLM-patient pilot (2026-05-28). Setup below.
 
-> Both functions are **DORMANT by default**: even after deploy they refuse to
-> do real work until an operator deliberately flips an approval flag. Code
-> alone cannot escalate.
+> It is **DORMANT by default**: even after deploy it refuses to do real work
+> until an operator deliberately flips an approval flag. Code alone cannot
+> escalate.
 
----
-
-## `sendQueuedMail` — transactional email
-
-This sends **consent-gated, transactional** email (e.g. the spaced-reinforcement
-"revisit your retention quiz" reminder) when a facilitator enqueues a job at
-`sessions/<code>/mail/<id>`.
-
-> ## ⛔ Status: DISABLED pending institutional approval
-> Email is intentionally kept **off** until the **university president approves**
-> it. The function is dormant by default: even with SMTP configured it will not
-> send — it records `delivery.state = "disabled"` — until an operator
-> *deliberately* flips the approval flag (step 0 below). Do **not** enable it
-> before approval.
-
-The code (`index.js`) is complete; activation is **four** steps that **only you
-can do** (they involve approval, billing, a secret, and DNS — which an assistant
-must never perform):
-
-## 0. Get institutional approval, then enable the feature
-Only after the university president signs off:
-
-```bash
-firebase functions:config:set email.enabled="true"
-```
-
-(Equivalently set `EMAIL_ENABLED=true`.) Leaving this unset keeps email off.
-
-
-## 1. Enable the Blaze (pay-as-you-go) plan
-Cloud Functions require Blaze. Workshop volumes stay within the free monthly
-allowance, but the plan must be enabled in the Firebase console → *Usage and
-billing*.
-
-## 2. Provide the SMTP secret (never commit it)
-Use any SMTP provider (SendGrid, Mailgun, Amazon SES, your institution's relay).
-Set the credentials as runtime config — they are stored by Firebase, **not** in
-the repo:
-
-```bash
-firebase functions:config:set \
-  smtp.host="smtp.yourprovider.com" \
-  smtp.port="587" \
-  smtp.user="apikey-or-username" \
-  smtp.pass="THE-SECRET" \
-  smtp.from="CANAMED <no-reply@your-domain.org>"
-```
-
-(Equivalently, set `SMTP_HOST/PORT/USER/PASS/FROM` as environment variables.)
-
-## 3. Verify the sender domain (SPF/DKIM)
-In your email provider, verify the `from` domain and add the SPF/DKIM DNS
-records they give you, so reminders don't land in spam.
-
-## Deploy
-```bash
-cd docs/Third_session/PBL_platform/functions
-npm install
-cd ..
-firebase deploy --only functions,database
-```
-
-## Notes
-- **Not an open relay.** The mail queue is admin-write-only at the database-rules
-  layer (`sessions/<code>/mail/<id>` requires the session's `adminPasswordHash`),
-  and recipient/subject/body are validated by the rules before the function runs.
-- **Consent + minimisation.** Email is collected only with explicit opt-in for a
-  single transactional send (the revisit reminder); it is not added to any
-  participant profile. Update the privacy notice if you enable this.
-- **Orgs tree.** If you run sessions under `/orgs/<slug>/sessions/...`, add a
-  parallel export with the trigger path
-  `/orgs/{slug}/sessions/{code}/mail/{id}` (same body as `sendQueuedMail`).
-- Until these steps are done, enqueued jobs simply record
-  `delivery: { state: "error", error: "SMTP not configured" }` — nothing is sent
-  and nothing breaks.
+> **No email.** The platform does not send email. The dormant `sendQueuedMail`
+> transactional-mail function, its `sessions/<code>/mail` queue and the
+> `enqueueMail()` admin helper were removed on 2026-09-24 — facilitators share
+> the retention (`revisit.html`) link with students themselves. If a copy of
+> `sendQueuedMail` is still deployed from before, delete it with
+> `firebase functions:delete sendQueuedMail --region europe-west1`; a later
+> `firebase deploy --only functions` will otherwise stop to ask about it.
 
 ---
 

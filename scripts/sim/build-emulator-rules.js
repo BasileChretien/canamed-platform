@@ -106,7 +106,10 @@ const FIREBASE_CONFIG_EMU = path.join(PLATFORM_DIR, "firebase.emulator.json");
  * would invert it. Anything not listed here trips assertEmulatorSafe().
  */
 const CLASS_SUBSTITUTIONS = [
-  // "non-whitespace, not @" — the mail `to` validator's three parts.
+  // "non-whitespace, not @" — written for the mail `to` validator. No rule
+  // uses this class since the mail queue was removed (2026-09-24); the entry
+  // stays because the translation was PROBED, so a future address validator
+  // should reuse it rather than re-derive it by reasoning.
   { from: "[^@\\\\s]", to: "[!-?A-~]" },
   // "non-whitespace" — the https:// link validators.
   { from: "[^\\\\s]", to: "[!-~]" }

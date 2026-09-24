@@ -1210,7 +1210,6 @@ Japanese block natively, in Art. 33/34/35 terms, with the fee stated.
 | ~~`[SUBSTITUTE INFORMATION — unidentifiable transfer country]`~~ — **may no longer be needed** (2026-08-21): the onward provider is pinned and nameable, so the substitute-information route exists only if Hugging Face's own location stays `[TO VERIFY]`. Resolve that first, then delete this row or keep it for the router leg alone | Screen B-JP |
 | `[RESEARCH RECIPIENTS]` (EU and Japan) | Screen C |
 | `[SIGN-IN PROVIDER]` | Screen G |
-| `[SMTP PROVIDER]` | Screen C — see below |
 | `[AGE]` | Screen C |
 | `[N] minutes` | Screen E |
 | `[HOW TO WITHDRAW — link]` | Screen B |
@@ -1226,10 +1225,9 @@ Japanese block natively, in Art. 33/34/35 terms, with the fee stated.
 4. Whether the ethics committee requires a post-session withdrawal window.
 5. Ethics approval reference(s), if any — the current text asserts Caen and
    Nagoya approvals that a third-party facilitator cannot inherit.
-6. The SMTP provider, before the (currently disabled) email feature is turned
-   on. Verified: `functions/index.js :: sendQueuedMail` runs in `europe-west1`
-   and is gated by `emailEnabled()`; the exposure is the **SMTP hop**, not the
-   function.
+6. ~~The SMTP provider~~ — no longer applicable: the platform sends no email
+   (the `sendQueuedMail` function was removed 2026-09-24). Kept so the items
+   below keep their numbers.
 7. Which APPI route the Japanese IRB requires: consent, or the 学術研究機関等
    exception (§9). The answer changes Screen B materially.
 8. Whether the facilitator's display name being visible to participants (in

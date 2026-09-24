@@ -479,9 +479,8 @@ rely on further companies; those are listed too. Everything is in **Appendix A**
 In summary: Google (hosting, database, sign-in, serverless functions, backups,
 and the software libraries loaded by your browser — **not** the reCAPTCHA check,
 which is consent-gated and not currently loaded), **Scaleway** (which relays your AI-chat messages from Paris; it does not store them), **Hugging Face and the inference providers it routes to** (the AI
-character chat), GitHub (runs our automated deletion, backup and export jobs),
-and [SMTP PROVIDER — only if you enable session emails; the email feature is
-switched **off** by default].
+character chat), and GitHub (runs our automated deletion, backup and export
+jobs). The platform sends no email.
 
 **Anyone who is given your certificate**, to the limited extent described in
 section 6.
@@ -1034,7 +1033,6 @@ add only if your institution requires it.]
 | **Hugging Face — Inference Providers** | Only the AI-character chat: the hidden scenario instructions plus at most 15 recent turns / about 12,000 characters of what participants typed | **Routes onward to OVHcloud AI Endpoints, Gravelines, France** — pinned since 21 August 2026, where it previously varied per request and was not known in advance. Hugging Face itself remains a separate recipient in the middle — [TO VERIFY which providers may be used, and in which countries. The platform's source code mentions some provider names only in a passing comment that ends "etc."; that is not a definitive or exhaustive list and must not be published as one.] | Sub-processor for the AI character |
 | **GitHub / GitHub Actions** | Runs the automated deletion, backup, export and cost-monitor jobs with an account that can read and delete the whole database. **The full identified copy of the session and the pseudonym-to-name linkage file are written on the job machine** before being stored in Belgium | United States infrastructure [TO VERIFY the runner region] | Automation |
 | **Google Cloud Storage (private archive bucket)** | Nightly identified backup of session data; pseudonymised research export; a short-lived re-identification key file | Belgium, private bucket, public access blocked. [TO VERIFY that the bucket and its expiry rules are actually provisioned for your project — the expiry rules are applied by hand and nothing in the software proves they are live] | Backup / research pipeline |
-| **[SMTP PROVIDER]** | Recipient address, subject and body of any session email | [LOCATION] | **Disabled by default.** Only applies if you switch session email on — name the provider before you do |
 
 **The AI model in use on the date of your session:**
 [MODEL NAME(S) — TO VERIFY with the operator on the day. The model is set by

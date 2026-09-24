@@ -993,30 +993,6 @@ esc(when.toLocaleString()) + "</p>" +
     if (typeof toast === "function") toast("Cohort comparison generated.");
   }
 
-  /* ── Transactional email (consent-gated) ──────────────────────────────── */
-  /* Enqueue one email by writing sessions/<code>/mail/<id> — the Cloud Function
-     (functions/index.js) sends it. Admin-gated by the database rules (a session
-     adminPasswordHash must exist), so this is not an open relay.
-
-     DORMANT until approved: the email feature is DISABLED by default and is not
-     wired to any UI. Even when enqueued, the Cloud Function will not send until
-     the institution (university president) approves it and an operator flips the
-     approval flag (email.enabled) — see functions/README.md. This helper exists
-     for that future, approved flow; consent + configured SMTP are also required.
-     Returns a Promise. */
-  function enqueueMail(to, subject, text) {
-    if (typeof db === "undefined" || !db || typeof sPath !== "function") {
-      return Promise.reject(new Error("no database"));
-    }
-    if (!to || !subject) return Promise.reject(new Error("missing recipient/subject"));
-    return db.ref(sPath("mail")).push({
-      to: String(to).slice(0, 200),
-      subject: String(subject).slice(0, 200),
-      text: text ? String(text).slice(0, 5000) : "",
-      at: Date.now()
-    });
-  }
-
   /* #14 — facilitator-only email roster export. Reads the /rosters subtree
      (which the rules let ONLY the session creator read), and downloads it as
      an IDENTIFIABLE CSV (uid, email, name, university, at). The roster lives
@@ -1068,7 +1044,6 @@ esc(when.toLocaleString()) + "</p>" +
 
   // Expose on window for the admin button + future tools.
   window.CanamedAdminTools = window.CanamedAdminTools || {};
-  window.CanamedAdminTools.enqueueMail = enqueueMail;
   window.CanamedAdminTools.generateEmailRoster = generateEmailRoster;
   window.generateEmailRoster = generateEmailRoster;
   window.CanamedAdminTools.cohortRows = cohortRows;                   // for tests

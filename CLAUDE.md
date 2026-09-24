@@ -175,7 +175,7 @@ therefore not merely broken but **unfixable in code**:
 | surface | state |
 | --- | --- |
 | `hfPatient` (Module A LLM patient) | **DOWN.** 500 from the Google front end, no application logs at all — the container is never started. Last invocation logged 2026-08-27T00:16:12Z. |
-| `sendQueuedMail` | same class — a v2 function on Cloud Run. Facilitator mail cannot send. |
+| ~~`sendQueuedMail`~~ | **REMOVED from source 2026-09-24** — the platform does not send email (Basile sends the `revisit.html` link to students himself). The queue rule, `enqueueMail()` and the nodemailer/sanitize-html deps went with it. A stale copy is still DEPLOYED; delete it with `firebase functions:delete sendQueuedMail --region europe-west1` (a later `firebase deploy --only functions` otherwise stops to ask). Don't reintroduce email without asking. |
 | `backup-sessions` → ~~GCS~~ **Scaleway** | ✅ **LIVE AGAIN since 2026-09-01** — destination moved to Scaleway Object Storage (`fr-par`), schedule re-enabled, first archive verified. It was disabled 2026-08-27 → 09-01 after `ApiError: The billing account for the owning project is disabled in state closed`. |
 | `pseudonymise-export` → ~~GCS~~ **Scaleway** | ✅ **LIVE AGAIN since 2026-09-01**, same migration, same commit (#363). |
 | Hosting, RTDB, Auth, App Check | **unaffected** — all free tier. The site serves normally, which is exactly why this went unnoticed. |

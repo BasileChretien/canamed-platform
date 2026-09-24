@@ -191,15 +191,6 @@
           ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val())",
           ".validate": "newData.val() == null || (newData.child('at').isNumber() && (!newData.hasChild('participants') || newData.child('participants').isNumber()) && (!newData.hasChild('rooms') || newData.child('rooms').isNumber()))"
         },
-        "mail": {
-          "$mailId": {
-            ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()) && !data.exists()",
-            ".validate": "newData.hasChildren(['to','subject','at']) && newData.child('to').isString() && newData.child('to').val().length <= 200 && newData.child('to').val().matches(/^[^@\\s]+@[^@\\s]+[.][^@\\s]+$/) && newData.child('subject').isString() && newData.child('subject').val().length > 0 && newData.child('subject').val().length <= 200 && newData.child('at').isNumber() && (!newData.hasChild('text') || (newData.child('text').isString() && newData.child('text').val().length <= 5000))",
-            "delivery": {
-              ".validate": "newData.val() == null || (newData.child('state').isString() && newData.child('at').isNumber())"
-            }
-          }
-        },
         "roomCount": {
           ".write": "auth != null && root.child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child($sessionId).child('hash').exists() && root.child('adminSecrets').child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child($sessionId).child('hash').val()) && !root.child('sessions').child($sessionId).child('closed').exists() && root.child('sessions').child($sessionId).child('started').val() != true",
           ".validate": "newData.isNumber() && newData.val() >= 1 && newData.val() <= 20"
@@ -1002,15 +993,6 @@
               ".read": "auth != null",
               ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val())",
               ".validate": "newData.val() == null || (newData.child('at').isNumber() && (!newData.hasChild('participants') || newData.child('participants').isNumber()) && (!newData.hasChild('rooms') || newData.child('rooms').isNumber()))"
-            },
-            "mail": {
-              "$mailId": {
-                ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val()) && !data.exists()",
-                ".validate": "newData.hasChildren(['to','subject','at']) && newData.child('to').isString() && newData.child('to').val().length <= 200 && newData.child('to').val().matches(/^[^@\\s]+@[^@\\s]+[.][^@\\s]+$/) && newData.child('subject').isString() && newData.child('subject').val().length > 0 && newData.child('subject').val().length <= 200 && newData.child('at').isNumber() && (!newData.hasChild('text') || (newData.child('text').isString() && newData.child('text').val().length <= 5000))",
-                "delivery": {
-                  ".validate": "newData.val() == null || (newData.child('state').isString() && newData.child('at').isNumber())"
-                }
-              }
             },
             "roomCount": {
               ".write": "auth != null && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('adminPasswordHash').exists() && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('creatorUid').val() == auth.uid || root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').exists() && root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('proof').child(auth.uid).val() == root.child('adminSecrets').child('orgs').child($orgSlug).child($sessionId).child('hash').val()) && !root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('closed').exists() && root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('started').val() != true",

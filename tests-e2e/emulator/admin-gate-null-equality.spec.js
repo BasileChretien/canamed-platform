@@ -21,14 +21,14 @@
  *   - CLOSE it (write-once, unrecoverable — ends the session for everyone)
  *   - write its summary and audit log
  *   - reassign participants between rooms (pool/<cid>/room)
- *   - enqueue MAIL (sendQueuedMail performs no authorisation of its own; the
- *     RTDB rule is the only gate on who may enqueue)
  *
  * 26 of the 36 sites using this disjunct ALREADY guard it with
  * `adminSecrets/<code>/hash.exists() &&` — roomOf does, for both .read and
  * .write. So the correct shape is already established in the same file; the
  * remaining 10 are an omission. This spec pins the fix for the highest-impact
- * one (`closed`) and for `mail`, plus the org mirrors.
+ * one (`closed`), plus the org mirrors. (It also pinned `mail` until the mail
+ * queue was removed on 2026-09-24; rules-smoke.spec.js now proves that path is
+ * denied to everyone.)
  */
 
 // @ts-check
@@ -119,21 +119,6 @@ test("rules: a peer cannot CLOSE a session that predates adminSecrets", async ({
     { by: "Facilitator", at: Date.now() });
   expect(byCreator, "the creator must still be able to close their session")
     .toBe("ALLOWED");
-});
-
-test("rules: a peer cannot ENQUEUE MAIL on a session that predates adminSecrets", async ({ page, browser }) => {
-  /* sendQueuedMail does no authorisation of its own — it trusts whatever is at
-     the node — so this rule is the ONLY gate on who may enqueue. */
-  const uid = await signedInUid(page);
-  const code = await legacySession(page, uid, "legacy-mail-");
-
-  const peer = await peerPage(browser, uid);
-  try {
-    const enqueued = await tryWrite(peer.page, "sessions/" + code + "/mail/m1",
-      { to: "victim@example.test", subject: "spam", text: "spam", at: Date.now() });
-    expectDenied(enqueued,
-      "the mail queue must stay admin-gated — sendQueuedMail re-checks nothing");
-  } finally { await peer.ctx.close(); }
 });
 
 test("rules: a peer cannot REASSIGN a room on a session that predates adminSecrets", async ({ page, browser }) => {
