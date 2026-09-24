@@ -1063,8 +1063,9 @@ that exists independently of this document.
   is consent-gated and not loaded. It becomes a gap again the moment a consent
   control is added.*
 - **M3 — ⚠️ RE-CHECK: the US leg this item describes has MOVED. `hfPatient` now
-  runs in `europe-west1` (functions/index.js ≈110, "co-located with the trigger
-  (EU-resident data)"; the client pins the same region and
+  runs in `europe-west1` (functions/index.js, `hfPatient` options block ≈288:
+  `region: "europe-west1"`, "EEA-resident, matching every other data path";
+  the client pins the same region and
   tests/hf-region-lockstep.test.js holds the pair). The residual non-EEA transfer
   is the Hugging Face leg and the GitHub Actions runners, NOT the Google
   function. Original text follows and must be reworked, not deleted —

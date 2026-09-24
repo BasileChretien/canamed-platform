@@ -71,9 +71,12 @@
 > **`hfPatient` no longer runs in `us-central1`. It runs in `europe-west1`**, and
 > the client pins the same region (`modA-llm-init.js :: HF_FUNCTIONS_REGION`), with
 > `tests/hf-region-lockstep.test.js` holding the pair so they cannot drift apart.
-> The code comment at `functions/index.js` ≈110 reads "co-located with the trigger
-> (EU-resident data)", and ≈333 refers to routing chat "through a US region" as a
-> problem that was fixed.
+> The `hfPatient` options block in `functions/index.js` declares
+> `region: "europe-west1"` (≈288) under the comment "EEA-resident, matching every
+> other data path (RTDB, Cloud Storage)", and the same comment refers to routing
+> chat "through a US region" as a problem that was fixed. (Earlier revisions of
+> this note quoted "co-located with the trigger (EU-resident data)" — that comment
+> belonged to the since-removed mail function, not to `hfPatient`.)
 >
 > **About twenty statements in this draft still describe the Google Cloud Function
 > leg as a US transfer.** They were true when written. They are not now, and the
@@ -195,7 +198,7 @@ This agreement says who is responsible for what:
   of its own (security logs, staff/facilitator accounts, the public certificate
   registry, the language-model usage log) — see clause 2.4.
 - Some parts of the processing use other companies (Google, Hugging Face,
-  GitHub, and an email provider if enabled). They are **sub-processors**, and
+  and GitHub). They are **sub-processors**, and
   they are listed in Annex III.
 
 > ### ⚠️ Before you sign — three things this summary must not hide
@@ -1361,8 +1364,8 @@ mandates.
 
 - the database security rules (`database.rules.json`), which define who can read
   and write every path;
-- the Cloud Function source (`functions/`), including the LLM proxy and the mail
-  queue;
+- the Cloud Function source (`functions/`), i.e. the LLM proxy (the mail
+  function and its queue were removed on 2026-09-24);
 - the retention, backup and pseudonymisation scripts and their scheduled workflow
   definitions, **and the run history showing whether they executed**;
 - the pseudonymisation logic and its unit tests;
@@ -1400,7 +1403,7 @@ creating the register closes neither.
 | Component | Location | Verified in |
 |---|---|---|
 | Realtime Database (all session data) | **`europe-west1`** (Belgium, EU) | `firebase-config.js` — `canamed-69785-default-rtdb.europe-west1.firebasedatabase.app` |
-| **`hfPatient` Cloud Function (the LLM proxy)** | **`europe-west1`** (Belgium, EU) — *moved from `us-central1`; corrected 2026-08-19* | `functions/index.js` ≈110 ("co-located with the trigger (EU-resident data)"); client pinned in `modA-llm-init.js`, pair held by `tests/hf-region-lockstep.test.js` |
+| **`hfPatient` Cloud Function (the LLM proxy)** | **`europe-west1`** (Belgium, EU) — *moved from `us-central1`; corrected 2026-08-19* | `functions/index.js` — the `hfPatient` options block declares `region: "europe-west1"` (≈288) under the comment "EEA-resident, matching every other data path (RTDB, Cloud Storage)"; client pinned in `modA-llm-init.js`, pair held by `tests/hf-region-lockstep.test.js` |
 | Hugging Face router and downstream inference provider | **Router: outside the EU [TO VERIFY]. Downstream provider: OVHcloud AI Endpoints, Gravelines, FRANCE** — pinned 2026-08-21, where it previously varied per request | `functions/index.js`, `functions/lib/hf-helpers.js` |
 | Private PII archive bucket (`gs://canamed-pii-archive`) | `europe-west1` (EU), per the provisioning script | `scripts/ops/setup-pii-bucket.sh` — [TO VERIFY the bucket exists with these settings] |
 | **GitHub Actions runners (retention, backup and export jobs)** | GitHub-hosted infrastructure, **US** | `.github/workflows/*.yml` |
@@ -2043,7 +2046,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 
 | # | Sub-processor | Service | Personal data it receives | Location | APPI characterisation |
 |---|---|---|---|---|---|
-| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database in `europe-west1` (Belgium). ⚠️ **The mail function and the language-model proxy are no longer Google Cloud Functions at all** — the project's billing trial closed on 2026-08-27 and was not renewed, so Cloud Functions v2 (which require a Blaze plan) cannot run. The language-model proxy moved to Scaleway `fr-par`, row #7; the mail function is simply **unavailable** while the project is on the Spark plan, which reinforces row #6's "not active". *The proxy had earlier moved from `us-central1` to `europe-west1`; corrected 2026-08-19, superseded 2026-08-31.*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
+| 1 | Google (Firebase / Google Cloud) — [EXACT CONTRACTING ENTITY TO CONFIRM] | Hosting, Realtime Database, Authentication, Cloud Functions, Cloud Storage | All data in Annex I §5 | Database in `europe-west1` (Belgium). ⚠️ **The language-model proxy is no longer a Google Cloud Function at all** — the project's billing trial closed on 2026-08-27 and was not renewed, so Cloud Functions v2 (which require a Blaze plan) cannot run. The language-model proxy moved to Scaleway `fr-par`, row #7. The mail function was removed on 2026-09-24 (see row #6). *The proxy had earlier moved from `us-central1` to `europe-west1`; corrected 2026-08-19, superseded 2026-08-31.*; the private archive bucket also `europe-west1`; Hosting and reCAPTCHA on Google's **global edge**, which remains the residual non-EEA exposure for this sub-processor | **Candidate cloud exception** (no Art. 28 provision; 外的環境の把握 applies) — [TO VERIFY against the actual Google contract terms with Japanese counsel] |
 | 2 | Google (reCAPTCHA v3 / App Check) — **INACTIVE since 2026-08-21** | Bot resistance | **Nothing.** Consent-gated and never loaded, so it receives no data. Previously: participant IP address and browser signals, on the application page | n/a while inactive; Google, not region-pinned, if re-enabled [TO VERIFY] | [TO VERIFY] |
 | 3 | **Hugging Face** — [EXACT LEGAL ENTITY AND ADDRESS TO CONFIRM] | Inference Providers router for the simulated-patient character | The scenario system prompt plus **participant free-text chat turns** (up to 16 messages / 12,000 characters per call) | Outside the EU [TO VERIFY exact location] | **Art. 28 foreign provision** — it processes the content to generate output, so the cloud exception does not apply |
 | 4 | **The inference provider behind Hugging Face** — **OVHcloud AI Endpoints** (OVH SAS) | Actual model execution | Same as #3 | **Pinned to `ovhcloud`, served from Gravelines, FRANCE — DEPLOYED 2026-08-21.** The running function now sends an explicit provider, so the recipient no longer varies per request. Note the deploy also had to correct `functions/.env`, which is git-ignored and was still naming the previous models: `.env` overrides the code defaults, so deploying without that fix would have paired the old models with the new provider, 404ing every call | **Art. 28 foreign provision.** The recipient becomes nameable when the pin is deployed, which is what Art. 28(2) requires and what this row previously could not supply. **Still not authorised under clause 6.1** — and the reason is no longer the deploy, which happened on 2026-08-21. Pinning names the recipient; it does not by itself produce the contract or the transfer record, and those remain outstanding. The runtime evidence is outstanding too: confirm from `metrics/hfPatient/events` (`provider` field, taken from the `x-inference-provider` response header) that a live turn records `ovhcloud` |
@@ -2339,7 +2342,7 @@ where the data is handled. The countries engaged here are:
 
 | Country | What is handled there | Basis for knowing |
 |---|---|---|
-| **Belgium** (`europe-west1`) | The Realtime Database (all session data), the mail function, the private archive bucket | Verified in config |
+| **Belgium** (`europe-west1`) | The Realtime Database (all session data), the private archive bucket | Verified in config |
 | **United States** (GitHub Actions runners) — *the language-model proxy moved to `europe-west1` on the platform side; corrected 2026-08-19* | The nightly full identified `/sessions` dump and the linkage-table construction | Verified in code |
 | **France, per the provider's own documentation** `[TO VERIFY against contract]` | Hugging Face's downstream inference provider — the **`ovhcloud`** provider, pinned 2026-08-21 where it previously varied per request and was the entry that made this table say *Unidentifiable* | **Two different strengths of evidence, and they should not be conflated.** The PIN is verified in code (`applyProviderPin` appends `:ovhcloud`) and will be confirmed at runtime from the `x-inference-provider` header. The LOCATION and the LEGAL ENTITY are not: `ovhcloud` is an identifier, and Gravelines/OVH SAS comes from the provider's published material, not from a contract or an operator attestation. Obtain both before relying on France in a signed document |
 

@@ -89,8 +89,8 @@ reading, and say so (section 3 does).
 
 **B5 — Resolve the Hugging Face transfer, or turn the AI chat off.**
 ⚠️ **STALE AS OF 2026-08-31 — the `hfPatient` Cloud Function no longer runs at all.** The project left Google's paid plan on 2026-08-27, and Cloud Functions v2 need one; the chat relay moved to **Scaleway `fr-par` (Paris)**. The paragraph below is kept because its reasoning about the Hugging Face leg is unchanged — only the leg BEFORE it moved. Historic text: the `hfPatient` function ran in **`europe-west1`** (verified in
-`functions/index.js` ≈110; it ran in `us-central1` and was moved — corrected
-2026-08-19), **so the Google leg is no longer the problem.** The next hop was
+`functions/index.js`, the `hfPatient` options block's `region:`; it ran in
+`us-central1` and was moved — corrected 2026-08-19), **so the Google leg is no longer the problem.** The next hop was
 the problem, and it has changed: Hugging Face used to route each request onward
 to a provider **whose identity was only visible in the response header after the
 fact**, which made an Art. 13(1)(f) disclosure and Art. 46 safeguards impossible
@@ -687,7 +687,6 @@ Rules</sub>
 | What | Where it goes | Why it leaves | Safeguard we rely on |
 |---|---|---|---|
 | The main database and the private archive bucket | **Belgium** (Google, `europe-west1`) | Hosting | Stays in the EEA |
-| The email function | **Not running.** Cloud Functions need a paid Google plan and the project returned to the free plan on 2026-08-27 | n/a | n/a — the email feature is disabled |
 | **The AI-character chat relay** | **Paris, France** (Scaleway, `fr-par`) — *moved 2026-08-31. It ran in `us-central1`, then Google `europe-west1` (corrected 2026-08-19), and moved again when the project left Google's paid plan. Scaleway was chosen over Cloudflare because a free Cloudflare service cannot be kept in the EU* | Relays the message to Hugging Face; stores nothing | Stays in the EEA. ⚠️ **Scaleway SAS is a NEW recipient — it must be named in §[X] and a DPA signed before this notice is published** |
 | **The AI chat text, onward from Hugging Face** | **OVHcloud AI Endpoints, Gravelines, FRANCE** — pinned since 21 August 2026. Until then it was not identifiable in advance: the router chose one of several providers per request and we only learned which after the reply | The AI character | [TRANSFER MECHANISM — the *naming* half of blocking precondition **B5** is now satisfied; an agreement with the named provider is not, so B5 stays open. If the pin is ever removed, the recipient becomes unnameable again and the chat must be switched off] |
 | The automated deletion, backup and research-export jobs — **including the full identified copy of the session and the file linking pseudonyms back to real names**, which are written to the machine running the job before being stored in Belgium | **GitHub-hosted runners** (United States infrastructure) [TO VERIFY the runner region with the operator] | Automation | [TRANSFER MECHANISM] |
@@ -925,7 +924,7 @@ decision about you.
   and delete the entire database.
 
 **Where your data is handled, for the APPI Art. 32 disclosure.** Your data is
-handled in **Belgium** (the database, the email function and the archive
+handled in **Belgium** (the database and the archive
 bucket, **and the AI-chat function**), in the **United States** (the automation
 runners — the one confirmed US transfer; **not** reCAPTCHA, which is no longer
 loaded), on a **global content-delivery network whose location for these requests
@@ -1024,7 +1023,7 @@ add only if your institution requires it.]
 
 | Who | What they receive | Where | Role |
 |---|---|---|---|
-| **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Storage | Everything in section 2 | Database and storage in **Belgium** (`europe-west1`). **Cloud Functions are no longer used**: the project returned to Google's free plan on 2026-08-27, so the AI-chat relay moved to Scaleway (row below) and the email function is disabled. *Earlier drafts placed the AI-chat function in the United States, then in Belgium* | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
+| **Google (Firebase)** — Hosting, Realtime Database, Authentication, Cloud Storage | Everything in section 2 | Database and storage in **Belgium** (`europe-west1`). **Cloud Functions are no longer used**: the project returned to Google's free plan on 2026-08-27, so the AI-chat relay moved to Scaleway (row below). The platform sends no email. *Earlier drafts placed the AI-chat function in the United States, then in Belgium* | Our processor (via [PLATFORM OPERATOR LEGAL NAME]) |
 | **Scaleway S.A.S.** (8 rue de la Ville l'Évêque, 75008 Paris, France; R.C.S. Paris 433 115 904) — Serverless Functions | Your AI-chat messages, **in transit only**, plus the sign-in token and session/room names used to check room membership | **Paris (`fr-par`)** — inside the EEA | Our processor. Art. 28 contract in force via Scaleway's DPA v1 June 2024, which "forms an integral part of the contract" and needs no separate signature. Named in the published notice since **PIS v4 · 2026-09** |
 | **Google (software libraries)** — the core JavaScript is downloaded from `gstatic.com` on every load of the **application page** and the certificate-verification page (not the privacy or compliance pages) | Your IP address and browser details | [TO VERIFY — served from a global network, not region-pinned] | Content delivery |
 | **Google (Firebase Authentication)** — `identitytoolkit.googleapis.com`, contacted on **every visit**, because the platform signs you in anonymously at startup | Your IP address and browser details at that moment; then, if you create an account, the email address and account identifier it returns | [TO VERIFY — Firebase Authentication is not pinned to a region in this project's configuration, unlike the database. See the EEA → US row in the DPA] | **Authentication, not content delivery.** Listed separately from `gstatic.com` for that reason: it is a Firebase Authentication API, and it falls under the same Google Cloud transfer-mechanism question as the rest of Firebase — not under the software-delivery row above |

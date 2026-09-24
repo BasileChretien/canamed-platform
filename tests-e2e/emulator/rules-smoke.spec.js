@@ -670,8 +670,9 @@ test("rules: the retired mail queue is DENIED to everyone — the session's crea
      not merely unused.
 
      Removing the child rule is only a closure because nothing above it grants
-     a write (tests/no-platform-email.test.js pins that structurally). This test
-     proves it against the real rules. Each denial is paired with an ALLOWED
+     a write — tests/no-platform-email.test.js pins that structurally, for every
+     ancestor in both trees. This test proves it against the real rules, in the
+     sessions tree AND the orgs tree. Each denial is paired with an ALLOWED
      admin write in the same session by the same uid, so a denial cannot be
      explained by the identity not being an admin — only by the path being
      shut. Plain ASCII on purpose (see build-emulator-rules.js on the emulator's
@@ -711,11 +712,24 @@ test("rules: the retired mail queue is DENIED to everyone — the session's crea
   expect(String(byCoFacilitator)).toMatch(/permission_denied|denied/i);
   await ctxB.close();
 
-  // ── 4. Observe: nothing landed ──
+  // ── 4. The org tree had its own mail rule — same closure, same control ──
+  const slug = "org" + Math.floor(Math.random() * 1e6);
+  const orgBase = `orgs/${slug}/sessions/${code}`;
+  expect(await tryWrite(page, `${orgBase}/creatorUid`, uidA)).toBe("ALLOWED");
+  expect(await tryWrite(page, `${orgBase}/adminPasswordHash`, "a".repeat(64))).toBe("ALLOWED");
+  expect(await tryWrite(page, `${orgBase}/teamsLink`, GOOD_URL),
+    "positive control: the creator IS an admin of the org session").toBe("ALLOWED");
+  const inOrg = await tryWrite(page, `${orgBase}/mail/m0`, job);
+  expect(inOrg, "not even the creator may write orgs/{slug}/sessions/{code}/mail").not.toBe("ALLOWED");
+  expect(String(inOrg)).toMatch(/permission_denied|denied/i);
+
+  // ── 5. Observe: nothing landed in either tree ──
   /* Per the suite's standing rule: assert the DB value, never the verdict
      alone. The owner read is for OBSERVATION only. */
   expect(await dbReadAsOwner(`sessions/${code}/mail`),
     "no mail job may exist under the session").toBeNull();
+  expect(await dbReadAsOwner(`${orgBase}/mail`),
+    "no mail job may exist under the org session").toBeNull();
 });
 
 test("rules: the three session links are admin-gated and https-validated", async ({ page, browser }) => {

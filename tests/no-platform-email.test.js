@@ -46,17 +46,37 @@ test("no mail sender, mail params or SMTP client in the functions codebase", () 
 });
 
 test("there is no mail queue in either session tree of the database rules", () => {
-  const session = RULES.rules.sessions.$sessionId;
-  const orgSession = RULES.rules.orgs.$orgSlug.sessions.$sessionId;
+  const r = RULES.rules;
+  const session = r.sessions.$sessionId;
+  const orgSession = r.orgs.$orgSlug.sessions.$sessionId;
   assert.ok(!("mail" in session), "sessions/$sessionId/mail must not be ruled open");
   assert.ok(!("mail" in orgSession), "orgs/$orgSlug/sessions/$sessionId/mail must not be ruled open");
-  /* Removing the child rule only closes the path because nothing above it
-     grants a write. If a session-level .write or a $wildcard ever appears,
-     sessions/<code>/mail would silently become writable again. */
-  assert.ok(!(".write" in session) && !Object.keys(session).some(k => k.startsWith("$")),
-    "a session-level .write or $wildcard would re-open sessions/<code>/mail");
-  assert.ok(!(".write" in orgSession) && !Object.keys(orgSession).some(k => k.startsWith("$")),
-    "an org session-level .write or $wildcard would re-open the org mail path");
+});
+
+test("nothing above either old mail path grants a write that would re-open it", () => {
+  /* Deleting the child rule only closes sessions/<code>/mail because no
+     ANCESTOR grants a write — RTDB rules cascade, so a .write anywhere on the
+     path would re-open it, and a $wildcard sibling in the session node would
+     match "mail" itself. Check every level of both trees, not just the parent. */
+  const r = RULES.rules;
+  const grants = (node) => (".write" in node) && node[".write"] !== false && node[".write"] !== "false";
+  const ancestors = [
+    ["rules", r],
+    ["sessions", r.sessions],
+    ["sessions/$sessionId", r.sessions.$sessionId],
+    ["orgs", r.orgs],
+    ["orgs/$orgSlug", r.orgs.$orgSlug],
+    ["orgs/$orgSlug/sessions", r.orgs.$orgSlug.sessions],
+    ["orgs/$orgSlug/sessions/$sessionId", r.orgs.$orgSlug.sessions.$sessionId]
+  ];
+  for (const [where, node] of ancestors) {
+    assert.ok(node && typeof node === "object", where + " must exist in the rules");
+    assert.ok(!grants(node), where + " must not carry a .write grant — it would cascade to .../mail");
+  }
+  for (const [where, node] of [ancestors[2], ancestors[6]]) {
+    assert.ok(!Object.keys(node).some(k => k.startsWith("$")),
+      where + " must not have a $wildcard child — it would match \"mail\"");
+  }
 });
 
 test("the admin tools no longer expose an enqueue helper", () => {
