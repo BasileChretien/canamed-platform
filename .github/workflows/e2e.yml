@@ -93,7 +93,7 @@ jobs:
     # runs the suite against browsers built for a different Playwright, which
     # fails confusingly at launch. `tests/e2e-container-version.test.js` pins
     # the two together so drift fails a fast unit test instead of the matrix.
-    container: mcr.microsoft.com/playwright:v1.62.1-noble
+    container: mcr.microsoft.com/playwright:v1.63.0-noble
     strategy:
       fail-fast: false
       matrix:
