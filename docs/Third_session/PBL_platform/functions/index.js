@@ -1,10 +1,13 @@
 /* CANAMED Cloud Functions — Gen 2 (firebase-functions v2 API).
  *
- * Two functions live in this codebase:
- *   1. sendQueuedMail — dormant transactional-email pipeline (consent-gated
- *      revisit reminders). Stays disabled until institutional approval.
- *   2. hfPatient — Module A LLM-patient broker. Calls Hugging Face Inference
- *      Providers; dormant until MODA_LLM_ENABLED=true.
+ * One function lives in this codebase:
+ *   hfPatient — Module A LLM-patient broker. Calls Hugging Face Inference
+ *   Providers; dormant until MODA_LLM_ENABLED=true.
+ *
+ * (sendQueuedMail, the dormant transactional-email pipeline, was removed
+ * 2026-09-24: the platform does not send email — facilitators share the
+ * revisit link themselves. A copy still deployed from before can be deleted
+ * with `firebase functions:delete sendQueuedMail --region europe-west1`.)
  *
  * Migrated from v1 → v2 on 2026-05-28. Reasons:
  *   - Cloud Functions Gen 1 caps at Node 20 (decommissioned 2026-10-30);
@@ -24,22 +27,20 @@
  *     room-membership check below is the boundary that always applies.
  *   - Room membership enforced per call (_verifyMembership): the caller's
  *     session-level roomOf/<uid> claim must name the room they claim to be in.
- *   - HF token + SMTP password in Google Secret Manager (never in .env,
- *     never in source). Bound per-function via `secrets: [...]`.
- *   - Non-secret config (MODA_LLM_ENABLED, SMTP_HOST, etc.) via
+ *   - HF token in Google Secret Manager (never in .env, never in source).
+ *     Bound per-function via `secrets: [...]`.
+ *   - Non-secret config (MODA_LLM_ENABLED, HF_MODEL, etc.) via
  *     defineString / defineBoolean — set in functions/.env or per-project
  *     functions/.env.<projectId>.
  *   - Counters-only metrics; never the user text or patient reply.
  */
 "use strict";
 
-const { onValueCreated } = require("firebase-functions/v2/database");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { defineString, defineSecret, defineBoolean, defineInt } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
-const nodemailer = require("nodemailer");
 
 // Force Node 22 explicitly. Without this, firebase-tools v13.x defaults Gen 2
 // functions to Node 20 even when package.json says engines.node="22" — the
@@ -49,108 +50,6 @@ const nodemailer = require("nodemailer");
 setGlobalOptions({ runtime: "nodejs22" });
 
 initializeApp();
-
-/* ============================================================================
- * sendQueuedMail — consent-gated transactional email (DORMANT by default).
- *
- * When an admin enqueues a mail job at /sessions/<code>/mail/<id> (e.g. a
- * spaced-reinforcement "revisit your retention quiz" reminder to a participant
- * who opted in), this function sends it via SMTP and records the delivery
- * state back on the node. Idempotent — skips anything already delivered.
- * ========================================================================== */
-
-const EMAIL_ENABLED = defineBoolean("EMAIL_ENABLED", { default: false });
-const SMTP_HOST     = defineString("SMTP_HOST", { default: "" });
-const SMTP_USER     = defineString("SMTP_USER", { default: "" });
-const SMTP_PASS     = defineSecret("SMTP_PASS");   // password in Secret Manager
-const SMTP_PORT     = defineString("SMTP_PORT", { default: "587" });
-const SMTP_FROM     = defineString("SMTP_FROM", { default: "CANAMED <no-reply@example.org>" });
-
-function buildTransport() {
-  const host = SMTP_HOST.value();
-  const user = SMTP_USER.value();
-  const pass = SMTP_PASS.value();
-  const port = Number(SMTP_PORT.value() || 587);
-  if (!host || !user || !pass) return null;
-  return nodemailer.createTransport({
-    host: host,
-    port: port,
-    secure: port === 465,              // 465 = implicit TLS; 587 = STARTTLS
-    auth: { user: user, pass: pass }
-  });
-}
-
-function fromAddress() {
-  return SMTP_FROM.value() || "CANAMED <no-reply@example.org>";
-}
-
-function emailEnabled() {
-  return EMAIL_ENABLED.value() === true;
-}
-
-// FINDING-05 (2026-05-30 review): job.html is admin-written but was passed to
-// nodemailer unsanitised — a compromised admin session could inject phishing
-// HTML into transactional emails. Sanitise with a tight allowlist (basic
-// formatting + https/mailto links only; scripts, styles, iframes, on* handlers,
-// and javascript:/data: URLs are discarded).
-const sanitizeHtml = require("sanitize-html");
-const EMAIL_HTML_OPTS = {
-  allowedTags: ["a", "b", "strong", "i", "em", "u", "br", "p", "div", "span",
-    "ul", "ol", "li", "h1", "h2", "h3", "h4", "table", "thead", "tbody", "tr",
-    "td", "th", "hr", "blockquote", "img"],
-  allowedAttributes: { a: ["href"], img: ["src", "alt", "width", "height"] },
-  allowedSchemes: ["https"],
-  allowedSchemesByTag: { img: ["https"] },
-  allowProtocolRelative: false,
-  disallowedTagsMode: "discard"
-};
-
-exports.sendQueuedMail = onValueCreated({
-  ref: "/sessions/{code}/mail/{id}",
-  region: "europe-west1",        // co-located with the trigger (EU-resident data)
-  runtime: "nodejs22",           // explicit override; setGlobalOptions can be ignored on `update` ops
-  secrets: [SMTP_PASS]
-}, async (event) => {
-  const snap = event.data;
-  const job = snap.val() || {};
-  // Skip malformed or already-processed jobs (idempotent on retries).
-  if (!job.to || !job.subject || job.delivery) return null;
-
-  // APPROVAL GATE: email is DISABLED until an operator deliberately opts in
-  // (after institutional sign-off). Set EMAIL_ENABLED=true in functions/.env.
-  if (!emailEnabled()) {
-    await snap.ref.child("delivery").set({
-      state: "disabled", at: Date.now(),
-      error: "Email feature disabled (pending institutional approval)"
-    });
-    return null;
-  }
-
-  const transport = buildTransport();
-  if (!transport) {
-    await snap.ref.child("delivery").set({
-      state: "error", at: Date.now(), error: "SMTP not configured"
-    });
-    return null;
-  }
-
-  try {
-    await transport.sendMail({
-      from: fromAddress(),
-      to: String(job.to),
-      subject: String(job.subject),
-      text: job.text ? String(job.text) : "",
-      html: job.html ? sanitizeHtml(String(job.html), EMAIL_HTML_OPTS) : undefined
-    });
-    await snap.ref.child("delivery").set({ state: "sent", at: Date.now() });
-  } catch (e) {
-    await snap.ref.child("delivery").set({
-      state: "error", at: Date.now(),
-      error: String((e && e.message) || e).slice(0, 300)
-    });
-  }
-  return null;
-});
 
 /* ============================================================================
  * hfPatient — HTTPS callable that voices Mr Lefebvre via Hugging Face
@@ -368,8 +267,8 @@ function _extractContent(j) {
 }
 
 exports.hfPatient = onCall({
-  // EEA-resident, matching every other data path (RTDB, Cloud Storage,
-  // sendQueuedMail). Moved from us-central1 on 2026-07-24: routing
+  // EEA-resident, matching every other data path (RTDB, Cloud Storage).
+  // Moved from us-central1 on 2026-07-24: routing
   // participants' free-text chat through a US region added a transfer to a
   // country that is NOT on Japan's APPI Art. 28 equivalent-protection list
   // (which covers only the EEA and the UK), for no functional benefit. The

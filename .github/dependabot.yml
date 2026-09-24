@@ -82,9 +82,10 @@ updates:
       prefix: "chore(deps)"
       include: "scope"
 
-  # Cloud Functions have their OWN package.json (nodemailer, firebase-admin,
-  # sanitize-html) — watched separately so the functions tree gets auto-bumps
-  # too (added 2026-05-30 after a security review flagged a stale nodemailer).
+  # Cloud Functions have their OWN package.json (firebase-admin,
+  # firebase-functions) — watched separately so the functions tree gets
+  # auto-bumps too (added 2026-05-30 after a security review flagged a stale
+  # nodemailer; the email function and its deps were removed 2026-09-24).
   - package-ecosystem: "npm"
     directory: "/docs/Third_session/PBL_platform/functions"
     schedule:

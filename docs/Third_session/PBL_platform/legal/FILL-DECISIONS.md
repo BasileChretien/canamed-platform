@@ -140,7 +140,7 @@ All verified against the code/live system on 2026-07-24:
 | Sign-in providers | **Google; email + password** | `script.js` |
 | Notice version | **PIS-v2-2026-05** | `CONSENT_NOTICE_VERSION` |
 | Certificate retention cap | **~5 years** | `credentials/$certId.retentionUntil` rule |
-| Sub-processors | **Google Firebase** (hosting, RTDB, auth, functions); **Hugging Face, Inc.** (AI patient); **[SMTP PROVIDER — confirm from `functions/`]** | code |
+| Sub-processors | **Google Firebase** (hosting, RTDB, auth, functions); **Hugging Face, Inc.** (AI patient). *No SMTP provider — the platform sends no email (mail function removed 2026-09-24).* | code |
 
 ⚠️ The **`[RETENTION PERIOD CHOSEN BY THE CONTROLLER]`** slots must use 30/90 days.
 **(Gap L3 is CLOSED: the live notice published 7 days, contradicting the code, and

@@ -133,7 +133,7 @@ and Scaleway Art. 5.3.3 require.
 | 3 | Hugging Face | Inference router for the simulated patient | Outside the EEA `[TO VERIFY]` |
 | 4 | OVHcloud AI Endpoints (OVH SAS) | Executes the language model | Gravelines, **France** |
 | 5 | **GitHub, Inc.** | Runs the scheduled jobs P3, P5, P7, P8 on Actions runners | **United States** |
-| 6 | [SMTP PROVIDER] | Transactional e-mail | Not active — the mail function cannot run on the current plan |
+| 6 | *(none — removed 2026-09-24)* | ~~Transactional e-mail~~ | The platform sends no email; the mail function was removed. Row kept so later rows keep their numbers. |
 | 7 | **Scaleway S.A.S.** — 8 rue de la Ville l'Évêque, 75008 Paris; R.C.S. Paris 433 115 904 | **Two purposes:** (a) Serverless Functions hosting the simulated-patient relay (P2); (b) **Object Storage holding the P4 backup and the P5 export, including the linkage table** | **`fr-par` (Paris), France — inside the EEA** |
 
 **Row 7 is the entry Scaleway's Art. 5.3.3 requires.** Its Art. 28 contract is

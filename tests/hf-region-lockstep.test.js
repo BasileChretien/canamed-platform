@@ -26,8 +26,9 @@ const P = path.join(__dirname, "..", "docs", "Third_session", "PBL_platform");
 const FUNCS = fs.readFileSync(path.join(P, "functions", "index.js"), "utf8");
 const INIT = fs.readFileSync(path.join(P, "modA-llm-init.js"), "utf8");
 
-/* The `region:` that belongs to the hfPatient onCall options block (the file
-   also declares a region for sendQueuedMail, so slice from the export). */
+/* The `region:` that belongs to the hfPatient onCall options block — sliced
+   from the export so a region declared by any other function added to the
+   file later can't be picked up instead. */
 function hfPatientRegion(src) {
   const at = src.indexOf("exports.hfPatient = onCall({");
   assert.notStrictEqual(at, -1, "could not find the hfPatient onCall block");
