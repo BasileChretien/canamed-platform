@@ -7,7 +7,8 @@
  * backend is wired:
  *
  *   ref(path).set(val) / .remove() / .push(val) / .once()
- *   ref(path).on(event, cb) / .off()   — "value" and "child_added" events
+ *   ref(path).on(event, cb) / .off()   — "value", "child_added" and
+ *                                        "child_removed" events
  *   ref(path).transaction(fn)
  *   ref(path).onDisconnect().remove() / .cancel()
  *   ref(path).child(sub)
@@ -149,18 +150,35 @@
     // in Firebase key order — push() keys embed a base36 timestamp, so key
     // order is chronological across different milliseconds (same-ms pushes
     // tie-break on the random suffix; the chat's two turns per submit are
-    // separated by an async boundary, so this never bites there). NB `seen`
-    // only ever GROWS: a child removed and later re-added under the same key
-    // will NOT re-fire (this shim has no child_removed) — fine for append-only
-    // lists like the chat, a trap for mutable ones.
+    // separated by an async boundary, so this never bites there).
+    //
+    // "child_removed" (2026-09-24) fires once per child that disappears, with
+    // that child's LAST value, and never for children present at subscribe
+    // time. `seen` forgets a removed key, so a child removed and re-added under
+    // the SAME key fires child_added again — Firebase semantics, and exactly
+    // what the web SDK does to a rules-refused write: applied locally, then
+    // reverted (the chat's update() and fallback set() gave added/removed/
+    // added/removed on the emulator). Until then `seen` only ever grew.
     _deliver(sub) {
-      if (sub.event === "child_added") {
+      if (sub.event === "child_added" || sub.event === "child_removed") {
         const node = this._getAt(this._read(), sub.path);
-        if (node === null || typeof node !== "object") return;
-        Object.keys(node).sort(compareKeys).forEach((k) => {
+        const kids = (node !== null && typeof node === "object") ? node : {};
+        const has = (k) => Object.prototype.hasOwnProperty.call(kids, k);
+        if (sub.event === "child_removed") {
+          Object.keys(sub.known).forEach((k) => {
+            if (has(k)) return;
+            const last = sub.known[k];
+            delete sub.known[k];   // BEFORE cb: a re-entrant write must not re-fire it
+            sub.cb(makeSnap(k, last));
+          });
+          Object.keys(kids).forEach((k) => { sub.known[k] = kids[k]; });
+          return;
+        }
+        Object.keys(sub.seen).forEach((k) => { if (!has(k)) delete sub.seen[k]; });
+        Object.keys(kids).sort(compareKeys).forEach((k) => {
           if (Object.prototype.hasOwnProperty.call(sub.seen, k)) return;
           sub.seen[k] = true;   // mark BEFORE cb: a re-entrant write must not re-fire it
-          sub.cb(makeSnap(k, node[k]));
+          sub.cb(makeSnap(k, kids[k]));
         });
         return;
       }
@@ -208,6 +226,9 @@
       // can't collide with Object.prototype (same hardening rule as the
       // pseudonymiser's name maps).
       if (event === "child_added") sub.seen = Object.create(null);
+      // child_removed: the children known so far, with their last values. The
+      // initial delivery below only records them — nothing is removed yet.
+      if (event === "child_removed") sub.known = Object.create(null);
       this._db._subs.push(sub);
       this._mine.push(sub);
       // Initial delivery: "value" fires with the current whole-path value;

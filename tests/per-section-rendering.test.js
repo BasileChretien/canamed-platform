@@ -135,7 +135,8 @@ test("a NEW reply in the visible thread is typed word by word; replays and reduc
   assert.match(child, /var fresh = t\.role === "assistant" && Number\(t\.at \|\| 0\) >= initStartedAt;/);
   assert.match(child, /fresh && who === activeId/, "only the visible thread animates");
   const rebuild = fnOf(INIT, "_rebuildForSlot");
-  assert.match(rebuild, /_renderTurn\(_threadEl\(who\), t\.role, t\.content\);/, "a slot replay renders whole");
+  // Three arguments — no `animate` — inside the key tag (child_removed, 2026-09-24).
+  assert.match(rebuild, /_tagTurn\(_renderTurn\(_threadEl\(who\), t\.role, t\.content\), t\.__key\);/, "a slot replay renders whole");
   const tw = fnOf(INIT, "_typewrite");
   assert.match(tw, /bub\.classList\.add\("is-typing"\)/);
   assert.match(tw, /bub\.classList\.remove\("is-typing"\)/);

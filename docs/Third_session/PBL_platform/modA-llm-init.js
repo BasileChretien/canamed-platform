@@ -325,6 +325,15 @@
       bub.textContent = content;
       host.scrollTop = host.scrollHeight;
     }
+    return bub;
+  }
+
+  /* Tag a rendered turn with its store key, so a turn the store takes back
+     (child_removed — a rules-refused write reverted by the SDK) can be found
+     and taken off the screen. */
+  function _tagTurn(bub, key) {
+    if (bub && key) bub.setAttribute("data-turn-key", String(key));
+    return bub;
   }
 
   function _setStatus(el, text, kind) {
@@ -756,6 +765,7 @@
     function _onChatChild(snap) {
       var t = snap.val();
       if (!t || !t.role || !t.content) return;
+      t.__key = snap.key;   // so child_removed can take it out of this cache
       turns.push(t);
       // Another section's conversation: kept for when the student walks there,
       // not shown now, and not flagged — a reply there is not "unread" here.
@@ -766,7 +776,7 @@
       // Only a reply that is NEW (not a replay) and in the VISIBLE thread is
       // typed out; everything else renders whole.
       var fresh = t.role === "assistant" && Number(t.at || 0) >= initStartedAt;
-      _renderTurn(_threadEl(who), t.role, t.content, fresh && who === activeId);
+      _tagTurn(_renderTurn(_threadEl(who), t.role, t.content, fresh && who === activeId), t.__key);
       _keepWaitingLast(_threadEl(who));
       // If the patient answered while the student is on the Examination /
       // Investigations tab, dot the Dialogue tab so the reply isn't missed.
@@ -777,7 +787,27 @@
       }
       // Seed the local context ring lazily — bridge has its own copy.
     }
+    /* A turn the store takes back. In production that is a write the rules
+       REFUSED: the SDK applies it locally (child_added, so it rendered) and
+       reverts it when the server says no (child_removed). This client's
+       update() and its fallback set() are two refused writes, so without this
+       a reply refused after "End session" showed TWICE and never left. Drop it
+       from the replay cache (or a section rebuild brings it back) and from the
+       screen. Matched by attribute VALUE — never a selector built from a key. */
+    function _onChatRemoved(snap) {
+      var key = snap && snap.key;
+      if (!key) return;
+      for (var i = turns.length - 1; i >= 0; i--) {
+        if (turns[i] && turns[i].__key === key) turns.splice(i, 1);
+      }
+      var tagged = transcriptEl.querySelectorAll("[data-turn-key]");
+      for (var j = 0; j < tagged.length; j++) {
+        var el = tagged[j];
+        if (el.getAttribute("data-turn-key") === key && el.parentNode) el.parentNode.removeChild(el);
+      }
+    }
     refs.chat.on("child_added", _onChatChild);
+    refs.chat.on("child_removed", _onChatRemoved);
 
     /* Show another slot's conversations: drop every thread and badge, replay
        that slot's cached turns (no badges — a replay is not news), and let the
@@ -788,7 +818,7 @@
         var t = turns[i];
         if (_slotOf(t) !== activeSlotId) continue;
         var who = t.character ? String(t.character) : _defaultId();
-        _renderTurn(_threadEl(who), t.role, t.content);
+        _tagTurn(_renderTurn(_threadEl(who), t.role, t.content), t.__key);
       }
       /* Emptying the transcript took a pending turn's dots with it. They belong
          to the section the question was ASKED in: back below that question
@@ -1155,6 +1185,7 @@
       inputEl.disabled = true;
       sendEl.disabled = true;
       var askedId = activeId;
+      var askedSlot = activeSlotId;
       _setStatus(statusEl, _thinkingFor(askedId), "pending");
       transcriptEl.setAttribute("aria-busy", "true");
 
@@ -1179,7 +1210,11 @@
         // Point-of-action feedback for any points the question just scored
         // (or cost). Runs on the fallback path too — scoring is local + already
         // applied, so the team still earns the points even if the LLM was down.
-        _showScoreFeedback(res, _threadEl((res && res.character) || activeId));
+        // The chip goes in the thread of the character who was ASKED, and only
+        // while the student is still on the section it was asked in: the thread
+        // on screen after a section change belongs to another section (and the
+        // next rebuild would drop the chip anyway). The toast still reports it.
+        _showScoreFeedback(res, activeSlotId === askedSlot ? _threadEl((res && res.character) || askedId) : null);
       }).catch(function (err) {
         _stopWaiting();
         _setStatus(statusEl, _t("modA.chat.error",
@@ -1223,6 +1258,7 @@
       awardedSubs = {};
       try { window.removeEventListener("canamed:slotchange", _onSlotChange); } catch (_) {}
       try { refs.chat.off("child_added", _onChatChild); } catch (_) {}
+      try { refs.chat.off("child_removed", _onChatRemoved); } catch (_) {}
       try { formEl.removeEventListener("submit", _onSubmit); } catch (_) {}
       try { inputEl.removeEventListener("keydown", _onKeydown); } catch (_) {}
       try { window.removeEventListener("canamed:langchange", _onLangChange); } catch (_) {}
