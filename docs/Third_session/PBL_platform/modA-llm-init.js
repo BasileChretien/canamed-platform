@@ -907,6 +907,9 @@
              "…is thinking" and then nothing. Say so where they are looking. */
           if (p && typeof p["catch"] === "function") {
             p["catch"](function () {
+              /* Refused because the session HAS ended (a reply that landed
+                 after "End session"): say that, not "may have ended". */
+              if (window.CANAMED_SESSION_CLOSED) { _applyClosedState(); return; }
               _setStatus(statusEl, _t("modA.chat.save-failed",
                 "Your message could not be saved — this session may have ended. Reload to check."), "error");
             });

@@ -63,8 +63,11 @@ test("the chat locks on the closed flag at mount and on the event, and refuses a
 test("a refused turn write surfaces a status line instead of vanishing", () => {
   const at = INIT.indexOf("persistTurn: function (role, content, characterId, slot) {");
   assert.ok(at > 0);
-  const f = INIT.slice(at, at + 2600);
-  assert.match(f, /p\["catch"\]\(function \(\) \{\s*_setStatus\(statusEl, _t\("modA\.chat\.save-failed"/,
+  const f = INIT.slice(at, at + 2800);
+  /* A refusal in a session known to be CLOSED shows the closed message instead
+     (#413 — tests/modA-chat-wait-feedback.test.js pins that ordering); every
+     other refusal must still reach the status line as save-failed. */
+  assert.match(f, /p\["catch"\]\(function \(\) \{[\s\S]{0,400}?_setStatus\(statusEl, _t\("modA\.chat\.save-failed"/,
     "the fallback set's rejection must reach the status line");
 });
 

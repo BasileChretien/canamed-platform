@@ -277,3 +277,16 @@ test("init: returning to the section a question was asked in brings its dots bac
     /if \(waiting && waiting\.slot === activeSlotId\) _threadEl\(waiting\.askedId\)\.appendChild\(waiting\.bubble\);/,
     "the rebuild empties the transcript; only the asked section gets the dots back");
 });
+
+test("init: a turn refused because the session closed keeps the closed message, not \"may have ended\"", () => {
+  /* In production the rules refuse roomChat writes once `closed` exists, so a
+     reply landing after "End session" takes the refused-write path. LOCAL mode
+     has no rules, so no e2e can reach this branch — pinned here. */
+  const at = INIT.indexOf('p["catch"](function () {');
+  assert.ok(at > 0, "the refused-write handler must exist");
+  const handler = INIT.slice(at, at + 700);
+  const closedAt = handler.indexOf("if (window.CANAMED_SESSION_CLOSED) { _applyClosedState(); return; }");
+  const failedAt = handler.indexOf('_t("modA.chat.save-failed"');
+  assert.ok(closedAt > 0 && failedAt > closedAt,
+    "the closed state must win over the generic save-failed message");
+});
