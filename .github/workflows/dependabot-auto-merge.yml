@@ -28,19 +28,30 @@
 # tests/dependabot-auto-merge.test.js.
 #
 # Setup (one-time, repo owner): a GitHub App with repository permissions
-# Contents, Pull requests and Workflows set to read & write, installed on
-# this repo only. Store its Client ID and a private key (.pem) as
-# **Dependabot** secrets (Settings → Secrets and variables → Dependabot),
-# NOT Actions secrets. Dependabot-triggered runs can only read that store:
+# Contents and Pull requests set to read & write, installed on this repo
+# only. Store its Client ID and a private key (.pem) as **Dependabot**
+# secrets (Settings → Secrets and variables → Dependabot), NOT Actions
+# secrets. Dependabot-triggered runs can only read that store:
 #   AUTOMERGE_APP_CLIENT_ID, AUTOMERGE_APP_PRIVATE_KEY
-# Without them the job falls back to GITHUB_TOKEN (the old behaviour) and
-# leaves a warning on the run.
+#
+# Failure handling, deliberately asymmetric:
+#   - Secrets NOT set (forks, or before setup): fall back to GITHUB_TOKEN,
+#     i.e. the old behaviour, and leave a warning on the run.
+#   - Secrets set but the token can't be minted (rotated key, wrong Client
+#     ID, App uninstalled): the job fails red and arms nothing. The PR then
+#     waits for a manual merge, which runs main's CI. A broken key must not
+#     quietly bring back the unchecked merges this change removes.
+#
+# No `workflows` permission: github-actions bumps edit .github/workflows/*,
+# yet #187, #214 and #352 auto-merged without it. If one ever sticks with
+# a workflows-permission error, grant Workflows on the App and add
+# `permission-workflows: write` below.
 #
 # Security: triggered on `pull_request` (not pull_request_target) and the
 # job never checks out or runs PR code, so neither token is ever exposed to
-# untrusted code. GITHUB_TOKEN permissions are scoped to exactly what
-# `gh pr merge --auto` needs; the App token is minted with the same scope
-# plus `workflows` and expires within the hour.
+# untrusted code. Both tokens are scoped to exactly what `gh pr merge
+# --auto` needs; the App token expires within the hour. The token action
+# holds the App key, so it is pinned to a commit (Dependabot bumps it).
 
 name: Dependabot auto-merge
 
@@ -54,12 +65,12 @@ jobs:
   auto-merge:
     name: Enable auto-merge
     runs-on: ubuntu-latest
-    # Dependabot's own events only (open, rebase, recreate). Those runs read
-    # the Dependabot secrets store, where the App key lives. A maintainer's
-    # "Update branch" also fires pull_request, but it reads the Actions
-    # store instead: it would fall back to GITHUB_TOKEN and re-enable
+    # Dependabot's own events only (open, rebase, recreate, re-run). Those
+    # runs read the Dependabot secrets store, where the App key lives. A
+    # maintainer's "Update branch" also fires pull_request, but it reads the
+    # Actions store instead: it would fall back to GITHUB_TOKEN and re-enable
     # auto-merge as github-actions, undoing the fix. Auto-merge survives a
-    # branch update, so skipping that run loses nothing.
+    # branch update by anyone with write access, so skipping loses nothing.
     if: >-
       github.event.pull_request.user.login == 'dependabot[bot]' &&
       github.actor == 'dependabot[bot]'
@@ -72,21 +83,27 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Apply merge policy
+        id: policy
+        # Auto-merge unless it is a non-actions semver-major bump.
+        # github-actions majors are allowed; npm majors are held for
+        # manual review. The expression is a plain boolean.
+        run: >-
+          echo "arm=${{ steps.meta.outputs.update-type != 'version-update:semver-major' ||
+          steps.meta.outputs.package-ecosystem == 'github_actions' }}" >> "$GITHUB_OUTPUT"
+
       - name: Mint merge token (GitHub App)
         id: app
-        if: env.HAS_APP == 'true'
-        uses: actions/create-github-app-token@v3
+        if: steps.policy.outputs.arm == 'true' && env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ secrets.AUTOMERGE_APP_CLIENT_ID }}
           private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
           permission-contents: write
           permission-pull-requests: write
-          # github-actions bumps edit .github/workflows/*; merging them needs
-          # this, and GITHUB_TOKEN can never be granted it.
-          permission-workflows: write
 
       - name: Warn that main CI will not run for this merge
-        if: env.HAS_APP != 'true'
+        if: steps.policy.outputs.arm == 'true' && env.HAS_APP != 'true'
         run: >-
           echo "::warning title=Auto-merge using GITHUB_TOKEN::The
           AUTOMERGE_APP_CLIENT_ID / AUTOMERGE_APP_PRIVATE_KEY Dependabot
@@ -95,12 +112,7 @@ jobs:
           the top of dependabot-auto-merge.yml."
 
       - name: Enable auto-merge
-        # Auto-merge unless it is a non-actions semver-major bump.
-        # github-actions majors are allowed; npm majors are held for
-        # manual review.
-        if: >-
-          steps.meta.outputs.update-type != 'version-update:semver-major' ||
-          steps.meta.outputs.package-ecosystem == 'github_actions'
+        if: steps.policy.outputs.arm == 'true'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

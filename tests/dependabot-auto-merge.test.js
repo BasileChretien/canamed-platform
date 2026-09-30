@@ -28,13 +28,13 @@ const WF = fs.readFileSync(
 );
 /* CRLF in a Windows checkout: split on /\r?\n/ or the guards match nothing. */
 const LINES = WF.split(/\r?\n/);
-const code = LINES.filter((l) => !/^\s*#/.test(l)).join("\n");
+const SECRET_ID = "AUTOMERGE_APP_CLIENT_ID";
+const SECRET_KEY = "AUTOMERGE_APP_PRIVATE_KEY";
 
-/* The body of one step, from its `- name:` line to the next step. */
-function step(name) {
-  const start = LINES.findIndex((l) => l.trim() === "- name: " + name);
-  assert.ok(start >= 0, "step not found: " + name);
-  const indent = LINES[start].indexOf("-");
+/* Lines from `start` up to the next line indented no deeper than `start`,
+   comments dropped: one step, or one multi-line key. */
+function blockFrom(start) {
+  const indent = LINES[start].search(/\S/);
   let end = start + 1;
   while (end < LINES.length) {
     const l = LINES[end];
@@ -44,27 +44,52 @@ function step(name) {
   return LINES.slice(start, end).filter((l) => !/^\s*#/.test(l)).join("\n");
 }
 
+function step(name) {
+  const start = LINES.findIndex((l) => l.trim() === "- name: " + name);
+  assert.ok(start >= 0, "step not found: " + name);
+  return blockFrom(start);
+}
+
+/* A job-level key (4-space indent under `jobs.auto-merge`). */
+function jobKey(key) {
+  const start = LINES.findIndex((l) => l.startsWith("    " + key + ":"));
+  assert.ok(start >= 0, "job key not found: " + key);
+  return blockFrom(start);
+}
+
 test("auto-merge is enabled with the App token, GITHUB_TOKEN only as fallback", () => {
   const s = step("Enable auto-merge");
   assert.match(s, /gh pr merge --auto --squash/);
   assert.match(s, /GH_TOKEN:\s*\$\{\{\s*steps\.app\.outputs\.token\s*\|\|\s*secrets\.GITHUB_TOKEN\s*\}\}/,
     "GH_TOKEN must prefer the App token — a GITHUB_TOKEN merge starts no workflows on main");
+  assert.match(s, /if:\s*steps\.policy\.outputs\.arm == 'true'/);
 });
 
-test("the App token can merge workflow-file bumps", () => {
+test("the token is minted by the step GH_TOKEN reads, from the secrets HAS_APP checks", () => {
   const s = step("Mint merge token (GitHub App)");
-  assert.match(s, /uses:\s*actions\/create-github-app-token@v\d+/);
+  /* Each of these silently empties the token, so GH_TOKEN falls back to
+     GITHUB_TOKEN and main stops getting CI, with every other check green. */
+  assert.match(s, /^\s*id:\s*app\s*$/m, "GH_TOKEN reads steps.app — the mint step must keep id: app");
+  assert.match(s, new RegExp("client-id:\\s*\\$\\{\\{\\s*secrets\\." + SECRET_ID + "\\s*\\}\\}"));
+  assert.match(s, new RegExp("private-key:\\s*\\$\\{\\{\\s*secrets\\." + SECRET_KEY + "\\s*\\}\\}"));
+  assert.match(s, /if:\s*steps\.policy\.outputs\.arm == 'true' && env\.HAS_APP == 'true'/);
+
+  const env = jobKey("env");
+  assert.match(env, new RegExp("HAS_APP:.*secrets\\." + SECRET_ID + " != ''"));
+  assert.match(env, new RegExp("HAS_APP:.*secrets\\." + SECRET_KEY + " != ''"));
+});
+
+test("the App token has the merge scopes and its action is pinned to a commit", () => {
+  const s = step("Mint merge token (GitHub App)");
+  /* This action receives the App private key: a moved tag could leak it. */
+  assert.match(s, /uses:\s*actions\/create-github-app-token@[0-9a-f]{40}\b/);
   assert.match(s, /permission-contents:\s*write/);
   assert.match(s, /permission-pull-requests:\s*write/);
-  /* github-actions ecosystem bumps edit .github/workflows/*; merging those
-     needs `workflows: write`, which GITHUB_TOKEN can never have. */
-  assert.match(s, /permission-workflows:\s*write/);
-  assert.match(s, /if:\s*env\.HAS_APP == 'true'/);
 });
 
 test("missing App secrets degrade to the old behaviour, loudly", () => {
   const s = step("Warn that main CI will not run for this merge");
-  assert.match(s, /if:\s*env\.HAS_APP != 'true'/);
+  assert.match(s, /if:\s*steps\.policy\.outputs\.arm == 'true' && env\.HAS_APP != 'true'/);
   assert.match(s, /::warning /);
 });
 
@@ -74,6 +99,16 @@ test("runs only for Dependabot's own events", () => {
      the Actions store, so it would fall back to GITHUB_TOKEN and re-enable
      auto-merge as github-actions, undoing the fix. Auto-merge survives a
      branch update, so skipping that run loses nothing. */
-  assert.match(code, /github\.event\.pull_request\.user\.login == 'dependabot\[bot\]'/);
-  assert.match(code, /github\.actor == 'dependabot\[bot\]'/);
+  const cond = jobKey("if");
+  assert.match(cond, /github\.event\.pull_request\.user\.login == 'dependabot\[bot\]'/);
+  assert.match(cond, /github\.actor == 'dependabot\[bot\]'/);
+  assert.match(cond, /&&/);
+});
+
+test("the workflow token keeps write scope (Dependabot runs default to read-only)", () => {
+  const top = LINES.findIndex((l) => l === "permissions:");
+  assert.ok(top >= 0, "top-level permissions block missing");
+  const perms = blockFrom(top);
+  assert.match(perms, /contents:\s*write/);
+  assert.match(perms, /pull-requests:\s*write/);
 });
