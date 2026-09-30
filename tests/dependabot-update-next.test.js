@@ -376,14 +376,23 @@ test("workflow: updates with the App token, never GITHUB_TOKEN", () => {
   assert.doesNotMatch(mint, /permission-/);
 });
 
-test("workflow: the App is used only when there is work, the secrets exist and it isn't a dry run", () => {
+test("workflow: updates only when there is work, the secrets exist and it isn't a dry run", () => {
   assert.match(CODE, /HAS_APP:.*secrets\.AUTOMERGE_APP_CLIENT_ID != ''.*secrets\.AUTOMERGE_APP_PRIVATE_KEY != ''/);
-  for (const name of ["Mint update token (GitHub App)", "Update the oldest behind Dependabot PR"]) {
-    const s = step(name);
-    assert.match(s, /steps\.plan\.outputs\.queue != ''/, name);
-    assert.match(s, /env\.HAS_APP == 'true'/, name);
-    assert.match(s, /github\.event\.inputs\.dry_run != 'true'/, name);
-  }
+  const s = step("Update the oldest behind Dependabot PR");
+  assert.match(s, /steps\.plan\.outputs\.queue != ''/);
+  assert.match(s, /env\.HAS_APP == 'true'/);
+  assert.match(s, /github\.event\.inputs\.dry_run != 'true'/);
+
+  /* The token is minted when there is work, or on a dry run so the App's
+     credentials can be proven before a Dependabot PR depends on them. */
+  const mint = step("Mint update token (GitHub App)");
+  assert.match(mint, /env\.HAS_APP == 'true' &&\s*\(steps\.plan\.outputs\.queue != '' \|\| github\.event\.inputs\.dry_run == 'true'\)/);
+  const check = step("Check the App token (dry run)");
+  assert.match(check, /if:\s*env\.HAS_APP == 'true' && github\.event\.inputs\.dry_run == 'true'/);
+  assert.match(check, /GH_TOKEN:\s*\$\{\{\s*steps\.app\.outputs\.token\s*\}\}/);
+  assert.match(check, /gh api installation\/repositories/);
+  assert.doesNotMatch(check, /update-branch|pr comment/, "a dry run must not change anything");
+
   const skip = step("Skip without the App");
   assert.match(skip, /env\.HAS_APP != 'true'/);
   assert.match(skip, /::notice /);
