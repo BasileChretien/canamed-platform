@@ -33,6 +33,10 @@
 # secrets (Settings → Secrets and variables → Dependabot), NOT Actions
 # secrets. Dependabot-triggered runs can only read that store:
 #   AUTOMERGE_APP_CLIENT_ID, AUTOMERGE_APP_PRIVATE_KEY
+# dependabot-update-next.yml uses the same App from push and schedule
+# events, so it reads the Actions store: add the same two values there as
+# well. It also works best with Workflows: read and write on the App (see
+# its header); this workflow's token never requests that scope.
 #
 # Failure handling, deliberately asymmetric:
 #   - Secrets NOT set (forks, or before setup): fall back to GITHUB_TOKEN,
