@@ -5,41 +5,53 @@
 # where auto-merge waits forever. Dependabot rebases only on conflicts. On
 # 2026-09-28 #415, #417 and #418 sat behind for two days this way.
 #
-# On every push to main this updates ONE behind Dependabot PR, the oldest, and
-# waits while an up-to-date one is still running CI. When that PR merges, its
-# push to main runs this again for the next. The selection logic lives in
-# scripts/ops/dependabot-update-next.js; both are guarded by
-# tests/dependabot-update-next.test.js.
+# This updates ONE behind Dependabot PR, the oldest, and waits while an
+# up-to-date one is still running CI. When that PR merges, its push to main
+# runs this again for the next. The hourly schedule catches the links that
+# end without a merge (a failed or cancelled CI run, a green PR that doesn't
+# merge). The logic lives in scripts/ops/dependabot-update-next.js; both are
+# guarded by tests/dependabot-update-next.test.js.
 #
 # WHY THE APP TOKEN, AND NO GITHUB_TOKEN FALLBACK: a push made with
 # GITHUB_TOKEN starts no workflows, so a PR updated with it would sit up to
-# date with no CI, blocked. It also needs the App's merges to be pushes that
-# start workflows (dependabot-auto-merge.yml), or nothing re-runs this.
+# date with no CI, blocked. The script checks that CI did start after each
+# update and fails the run if it didn't.
 #
 # Setup: the same GitHub App as dependabot-auto-merge.yml, but this workflow
-# runs on push, so it reads the **Actions** secrets store, not the Dependabot
-# one. Add the same two values under Settings → Secrets and variables →
-# Actions as well:
+# runs on push and schedule, so it reads the **Actions** secrets store, not
+# the Dependabot one. Add the same two values under Settings → Secrets and
+# variables → Actions as well:
 #   AUTOMERGE_APP_CLIENT_ID, AUTOMERGE_APP_PRIVATE_KEY
-# Without them it does nothing and leaves a notice on the run.
+# Without them it only plans and leaves a notice.
 #
-# Known gap: when main's new commit changed a workflow file, merging it into
-# the PR branch needs the Workflows permission, which the App deliberately
-# lacks. The update is refused, the run warns, and that PR needs one manual
-# "Update branch".
+# WORKFLOWS PERMISSION (recommended): merging main into a PR branch after main
+# changed ANY workflow file (Dependabot's own github-actions bumps included)
+# is refused unless the App has Workflows: read and write. The token below
+# requests no narrower scope, so it gets whatever the App was granted:
+# Contents + Pull requests at minimum, Workflows if you added it. Without it,
+# such a PR gets one comment asking for a manual "Update branch", and the next
+# PR is tried. dependabot-auto-merge.yml's token never requests Workflows.
 
 name: Dependabot update-next
 
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "23 * * * *"
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only plan; don't update anything
+        type: boolean
+        default: false
 
-# The job's own token only READS (PR list, check status, compare); the
-# update itself uses the App token.
+# The job's own token only READS (PR list, check status, compare, comments);
+# updates and comments use the App token.
 permissions:
   contents: read
   pull-requests: read
+  issues: read
   checks: read
   statuses: read
 
@@ -51,36 +63,47 @@ jobs:
   update-next:
     name: Update the next behind Dependabot PR
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       HAS_APP: ${{ secrets.AUTOMERGE_APP_CLIENT_ID != '' && secrets.AUTOMERGE_APP_PRIVATE_KEY != '' }}
     steps:
-      - name: Skip without the App
-        if: env.HAS_APP != 'true'
-        run: >-
-          echo "::notice title=Dependabot update-next skipped::The
-          AUTOMERGE_APP_CLIENT_ID / AUTOMERGE_APP_PRIVATE_KEY Actions secrets
-          are not set. See the setup notes at the top of
-          dependabot-update-next.yml."
-
       - name: Check out
-        if: env.HAS_APP == 'true'
         uses: actions/checkout@v7
         with:
           persist-credentials: false
 
+      - name: Plan
+        id: plan
+        run: node scripts/ops/dependabot-update-next.js plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Skip without the App
+        if: steps.plan.outputs.queue != '' && env.HAS_APP != 'true'
+        run: >-
+          echo "::notice title=Dependabot update-next skipped::Dependabot PRs
+          are behind main (${{ steps.plan.outputs.queue }}), but the
+          AUTOMERGE_APP_CLIENT_ID / AUTOMERGE_APP_PRIVATE_KEY Actions secrets
+          are not set. See the setup notes at the top of
+          dependabot-update-next.yml."
+
       - name: Mint update token (GitHub App)
         id: app
-        if: env.HAS_APP == 'true'
+        if: >-
+          steps.plan.outputs.queue != '' && env.HAS_APP == 'true' &&
+          github.event.inputs.dry_run != 'true'
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
           client-id: ${{ secrets.AUTOMERGE_APP_CLIENT_ID }}
           private-key: ${{ secrets.AUTOMERGE_APP_PRIVATE_KEY }}
-          permission-contents: write
-          permission-pull-requests: write
+          # No permission-* inputs on purpose: see WORKFLOWS PERMISSION above.
 
       - name: Update the oldest behind Dependabot PR
-        if: env.HAS_APP == 'true'
-        run: node scripts/ops/dependabot-update-next.js
+        if: >-
+          steps.plan.outputs.queue != '' && env.HAS_APP == 'true' &&
+          github.event.inputs.dry_run != 'true'
+        run: node scripts/ops/dependabot-update-next.js update
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UPDATE_TOKEN: ${{ steps.app.outputs.token }}
+          QUEUE: ${{ steps.plan.outputs.queue }}
