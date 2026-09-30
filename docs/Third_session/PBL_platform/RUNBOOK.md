@@ -50,6 +50,21 @@ takes ≤5 min; the whole thing is ~30 min end-to-end.
 1. **Build → Hosting → Get started**.
 2. Skip the CLI walkthrough — the workflow in
    `.github/workflows/firebase-deploy.yml` already handles deploys.
+3. **Make sure the default Hosting site exists before the first CI
+   deploy.** Projects created on or after **15 October 2026** no longer
+   get one automatically (Firebase now provisions it on demand), and a
+   CI deploy to a project without a site fails with **404 Site Not
+   Found**. Step 1 above (or registering the web app for §1.6) should
+   provision it; if `firebase hosting:sites:list --project <project-id>`
+   still shows no site, create it once:
+
+   ```bash
+   firebase hosting:sites:create <project-id> --project <project-id>
+   ```
+
+   The site ID becomes the `<site-id>.web.app` URL; if the project ID is
+   already taken as a subdomain, pick another site ID and set
+   `"site": "<site-id>"` in `firebase.json`'s `hosting` block.
 
 ### 1.3. Realtime Database
 
@@ -222,6 +237,9 @@ Common causes, in order of likelihood:
 2. `firebase.json` has a syntax error — the unit tests workflow's
    syntax-check step catches this on PR, so it shouldn't reach main.
 3. Hosting Admin role missing from the service account — §1.5.
+4. **`404 Site Not Found`** on a newly created project — the default
+   Hosting site was never provisioned (projects created from
+   15 October 2026 on no longer get one automatically). Create it — §1.2.
 
 ### 4.6. Rule changes don't take effect after merge
 

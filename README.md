@@ -67,7 +67,10 @@ To adapt the platform for a different partnership:
    for single sessions) — drop your credentials into a local
    `firebase-config.js` and deploy. Hosting + database rules are in
    the repo; the GitHub Actions deploy workflow needs your project's
-   service-account secret.
+   service-account secret. Step-by-step:
+   [RUNBOOK §1](docs/Third_session/PBL_platform/RUNBOOK.md#1-initial-deploy-from-scratch)
+   — including the one-time Hosting site creation that projects created
+   from 15 October 2026 on need before their first CI deploy.
 6. **Review the ethics + privacy posture** in `SECURITY.md` and in
    `docs/Third_session/PBL_platform/ARCHITECTURE/OPERATOR_POLICY.md`
    — both will need to be adapted to your institutions' data
