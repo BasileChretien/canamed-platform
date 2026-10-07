@@ -2,7 +2,7 @@
  *
  * The account dialog OPENS, and says truthfully what "Delete account" does.
  *
- * Two reasons this spec exists:
+ * Four reasons this spec exists:
  *
  *   1. Nothing opened this dialog in a browser. `_historyListenerRef` lost its
  *      declaration in #264 (2026-07-31); from then on openAccountDialog() threw
@@ -202,8 +202,68 @@ test("the dialog fits every width, and a history row keeps its code and its butt
       expect(r.inside, `${at}: the row of ${r.code} must contain its code, date and button`).toBe(true);
       /* The date and scenario name sit beside the code where there is room and
          on their own line under it where there is not (style.css breaks at
-         720px) — never in a sliver between the code and the button. */
+         720px). What keeps them from becoming a sliver between the code and the
+         button is the next test's business. */
       expect(r.metaBelowCode, `${at}: where the date and scenario name of ${r.code} sit`).toBe(width <= 720);
+    }
+  }
+});
+
+test("enlarged text does not squeeze the date and scenario name into a sliver", async ({ page }) => {
+  await openDialog(page);
+  await page.evaluate(() => db.ref("users/u_local/history/XYZ-789").set({
+    code: "XYZ-789", joinedAt: Date.now() - 86400000,
+    scenarioName: "A Difficult Child (Mayumi) — Step 3 of 6"
+  }));
+  await expect(page.locator("#account-history .account-history-row")).toHaveCount(2);
+
+  /* Desktop width on every project: this is the side-by-side layout, where the
+     date and name only get what the code and the button leave. With a zero flex
+     basis that was 62px (2.3em, eleven lines, a 480px row in a 240px list) at
+     200% text. Below 720px the row stacks and the name has the full width. */
+  await page.setViewportSize({ width: 1280, height: page.viewportSize().height });
+  for (const pct of [100, 150, 175, 200]) {
+    const m = await page.evaluate((pct) => {
+      /* Text-only zoom, approximated through the root font size: the sizes in
+         this row are rem-based. Page zoom is a different thing — it narrows the
+         viewport, which lands in the stacked layout. */
+      document.documentElement.style.fontSize = pct + "%";
+      const inner = document.querySelector(".account-dialog-inner");
+      const lines = (el) => {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        return new Set([...range.getClientRects()]
+          .filter(b => b.width > 0).map(b => Math.round(b.top))).size;
+      };
+      return {
+        vw: window.innerWidth,
+        innerScroll: inner.scrollWidth, innerClient: inner.clientWidth,
+        rows: [...inner.querySelectorAll(".account-history-row")].map(li => {
+          const row = li.getBoundingClientRect();
+          const code = li.querySelector(".account-history-code");
+          const meta = li.querySelector(".account-history-meta");
+          return {
+            code: code.textContent, codeLines: lines(code),
+            btnLines: lines(li.querySelector(".account-history-withdraw")),
+            metaEm: meta.getBoundingClientRect().width / parseFloat(getComputedStyle(meta).fontSize),
+            inside: [...li.children].every(c => {
+              const b = c.getBoundingClientRect();
+              return b.left >= row.left - 1 && b.right <= row.right + 1;
+            })
+          };
+        })
+      };
+    }, pct);
+    const at = `at ${pct}% text`;
+    expect(m.vw, "the viewport is the desktop one").toBe(1280);
+    expect(m.innerScroll, `${at}: the dialog must not scroll sideways`).toBeLessThanOrEqual(m.innerClient + 1);
+    expect(m.rows.map(r => r.code), `${at}: every session is listed`).toEqual(["ABC-123", "XYZ-789"]);
+    for (const r of m.rows) {
+      // A date alone is about 5em; less than that is a column of fragments.
+      expect(r.metaEm, `${at}: the date and scenario name of ${r.code} need a readable column`).toBeGreaterThanOrEqual(5);
+      expect(r.codeLines, `${at}: the code ${r.code} must stay on one line`).toBe(1);
+      expect(r.btnLines, `${at}: the withdraw button of ${r.code} must stay on one line`).toBe(1);
+      expect(r.inside, `${at}: the row of ${r.code} must contain its code, date and button`).toBe(true);
     }
   }
 });
