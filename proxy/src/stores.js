@@ -77,8 +77,13 @@ export function rtdbStore(rtdbUrl, idToken, deps) {
       /* TTL is ignored here on purpose: RTDB has no expiry. The BUCKET is the
        * window — an hour or a UTC day is baked into the key — so a counter
        * simply stops being consulted when its window passes. The stale nodes
-       * are swept by scripts/cleanup-stale-sessions.js, same as the hfPatient
-       * metrics tree. */
+       * are swept by scripts/cleanup-anonymous-accounts.js once they are older
+       * than the TTL passed in here (scripts/lib/rate-limit-retention.js).
+       *
+       * Until 2026-10 this comment named cleanup-stale-sessions.js, which never
+       * touched `rateLimits`: nothing swept them at all. The claim is now
+       * checked by tests/rate-limit-retention.test.js, along with the bucket
+       * formats — change either here and that test has to change with it. */
       const p = pathFor(counter);
       let last = 0;
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
