@@ -1031,7 +1031,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v27";  // PIS v12: lobby.consent-version names the notice that discloses the anonymous identifier
+  const LOCALE_VERSION = "v28";  // PIS v12: lobby.consent-version names the notice that discloses the anonymous identifier
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {
