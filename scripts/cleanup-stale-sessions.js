@@ -20,6 +20,9 @@
  *   CLEANUP_RETENTION_CLOSED_DAYS   default 30 — purge after this many days post-close
  *   CLEANUP_RETENTION_OPEN_DAYS     default 90 — purge abandoned sessions after this many days
  *   CLEANUP_RETENTION_METRICS_DAYS  default 30 — purge hfPatient metrics rows older than this
+ *   CLEANUP_RETENTION_PURGED_MARKER_DAYS  default 1825 — drop a purge marker
+ *                                   (purgedSessions/<code>) once it is this old
+ *                                   and no withdrawal record is left under it
  *   CLEANUP_CONFIRM                 set to "1" to actually delete (otherwise just log)
  *   CLEANUP_QUIET                   set to "1" to suppress the per-session lines and
  *                                   emit only the summary. REQUIRED when the workflow
@@ -73,7 +76,10 @@ const { parseRetentionDays } = require("./lib/retention-window");
 const { readBackupMarker, backupGateReport } = require("./lib/backup-marker");
 const { runCleanupPasses } = require("./lib/cleanup-passes");
 const { answeredKeys, flattenErasures } = require("./lib/data-rights");
-const { planPurgedSessionWithdrawals } = require("./lib/withdrawal-retention");
+const {
+  planPurgedSessionWithdrawals,
+  sweepPurgedSessionRecords
+} = require("./lib/withdrawal-retention");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -106,6 +112,17 @@ const OPEN_DAYS = retentionDays("CLEANUP_RETENTION_OPEN_DAYS", 90);
    privacy policy already makes — these rows are pseudonymous rather than
    identified, so the same window is conservative, not lax. */
 const METRICS_DAYS = retentionDays("CLEANUP_RETENTION_METRICS_DAYS", 30);
+/* How long a purge marker (purgedSessions/<code>) is kept once nothing is left
+   under it. FIVE YEARS, and the reasoning is the marker's job, not a habit:
+   the rules accept a withdrawal for a purged session only while its marker
+   exists, and a withdrawal can still have an object for as long as the
+   research dataset and the certificate registry may hold the participant —
+   both up to five years in the participant notice. A shorter window would
+   turn the account dialog's "Withdraw" on an old session into an error. The
+   marker is a session code and a date; it names nobody.
+   ⚠️ A retention period nonetheless: recorded as the Controller's to confirm
+   in DPA Annex VI, G12. */
+const MARKER_DAYS = retentionDays("CLEANUP_RETENTION_PURGED_MARKER_DAYS", 5 * 365);
 const CONFIRM = process.env.CLEANUP_CONFIRM === "1";
 const QUIET = process.env.CLEANUP_QUIET === "1";
 
@@ -137,7 +154,11 @@ const QUIET = process.env.CLEANUP_QUIET === "1";
  * was skipped too. main() no longer acts on the verdict at all: it hands it to
  * runCleanupPasses() (scripts/lib/cleanup-passes.js), which skips the session
  * pass, still runs the metrics pass, and returns exit code 3. The ordering is
- * run, not grepped, in tests/cleanup-passes.test.js. */
+ * run, not grepped, in tests/cleanup-passes.test.js.
+ *
+ * The same holds for the third pass, sweepWithdrawals(): the withdrawal
+ * records and markers of sessions that are already purged are in no backup
+ * either, so a blocked gate does not stop it. */
 const REQUIRE_BACKUP = process.env.CLEANUP_REQUIRE_BACKUP === "1";
 const BACKUP_MAX_AGE_DAYS = retentionDays("CLEANUP_BACKUP_MAX_AGE_DAYS", 2);
 
@@ -145,6 +166,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const closedCutoff = Date.now() - CLOSED_DAYS * MS_PER_DAY;
 const openCutoff = Date.now() - OPEN_DAYS * MS_PER_DAY;
 const metricsCutoff = Date.now() - METRICS_DAYS * MS_PER_DAY;
+const markerCutoff = Date.now() - MARKER_DAYS * MS_PER_DAY;
 
 function fmtAge(ms) {
   const d = Math.round((Date.now() - ms) / MS_PER_DAY);
@@ -164,6 +186,67 @@ function fmtAge(ms) {
    the window keeps it bounded. Revisit if this ever serves continuous traffic. */
 async function pruneMetrics(db) {
   return pruneHfPatientMetrics(db, { cutoffMs: metricsCutoff, confirm: CONFIRM });
+}
+
+/* Which erasure requests have been answered — the `erasures` ledger. Shared by
+   the session pass and the withdrawal sweep, read at most ONCE per run, and
+   only when one of them actually holds a request to decide on: a dry run of
+   the session pass, or a night with nothing due and no purged session holding
+   a request, reads no identifier at all. If it cannot be read, nothing can be
+   shown to be answered — every request is then kept, the purge itself still
+   happens, and the pass that asked reports one error: an unreadable ledger is
+   also a restore that would refuse to run. */
+let ledger;                           // undefined = not read yet; null = unreadable
+let ledgerErrors = 0;
+async function answeredRequests(db) {
+  if (ledger !== undefined) return ledger;
+  try {
+    const snap = await db.ref("erasures").once("value");
+    ledger = answeredKeys(flattenErasures(snap.val()));
+  } catch (e) {
+    ledger = null;
+    ledgerErrors = 1;
+    console.error("ERROR    could not read the erasure ledger: " +
+      (QUIET ? (e && e.code ? e.code : "error") : (e && e.message)) +
+      " — every erasure request is being kept.");
+  }
+  return ledger;
+}
+/* Charged once, to whichever pass hit it. */
+function takeLedgerErrors() {
+  const n = ledgerErrors;
+  ledgerErrors = 0;
+  return n;
+}
+
+/* The third pass: withdrawal records of sessions purged on an EARLIER night —
+   a request the purge kept, once it has been answered, and anything written
+   since (the rules accept a withdrawal for a purged session). Nothing else
+   ever deletes them. Only under a purge marker; see lib/withdrawal-retention.js.
+
+   NOT governed by the backup gate, for the reason the metrics pass is not: the
+   session backup holds none of this, and these records belong to sessions that
+   are already gone. A session purged tonight is still in `locations`, so it is
+   skipped here and picked up tomorrow — the purge has just decided its records. */
+async function sweepWithdrawals(db, locations) {
+  const sweep = await sweepPurgedSessionRecords(db, {
+    liveLocationKeys: locations.map((l) => l.key),
+    answered: () => answeredRequests(db),
+    markerCutoffMs: markerCutoff,
+    confirm: CONFIRM,
+    onError: (e) => console.error("ERROR    withdrawal records of purged sessions: " +
+      (QUIET ? (e && e.code ? e.code : "error") : (e && e.message)))
+  });
+  console.log("");
+  console.log(`Withdrawal records of purged sessions: ${CONFIRM ? "purged" : "would-purge"} ` +
+    `${sweep.answered} answered request(s), ` +
+    `${sweep.noRequest} with no erasure request; ${sweep.open} unanswered request(s) kept.`);
+  console.log(`Purge markers: ${sweep.markers} held, ${sweep.markersExpired} ` +
+    `${CONFIRM ? "expired" : "would-expire"}.`);
+  return {
+    changes: sweep.answered + sweep.noRequest + sweep.markersExpired,
+    errors: sweep.errors + takeLedgerErrors()
+  };
 }
 
 async function main() {
@@ -231,6 +314,7 @@ async function main() {
     gate,
     purgeSessions: () => purgeSessions(db, locations),
     pruneMetrics: () => pruneMetrics(db),
+    sweepWithdrawals: () => sweepWithdrawals(db, locations),
     confirm: CONFIRM,
     metricsDays: METRICS_DAYS,
     sessionCount: locations.length
@@ -248,29 +332,7 @@ async function main() {
    blocks, so it must stay the only place a session is deleted from. */
 async function purgeSessions(db, locations) {
   let kept = 0, purged = 0, errors = 0;
-
-  /* Which erasure requests have been answered — the `erasures` ledger, read
-     ONCE and only when a session is actually about to be purged (a dry run,
-     or a night with nothing due, reads no identifier at all). If it cannot be
-     read, nothing can be shown to be answered: every request is then kept,
-     the purge itself still happens, and the run is marked failed — an
-     unreadable ledger is also a restore that would refuse to run. */
   let requestsKept = 0;
-  let answered;                       // undefined = not read yet; null = unreadable
-  async function answeredRequests() {
-    if (answered !== undefined) return answered;
-    try {
-      const snap = await db.ref("erasures").once("value");
-      answered = answeredKeys(flattenErasures(snap.val()));
-    } catch (e) {
-      answered = null;
-      errors++;
-      console.error("ERROR    could not read the erasure ledger: " +
-        (QUIET ? (e && e.code ? e.code : "error") : (e && e.message)) +
-        " — every erasure request is being kept.");
-    }
-    return answered;
-  }
 
   for (const loc of locations) {
     const label = safeLabel(loc, QUIET);
@@ -369,7 +431,7 @@ async function purgeSessions(db, locations) {
         // must OUTLIVE the snapshots it suppresses.
         const withdrawalsSnap = await db.ref(loc.withdrawalsPath).once("value");
         const records = planPurgedSessionWithdrawals(
-          withdrawalsSnap.val(), loc.key, await answeredRequests());
+          withdrawalsSnap.val(), loc.key, await answeredRequests(db));
         for (const uid of records.deleteUids) purge[`${loc.withdrawalsPath}/${uid}`] = null;
         // Certificate-id map (certIds/<code>): another out-of-cascade top-level
         // tree, so it needs the same explicit purge or it orphans a map of
@@ -396,8 +458,8 @@ async function purgeSessions(db, locations) {
         // never was, and three things need to: the rule that lets someone
         // withdraw from a session after it has been purged, the erasure tool
         // (which must not write a permanent suppression record for a session
-        // that never existed), and the sweep below (which deletes a withdrawal
-        // record only where a marker shows its session really was purged).
+        // that never existed), and sweepWithdrawals() (which deletes a
+        // withdrawal record only where a marker shows its session was purged).
         // In the SAME update as the deletions, so there is never a purged
         // session without one. See purgedMarkers() in lib/session-trees.js.
         purge[loc.purgedMarkerPath] = Date.now();
@@ -423,7 +485,7 @@ async function purgeSessions(db, locations) {
       "(unanswered — see scripts/data-rights-monitor.js).");
   }
 
-  return { kept, purged, errors };
+  return { kept, purged, errors: errors + takeLedgerErrors() };
 }
 
 main().catch((e) => {

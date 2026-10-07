@@ -3391,9 +3391,6 @@ now exists; that is not the same as the duty being discharged.
      by hand; and the nightly snapshots that still hold that session (up to
      90) have no record telling a restore to leave the participant out — the
      one thing the suppression list exists for.
-   - **The record has no end of life.** `withdrawals/<code>` is deleted only in
-     the update that deletes its session, so a record written afterwards is
-     kept indefinitely: a uid, a session code and a date.
    - **The participant notice does not list what the daily jobs read of these
      records — found 2026-10-07, open.** `privacy.html` section 6 (PIS v11,
      EN/FR/JA) says the jobs that run every day read "a list of session
@@ -3408,11 +3405,56 @@ now exists; that is not the same as the duty being discharged.
      less than it is. Not corrected here: the notice is twelve surfaces in
      eight languages with its own version, and a revision of it (PIS v12) is
      open elsewhere.
-   - **Marker lifetime — new, and open.** The purge marker described below
-     (`purgedSessions/<code>`) is written and, as of this change, never
-     deleted. It holds no participant identifier, but it is a new record with
-     no end of life.
+   - **Marker lifetime — FIVE YEARS, chosen in code and not yet confirmed by
+     the Controller.** The purge marker described below
+     (`purgedSessions/<code>`) is deleted once it is older than
+     `CLEANUP_RETENTION_PURGED_MARKER_DAYS` (default 1825) **and** no
+     withdrawal record is left under it. The reasoning for five years: the
+     rules accept a withdrawal for a purged session only while its marker
+     exists, and such a withdrawal can still have an object for as long as the
+     research dataset and the certificate registry may hold the participant —
+     both up to five years in the participant notice. A shorter window is
+     defensible (the marker matters to the *tooling* only while the nightly
+     snapshots hold the session, 90 days) but would turn the history row's
+     "Withdraw" on an older session into "Could not record your withdrawal",
+     which would need a change to the product's wording first. The marker
+     holds a session code and a date and names nobody; it is still a
+     retention period, and it is the Controller's to settle.
+   - **A record with neither a session nor a marker is never swept.** The
+     sweep below acts only under a marker. A record written before the rule
+     required one, for a session purged before the purge wrote markers, stays
+     until the markers are backfilled (then it is swept like any other) or an
+     operator removes it. The monitor reports how many there are.
    **Closed since, in code — none of it true in production until deployed:**
+   - **A withdrawal record now has an end of life** (2026-10-07). *What was
+     wrong:* `withdrawals/<code>` was deleted only in the update that deletes
+     its session, so a record written afterwards — which the rules allow, and
+     which the account dialog's history row is for — was kept indefinitely: a
+     uid, a session code and a date.
+     *What changed:* the nightly job sweeps the records of sessions that have
+     already been purged, by the rule the purge itself applies: an erasure
+     request that has been answered goes, a record that asks for no erasure
+     goes (the export reads only sessions that are in the database, so it
+     protects nothing), and **an unanswered erasure request is never deleted
+     by a job** — it ends when an operator answers it, and the lasting trace
+     is then the record under `erasures/`, which is never deleted.
+     *Positive evidence only:* the sweep visits a branch only where a purge
+     marker shows the session was purged, and skips a session that is in the
+     database again. It never acts because a session merely failed to appear
+     in a listing — a `research: false` record under a session that is still
+     there is what keeps that participant out of the research export. It reads
+     the markers, then one branch per purged session, then the erasure ledger
+     only if one of those branches holds a request; never the withdrawal
+     records of a session that is in the database.
+     *It is not governed by the backup gate.* When the backup is stale the job
+     refuses to purge sessions and still runs this sweep, as it still prunes
+     the usage metrics, and for the same reason: these are records of sessions
+     that are already gone, the session backup holds none of them, and a stale
+     backup must not pause a second retention duty.
+     `Verify:` `node --test tests/withdrawal-retention.test.js` — "the nightly
+     sweep ends the life of answered and request-less records of PURGED
+     sessions only", "a request has its whole life", and "a blocked backup gate
+     stops the session purge and not the sweep".
    - **The purge no longer deletes an erasure request nobody has answered**
      (2026-10-07). *What was wrong, now measured rather than read:* the purge
      removed `withdrawals/<code>` whole, in the update that deletes the
@@ -3477,7 +3519,7 @@ now exists; that is not the same as the duty being discharged.
      test writes such a row and shows the withdrawal still refused.
      *What the marker holds, and for how long:* a session code and a date — no
      participant, no content. See "Marker lifetime" under the open points
-     below; it is a retention period nobody but the Controller should settle.
+     above; it is a retention period nobody but the Controller should settle.
      ⚠️ **What this does NOT close.** (i) Anyone who knows the code of a session
      that really existed, live or purged, can still record a request under
      their own uid without having taken part. The code is the capability

@@ -31,12 +31,14 @@
  * uses to decide what is still open. Sharing it is the point — if the two
  * disagreed, the purge would again delete something the monitor was counting.
  *
- * Pure: no Firebase, no clock.
+ * The planning is pure — no Firebase, no clock. sweepPurgedSessionRecords()
+ * takes a database handle, so it can be driven against a stand-in.
  */
 
 "use strict";
 
 const { requestKey } = require("./data-rights");
+const { purgedMarkers, locationForKey } = require("./session-trees");
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
@@ -55,16 +57,111 @@ function isOpenRequest(record, locationKey, uid, answered) {
  * @param {object|null} byUid value of `withdrawals/<code>` ({ uid: record })
  * @param {string} locationKey the session's location key
  * @param {Set<string>|null} answered from answeredKeys(); null = ledger unreadable
- * @returns {{deleteUids: string[], keptUids: string[]}}
+ * @returns {{deleteUids: string[], keptUids: string[], answeredUids: string[]}}
+ *   `answeredUids` is the part of `deleteUids` that were erasure requests —
+ *   for the report only.
  */
 function planPurgedSessionWithdrawals(byUid, locationKey, answered) {
   const deleteUids = [];
   const keptUids = [];
+  const answeredUids = [];
   for (const uid of Object.keys(isObj(byUid) ? byUid : {})) {
-    if (isOpenRequest(byUid[uid], locationKey, uid, answered)) keptUids.push(uid);
-    else deleteUids.push(uid);
+    const record = byUid[uid];
+    if (isOpenRequest(record, locationKey, uid, answered)) { keptUids.push(uid); continue; }
+    deleteUids.push(uid);
+    if (isObj(record) && record.erasure === true) answeredUids.push(uid);
   }
-  return { deleteUids: deleteUids.sort(), keptUids: keptUids.sort() };
+  return {
+    deleteUids: deleteUids.sort(), keptUids: keptUids.sort(), answeredUids: answeredUids.sort(),
+  };
 }
 
-module.exports = { isOpenRequest, planPurgedSessionWithdrawals };
+/**
+ * The nightly sweep: the withdrawal records of sessions that have ALREADY
+ * been purged, by the same rule as above.
+ *
+ * WHY IT IS NEEDED. Two kinds of record are left under a session that is
+ * gone: a request the purge kept, once someone has answered it; and anything
+ * written after the purge — which the rules allow, because withdrawing from a
+ * session that has been purged is what the account dialog's history row is
+ * for. Before this, neither was ever deleted: the only thing that removed
+ * `withdrawals/<code>` was the update that removed the session.
+ *
+ * POSITIVE EVIDENCE ONLY. It visits a branch only where a purge MARKER says
+ * the session was purged, and skips any such session that is in the database
+ * again (a restore, a reused code). It never acts because a session merely
+ * failed to appear in a listing: a record with `research: false` under a
+ * session that is in fact still there is what keeps that participant out of
+ * the research export, and deleting it would undo a withdrawal of consent.
+ * A branch with neither a session nor a marker is therefore left alone — the
+ * monitor counts those, and scripts/backfill-purged-markers.js or an operator
+ * settles them.
+ *
+ * IT READS ONLY WHAT IT MAY DELETE: the markers, then one branch per purged
+ * session, then the erasure ledger if any of those branches holds a request.
+ * Never the withdrawal records of a session that is in the database.
+ *
+ * A marker itself goes once it is older than the window AND nothing is left
+ * under it. While an unanswered request hangs off a marker it stays, however
+ * old: the marker is what lets the erasure tool act on that request.
+ *
+ * @param {object} db a firebase-admin database() handle (or a stand-in)
+ * @param {object} opts
+ * @param {string[]} opts.liveLocationKeys sessions in the database
+ * @param {function(): Promise<Set<string>|null>} opts.answered resolves to
+ *   answeredKeys(), or null when the ledger cannot be read. Called at most
+ *   once, and only if a request is found.
+ * @param {number} opts.markerCutoffMs a marker older than this may expire
+ * @param {boolean} opts.confirm false = report only
+ * @param {function(Error): void} [opts.onError] told of each failed read/write
+ * @returns {Promise<{markers:number, answered:number, noRequest:number,
+ *   open:number, markersExpired:number, errors:number}>} counts — never whose
+ */
+async function sweepPurgedSessionRecords(db, opts) {
+  const out = { markers: 0, answered: 0, noRequest: 0, open: 0, markersExpired: 0, errors: 0 };
+  const fail = (e) => { out.errors++; if (opts.onError) opts.onError(e); };
+
+  let markers;
+  try {
+    markers = purgedMarkers((await db.ref("purgedSessions").once("value")).val());
+  } catch (e) {
+    fail(e);
+    return out;
+  }
+
+  const live = new Set(opts.liveLocationKeys || []);
+  const updates = {};
+  for (const key of Object.keys(markers)) {
+    out.markers++;
+    if (live.has(key)) continue;
+    const loc = locationForKey(key);
+    try {
+      const byUid = (await db.ref(loc.withdrawalsPath).once("value")).val();
+      const holdsRequest = Object.values(isObj(byUid) ? byUid : {})
+        .some((r) => isObj(r) && r.erasure === true);
+      const plan = planPurgedSessionWithdrawals(
+        byUid, key, holdsRequest ? await opts.answered() : new Set());
+      for (const uid of plan.deleteUids) updates[`${loc.withdrawalsPath}/${uid}`] = null;
+      out.answered += plan.answeredUids.length;
+      out.noRequest += plan.deleteUids.length - plan.answeredUids.length;
+      out.open += plan.keptUids.length;
+      if (markers[key] < opts.markerCutoffMs && plan.keptUids.length === 0) {
+        updates[loc.purgedMarkerPath] = null;
+        out.markersExpired++;
+      }
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  if (opts.confirm && Object.keys(updates).length) {
+    try {
+      await db.ref().update(updates);
+    } catch (e) {
+      fail(e);
+    }
+  }
+  return out;
+}
+
+module.exports = { isOpenRequest, planPurgedSessionWithdrawals, sweepPurgedSessionRecords };

@@ -149,7 +149,7 @@ test("the purge and the monitor agree on what is still open", () => {
 test("malformed input plans nothing and throws nothing", () => {
   for (const byUid of [null, undefined, "x", 7, []]) {
     assert.deepStrictEqual(planPurgedSessionWithdrawals(byUid, "S-1", new Set()),
-      { deleteUids: [], keptUids: [] });
+      { deleteUids: [], keptUids: [], answeredUids: [] });
   }
 });
 
@@ -283,10 +283,217 @@ test("if the session's withdrawal records cannot be read, the session is NOT pur
   assert.strictEqual(r.code, 1, r.out);
 });
 
-test("a dry run reads no withdrawal record and no ledger", () => {
-  /* Nothing is decided in a dry run, so nothing needs reading: the two reads
-     carry uids onto a hosted runner. Shown by making both reads fail — a dry
-     run that touched either would exit 1. */
+// ------------------------------------------------------------- end of life
+
+/* A record written AFTER its session was purged had no end of life at all:
+   the only thing that ever deleted `withdrawals/<code>` was the update that
+   deleted the session. And a request the purge now keeps needs one too, once
+   it has been answered. So the nightly job sweeps the records of purged
+   sessions by the same rule the purge applies — and ONLY under a purge marker,
+   never because a session merely did not appear in a listing: deleting a bare
+   withdrawal from a session that is in fact still there would put a
+   participant back into the research export. */
+
+const NIGHT = D0 + 200 * DAY + PURGE_AT;
+const old = (days) => NIGHT - days * DAY;
+const sweepTree = () => ({
+  sessions: { "LIVE-1": { created: { at: old(3) } }, "BACK-1": { created: { at: old(3) } } },
+  orgs: { "uni-x": { sessions: { "ORG-LIVE": { created: { at: old(3) } } } } },
+  purgedSessions: {
+    "GONE-1": old(40), "BACK-1": old(40), "EMPTY-1": old(40),
+    orgs: { "uni-x": { "GONE-2": old(40) } },
+  },
+  withdrawals: {
+    "GONE-1": { open: request(old(35)), answered: request(old(35)), withdrewOnly: { research: false, at: old(35) } },
+    "NO-MARKER": { answered: request(old(35)), withdrewOnly: { research: false, at: old(35) } },
+    "LIVE-1": { answered: request(old(2)), withdrewOnly: { research: false, at: old(2) } },
+    "BACK-1": { answered: request(old(2)), withdrewOnly: { research: false, at: old(2) } },
+    orgs: { "uni-x": {
+      "GONE-2": { open: request(old(35)), answered: request(old(35)), withdrewOnly: { research: false, at: old(35) } },
+      "ORG-LIVE": { withdrewOnly: { research: false, at: old(2) } },
+    } },
+  },
+  erasures: { e1: { at: "x", records: [
+    { locationKey: "GONE-1", uid: "answered" }, { locationKey: "orgs/uni-x/GONE-2", uid: "answered" },
+    { locationKey: "NO-MARKER", uid: "answered" }, { locationKey: "LIVE-1", uid: "answered" },
+    { locationKey: "BACK-1", uid: "answered" },
+  ] } },
+});
+
+test("the plan says which deleted records were answered requests", () => {
+  const plan = planPurgedSessionWithdrawals({
+    open: request(1), answered: request(1), withdrewOnly: { research: false, at: 1 },
+  }, "S-1", answeredKeys([{ locationKey: "S-1", uid: "answered" }]));
+  assert.deepStrictEqual(plan.answeredUids, ["answered"]);
+  assert.deepStrictEqual(plan.deleteUids, ["answered", "withdrewOnly"]);
+});
+
+test("the nightly sweep ends the life of answered and request-less records of PURGED sessions only", () => {
+  const before = sweepTree();
+  const r = purge(before, NIGHT);
+
+  // Under a marker, session gone: only the unanswered request stays.
+  assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/GONE-1")), ["open"]);
+  assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/orgs/uni-x/GONE-2")), ["open"]);
+
+  // No marker: nothing shows the session was purged, so nothing is deleted.
+  assert.deepStrictEqual(at(r.tree, "withdrawals/NO-MARKER"), before.withdrawals["NO-MARKER"],
+    "a record was deleted on the strength of a session merely being absent");
+  // In the database: not the sweep's to touch — a bare withdrawal there is what
+  // keeps the participant out of tonight's research export.
+  assert.deepStrictEqual(at(r.tree, "withdrawals/LIVE-1"), before.withdrawals["LIVE-1"]);
+  assert.deepStrictEqual(at(r.tree, "withdrawals/orgs/uni-x/ORG-LIVE"), before.withdrawals.orgs["uni-x"]["ORG-LIVE"]);
+  // Back in the database under an old marker (a restore, a reused code): live.
+  assert.deepStrictEqual(at(r.tree, "withdrawals/BACK-1"), before.withdrawals["BACK-1"],
+    "a marker left by an earlier purge must not outrank the session being there");
+
+  // Never deleted from, and nothing else moved.
+  assert.deepStrictEqual(r.tree.erasures, before.erasures);
+  assert.deepStrictEqual(r.tree.sessions, before.sessions);
+  assert.deepStrictEqual(r.tree.purgedSessions, before.purgedSessions, "no marker here is old enough to expire");
+
+  assert.match(r.out, /Withdrawal records of purged sessions: purged 2 answered request\(s\), 2 with no erasure request; 2 unanswered request\(s\) kept\./);
+  assert.doesNotMatch(r.out, /GONE-|NO-MARKER|LIVE-1|BACK-1|withdrewOnly|uni-x\//,
+    "the sweep printed a code or a uid");
+});
+
+test("a dry run sweeps nothing and says what it would", () => {
+  const before = sweepTree();
+  const r = purge(before, NIGHT, { CLEANUP_CONFIRM: "0" });
+  assert.deepStrictEqual(r.tree, before);
+  assert.match(r.out, /would-purge 2 answered request\(s\), 2 with no erasure request; 2 unanswered request\(s\) kept\./);
+});
+
+test("a request has its whole life: kept at the purge, red at 30 days, gone the night after it is answered", async () => {
+  const A = C + 10 * MIN;
+  let { tree } = await nights({
+    sessions: { "S-1": closedAt(C) }, withdrawals: { "S-1": { u1: request(A) } },
+  }, D0 + 30 * DAY, 3);
+  assert.strictEqual(at(tree, "sessions/S-1"), null, "positive control: purged");
+  assert.deepStrictEqual(at(tree, "withdrawals/S-1/u1"), request(A));
+  assert.strictEqual((await monitor(tree, A + 31 * DAY)).code, 1, "positive control: late and red");
+
+  // Someone answers it: an erasure record for this person in this session.
+  tree = JSON.parse(JSON.stringify(tree));
+  tree.erasures = { e1: { at: "x", records: [{ locationKey: "S-1", uid: "u1" }] } };
+  const sameDay = await monitor(tree, A + 31 * DAY);
+  assert.strictEqual(sameDay.code, 0, "an answered request must stop failing the job at once");
+  assert.match(sameDay.text, /Erasure requests done:\s+1\b/);
+
+  // The next night's job deletes the record; the ledger and the marker stay.
+  const next = purge(tree, A + 32 * DAY);
+  assert.strictEqual(at(next.tree, "withdrawals"), null, "the answered record was kept");
+  assert.deepStrictEqual(next.tree.erasures, tree.erasures);
+  assert.strictEqual(typeof at(next.tree, "purgedSessions/S-1"), "number");
+  const after = await monitor(next.tree, A + 33 * DAY);
+  assert.deepStrictEqual([after.code, after.open], [0, 0]);
+});
+
+test("a blocked backup gate stops the session purge and not the sweep", () => {
+  /* The gate exists so the purge cannot delete the only copy of a session.
+     The sweep deletes nothing the backup holds — records of sessions already
+     gone — so a stale backup must not pause it, exactly as it must not pause
+     the metrics pruning. One database, the gate armed, no backup marker:
+     the session due for purging stays, the purged session's records are swept. */
+  const tree = Object.assign(sweepTree(), {});
+  tree.sessions["DUE-1"] = { created: { at: old(40) }, closed: { at: old(31) } };
+  tree.withdrawals["DUE-1"] = { asked: request(old(20)) };
+  const armed = { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "1" };
+
+  const r = runOpsScript("cleanup-stale-sessions.js", { tree, now: NIGHT, env: armed });
+  assert.strictEqual(r.code, 3, "a blocked run exits 3:\n" + r.out);
+  assert.notStrictEqual(at(r.tree, "sessions/DUE-1"), null, "the gate did not stop the session purge");
+  assert.strictEqual(at(r.tree, "purgedSessions/DUE-1"), null, "a marker was written for a session that was not purged");
+  assert.deepStrictEqual(at(r.tree, "withdrawals/DUE-1"), tree.withdrawals["DUE-1"]);
+  assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/GONE-1")), ["open"],
+    "the sweep did not run on a blocked night");
+  assert.match(r.out, /Withdrawal records of purged sessions: purged 2 answered request\(s\)/);
+
+  /* The control: the same database with a fresh backup. The session goes too. */
+  const fresh = Object.assign({}, tree, { ops: { lastBackup: { at: NIGHT - 3600000, sessions: 4 } } });
+  const ok = runOpsScript("cleanup-stale-sessions.js", { tree: fresh, now: NIGHT, env: armed });
+  assert.strictEqual(ok.code, 0, ok.out);
+  assert.strictEqual(at(ok.tree, "sessions/DUE-1"), null, "positive control: with a backup the session is purged");
+  assert.deepStrictEqual(Object.keys(at(ok.tree, "withdrawals/DUE-1")), ["asked"]);
+});
+
+test("with an unreadable ledger the sweep keeps every request, and the run fails", () => {
+  const before = sweepTree();
+  const r = runOpsScript("cleanup-stale-sessions.js", {
+    tree: before, now: NIGHT,
+    env: { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0" },
+    throwOn: "erasures",
+  });
+  assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/GONE-1")).sort(), ["answered", "open"]);
+  assert.strictEqual(r.code, 1, r.out);
+});
+
+test("with unreadable markers the sweep deletes nothing, and the run fails", () => {
+  const before = sweepTree();
+  const r = runOpsScript("cleanup-stale-sessions.js", {
+    tree: before, now: NIGHT,
+    env: { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0" },
+    throwOn: "purgedSessions",
+  });
+  assert.deepStrictEqual(r.tree.withdrawals, before.withdrawals);
+  assert.strictEqual(r.code, 1, r.out);
+});
+
+test("one unreadable branch does not stop the others being swept", () => {
+  const before = sweepTree();
+  const r = runOpsScript("cleanup-stale-sessions.js", {
+    tree: before, now: NIGHT,
+    env: { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0" },
+    throwOn: "withdrawals/GONE-1",
+  });
+  assert.deepStrictEqual(at(r.tree, "withdrawals/GONE-1"), before.withdrawals["GONE-1"], "swept blind");
+  assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/orgs/uni-x/GONE-2")), ["open"]);
+  assert.strictEqual(r.code, 1, r.out);
+});
+
+test("a purge marker expires after its window — unless a request still hangs off it", () => {
+  const FIVE_YEARS = 5 * 365;
+  const tree = {
+    purgedSessions: {
+      "OLD-EMPTY": old(FIVE_YEARS + 1),
+      "OLD-OPEN": old(FIVE_YEARS + 1),
+      "OLD-ANSWERED": old(FIVE_YEARS + 1),
+      "YOUNG": old(FIVE_YEARS - 1),
+      orgs: { "uni-x": { "OLD-ORG": old(FIVE_YEARS + 1) } },
+    },
+    withdrawals: {
+      "OLD-OPEN": { u: request(old(40)) },
+      "OLD-ANSWERED": { u: request(old(40)) },
+    },
+    erasures: { e1: { at: "x", records: [{ locationKey: "OLD-ANSWERED", uid: "u" }] } },
+  };
+  const r = purge(tree, NIGHT);
+  assert.deepStrictEqual(Object.keys(r.tree.purgedSessions).sort(), ["OLD-OPEN", "YOUNG"],
+    "expired markers with nothing left under them go, in both trees; a marker " +
+    "with an unanswered request under it stays, and so does one inside the window");
+  assert.deepStrictEqual(Object.keys(r.tree.withdrawals), ["OLD-OPEN"]);
+  assert.match(r.out, /Purge markers: 5 held, 3 expired\./);
+
+  // The window is a setting, and a bad one stops the job rather than guessing.
+  const short = purge(tree, NIGHT, { CLEANUP_RETENTION_PURGED_MARKER_DAYS: "10" });
+  assert.deepStrictEqual(Object.keys(short.tree.purgedSessions), ["OLD-OPEN"]);
+  for (const bad of ["-1", "abc", "0", "30.5"]) {
+    const refused = runOpsScript("cleanup-stale-sessions.js", {
+      tree, now: NIGHT,
+      env: { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0",
+             CLEANUP_RETENTION_PURGED_MARKER_DAYS: bad },
+    });
+    assert.strictEqual(refused.code, 2, "window " + JSON.stringify(bad) + " was accepted");
+    assert.deepStrictEqual(refused.tree, tree, "something was deleted under a refused window");
+  }
+});
+
+test("a dry run does not read the records of a session it would purge, nor the ledger", () => {
+  /* Nothing is decided about that session in a dry run, so nothing about it
+     needs reading: the two reads carry uids onto a hosted runner. Shown by
+     making both reads fail — a dry run that touched either would exit 1.
+     (No session here has been purged before, so the sweep has no marker to
+     visit; where it has, a dry run does read those branches, to report.) */
   for (const throwOn of ["erasures", "withdrawals/S-1"]) {
     const r = runOpsScript("cleanup-stale-sessions.js", {
       tree: { sessions: { "S-1": closedAt(C) }, withdrawals: { "S-1": { asked: request(C + DAY) } } },
