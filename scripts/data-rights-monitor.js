@@ -17,17 +17,24 @@
  * has lost real failures to alert fatigue more than once; a monitor that cries
  * every morning would be worse than none.
  *
- * WHAT IT READS. The `withdrawals` and `erasures` trees, whole — identifiers
- * and dates — and the KEYS of `sessions` and `orgs/<slug>/sessions`. No session
- * body: it runs daily on a hosted runner outside the EEA, and the privacy
- * notice says the daily jobs do not read session content.
+ * WHAT IT READS. The `withdrawals`, `erasures` and `purgedSessions` trees,
+ * whole — identifiers and dates — and the KEYS of `sessions` and
+ * `orgs/<slug>/sessions`. No session body: it runs daily on a hosted runner
+ * outside the EEA, and the privacy notice says the daily jobs do not read
+ * session content.
  *
- * WHAT IT CANNOT TELL YOU. It counts a request whether or not its session is
- * still in the database, and says how many are in the second group — but for
- * those it cannot distinguish a session that was purged from a code that never
- * existed (any signed-in visitor may write a withdrawal record for any code),
- * and scripts/erase-participant.js cannot act on them. Both are open in DPA
- * Annex VI, G12.
+ * WHAT IT CAN AND CANNOT TELL YOU. It counts a request whether or not its
+ * session is still in the database, and says how many are in the second group.
+ * Within that group it separates a session the purge removed (it left a marker
+ * under `purgedSessions`) from one that nothing shows ever existed. Once the
+ * marker backfill has been run, the rules accept a withdrawal only for a
+ * session that exists or carries a marker; until then they accept one for any
+ * code. So a record with neither was written while that requirement was off,
+ * or names a session purged before the purge wrote markers and not yet
+ * backfilled — it cannot say which. scripts/erase-participant.js
+ * answers a request for a purged session (with the operator's word on the
+ * research copy) and writes nothing for one with no marker; the failure
+ * message below says which is which. DPA Annex VI, G12.
  *
  * ENV
  *   DATA_RIGHTS_DEADLINE_DAYS  default 30 (Art. 12(3))
@@ -41,8 +48,9 @@
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
-const { readSessionLocationsShallow } = require("./lib/session-trees");
-const { erasureQueue, DEADLINE_DAYS } = require("./lib/data-rights");
+const { readSessionLocationsShallow, purgedMarkers } = require("./lib/session-trees");
+const { erasureQueue, flattenErasures, DEADLINE_DAYS } = require("./lib/data-rights");
+const { isListedReason } = require("./lib/suppression");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -66,16 +74,6 @@ function initAdmin() {
   return raw
     ? initializeApp({ credential: cert(JSON.parse(raw)), databaseURL: DB_URL })
     : initializeApp({ databaseURL: DB_URL });
-}
-
-function flattenErasures(node) {
-  const out = [];
-  for (const id of Object.keys(node || {})) {
-    const entry = node[id];
-    if (!entry || typeof entry !== "object") continue;
-    for (const rec of entry.records || []) out.push(rec);
-  }
-  return out;
 }
 
 /**
@@ -121,11 +119,17 @@ async function run(db, opts) {
   const locations = await opts.liveLocations();
   const withdrawalsSnap = await db.ref("withdrawals").get();
   const erasuresSnap = await db.ref("erasures").get();
+  /* The purge's markers: a session code and a date each. A failed read throws
+     like the two above — read as "no markers", every request for a purged
+     session would be reported as a record that nothing accounts for. */
+  const markersSnap = await db.ref("purgedSessions").get();
 
-  const { pending, overdue, handled, sessionGone } = erasureQueue({
+  const erasureRecords = flattenErasures(erasuresSnap.exists() ? erasuresSnap.val() : {});
+  const { pending, overdue, handled, sessionGone, noMarker } = erasureQueue({
     withdrawals: withdrawalsSnap.exists() ? withdrawalsSnap.val() : {},
-    erasureRecords: flattenErasures(erasuresSnap.exists() ? erasuresSnap.val() : {}),
+    erasureRecords,
     liveLocationKeys: locations.map((loc) => loc.key),
+    purgedLocationKeys: Object.keys(purgedMarkers(markersSnap.exists() ? markersSnap.val() : {})),
     now: opts.now,
     deadlineDays: DEADLINE,
   });
@@ -136,7 +140,26 @@ async function run(db, opts) {
   if (sessionGone.length) {
     out(`  session not in the database: ${sessionGone.length}`);
   }
+  if (noMarker.length) {
+    out(`    of which with no purge marker: ${noMarker.length}`);
+  }
+  const reoccupied = pending.filter((p) => p.sessionInDatabase && p.sessionPurged).length;
+  if (reoccupied) {
+    out(`  session purged, its code in the database again: ${reoccupied}`);
+  }
   out(`Deadline:                ${DEADLINE} days (Art. 12(3)); warn at ${WARN}`);
+
+  /* Records whose `reason` is text somebody typed. Until 2026-10-07 the
+     erasure tool stored whatever followed --reason; it now takes a fixed list,
+     but the ledger is never rewritten, so anything typed before then is still
+     in it — and still read here, daily. Counted, never printed: what makes it
+     worth counting is that it may be about a person. */
+  const freeText = erasureRecords.filter(
+    (rec) => rec && typeof rec.reason === "string" && !isListedReason(rec.reason)).length;
+  if (freeText) {
+    out(`Erasure records with a reason outside the fixed list: ${freeText} ` +
+      "(typed before the list was fixed; kept as written)");
+  }
 
   /* ⚠️ NO uid, NO session code in the output. These logs are world-readable on
      a public repository — the same reason cleanup-stale-sessions runs with
@@ -146,27 +169,67 @@ async function run(db, opts) {
     const age = p.ageDays === null ? "undated" : `${p.ageDays}d`;
     const flag = p.overdue ? "OVERDUE" : (p.ageDays !== null && p.ageDays >= WARN ? "due soon" : "open");
     out(`  - request age ${age} [${flag}]` +
-      (p.sessionInDatabase ? "" : " (session not in the database)"));
+      (p.sessionInDatabase
+        ? (p.sessionPurged ? " (session purged; its code is in the database again)" : "")
+        : p.sessionPurged ? " (session not in the database)"
+          : " (session not in the database, no purge marker)"));
   }
 
   if (overdue.length) {
     err("");
     err(`FAIL: ${overdue.length} erasure request(s) past the ` +
       `${DEADLINE}-day limit in GDPR Art. 12(3).`);
-    err("Run scripts/erase-participant.js for each. Read the open " +
-      "requests from `withdrawals/` in the database — deliberately not printed " +
-      "here, because these logs are public.");
-    const gone = overdue.filter((p) => !p.sessionInDatabase).length;
-    if (gone) {
-      /* Said here because the line above would otherwise send the operator to
-         a tool that answers "nothing to erase" and exits 0. */
+    err("Run scripts/erase-participant.js for each, with --uid AND --session: a " +
+      "request is about one session, and --uid alone erases the person from " +
+      "every session they are in and deletes their account record. Read the " +
+      "open requests from `withdrawals/` in the database — deliberately not " +
+      "printed here, because these logs are public.");
+    /* Said here because "run the tool" alone would send the operator to a run
+       that refuses, or to one that reports nothing to erase. */
+    const purged = overdue.filter((p) => p.sessionPurged).length;
+    if (purged) {
       err("");
-      err(`Session not in the database for ${gone} of them. ` +
-        "erase-participant.js walks live sessions only: it will find nothing " +
-        "for those and write no suppression record, so nothing in the tooling " +
-        "closes them yet. They concern the copies that outlive a session " +
-        "(archive snapshots, exports), or a code that never existed — the " +
-        "record is writable for any code. See DPA Annex VI, G12.");
+      err(`${purged} of them name a session that has been purged. The tool answers ` +
+        "those too, and it will not write without --research-copy-checked: " +
+        "for a purged session nothing but you takes the participant out of " +
+        "the research copy. Run it without ERASE_CONFIRM first and read what " +
+        "it cannot reach.");
+      const again = overdue.filter((p) => p.sessionPurged && p.sessionInDatabase).length;
+      if (again) {
+        /* Anyone can put a node under a purged code. It does not un-purge the
+           session, and it must not turn "answer this" into "dismiss this". */
+        err(`For ${again} of those, something is in the database again under the ` +
+          "session's code. That changes nothing: the session that was purged is " +
+          "still in the snapshots, and the request is answered the same way.");
+      }
+    }
+    const untraced = overdue.filter((p) => !p.sessionInDatabase && !p.sessionPurged).length;
+    if (untraced) {
+      err("");
+      err(`${untraced} of them name a session that is not in the database and has no ` +
+        "purge marker: nothing shows it ever existed, and the tool writes no " +
+        "record for those. If it was purged before the purge wrote markers " +
+        "(2026-10-07), its marker is rebuilt from the nightly snapshots by " +
+        "scripts/backfill-purged-markers.js. Only once that has been run can a " +
+        "request that still has no marker be removed, with " +
+        "erase-participant.js --dismiss: until then the tool refuses. See DPA " +
+        "Annex VI, G12.");
+    }
+    /* Only where the code carries NO PURGE MARKER — which is all this job can
+       know. Under a marker the tool refuses --dismiss, and this must not send
+       anyone to try. "No marker" is not "never purged": a session purged
+       before the purge wrote markers has none until the one-off backfill has
+       run, and something else may sit under its code — which is why the tool
+       refuses --dismiss until then. This job does not read the switch (one
+       more read on a hosted runner, for a line of advice), so the sentence
+       below is worded to be true whether or not the backfill has run. */
+    if (overdue.some((p) => p.sessionInDatabase && !p.sessionPurged)) {
+      err("");
+      err("If the tool answers \"Nothing to erase\" for a session that IS in the " +
+        "database, the person has nothing left in it (already erased and asked " +
+        "again, or never took part): close that request with --dismiss. The " +
+        "tool refuses --dismiss until scripts/backfill-purged-markers.js has " +
+        "been run once.");
     }
     return 1;
   }
@@ -194,7 +257,13 @@ async function main() {
 
 if (require.main === module) {
   main().then((code) => process.exit(code)).catch((e) => {
-    console.error("FATAL: " + (e && e.message));
+    /* The CODE, never the message. A failed listing's message quotes the path
+       it was listing ("shallow read of 'orgs/<slug>/sessions' failed"), and an
+       Admin read error can quote any path — these logs are public. Same rule as
+       cleanup-stale-sessions.js in CLEANUP_QUIET mode. */
+    console.error("FATAL: the request queue could not be read (" +
+      (e && e.code ? e.code : "no error code") + "). This run says nothing " +
+      "about whether a request is late; it is a failure of the job, not a deadline.");
     process.exit(2);
   });
 }

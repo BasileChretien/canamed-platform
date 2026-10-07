@@ -1034,6 +1034,251 @@ estimate; the two together are why Monitor stays.
 
    </details>
 
+### Erasure requests that outlive their session (2026-10-07) — ⚠️ THE STRICT RULE IS OFF UNTIL AN OPERATOR RUNS THE BACKFILL
+
+A participant records withdrawal plus an erasure request at
+`withdrawals/<code>/<uid>` (org: `withdrawals/orgs/<slug>/<code>/<uid>`). Four
+things were wrong once the session was purged; all four are fixed in code. The
+full account, with what each fix does NOT close, is DPA Annex VI G12 item 2 —
+read that before describing any of this as done.
+
+- **The purge leaves a marker**, `purgedSessions/<code>` = time of the purge
+  (Admin-only node; a code and a date) — only for a session that had a
+  `created` or `closed` timestamp. It is the only thing in the database that
+  tells a purged session from a code that never was one.
+- **ONCE THE BACKFILL HAS RUN, the rule accepts a withdrawal only if the
+  session's `created` record exists, or the code has a marker**, in both
+  trees. That requirement sits behind a switch,
+  `ops/purgedMarkersBackfilledAt` (`PURGED_MARKERS_BACKFILLED_PATH` in
+  `scripts/lib/session-trees.js`), which a confirmed run of
+  `scripts/backfill-purged-markers.js` writes in the same update as the
+  markers and nothing else writes. **Absent — production's state after the
+  merge — a withdrawal is accepted for any code, as before, and the spoofable
+  monitor is still spoofable.** `ops/` has no entry in the rules, so no client
+  can read or set it; a rule that opened any of `ops/` would hand over the
+  switch. Whatever the switch says, `at` must be within
+  24 h behind / 5 s ahead of the server clock — a window that sits on the
+  RECORD (`$uid` `.validate`), so a write to one field is judged against it
+  too. Before, any signed-in visitor could file a request for any code, and
+  one write with `at: 1` turned the daily monitor red on its next run. (The old
+  rule also allowed NO clock lead, `at <= now`, alone in the file: a device a
+  little fast was refused its withdrawal. A unit test fails if the text
+  `.val() <= now` appears anywhere in the rules with no tolerance after it —
+  that is ALL it checks. It does not see a timestamp with no upper bound at
+  all — `created/at` and `closed/at` had none when this was written (#438
+  adds one); an earlier wording here claimed it covered "any timestamp
+  rule".)
+- **The purge keeps an erasure request nobody has answered**, with no time
+  limit. It used to delete the whole branch with the session: measured on the
+  real schedule (purge 03:17, monitor 04:11), a request made from about the
+  session's last day onward never turned the monitor red at all.
+- **The nightly job sweeps answered and request-less records of purged
+  sessions** — a third pass of `runCleanupPasses()`, which a blocked backup
+  gate does not stop. Only under a marker, never because a session is merely
+  absent from a listing (a `research:false` record under a live session is
+  what keeps that participant out of the export).
+- **`scripts/erase-participant.js` answers a request for a purged session**:
+  `--uid` required, and it refuses to write without `--research-copy-checked`.
+  It writes nothing for a session with no marker (exit 3); `--dismiss` removes
+  such a request, or one under a live session the person left nothing in.
+  **The marker decides, whatever is in the database**: under a marker a
+  request is answered and never dismissed, even when the code is in use again.
+  Procedure: `ARCHITECTURE/OPERATOR_POLICY.md` §4.1.
+- **`--reason` is a closed list** (`ERASURE_REASONS` in `scripts/lib/suppression.js`):
+  it is written into `erasures/`, which is never deleted and which two daily
+  jobs read in full, so it must never be something an operator typed — that
+  could be a name. Older records are not rewritten; the monitor prints how
+  many carry typed text. Do not add a free-text field to that ledger.
+
+⚠️ **ACTION REQUIRED, not done, cannot be done in code — and until it is done
+the rule above is OFF.** Sessions purged before this change have no marker;
+they are rebuilt from the nightly snapshots, and the same confirmed run turns
+the strict rule on:
+
+```bash
+node scripts/backfill-purged-markers.js --file <snapshot.json> [--file …]
+BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json>
+```
+
+- **Local only, by hand; there is no workflow, on purpose** — the snapshots
+  are identified data and must not reach a hosted runner. It needs every
+  `backups/canamed-backup-YYYY-MM-DD.json` the Scaleway bucket still holds,
+  and `GOOGLE_APPLICATION_CREDENTIALS_JSON` (default credentials alone stop
+  it: the session listing wants a credential object).
+- **Confirming it is a decision about participants, and nobody has taken it
+  yet.** A session purged before the oldest snapshot given gets no marker —
+  and the archive holds 90 days at most, less while it is younger (it moved
+  to Scaleway on 2026-09-01; the dry run prints the oldest date) — and from then on
+  its participants are refused for good ("please try again", which cannot
+  work). The dry run says so and names the oldest snapshot. Do not record
+  that as signed off until an operator has confirmed a run.
+- **Nothing breaks while it has not been run**, which is why this change
+  could merge without it. What does not work until then:
+  `erase-participant.js --dismiss` refuses (it reads the switch), and a
+  request for a session purged before the markers existed can be neither
+  answered nor dismissed.
+- Idempotent: it never overwrites a marker or the switch's date. It refuses
+  (exit 2, nothing written) a file that is not the backup's — a key that is
+  not a session location, or a `sessionCount` that does not match — and a
+  switch that exists but is not a number.
+- **Every sentence that states the session-or-marker rule must say it waits
+  for the backfill.** When the switch was added, four sentences in the legal
+  drafts and five comments went on stating the rule as in force; three of the
+  four sat ABOVE the paragraph that said otherwise, which scoped itself to
+  "nothing below". `tests/withdrawal-switch-docs.test.js` now fails on such a
+  statement in `legal/dpa-draft.md` or `legal/record-of-processing.md`. It
+  knows a handful of phrasings, not the meaning: write new ones with the
+  switch in them.
+
+`Verify:` not checkable from the repo. An operator's dry run printing
+`Strict withdrawal rule: already ON` is the evidence that it was run; a fresh
+database (and the emulator suite's default state) has it off.
+
+**What the independent review of this change found, each of which would have
+shipped — the lessons are general:**
+
+1. **"Exists" is not "was created".** The first rule tested
+   `sessions/<code>.exists()`. `sessions/<any code>/members/<own uid>` is
+   writable by any signed-in visitor, so one extra write made any code "exist"
+   — the same objection that had been used, in the same paragraph, to reject
+   `users/<uid>/history/<code>` as the evidence. **Before a rule leans on a
+   node, list who can write anything underneath it.**
+2. **And `created` is only as strong as the facilitator gate.** Creating a
+   session is open to any signed-in visitor while `facilitatorGate/enforce` is
+   off. So this is NOT a boundary against a visitor who creates a session and
+   files a request in it; it removes arbitrary codes, back-dating, and requests
+   nothing can close. Do not describe it as more.
+3. **`orgs` is a reserved key.** Outside `sessions/`, every per-session tree
+   keeps organisation sessions under a literal `orgs` child, so a default-tree
+   session CODED `orgs` has the roots of every organisation's data as its
+   paths — and the purge deletes a session's paths. One anonymous write under
+   `sessions/orgs/` did that (latent: no org sessions in production; older than
+   this change). Now: a `.validate` on the session node in both trees, the
+   enumerators skip the key, `locationFor()` throws. **A new per-session tree
+   with an `orgs/` branch inherits this for free only because of those three.**
+4. **`--uid` without `--session` is the person, everywhere** — every live
+   session and, when it finds them in one, the whole `users/<uid>` record. The
+   first operator text gave that command for answering one request. The tool
+   prints `SCOPE` and rejects unknown arguments (a mistyped `--session` used
+   to be ignored).
+5. **A ledger that is never deleted needs to say WHICH request a record
+   answers.** "Answered" first matched a record of any age, so a second
+   request after an erasure was closed on arrival and deleted by the purge.
+   The fix compared dates — and that compared the operator's clock with the
+   participant's device, which the rule accepts a day slow, so a second
+   request could still read as answered. **Never order two events by
+   timestamps from two machines.** The record now carries the `at` of the
+   request it answers (`requestAt`) and is matched on that.
+6. **A `.validate` on a field does not run when its sibling is written.** The
+   date window sat on `at`; writing `erasure: true` alone onto a 40-day-old
+   bare withdrawal produced a request that was overdue the moment it became
+   visible. A constraint that must hold for the record belongs on the record.
+   (`tests-e2e/emulator/pool-stale-at-rules.spec.js` had already recorded the
+   mechanism on another node.)
+7. **A purged code can be occupied again, by anyone.** The tool looked for the
+   marker only when the session was absent; one membership row under the code
+   made the request unanswerable and `--dismiss` available, and the monitor
+   advised it. Decide on the durable fact (the Admin-only marker), never on
+   "is something there now".
+8. **Two jobs that must agree need one definition, not two copies.** The purge
+   marks only a session with a timestamp; the backfill marked every key in a
+   snapshot, and so handed a visitor's made-up code the marker the purge had
+   refused it. Both now call `hadSessionTimestamp` / `bodyWasSession`
+   (`scripts/lib/session-trees.js`). Every backfill fixture had used an empty
+   body, so the tests had the mistake built in — **a fixture simpler than the
+   data it stands for can only confirm the simple case.**
+9. **…and the same definition has to be applied to BOTH sides of a
+   comparison** (review round 2). The backfill tested the snapshot's body and
+   took "still in the database" from the key listing — so item 7 was back for
+   every session purged before the deploy: a visitor's row under the code, no
+   marker, `--dismiss`. It now reads `created/at`, `closed/at` and
+   `creatorUid` of what is there and asks whether it is THAT session
+   (`isSameSession`). The fixture had the mistake built in again: the "still
+   here" session was in the snapshot with a different `created` than in the
+   database. **Before the backfill has run once, "no purge marker" does not
+   mean "never purged"** — the tool says the first, and nothing under a live
+   code should be dismissed until then.
+10. **A validation added to a writer is a new way for the reader's input to
+    kill it** (review round 2, a regression from item 5's fix).
+    `buildRecord()` demanded a whole, non-negative `requestAt`; the rule asks
+    a request's `at` only to be a number, so `at: Date.now() + 0.5` made a
+    request the tool died on — unanswerable, undismissable, and a `--uid` run
+    aborted before erasing the person's other sessions. **When a value is
+    copied from data somebody else may write, the copier must accept
+    everything the rules do** — and everything they did before they were
+    tightened. The unit test pinned the throw; what was missing was a test
+    that RUNS THE TOOL on a request the rules accept.
+
+**Listing sessions over REST: an array is a listing too.** `shallowKeysOf()`
+threw on anything but an object, and RTDB renders a node keyed 0, 1, 2… as an
+array. A session code is chosen by whoever writes under it, so if a
+`?shallow=true` listing comes back that way, one visitor write stopped the
+purge, the monitor and the backfill. Both shapes are now read, and the
+emulator suite prints which one the EMULATOR returns ("a listing of integer
+keys"). **Measured on the emulator, 2026-10-07: a shallow listing of integer
+keys is an OBJECT** (one key, three keys, and with a gap), while the same node
+read whole is an array — so on the emulator the old reader would not have
+thrown. Production's REST API was not asked; the array branch stays as cover
+for it.
+
+⚠️ **Still open, and not this change's to settle** (all in the DPA paragraph):
+the marker's lifetime is five years by a constant
+(`CLEANUP_RETENTION_PURGED_MARKER_DAYS`) the Controller has not confirmed; "You
+are excluded from the research dataset" is made true for a purged session by
+the operator's `--research-copy-checked` and by nothing the tool can verify; a
+certificate published for a purged session cannot be found from a uid;
+`privacy.html` §6 lists what the daily jobs read of withdrawal and erasure
+records since PIS v12 (#429), but not the two yes/no fields a record for a
+purged session now holds, nor the five-year purge marker; for a session still in
+the database the tool deletes the whole `users/<uid>` even with `--session`;
+**a session purged before the oldest snapshot the backfill is given can never
+get a marker, so once the strict rule is on its participants are refused in
+the product for good and told to "try again"** — a decision that is taken
+when an operator confirms the backfill, and that nobody has taken yet;
+a device clock more than 5 s fast is still refused; and **a session whose
+`created/at` or `closed/at` was dated in the future was never purged** — found
+by running the purge, and corrected by a SEPARATE change (#438:
+`scripts/lib/session-retention.js` plus a bound on both dates in the rules).
+If that file is not in this checkout, it is still open. Nothing here depends
+on which: the tests that put a future-dated `created` under a purged code
+assert only what holds either way.
+
+**Three traps met on the way:**
+1. **The ops scripts can be RUN in a test.** `tests/fixtures/run-ops-script.js`
+   starts a real script in a child process against an in-memory database whose
+   writes are applied and whose clock is fixed, so one job's output can be fed
+   to the next (purge, then monitor; tool, then the real restore). The fake
+   keeps the event loop alive like a real connection, so a path that forgets
+   `process.exit()` times out — that is how `erase-participant.js` was found to
+   hang after every successful live erasure, and running the real
+   `restore-sessions.js` is how it was found to restore an organisation's
+   session to `orgs/orgs/sessions/…`.
+2. **Do not type a backslash into a Bash heredoc that writes JavaScript.** A
+   `\b` meant for a regex arrived as a backspace byte in a test file, and a
+   `\n` inside a string literal as a real line break. Use the Write/Edit tools
+   for anything containing a backslash, and scan changed files for control
+   bytes before committing.
+3. **The emulator rules suite cannot be run by two sessions at once.**
+   `run-rules-e2e.js` frees whatever it saw on :9000/:9099 during its own run,
+   which under overlap is the OTHER session's emulator. If the hub falls back
+   from port 4400 to 4401, another emulator is alive: stop, do not retry.
+
+`Verify:` `node --test tests/purged-session-marker.test.js
+tests/withdrawal-retention.test.js tests/erase-purged-session.test.js
+tests/reserved-session-key.test.js tests/withdrawal.test.js
+tests/data-rights.test.js tests/cleanup-passes.test.js`, and on the emulator
+`npm run test:e2e:rules -- -g "session"`. Whether the backfill has been run is
+NOT checkable from the repo: an operator's dry run printing `to mark: 0` and
+`Strict withdrawal rule: already ON` is the evidence.
+
+**In the emulator suite the switch is GLOBAL state**, and every spec shares one
+database. A test that leaves `ops/purgedMarkersBackfilledAt` set turns the
+strict rule on for every test after it — including the account-dialog case
+that withdraws from a purged session with no marker, which is production's
+state. Only two blocks in `rules-smoke.spec.js` touch it; each puts it back in
+a hook or a `finally`. A new test that needs the strict rule goes inside the
+`describe` that sets it.
+
 ## Scenario characters (facilitator-authored scenarios)
 
 Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/PBL_platform/ARCHITECTURE/scenario-characters-design.md).

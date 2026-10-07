@@ -17,7 +17,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const {
-  pendingErasures, erasureQueue, planRectification, RECTIFIABLE, ROSTER_FIELDS, DEADLINE_DAYS,
+  pendingErasures, erasureQueue, flattenErasures, planRectification,
+  RECTIFIABLE, ROSTER_FIELDS, DEADLINE_DAYS,
 } = require("../scripts/lib/data-rights");
 const { resolveIdentity } = require("../scripts/lib/erasure");
 const {
@@ -27,6 +28,9 @@ const {
 const DAY = 86400000;
 const NOW = 1780000000000;
 const ago = (d) => NOW - d * DAY;
+/* An erasure record answers a request only if it is dated at or after it, so
+   the fixtures date theirs: "answered just now". */
+const ANSWERED_AT = new Date(NOW).toISOString();
 
 // ------------------------------------------------------------ the deadline
 
@@ -64,10 +68,99 @@ test("an UNDATED request is treated as overdue, not as fresh", () => {
 test("a request already erased is counted as handled, not as open", () => {
   const w = { ABC: { uidA: { erasure: true, at: ago(40) } } };
   const { pending, overdue, handled } = pendingErasures(
-    w, [{ locationKey: "ABC", uid: "uidA" }], NOW);
+    w, [{ locationKey: "ABC", uid: "uidA", at: ANSWERED_AT }], NOW);
   assert.strictEqual(handled, 1);
   assert.strictEqual(pending.length, 0);
   assert.strictEqual(overdue.length, 0, "a handled request must not fail the job");
+});
+
+test("an erasure record answers only a request made BEFORE it", () => {
+  /* Matching on (session, person) for all time meant a second request was
+     closed the moment it arrived: someone erased from a session who came back
+     to it on the same account, did new work and asked again was "handled" by
+     the record of the first erasure — the monitor never showed the request,
+     and the purge (which deletes what the monitor calls answered) removed it.
+     The ledger is never deleted, so that record is there for ever. */
+  const dated = (d) => new Date(ago(d)).toISOString();
+  const first = { ABC: { u: { erasure: true, at: ago(40) } } };
+  const record = [{ locationKey: "ABC", uid: "u", at: dated(30) }];
+  assert.strictEqual(pendingErasures(first, record, NOW).handled, 1,
+    "a record written after the request answers it");
+
+  const again = { ABC: { u: { erasure: true, at: ago(5) } } };
+  const r = pendingErasures(again, record, NOW);
+  assert.deepStrictEqual([r.handled, r.pending.length], [0, 1],
+    "a request made after the last erasure is a new request");
+
+  // ...and answering it again closes it again.
+  const twice = record.concat([{ locationKey: "ABC", uid: "u", at: dated(1) }]);
+  assert.strictEqual(pendingErasures(again, twice, NOW).handled, 1);
+  // The order the ledger is read in must not matter.
+  assert.strictEqual(pendingErasures(again, twice.slice().reverse(), NOW).handled, 1);
+});
+
+test("a record answers the request it was written for — matched by that request's own date, not by comparing clocks", () => {
+  /* The record's date is the operator's clock; the request's is the
+     participant's device, and the rules let it be up to a day behind the
+     server. "Record dated at or after the request" therefore called a second
+     request answered whenever its device was slow enough — and the purge then
+     deleted it. A record written from 2026-10-07 on carries `requestAt`, the
+     `at` of the request it answers, and is matched on that alone. */
+  const T1 = ago(10);
+  const stamped = (requestAt) => ({
+    locationKey: "ABC", uid: "u", at: new Date(T1).toISOString(), requestAt,
+  });
+  const HOUR = 3600000;
+
+  const answeredOne = { ABC: { u: { erasure: true, at: T1 - 5 * HOUR } } };
+  assert.strictEqual(pendingErasures(answeredOne, [stamped(T1 - 5 * HOUR)], NOW).handled, 1);
+
+  // A different request, whatever its date says relative to the record's.
+  for (const secondAt of [T1 - HOUR, T1 - 23 * HOUR, T1, T1 + HOUR]) {
+    const r = pendingErasures({ ABC: { u: { erasure: true, at: secondAt } } }, [stamped(T1 - 5 * HOUR)], NOW);
+    assert.deepStrictEqual([r.handled, r.pending.length], [0, 1],
+      "a request with at=" + (secondAt - T1) / HOUR + "h from the erasure was read as answered by it");
+  }
+  // A record written with no request in the queue (requestAt 0) answers none.
+  assert.strictEqual(pendingErasures(answeredOne, [stamped(0)], NOW).pending.length, 1);
+  // Answering the second request closes the second request.
+  const two = [stamped(T1 - 5 * HOUR), stamped(T1 - HOUR)];
+  assert.strictEqual(pendingErasures({ ABC: { u: { erasure: true, at: T1 - HOUR } } }, two, NOW).handled, 1);
+});
+
+test("a record with no readable date answers nothing that has one", () => {
+  /* It cannot be shown to come after the request. Every record the tool writes
+     is dated, so this is about data something else wrote — and the safe reading
+     of that is "still open", where a person will look at it. */
+  const w = { ABC: { u: { erasure: true, at: ago(40) } } };
+  for (const at of [undefined, null, "", "last tuesday", 12]) {
+    const r = pendingErasures(w, [{ locationKey: "ABC", uid: "u", at }], NOW);
+    assert.strictEqual(r.pending.length, 1, "at=" + JSON.stringify(at));
+  }
+  /* An UNDATED request is the one thing any record answers: nothing could ever
+     be shown to post-date it, and it must stay closable. */
+  const undated = pendingErasures({ ABC: { u: { erasure: true } } },
+    [{ locationKey: "ABC", uid: "u" }], NOW);
+  assert.deepStrictEqual([undated.handled, undated.pending.length], [1, 0]);
+});
+
+test("the ledger is flattened with each entry's date on its records", () => {
+  /* `erasures/<id> = { at, records }`. The tool dates every record too, but a
+     record that lacks one takes its entry's — the run it was written in. */
+  const flat = flattenErasures({
+    e1: { at: "2026-10-01T00:00:00.000Z", records: [
+      { locationKey: "A", uid: "u1" },
+      { locationKey: "B", uid: "u2", at: "2026-09-01T00:00:00.000Z" },
+    ] },
+    e2: { at: "2026-10-02T00:00:00.000Z", records: { 0: { locationKey: "C", uid: "u3" } } },
+    e3: "debris", e4: { records: null }, e5: null,
+  });
+  assert.deepStrictEqual(flat, [
+    { at: "2026-10-01T00:00:00.000Z", locationKey: "A", uid: "u1" },
+    { locationKey: "B", uid: "u2", at: "2026-09-01T00:00:00.000Z" },
+    { at: "2026-10-02T00:00:00.000Z", locationKey: "C", uid: "u3" },
+  ]);
+  for (const junk of [null, undefined, "x", 7, []]) assert.deepStrictEqual(flattenErasures(junk), []);
 });
 
 test("an erasure in ANOTHER session does not close this request", () => {
@@ -76,7 +169,7 @@ test("an erasure in ANOTHER session does not close this request", () => {
      rubber stamp. */
   const { pending } = pendingErasures(
     { ABC: { uidA: { erasure: true, at: ago(40) } } },
-    [{ locationKey: "OTHER", uid: "uidA" }], NOW);
+    [{ locationKey: "OTHER", uid: "uidA", at: ANSWERED_AT }], NOW);
   assert.strictEqual(pending.length, 1);
 });
 
@@ -253,7 +346,7 @@ test("the monitor exits 1 on an overdue request and 0 otherwise", async () => {
   assert.strictEqual(none.code, 0);
   const done = await monitor({
     sessions, withdrawals: { "LIVE-1": { uidA: request(40) } },
-    erasures: { e1: { at: "x", records: [{ locationKey: "LIVE-1", uid: "uidA" }] } },
+    erasures: { e1: { at: ANSWERED_AT, records: [{ locationKey: "LIVE-1", uid: "uidA" }] } },
   });
   assert.strictEqual(done.code, 0, "a request already erased must not fail the job");
 });
@@ -261,9 +354,10 @@ test("the monitor exits 1 on an overdue request and 0 otherwise", async () => {
 test("a request whose session is NO LONGER IN THE DATABASE is still counted — open, then overdue", async () => {
   /* The case the front-page "Account" route makes ordinary: someone comes back
      after their session was purged (30 days after closing, 90 after creation)
-     and withdraws from the row in their history. The rules accept the write —
-     `withdrawals/<code>/<uid>` does not look at the session — and the page says
-     the deletion request is recorded.
+     and withdraws from the row in their history. The rules accept the write
+     for a session the purge left a marker for (and, when this test was
+     written, for any code at all), and the page says the deletion request is
+     recorded.
 
      The monitor read `withdrawals/<code>` only for sessions it found under
      `sessions/` and `orgs/`. So this request was never open, never due and
@@ -299,7 +393,7 @@ test("a request whose session is NO LONGER IN THE DATABASE is still counted — 
   // And it closes the same way: an erasure record for that person and session.
   const closed = await monitor({
     sessions, withdrawals: { "GONE-1": { uidB: request(40) } },
-    erasures: { e1: { at: "x", records: [{ locationKey: "GONE-1", uid: "uidB" }] } },
+    erasures: { e1: { at: ANSWERED_AT, records: [{ locationKey: "GONE-1", uid: "uidB" }] } },
   });
   assert.strictEqual(closed.code, 0);
   assert.match(closed.text, /Erasure requests done:\s+1\b/);
@@ -326,8 +420,9 @@ test("the monitor never reads a session body — it lists session KEYS and nothi
   };
   const r = await monitor(tree);
 
-  assert.deepStrictEqual([...r.reads].sort(), ["erasures", "withdrawals"],
-    "the only trees read whole are the request queue and the erasure ledger");
+  assert.deepStrictEqual([...r.reads].sort(), ["erasures", "purgedSessions", "withdrawals"],
+    "the only trees read whole are the request queue, the erasure ledger and " +
+    "the purge markers (a session code and a date each)");
   assert.ok(!r.reads.some((p) => p === "sessions" || p === "orgs" ||
                                   p.startsWith("sessions/") || p.startsWith("orgs/")),
     "the monitor read session bodies");
@@ -360,25 +455,75 @@ test("a failed listing of live sessions stops the monitor", async () => {
 });
 
 test("the monitor says which open requests name a session that is not in the database", async () => {
-  /* The operator needs to know, because the tool the failure message points at
-     cannot act on those: erase-participant.js walks live sessions only. And a
-     withdrawal record is writable by any signed-in visitor for ANY code, so
-     "not in the database" covers a purged session and one that never existed
-     alike — the count is what lets a human tell a request from noise. */
+  /* The operator needs to know, because the three kinds are answered three
+     ways. A session in the database: run the tool. A session the purge removed:
+     the tool answers it too, but only by uid and only with the operator's word
+     on the research copy. A session nothing shows ever existed: the tool writes
+     nothing, and the way out is the marker backfill or a dismissal. A failure
+     message that just says "run the tool" sends the operator to a run that
+     refuses, or one that reports nothing to erase. */
+  const sessions = { "LIVE-1": { created: { at: ago(50) } } };
   const r = await monitor({
-    sessions: { "LIVE-1": { created: { at: ago(50) } } },
-    withdrawals: { "LIVE-1": { uidA: request(40) }, "GONE-1": { uidB: request(40) }, "GONE-2": { uidC: request(5) } },
+    sessions,
+    purgedSessions: { "PURGED-1": ago(35) },
+    withdrawals: {
+      "LIVE-1": { uidA: request(40) }, "PURGED-1": { uidB: request(40) },
+      "NO-TRACE": { uidC: request(40) }, "GONE-2": { uidD: request(5) },
+    },
   });
-  assert.match(r.text, /session not in the database:\s+2\b/i);
+  assert.strictEqual(r.code, 1);
+  assert.match(r.text, /session not in the database:\s+3\b/i);
   assert.match(r.text, /erase-participant\.js/);
-  assert.match(r.text, /live sessions only/i,
-    "the failure message must not send the operator to a tool that will report nothing to erase");
+  assert.match(r.text, /1 of them name a session that has been purged/i);
+  assert.match(r.text, /--research-copy-checked/);
+  assert.match(r.text, /1 of them name a session that is not in the database and has no purge marker/i,
+    "only the OVERDUE untraced request is in the failure message; the 5-day-old one is not late");
+  assert.match(r.text, /backfill-purged-markers\.js/);
+  assert.match(r.text, /--dismiss/);
+  /* For a request with no marker, removal comes AFTER the backfill, never
+     instead of it: before it has run the tool refuses, and "no marker" does
+     not yet mean "never a session". */
+  assert.match(r.text, /Only once that has been run[^]*--dismiss/);
+  assert.doesNotMatch(r.text, /otherwise remove the request/);
 
-  const allLive = await monitor({
-    sessions: { "LIVE-1": {} }, withdrawals: { "LIVE-1": { uidA: request(40) } },
+  // Each caveat appears only when it applies.
+  const allLive = await monitor({ sessions, withdrawals: { "LIVE-1": { uidA: request(40) } } });
+  assert.strictEqual(allLive.code, 1);
+  assert.doesNotMatch(allLive.text, /research-copy-checked|purge marker|rebuild/,
+    "the purged-session caveats are noise when every late request has its session");
+  /* ONE mention of the backfill does belong here, and it is not a caveat about
+     purged sessions: `--dismiss`, which this message recommends, refuses to
+     run until the marker backfill has been run once. The message used to send
+     the operator to a command that would refuse (review of the switch,
+     finding 2). It says so in terms that are true whether or not it has run —
+     this job does not read the switch. */
+  assert.match(allLive.text, /--dismiss[^]*refuses[^]*backfill-purged-markers\.js[^]*once/);
+  /* What it must always say: a request is about ONE session, and the tool run
+     with --uid alone erases the person everywhere and deletes their account
+     record. And how a request the tool finds nothing for is closed. */
+  assert.match(allLive.text, /--uid AND --session/);
+  assert.match(allLive.text, /every session/i);
+  assert.match(allLive.text, /Nothing to erase[^]*--dismiss/);
+  const purgedOnly = await monitor({
+    sessions, purgedSessions: { "PURGED-1": ago(35) }, withdrawals: { "PURGED-1": { uidB: request(40) } },
   });
-  assert.doesNotMatch(allLive.text, /live sessions only/i,
-    "the caveat is noise when every open request has its session");
+  assert.match(purgedOnly.text, /--research-copy-checked/);
+  assert.doesNotMatch(purgedOnly.text, /--dismiss|backfill/);
+
+  /* A purged session whose code is in the database again is still a purged
+     session: the advice is to answer it, and the --dismiss hint — which is for
+     a session that was never purged — must not appear. */
+  const reoccupied = await monitor({
+    sessions: { "LIVE-1": { created: { at: ago(50) } }, "PURGED-1": { members: { stranger: { at: ago(0) } } } },
+    purgedSessions: { "PURGED-1": ago(35) },
+    withdrawals: { "PURGED-1": { uidB: request(40) } },
+  });
+  assert.strictEqual(reoccupied.code, 1);
+  assert.match(reoccupied.text, /1 of them name a session that has been purged/i);
+  assert.match(reoccupied.text, /--research-copy-checked/);
+  assert.doesNotMatch(reoccupied.text, /--dismiss/,
+    "the monitor sent the operator to --dismiss for a purged session");
+  assert.match(reoccupied.text, /in the database again/i);
 });
 
 test("the monitor prints no uid and no session code — its logs are public", async () => {
@@ -473,6 +618,91 @@ test("erasureQueue marks which open requests have no session, without changing t
   assert.strictEqual(q.handled, direct.handled);
 });
 
+test("the queue tells a PURGED session from one nothing shows ever existed", () => {
+  /* "Not in the database" used to cover both, and the monitor could not tell
+     a participant's request from a record written for a made-up code. The
+     purge now leaves a marker (purgedSessions/<code>), and — once the marker
+     backfill has been run; until then they accept one for any code — the
+     rules accept a withdrawal only for a session that exists or has one. So a
+     record with neither was written while that requirement was off, or its
+     session was purged before the purge wrote markers and has not been
+     backfilled. Those are the ones a human has to look at. */
+  const q = erasureQueue({
+    withdrawals: {
+      "LIVE-1": { a: { erasure: true, at: ago(3) } },
+      "PURGED-1": { b: { erasure: true, at: ago(3) } },
+      "NO-TRACE": { c: { erasure: true, at: ago(3) } },
+      orgs: { "uni-x": { "PURGED-2": { d: { erasure: true, at: ago(3) } } } },
+    },
+    erasureRecords: [],
+    liveLocationKeys: ["LIVE-1"],
+    purgedLocationKeys: ["PURGED-1", "orgs/uni-x/PURGED-2"],
+    now: NOW, deadlineDays: 30,
+  });
+  const state = Object.fromEntries(q.pending.map((p) => [p.uid, [p.sessionInDatabase, p.sessionPurged]]));
+  assert.deepStrictEqual(state, {
+    a: [true, false], b: [false, true], c: [false, false], d: [false, true],
+  });
+  assert.deepStrictEqual(q.sessionGone.map((p) => p.uid).sort(), ["b", "c", "d"]);
+  assert.deepStrictEqual(q.noMarker.map((p) => p.uid), ["c"]);
+
+  /* A code that is in the database AND carries a marker is both: something is
+     there now, and a session with that code was purged. The two facts are
+     independent — anyone can put a node under a purged code — so neither
+     hides the other. It is not "no marker", and it is not "not in the database". */
+  const back = erasureQueue({
+    withdrawals: { "BACK-1": { a: { erasure: true, at: ago(3) } } }, erasureRecords: [],
+    liveLocationKeys: ["BACK-1"], purgedLocationKeys: ["BACK-1"], now: NOW,
+  });
+  assert.deepStrictEqual([back.pending[0].sessionInDatabase, back.pending[0].sessionPurged], [true, true]);
+  assert.deepStrictEqual([back.sessionGone.length, back.noMarker.length], [0, 0]);
+
+  // Callers that pass no marker list get the old answer, not a crash.
+  const old = erasureQueue({
+    withdrawals: { "GONE-1": { a: { erasure: true, at: ago(3) } } }, erasureRecords: [],
+    liveLocationKeys: [], now: NOW,
+  });
+  assert.strictEqual(old.pending[0].sessionPurged, false);
+  assert.strictEqual(old.noMarker.length, 1);
+});
+
+test("the monitor reads the purge markers and says how many open requests have none", async () => {
+  const sessions = { "LIVE-1": { created: { at: ago(50) } } };
+  const r = await monitor({
+    sessions,
+    purgedSessions: { "PURGED-1": ago(20), orgs: { "uni-x": { "PURGED-2": ago(20) } } },
+    withdrawals: {
+      "LIVE-1": { a: request(3) }, "PURGED-1": { b: request(3) }, "NO-TRACE": { c: request(3) },
+      orgs: { "uni-x": { "PURGED-2": { d: request(3) } } },
+    },
+  });
+  assert.strictEqual(r.code, 0);
+  assert.ok(r.reads.includes("purgedSessions"), "the monitor never read the markers");
+  assert.match(r.text, /Erasure requests open:\s+4\b/);
+  assert.match(r.text, /session not in the database:\s+3\b/i);
+  assert.match(r.text, /no purge marker:\s+1\b/i);
+
+  // No such line when every gone session has its marker: it would be noise.
+  const clean = await monitor({
+    sessions, purgedSessions: { "PURGED-1": ago(20) },
+    withdrawals: { "PURGED-1": { b: request(3) } },
+  });
+  assert.match(clean.text, /session not in the database:\s+1\b/i);
+  assert.doesNotMatch(clean.text, /no purge marker/i);
+
+  // An unreadable marker tree stops the job: read as "no markers", every
+  // purged session's request would be reported as a record with no trace.
+  const db = fakeDb({ sessions: {} });
+  const ref = db.ref;
+  db.ref = (p) => (p === "purgedSessions"
+    ? { get: async () => { throw new Error("permission denied"); } }
+    : ref(p));
+  await assert.rejects(
+    () => runMonitor(db, { now: NOW, deadlineDays: 30, warnDays: 21, out() {}, err() {},
+                           liveLocations: async () => [] }),
+    /permission denied/);
+});
+
 test("no script is stored with a raw control byte in it", () => {
   /* scripts/lib/data-rights.js joined its Set keys with a NUL written as a
      string literal, and the literal was saved as the byte itself. Git treats a
@@ -494,6 +724,60 @@ test("no script is stored with a raw control byte in it", () => {
   walk("scripts");
   assert.deepStrictEqual(offenders, [],
     "build the character (String.fromCharCode) instead of typing it");
+});
+
+test("the monitor counts ledger records whose reason is not from the fixed list, and prints none of them", async () => {
+  /* Until 2026-10-07 the erasure tool stored whatever the operator typed after
+     --reason. The ledger is never deleted or rewritten, so any such text is
+     still there and is still read by this job every day. Nobody can say from
+     the repository how many there are; the job that reads them can, as a
+     number. */
+  const sessions = { "LIVE-1": { created: { at: ago(50) } } };
+  const r = await monitor({
+    sessions,
+    erasures: {
+      e1: { at: ANSWERED_AT, records: [
+        { locationKey: "A", uid: "u1", reason: "erasure request" },
+        { locationKey: "B", uid: "u2", reason: "Art. 17 request" },
+        { locationKey: "C", uid: "u3", reason: "SecretName asked by phone" },
+      ] },
+      e2: { at: ANSWERED_AT, records: [
+        { locationKey: "D", uid: "u4", reason: "see mail from secret@example.test" },
+        { locationKey: "E", uid: "u5" },                       // no reason at all: nothing typed
+      ] },
+    },
+  });
+  assert.strictEqual(r.code, 0, "old free text is not a missed deadline");
+  assert.match(r.text, /reason outside the fixed list:\s+2\b/i);
+  assert.doesNotMatch(r.text, /SecretName|secret@example/, "the monitor printed the text it was counting");
+
+  const clean = await monitor({
+    sessions, erasures: { e1: { at: ANSWERED_AT, records: [{ locationKey: "A", uid: "u1", reason: "Art. 17 request" }] } },
+  });
+  assert.doesNotMatch(clean.text, /fixed list/i, "nothing to report, so nothing printed");
+});
+
+test("when the monitor cannot read, its last line names an error code and no path", () => {
+  /* It printed e.message. A failed listing quotes the path it was listing —
+     "shallow read of 'orgs/<slug>/sessions' failed" — and an Admin read error
+     can quote any path at all; this log is public. The real script is run
+     here, with each of its reads failing in turn. */
+  const { runOpsScript } = require("./fixtures/run-ops-script");
+  const tree = {
+    sessions: { "SECRETCODE-1": { created: { at: ago(3) } } },
+    orgs: { "secret-slug": { sessions: { "SECRETCODE-2": {} } } },
+    withdrawals: { "SECRETCODE-1": { uidSecret: request(3) } },
+  };
+  const ok = runOpsScript("data-rights-monitor.js", { tree, now: NOW });
+  assert.strictEqual(ok.code, 0, "positive control: it runs clean when it can read:\n" + ok.out);
+  for (const throwOn of ["sessions", "orgs/secret-slug/sessions", "withdrawals", "erasures", "purgedSessions"]) {
+    const r = runOpsScript("data-rights-monitor.js", { tree, now: NOW, throwOn });
+    assert.strictEqual(r.code, 2, throwOn + ": a failed read must fail the job, apart from 'late'");
+    assert.match(r.out, /FATAL/);
+    assert.match(r.out, /HTTP_401|PERMISSION_DENIED/, throwOn + ": the code is what an operator can act on");
+    assert.doesNotMatch(r.out, /secret-slug|SECRETCODE|uidSecret|fake read failure/,
+      throwOn + ": the failure printed a path or a message that quotes one");
+  }
 });
 
 test("the monitor is scheduled, and after the nightly purge and export", () => {
