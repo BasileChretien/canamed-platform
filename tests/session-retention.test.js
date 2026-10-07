@@ -104,6 +104,22 @@ test("the control: honest dates on both sides of each window are decided exactly
   }
 });
 
+test("the windows are the ones passed in, on both dates", () => {
+  const short = (createdAt, closedAt) =>
+    sessionRetentionVerdict({ createdAt, closedAt, now: NOW, closedDays: 7, openDays: 10 });
+  assert.deepStrictEqual(short(NOW - 50 * DAY, NOW - 8 * DAY),
+    { purge: true, futureDated: false, reason: "closed 8d ago (> 7d)" });
+  assert.strictEqual(short(NOW - 50 * DAY, NOW - 6 * DAY).purge, false);
+  assert.deepStrictEqual(short(NOW - 11 * DAY, null),
+    { purge: true, futureDated: false, reason: "abandoned, created 11d ago (> 10d)" });
+  assert.strictEqual(short(NOW - 9 * DAY, null).purge, false);
+  /* Under the defaults the same four are all kept — so it is the argument, not
+     the dates, that made the difference. */
+  for (const [c, x] of [[NOW - 50 * DAY, NOW - 8 * DAY], [NOW - 11 * DAY, null]]) {
+    assert.strictEqual(verdict(c, x).purge, false);
+  }
+});
+
 test("a device clock that is merely FAST does not get a live session deleted", () => {
   /* The dates are Date.now() on the creator's device. A session made at 03:10
      by a laptop ten minutes fast is "in the future" at the 03:17 run; one made
@@ -216,10 +232,10 @@ function childEnv(extra) {
   return Object.assign(env, extra);
 }
 
-function runScript(now, flags) {
+function runScript(now, flags, sessionsTree = TREE) {
   /* A backup taken twelve hours before WHICHEVER night this is, so the armed
      gate is open and the session pass really runs. */
-  const tree = Object.assign({}, TREE, {
+  const tree = Object.assign({}, sessionsTree, {
     ops: { lastBackup: { at: now - DAY / 2, sessions: 7, uri: "s3://fake" } }
   });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-retention-"));
@@ -307,27 +323,41 @@ test("REAL SCRIPT, dry run: the count says what WOULD happen, and nothing is wri
 });
 
 test("REAL SCRIPT: with no future-dated session the count line is absent — it is not boilerplate", () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "session-retention-"));
-  const outFile = path.join(dir, "writes.json");
-  try {
-    const tree = {
-      sessions: { LIVE0001: TREE.sessions.LIVE0001, EXPIRED1: TREE.sessions.EXPIRED1 },
-      ops: { lastBackup: { at: NOW - DAY / 2, sessions: 2, uri: "s3://fake" } }
-    };
-    const r = spawnSync(process.execPath, ["-r", PRELOAD, SCRIPT_PATH], {
-      encoding: "utf8", timeout: HANG_TIMEOUT_MS,
-      env: childEnv({
-        FAKE_DB_TREE: JSON.stringify(tree), FAKE_DB_WRITES_OUT: outFile, FAKE_DB_NOW: String(NOW),
-        FIREBASE_DATABASE_URL: "https://fake-db.invalid", CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1",
-        CLEANUP_REQUIRE_BACKUP: "1", CLEANUP_BACKUP_MAX_AGE_DAYS: "2"
-      })
-    });
-    assert.strictEqual(r.status, 0, r.stdout + r.stderr);
-    assert.match(r.stdout, /Summary: 1 kept, 1 purged, 0 errors\./);
-    assert.ok(!/Dated in the future/.test(r.stdout), r.stdout);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const r = runScript(NOW, LIVE_QUIET, {
+    sessions: { LIVE0001: TREE.sessions.LIVE0001, EXPIRED1: TREE.sessions.EXPIRED1 }
+  });
+  assert.strictEqual(r.status, 0, r.log);
+  assert.match(r.stdout, /Summary: 1 kept, 1 purged, 0 errors\./);
+  assert.ok(!/Dated in the future/.test(r.stdout), r.log);
+});
+
+test("REAL SCRIPT: the windows are the ones the workflow passes — 7 and 10 days are not quietly 30 and 90", () => {
+  /* The cutoff arithmetic moved out of the script when the verdict did, so the
+     script now has to HAND the windows over. Every other run in this file uses
+     the defaults, and a verdict that ignored its arguments and used 30 and 90
+     would pass all of them. An operator dispatching the workflow with a
+     shorter window would then get the published one, silently. */
+  const tree = {
+    sessions: {
+      CLOSED08: { created: { by: "x", at: NOW - 50 * DAY }, closed: { by: "x", at: NOW - 8 * DAY } },
+      CLOSED06: { created: { by: "x", at: NOW - 50 * DAY }, closed: { by: "x", at: NOW - 6 * DAY } },
+      OPEN0011: { created: { by: "x", at: NOW - 11 * DAY } },
+      OPEN0009: { created: { by: "x", at: NOW - 9 * DAY } }
+    }
+  };
+  const short = runScript(NOW, Object.assign({
+    CLEANUP_RETENTION_CLOSED_DAYS: "7", CLEANUP_RETENTION_OPEN_DAYS: "10"
+  }, LIVE), tree);
+  assert.strictEqual(short.status, 0, short.log);
+  assert.deepStrictEqual(short.purged, ["sessions/CLOSED08", "sessions/OPEN0011"], short.log);
+  assert.match(short.stdout, /PURGE {4}CLOSED08 {2}closed 8d ago \(> 7d\)/);
+  assert.match(short.stdout, /PURGE {4}OPEN0011 {2}abandoned, created 11d ago \(> 10d\)/);
+
+  /* The control: the same database under the published windows keeps all four. */
+  const published = runScript(NOW, LIVE, tree);
+  assert.strictEqual(published.status, 0, published.log);
+  assert.deepStrictEqual(published.purged, [], published.log);
+  assert.match(published.stdout, /Summary: 4 kept, 0 purged, 0 errors\./);
 });
 
 test("the fixture's fixed clock is real: an unusable FAKE_DB_NOW is refused, not ignored", () => {
@@ -410,6 +440,21 @@ test("rules: both are still WRITE-ONCE — without that, the bound buys nothing"
         where + " grew a child rule (" + child + "). A `.write` there could let the date " +
         "be rewritten past the write-once guard on the node.");
     }
+  }
+  /* And from ABOVE: an RTDB write grant cascades and cannot be revoked lower
+     down, so a `.write` on any ancestor would let the node be replaced whatever
+     its own rule says. Every level down to the session must grant nothing. */
+  const ANCESTORS = [
+    ["the root", RULES], ["sessions", RULES.sessions], ["sessions/$sessionId", SESSION],
+    ["orgs", RULES.orgs], ["orgs/$orgSlug", RULES.orgs.$orgSlug],
+    ["orgs/$orgSlug/sessions", RULES.orgs.$orgSlug.sessions],
+    ["orgs/$orgSlug/sessions/$sessionId", ORG]
+  ];
+  for (const [where, node] of ANCESTORS) {
+    const w = node[".write"];
+    assert.ok(w === undefined || w === false || w === "false",
+      where + " has a `.write` rule (" + JSON.stringify(w) + "). It cascades to `created` " +
+      "and `closed`, and a session's dates could then be rewritten.");
   }
 });
 

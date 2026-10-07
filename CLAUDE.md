@@ -1814,8 +1814,11 @@ observed — LOCAL mode models no rules — so these are static findings:**
   both trees at once — not smuggled into a parity change.
   `Verify:` `node --test tests/rule-tree-parity.test.js`.
 - ~~`summary.at` / `created.at` lack an upper timestamp bound (admin-only writes;
-  low value)~~ **WRONG ON BOTH COUNTS for `created.at` — ✅ FIXED 2026-10-07,
-  together with `closed.at`.** `created` is not admin-only (any signed-in
+  low value)~~ **WRONG ON BOTH COUNTS for `created.at` — ✅ FIXED IN CODE
+  2026-10-07 (PR #438), together with `closed.at`. "In code" is the claim: the
+  purge half is live from the first scheduled run after merge, the rules half
+  only once the best-effort database deploy has actually run — check both
+  before saying it is live (`Verify:` below).** `created` is not admin-only (any signed-in
   visitor writes it while `facilitatorGate/enforce` is off), and it was not low
   value: `created/at` and `closed/at` are the two numbers the nightly purge
   decides from, so a session dated in the future was "within retention" until
@@ -1826,8 +1829,22 @@ observed — LOCAL mode models no rules — so these are static findings:**
     trees. The upper bound equals `members/$uid/at`'s, which the same device
     writes seconds later, so no device that could run a session is newly
     refused; the lower one is deliberately slack (a past date only brings the
-    purge forward). The client still sends `Date.now()`, so a clock more than
-    5 s fast now fails at CREATION with a bare permission error.
+    purge forward).
+  - **⚠️ THE COST, and it is a client defect waiting to be fixed.** The client
+    still sends `Date.now()`, so a device more than 5 s fast is now refused at
+    CREATION and at CLOSE, and the product handles neither well:
+    *create* — only the dated write is refused, the rest of the batch lands,
+    leaving a dateless partial session (purged the next night; its `recovery/`
+    node by nothing); *close* — "Sessions you created" says to check the
+    connection, the dashboard alert says to run `firebase deploy --only
+    database` (wrong for this cause), and the session STAYS OPEN, so it falls
+    to the 90-day path and participants never see it end. Such a device could
+    not have RUN a session before (same 5 s on `members`), but it could create
+    one for another device, or close one from its list. **If a facilitator
+    reports "can't create a session" or "can't close", check their clock
+    first.** The fix is `ServerValue.TIMESTAMP` for these two writes (the R3-D1
+    pattern already used for `_superadminReset`) — a client change, shell bump,
+    and LOCAL mode must not be handed the sentinel object.
   - **Purge (the half that closes it — a rule cannot reach a session already in
     the database):** `scripts/lib/session-retention.js` treats a date more than
     24 h ahead as impossible and the session as due. The tolerance is a day on
@@ -1837,7 +1854,12 @@ observed — LOCAL mode models no rules — so these are static findings:**
   - `Verify:` `node --test tests/session-retention.test.js` (runs the real
     script on two dates five years apart; holds the tolerance ≥ the rules'
     allowance) and `tests-e2e/emulator/session-date-bounds.spec.js` (every
-    denial paired with an allow; the real client creates and closes).
+    denial paired with an allow; the real client creates and closes). Those
+    test the REPO. For the live system: `gh run view <deploy run> --log | grep
+    -iE 'Database rules deployed|NOT deployed'`, and the first scheduled
+    `cleanup-stale-sessions` log after merge — a `Dated in the future: N`
+    line means sessions already carried such a date (nobody queried
+    production for them); its absence means none did.
   - **Still unbounded, and NOT read by any deletion job today:** `summary.at`,
     `pool/$cid/consent/at`, `users/$uid/history/$code/joinedAt`. Bound one
     before a retention job starts reading it, not after.
