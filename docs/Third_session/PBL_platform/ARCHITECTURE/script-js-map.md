@@ -340,7 +340,7 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 
 | Function | Lines | Calls | Purpose |
 |----------|-------|-------|---------|
-| openAccountDialog() | 4745–4760 | Header chip click | Show account modal (profile, history, sign-out, delete) |
+| openAccountDialog() | 4745–4760 | Header chip click (in a session); "Account" in the splash's signed-in row (outside one) | Show account modal (profile, history + per-session withdrawal, sign-out, delete) |
 | closeAccountDialog() | 4761–4768 | Dialog close button | Hide modal |
 | paintUserChip() | 4678–4710 | Header render | Show signed-in user name or "Sign in" link |
 | accountSaveBtn() | 4803–4821 | Profile edit in modal | Update profile from modal form |

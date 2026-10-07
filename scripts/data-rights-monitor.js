@@ -17,6 +17,18 @@
  * has lost real failures to alert fatigue more than once; a monitor that cries
  * every morning would be worse than none.
  *
+ * WHAT IT READS. The `withdrawals` and `erasures` trees, whole — identifiers
+ * and dates — and the KEYS of `sessions` and `orgs/<slug>/sessions`. No session
+ * body: it runs daily on a hosted runner outside the EEA, and the privacy
+ * notice says the daily jobs do not read session content.
+ *
+ * WHAT IT CANNOT TELL YOU. It counts a request whether or not its session is
+ * still in the database, and says how many are in the second group — but for
+ * those it cannot distinguish a session that was purged from a code that never
+ * existed (any signed-in visitor may write a withdrawal record for any code),
+ * and scripts/erase-participant.js cannot act on them. Both are open in DPA
+ * Annex VI, G12.
+ *
  * ENV
  *   DATA_RIGHTS_DEADLINE_DAYS  default 30 (Art. 12(3))
  *   DATA_RIGHTS_WARN_DAYS      default 21 — warn before it is late, since a
@@ -29,8 +41,8 @@
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
-const { readSessionLocations } = require("./lib/session-trees");
-const { pendingErasures, DEADLINE_DAYS } = require("./lib/data-rights");
+const { readSessionLocationsShallow } = require("./lib/session-trees");
+const { erasureQueue, DEADLINE_DAYS } = require("./lib/data-rights");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -48,14 +60,12 @@ function positiveDays(name, fallback) {
   return n;
 }
 
-const DEADLINE = positiveDays("DATA_RIGHTS_DEADLINE_DAYS", DEADLINE_DAYS);
-const WARN = positiveDays("DATA_RIGHTS_WARN_DAYS", 21);
-
 function initAdmin() {
-  if (getApps().length) return;
+  if (getApps().length) return getApps()[0];
   const raw = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-  if (raw) initializeApp({ credential: cert(JSON.parse(raw)), databaseURL: DB_URL });
-  else initializeApp({ databaseURL: DB_URL });
+  return raw
+    ? initializeApp({ credential: cert(JSON.parse(raw)), databaseURL: DB_URL })
+    : initializeApp({ databaseURL: DB_URL });
 }
 
 function flattenErasures(node) {
@@ -68,28 +78,65 @@ function flattenErasures(node) {
   return out;
 }
 
-async function main() {
-  initAdmin();
-  const db = getDatabase();
-
-  const locations = await readSessionLocations(db);
-  const withdrawalsByLocation = {};
-  for (const loc of locations) {
-    const snap = await db.ref(loc.withdrawalsPath).get();
-    if (snap.exists()) withdrawalsByLocation[loc.key] = snap.val() || {};
+/**
+ * The whole check, against any database handle. Returns the exit code instead
+ * of exiting, and writes through `out` / `err`, so a test can run the real
+ * thing against a fake database rather than read this file for strings.
+ *
+ * @param {object} db a firebase-admin database() handle (or a stand-in)
+ * @param {object} opts
+ * @param {number} opts.now epoch ms
+ * @param {number} opts.deadlineDays
+ * @param {number} opts.warnDays
+ * @param {function} opts.liveLocations async () => the sessions in the
+ *   database, as session-trees locations. REQUIRED, and must list KEYS ONLY:
+ *   see the note where it is called.
+ * @param {function} [opts.out] defaults to console.log
+ * @param {function} [opts.err] defaults to console.error
+ * @returns {Promise<number>} 0 = nothing late, 1 = a request is past the limit
+ */
+async function run(db, opts) {
+  const DEADLINE = opts.deadlineDays;
+  const WARN = opts.warnDays;
+  const out = opts.out || console.log;
+  const err = opts.err || console.error;
+  if (typeof opts.liveLocations !== "function") {
+    throw new Error("run() needs opts.liveLocations — there is deliberately no " +
+      "default: the obvious one reads every session body.");
   }
 
+  /* THE WHOLE `withdrawals` TREE, not one branch per live session. Until
+     2026-10-07 this visited `withdrawals/<code>` only for the sessions it found
+     in the database, so a request whose session had been purged — which the
+     rules accept, and which the account dialog's history row exists for — was
+     never open, due or overdue: the participant was told it was recorded, and
+     this job stayed green for ever. A failed read throws; it must never read
+     as "no requests". */
+  /* WHICH SESSIONS EXIST — KEYS ONLY. This job runs daily on a hosted runner
+     outside the EEA, and the privacy notice says the daily jobs do not read
+     session content. Until 2026-10-07 this line called the deep enumerator,
+     which reads `sessions` and `orgs` whole in order to use a key, a path and
+     a count. The two trees read whole below hold requests and erasure records:
+     identifiers and dates, no session content. */
+  const locations = await opts.liveLocations();
+  const withdrawalsSnap = await db.ref("withdrawals").get();
   const erasuresSnap = await db.ref("erasures").get();
-  const records = flattenErasures(erasuresSnap.exists() ? erasuresSnap.val() : {});
 
-  const now = Date.now();
-  const { pending, overdue, handled } = pendingErasures(
-    withdrawalsByLocation, records, now, DEADLINE);
+  const { pending, overdue, handled, sessionGone } = erasureQueue({
+    withdrawals: withdrawalsSnap.exists() ? withdrawalsSnap.val() : {},
+    erasureRecords: flattenErasures(erasuresSnap.exists() ? erasuresSnap.val() : {}),
+    liveLocationKeys: locations.map((loc) => loc.key),
+    now: opts.now,
+    deadlineDays: DEADLINE,
+  });
 
-  console.log(`Sessions checked:        ${locations.length}`);
-  console.log(`Erasure requests done:   ${handled}`);
-  console.log(`Erasure requests open:   ${pending.length}`);
-  console.log(`Deadline:                ${DEADLINE} days (Art. 12(3)); warn at ${WARN}`);
+  out(`Sessions in database:    ${locations.length}`);
+  out(`Erasure requests done:   ${handled}`);
+  out(`Erasure requests open:   ${pending.length}`);
+  if (sessionGone.length) {
+    out(`  session not in the database: ${sessionGone.length}`);
+  }
+  out(`Deadline:                ${DEADLINE} days (Art. 12(3)); warn at ${WARN}`);
 
   /* ⚠️ NO uid, NO session code in the output. These logs are world-readable on
      a public repository — the same reason cleanup-stale-sessions runs with
@@ -98,31 +145,58 @@ async function main() {
   for (const p of pending) {
     const age = p.ageDays === null ? "undated" : `${p.ageDays}d`;
     const flag = p.overdue ? "OVERDUE" : (p.ageDays !== null && p.ageDays >= WARN ? "due soon" : "open");
-    console.log(`  - request age ${age} [${flag}]`);
+    out(`  - request age ${age} [${flag}]` +
+      (p.sessionInDatabase ? "" : " (session not in the database)"));
   }
 
   if (overdue.length) {
-    console.error("");
-    console.error(`FAIL: ${overdue.length} erasure request(s) past the ` +
+    err("");
+    err(`FAIL: ${overdue.length} erasure request(s) past the ` +
       `${DEADLINE}-day limit in GDPR Art. 12(3).`);
-    console.error("Run scripts/erase-participant.js for each. Read the open " +
+    err("Run scripts/erase-participant.js for each. Read the open " +
       "requests from `withdrawals/` in the database — deliberately not printed " +
       "here, because these logs are public.");
-    process.exit(1);
+    const gone = overdue.filter((p) => !p.sessionInDatabase).length;
+    if (gone) {
+      /* Said here because the line above would otherwise send the operator to
+         a tool that answers "nothing to erase" and exits 0. */
+      err("");
+      err(`Session not in the database for ${gone} of them. ` +
+        "erase-participant.js walks live sessions only: it will find nothing " +
+        "for those and write no suppression record, so nothing in the tooling " +
+        "closes them yet. They concern the copies that outlive a session " +
+        "(archive snapshots, exports), or a code that never existed — the " +
+        "record is writable for any code. See DPA Annex VI, G12.");
+    }
+    return 1;
   }
 
   const soon = pending.filter((p) => p.ageDays !== null && p.ageDays >= WARN);
   if (soon.length) {
-    console.log("");
-    console.log(`${soon.length} request(s) will pass the deadline within ` +
+    out("");
+    out(`${soon.length} request(s) will pass the deadline within ` +
       `${DEADLINE - WARN} day(s). Acting now avoids a breach, not just a red run.`);
   }
-  console.log("");
-  console.log("OK — nothing is past the limit.");
-  process.exit(0);
+  out("");
+  out("OK — nothing is past the limit.");
+  return 0;
 }
 
-main().catch((e) => {
-  console.error("FATAL: " + (e && e.message));
-  process.exit(2);
-});
+async function main() {
+  const deadlineDays = positiveDays("DATA_RIGHTS_DEADLINE_DAYS", DEADLINE_DAYS);
+  const warnDays = positiveDays("DATA_RIGHTS_WARN_DAYS", 21);
+  const app = initAdmin();
+  return run(getDatabase(), {
+    now: Date.now(), deadlineDays, warnDays,
+    liveLocations: () => readSessionLocationsShallow({ app, databaseURL: DB_URL }),
+  });
+}
+
+if (require.main === module) {
+  main().then((code) => process.exit(code)).catch((e) => {
+    console.error("FATAL: " + (e && e.message));
+    process.exit(2);
+  });
+}
+
+module.exports = { run };

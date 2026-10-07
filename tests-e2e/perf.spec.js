@@ -700,6 +700,23 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     the +54 bytes are a re-added declaration and its comment. data-rights.js
 //     is 6.3 KB gz, lazy. ⚠️ THE MARGIN IS ~1.45 KB, not 3.4: the next eager
 //     addition of any size needs a reclaim first.
+//   2026-10-07 (2): CAP UNCHANGED (326). The splash's signed-in row gained an
+//     "Account" link — the only opener of the account dialog outside a
+//     session. The splash IS the eager surface, so this could not be made
+//     lazy, and NO reclaim was done for it: it was cut to +120 B gz instead
+//     (script.js +60: two lines of wiring; style.css +49: the row wraps and
+//     the name may break; i18n.js +11: one key. index.html is not counted).
+//     Measured, same method as the test (LF-normalised, gzip level 9, the 15
+//     counted assets): 323.99 -> 324.11 KB.
+//     ⚠️ That baseline is NOT the 324.55 the entry above records. The entry
+//     above was measured at gzip LEVEL 6; this test, and therefore CI,
+//     compress at level 9 (the gzipSync call below). Recomputed for the same
+//     commit: level 6 gives 324.55 with script.js at 191.34 — that entry's
+//     figures exactly — and level 9 gives 323.99 with script.js at 191.10,
+//     which is what CI's perf job printed. So the margin under the cap, as
+//     this test measures it, is ~1.9 KB after this change, not ~1.3.
+//     A figure for this ledger has to come from level 9: read it off the
+//     critical_assets list in the perf job's log, or use the same call.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

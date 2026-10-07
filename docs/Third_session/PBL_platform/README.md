@@ -151,14 +151,18 @@ For students who want their details remembered:
 - Subsequent visits automatically pre-fill the lobby join form from the
   profile. A header chip shows the user's name + initials; clicking it opens
   a **My account** dialog with editable profile, the list of sessions they
-  have joined, *Sign out* and *Delete account &amp; profile data*.
+  have joined (each with a *Withdraw consent* button), *Sign out* and *Delete
+  account &amp; profile data*.
 - Deleting the account removes `users/{uid}` (profile + history), the user's
   authored scenarios (`scenarios/{uid}`) with their published copies under
   `sharedScenarios/`, and then the Firebase auth user. Contributions in past
   sessions stay in those sessions' records and stay identifiable — the name
   typed at join is still there — until the session is purged or an operator
   erases them. Moderation reports the user filed are also kept (no client can
-  delete one). The account dialog is reachable only from inside a session.
+  delete one). The header chip exists only inside a session (the front page
+  hides the header until a code is entered), so the front page's "Signed in
+  as …" row carries an **Account** link that opens the same dialog — the route
+  for someone who has no working session code.
 - The privacy notice on the splash explains the trade-off; the platform
   remains usable without an account.
 
