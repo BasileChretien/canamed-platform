@@ -3,8 +3,9 @@
  * What the account UI keeps between two accounts, and between two page loads.
  *
  * Each section below opens with the defect it covers. A to C became reachable
- * once the account dialog could be opened from the front page (#431); D to G
- * were found by the independent review of the PR that fixed those.
+ * once the account dialog could be opened from the front page (#431); D to H
+ * were found by the independent review of the PR that fixed those. I is the
+ * other side: an account that the page did NOT show until a reload.
  *
  * HOW THESE TESTS RUN. They execute the real code: the whole account section of
  * script.js (handleAuthStateChange() down to wireAccountUI()) is cut out by its
@@ -158,7 +159,8 @@ const clone = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
    that path pending until release(path); holdAck(path) lets a write to that
    path land but keeps its acknowledgement back until releaseAck(path), which
    refuses the write instead when given an error. Values cross the boundary as
-   copies, so what is stored is plain data in THIS realm.
+   copies, so what is stored is plain data in THIS realm. `reads` lists the
+   path of every once(), in order.
 
    on("value") NEVER answers inside the call — the real database does not, and
    a fake that did hid a defect (section H): the first answer comes a microtask
@@ -167,6 +169,7 @@ const clone = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
 function makeDb() {
   const tree = {};
   const writes = [];
+  const reads = [];
   const held = new Map();
   const acks = new Map();
   const listeners = new Map();
@@ -182,7 +185,7 @@ function makeDb() {
   };
   const snap = (p) => ({ val: () => clone(get(p)) });
   return {
-    tree, writes, get: (p) => clone(get(p)), seed: (p, v) => set(p, clone(v)),
+    tree, writes, reads, get: (p) => clone(get(p)), seed: (p, v) => set(p, clone(v)),
     hold(p) { held.set(p, []); },
     release(p) { const q = held.get(p) || []; held.delete(p); q.forEach((go) => go()); },
     holdAck(p) { acks.set(p, []); },
@@ -199,6 +202,7 @@ function makeDb() {
     ref(p) {
       return {
         once() {
+          reads.push(p);
           if (held.has(p)) return new Promise((resolve) => { held.get(p).push(() => resolve(snap(p))); });
           return Promise.resolve(snap(p));
         },
@@ -283,16 +287,40 @@ function makeWorld(opts) {
      changes (12.17.1 keeps a lastNotifiedUid and compares); and it signs nobody
      in by itself: the page's own ensureSignedIn() asks for the anonymous user. */
   let anon = 0;
+  let made = 0;
   let lastUid = null;
-  const deliver = (user) => { lastUid = user ? user.uid : null; sandbox.handleAuthStateChange(user); };
+  /* Every user the backend told the page about, and every call of the page's
+     handler whoever made it (see below): uids, or null for "nobody". */
+  const reported = [];
+  const handled = [];
+  const deliver = (user) => {
+    lastUid = user ? user.uid : null;
+    reported.push(lastUid);
+    sandbox.handleAuthStateChange(user);
+  };
   const notify = (user) => Promise.resolve().then(() => {
     if ((user ? user.uid : null) !== lastUid) deliver(user);
   });
-  const fail = (code) => Promise.reject(Object.assign(new Error(code), { code }));
+  const fail = (code, more) => Promise.reject(Object.assign(new Error(code), { code }, more));
+  /* A call that signs somebody in. The listener is told before the call's
+     promise resolves — or, with `auth.late`, only after the caller's own
+     success handler has run: nothing in the page may depend on that order. */
+  const signedInAs = (user) => {
+    auth.currentUser = user;
+    if (!auth.late) return notify(user).then(() => ({ user }));
+    setImmediate(() => { if (user.uid !== lastUid) deliver(user); });
+    return Promise.resolve({ user });
+  };
   const auth = {
     currentUser: null,
-    /* The accounts that exist: e-mail address -> { user, password }. */
+    /* The accounts that exist: e-mail address -> { user, password }. One made
+       through a provider has no password. */
     accounts: {},
+    /* What happens in a provider's popup: { email, displayName } for the
+       identity chosen in it, or { error: code }. */
+    popup: null,
+    late: false,
+    redirected: false,
     signInAnonymously() {
       const user = {
         uid: "uidAnon" + (++anon), email: null, displayName: null, isAnonymous: true,
@@ -305,18 +333,53 @@ function makeWorld(opts) {
           user.email = cred.email;
           auth.accounts[cred.email] = { user, password: cred.password };
           return Promise.resolve({ user });
-        }
+        },
+        /* The same upgrade through a provider. An identity that already is an
+           account of its own cannot be linked: the error carries a credential
+           to sign in to that account with. */
+        linkWithPopup() {
+          const p = auth.popup;
+          if (p.error) return fail(p.error);
+          if (auth.accounts[p.email]) {
+            return fail("auth/credential-already-in-use", { credential: { provider: p.email } });
+          }
+          user.isAnonymous = false;
+          user.email = p.email;
+          user.displayName = p.displayName || null;
+          auth.accounts[p.email] = { user };
+          return Promise.resolve({ user });
+        },
+        // The page is left for the provider's: this never resolves.
+        linkWithRedirect() { auth.redirected = true; return new Promise(() => {}); }
       };
       auth.currentUser = user;
       return notify(user).then(() => ({ user }));
     },
     signInWithEmailAndPassword(email, password) {
-      const a = auth.accounts[email];
-      if (!a) return fail("auth/user-not-found");
-      if (a.password !== password) return fail("auth/wrong-password");
-      auth.currentUser = a.user;
-      return notify(a.user).then(() => ({ user: a.user }));
+      return auth.signInWithCredential({ email, password });
     },
+    signInWithCredential(cred) {
+      const a = auth.accounts[cred.provider || cred.email];
+      if (!a) return fail("auth/user-not-found");
+      if (!cred.provider && a.password !== cred.password) return fail("auth/wrong-password");
+      return signedInAs(a.user);
+    },
+    createUserWithEmailAndPassword(email, password) {
+      if (auth.accounts[email]) return fail("auth/email-already-in-use");
+      const user = { uid: "uidNew" + (++made), email, displayName: null, isAnonymous: false };
+      auth.accounts[email] = { user, password };
+      return signedInAs(user);
+    },
+    signInWithPopup() {
+      const p = auth.popup;
+      if (p.error) return fail(p.error);
+      if (!auth.accounts[p.email]) {
+        auth.accounts[p.email] = { user: {
+          uid: "uidNew" + (++made), email: p.email, displayName: p.displayName || null, isAnonymous: false } };
+      }
+      return signedInAs(auth.accounts[p.email].user);
+    },
+    signInWithRedirect() { auth.redirected = true; return new Promise(() => {}); },
     signOut() { auth.currentUser = null; return notify(null); }
   };
 
@@ -325,7 +388,11 @@ function makeWorld(opts) {
     window: {}, document, localStorage, el, db,
     setTimeout: () => 0,
     Event: class { constructor(type) { this.type = type; } },
-    firebase: { auth: { EmailAuthProvider: { credential: (email, password) => ({ email, password }) } } },
+    firebase: { auth: {
+      EmailAuthProvider: { credential: (email, password) => ({ email, password }) },
+      GoogleAuthProvider: class { setCustomParameters() {} },
+      OAuthProvider: class { setCustomParameters() {} addScope() {} }
+    } },
     auth: o.backend ? auth : null,
     currentUser: null, currentProfile: null,
     authReady: null, _authReadyResolve: null, _anonSignInPromise: null,
@@ -335,18 +402,22 @@ function makeWorld(opts) {
     resetStableId() {},
     dialogShow(dlg) { dlg.open = true; },
     dialogClose(dlg) { dlg.open = false; },
-    authErrorMessage: () => "AUTH",
-    runWithdrawalFlow() {}, wireEmailAuthForm() {}, signInWithProvider() {}
+    runWithdrawalFlow() {}, wireEmailAuthForm() {}
   }, o.globals);
   vm.createContext(sandbox);
-  vm.runInContext(["ensureSignedIn", "splashShowView", "splashHintErr", "splashHintOk",
-    "scorePassword", "signInWithEmail", "signUpWithEmail"]
+  vm.runInContext(["ensureSignedIn", "splashShowView", "splashHintErr", "splashHintOk", "authErrorMessage",
+    "scorePassword", "signInWithProvider", "signInWithEmail", "signUpWithEmail"]
     .map((fn) => extractFn(SCRIPT, fn)).join("\n") + "\n" + ACCOUNT_SECTION + "\n" + o.source, sandbox);
+  /* Count the calls of the page's handler, the page's own included: a function
+     declared at the top of the script is a property of this sandbox, and the
+     script's own calls look it up there. */
+  const handler = sandbox.handleAuthStateChange;
+  sandbox.handleAuthStateChange = (user) => { handled.push(user ? user.uid : null); return handler(user); };
 
   const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };
   const role = (name) => (radios[name].find((r) => r.checked) || {}).value;
   return {
-    sandbox, db, auth, el, settle,
+    sandbox, db, auth, el, settle, reported, handled,
     run: (code) => vm.runInContext(code, sandbox),
     /* An account signs in. `profile` is what it already has stored, if any. */
     async signIn(user, profile) {
@@ -1373,4 +1444,276 @@ test("H: an answer for a list that is no longer subscribed goes nowhere (positiv
   w.db.releaseOn("users/uidAlice/history");
   await w.settle();
   assert.deepStrictEqual(w.sessionsListed(), [], "her late answer must not fill his dialog");
+});
+
+/* ======================= I. an upgrade the SDK does not report =============
+ *
+ * A SIGN-UP, OR A FIRST GOOGLE SIGN-IN, LEFT THE PAGE AS IT WAS UNTIL A RELOAD.
+ * Every visitor is signed in anonymously, and creating an account LINKS that
+ * anonymous user: the uid is kept, so that what is stored under it stays the
+ * account's. The SDK shipped here (12.17.1) tells onAuthStateChanged about a
+ * change of UID only, so after a link it says nothing — and nothing else called
+ * the page's handler. The visitor was signed in with no chip, no "signed in as"
+ * row, no profile setup and no way to sign out; and since the form is emptied
+ * on success (section F), it looked like a form that had silently reset.
+ *
+ * The page now takes the upgraded user through the SAME handler the SDK calls.
+ * The other half is what must not change: wherever the SDK does report (the uid
+ * changed), the handler still runs once, not twice — in either order of "the
+ * call resolved" and "the listener was told".
+ */
+
+const NEW = "new@example.test";
+
+/* A visitor on the front page's sign-in view. */
+async function onSignInView() {
+  const w = makeWorld();
+  w.sandbox.wireAccountUI();
+  await w.visit();
+  w.sandbox.splashShowView("account");
+  return w;
+}
+
+/* The two ways an anonymous visitor becomes an account with no change of uid.
+   `name` is what profile setup then starts from. */
+const UPGRADES = [
+  { how: "an e-mail sign-up", name: "new", go(w) {
+    w.typeSignIn({ email: NEW, password: PASSWORD, confirm: PASSWORD });
+    w.sandbox.signUpWithEmail(NEW, PASSWORD);
+  } },
+  { how: "a first Google sign-in", name: "Nova", go(w) {
+    // An address and a password typed first, then the Google button instead.
+    w.typeSignIn({ email: "half@example.test", password: "Half-typed-1" });
+    w.auth.popup = { email: NEW, displayName: "Nova Example" };
+    w.sandbox.signInWithProvider("google");
+  } }
+];
+const profileReads = (w, uid) => w.db.reads.filter((p) => p === "users/" + uid + "/profile").length;
+
+for (const up of UPGRADES) {
+  test("I: after " + up.how + " the visitor is shown as signed in and asked for a profile, with no reload", async () => {
+    const w = await onSignInView();
+    const visitor = w.sandbox.currentUser;
+    const uid = visitor.uid;
+    const told = w.reported.length;
+    assert.deepStrictEqual([w.signedIn().row, w.signedIn().chip], [false, false],
+      "premise: an anonymous visitor is shown as nobody");
+
+    up.go(w);
+    await w.settle();
+
+    assert.strictEqual(w.auth.currentUser, visitor, "premise: the same user, upgraded in place");
+    assert.deepStrictEqual([visitor.uid, visitor.isAnonymous], [uid, false], "premise: with the uid it had");
+    assert.strictEqual(w.reported.length, told, "premise: and the SDK reported nothing");
+
+    assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: NEW },
+      "the chip and the 'signed in as' row, which carry Account and Sign out");
+    assert.strictEqual(profileReads(w, uid), 1, "the account's profile is read");
+    assert.deepStrictEqual(w.views(), ["profile-setup"], "and, having none, it is asked for one");
+    assert.strictEqual(w.setupForm().name, up.name);
+    assert.strictEqual(w.el("splash-account-hint").textContent, "");
+    assert.deepStrictEqual(w.signInForm(), EMPTY, "the sign-in form is emptied, as after any sign-in");
+  });
+
+  test("I: she can then save her profile, open her account and sign out (" + up.how + ")", async () => {
+    const w = await onSignInView();
+    const uid = w.sandbox.currentUser.uid;
+    up.go(w);
+    await w.settle();
+    assert.deepStrictEqual(w.views(), ["profile-setup"]);
+
+    w.fill("splash-prof", { name: "Nova", university: "Caen", year: "3", english: "C1" });
+    w.sandbox.profileSetupSubmit();
+    await w.settle();
+    assert.deepStrictEqual(w.stored(uid), { name: "Nova", university: "Caen", role: "student", year: 3, english: "C1" });
+    assert.deepStrictEqual(w.views(), ["enter"]);
+    assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "Nova" });
+
+    w.el("splash-signed-in-account").fire("click");
+    assert.strictEqual(w.el("account-dialog").open, true);
+    assert.strictEqual(w.dialog().email, NEW);
+    w.el("account-signout-btn").fire("click");
+    await w.settle();
+    assert.ok(w.sandbox.currentUser.isAnonymous && w.sandbox.currentUser.uid !== uid,
+      "signed out: a new anonymous visitor");
+    assert.deepStrictEqual([w.signedIn().row, w.signedIn().chip], [false, false]);
+    assert.strictEqual(w.el("account-dialog").open, false);
+  });
+
+  test("I: what is stored under the visitor's uid is the account's at once (" + up.how + ")", async () => {
+    /* The promise the link makes: the uid is kept, so a profile and a list of
+       sessions stored under it are the new account's. They are read from that
+       same uid straight away; and work is stamped with the uid from then on,
+       which is what a reload did. */
+    const w = await onSignInView();
+    const uid = w.sandbox.currentUser.uid;
+    w.db.seed("users/" + uid + "/profile", ALICE_PROFILE);
+    w.db.seed("users/" + uid + "/history", HER_SESSIONS);
+    assert.notStrictEqual(w.sandbox.stableId, uid, "premise: an anonymous visitor's work carries a random id");
+
+    up.go(w);
+    await w.settle();
+
+    assert.strictEqual(w.sandbox.currentUser.uid, uid, "premise: the uid is kept");
+    assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "Alice" });
+    assert.deepStrictEqual(w.views(), ["enter"], "an account that has a profile goes back to 'enter a session'");
+    assert.deepStrictEqual(w.joinForm(), { name: "Alice", university: "Nagoya", year: "5", english: "C1" });
+    w.el("splash-signed-in-account").fire("click");
+    await w.settle();
+    assert.deepStrictEqual(w.sessionsListed(), ["ABC-123", "DEF-456"]);
+    assert.strictEqual(w.sandbox.stableId, uid);
+    assert.strictEqual(w.sandbox.localStorage.getItem("canamed_stable_id"), uid);
+  });
+
+  test("I: " + up.how + " is not a change of account: what the visitor typed in the join form stays", async () => {
+    const w = await onSignInView();
+    const uid = w.sandbox.currentUser.uid;
+    const typed = { name: "Typed Name", university: "Caen", year: "3", english: "C1" };
+    w.el("name-input").value = typed.name;
+    w.el("uni-input").value = typed.university;
+    w.el("year-input").value = typed.year;
+    w.el("english-input").value = typed.english;
+    const before = w.handled.length;
+
+    up.go(w);
+    await w.settle();
+
+    assert.deepStrictEqual(w.handled.slice(before), [uid], "the upgraded user is handled once");
+    assert.deepStrictEqual(w.joinForm(), typed);
+  });
+}
+
+test("I: signing in again through Google to the account already shown changes nothing on the page", async () => {
+  /* The other same-uid case, and the one where a dialog can be open: the page
+     already shows this account, the SDK reports nothing, and nothing is to be
+     handled again — what she is in the middle of is hers. */
+  const w = makeWorld();
+  w.sandbox.wireAccountUI();
+  w.auth.accounts[ALICE.email] = { user: ALICE };
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.el("splash-signed-in-account").fire("click");
+  w.el("account-name").value = "Alice, halfway through";
+  const before = w.handled.length;
+
+  w.auth.popup = { email: ALICE.email };
+  w.sandbox.signInWithProvider("google");
+  await w.settle();
+
+  assert.strictEqual(w.el("splash-account-hint").textContent, "", "premise: the sign-in succeeded");
+  assert.deepStrictEqual(w.handled.slice(before), [], "nothing to handle: same account, already shown");
+  assert.strictEqual(w.el("account-dialog").open, true);
+  assert.strictEqual(w.dialog().name, "Alice, halfway through");
+  assert.deepStrictEqual(w.joinForm(), { name: "Alice", university: "Nagoya", year: "5", english: "C1" });
+});
+
+/* Where the uid DOES change, the SDK reports the user and the page must not
+   handle it a second time. */
+const REPORTED = [
+  { what: "a sign-up with an address that already has an account", go(w) {
+    w.typeSignIn({ email: ALICE.email, password: PASSWORD, confirm: PASSWORD });
+    w.sandbox.signUpWithEmail(ALICE.email, PASSWORD);
+  } },
+  { what: "a plain sign-in", go(w) {
+    w.typeSignIn({ email: ALICE.email, password: PASSWORD });
+    w.sandbox.signInWithEmail(ALICE.email, PASSWORD);
+  } },
+  { what: "a Google sign-in to an account that already exists", go(w) {
+    w.auth.popup = { email: ALICE.email };
+    w.sandbox.signInWithProvider("google");
+  } }
+];
+
+for (const late of [false, true]) {
+  const order = "the SDK's report arriving " + (late ? "after" : "before") + " the call resolves";
+
+  for (const r of REPORTED) {
+    test("I: " + r.what + " is handled once, not twice (" + order + ")", async () => {
+      const w = await onSignInView();
+      w.auth.accounts[ALICE.email] = { user: ALICE, password: PASSWORD };
+      w.db.seed("users/uidAlice/profile", ALICE_PROFILE);
+      w.auth.late = late;
+      const before = w.handled.length;
+
+      r.go(w);
+      await w.settle();
+
+      assert.strictEqual(w.sandbox.currentUser, ALICE, "premise: she is signed in, under her own uid");
+      assert.deepStrictEqual(w.handled.slice(before), ["uidAlice"]);
+      assert.strictEqual(profileReads(w, "uidAlice"), 1);
+      assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "Alice" });
+      assert.deepStrictEqual(w.views(), ["enter"]);
+      assert.deepStrictEqual(w.signInForm(), EMPTY);
+    });
+  }
+
+  test("I: a sign-up when there is no anonymous visitor to upgrade is handled once, not twice (" + order + ")", async () => {
+    // Anonymous sign-in refused or not answered yet: the account is created outright.
+    const w = makeWorld();
+    w.sandbox.wireAccountUI();
+    w.sandbox.splashShowView("account");
+    w.auth.late = late;
+    assert.strictEqual(w.auth.currentUser, null, "premise: nobody at all");
+
+    w.typeSignIn({ email: NEW, password: PASSWORD, confirm: PASSWORD });
+    w.sandbox.signUpWithEmail(NEW, PASSWORD);
+    await w.settle();
+
+    assert.deepStrictEqual(w.handled, ["uidNew1"]);
+    assert.strictEqual(profileReads(w, "uidNew1"), 1);
+    assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: NEW });
+    assert.deepStrictEqual(w.views(), ["profile-setup"]);
+    assert.deepStrictEqual(w.signInForm(), EMPTY);
+  });
+}
+
+/* A sign-up or a link that FAILS leaves the visitor exactly as they were. These
+   pass before the fix too: they are here so that it cannot reach a failure. */
+async function expectStillAVisitor(w, before, message) {
+  await w.settle();
+  assert.ok(w.sandbox.currentUser.isAnonymous, "still the anonymous visitor");
+  assert.deepStrictEqual(w.handled.slice(before), [], "nothing was handled");
+  assert.deepStrictEqual([w.signedIn().row, w.signedIn().chip], [false, false]);
+  assert.deepStrictEqual(w.views(), ["account"], "still on the sign-in view");
+  assert.strictEqual(w.el("splash-account-hint").className, "splash-hint err");
+  assert.match(w.el("splash-account-hint").textContent, message);
+}
+
+test("I: a sign-up refused for a weak password leaves the visitor as they were, with what they typed", async () => {
+  const w = await onSignInView();
+  const before = w.handled.length;
+  w.typeSignIn({ email: NEW, password: "weak", confirm: "weak" });
+  w.sandbox.signUpWithEmail(NEW, "weak");
+  await expectStillAVisitor(w, before, /^Pick a stronger password/);
+  assert.deepStrictEqual(w.signInForm(), { email: NEW, password: "weak", confirm: "weak" });
+});
+
+test("I: so does a sign-up with an address in use and the wrong password", async () => {
+  const w = await onSignInView();
+  w.auth.accounts[ALICE.email] = { user: ALICE, password: PASSWORD };
+  const before = w.handled.length;
+  w.typeSignIn({ email: ALICE.email, password: "Wrong-Horse-9", confirm: "Wrong-Horse-9" });
+  w.sandbox.signUpWithEmail(ALICE.email, "Wrong-Horse-9");
+  await expectStillAVisitor(w, before, /^Wrong password/);
+  assert.deepStrictEqual(w.signInForm(), { email: ALICE.email, password: "Wrong-Horse-9", confirm: "Wrong-Horse-9" });
+});
+
+test("I: so does a Google popup closed without choosing an account", async () => {
+  const w = await onSignInView();
+  const before = w.handled.length;
+  w.auth.popup = { error: "auth/popup-closed-by-user" };
+  w.sandbox.signInWithProvider("google");
+  await expectStillAVisitor(w, before, /^Sign-in was cancelled\.$/);
+  assert.strictEqual(w.auth.redirected, false);
+});
+
+test("I: a blocked popup still goes on to the full-page redirect, and nothing is handled meanwhile", async () => {
+  const w = await onSignInView();
+  const before = w.handled.length;
+  w.auth.popup = { error: "auth/popup-blocked" };
+  w.sandbox.signInWithProvider("google");
+  await w.settle();
+  assert.strictEqual(w.auth.redirected, true);
+  assert.strictEqual(w.el("splash-account-hint").textContent, "Redirecting to Google…");
+  assert.ok(w.sandbox.currentUser.isAnonymous);
+  assert.deepStrictEqual(w.handled.slice(before), []);
 });

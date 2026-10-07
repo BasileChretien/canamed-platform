@@ -39,10 +39,23 @@ async function standInAuth(page) {
     /* Like the SDK (12.17.1 keeps a lastNotifiedUid): the app's handler is told
        only when the UID changes. */
     let lastUid = null;
-    const report = (user) => { lastUid = user ? user.uid : null; handleAuthStateChange(user); };
+    /* What this backend told the page (__reported), and every call of the
+       page's handler whoever made it (__handled): uids, or null for nobody.
+       A function declared at the top of a classic script is a property of
+       window, and the script's own calls look it up there. */
+    window.__reported = [];
+    window.__handled = [];
+    const handler = handleAuthStateChange;
+    window.handleAuthStateChange = (user) => { window.__handled.push(user ? user.uid : null); return handler(user); };
+    const report = (user) => {
+      lastUid = user ? user.uid : null;
+      window.__reported.push(lastUid);
+      handleAuthStateChange(user);
+    };
     const later = (user) => Promise.resolve().then(() => {
       if ((user ? user.uid : null) !== lastUid) report(user);
     });
+    const refuse = (code, more) => Promise.reject(Object.assign(new Error(code), { code }, more));
     const account = (who) => Object.assign({
       displayName: null, isAnonymous: false,
       delete() { auth.currentUser = null; return later(null); }
@@ -60,8 +73,20 @@ async function standInAuth(page) {
              the SDK shipped here (12.17.1) reports to onAuthStateChanged only
              when the uid changes — so the app's handler is not called. */
           linkWithCredential(cred) {
+            // An address that already is an account cannot be linked.
+            if (accounts[cred.email]) return refuse("auth/email-already-in-use");
             user.isAnonymous = false;
             user.email = cred.email;
+            return Promise.resolve({ user });
+          },
+          /* The same upgrade through a provider's popup. window.__popup is
+             what happens in it: { email, displayName }, or { error: code }. */
+          linkWithPopup() {
+            const p = window.__popup;
+            if (p.error) return refuse(p.error);
+            user.isAnonymous = false;
+            user.email = p.email;
+            user.displayName = p.displayName || null;
             return Promise.resolve({ user });
           }
         };
@@ -70,16 +95,19 @@ async function standInAuth(page) {
       },
       signInWithEmailAndPassword(email, password) {
         const a = accounts[email];
-        if (!a || a.password !== password) {
-          return Promise.reject(Object.assign(new Error("refused"), { code: "auth/invalid-credential" }));
-        }
+        if (!a || a.password !== password) return refuse("auth/invalid-credential");
         auth.currentUser = a.user;
         return later(a.user).then(() => ({ user: a.user }));
       },
+      signInWithCredential(cred) { return auth.signInWithEmailAndPassword(cred.email, cred.password); },
       signOut() { auth.currentUser = null; return later(null); }
     };
-    /* LOCAL mode never calls the SDK; the sign-up path asks it for one thing. */
-    window.firebase = { auth: { EmailAuthProvider: { credential: (email, password) => ({ email, password }) } } };
+    /* LOCAL mode never calls the SDK; the sign-up and provider paths ask it
+       for a credential and a provider object. */
+    window.firebase = { auth: {
+      EmailAuthProvider: { credential: (email, password) => ({ email, password }) },
+      GoogleAuthProvider: class { setCustomParameters() {} }
+    } };
     window.__register = (who, password) => { accounts[who.email] = { user: account(who), password }; };
     window.__signIn = (who) => {
       const user = account(who);
@@ -781,5 +809,143 @@ test("H: the next account's dialog lists none of the previous account's sessions
   await expect(page.locator("#account-history .account-history-code"), "then his own, and only his own")
     .toHaveText(["XYZ-789"]);
   await expect(page.locator("#account-history .account-history-withdraw")).toHaveCount(1);
+  expect(errors).toEqual([]);
+});
+
+/* ======================= I. an upgrade the SDK does not report =============
+ *
+ * A sign-up, or a first Google sign-in, left the page as it was until a
+ * reload. Creating an account LINKS the anonymous user every visitor is, so the
+ * uid is kept; the SDK reports a user only when the uid changes; and nothing
+ * else called the page's handler. The visitor was signed in with no "signed in
+ * as" row, no profile setup, no Account and no Sign out — and since the form is
+ * emptied on success, it looked as if the form had silently reset.
+ *
+ * WHAT THIS CAN AND CANNOT SHOW. The form, the Google button, the views, the
+ * dialog and the handler are the real page on each viewport. The auth backend
+ * is the stand-in above: THAT a link keeps the uid and is not reported is read
+ * from the SDK's source and modelled, not exercised — and there is no real
+ * Google popup, no redirect fallback and no database rule here.
+ */
+
+const NEW = "new@example.test";
+const pageState = (page, since) => page.evaluate((since) => ({
+  uid: currentUser.uid, anonymous: currentUser.isAnonymous,
+  reported: window.__reported.slice(since.reported), handled: window.__handled.slice(since.handled)
+}), since);
+const mark = (page) => page.evaluate(() => ({ reported: window.__reported.length, handled: window.__handled.length }));
+
+/* From profile setup to signed out again, through the page's own controls. */
+async function setUpThenSignOut(page, uid) {
+  await page.locator("#splash-prof-name").fill("Nova");
+  await page.locator("#splash-prof-uni").selectOption("Caen");
+  await page.locator("#splash-profile-setup-submit").click();
+  await expect(page.locator("#splash-view-enter")).toBeVisible();
+  expect(withoutTimes(await stored(page, "users/" + uid + "/profile")), "her profile, under the uid she had as a visitor")
+    .toEqual({ name: "Nova", university: "Caen", role: "student", year: 1, english: "B2" });
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("Nova");
+
+  await page.locator("#splash-signed-in-account").click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  expect(await dialogFields(page)).toEqual(
+    { email: NEW, name: "Nova", university: "Caen", year: "1", english: "B2", role: "student" });
+  await page.locator("#account-signout-btn").scrollIntoViewIfNeeded();
+  await page.locator("#account-signout-btn").click();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+  await expect(page.locator("#splash-signed-in")).toBeHidden();
+  await expect.poll(() => page.evaluate(() => !!(currentUser && currentUser.isAnonymous)),
+    { message: "signed out: an anonymous visitor again" }).toBe(true);
+  expect(await page.evaluate(() => currentUser.uid), "and a new one").not.toBe(uid);
+}
+
+test("I: an account created with the e-mail form is on the page at once: profile setup, Account and Sign out", async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors = collectErrors(page);
+  await frontPage(page);
+  const uid = await page.evaluate(() => currentUser.uid);
+  // What the visitor has typed in the lobby's join form, behind the front page.
+  await page.evaluate(() => { /** @type {HTMLInputElement} */ (document.getElementById("name-input")).value = "Typed Name"; });
+
+  await page.locator("#splash-go-account").click();
+  await page.locator("#splash-email-mode-signup").click();
+  await page.locator("#splash-email-input").fill(NEW);
+  await page.locator("#splash-password-input").fill(PASSWORD);
+  await page.locator("#splash-password-confirm").fill(PASSWORD);
+  const since = await mark(page);
+  await page.locator("#splash-email-submit").click();
+
+  await expect(page.locator("#splash-view-profile-setup"), "a new account is asked for its profile").toBeVisible();
+  expect(await pageState(page, since), "premise: upgraded in place, unreported; handled once by the page itself")
+    .toEqual({ uid, anonymous: false, reported: [], handled: [uid] });
+  await expect(page.locator("#splash-view-account")).toBeHidden();
+  await expect(page.locator("#splash-signed-in")).toBeVisible();
+  await expect(page.locator("#splash-signed-in-name")).toHaveText(NEW);
+  await expect(page.locator("#splash-prof-name"), "starting from her own address").toHaveValue("new");
+  expect(await signInFields(page), "the sign-in form is emptied, as after any sign-in").toEqual(NOTHING);
+  expect((await joinFields(page)).name, "not a change of account: what the visitor typed stays").toBe("Typed Name");
+
+  await setUpThenSignOut(page, uid);
+  expect(errors).toEqual([]);
+});
+
+test("I: so is an account made with the Google button, and a popup that is closed changes nothing", async ({ page }) => {
+  test.setTimeout(90_000);
+  const errors = collectErrors(page);
+  await frontPage(page);
+  const uid = await page.evaluate(() => currentUser.uid);
+  await page.locator("#splash-go-account").click();
+  await expect(page.locator("#splash-view-account")).toBeVisible();
+
+  // 1. The popup is closed without choosing an account.
+  let since = await mark(page);
+  await page.evaluate(() => { window.__popup = { error: "auth/popup-closed-by-user" }; });
+  await page.locator("#splash-google-signin").click();
+  await expect(page.locator("#splash-account-hint")).toHaveText("Sign-in was cancelled.");
+  await expect(page.locator("#splash-account-hint")).toHaveClass(/(^|\s)err(\s|$)/);
+  expect(await pageState(page, since), "still the anonymous visitor, and nothing handled")
+    .toEqual({ uid, anonymous: true, reported: [], handled: [] });
+  await expect(page.locator("#splash-view-account")).toBeVisible();
+  await expect(page.locator("#splash-signed-in")).toBeHidden();
+
+  // 2. An address and a password typed first, then the Google button instead.
+  await page.locator("#splash-email-input").fill("half@example.test");
+  await page.locator("#splash-password-input").fill("Half-typed-1");
+  since = await mark(page);
+  await page.evaluate((email) => { window.__popup = { email, displayName: "Nova Example" }; }, NEW);
+  await page.locator("#splash-google-signin").click();
+
+  await expect(page.locator("#splash-view-profile-setup")).toBeVisible();
+  expect(await pageState(page, since), "premise: upgraded in place, unreported; handled once by the page itself")
+    .toEqual({ uid, anonymous: false, reported: [], handled: [uid] });
+  await expect(page.locator("#splash-signed-in")).toBeVisible();
+  await expect(page.locator("#splash-signed-in-name")).toHaveText(NEW);
+  await expect(page.locator("#splash-prof-name"), "starting from the name Google gave").toHaveValue("Nova");
+  await expect(page.locator("#splash-account-hint")).toHaveText("");
+  expect(await signInFields(page), "what was typed in the e-mail form is not left in it").toEqual(NOTHING);
+
+  await setUpThenSignOut(page, uid);
+  expect(errors).toEqual([]);
+});
+
+test("I: a sign-up that turns out to be another account is reported by the SDK and handled once, not twice", async ({ page }) => {
+  /* The address already has an account: the link is refused, the page signs in
+     to that account instead, the uid changes and the SDK reports it. */
+  const errors = collectErrors(page);
+  await frontPage(page);
+  await page.evaluate(({ who, password }) => { window.__register(who, password); }, { who: ALICE, password: PASSWORD });
+  await seed(page, "users/u_alice/profile", ALICE_PROFILE);
+  await page.locator("#splash-go-account").click();
+  await page.locator("#splash-email-mode-signup").click();
+  await page.locator("#splash-email-input").fill(ALICE.email);
+  await page.locator("#splash-password-input").fill(PASSWORD);
+  await page.locator("#splash-password-confirm").fill(PASSWORD);
+  const since = await mark(page);
+  await page.locator("#splash-email-submit").click();
+
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("Alice");
+  await expect(page.locator("#splash-view-enter")).toBeVisible();
+  expect(await pageState(page, since))
+    .toEqual({ uid: "u_alice", anonymous: false, reported: ["u_alice"], handled: ["u_alice"] });
+  expect(await signInFields(page)).toEqual(NOTHING);
   expect(errors).toEqual([]);
 });

@@ -12006,6 +12006,7 @@ function signInWithProvider(name) {
   // error carries. Direct credential sign-in needs no popup, so it can't be
   // popup-blocked. (History under the throwaway anon uid is forfeited.)
   const cur = auth.currentUser;
+  const anon = cur && cur.isAnonymous && cur.uid;
   const popupSignIn = () => auth.signInWithPopup(provider);
   const salvageSignIn = e =>
     (e && e.credential) ? auth.signInWithCredential(e.credential) : popupSignIn();
@@ -12025,7 +12026,7 @@ function signInWithProvider(name) {
       ? c.linkWithRedirect(provider)
       : auth.signInWithRedirect(provider);
   };
-  const link = (cur && cur.isAnonymous)
+  const link = anon
     ? cur.linkWithPopup(provider).catch(e => {
         if (e && (e.code === "auth/credential-already-in-use" ||
                   e.code === "auth/email-already-in-use")) {
@@ -12037,10 +12038,7 @@ function signInWithProvider(name) {
         throw e;
       })
     : popupSignIn();
-  link.then(() => {
-    // handleAuthStateChange takes over from here
-    splashHintOk(hint, "");
-  }).catch(e => {
+  link.then(() => signInDone(hint, anon)).catch(e => {
     if (popupBlocked(e)) {
       redirectSignIn().catch(err => splashHintErr(hint, authErrorMessage(err)));
       return;
@@ -12186,7 +12184,7 @@ function signInWithEmail(email, password) {
   }
   splashHintOk(hint, "Signing you in…");
   auth.signInWithEmailAndPassword(email, password)
-    .then(() => { clearSignInForm(); splashHintOk(hint, ""); })
+    .then(() => signInDone(hint))
     .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
@@ -12211,8 +12209,9 @@ function signUpWithEmail(email, password) {
   }
   splashHintOk(hint, "Creating your account…");
   const cur = auth.currentUser;
+  const anon = cur && cur.isAnonymous && cur.uid;
   const cred = firebase.auth.EmailAuthProvider.credential(email, password);
-  const link = (cur && cur.isAnonymous)
+  const link = anon
     ? cur.linkWithCredential(cred).catch(e => {
         if (e && (e.code === "auth/credential-already-in-use" ||
                   e.code === "auth/email-already-in-use")) {
@@ -12228,7 +12227,7 @@ function signUpWithEmail(email, password) {
           }
           throw e;
         });
-  link.then(() => { clearSignInForm(); splashHintOk(hint, ""); })
+  link.then(() => signInDone(hint, anon))
       .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
@@ -12266,7 +12265,8 @@ function ensureSignedIn() {
   return _anonSignInPromise;
 }
 
-/* Auth state changes: signed-in / signed-out / after sign-up */
+/* Who is signed in: the page's ONE path to it. The SDK calls this when the uid
+   changes, and only then; signInDone() calls it after a link, which keeps it. */
 function handleAuthStateChange(user) {
   if ((currentUser && currentUser.uid) !== (user && user.uid)) resetAccountUI();
   currentUser = user || null;
@@ -12379,6 +12379,16 @@ function clearSignInForm() {
     const n = el("splash-" + id);
     if (n) { n.value = ""; n.dispatchEvent(new Event("input")); }
   });
+}
+
+/* A sign-in or sign-up succeeded. `anon` is the uid of the anonymous visitor
+   it started from, if any: when that is still the uid, it was a link, the SDK
+   reports nothing, and the page is brought to the account from here. */
+function signInDone(hint, anon) {
+  clearSignInForm();
+  splashHintOk(hint, "");
+  const u = auth.currentUser;
+  if (anon && u && u.uid === anon) handleAuthStateChange(u);
 }
 
 function loadProfile() {
