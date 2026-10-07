@@ -35,6 +35,97 @@ const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
    request from the day it was added (2026-09-03) until 2026-10-07. */
 const SEP = String.fromCharCode(0);
 
+/** One request: this person, in this session. */
+const requestKey = (locationKey, uid) => locationKey + SEP + uid;
+
+/** `erasures/<pushId>.records[]`, as one list. A record with no date of its own
+ *  takes its entry's: `erasures/<id> = { at, records }`, one entry per run. */
+function flattenErasures(node) {
+  const out = [];
+  for (const id of Object.keys(isObj(node) ? node : {})) {
+    const entry = node[id];
+    if (!isObj(entry)) continue;
+    for (const rec of Object.values(entry.records || {})) {
+      out.push(isObj(rec) && rec.at === undefined && entry.at !== undefined
+        ? Object.assign({ at: entry.at }, rec) : rec);
+    }
+  }
+  return out;
+}
+
+/**
+ * Which requests each (session, person) has had ANSWERED. Matching on uid AND
+ * location, not uid alone: someone may withdraw from one session and not
+ * another, and treating any past erasure as covering every future request
+ * would mark new requests done on arrival.
+ *
+ * ONE DEFINITION, SHARED — with isAnswered() below. The monitor uses it to
+ * decide what is still open; the nightly purge and sweep use it to decide
+ * which withdrawal records may be deleted (scripts/lib/withdrawal-retention.js).
+ * If those two ever disagreed, the purge would delete a request the monitor
+ * still counted as open — which is the defect this arrangement exists to end.
+ *
+ * @param {object[]} erasureRecords flattened `erasures/*.records[]`
+ * @returns {Map<string, {stamps: Set<number>, unstampedLatest: number}>}
+ *   requestKey() -> the `requestAt` stamps of its records, and — for records
+ *   that carry no stamp at all — the latest of their dates in epoch ms
+ *   (-Infinity when none can be read)
+ */
+function answeredIndex(erasureRecords) {
+  const index = new Map();
+  for (const rec of erasureRecords || []) {
+    if (!rec || !rec.uid || !rec.locationKey) continue;
+    const key = requestKey(rec.locationKey, rec.uid);
+    if (!index.has(key)) index.set(key, { stamps: new Set(), unstampedLatest: -Infinity });
+    const entry = index.get(key);
+    if (typeof rec.requestAt === "number") { entry.stamps.add(rec.requestAt); continue; }
+    const parsed = typeof rec.at === "string" ? Date.parse(rec.at) : NaN;
+    if (Number.isFinite(parsed) && parsed > entry.unstampedLatest) entry.unstampedLatest = parsed;
+  }
+  return index;
+}
+
+/**
+ * Has THIS request been answered?
+ *
+ * A record answers the request it was written for, and says which: it carries
+ * `requestAt`, a copy of that request's own `at` (0 when it was written with
+ * no request in the queue). The match is on that value. Nothing is compared
+ * across clocks.
+ *
+ * WHY NOT "A RECORD FOR THIS PERSON AND SESSION EXISTS". `erasures/` is never
+ * deleted, so that stays true for ever: erased, back in the same session on
+ * the same account, new work, a second request — answered before it was made,
+ * never shown, and deleted by the purge.
+ *
+ * WHY NOT "…DATED AT OR AFTER THE REQUEST" either, which is what this did for
+ * a few hours on 2026-10-07. The record's date is the operator's clock and the
+ * request's is the participant's device, which the rules let run up to a day
+ * behind the server. A second request from a slow device, made after the
+ * erasure, is dated before it.
+ *
+ * RECORDS WITH NO STAMP were written before stamps existed. For those, and
+ * only those, the date comparison is all there is. It is wrong by up to the
+ * 24 hours the rule allows, in one direction: a request made within a day
+ * AFTER such a record can read as answered. No such record is written any
+ * more, so that window closes a day after this is deployed.
+ *
+ * An undated request is answered by any record (nothing identifies it, and it
+ * must stay closable); a record with no stamp and no readable date answers
+ * nothing that has a date.
+ *
+ * @param {Map} index from answeredIndex()
+ * @param {string} locationKey
+ * @param {string} uid
+ * @param {*} requestAt the request's `at` (epoch ms)
+ */
+function isAnswered(index, locationKey, uid, requestAt) {
+  const entry = index.get(requestKey(locationKey, uid));
+  if (!entry) return false;
+  if (typeof requestAt !== "number") return true;
+  return entry.stamps.has(requestAt) || entry.unstampedLatest >= requestAt;
+}
+
 /**
  * Which erasure requests are still outstanding, and which are late.
  *
@@ -46,14 +137,7 @@ const SEP = String.fromCharCode(0);
  */
 function pendingErasures(withdrawalsByLocation, erasureRecords, now,
                          deadlineDays = DEADLINE_DAYS) {
-  /* A request is handled when an erasure record exists for the same person in
-     the same session. Matching on uid AND location, not uid alone: someone may
-     withdraw from one session and not another, and treating any past erasure as
-     covering every future request would mark new requests done on arrival. */
-  const done = new Set();
-  for (const rec of erasureRecords || []) {
-    if (rec && rec.uid && rec.locationKey) done.add(rec.locationKey + SEP + rec.uid);
-  }
+  const done = answeredIndex(erasureRecords);
 
   const pending = [];
   let handled = 0;
@@ -66,7 +150,7 @@ function pendingErasures(withdrawalsByLocation, erasureRecords, now,
          full effect the moment it is written — the export honours it — so
          listing those as "outstanding" would bury the real ones in noise. */
       if (!isObj(w) || w.erasure !== true) continue;
-      if (done.has(locationKey + SEP + uid)) { handled++; continue; }
+      if (isAnswered(done, locationKey, uid, w.at)) { handled++; continue; }
       const at = typeof w.at === "number" ? w.at : null;
       const ageDays = at === null ? null : Math.floor((now - at) / DAY_MS);
       pending.push({
@@ -100,25 +184,42 @@ function pendingErasures(withdrawalsByLocation, erasureRecords, now,
  * @param {object} args.withdrawals value of `withdrawals` (both trees)
  * @param {object[]} args.erasureRecords flattened `erasures/*.records[]`
  * @param {string[]} args.liveLocationKeys keys of the sessions in the database
+ * @param {string[]} [args.purgedLocationKeys] keys that carry a purge marker
+ *   (session-trees purgedMarkers()). Omitted = none known.
  * @param {number} args.now epoch ms
  * @param {number} [args.deadlineDays]
  * @returns {{pending: object[], overdue: object[], handled: number,
- *            sessionGone: object[]}} as pendingErasures(), each pending item
- *   also carrying `sessionInDatabase`; `sessionGone` is the pending items
- *   whose session is not there. NB "not there" means purged OR never existed:
- *   see withdrawalLocations().
+ *            sessionGone: object[], noMarker: object[]}} as pendingErasures(),
+ *   each pending item also carrying `sessionInDatabase` and `sessionPurged`.
+ *   `sessionGone` is the pending items whose session is not in the database;
+ *   `noMarker` is the part of those that NOTHING shows ever existed — written
+ *   before the rules required a session or a marker, or for a session purged
+ *   before the purge wrote markers. `sessionPurged` is true wherever a marker
+ *   exists, whether or not something is in the database under that code again.
  */
-function erasureQueue({ withdrawals, erasureRecords, liveLocationKeys, now, deadlineDays }) {
+function erasureQueue({ withdrawals, erasureRecords, liveLocationKeys, purgedLocationKeys,
+                        now, deadlineDays }) {
   const live = new Set(liveLocationKeys || []);
+  const purged = new Set(purgedLocationKeys || []);
   const found = pendingErasures(
     withdrawalLocations(withdrawals), erasureRecords, now, deadlineDays);
-  const pending = found.pending.map(
-    (p) => ({ ...p, sessionInDatabase: live.has(p.locationKey) }));
+  /* TWO INDEPENDENT FACTS. "Something is under this code now" does not undo
+     "a session with this code was purged": anyone can put a node under a
+     purged code (their own membership row is writable under any code), and
+     the snapshots still hold the session that was purged. Treating a code
+     that is in the database as "not purged" is how a request for a purged
+     session came to be offered for dismissal. */
+  const pending = found.pending.map((p) => ({
+    ...p,
+    sessionInDatabase: live.has(p.locationKey),
+    sessionPurged: purged.has(p.locationKey),
+  }));
   return {
     pending,
     overdue: pending.filter((p) => p.overdue),
     handled: found.handled,
     sessionGone: pending.filter((p) => !p.sessionInDatabase),
+    noMarker: pending.filter((p) => !p.sessionInDatabase && !p.sessionPurged),
   };
 }
 
@@ -184,6 +285,10 @@ module.exports = {
   DEADLINE_DAYS,
   RECTIFIABLE,
   ROSTER_FIELDS,
+  requestKey,
+  flattenErasures,
+  answeredIndex,
+  isAnswered,
   pendingErasures,
   erasureQueue,
   planRectification,

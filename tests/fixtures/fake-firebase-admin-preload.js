@@ -18,6 +18,10 @@
  *   FAKE_DB_TREE        JSON for the whole database
  *   FAKE_DB_THROW_ON    optional path whose read rejects (PERMISSION_DENIED)
  *   FAKE_DB_WRITES_OUT  file that receives { exitCode, writes } at exit
+ *   FAKE_DB_NOW         optional epoch ms: the script's Date.now() returns this
+ *                       for the whole run. A retention job is a function of the
+ *                       date, and "the same database, five years later" is a
+ *                       case worth running rather than reasoning about.
  */
 
 const Module = require("node:module");
@@ -25,6 +29,17 @@ const fs = require("node:fs");
 
 const OUT = process.env.FAKE_DB_WRITES_OUT;
 if (!OUT) throw new Error("fake-firebase-admin-preload: FAKE_DB_WRITES_OUT is not set");
+
+/* Refused when unusable, never ignored: a test that asked for a fixed clock and
+   silently got the real one would pass or fail by the calendar. Set before the
+   script is loaded, because the ops scripts read the clock at module scope. */
+if (process.env.FAKE_DB_NOW) {
+  const fixedNow = Number(process.env.FAKE_DB_NOW);
+  if (!Number.isSafeInteger(fixedNow) || fixedNow <= 0) {
+    throw new Error("fake-firebase-admin-preload: FAKE_DB_NOW must be epoch milliseconds");
+  }
+  Date.now = () => fixedNow;
+}
 const tree = JSON.parse(process.env.FAKE_DB_TREE || "{}");
 const throwOn = process.env.FAKE_DB_THROW_ON || "";
 
