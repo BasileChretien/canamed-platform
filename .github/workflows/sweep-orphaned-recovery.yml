@@ -15,10 +15,18 @@
 # opens the password reset at that code. See scripts/sweep-orphaned-recovery.js.
 #
 # ⚠️ DISPATCH ONLY, ON PURPOSE. Nothing here runs by itself and there is no
-# cron to uncomment. Run it once as a DRY RUN and read the three counts; run it
-# again with `confirm` ticked. After that the nightly purge keeps the tree
-# clean, and this is only needed again if records appear with no session — any
-# signed-in visitor can write one at an unused code.
+# cron to uncomment. Run it once as a DRY RUN and read the counts; run it again
+# with `confirm` ticked. After that the nightly purge keeps the tree clean, and
+# this is only needed again if records appear with no session — a signed-in
+# visitor can write one at an unused code (an allowlisted one only, while the
+# session-creation gate is enforced).
+#
+# A run REFUSES, dry runs included, when a tree that holds recovery records
+# lists no session at all: that is what the wrong database looks like. The two
+# `allow_empty_*` boxes say "yes, that is the true state" — one for the default
+# tree, one for org trees, and neither waives the other. An org tree in that
+# state is ordinary (all of that org's sessions were purged) and a visitor can
+# also create one; ticking its box must not switch off the default tree's guard.
 #
 # WHAT REACHES THE RUNNER: the KEYS of `recovery/` and of the two session trees
 # — session codes, the identifier the nightly purge already lists, here
@@ -38,8 +46,13 @@ on:
         type: boolean
         required: true
         default: false
-      allow_no_sessions:
-        description: "Proceed even if a tree with recovery records lists NO session"
+      allow_empty_default_tree:
+        description: "Proceed even if the DEFAULT tree has recovery records and lists NO session"
+        type: boolean
+        required: true
+        default: false
+      allow_empty_org_trees:
+        description: "Proceed even if an ORG tree has recovery records and lists NO session"
         type: boolean
         required: true
         default: false
@@ -83,5 +96,6 @@ jobs:
           FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
           # DRY-RUN unless a manual dispatch ticks `confirm`.
           RECOVERY_SWEEP_CONFIRM: ${{ github.event.inputs.confirm == 'true' && '1' || '0' }}
-          RECOVERY_SWEEP_ALLOW_NO_SESSIONS: ${{ github.event.inputs.allow_no_sessions == 'true' && '1' || '0' }}
+          RECOVERY_SWEEP_ALLOW_EMPTY_DEFAULT_TREE: ${{ github.event.inputs.allow_empty_default_tree == 'true' && '1' || '0' }}
+          RECOVERY_SWEEP_ALLOW_EMPTY_ORG_TREES: ${{ github.event.inputs.allow_empty_org_trees == 'true' && '1' || '0' }}
         run: node scripts/sweep-orphaned-recovery.js

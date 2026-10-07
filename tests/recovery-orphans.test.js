@@ -34,9 +34,10 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const {
-  BATCH_SIZE, readRecoveryKeys, planRecoverySweep, findOrphanedRecovery,
-  deleteRecoveryRecords, describeBatchError, batches
+  BATCH_SIZE, makeSweepReader, readRecoveryKeys, planRecoverySweep, findOrphanedRecovery,
+  deleteRecoveryRecords, describeBatchError, describeFatal, batches
 } = require("../scripts/lib/recovery-orphans");
+const { encodePath: anonJobEncodePath } = require("../scripts/lib/anonymous-retention-job");
 const {
   sessionLocationsFromKeys, makeRestShallowReader, makeRestValueReader, encodeRestPath
 } = require("../scripts/lib/session-trees");
@@ -190,10 +191,10 @@ const TREE = {
 test("the recovery keys are read in both trees, and no path that holds a code is ever requested", async () => {
   const asked = [];
   const keys = await readRecoveryKeys(shallowReader(TREE, asked));
-  assert.deepStrictEqual(keys, {
-    codes: ["liv-aaa", "old-aaa"],
-    orgCodes: { partner: ["liv-bbb", "old-bbb"] }
-  });
+  assert.deepStrictEqual(keys.codes, ["liv-aaa", "old-aaa"]);
+  assert.deepStrictEqual(Object.entries(keys.orgCodes), [["partner", ["liv-bbb", "old-bbb"]]]);
+  assert.strictEqual(Object.getPrototypeOf(keys.orgCodes), null,
+    "slugs are collected into an object WITH a prototype again — see the __proto__ test");
   assert.deepStrictEqual(asked,
     ["recovery/sessions", "recovery/orgs", "recovery/orgs/partner/sessions"],
     "three LISTS. A read of recovery/sessions/<code> would return the secret itself.");
@@ -258,12 +259,64 @@ test("a list that is not a list stops the sweep — it is never read as 'no sess
   /* shallowKeysOf() throws on anything that is not an object of keys or null.
      Here that matters in the DANGEROUS direction: sessions read as empty makes
      every record an orphan. */
-  for (const bad of ["sessions", "orgs", "recovery/sessions", "recovery/orgs"]) {
-    const real = shallowReader(TREE, []);
+  /* The two PER-ORG lists as well as the four top-level ones. An org's session
+     list read as empty is the same hazard one level down — every live session
+     of that org looks absent — and nothing failed that read in any test until
+     a review turned its failure into `[]` and the whole suite stayed green. */
+  for (const bad of ["sessions", "orgs", "orgs/partner/sessions",
+    "recovery/sessions", "recovery/orgs", "recovery/orgs/partner/sessions"]) {
+    const asked = [];
+    const real = shallowReader(TREE, asked);
     await assert.rejects(
       findOrphanedRecovery(async (p) => (p === bad ? "Permission denied" : real(p))),
       /Refusing to treat this as an empty tree/,
       "a string body for '" + bad + "' must throw");
+  }
+  /* …and each of those six is a list the sweep really reads, or the loop above
+     proves nothing about it. */
+  const asked = [];
+  await findOrphanedRecovery(shallowReader(TREE, asked));
+  assert.deepStrictEqual(asked.slice().sort(), ["orgs", "orgs/partner/sessions",
+    "recovery/orgs", "recovery/orgs/partner/sessions", "recovery/sessions", "sessions"]);
+});
+
+test("a slug named __proto__ is listed, counted and swept like any other", async () => {
+  /* A legal key, and under recovery/orgs/ no rule says otherwise. Collected
+     into a plain object, `orgCodes["__proto__"] = [...]` sets the prototype and
+     adds no key: the slug's records were never listed, and the run ended
+     "nothing to sweep" with the orphan still there. (JSON.parse, not a literal:
+     in source code `{ "__proto__": x }` sets the prototype too.) */
+  const tree = JSON.parse(
+    '{"sessions":{"liv-aaa":{"created":{"at":1}}},' +
+    '"recovery":{"sessions":{"liv-aaa":{"code":"k"}},' +
+    '"orgs":{"__proto__":{"sessions":{"old-ppp":{"code":"p"}}}}}}');
+  const keys = await readRecoveryKeys(shallowReader(tree, []));
+  assert.deepStrictEqual(Object.keys(keys.orgCodes), ["__proto__"]);
+  assert.deepStrictEqual(keys.orgCodes["__proto__"], ["old-ppp"]);
+
+  const found = await findOrphanedRecovery(shallowReader(tree, []));
+  assert.deepStrictEqual(found.orphans, ["recovery/orgs/__proto__/sessions/old-ppp"]);
+  assert.strictEqual(found.emptyOrgTrees, 1);
+
+  const r = runSweep(tree, { RECOVERY_SWEEP_CONFIRM: "1", RECOVERY_SWEEP_ALLOW_EMPTY_ORG_TREES: "1" });
+  assert.strictEqual(r.status, 0, r.log);
+  assert.deepStrictEqual(r.writes,
+    [{ op: "update", path: "", keys: ["recovery/orgs/__proto__/sessions/old-ppp"] }], r.log);
+});
+
+test("the FATAL line carries a code or a name — never the message", () => {
+  /* A JSON parse error quotes the start of the body it failed on, and the body
+     of a list read is session codes. */
+  let parseError;
+  try { JSON.parse('abc-234":true'); } catch (e) { parseError = e; }
+  assert.ok(parseError.message.includes("abc"), "precondition: the engine's message quotes the body");
+  assert.strictEqual(describeFatal(parseError), "FATAL: SyntaxError");
+
+  assert.strictEqual(describeFatal(Object.assign(new Error("read of 'sessions/abc-234' failed"), { code: "HTTP_401" })),
+    "FATAL: HTTP_401");
+  assert.strictEqual(describeFatal(new Error("needs an https databaseURL")), "FATAL: Error");
+  for (const odd of [null, undefined, "abc-234", { message: "abc-234" }, { code: 5, name: "" }]) {
+    assert.strictEqual(describeFatal(odd), "FATAL: error");
   }
 });
 
@@ -271,7 +324,14 @@ test("a list that is not a list stops the sweep — it is never read as 'no sess
  * Found in review. The sweep is the first job to read lists under
  * `recovery/orgs/<slug>`, and no rule validates that slug (the one under
  * `orgs/` must match /^[a-z0-9-]+$/; this one may be anything a key may be).
- * The shared reader put the path into the URL as it stood. */
+ * Put into a URL as it stands, such a key reads a different node.
+ *
+ * WHERE the encoding happens is the other half, and it was got wrong once: the
+ * first fix encoded inside the SHARED reader, which the anonymous-account job
+ * calls with paths it has already encoded. That job then read `My%2520Code`
+ * for the key `My Code`, got null, and took it for "no members to protect" —
+ * in a job that deletes on a schedule. So: the shared reader sends what it is
+ * given, and each caller encodes once. Both halves are pinned below. */
 
 const FAKE_APP = { options: { credential: { getAccessToken: async () => ({ access_token: "t" }) } } };
 
@@ -289,39 +349,60 @@ async function urlsFor(makeReader, paths) {
   return urls;
 }
 
-test("REST reader: every path an existing job passes today is requested byte-for-byte as before", async () => {
-  /* The reader is shared with the nightly purge and the anonymous-account job.
-     Session codes, uids and slugs are letters, digits, `-` and `_`, which
-     encodeURIComponent leaves alone — so encoding must change none of these. */
-  const today = [
-    "sessions", "orgs", "orgs/caen-nagoya/sessions", "orgs/partner-2/sessions",
-    "sessions/abc-234/members", "sessions/ABC-234/roomOf", "users", "rateLimits/uid",
-    "rateLimits/session", "users/AbCdEf0123456789_xyzUID12345Qq/history",
-    "recovery/sessions", "recovery/orgs", "recovery/orgs/partner/sessions"
+test("SHARED reader: it requests exactly the path it is given — it does not encode", async () => {
+  /* Every other job's requests are unchanged by this branch, for every key,
+     because the shared reader is unchanged: clean paths and already-encoded
+     ones alike go out verbatim. */
+  const given = [
+    "sessions", "orgs", "orgs/caen-nagoya/sessions", "sessions/abc-234/members",
+    "users/AbCdEf0123456789_xyzUID12345Qq", "rateLimits/session/abc-234",
+    "sessions/My%20Code/members", "sessions/a%3Fb/creatorUid"
   ];
-  for (const p of today) assert.strictEqual(encodeRestPath(p), p, "encoding changed '" + p + "'");
-
-  assert.deepStrictEqual(await urlsFor(makeRestShallowReader, today),
-    today.map((p) => "https://db.invalid/" + p + ".json?shallow=true"));
-  assert.deepStrictEqual(await urlsFor(makeRestValueReader, today),
-    today.map((p) => "https://db.invalid/" + p + ".json"));
+  assert.deepStrictEqual(await urlsFor(makeRestShallowReader, given),
+    given.map((p) => "https://db.invalid/" + p + ".json?shallow=true"));
+  assert.deepStrictEqual(await urlsFor(makeRestValueReader, given),
+    given.map((p) => "https://db.invalid/" + p + ".json"));
 });
 
-test("REST reader: a key with a '?' stays inside the path instead of ending it", async () => {
+test("SHARED reader + the anonymous-account job's own encoding: a key is encoded ONCE", async () => {
+  /* The regression, through that job's real encoder. It encodes the path and
+     hands it to the shared reader; the request must carry `My%20Code`, which
+     the server decodes back to the key `My Code`. `My%2520Code` is the key
+     `My%20Code` — some other session, or none: a null that reads as "nobody to
+     protect". */
+  const paths = ["sessions/My Code/members", "sessions/a?b/creatorUid", "users/plain_uid-1"];
+  const urls = await urlsFor(makeRestShallowReader, paths.map(anonJobEncodePath));
+  assert.deepStrictEqual(urls, [
+    "https://db.invalid/sessions/My%20Code/members.json?shallow=true",
+    "https://db.invalid/sessions/a%3Fb/creatorUid.json?shallow=true",
+    "https://db.invalid/users/plain_uid-1.json?shallow=true"
+  ]);
+  for (const u of urls) assert.ok(!u.includes("%25"), "encoded twice: " + u);
+});
+
+test("SWEEP reader: a clean path is requested as it stands", async () => {
+  const clean = ["sessions", "orgs", "orgs/caen-nagoya/sessions",
+    "recovery/sessions", "recovery/orgs", "recovery/orgs/partner-2/sessions"];
+  for (const p of clean) assert.strictEqual(encodeRestPath(p), p, "encoding changed '" + p + "'");
+  assert.deepStrictEqual(await urlsFor(makeSweepReader, clean),
+    clean.map((p) => "https://db.invalid/" + p + ".json?shallow=true"));
+});
+
+test("SWEEP reader: a key with a '?' stays inside the path instead of ending it", async () => {
   /* Unencoded, the request is for `recovery/orgs/a` with a query string of
      `b/sessions.json?shallow=true` — not the list that was asked for, and with
      the `shallow` flag no longer a parameter of its own. */
-  const [url] = await urlsFor(makeRestShallowReader, ["recovery/orgs/a?b/sessions"]);
+  const [url] = await urlsFor(makeSweepReader, ["recovery/orgs/a?b/sessions"]);
   assert.strictEqual(url, "https://db.invalid/recovery/orgs/a%3Fb/sessions.json?shallow=true");
   assert.strictEqual(url.split("?").length, 2, "exactly one '?': the one before shallow=true");
 });
 
-test("REST reader: a key that LOOKS encoded is not decoded into a different key", async () => {
+test("SWEEP reader: a key that LOOKS encoded is not decoded into a different key", async () => {
   /* `x%20y` is a legal key, and so is `x y`. Sent as it stands, the server
      decodes the first into the second and answers with the OTHER slug's
      sessions — which the sweep would then plan against the first slug's paths,
      as orphans that are never there to delete and never go away. */
-  const urls = await urlsFor(makeRestShallowReader,
+  const urls = await urlsFor(makeSweepReader,
     ["recovery/orgs/x%20y/sessions", "recovery/orgs/x y/sessions", "recovery/orgs/a&b=c/sessions"]);
   assert.deepStrictEqual(urls, [
     "https://db.invalid/recovery/orgs/x%2520y/sessions.json?shallow=true",
@@ -336,7 +417,7 @@ test("REST reader: a key that LOOKS encoded is not decoded into a different key"
   }
 });
 
-test("REST reader: the slashes BETWEEN segments are kept", () => {
+test("encodeRestPath: the slashes BETWEEN segments are kept", () => {
   assert.strictEqual(encodeRestPath("a/b c/d"), "a/b%20c/d");
   assert.strictEqual(encodeRestPath("recovery/orgs/é/sessions"), "recovery/orgs/%C3%A9/sessions");
 });
@@ -427,12 +508,23 @@ test("REAL SCRIPT: nothing orphaned — no write, exit 0", () => {
   assert.match(r.stdout, /Summary: nothing to sweep\./);
 });
 
-const ALLOW = { RECOVERY_SWEEP_CONFIRM: "1", RECOVERY_SWEEP_ALLOW_NO_SESSIONS: "1" };
+/* TWO overrides, one per kind of tree, and neither waives the other. */
+const DEFAULT_FLAG = "RECOVERY_SWEEP_ALLOW_EMPTY_DEFAULT_TREE";
+const ORGS_FLAG = "RECOVERY_SWEEP_ALLOW_EMPTY_ORG_TREES";
+const confirmWith = (...flags) => Object.assign({ RECOVERY_SWEEP_CONFIRM: "1" },
+  Object.fromEntries(flags.map((f) => [f, "1"])));
 
-function assertRefused(r, trees) {
+/* `trees`: how many trees are still blocking. `flags`: exactly the overrides the
+   message must ask for — and no other, or it invites the operator to waive a
+   guard that was not in the way. */
+function assertRefused(r, trees, flags) {
   assert.strictEqual(r.status, 2, "a tree with records and no session must stop the run." + r.log);
   assert.deepStrictEqual(r.writes, [], "a refused run must not write." + r.log);
   assert.match(r.stderr, new RegExp("REFUSED: " + trees + " tree\\(s\\) hold recovery records and list no session"));
+  for (const f of [DEFAULT_FLAG, ORGS_FLAG]) {
+    assert.strictEqual(r.stderr.includes(f + "=1"), flags.includes(f),
+      "the refusal " + (flags.includes(f) ? "does not name " : "names ") + f + r.log);
+  }
   assertNothingSensitive(r);
 }
 
@@ -440,11 +532,20 @@ test("REAL SCRIPT: NO session listed at all — refused, exit 2, nothing deleted
   /* The state in which every record looks orphaned. It is also what a wrong
      database URL, or a tree that moved, looks like. */
   const empty = { recovery: TREE.recovery };
-  assertRefused(runSweep(empty, { RECOVERY_SWEEP_CONFIRM: "1" }), 2);
-  assertRefused(runSweep(empty, {}), 2);       // a dry run is refused too: its count would mislead
+  assertRefused(runSweep(empty, confirmWith()), 2, [DEFAULT_FLAG, ORGS_FLAG]);
+  // A dry run is refused too: its count would mislead.
+  assertRefused(runSweep(empty, {}), 2, [DEFAULT_FLAG, ORGS_FLAG]);
 
-  // …and the same database, with the operator saying so: all four go.
-  const allowed = runSweep(empty, ALLOW);
+  /* ONE OVERRIDE DOES NOT WAIVE THE OTHER TREE'S GUARD (found in review, when
+     there was a single switch). The dangerous half: a visitor plants a record
+     under a new org slug, the operator ticks the box for it — and with one
+     switch the default tree's guard was off in that same run, deleting a live
+     session's record if the default list was empty for a bad reason. */
+  assertRefused(runSweep(empty, confirmWith(ORGS_FLAG)), 1, [DEFAULT_FLAG]);
+  assertRefused(runSweep(empty, confirmWith(DEFAULT_FLAG)), 1, [ORGS_FLAG]);
+
+  // …and the same database, with the operator saying so for BOTH: all four go.
+  const allowed = runSweep(empty, confirmWith(DEFAULT_FLAG, ORGS_FLAG));
   assert.strictEqual(allowed.status, 0, allowed.log);
   assert.strictEqual(allowed.writes.length, 1);
   assert.strictEqual(allowed.writes[0].keys.length, 4);
@@ -459,13 +560,15 @@ test("REAL SCRIPT: the default tree lists nothing and ONE junk node sits under a
     orgs: { squat: { sessions: { x: { members: { u1: { at: 1 } } } } } },
     recovery: { sessions: TREE.recovery.sessions }
   };
-  const r = runSweep(junk, { RECOVERY_SWEEP_CONFIRM: "1" });
-  assertRefused(r, 1);
+  const r = runSweep(junk, confirmWith());
+  assertRefused(r, 1, [DEFAULT_FLAG]);
   assert.match(r.stdout, /Sessions in the database:\s+1/, "precondition: the junk node IS counted as a session");
   assert.match(r.stdout, /Trees with records and NO session: 1 \(default tree: yes; org trees: 0\)/);
+  // The org override is the wrong one for this, and must not open it.
+  assertRefused(runSweep(junk, confirmWith(ORGS_FLAG)), 1, [DEFAULT_FLAG]);
 
   // The control: same database, the operator asserts it. Both default records go.
-  const allowed = runSweep(junk, ALLOW);
+  const allowed = runSweep(junk, confirmWith(DEFAULT_FLAG));
   assert.strictEqual(allowed.status, 0, allowed.log);
   assert.deepStrictEqual(allowed.writes,
     [{ op: "update", path: "", keys: ["recovery/sessions/liv-aaa", "recovery/sessions/old-aaa"] }]);
@@ -478,13 +581,14 @@ test("REAL SCRIPT: an ORG tree with records and no session is refused even when 
     sessions: TREE.sessions,
     recovery: { sessions: TREE.recovery.sessions, orgs: TREE.recovery.orgs }
   };
-  const r = runSweep(lopsided, { RECOVERY_SWEEP_CONFIRM: "1" });
-  assertRefused(r, 1);
+  const r = runSweep(lopsided, confirmWith());
+  assertRefused(r, 1, [ORGS_FLAG]);
   assert.match(r.stdout, /Trees with records and NO session: 1 \(default tree: no; org trees: 1\)/);
   assert.ok(!(r.stdout + r.stderr).includes("partner"),
     "an org tree is counted, not named: a slug under recovery/orgs is whatever its writer typed");
+  assertRefused(runSweep(lopsided, confirmWith(DEFAULT_FLAG)), 1, [ORGS_FLAG]);
 
-  const allowed = runSweep(lopsided, ALLOW);
+  const allowed = runSweep(lopsided, confirmWith(ORGS_FLAG));
   assert.strictEqual(allowed.status, 0, allowed.log);
   assert.deepStrictEqual(allowed.writes, [{ op: "update", path: "", keys: [
     "recovery/orgs/partner/sessions/liv-bbb", "recovery/orgs/partner/sessions/old-bbb",
@@ -514,7 +618,9 @@ test("REAL SCRIPT: cannot start — exit 2, nothing written, and it still ends b
   });
   assert.strictEqual(r.status, 2, r.log);
   assert.deepStrictEqual(r.writes, []);
-  assert.match(r.stderr, /^FATAL: /m);
+  assert.match(r.stderr, /^FATAL: Error$/m,
+    "the name of the error and nothing else — its message stays out of the log");
+  assert.ok(!r.stderr.includes("plain.invalid"), "the message was printed" + r.log);
   assertNothingSensitive(r);
 });
 
@@ -554,8 +660,24 @@ test("workflow: deleting takes a ticked box, and the box starts empty", () => {
   assert.match(ymlCode,
     /RECOVERY_SWEEP_CONFIRM: \$\{\{ github\.event\.inputs\.confirm == 'true' && '1' \|\| '0' \}\}/,
     "the flag must come from the box and nowhere else — a literal \"1\" here deletes on every dispatch");
-  assert.match(ymlCode,
-    /RECOVERY_SWEEP_ALLOW_NO_SESSIONS: \$\{\{ github\.event\.inputs\.allow_no_sessions == 'true' && '1' \|\| '0' \}\}/);
+  /* Two overrides, each from its own box, each starting empty — and the env
+     names are the ones the script reads (a misspelt one is a box that does
+     nothing, which here means a run that can never be let through). */
+  const script = fs.readFileSync(SCRIPT_PATH, "utf8");
+  for (const [env, input] of [
+    ["RECOVERY_SWEEP_ALLOW_EMPTY_DEFAULT_TREE", "allow_empty_default_tree"],
+    ["RECOVERY_SWEEP_ALLOW_EMPTY_ORG_TREES", "allow_empty_org_trees"]
+  ]) {
+    assert.ok(ymlCode.includes(
+      env + ": ${{ github.event.inputs." + input + " == 'true' && '1' || '0' }}"),
+      env + " is not wired to the `" + input + "` box");
+    const box = ymlCode.slice(ymlCode.indexOf("      " + input + ":"));
+    assert.match(box.slice(0, 260), /type: boolean[\s\S]*default: false/, input + " must start unticked");
+    assert.ok(script.includes("process.env." + env + " === \"1\""), "the script does not read " + env);
+  }
+  assert.ok(!/ALLOW_NO_SESSIONS/.test(ymlCode + script),
+    "the single override is back. It waived the default tree's guard whenever it " +
+    "was given for an org tree.");
   assert.match(ymlCode, /run: node scripts\/sweep-orphaned-recovery\.js/);
 });
 

@@ -27,9 +27,14 @@
  *   GOOGLE_APPLICATION_CREDENTIALS      path to the service-account JSON
  *   FIREBASE_DATABASE_URL               the RTDB URL (with region suffix)
  *   RECOVERY_SWEEP_CONFIRM              "1" to actually delete (otherwise report)
- *   RECOVERY_SWEEP_ALLOW_NO_SESSIONS    "1" to proceed when a tree that holds
- *                                       recovery records lists NO session — see
- *                                       below
+ *   RECOVERY_SWEEP_ALLOW_EMPTY_DEFAULT_TREE
+ *                                       "1" to proceed when the DEFAULT tree
+ *                                       holds recovery records and lists no
+ *                                       session — see below
+ *   RECOVERY_SWEEP_ALLOW_EMPTY_ORG_TREES
+ *                                       "1" to proceed when an ORG tree does.
+ *                                       Separate on purpose: neither waives
+ *                                       the other.
  *
  * Exit codes:
  *   0  clean: nothing to do, a dry run, or everything found was deleted
@@ -42,15 +47,16 @@
 
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
-const { makeRestShallowReader } = require("./lib/session-trees");
 const {
-  findOrphanedRecovery, deleteRecoveryRecords, describeBatchError
+  makeSweepReader, findOrphanedRecovery, deleteRecoveryRecords,
+  describeBatchError, describeFatal
 } = require("./lib/recovery-orphans");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
 const CONFIRM = process.env.RECOVERY_SWEEP_CONFIRM === "1";
-const ALLOW_NO_SESSIONS = process.env.RECOVERY_SWEEP_ALLOW_NO_SESSIONS === "1";
+const ALLOW_EMPTY_DEFAULT = process.env.RECOVERY_SWEEP_ALLOW_EMPTY_DEFAULT_TREE === "1";
+const ALLOW_EMPTY_ORGS = process.env.RECOVERY_SWEEP_ALLOW_EMPTY_ORG_TREES === "1";
 
 async function main() {
   // initializeApp picks up GOOGLE_APPLICATION_CREDENTIALS automatically
@@ -63,7 +69,7 @@ async function main() {
   console.log("Reads:       keys only — no recovery code and no session body leaves the database");
   console.log("");
 
-  const found = await findOrphanedRecovery(makeRestShallowReader({ app, databaseURL: DB_URL }));
+  const found = await findOrphanedRecovery(makeSweepReader({ app, databaseURL: DB_URL }));
 
   const emptyTrees = (found.emptyDefaultTree ? 1 : 0) + found.emptyOrgTrees;
   console.log(`Sessions in the database:   ${found.liveSessions}`);
@@ -91,13 +97,26 @@ async function main() {
    * PER TREE, and that is the point. Counted over the whole database, one node
    * under any org — which a signed-in visitor can create — says "there are
    * sessions" for a default tree that listed none, and every default-tree
-   * record is deleted without a word. An org whose sessions have all been
-   * purged trips this too; that is the true state and what the flag is for. */
-  if (emptyTrees > 0 && !ALLOW_NO_SESSIONS) {
-    console.error(`REFUSED: ${emptyTrees} tree(s) hold recovery records and list no ` +
+   * record is deleted without a word.
+   *
+   * AND ONE OVERRIDE PER KIND OF TREE, for the mirror reason. An org tree with
+   * records and no session is ordinary (every session of that org has been
+   * purged) and can also be made by a visitor: one record under a new slug in
+   * recovery/orgs/. With a single switch, giving it for that org tree would
+   * waive the default tree's guard in the same run — the guard would be off in
+   * exactly the run where somebody had interfered. */
+  const needDefault = found.emptyDefaultTree && !ALLOW_EMPTY_DEFAULT;
+  const needOrgs = found.emptyOrgTrees > 0 && !ALLOW_EMPTY_ORGS;
+  if (needDefault || needOrgs) {
+    const blocked = (needDefault ? 1 : 0) + (needOrgs ? found.emptyOrgTrees : 0);
+    const flags = [
+      needDefault ? "RECOVERY_SWEEP_ALLOW_EMPTY_DEFAULT_TREE=1" : null,
+      needOrgs ? "RECOVERY_SWEEP_ALLOW_EMPTY_ORG_TREES=1" : null
+    ].filter(Boolean).join(" and ");
+    console.error(`REFUSED: ${blocked} tree(s) hold recovery records and list no ` +
       "session at all, so every record in them looks orphaned. That is also what " +
       "the wrong database looks like. If it is the true state, run again with " +
-      "RECOVERY_SWEEP_ALLOW_NO_SESSIONS=1. Nothing was deleted.");
+      flags + ". Nothing was deleted.");
     process.exit(2);
   }
 
@@ -119,9 +138,8 @@ async function main() {
 }
 
 main().catch((e) => {
-  /* Safe to print: every path this script READS is a tree or an org slug
-   * ("recovery/orgs/<slug>/sessions"), never a session code. The one call
-   * whose error could name a code is the update, and that is caught above. */
-  console.error("FATAL: " + ((e && e.code) || (e && e.message) || "error"));
+  /* The code or the name, never the message — see describeFatal(). To read the
+   * whole error, run this locally, where the log is yours. */
+  console.error(describeFatal(e));
   process.exit(2);
 });

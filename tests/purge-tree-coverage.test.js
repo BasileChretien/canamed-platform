@@ -90,7 +90,7 @@ const NOT_A_SESSION_KEY = {
   "$uid": "a Firebase Auth uid",
   "$ownerUid": "the uid that owns an authored scenario",
   "$reporterUid": "the uid that filed a moderation report",
-  "$certId": "a published certificate id (its own clock: cleanup-expired-credentials)",
+  "$certId": "a published certificate id",
   "$shareId": "a shared-scenario id",
   "$scenarioId": "an authored-scenario id",
   "$bucket": "a rate-limit window key (h<hour> / d<yyyymmdd>)",
@@ -128,8 +128,9 @@ const DECIDED_PER_RECORD = {};
    by session) is ever looked at. If such a tree IS per-session, the entry says
    so, and names what writes it and what deletes it. */
 const NO_SESSION_KEY_IN_RULES = {
-  credentials: "published certificate records, keyed by certificate id; their own " +
-    "clock (retentionUntil, cleanup-expired-credentials)",
+  credentials: "published certificate records, keyed by certificate id. Each carries " +
+    "its own retentionUntil; the job that acts on it (cleanup-expired-credentials) is " +
+    "scheduled as a DRY RUN, so nothing deletes them on a timer yet (DPA Annex VI G6)",
   facilitatorGate: "one admin-only switch and an allowlist of uids",
   scenarios: "authored scenarios, keyed by their owner's uid",
   sharedScenarios: "published scenarios, keyed by share id",
@@ -301,6 +302,10 @@ test("nothing but `sessions` lives under an org", () => {
     "the rules now declare something beside `sessions` under orgs/<slug>/. If it is " +
     "keyed by session, the purge does not delete it — and nothing here derived it.");
   assert.deepStrictEqual(children(rules.orgs[ORG_KEY].sessions), ["$sessionId"]);
+  /* The default tree, for the same reason: a literal key beside `$sessionId`
+     (`sessions/_meta/…`) would be skipped by this file with the rest of the
+     tree, and enumerated by the purge as if it were a session. */
+  assert.deepStrictEqual(children(rules.sessions), ["$sessionId"]);
 });
 
 test("a per-session node the purge cannot address by path is acknowledged, not ignored", () => {
@@ -440,12 +445,32 @@ for (const [label, sessionPath, code, wantOrg] of [
 test("REAL SCRIPT: a live session keeps everything, its recovery code included", () => {
   /* The control. Without it the tests above pass just as well for a purge that
      deletes every recovery code in the database — and a live session that loses
-     its code has lost the only way to reset a forgotten password. */
-  const all = purge().writes.flatMap((w) => (w.keys || []).concat(w.path || ""));
-  for (const code of [CODES.dfltLive, CODES.orgLive]) {
-    assert.deepStrictEqual(all.filter((k) => k.includes(code)), [],
-      "the purge wrote under a session that is one day old" + purge().log);
+     its code has lost the only way to reset a forgotten password.
+
+     A write can reach a live session three ways, and all three are checked:
+     AT one of its paths, BELOW one, or ABOVE one. The last is the one a search
+     for the session's code misses — `recovery/orgs/<slug>: null` names no code
+     and deletes every live code in that org (found in review: exactly that
+     mutant survived the whole suite). */
+  const live = sessionLocationsFromKeys([CODES.dfltLive], { [SLUG]: [CODES.orgLive] });
+  const livePaths = live.flatMap((loc) =>
+    Object.entries(loc).filter(([prop]) => prop === "path" || /Path$/.test(prop)).map(([, p]) => p));
+  assert.ok(livePaths.includes("recovery/sessions/" + CODES.dfltLive) &&
+    livePaths.includes("recovery/orgs/" + SLUG + "/sessions/" + CODES.orgLive),
+    "the live sessions' recovery paths are not among the paths being protected");
+
+  const written = purge().writes.flatMap((w) =>
+    (w.keys && w.keys.length ? w.keys : [""]).map((k) => (w.path ? w.path + (k ? "/" + k : "") : k)));
+  const hits = [];
+  for (const k of written) {
+    for (const p of livePaths) {
+      if (k === p || k.startsWith(p + "/") || p.startsWith(k + "/") || k === "") {
+        hits.push(k + "  (reaches " + p + ")");
+      }
+    }
   }
+  assert.deepStrictEqual(hits, [],
+    "the purge wrote at, below or above a path of a session that is one day old" + purge().log);
   assert.match(purge().stdout, /Summary: 2 kept, 2 purged, 0 errors\./);
 });
 

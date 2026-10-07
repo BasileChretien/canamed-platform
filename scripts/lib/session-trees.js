@@ -268,8 +268,15 @@ function makeRestValueReader(opts) {
  * key began, so the read fails or lands on a different node; and a key that
  * LOOKS encoded (`x%20y`) asks the server for another key (`x y`) and returns
  * that one's children. The keys the platform itself writes — session codes,
- * uids, slugs: letters, digits, `-` and `_` — come out byte-identical, so no
- * existing caller's request changes.
+ * uids, slugs: letters, digits, `-` and `_` — come out byte-identical.
+ *
+ * ⚠️ THE READERS BELOW DO NOT APPLY THIS THEMSELVES, and must not start to.
+ * The caller encodes, once. scripts/lib/anonymous-retention-job.js already
+ * encodes every path before it calls them; when the reader encoded as well
+ * (for one commit, 2026-10-07) that job asked for `My%2520Code` where the key
+ * was `My Code`, got null, and read it as "this session has no members to
+ * protect" — in a job that deletes on a schedule. Encoding twice is not a
+ * no-op; it is a different node.
  */
 function encodeRestPath(path) {
   return String(path).split("/").map(encodeURIComponent).join("/");
@@ -291,7 +298,7 @@ function makeRestGetter(opts, query, what) {
 
   return async function restGet(path) {
     const { access_token: token } = await cred.getAccessToken();
-    const res = await fetch(base + "/" + encodeRestPath(path) + ".json" + query, {
+    const res = await fetch(base + "/" + path + ".json" + query, {
       headers: { Authorization: "Bearer " + token }
     });
     if (!res.ok) {

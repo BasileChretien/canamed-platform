@@ -1165,13 +1165,28 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     lists no session. That is counted PER TREE (the default tree, each org):
     over the whole database, one junk node under any org, which a signed-in
     visitor can create, vouched for a default tree that listed nothing (found
-    in review). The shared REST reader now percent-encodes each path segment,
-    because the slug under `recovery/orgs/` is validated by no rule.
+    in review). The override is TWO boxes — `allow_empty_default_tree` and
+    `allow_empty_org_trees` — and neither waives the other: an org tree in that
+    state is ordinary, and a visitor can also make one, so the box for it must
+    not switch off the default tree's guard (also found in review).
+    **The sweep encodes its REST paths itself** (`makeSweepReader`), because the
+    slug under `recovery/orgs/` is validated by no rule. ⚠️ NOT inside the
+    shared reader in `session-trees.js`: the anonymous-account job hands that
+    reader paths it has ALREADY encoded, and for one commit on this branch the
+    reader encoded them again — `My%2520Code` for the key `My Code`, a null,
+    and "no members to protect" in a job that deletes nightly. Encoding twice
+    is a different node, not a no-op; each caller encodes once.
     **Not run yet.** `Verify:`
-    `gh run list --workflow sweep-orphaned-recovery.yml` shows a run whose log
-    says `Mode: LIVE`; a dry run after it ends in `Summary: nothing to sweep.`
+    `gh run list --workflow sweep-orphaned-recovery.yml` lists the runs; for the
+    confirmed one, `gh run view <id> --log | grep -E "Mode: +LIVE|Summary:"`
+    prints `Mode:        LIVE — deletions WILL happen` and
+    `Summary: <n> deleted, 0 left.` A dry run after it ends in
+    `Summary: nothing to sweep.`
   - **⚠️ OPEN — the reset does not require a password to exist** (measured
-    2026-10-07). `_superadminReset` asks only for a matching `recovery/…/code`
+    2026-10-07 with a throwaway emulator probe that is NOT in the repository;
+    the committed spec stops at the reset write, so the hash writes and the
+    restored-session case below rest on that probe and on the rule text).
+    `_superadminReset` asks only for a matching `recovery/…/code`
     and a session that is not closed, and the hash rules' reset branch has no
     `data.exists()`. So on a session with NO hash: (1) whoever holds its
     recovery code sets the FIRST hash, whatever `creatorUid` says — this is how

@@ -24,12 +24,34 @@
 const {
   shallowKeysOf,
   sessionLocationsFromKeys,
-  readSessionLocationsShallow
+  readSessionLocationsShallow,
+  makeRestShallowReader,
+  encodeRestPath
 } = require("./session-trees");
 
 /* Paths per multi-path update. Each batch is all-or-nothing and the sweep is
    idempotent, so a batch that fails is simply found again by the next run. */
 const BATCH_SIZE = 500;
+
+/**
+ * The sweep's reader: the shared shallow REST reader, with each path encoded
+ * ONCE on the way in.
+ *
+ * The sweep is the first job to read lists under `recovery/orgs/<slug>`, and no
+ * rule validates that slug (the one under `orgs/` must match /^[a-z0-9-]+$/;
+ * this one may be anything a key may be). Put into a URL as it stands, a `?`
+ * in it ends the path, and a `%20` asks for a different slug's list.
+ *
+ * Encoded HERE and not inside the shared reader, which another job calls with
+ * paths it has already encoded — see encodeRestPath() in session-trees.js.
+ *
+ * @param {{app:object, databaseURL:string}} opts as makeRestShallowReader takes
+ * @returns {function(string): Promise<object|null>} takes a DATABASE path
+ */
+function makeSweepReader(opts) {
+  const rest = makeRestShallowReader(opts);
+  return (path) => rest(encodeRestPath(path));
+}
 
 /**
  * The keys of the recovery tree, in both session trees.
@@ -40,7 +62,10 @@ const BATCH_SIZE = 500;
 async function readRecoveryKeys(fetchShallow) {
   const codes = shallowKeysOf(await fetchShallow("recovery/sessions"), "recovery/sessions");
   const slugs = shallowKeysOf(await fetchShallow("recovery/orgs"), "recovery/orgs");
-  const orgCodes = {};
+  /* No prototype. A slug is whatever its writer typed, `__proto__` included:
+     on a plain object that assignment sets the prototype instead of a key, and
+     the slug's records are then never listed, counted or deleted. */
+  const orgCodes = Object.create(null);
   for (const slug of slugs) {
     const p = "recovery/orgs/" + slug + "/sessions";
     orgCodes[slug] = shallowKeysOf(await fetchShallow(p), p);
@@ -170,12 +195,27 @@ function describeBatchError(e, size) {
   return "ERROR    a batch of " + size + " was not deleted: " + code;
 }
 
+/**
+ * The log line for a run that could not start or could not read.
+ *
+ * The error's CODE, or failing that its NAME — never its message. A message is
+ * free text from wherever the failure happened: a JSON parse error quotes the
+ * first characters of the body it choked on, and the body of a list read is
+ * session codes.
+ */
+function describeFatal(e) {
+  const pick = (v) => (typeof v === "string" && v ? v : null);
+  return "FATAL: " + (pick(e && e.code) || pick(e && e.name) || "error");
+}
+
 module.exports = {
   BATCH_SIZE,
+  makeSweepReader,
   readRecoveryKeys,
   planRecoverySweep,
   findOrphanedRecovery,
   deleteRecoveryRecords,
   describeBatchError,
+  describeFatal,
   batches
 };
