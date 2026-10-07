@@ -742,17 +742,21 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     click on the header chip". It has two openers now, the chip and this
 //     link, and both call openAccountDialog() — so a lazily linked sheet has
 //     to be awaited THERE, not in a click handler.
-//   2026-10-07 (fourth entry): CAP UNCHANGED (326), AND NOT AN ADDITION. The
-//     follow-up to the SECOND entry of this date (a long sign-in address wraps
-//     instead of scrolling the account dialog; the floor of a history row's
-//     date + name column goes from 12ch to 20ch) is -13 B on style.css,
-//     measured the way this spec measures against main at v181: style.css
-//     46.30 -> 46.28 KB gz, first-party 324.61 -> 324.60, margin ~1.4 KB.
-//     Two declarations, paid for by rewording that block's own comments, which
-//     the review of the second entry had measured at ~400 B of the ~600 it
-//     added. Said plainly because the 316 entry calls trimming prose to land a
-//     symptom of a budget with no room: that is where this budget is. THE
-//     RECLAIM IS STILL OWED.
+//   2026-10-07 (fourth entry): CAP UNCHANGED (326). The follow-up to the SECOND
+//     entry of this date, all in the account dialog: a long sign-in address
+//     wraps instead of scrolling it; the floor of a history row's date + name
+//     column goes from 12ch to 20ch; and with enlarged text on a phone the two
+//     role options stack and a bare domain in a hint breaks. +29 B on
+//     style.css, measured the way this spec measures against main at v181:
+//     style.css 46.30 -> 46.33 KB gz, first-party 324.61 -> 324.64, margin
+//     ~1.4 KB.
+//     Four declarations. The first two were paid for by rewording that block's
+//     own comments (-13 B at that point; the review of the second entry had
+//     measured those comments at ~400 B of the ~600 it added). The last two,
+//     added after this change's own review, are not paid for. Said plainly
+//     because the 316 entry calls trimming prose to land a symptom of a budget
+//     with no room: that is where this budget is.
+//     ⚠️ A THIRD SMALL EAGER ADDITION WITHOUT THE RECLAIM, which is still owed.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

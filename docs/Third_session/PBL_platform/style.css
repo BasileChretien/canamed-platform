@@ -3695,7 +3695,9 @@ body.session-ended-shown { overflow: hidden; }
   font-size: 0.9rem;
   color: var(--ink);
 }
-.account-fieldset .hint { margin: 0 0 10px; }
+/* Enlarged text on a phone: the role options stack, a bare domain breaks. */
+.account-fieldset .hint { margin: 0 0 10px; overflow-wrap: anywhere; }
+.account-fieldset .splash-role-toggle { flex-wrap: wrap; }
 .account-actions {
   display: flex;
   flex-wrap: wrap;

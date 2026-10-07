@@ -349,6 +349,63 @@ for (const locale of LOCALES) {
       // the sweep leaves the column within a few px of it.
       expect(result.narrowestOverFloor, "the sweep samples the floor itself").toBeLessThan(12);
     });
+
+    test("on a phone, enlarged text does not make the dialog scroll sideways", async ({ page }) => {
+      await openDialogWithHistory(page, locale, LONG_EMAIL);
+
+      /* The width test above runs at 100% text and the sweep above at desktop
+         width; neither sees a phone with enlarged text, where a word that
+         cannot break is the first thing to stick out. At 320px the dialog
+         scrolled by 37px at 150% and by 106px at 200%: the two role options
+         side by side, and the one unbreakable token in the security hint.
+
+         Only the dialog is asserted on. The page behind it is the splash, which
+         scrolls sideways by itself at these sizes, dialog open or closed (370px
+         of content in a 320px viewport at 150%); that is the splash's defect,
+         and asserting it here would make this test fail for a reason that is
+         not the dialog's. */
+      const height = page.viewportSize().height;
+      for (const width of [320, 360, 393]) {
+        await page.setViewportSize({ width, height });
+        const result = await page.evaluate(() => {
+          const root = document.documentElement;
+          const inner = document.querySelector(".account-dialog-inner");
+          root.style.fontSize = "";
+          const basePx = parseFloat(getComputedStyle(root).fontSize);
+          const out = { vw: window.innerWidth, sizes: 0, violations: [] };
+          for (let pct = 100; pct <= 200; pct += 5) {
+            root.style.fontSize = pct + "%";
+            out.sizes++;
+            const rootPx = parseFloat(getComputedStyle(root).fontSize);
+            if (Math.abs(rootPx - basePx * pct / 100) > 0.5) {
+              out.violations.push(`${pct}%: the text was not enlarged (root font ${rootPx}px)`);
+            }
+            const over = inner.scrollWidth - inner.clientWidth;
+            if (over > 1) {
+              // Name what reaches furthest right, so the failure says where to look.
+              const contentRight = inner.getBoundingClientRect().right -
+                parseFloat(getComputedStyle(inner).paddingRight);
+              let worst = { right: -Infinity, what: "" };
+              for (const el of inner.querySelectorAll("*")) {
+                const r = el.getBoundingClientRect();
+                if (r.width > 0 && r.right >= worst.right) {
+                  worst = { right: r.right, what: el.tagName.toLowerCase() + (el.id ? "#" + el.id : "") +
+                    ` "${(el.textContent || "").trim().replace(/\s+/g, " ").slice(0, 28)}"` };
+                }
+              }
+              out.violations.push(`${pct}%: the dialog scrolls sideways by ${over}px; furthest right is ` +
+                `${worst.what}, ${Math.round(worst.right - contentRight)}px past the content edge`);
+            }
+          }
+          root.style.fontSize = "";
+          return out;
+        });
+        expect(result.vw, `at ${width}px: the resize took effect`).toBe(width);
+        // 100% to 200% in steps of 5: the loop cannot have run empty.
+        expect(result.sizes).toBe(21);
+        expect(result.violations.length, `at ${width}px:\n` + result.violations.slice(0, 4).join("\n")).toBe(0);
+      }
+    });
   });
 }
 
