@@ -156,13 +156,21 @@ const clone = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
 
 /* An in-memory database: ref(path).once/set/on/off. hold(path) keeps a read of
    that path pending until release(path); holdAck(path) lets a write to that
-   path land but keeps its acknowledgement back until releaseAck(path). Values
-   cross the boundary as copies, so what is stored is plain data in THIS realm. */
+   path land but keeps its acknowledgement back until releaseAck(path), which
+   refuses the write instead when given an error. Values cross the boundary as
+   copies, so what is stored is plain data in THIS realm.
+
+   on("value") NEVER answers inside the call — the real database does not, and
+   a fake that did hid a defect (section H): the first answer comes a microtask
+   later, or, after holdOn(path), when releaseOn(path) is called. off() detaches
+   every listener at that path, as ref.off() does, so a late answer goes nowhere. */
 function makeDb() {
   const tree = {};
   const writes = [];
   const held = new Map();
   const acks = new Map();
+  const listeners = new Map();
+  const onHeld = new Set();
   const get = (p) => p.split("/").filter(Boolean).reduce((n, k) =>
     (n !== null && typeof n === "object" && Object.prototype.hasOwnProperty.call(n, k)) ? n[k] : null, tree);
   const set = (p, v) => {
@@ -178,7 +186,16 @@ function makeDb() {
     hold(p) { held.set(p, []); },
     release(p) { const q = held.get(p) || []; held.delete(p); q.forEach((go) => go()); },
     holdAck(p) { acks.set(p, []); },
-    releaseAck(p) { const q = acks.get(p) || []; acks.delete(p); q.forEach((go) => go()); },
+    releaseAck(p, error) {
+      const q = acks.get(p) || [];
+      acks.delete(p);
+      q.forEach((a) => (error ? a.reject(error) : a.resolve()));
+    },
+    holdOn(p) { onHeld.add(p); },
+    releaseOn(p) {
+      onHeld.delete(p);
+      (listeners.get(p) || []).forEach((l) => { if (l.live) l.cb(snap(p)); });
+    },
     ref(p) {
       return {
         once() {
@@ -188,11 +205,19 @@ function makeDb() {
         set(v) {
           writes.push(p);
           set(p, clone(v));
-          if (acks.has(p)) return new Promise((resolve) => { acks.get(p).push(resolve); });
+          if (acks.has(p)) return new Promise((resolve, reject) => { acks.get(p).push({ resolve, reject }); });
           return Promise.resolve();
         },
-        on(ev, cb) { cb(snap(p)); },
-        off() {}
+        on(ev, cb) {
+          const l = { cb, live: true };
+          if (!listeners.has(p)) listeners.set(p, []);
+          listeners.get(p).push(l);
+          if (!onHeld.has(p)) Promise.resolve().then(() => { if (l.live) cb(snap(p)); });
+        },
+        off() {
+          (listeners.get(p) || []).forEach((l) => { l.live = false; });
+          listeners.delete(p);
+        }
       };
     }
   };
@@ -371,6 +396,12 @@ function makeWorld(opts) {
       el("splash-password-input").value = v.password;
       el("splash-password-confirm").value = v.confirm || "";
     },
+    /* The dialog's "Sessions you have joined": the codes of the rows in it, and
+       how many of those rows carry a wired Withdraw button. */
+    sessionsListed: () => el("account-history").children
+      .filter((li) => li.className === "account-history-row").map((li) => li.children[0].textContent),
+    withdrawButtons: () => el("account-history").children.filter((li) =>
+      li.children.some((c) => /account-history-withdraw/.test(c.className) && c.count("click") > 0)).length,
     dialog: () => ({
       email: el("account-email").textContent, name: el("account-name").value,
       university: el("account-uni").value, year: el("account-year").value,
@@ -840,15 +871,21 @@ test("D: an account that replaces another directly is shown nothing of it while 
     "neither opener may stay on screen saying 'Signed in as Alice' — nor come back before HIS profile is read");
 
   /* Nothing on screen opens the dialog now. Opened by any other route it still
-     must not hold her values, and Save must not write them over his. */
+     must not hold her values. Save from there then writes nothing — but ONLY
+     because the name field is empty and Save refuses an empty name: with a name
+     typed it would replace his stored profile with the defaults. That is why
+     the openers are hidden until his profile has been read, and not repainted
+     at once ("D-repaint" in the put-backs). */
   w.sandbox.openAccountDialog();
   const d = w.dialog();
   assert.strictEqual(d.email, "bob@example.test", "premise: the dialog is his");
   for (const k of Object.keys(HERS)) assert.notStrictEqual(d[k], HERS[k], "her " + k + " in his dialog");
   w.sandbox.accountSaveBtn();
   await w.settle();
+  assert.strictEqual(w.el("account-action-hint").textContent, "Enter your name.",
+    "it is the empty name that stops this Save, nothing else");
   assert.deepStrictEqual(w.db.get("users/uidBob/profile"), BOB_PROFILE,
-    "his stored profile must not be overwritten");
+    "so none of her values are written over his profile");
   w.sandbox.closeAccountDialog();
 
   w.db.release("users/uidBob/profile");
@@ -887,8 +924,14 @@ test("D: an account with no profile that replaces another directly is asked for 
  *
  * What is given back is what the ACCOUNT put there, and nothing else: a field
  * the participant typed or chose before signing in goes back to that, one they
- * changed afterwards is left as they changed it, and a name that was already in
- * the form — typed, or restored from `canamed_name` — was never the account's.
+ * changed afterwards is left as they changed it, and a name that was ALREADY in
+ * the field when the profile was applied was never the account's.
+ *
+ * "Still holds what the account put" is a comparison of VALUES, so two cases
+ * count as the account's although a person could argue otherwise, and both are
+ * pinned below rather than left implied: a field re-entered by hand with the
+ * very value the account had put; and a name the account filled first that
+ * initLobby() then "restores" from `canamed_name` as the same string.
  */
 
 const NOBODY = { name: "", university: "", year: "1", english: "B2" };
@@ -940,16 +983,34 @@ test("E: what the participant changed after the account filled the form is kept"
     "only the fields still holding what the account put there are given back");
 });
 
-test("E: a name that was already in the form is not the account's to remove", async () => {
-  /* The guard on the other side: initLobby() restores the name a participant
-     joined under from `canamed_name`. If it happens to be the name in the
-     profile too, it is still theirs — the account never wrote it. */
+test("E: a name that was already in the field when the profile was applied is not the account's to remove", async () => {
+  /* The guard on the other side. The name is in the field BEFORE the profile
+     lands — typed, or put there by an initLobby() that had already run — so
+     the account never writes it, even when it is the profile's name too. */
   const w = makeWorld();
   await w.visit();
   w.el("name-input").value = "Alice";
   await w.signIn(ALICE, ALICE_PROFILE);
   await w.signOut();
   assert.strictEqual(w.joinForm().name, "Alice");
+});
+
+test("E: a name the account filled first is taken out even if the same name is put there again afterwards", async () => {
+  /* The limit of the rule, recorded so that no comment promises more. On the
+     front page the profile lands while the field is still empty, so the ACCOUNT
+     fills the name; entering a session then runs initLobby(), which writes the
+     name stored in `canamed_name` over it — the same string, if she joined
+     under her profile name before. At sign-out the field still holds what the
+     account put, and is emptied. `canamed_name` itself is not touched, and
+     initLobby() restores from it again on the next entry. The same goes for a
+     list re-picked by hand to the value the account had put. */
+  const w = makeWorld();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  assert.strictEqual(w.joinForm().name, "Alice", "premise: the account filled the empty name");
+  w.el("name-input").value = "Alice";          // initLobby(): nameInput.value = savedName
+  w.el("uni-input").value = "Nagoya";          // picked again by hand, same value
+  await w.signOut();
+  assert.deepStrictEqual(w.joinForm(), NOBODY);
 });
 
 test("E: a profile saved again while signed in still gives the form back as it was before the account", async () => {
@@ -1066,6 +1127,29 @@ test("F: the first auth event of a page load leaves the form alone", async () =>
   assert.deepStrictEqual(w.signInForm(), { email: "saved@example.test", password: "from-the-browser", confirm: "" });
 });
 
+test("F: Back from the sign-in view empties the form, so an attempt that failed is not left in it", async () => {
+  /* FOUND IN REVIEW, round 2. A failed attempt rightly keeps what was typed —
+     but "Back" only switched the view, so the address and the near-miss
+     password stayed in the hidden form until some account changed, and nobody's
+     had: the next person to open "Sign in" found them. */
+  const w = makeWorld();
+  w.auth.accounts["alice@example.test"] = { user: ALICE, password: PASSWORD };
+  w.sandbox.wireAccountUI();
+  await w.visit();
+  w.sandbox.splashShowView("account");
+  w.typeSignIn({ email: "alice@example.test", password: "Correct-Horse-8" });
+  w.sandbox.signInWithEmail("alice@example.test", "Correct-Horse-8");
+  await w.settle();
+  assert.ok(w.sandbox.currentUser.isAnonymous, "premise: the attempt failed");
+  assert.deepStrictEqual(w.signInForm(), { email: "alice@example.test", password: "Correct-Horse-8", confirm: "" },
+    "premise: and what was typed is still there, to be corrected");
+
+  w.el("splash-back-from-account").fire("click");
+
+  assert.deepStrictEqual(w.views(), ["enter"], "premise: Back still goes back");
+  assert.deepStrictEqual(w.signInForm(), EMPTY);
+});
+
 /* ======================= G. a save acknowledged too late ===================
  *
  * FOUND IN REVIEW (finding 4). The late profile READ is dropped when its
@@ -1117,4 +1201,176 @@ test("G: a save from the dialog acknowledged after sign-out changes nothing for 
   assert.notStrictEqual(w.el("account-action-hint").textContent, "Profile saved.");
   assert.deepStrictEqual(w.joinForm(), NOBODY, "the join form must not be refilled with her details");
   assert.deepStrictEqual([w.signedIn().row, w.signedIn().chip], [false, false]);
+});
+
+test("G: her 'Saving your profile…' is not left on the next account's setup form", async () => {
+  /* FOUND IN REVIEW, round 2. The stale acknowledgement now changes nothing —
+     including the status line her submit had written, which sat on HIS form. */
+  const w = makeWorld();
+  await w.signIn(ALICE);
+  w.fill("splash-prof", { name: "Alice A", university: "Nagoya", year: "5", english: "C1" });
+  w.db.holdAck("users/uidAlice/profile");
+  w.sandbox.profileSetupSubmit();
+  await w.settle();
+  assert.match(w.el("splash-profile-setup-hint").textContent, /^Saving your profile/, "premise");
+
+  await w.replaceWith(BOB);
+
+  assert.deepStrictEqual(w.views(), ["profile-setup"], "premise: he is on his own setup form");
+  assert.strictEqual(w.el("splash-profile-setup-hint").textContent, "");
+  assert.strictEqual(w.el("splash-profile-setup-hint").className, "splash-hint");
+});
+
+test("G: nor is 'Could not save' when her save is refused after she has gone, on either form", async () => {
+  const denied = Object.assign(new Error("denied"), { code: "PERMISSION_DENIED" });
+
+  // From profile setup, with Bob taking over before the refusal arrives.
+  const w = makeWorld();
+  await w.signIn(ALICE);
+  w.fill("splash-prof", { name: "Alice A", university: "Nagoya", year: "5", english: "C1" });
+  w.db.holdAck("users/uidAlice/profile");
+  w.sandbox.profileSetupSubmit();
+  await w.settle();
+  await w.replaceWith(BOB);
+  w.db.releaseAck("users/uidAlice/profile", denied);
+  await w.settle();
+  assert.strictEqual(w.el("splash-profile-setup-hint").textContent, "",
+    "her refusal must not be reported on his setup form");
+  assert.deepStrictEqual(w.views(), ["profile-setup"]);
+
+  // From the dialog, with a sign-out before the refusal arrives.
+  const v = makeWorld();
+  await v.signIn(ALICE, ALICE_PROFILE);
+  v.sandbox.openAccountDialog();
+  v.el("account-name").value = "Alice B";
+  v.db.holdAck("users/uidAlice/profile");
+  v.sandbox.accountSaveBtn();
+  await v.settle();
+  await v.signOut();
+  v.db.releaseAck("users/uidAlice/profile", denied);
+  await v.settle();
+  assert.strictEqual(v.el("account-action-hint").textContent, "",
+    "nor in the dialog the next account will open");
+});
+
+test("G: a save refused for the account still signed in is reported (positive control)", async () => {
+  // Without this, dropping a stale refusal could pass by dropping every refusal.
+  const w = makeWorld();
+  await w.signIn(ALICE);
+  w.fill("splash-prof", { name: "Alice A", university: "Nagoya", year: "5", english: "C1" });
+  w.db.holdAck("users/uidAlice/profile");
+  w.sandbox.profileSetupSubmit();
+  await w.settle();
+  w.db.releaseAck("users/uidAlice/profile", new Error("denied"));
+  await w.settle();
+  assert.strictEqual(w.el("splash-profile-setup-hint").textContent, "Could not save: denied");
+  assert.strictEqual(w.el("splash-profile-setup-hint").className, "splash-hint err");
+});
+
+/* ======================= H. the dialog's list of joined sessions ===========
+ *
+ * FOUND IN REVIEW, round 2 (blocking), and older than this file. The dialog's
+ * "Sessions you have joined" list was emptied only INSIDE the listener's
+ * callback, and the dialog was shown straight after subscribing. So Alice opens
+ * Account and signs out, or is replaced; Bob signs in and opens Account; and
+ * under his e-mail address and name he sees HER rows — session code, date
+ * joined, scenario name — for one database round trip, or for good if that
+ * answer never comes (the listener has no error handler). Their Withdraw
+ * buttons were live, and would have acted on her session codes under his uid.
+ *
+ * No test saw it because LocalDB, and this file's fake until now, answered
+ * on("value") inside the call. The real database answers later.
+ */
+
+const HER_SESSIONS = {
+  "abc-123": { code: "abc-123", joinedAt: 2000, scenarioName: "Opioid stewardship" },
+  "def-456": { code: "def-456", joinedAt: 1000 }
+};
+const HIS_SESSIONS = { "xyz-789": { code: "xyz-789", joinedAt: 3000 } };
+
+for (const how of ["signOut", "replaceWith"]) {
+  test("H: the next account's dialog lists none of the previous account's sessions while its own list is being read (" +
+       how + ")", async () => {
+    const w = makeWorld();
+    w.db.seed("users/uidAlice/history", HER_SESSIONS);
+    w.db.seed("users/uidBob/history", HIS_SESSIONS);
+    w.db.seed("users/uidBob/profile", BOB_PROFILE);
+    await w.signIn(ALICE, ALICE_PROFILE);
+    w.sandbox.openAccountDialog();
+    await w.settle();
+    assert.deepStrictEqual(w.sessionsListed(), ["ABC-123", "DEF-456"], "premise: her dialog lists her sessions");
+    assert.strictEqual(w.withdrawButtons(), 2, "premise: each with a Withdraw button");
+
+    w.db.holdOn("users/uidBob/history");        // his list has not come back yet
+    if (how === "signOut") { await w.signOut(); await w.signIn(BOB); } else await w.replaceWith(BOB);
+    w.sandbox.openAccountDialog();
+    await w.settle();
+
+    assert.strictEqual(w.el("account-dialog").open, true, "premise: his dialog is open");
+    assert.strictEqual(w.el("account-email").textContent, "bob@example.test", "premise");
+    assert.deepStrictEqual(w.sessionsListed(), [], "none of her sessions under his name");
+    assert.strictEqual(w.withdrawButtons(), 0,
+      "and no Withdraw button that would act on her session codes under his uid");
+
+    w.db.releaseOn("users/uidBob/history");
+    await w.settle();
+    assert.deepStrictEqual(w.sessionsListed(), ["XYZ-789"], "then his own, and only his own");
+  });
+}
+
+test("H: a dialog reopened after Escape shows no row it has not just read", async () => {
+  /* Escape closes a native <dialog> without telling the page, so nothing was
+     emptied on the way out. Emptying BEFORE subscribing is what keeps a list
+     that has not been read — or cannot be — from standing there with live
+     buttons. */
+  const w = makeWorld();
+  w.db.seed("users/uidAlice/history", HER_SESSIONS);
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.sandbox.openAccountDialog();
+  await w.settle();
+  assert.strictEqual(w.sessionsListed().length, 2, "premise");
+
+  w.el("account-dialog").open = false;          // Escape: no closeAccountDialog()
+  w.db.holdOn("users/uidAlice/history");
+  w.sandbox.openAccountDialog();
+  await w.settle();
+  assert.deepStrictEqual(w.sessionsListed(), []);
+  assert.strictEqual(w.withdrawButtons(), 0);
+
+  w.db.releaseOn("users/uidAlice/history");
+  await w.settle();
+  assert.deepStrictEqual(w.sessionsListed(), ["ABC-123", "DEF-456"]);
+});
+
+test("H: when the account goes, nothing of its list is left in the closed dialog", async () => {
+  const w = makeWorld();
+  w.db.seed("users/uidAlice/history", HER_SESSIONS);
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.sandbox.openAccountDialog();
+  await w.settle();
+  assert.strictEqual(w.sessionsListed().length, 2, "premise");
+  await w.signOut();
+  assert.strictEqual(w.el("account-dialog").open, false, "premise: signing out closed the dialog");
+  assert.deepStrictEqual(w.sessionsListed(), []);
+});
+
+test("H: an answer for a list that is no longer subscribed goes nowhere (positive control for the detach)", async () => {
+  /* Her dialog is open with her list still unanswered when Bob replaces her.
+     The page detaches her listener on the way; were it still attached, her
+     rows would be written into his dialog when the answer finally came. */
+  const w = makeWorld();
+  w.db.seed("users/uidAlice/history", HER_SESSIONS);
+  w.db.seed("users/uidBob/profile", BOB_PROFILE);
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.db.holdOn("users/uidAlice/history");
+  w.sandbox.openAccountDialog();
+  await w.settle();
+  await w.replaceWith(BOB);
+  w.sandbox.openAccountDialog();
+  await w.settle();
+  assert.deepStrictEqual(w.sessionsListed(), [], "premise: he has no sessions, and the list says so");
+
+  w.db.releaseOn("users/uidAlice/history");
+  await w.settle();
+  assert.deepStrictEqual(w.sessionsListed(), [], "her late answer must not fill his dialog");
 });

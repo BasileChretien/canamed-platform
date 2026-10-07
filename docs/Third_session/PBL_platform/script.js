@@ -12359,6 +12359,7 @@ function resetAccountUI() {
   currentProfile = null;
   paintUserChip(true);   // no opener until THIS account's profile is read
   if (currentUser) clearSignInForm();
+  splashHintOk(el("splash-profile-setup-hint"), "");
   Object.keys(_joinFill).forEach(id => {
     const n = el(id), f = _joinFill[id];
     if (n && n.value === f[1]) n.value = f[0];
@@ -12393,8 +12394,9 @@ function saveProfile(updates) {
   const now = Date.now();
   const merged = Object.assign({}, currentProfile || {}, updates, { updatedAt: now });
   if (!merged.createdAt) merged.createdAt = now;
-  return db.ref("users/" + user.uid + "/profile").set(merged)
-    .then(() => (currentUser === user ? (currentProfile = merged) : null));
+  return db.ref("users/" + user.uid + "/profile").set(merged).then(
+    () => (currentUser === user ? (currentProfile = merged) : null),
+    e => { if (currentUser === user) throw e; return null; });
 }
 
 /* Log a session join to the SIGNED-IN user's history. Idempotent: writing the
@@ -12581,12 +12583,15 @@ function closeAccountDialog() {
   if (!dlg) return;
   dialogClose(dlg);
   if (_historyListenerRef) { _historyListenerRef.off(); _historyListenerRef = null; }
+  const list = el("account-history");
+  if (list) list.innerHTML = "";
 }
 
 function loadHistoryForDialog() {
   const list = el("account-history");
   if (!list || !currentUser || !db) return;
   if (_historyListenerRef) _historyListenerRef.off();
+  list.innerHTML = "";   // the answer comes later: never a previous account's rows meanwhile
   _historyListenerRef = db.ref("users/" + currentUser.uid + "/history");
   _historyListenerRef.on("value", snap => {
     const v = snap.val() || {};
@@ -12704,7 +12709,7 @@ function wireAccountUI() {
   });
   if (el("splash-signed-in-out")) el("splash-signed-in-out").addEventListener("click", accountSignOut);
   if (el("splash-back-from-account")) el("splash-back-from-account")
-    .addEventListener("click", () => splashShowView("enter"));
+    .addEventListener("click", () => { clearSignInForm(); splashShowView("enter"); });
   if (el("splash-google-signin")) el("splash-google-signin")
     .addEventListener("click", () => signInWithProvider("google"));
   if (el("splash-microsoft-signin")) el("splash-microsoft-signin")

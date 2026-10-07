@@ -582,6 +582,22 @@ test("F: the sign-in form keeps nobody's e-mail address or password", async ({ p
   await page.evaluate(({ who, password }) => { window.__register(who, password); }, { who: ALICE, password: PASSWORD });
   await seed(page, "users/u_alice/profile", ALICE_PROFILE);
 
+  /* 0. An attempt that fails keeps what was typed, so that it can be corrected
+        — but "Back" must empty it: it only switched the view, and the address
+        and the near-miss password stayed in the hidden form for the next
+        person to open "Sign in" (review round 2). */
+  await page.locator("#splash-go-account").click();
+  await expect(page.locator("#splash-view-account")).toBeVisible();
+  await page.locator("#splash-email-input").fill(ALICE.email);
+  await page.locator("#splash-password-input").fill("Correct-Horse-8");
+  await page.locator("#splash-email-submit").click();
+  await expect(page.locator("#splash-account-hint"), "premise: the attempt failed").toHaveClass(/(^|\s)err(\s|$)/);
+  expect(await signInFields(page), "premise: a failed attempt keeps what was typed")
+    .toEqual({ email: ALICE.email, password: "Correct-Horse-8", confirm: "" });
+  await page.locator("#splash-back-from-account").click();
+  await expect(page.locator("#splash-view-enter")).toBeVisible();
+  expect(await signInFields(page), "after Back").toEqual(NOTHING);
+
   // 1. Alice signs in through the form itself.
   await page.locator("#splash-go-account").click();
   await expect(page.locator("#splash-view-account")).toBeVisible();
@@ -689,5 +705,81 @@ test("G: a profile save acknowledged after another account took over changes not
   expect(await page.evaluate(() => currentProfile), "nor make her profile his current one").toBeNull();
   expect((await joinFields(page)).name, "nor fill the lobby's join form with it").toBe("");
   expect((await stored(page, "users/u_alice/profile")).name, "her own save stays where it landed").toBe("Alice A");
+  await expect(page.locator("#splash-profile-setup-hint"),
+    "nor leave her 'Saving your profile…' on his form (review round 2)").toHaveText("");
+  expect(errors).toEqual([]);
+});
+
+/* ======================= H. the dialog's list of joined sessions ===========
+ *
+ * Found in review, round 2 (blocking), and older than this spec. The dialog's
+ * "Sessions you have joined" list was emptied only inside the listener's
+ * callback, and the dialog was shown straight after subscribing. So the next
+ * account to open Account saw the PREVIOUS account's rows — session code, date
+ * joined, scenario name — under its own e-mail address for one database round
+ * trip, or for good if the answer never came; and their Withdraw buttons were
+ * live, and would have acted on her session codes under his uid.
+ *
+ * LocalDB answers a listener inside the call, which is why nothing saw it: the
+ * real database answers later. holdListener() makes LocalDB do the same.
+ */
+
+/* A slow network once more: a listener on `path` is not answered until
+   __releaseList(). */
+async function holdListener(page, path) {
+  await page.evaluate((path) => {
+    const ref = db.ref.bind(db);
+    db.ref = (p) => {
+      const r = ref(p);
+      if (p === path) {
+        const on = r.on.bind(r);
+        r.on = (ev, cb) => {
+          window.__releaseList = () => { db.ref = ref; on(ev, cb); };
+          return cb;
+        };
+      }
+      return r;
+    };
+  }, path);
+}
+
+test("H: the next account's dialog lists none of the previous account's sessions while its own list is being read", async ({ page }) => {
+  const errors = collectErrors(page);
+  await frontPage(page);
+  await seed(page, "users/u_alice/profile", ALICE_PROFILE);
+  await seed(page, "users/u_alice/history", {
+    "abc-123": { code: "abc-123", joinedAt: 2000, scenarioName: "Opioid stewardship" },
+    "def-456": { code: "def-456", joinedAt: 1000 }
+  });
+  await seed(page, "users/u_bob/profile", BOB_PROFILE);
+  await seed(page, "users/u_bob/history", { "xyz-789": { code: "xyz-789", joinedAt: 3000 } });
+
+  // Alice opens Account, sees her sessions, signs out.
+  await signIn(page, ALICE);
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("Alice");
+  await page.locator("#splash-signed-in-account").click();
+  await expect(page.locator("#account-history .account-history-code"), "premise: her dialog lists her sessions")
+    .toHaveText(["ABC-123", "DEF-456"]);
+  await expect(page.locator("#account-history .account-history-withdraw")).toHaveCount(2);
+  await page.locator("#account-signout-btn").scrollIntoViewIfNeeded();
+  await page.locator("#account-signout-btn").click();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+
+  // Bob signs in and opens Account before his own list has come back.
+  await holdListener(page, "users/u_bob/history");
+  await signIn(page, BOB);
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("Bob");
+  await page.locator("#splash-signed-in-account").click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await expect(page.locator("#account-email"), "premise: the dialog is his").toHaveText("bob@example.test");
+  await expect(page.locator("#account-history .account-history-code"), "none of her sessions under his name")
+    .toHaveCount(0);
+  await expect(page.locator("#account-history .account-history-withdraw"),
+    "and no Withdraw button that would act on her session codes under his uid").toHaveCount(0);
+
+  await page.evaluate(() => { window.__releaseList(); });
+  await expect(page.locator("#account-history .account-history-code"), "then his own, and only his own")
+    .toHaveText(["XYZ-789"]);
+  await expect(page.locator("#account-history .account-history-withdraw")).toHaveCount(1);
   expect(errors).toEqual([]);
 });
