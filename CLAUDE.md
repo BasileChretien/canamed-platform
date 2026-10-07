@@ -424,14 +424,19 @@ mask honoured; every anonymous account dated; 119 database paths would go.
   `rateLimits` node, so it is read per id, shallow, and a failure is counted
   (exit 1) rather than thrown. Exit 3 therefore means "the ACCOUNT half
   refused", not "nothing happened" — the log still carries a `Rate limits:` line.
-  **And the sweep cannot stop the account half by running long:** it is one
-  read per counter id, all before any write, and the ids are a participant's to
-  mint — a few thousand would outlast the job's 15 minutes, cancelling the run
-  with nothing written, every night, and a cancelled run mails nobody. So the
-  reading has a 5-minute budget (`SWEEP_BUDGET_MS`): what was read is swept,
-  what was not is counted (`OUT OF TIME, N counter(s) not read`, exit 1), and
-  the next day starts elsewhere in the list so a block of counters kept fresh
-  cannot hide the rest.
+  **And the sweep has a time budget, for its reads AND its writes:** it is one
+  read per counter id and one delete path per stale bucket, and a participant
+  can mint both — ids, and any number of bucket NAMES under their own (a name
+  the sweep does not recognise counts as stale). Unbounded, either outlasts the
+  job's 15 minutes: the run is cancelled, every night, and a cancelled run
+  mails nobody. So the whole sweep gets 5 minutes (`SWEEP_BUDGET_MS`; reads may
+  use the first 60%): no read and no update starts after its share, ids with
+  few stale buckets are written first so that it is the flood that waits, what
+  was left is counted (`OUT OF TIME, N counter(s) not read` / `N stale
+  bucket(s) not deleted`, exit 1), and the next day starts elsewhere in the
+  list. The first version bounded the reads only; a review showed one id with
+  a million bucket names walking straight past it. What is NOT bounded the
+  same way: the account half reads two nodes per live session.
 - **The account half refuses if the listing has NO signed-in account** (two
   exist today). Deliberate, but if both ever go, every nightly run exits 3 and
   no anonymous account is removed until someone intervenes.

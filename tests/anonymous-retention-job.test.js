@@ -161,7 +161,7 @@ test("dry run: counts everything, writes NOTHING, deletes no account", async () 
     orphanPaths: 0, skippedKeys: 0, readErrors: 0
   });
   assert.deepStrictEqual(r.rateLimits,
-    { staleUid: 2, staleSession: 1, kept: 1, unparsed: 0, readErrors: 0, unread: 0 });
+    { staleUid: 2, staleSession: 1, kept: 1, unparsed: 0, readErrors: 0, unread: 0, unwritten: 0 });
   assert.strictEqual(r.sessions, 3);
 });
 
@@ -648,7 +648,7 @@ test("a sweep short of time starts somewhere else each day, so no counter is sta
   const seen = new Set();
   for (let day = 0; day < 30; day++) {
     const { h, counterReads } = floodedHarness(12);
-    await h.run({ nowMs: NOW + day * DAY_MS, sweepBudgetMs: 45 });
+    await h.run({ nowMs: NOW + day * DAY_MS, sweepBudgetMs: 75 });
     const today = counterReads();
     assert.ok(today.length >= 2 && today.length < 12, "day " + day + " read " + today.length);
     for (const id of today) seen.add(id);
@@ -667,9 +667,71 @@ test("a broken clock cannot switch the sweep off", async () => {
   assert.strictEqual(r.rateLimits.unread, 0);
 });
 
+/* The budget above counted counter IDS. A second review pointed out what that
+   leaves: the rules let a participant write any bucket NAME under their own
+   uid, the sweep treats a name it does not recognise as stale, and every one
+   becomes a path to delete — 400 per update, one update after another. One id
+   with a million junk names is one fast read and thousands of writes, all in
+   front of the account half. So the budget has to cover the writes too.
+
+   A world with one flooded uid (`junk` unrecognisable bucket names) next to
+   the usual counters, and a harness in which every WRITE costs 100 ms. */
+function writeFloodHarness(junk) {
+  const w = world();
+  const buckets = {};
+  for (let i = 0; i < junk; i++) buckets["zz" + i] = true;
+  w.shallow["rateLimits/uid"] = Object.assign({ flooder: true }, w.shallow["rateLimits/uid"]);
+  w.shallow["rateLimits/uid/flooder"] = buckets;
+  const h = harness(w);
+  let t = 0;
+  const realUpdate = h.deps.updateRoot;
+  h.deps.clock = () => t;
+  h.deps.updateRoot = async (u) => { t += 100; return realUpdate(u); };
+  const counterWrites = () => h.writtenPaths().filter((p) => p.startsWith("rateLimits/"));
+  return { h, counterWrites };
+}
+
+test("the budget covers the WRITES too: a flood of bucket names cannot hold the job", async () => {
+  const junk = UPDATE_CHUNK * 5;
+  const { h, counterWrites } = writeFloodHarness(junk);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 250 });
+  const stale = junk + COUNTER_PATHS.length;
+  const written = counterWrites().length;
+  assert.ok(written > 0 && written < stale,
+    "expected the sweep to stop writing part-way; it wrote " + written + " of " + stale);
+  assert.strictEqual(r.rateLimits.unwritten, stale - written,
+    "what the sweep did not get to delete must be counted, not dropped");
+  assert.deepStrictEqual(h.deletedUids(), ["idleAnon"],
+    "running out of time on the counter writes must not stop the account half");
+  assert.strictEqual(exitCodeFor(r), 1, "a sweep that left stale buckets behind is not a clean run");
+  assert.match(formatReport(r, { confirm: true, days: 90, sweepOrphans: false }).join("\n"),
+    /OUT OF TIME, \d+ stale bucket\(s\) not deleted/);
+});
+
+test("ordinary counters are swept before a flooded one, however short the time", async () => {
+  /* Stopping the writes early is only acceptable if the flood is what waits.
+     The counters the notice promises gone in about three days belong to
+     everyone else, and there are few of them per id. */
+  const { h, counterWrites } = writeFloodHarness(UPDATE_CHUNK * 5);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 50 });   // time for one update
+  const written = counterWrites();
+  for (const p of COUNTER_PATHS) {
+    assert.ok(written.includes(p), "an ordinary stale counter was left behind a flood: " + p);
+  }
+  assert.ok(r.rateLimits.unwritten > 0);
+  assert.ok(written.length <= UPDATE_CHUNK, "more than one update went out in time for one");
+});
+
+test("a dry run leaves nothing unwritten to report, whatever the size", async () => {
+  const { h } = writeFloodHarness(UPDATE_CHUNK * 5);
+  const r = await h.run({ confirm: false, sweepBudgetMs: 50 });
+  assert.strictEqual(r.rateLimits.unwritten, 0);
+  assert.deepStrictEqual(h.writtenPaths(), []);
+});
+
 // ── what reaches the log ────────────────────────────────────────────────────
 
-const secretsOf =(w) => w.accounts.map((a) => a.uid).concat(["CODE1", "My Code", "ORG9", "partner"]);
+const secretsOf = (w) =>w.accounts.map((a) => a.uid).concat(["CODE1", "My Code", "ORG9", "partner"]);
 
 test("the report carries COUNTS only — no uid, no session code", async () => {
   const w = world();

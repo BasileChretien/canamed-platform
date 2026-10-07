@@ -370,11 +370,12 @@ test("the notice says the daily jobs read withdrawal and erasure requests", () =
   const s = privacySections();
   const said = {
     en: [/Requests to withdraw consent or to have data erased are read too, with the record of those already carried out/,
-         /for each, the session's identifier, the person's technical identifiers, a date and what was asked/],
+         /for each, the session's identifier, the person's technical identifiers, a date and what was asked, and for a request already carried out the operator's note of the reason/],
     fr: [/Les demandes de retrait du consentement ou d'effacement des données sont lues elles aussi, ainsi que la trace de celles déjà traitées/,
-         /pour chacune, l'identifiant de la séance, les identifiants techniques de la personne, une date et l'objet de la demande/],
+         /pour chacune, l'identifiant de la séance, les identifiants techniques de la personne, une date et l'objet de la demande, ainsi que, pour une demande déjà traitée, le motif noté par l'exploitant/],
     ja: [/同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も読み込みます/,
-         /それぞれについて読み込むのは、セッション識別子、ご本人の技術的識別子、日付、ご請求の内容です/]
+         /それぞれについて読み込むのは、セッション識別子、ご本人の技術的識別子、日付、ご請求の内容です/,
+         /対応済みのご請求については、運営者が記録した理由も読み込みます/]
   };
   for (const lang of ["en", "fr", "ja"]) {
     const sec = recipientsAndTransfers(s[lang], lang);
@@ -386,21 +387,22 @@ test("the notice says the daily jobs read withdrawal and erasure requests", () =
 });
 
 test("the notice admits the month in which a third daily job copied every session", () => {
-  /* From 2026-09-03 the data-rights monitor enumerated sessions with the deep
+  /* From its first run on 2026-09-04 (it was merged the day before, after
+     that day's slot) the data-rights monitor enumerated sessions with the deep
      reader, so it copied the whole live database to a GitHub runner every day
      while section 6 said no daily job read session content. The same section
      already owns up to the two jobs that did so until 2026-09-01; leaving this
      one out would make that paragraph read as the full account. */
   const s = privacySections();
   const said = {
-    en: /A third job, which watches for erasure requests that have gone unanswered, did the same from 2026-09-03 to 2026-10-07, although it needed only the requests; it has been corrected/,
-    fr: /Une troisième tâche, qui surveille les demandes d'effacement restées sans réponse, a fait de même du 03\/09\/2026 au 07\/10\/2026, alors qu'elle n'avait besoin que des demandes ; elle a été corrigée/,
-    ja: /対応されていない削除のご請求を監視する3つ目の処理も、2026年9月3日から2026年10月7日まで同じように複製していました/
+    en: /A third job, which watches for erasure requests that have gone unanswered, did the same from 2026-09-04 to 2026-10-07, although it needed only the requests; it has been corrected/,
+    fr: /Une troisième tâche, qui surveille les demandes d'effacement restées sans réponse, a fait de même du 04\/09\/2026 au 07\/10\/2026, alors qu'elle n'avait besoin que des demandes ; elle a été corrigée/,
+    ja: /対応されていない削除のご請求を監視する3つ目の処理も、2026年9月4日から2026年10月7日まで同じように複製していました/
   };
   for (const lang of ["en", "fr", "ja"]) {
     assert.ok(said[lang].test(recipientsAndTransfers(s[lang], lang)),
       "privacy.html [" + lang + "] sections 6-7 no longer admit that the data-rights monitor " +
-      "copied the whole session database daily from 2026-09-03 to 2026-10-07");
+      "copied the whole session database daily from 2026-09-04 to 2026-10-07");
   }
 });
 

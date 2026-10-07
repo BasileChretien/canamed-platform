@@ -51,10 +51,15 @@ const {
 } = require("./anonymous-retention");
 const { planRateLimitSweep, SCOPES } = require("./rate-limit-retention");
 
-/* How long the counter sweep may spend reading before it writes what it has
-   and lets the account half run. The workflow gives the whole job 15 minutes;
-   one read can overshoot this by its own timeout (READ_TIMEOUT_MS). */
+/* How long the counter sweep may take, reads and writes together, before the
+   account half runs. The workflow gives the whole job 15 minutes. No read and
+   no update STARTS after its share of this; one already under way can overrun
+   it by its own timeout (READ_TIMEOUT_MS for a read; the caller sets the
+   timeout of an update). */
 const SWEEP_BUDGET_MS = 5 * 60 * 1000;
+/* The share of that budget the reads may use. The rest is kept for writing
+   what was read: a sweep that only ever read would never delete anything. */
+const SWEEP_READ_SHARE = 0.6;
 
 /* Paths per multi-path update. Each update is atomic; the size is a bound on
    one request, not a correctness requirement. */
@@ -190,8 +195,9 @@ async function recheckCandidates(lookupAccounts, cls, history, opts) {
 }
 
 /** Where today's sweep starts in a list of `n` counters. Spread over the list
- *  by the day number, so two consecutive days do not begin at the same place
- *  whatever `n` is. Only matters when the sweep runs out of time. */
+ *  by the day number, so that over a run of days every part of the list gets
+ *  its turn (for a very short list two consecutive days can coincide, which is
+ *  harmless at that size). Only matters when the sweep runs out of time. */
 function sweepStart(nowMs, n) {
   if (!(n > 0)) return 0;
   const day = Math.floor(nowMs / DAY_MS);
@@ -259,12 +265,31 @@ async function planRateLimits(read, nowMs, budget) {
   };
 }
 
+/** Counter paths ordered so that an id with few stale buckets goes before one
+ *  with many. When the sweep runs out of time it is then the flood that waits,
+ *  not everyone else's counters. Stable within an id. */
+function smallestIdsFirst(paths) {
+  const idOf = (p) => p.split("/").slice(0, 3).join("/");
+  const size = new Map();
+  for (const p of paths) size.set(idOf(p), (size.get(idOf(p)) || 0) + 1);
+  return paths
+    .map((p, i) => [p, i])
+    .sort((a, b) => (size.get(idOf(a[0])) - size.get(idOf(b[0]))) || (a[1] - b[1]))
+    .map((x) => x[0]);
+}
+
 /** Null every path, one atomic update per chunk. A failed chunk is counted,
  *  not thrown: the remaining chunks still run, and the caller decides what a
- *  failure means for the accounts. */
-async function writeDeletions(updateRoot, paths) {
+ *  failure means for the accounts.
+ *
+ *  With a `limit` ({ clock, deadline }) no update STARTS after the deadline;
+ *  what was not attempted is returned as `unwritten`, never dropped. */
+async function writeDeletions(updateRoot, paths, limit) {
   const written = { paths: 0, failedUpdates: 0, errorCodes: [] };
+  let attempted = 0;
   for (const part of chunk(paths, UPDATE_CHUNK)) {
+    if (limit && limit.clock() >= limit.deadline) break;
+    attempted += part.length;
     const update = {};
     for (const p of part) update[p] = null;
     try {
@@ -276,7 +301,7 @@ async function writeDeletions(updateRoot, paths) {
       if (!written.errorCodes.includes(code)) written.errorCodes.push(code);
     }
   }
-  return written;
+  return { written, unwritten: paths.length - attempted };
 }
 
 /** The counts a run reports. Built before anything is written, so a dry run
@@ -372,12 +397,23 @@ async function runAnonymousRetention(deps, opts) {
   const read = { shallow: labelled(deps.fetchShallow), value: labelled(deps.readValue) };
 
   /* PHASE 1 — the counters. Planned, checked and written before anything is
-     asked of Firebase Auth. */
+     asked of Firebase Auth, and inside ONE time budget that covers the reads
+     and the writes: a participant decides how many counter ids there are AND
+     how many bucket names sit under their own, so neither may be allowed to
+     run on. Reading gets the first part of the budget; no update starts after
+     the whole of it. */
+  const clock = typeof deps.clock === "function" ? deps.clock : Date.now;
+  const budget = opts.sweepBudgetMs > 0 ? opts.sweepBudgetMs : SWEEP_BUDGET_MS;
+  const deadline = clock() + budget;
   const limits = await planRateLimits(read, opts.nowMs,
-    { ms: opts.sweepBudgetMs, clock: deps.clock });
-  const limitPaths = dropDescendants(limits.paths);
+    { ms: budget * SWEEP_READ_SHARE, clock });
+  const limitPaths = smallestIdsFirst(dropDescendants(limits.paths));
   assertSafePaths(limitPaths);
-  const swept = opts.confirm ? await writeDeletions(deps.updateRoot, limitPaths) : noWrites();
+  const sweep = opts.confirm
+    ? await writeDeletions(deps.updateRoot, limitPaths, { clock, deadline })
+    : { written: noWrites(), unwritten: 0 };
+  const swept = sweep.written;
+  limits.counts.unwritten = sweep.unwritten;
 
   /* PHASE 2 — the accounts. */
   let acc;
@@ -395,7 +431,7 @@ async function runAnonymousRetention(deps, opts) {
   report.written = swept;
   if (!opts.confirm) return report;
 
-  const records = await writeDeletions(deps.updateRoot, paths);
+  const records = (await writeDeletions(deps.updateRoot, paths)).written;
   report.written = addWrites(swept, records);
   if (!expired.length) return report;
   if (records.failedUpdates) {

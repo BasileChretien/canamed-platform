@@ -18,7 +18,7 @@
  * a database write that failed, an account that could not be deleted, accounts
  * left in place because their records could not be removed first, a read
  * that had to be skipped (which means something was not looked at), or
- * counters the sweep ran out of time before reading.
+ * counters the sweep ran out of time before reading or before deleting.
  */
 function exitCodeFor(report) {
   const failed =
@@ -27,7 +27,8 @@ function exitCodeFor(report) {
     report.auth.skipped ||
     report.records.readErrors > 0 ||
     report.rateLimits.readErrors > 0 ||
-    report.rateLimits.unread > 0;
+    report.rateLimits.unread > 0 ||
+    report.rateLimits.unwritten > 0;
   return failed ? 1 : 0;
 }
 
@@ -39,7 +40,8 @@ function formatRateLimits(l) {
     `their window, ${l.kept} current` +
     (l.unparsed ? `, ${l.unparsed} in no known format` : "") +
     (l.readErrors ? ` — ${l.readErrors} READ(S) FAILED, those counters were not swept` : "") +
-    (l.unread ? ` — OUT OF TIME, ${l.unread} counter(s) not read; the next run starts elsewhere` : "");
+    (l.unread ? ` — OUT OF TIME, ${l.unread} counter(s) not read; the next run starts elsewhere` : "") +
+    (l.unwritten ? ` — OUT OF TIME, ${l.unwritten} stale bucket(s) not deleted; the next run continues` : "");
 }
 
 /**

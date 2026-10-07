@@ -188,7 +188,8 @@
       decide when it is deleted; one also reads the certificate records. Requests
       to withdraw consent or to have data erased are read too, with the record of
       those already carried out: for each, the session's identifier, the person's
-      technical identifiers, a date and what was asked. A further
+      technical identifiers, a date and what was asked, and for a request
+      already carried out the operator's note of the reason. A further
       job, which deletes technical identifiers that are no longer in use
       (section 8), reads: the list of those identifiers with the dates they were
       created and last used; the identifiers of the members and the creator of
@@ -204,7 +205,7 @@
       what to delete, one to weigh how large the database had become. Neither
       needed the contents to do its work, and neither does it any more. A third
       job, which watches for erasure requests that have gone unanswered, did the
-      same from 2026-09-03 to 2026-10-07, although it needed only the requests;
+      same from 2026-09-04 to 2026-10-07, although it needed only the requests;
       it has been corrected. These jobs report only counts and dates &mdash; no personal
       data is written into their logs. Two
       further jobs that copy the database in full, a backup and the
@@ -235,6 +236,8 @@
       session and the certificate records, rather than your session content.
       The technical identifiers described in section 4 cross with them,
       together with their dates and the time slots of their usage counters.
+      So do the requests to withdraw consent or to have data erased, and the
+      record of those carried out.
       GitHub, Inc. is established in the <strong>United States</strong>, and the
       jobs run on Microsoft Azure machines whose region GitHub does not publish
       and which we cannot choose. The safeguard for this transfer is the <strong>EU&ndash;US Data Privacy
@@ -350,7 +353,7 @@
       Section 6 now also says that the daily jobs read requests to withdraw
       consent or to have data erased, which earlier versions did not mention,
       and that one of them copied the whole live session database to a GitHub
-      machine every day from 2026-09-03 to 2026-10-07 without needing to.
+      machine every day from 2026-09-04 to 2026-10-07 without needing to.
       Material changes are issued under a new version with re-consent on next join.
       <strong>Material changes since PIS v10, carried forward:</strong>
       section 1 no longer states that Université de Caen Normandie and Nagoya
@@ -581,7 +584,8 @@
       enregistrements de certificats. Les demandes de retrait du consentement ou
       d'effacement des données sont lues elles aussi, ainsi que la trace de
       celles déjà traitées : pour chacune, l'identifiant de la séance, les
-      identifiants techniques de la personne, une date et l'objet de la demande.
+      identifiants techniques de la personne, une date et l'objet de la demande,
+      ainsi que, pour une demande déjà traitée, le motif noté par l'exploitant.
       Une autre tâche, qui supprime les
       identifiants techniques devenus inutiles (section 8), lit : la liste de ces
       identifiants avec leurs dates de création et de dernière utilisation ; les
@@ -599,7 +603,7 @@
       l'autre pour mesurer la taille de la base. Ni l'une ni l'autre n'avait
       besoin du contenu pour accomplir sa tâche, et ce n'est plus le cas. Une
       troisième tâche, qui surveille les demandes d'effacement restées sans
-      réponse, a fait de même du 03/09/2026 au 07/10/2026, alors qu'elle n'avait
+      réponse, a fait de même du 04/09/2026 au 07/10/2026, alors qu'elle n'avait
       besoin que des demandes ; elle a été corrigée. Ces tâches ne consignent que des décomptes et des dates
       &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base intégralement,
       une sauvegarde et l'export de recherche pseudonymisé, sont de nouveau actives
@@ -632,7 +636,9 @@
       identifiants de séance, deux dates par séance et les enregistrements de
       certificats, et non le contenu de vos séances. Les identifiants
       techniques décrits en section 4 la franchissent également, avec leurs
-      dates et les créneaux horaires de leurs compteurs d'utilisation. GitHub, Inc. est établie aux <strong>États-Unis</strong>, et
+      dates et les créneaux horaires de leurs compteurs d'utilisation. Il en va
+      de même des demandes de retrait du consentement ou d'effacement et de la
+      trace de celles déjà traitées. GitHub, Inc. est établie aux <strong>États-Unis</strong>, et
       les tâches s'exécutent sur des machines Microsoft Azure dont GitHub ne
       publie pas la région et que nous ne pouvons pas choisir. La garantie encadrant ce transfert est le <strong>cadre de protection
       des données UE&ndash;États-Unis</strong> (<i>Data Privacy Framework</i>) :
@@ -767,7 +773,7 @@
       les demandes de retrait du consentement ou d'effacement, ce que les
       versions précédentes ne mentionnaient pas, et que l'une d'elles a copié
       chaque jour l'intégralité de la base de session en cours sur une machine
-      GitHub, du 03/09/2026 au 07/10/2026, sans en avoir besoin.
+      GitHub, du 04/09/2026 au 07/10/2026, sans en avoir besoin.
       Les modifications substantielles font l'objet d'une nouvelle version avec re-consentement à la prochaine participation.
       <strong>Modifications substantielles depuis la version PIS v10, reprises :</strong>
       la section 1 n'affirme plus que l'Université de Caen Normandie et
@@ -954,10 +960,11 @@
 
     <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>（GitHub, Inc.、米国）上で実行されます。<strong>毎日実行される処理は、セッションの内容を読み込みません。</strong>
       読み込むのは、
-      セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付だけです。
+      セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付です。
       1つの処理は証明書レコードも読み込みます。
       同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も読み込みます。
       それぞれについて読み込むのは、セッション識別子、ご本人の技術的識別子、日付、ご請求の内容です。
+      対応済みのご請求については、運営者が記録した理由も読み込みます。
       さらに別の処理が、使われなくなった技術的識別子を削除します（第8条）。
       この処理は、識別子の一覧と、それぞれの作成日および最終利用日を読み込みます。
       現在あるセッションの各メンバーおよび作成者の識別子も読み込みます。
@@ -969,7 +976,7 @@
       氏名やメールアドレスは受け取りません。
       サインインして作成したアカウントの場合も、
       受け取るのは識別子と日付、サインイン方法の名称だけです。
-      2026年9月1日までは、このうち2つの処理が<strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定のためです）。いずれも本来その内容を必要としておらず、現在は複製していません。対応されていない削除のご請求を監視する3つ目の処理も、2026年9月3日から2026年10月7日まで同じように複製していました。この処理に必要だったのはご請求の記録だけで、現在は修正済みです。これらの処理が記録するのは件数と日付だけで、実行ログに個人データが書き込まれることはありません。データベース全体を複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は、2026年9月1日に再開しました。保存先は<strong>Scaleway</strong>の<strong>パリ</strong>のオブジェクトストレージで、
+      2026年9月1日までは、このうち2つの処理が<strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定のためです）。いずれも本来その内容を必要としておらず、現在は複製していません。対応されていない削除のご請求を監視する3つ目の処理も、2026年9月4日から2026年10月7日まで同じように複製していました。この処理に必要だったのはご請求の記録だけで、現在は修正済みです。これらの処理が記録するのは件数と日付だけで、実行ログに個人データが書き込まれることはありません。データベース全体を複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は、2026年9月1日に再開しました。保存先は<strong>Scaleway</strong>の<strong>パリ</strong>のオブジェクトストレージで、
       模擬患者チャットを中継しているのと同じ委託先です。複製はEEA域内に留まり、
       アクセスできるのはプラットフォーム管理者のみです。これらの処理は2026年8月27日以降停止していました。本プラットフォームがGoogleの有料プランを離れ、それまで使用していたストレージが書き込みを受け付けなくなったためです。</p>
 
@@ -984,6 +991,7 @@
       ただし国境を越えるのは、セッション識別子、各セッションの2つの日付、および証明書レコードであり、セッションの内容ではありません。
       第4条に記載した技術的識別子も、
       その日付および利用回数カウンターの時間帯とともに国境を越えます。
+      同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も国境を越えます。
       GitHub, Inc. は<strong>米国</strong>に所在し、処理はMicrosoft Azureのマシン上で実行されますが、そのリージョンをGitHubは公表しておらず、
       当方が選択することもできません。この移転を担保するのは<strong>EU・米国データプライバシーフレームワーク（DPF）</strong>です。GitHub, Inc. は2017年以来の認証参加者であり、2027年8月まで認証が更新されています。同社の認証は、無料アカウント利用者のデータを明示的に対象としています。認証を受けた組織への移転は、2023年7月10日の欧州委員会による十分性認定の対象となるため、追加の契約条項は必要ありません。
       （本通知の従来のバージョンではこの確認が未完了である旨を記載していましたが、
@@ -1066,7 +1074,7 @@
       この誤りは2026年8月25日に修正しており、残っていた記録は同じ処理で削除します。
       第6条には、毎日実行される処理が同意の撤回やデータ削除のご請求を読み込むことも記載しました。
       従来のバージョンには、この記載がありませんでした。
-      そのうち1つの処理は、2026年9月3日から2026年10月7日まで、
+      そのうち1つの処理は、2026年9月4日から2026年10月7日まで、
       必要がないのに稼働中のセッションデータベース全体を毎日GitHubのマシンへ複製していました。
       重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
       <strong>PIS v10からの重要な変更（継続掲載）：</strong>第1条は、カーン・ノルマンディー大学と名古屋大学が<em>すべての</em>セッションの管理者であるとは記載しなくなりました。
