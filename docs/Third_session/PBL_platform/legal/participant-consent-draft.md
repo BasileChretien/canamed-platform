@@ -864,12 +864,18 @@ certificate entry** — for those, write to **[DPO / PRIVACY CONTACT EMAIL]**.
   §9), and triggers the **Art. 29/30 record-creation and retention duties on
   both sides**. If the recipient is outside Japan, **Art. 28 stacks on top**.
   Add records-of-provision to the operational checklist. `[TO VERIFY]`*
-- ***CORRECTED — what "delete" deletes.** `script.js :: accountDelete` (≈14350)
-  removes `users/$uid` and the Firebase Auth user. It does **not** touch session
-  contributions, roster entries or certificate entries. Its own confirm dialog
-  says contributions "are no longer linked to your identity" — that is
-  optimistic, since `pool/$cid/name` still holds the name typed at join. Do not
-  repeat that claim on screen.*
+- ***CORRECTED — what "delete" deletes.** `data-rights.js :: deleteMyAccount`
+  (reached through the `script.js :: accountDelete` shim) removes `users/$uid`,
+  the Firebase Auth user and — since 2026-10-07 — the author's own
+  `scenarios/$uid` and published `sharedScenarios/` copies. It does **not**
+  touch session contributions, roster entries (which hold the email) or
+  certificate entries, nor any moderation report the user filed. Its confirm
+  dialog used to say contributions "are no longer linked to your identity" —
+  untrue, since `pool/$cid/name` still holds the name typed at join. Since
+  2026-10-07 the dialog lists what is kept instead. Do not reintroduce that
+  claim on screen (`tests/account-delete.test.js` fails if it comes back).
+  Note that this was moot in production from 2026-07-31 until the same date:
+  the dialog holding the button could not be opened (DPA Annex VI, G8).*
 - *`[TO VERIFY]` The roster sits **outside** `sessions/`, so **no clean-up job
   ever deletes it**. Retention is currently indefinite. Either extend the
   clean-up job or state the real (indefinite) retention here — the second option
