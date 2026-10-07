@@ -506,8 +506,60 @@
     return out;
   }
 
+  /* ── A label for a session made of these sections, in at most `max` chars ──
+     The session's own name lists every picked section joined by " + " (script.js
+     publishSectionIdentity), which is right for the lobby line and far too long
+     to STORE: two built-in sections already reach 99 characters, the six Mayumi
+     parts 290, and one authored title may be 200. `users/$uid/history/$code`
+     allows a name 80, and a field over its limit refuses the whole entry — so
+     the session vanished from the participant's history, and with it the only
+     "Withdraw consent" button they have once a session is over.
+
+     As many whole names as fit, in pick order, then how many are left:
+       "Alpha + Bravo"            when everything fits (unchanged from before)
+       "Alpha + 5 more"           when it does not
+       "A very long first na… + 2 more"   when not even the first one does
+     A name is kept only if the count that must follow it still fits, so the
+     label always accounts for every section.
+
+     `names` are the section names in ONE language, already resolved. They are
+     taken from the pick, never by splitting a joined name: a title may itself
+     contain " + ". The bound is in UTF-16 units, which is what String.length
+     counts AND what a rule's `.length` counts on the emulator (probed
+     2026-10-07: 80 three-byte characters accepted, so not bytes; 40 astral
+     characters accepted and 41 refused, so not code points). Production is
+     taken to count the same; it was not probed. */
+  function sectionsLabel(names, max) {
+    const list = (names || []).map(n => String(n == null ? "" : n).trim()).filter(Boolean);
+    if (!list.length) return "";
+    /* What fits whole is returned whole. The loop below would refuse the name
+       BEFORE a short last one, because a count would not fit after it — when
+       nothing is left to count. */
+    const whole = list.join(" + ");
+    if (whole.length <= max) return whole;
+    const more = n => (n ? " + " + n + " more" : "");
+    let out = "", used = 0;
+    while (used < list.length) {
+      const next = (used ? out + " + " : "") + list[used];
+      if ((next + more(list.length - used - 1)).length > max) break;
+      out = next;
+      used += 1;
+    }
+    if (!used) {
+      // Not even the first name fits: cut it, and keep the count.
+      let keep = max - more(list.length - 1).length - 1;
+      const last = list[0].charCodeAt(keep - 1);
+      if (last >= 0xD800 && last <= 0xDBFF) keep -= 1;   // never half a surrogate pair
+      out = list[0].slice(0, Math.max(0, keep)).trimEnd() + "…";
+      used = 1;
+    }
+    /* The final slice only ever cuts for a `max` too small to hold "…" and the
+       count; it is what makes "never longer than max" true without exception. */
+    return (out + more(list.length - used)).slice(0, Math.max(0, max));
+  }
+
   return { SECTION_TYPES, SECTION_SOURCES, TEST_SPLIT, SECTION_SUMMARIES, MODULE_PREFIX,
            stripModulePrefix, byModule, buildSection, buildSectionRegistry,
            sectionTypesFor, sectionsForScenario,
-           unclassifiedTestItems };
+           unclassifiedTestItems, sectionsLabel };
 });
