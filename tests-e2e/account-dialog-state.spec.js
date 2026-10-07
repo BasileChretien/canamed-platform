@@ -341,3 +341,70 @@ test("B: after Delete account during profile setup the form is gone, and no prof
   await expectPlainFrontPage(page);
   expect(errors).toEqual([]);
 });
+
+/* ======================= C. the chip after a reload inside a session ======
+ *
+ * After a reload inside a session the header chip did nothing. Its listener,
+ * and those of every button in the dialog, were attached only when the splash
+ * was shown, and auto-resume never shows it.
+ */
+
+test("C: after a reload inside a session the header chip opens the dialog, and its buttons work", async ({ page }) => {
+  /* Inside a session the WebKit-family projects take about two seconds to pass
+     each click's stability check on this suite's hardware, and there are six
+     clicks here: ~18 s on webkit, more on the iPad project (measured
+     2026-10-07). Same allowance as the other in-session specs. */
+  test.setTimeout(90_000);
+  const errors = collectErrors(page);
+
+  // Enter a session through the front page, as a participant does.
+  await page.goto("/");
+  await page.waitForFunction(() => typeof dbInit === "function");
+  await page.evaluate(async (code) => {
+    dbInit();
+    await db.ref("sessions/" + code + "/created").set({ at: Date.now(), by: "E2E" });
+  }, CODE);
+  await page.locator("#splash-code").fill(CODE);
+  await page.locator("#splash-enter").click();
+  await expect(page.locator("#splash")).toBeHidden({ timeout: 10_000 });
+
+  await page.reload();
+  await expect(page.locator("#splash")).toBeHidden({ timeout: 10_000 });
+  await expect(page.locator("body")).not.toHaveClass(/(^|\s)locked(\s|$)/, { timeout: 10_000 });
+  /* Positive control for "the splash was never shown": on this load the
+     splash's own wiring did not run. Without it the test would pass by the
+     route that always worked. */
+  expect(await page.evaluate(() => splashWired)).toBe(false);
+
+  await standInAuth(page);
+  await seed(page, "users/u_alice/profile", ALICE_PROFILE);
+  await signIn(page, ALICE);
+
+  const chip = page.locator("#user-chip");
+  await expect(chip).toBeVisible();
+  await chip.click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await expect(page.locator("#account-email")).toHaveText("alice@example.test");
+  await expect(page.locator("#account-name")).toHaveValue("Alice");
+
+  // Save.
+  await page.locator("#account-name").fill("Alice B");
+  await page.locator("#account-save-btn").click();
+  await expect(page.locator("#account-action-hint")).toHaveText("Profile saved.");
+  expect((await stored(page, "users/u_alice/profile")).name).toBe("Alice B");
+
+  // Close.
+  await page.locator("#account-dialog-close").click();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+
+  // Sign out — from the dialog, reopened by the chip.
+  await chip.click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await page.locator("#account-signout-btn").scrollIntoViewIfNeeded();
+  await page.locator("#account-signout-btn").click();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+  await expect(chip).toBeHidden();
+  // Still in the session: signing out of an account is not leaving a session.
+  await expect(page.locator("#splash")).toBeHidden();
+  expect(errors).toEqual([]);
+});

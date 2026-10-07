@@ -642,3 +642,96 @@ test("B: a profile read that comes back for the account still signed in is appli
   assert.strictEqual(w.sandbox.currentProfile.name, "Alice");
   assert.strictEqual(w.el("user-chip").classList.contains("hidden"), false);
 });
+
+/* ======================= C. the account UI wired on every way in ==========
+ *
+ * THE HEADER CHIP DID NOTHING AFTER A RELOAD INSIDE A SESSION. wireAccountUI()
+ * was reached only through wireSplash(), which runs only when the splash is
+ * shown. Auto-resume never shows it, so the chip — painted, titled "open your
+ * account" — and every button in the dialog had no listener.
+ *
+ * These run script.js's own START block (what the page does when it has
+ * loaded) with the real initEntry(), session entry and wireSplash(), so the
+ * wiring is found wherever on that path it is done.
+ */
+
+const START_MARKER = "/* ===================== START ===================== */";
+const START_BLOCK = (() => {
+  const a = SCRIPT.indexOf(START_MARKER);
+  assert.notStrictEqual(a, -1, "could not find script.js's START block");
+  return SCRIPT.slice(a);
+})();
+
+const ACCOUNT_CONTROLS = ["user-chip", "splash-signed-in-account", "account-dialog-close",
+  "account-save-btn", "account-signout-btn", "account-delete-btn", "account-dialog"];
+const clicks = (w) => Object.fromEntries(ACCOUNT_CONTROLS.map((id) => [id, w.el(id).count("click")]));
+const ONCE = Object.fromEntries(ACCOUNT_CONTROLS.map((id) => [id, 1]));
+
+/* Load the page: `stored` is what localStorage holds. */
+async function boot(stored) {
+  const entered = [];
+  /* The flag is taken from script.js itself — seeding it here would let the
+     real file lose its declaration unnoticed. */
+  const flag = SCRIPT.match(/^let splashWired\s*=\s*false;/m);
+  assert.ok(flag, "script.js must declare splashWired at top level");
+  const w = makeWorld({
+    stored: stored || {},
+    globals: {
+      currentOrgInvalid: false, sessionNum: "",
+      sanitizeCode: (c) => String(c || "").toLowerCase(),
+      peekDeepLinkCode: () => "",
+      sessionStatus: () => Promise.resolve({ exists: true, closed: false }),
+      loadSessionScenario: () => Promise.resolve(true),
+      initLobby() { entered.push("initLobby"); },
+      lobbyShowLockedSession() {}, subscribeClosedListener() {}, autoResume() {},
+      tryConsumeDeepLink() {}, paintSavedSessionBanner() {}, paintMySessionsLink() {},
+      loadLastWorkshop: () => null,
+      initObserverChecklist() {}, wireReferenceToolbars() {}, wireBackToTop() {}
+    },
+    source: flag[0] + "\n" + ["setUnlockedSession", "enterUnlockedSession", "initEntry", "wireSplash"]
+      .map((fn) => extractFn(SCRIPT, fn)).join("\n")
+  });
+  w.entered = entered;
+  w.run(START_BLOCK);
+  await w.settle();
+  return w;
+}
+
+test("C: after a reload inside a session the header chip and the dialog's buttons are wired", async () => {
+  const w = await boot({ canamed_session: "abc-123" });
+
+  /* Positive control for "the splash was never shown": the session was entered
+     and wireSplash() — until now the only caller of wireAccountUI() — did not
+     run. Without it this would pass by the route that always worked. */
+  assert.ok(w.entered.includes("initLobby"), "premise: the stored session was resumed");
+  assert.strictEqual(w.sandbox.sessionNum, "abc-123");
+  assert.strictEqual(w.run("splashWired"), false, "premise: the splash was never wired");
+
+  assert.deepStrictEqual(clicks(w), ONCE,
+    "every account control needs its listener on the auto-resume path too");
+
+  // And they do what they say.
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.el("user-chip").fire("click");
+  assert.strictEqual(w.el("account-dialog").open, true, "the chip must open the dialog");
+  assert.strictEqual(w.el("account-email").textContent, "alice@example.test");
+  w.el("account-dialog-close").fire("click");
+  assert.strictEqual(w.el("account-dialog").open, false, "and Close must close it");
+});
+
+test("C: on the front page they are wired once, not twice", async () => {
+  const w = await boot();
+  assert.strictEqual(w.run("splashWired"), true, "premise: no stored session, so the splash was shown");
+  assert.deepStrictEqual(w.views(), ["enter"]);
+  /* Two listeners would open the dialog twice per click — and showModal() on an
+     open dialog throws. */
+  assert.deepStrictEqual(clicks(w), ONCE);
+});
+
+test("C: wiring the account UI again, from anywhere and in any order, adds nothing", async () => {
+  for (const stored of [{ canamed_session: "abc-123" }, {}]) {
+    const w = await boot(stored);
+    w.run("wireAccountUI(); wireSplash(); wireAccountUI(); wireSplash();");
+    assert.deepStrictEqual(clicks(w), ONCE);
+  }
+});

@@ -12657,7 +12657,7 @@ function accountDelete() {
 }
 
 /* wire the splash-view-account / splash-view-profile-setup / account-dialog
-   handlers. Called once on first splash render. */
+   handlers. Idempotent: called at start-up and again by wireSplash(). */
 let _accountWired = false;
 function wireAccountUI() {
   if (_accountWired) return;
@@ -12808,6 +12808,9 @@ function wireBackToTop() {
 
 /* ===================== START ===================== */
 initEntry();
+// Not only from wireSplash(): auto-resume never shows the splash, and the
+// header chip and the account dialog need their listeners in a session too.
+wireAccountUI();
 initObserverChecklist();
 wireReferenceToolbars();
 wireBackToTop();
