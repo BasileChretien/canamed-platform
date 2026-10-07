@@ -112,8 +112,10 @@ p { margin: 0.6em 0; }
   max-width: 70ch;
 }
 
-/* ---------- header ---------- */
-header {
+/* ---------- header ----------
+   The page masthead only, hence `body > header`: a bare `header` also took a
+   dialog's title row and the chart's tally for mastheads. */
+body > header {
   background: linear-gradient(105deg, var(--masthead-a), var(--masthead-b));
   color: var(--masthead-ink);
   box-shadow: inset 0 -3px 0 var(--caen-500), var(--sh-md);
@@ -127,8 +129,8 @@ header {
   justify-content: space-between;
   gap: var(--s-4);
 }
-header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
-header .sub { margin: 4px 0 0; font-size: 0.9rem; opacity: 0.92; }
+body > header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.02em; }
+body > header .sub { margin: 4px 0 0; font-size: 0.9rem; opacity: 0.92; }
 
 .header-right-wrap {
   display: flex;
@@ -1852,7 +1854,7 @@ body.admin-room .columns { grid-template-columns: 1fr; }
   outline-offset: 2px;
   border-radius: 3px;
 }
-header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
+body > header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 .view-btn:focus-visible{
   outline-color: #fff;
 }
@@ -1863,7 +1865,6 @@ header :focus-visible, .mode-badge:focus-visible, .conn-badge:focus-visible,
 @media (max-width: 680px) {
   main, #lobby, footer { padding-left: 14px; padding-right: 14px; }
   .header-inner { padding-left: 14px; padding-right: 14px; }
-  header h1 { font-size: 1.35rem; }
   .card { padding: var(--s-4); }
 }
 @media (max-width: 520px) {
@@ -1999,18 +2000,6 @@ body {
     var(--bg);
   background-attachment: fixed;
 }
-
-/* --- dramatic dark gradient-mesh header --- */
-header {
-  background:
-    radial-gradient(620px 220px at 85% -70%, rgba(231,184,0,.24), transparent),
-    linear-gradient(135deg, var(--masthead-a), var(--masthead-b));
-  box-shadow:
-    inset 0 -1px 0 rgba(255,255,255,.08),
-    inset 0 -4px 0 var(--caen-500),
-    0 8px 26px rgba(8,36,63,.30);
-}
-header h1 { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.025em; }
 
 /* --- the signature lobby hero (two columns: dark SVG aside + join card) --- */
 #lobby {
@@ -3689,7 +3678,17 @@ body.session-ended-shown { overflow: hidden; }
   padding: 14px 16px 16px;
   margin: 0 0 14px;
   background: var(--card);
+  /* A fieldset's UA default is min-inline-size: min-content, so it will not
+     shrink below its widest descendant — here the University <select>, as wide
+     as its longest option. On a phone that pushed the profile form out of the
+     dialog, which then scrolled sideways. */
+  min-width: 0;
 }
+/* WebKit counts a <select>'s longest option toward its ancestors' scroll width
+   even once the box is sized to fit, and no sizing on the select changes that.
+   Paint containment does; without it the dialog still scrolls sideways in
+   Safari below ~347px. */
+.account-fieldset select { contain: paint; }
 .account-fieldset legend {
   padding: 0 6px;
   font-weight: 700;
@@ -3743,11 +3742,17 @@ body.session-ended-shown { overflow: hidden; }
   max-height: 240px;
   overflow-y: auto;
 }
+/* Session code, date + scenario name, withdraw button. The row wraps instead of
+   shrinking, and the date + scenario name asks for little and takes what the
+   other two leave: under default flex shrinking a long scenario name squeezed
+   them, breaking the code at its hyphen and the button label over several
+   lines, at every width. */
 .account-history-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--s-1) var(--s-3);
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
 }
@@ -3759,7 +3764,22 @@ body.session-ended-shown { overflow: hidden; }
   color: var(--primary);
   font-weight: 800;
 }
-.account-history-meta { color: var(--muted); font-size: 0.84rem; }
+.account-history-meta {
+  /* A floor, not zero: with enlarged text the code and the button leave very
+     little, and at 0 this became a 62px column eleven lines tall. Once less
+     than this is left the button wraps to the next line instead. */
+  flex: 1 1 12ch;
+  /* A scenario name is authored text, up to 80 characters of anything. */
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+/* A phone is too narrow for all three side by side: the date + scenario name
+   goes last, on its own line at full width. The button shares the first line
+   with the code where its label fits and drops below it where it does not. */
+@media (max-width: 720px) {
+  .account-history-meta { order: 1; flex-basis: 100%; }
+}
 
 /* --- splash-foot extra link --- */
 .splash-foot-or { color: var(--muted); }
@@ -4113,13 +4133,12 @@ body.session-ended-shown { overflow: hidden; }
   margin-left: 4px;
 }
 /* Contribution tally relocated 2026-05-18 to the chart header (was
-   inside the removed Findings panel). Tighter top spacing + lighter
-   surface so it sits naturally inside the consultation-note header
-   without competing with the title. */
+   inside the removed Findings panel). Tighter top spacing + a themed
+   surface: a white wash was a grey slab on the dark chart. */
 .contrib-tally-header {
   margin: 8px 0 0;
   padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--card);
   border-radius: var(--r-sm);
 }
 
@@ -4200,7 +4219,7 @@ body.session-ended-shown { overflow: hidden; }
 
 /* --- editorial typography: real weight contrast + a dramatic scale --- */
 h1, h2, h3, h4 { text-wrap: balance; }
-header h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; }
+body > header h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; }
 .card h2 { font-size: 1.55rem; font-weight: 800; letter-spacing: -0.025em; line-height: 1.16; }
 .card h3 { font-size: 1.1rem; font-weight: 700; }
 .card h4 { font-weight: 700; }
@@ -4219,9 +4238,9 @@ header h1 { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.025em; }
 .brand-mark .arc-n { stroke: var(--nagoya-500); }
 .brand-mark .heart { fill: var(--caen-500); }
 /* on dark surfaces (header, lobby hero) the arcs read brighter */
-header .brand-mark .arc-c, .hero-aside .brand-mark .arc-c { stroke: #f0ad3c; }
-header .brand-mark .arc-n, .hero-aside .brand-mark .arc-n { stroke: #5cb8ea; }
-header .brand-mark .heart, .hero-aside .brand-mark .heart { fill: #fff; }
+body > header .brand-mark .arc-c, .hero-aside .brand-mark .arc-c { stroke: #f0ad3c; }
+body > header .brand-mark .arc-n, .hero-aside .brand-mark .arc-n { stroke: #5cb8ea; }
+body > header .brand-mark .heart, .hero-aside .brand-mark .heart { fill: #fff; }
 /* draw-on: both arcs arrive together, then the heart fades in */
 .brand-mark .arc-c, .brand-mark .arc-n {
   stroke-dasharray: 150;
@@ -4232,7 +4251,7 @@ header .brand-mark .heart, .hero-aside .brand-mark .heart { fill: #fff; }
 @keyframes mark-heart { from { opacity: 0; transform: scale(0); } to { opacity: 1; transform: scale(1); } }
 
 /* --- header: a crossing blue->meeting->amber underline --- */
-header {
+body > header {
   background: radial-gradient(620px 220px at 85% -70%, rgba(224,138,30,.22), transparent),
               linear-gradient(135deg, var(--masthead-a), var(--masthead-b));
   border-bottom: 3px solid transparent;
@@ -4366,7 +4385,7 @@ button:active:not(:disabled), .req-btn:active:not(:disabled):not(.done) {
 .hero-aside .brand-mark { width: 104px; height: 104px; margin-bottom: var(--s-3); }
 
 @media (max-width: 680px) {
-  header h1 { font-size: 1.4rem; }
+  body > header h1 { font-size: 1.4rem; }
   .card h2 { font-size: 1.35rem; }
 }
 
