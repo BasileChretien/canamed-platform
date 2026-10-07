@@ -2027,8 +2027,9 @@ function withdrawResearchConsent(code, uid, opts) {
   const payload = { research: false, at: Date.now() };
   if (opts.alsoRequestErasure) payload.erasure = true;
   return db.ref(withdrawalPath(code, uid)).set(payload).then(() => {
-    /* Best effort, and its failure is expected on a closed session. */
-    if (!clientId) return null;
+    /* Best effort, and its failure is expected on a closed session. Only for
+       the session this page is IN: sPath() addresses that one, not `code`. */
+    if (!clientId || code !== sessionNum) return null;
     return db.ref(sPath("pool/" + clientId + "/consent/research")).set(false)
       .catch(() => null);
   });
