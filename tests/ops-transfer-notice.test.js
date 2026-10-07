@@ -115,11 +115,31 @@ function deepReadsSessions(rel, seen = new Set()) {
    asserted in tests/session-enum-shallow.test.js, which is where that
    invariant belongs. */
 function enumeratesShallowly(rel) {
+  let src;
   try {
-    return /readSessionLocationsShallow\s*\(/.test(read(ROOT, rel));
+    src = read(ROOT, rel);
   } catch {
     return false;
   }
+  if (/readSessionLocationsShallow\s*\(/.test(src)) return true;
+  /* ...or through the library that does its reading. cleanup-anonymous-accounts
+     keeps its orchestration in lib/anonymous-retention-job.js so it can be
+     driven against fakes, and THAT file calls the shallow enumerator. One
+     level, and only into ./lib/ — the same reach the deep-read check has.
+     That the library never reads a session body is asserted where it can be
+     shown by running it: tests/anonymous-retention-job.test.js, "the only
+     value ever read whole is a session's creator uid". */
+  for (const m of src.matchAll(/require\(["'](\.\/lib\/[\w.-]+)["']\)/g)) {
+    const dep = path.posix.join(path.posix.dirname(rel), m[1]);
+    try {
+      if (/readSessionLocationsShallow\s*\(/.test(read(ROOT, dep.endsWith(".js") ? dep : dep + ".js"))) {
+        return true;
+      }
+    } catch {
+      /* an unreadable dependency proves nothing either way */
+    }
+  }
+  return false;
 }
 
 /* DERIVATION A — scheduled jobs that reach the database at all, by any route.
@@ -227,7 +247,8 @@ test("the DAILY jobs read no session content — the notice says so in three lan
   const DAILY = [
     "scripts/cleanup-stale-sessions.js",
     "scripts/firebase-cost-monitor.js",
-    "scripts/cleanup-expired-credentials.js"
+    "scripts/cleanup-expired-credentials.js",
+    "scripts/cleanup-anonymous-accounts.js"
   ];
   const offenders = jobsReadingSessionBodies()
     .map((j) => j.script)

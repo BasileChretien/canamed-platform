@@ -12370,8 +12370,10 @@ function saveProfile(updates) {
    record of which workshops a persistent anonymous uid attended, under the
    `users` tree — which no retention job touches — disclosed nowhere.
 
-   See issue #347. This stops NEW writes only; entries already written need an
-   operator sweep of history nodes belonging to uids that have no profile. */
+   See issue #347. This stops NEW writes only. The entries already written are
+   removed by scripts/cleanup-anonymous-accounts.js — the first job to reach
+   `users` at all: once an anonymous account has been quiet for a day, and
+   with the account itself when it has gone 90 days unused. */
 function pushSessionToHistory(code) {
   if (!currentUser || currentUser.isAnonymous || !db || !code) return;
   const path = "users/" + currentUser.uid + "/history/" + code;

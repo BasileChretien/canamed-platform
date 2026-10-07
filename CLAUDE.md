@@ -340,15 +340,18 @@ start — an undeployable function enforces nothing — but it is uncheckable
 again until Blaze returns. The **RTDB** canary in item 1 is unaffected and
 still runs every tick.
 
-### Anonymous-account retention (issue #347) — ⛔ BUILT 2026-10-07, NOT SCHEDULED, NOT ARMED
+### Anonymous-account retention (issue #347) — SCHEDULED + ARMED with PIS v12 (2026-10); confirm a live run before quoting it
 
 `signInAnonymously()` gives every visitor an Auth account before any consent
 surface, and nothing ever removed one: retention was indefinite, by absence of
 any mechanism (auto-delete is an Identity Platform feature this project lacks).
-The job now exists — `.github/workflows/cleanup-anonymous-accounts.yml` →
-`scripts/cleanup-anonymous-accounts.js` — but it runs **only on manual dispatch,
-dry-run unless `confirm` is ticked**. Until it is scheduled, retention of the
-anonymous identifier is still indefinite; do not describe it otherwise.
+The job is `.github/workflows/cleanup-anonymous-accounts.yml` →
+`scripts/cleanup-anonymous-accounts.js`. It runs nightly at 04:37 UTC and
+**DELETES on schedule**; a manual dispatch is a dry run unless `confirm` is
+ticked. It was scheduled in the same change that issued PIS v12, after one dry
+run against production on 2026-10-07 (run 37576812113, nothing deleted): 338
+accounts — 336 anonymous, 2 signed-in — of which 185 idle past the window; the
+mask honoured; every anonymous account dated; 119 database paths would go.
 
 - **What it removes.** An anonymous account idle ≥ 90 days that no LIVE session
   names (member or creator) and no allowlist names (`facilitatorGate/allow`,
@@ -393,11 +396,18 @@ anonymous identifier is still indefinite; do not describe it otherwise.
   and then VERIFIES it: one unrequested key aborts the run. The check can only
   detect a transfer, not undo it, so the listing starts with a ONE-account
   canary — an ignored mask exposes one record, not a thousand.
-- ⚠️ **SCHEDULING IT IS ONE CHANGE WITH THREE PARTS**: the cron, the armed
-  `ANON_CONFIRM`, and the privacy notice. A nightly run sends account
-  identifiers and session member uids to a US runner, which `privacy.html` §6–7
-  does not list, and §8 states no period for the identifier.
-  `tests/anonymous-retention-job.test.js` fails if a cron appears alone.
+- ⚠️ **THE CRON, THE ARMED `ANON_CONFIRM` AND THE NOTICE ARE ONE THING.** A
+  nightly run sends account identifiers and session member uids to a US runner;
+  `privacy.html` says so, and states the period, since PIS v12 (§4, §6–8, §16,
+  §17, EN/FR/JA). Comment out the cron or flip the schedule back to a dry run
+  and §8 promises a deletion nothing performs; change the window and it states
+  the wrong number. `tests/anonymous-identifier-notice.test.js` holds the three
+  together and fails on any one moving alone.
+- ⚠️ **STILL OPEN, and not code:** the lawful basis for an identifier created
+  before any consent (notice §3 rests on consent) — DPA Annex VI G13, for the
+  controller / DPO; how long an unactioned moderation report is kept; and the
+  operator's acceptance of the GitHub transfer (R9) was given for narrower
+  content than this job sends.
 - **Two emulator divergences, both measured.** The Auth emulator ignores
   `fields` (so it serves as the positive control for the mask check), and it
   answers a deleted account's refresh with `INVALID_REFRESH_TOKEN` where Google
@@ -405,11 +415,12 @@ anonymous identifier is still indefinite; do not describe it otherwise.
   LOAD only (the SDK clears a stored user whose reload fails); a tab left open
   across the deletion is not reachable on the emulator.
 
-`Verify:` `grep -E '^\s*-\s*cron:' .github/workflows/cleanup-anonymous-accounts.yml`
-prints nothing while unscheduled (a plain `grep cron:` matches the commented
-line and misleads). The first real evidence is a dispatched dry run: it must
-print an `Accounts:` line, and it is the only test of whether the service
-account may list accounts and whether Google honours the mask.
+`Verify:` `gh run list --workflow=cleanup-anonymous-accounts.yml --limit 3`
+shows `schedule` runs succeeding, and the newest one's log has an `Auth:` line.
+That line is printed only by a LIVE run — a log that ends at `Paths: … would
+delete` was a dry run, and a schedule producing those means the job has been
+disarmed while the notice still promises deletion. Then
+`curl -s https://canamed-69785.web.app/privacy.html | grep -c "PIS v12"` > 0.
 
 ### Round-3 security follow-ups
 

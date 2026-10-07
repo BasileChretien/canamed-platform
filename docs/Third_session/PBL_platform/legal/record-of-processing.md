@@ -55,14 +55,16 @@ contract it records.
 | P7 | **Credential-expiry purge** (daily) | `credentials` records | Retention of certificate records |
 | P9 | **Erasure on request** (on demand, operator-run) | Identifiers only — the `erasures` node records clientId/uid/stableId and the session, never a name and never content | Discharge Art. 17 / Art. 7(3) and APPI Art. 35(5). `scripts/erase-participant.js` removes the participant from the live tree; the record is what stops a restore from the nightly archive bringing them back (`scripts/restore-sessions.js`). ⚠️ The record must OUTLIVE the snapshots it suppresses — deleting it early re-exposes the person it protects |
 | P8 | **Storage/cost monitoring** (daily) | Session identifiers and lifecycle dates only | Keep the deployment inside free-tier limits |
-| P10 | **Anonymous-account retention** (⚠️ **on demand only — NOT scheduled** as of 2026-10-07) | For every Auth account: UID, three timestamps and the names of its sign-in providers — **no e-mail address, no display name**. The member and creator UIDs of each live session. The keys of `users/` and `scenarios/`, and of each quiet anonymous account's `users/` node (never their contents). The keys of the chat's rate-limit tree (UID or session code, and time buckets) | Discharge storage limitation for the anonymous sign-in account every visitor is given, the records keyed by it, and the proxy's usage counters (DPA Annex VI, G13 and G7). `scripts/cleanup-anonymous-accounts.js`. Until it is scheduled this row describes a tool, not a practice: **the identifier is still kept indefinitely** |
+| P10 | **Anonymous-account retention** (nightly, since PIS v12) | For every Auth account: UID, three timestamps and the names of its sign-in providers — **no e-mail address, no display name**. The member and creator UIDs of each live session. The keys of `users/` and `scenarios/`, and of each quiet anonymous account's `users/` node (never their contents). The keys of the chat's rate-limit tree (UID or session code, and time buckets) | Discharge storage limitation for the anonymous sign-in account every visitor is given, the records keyed by it, and the proxy's usage counters (DPA Annex VI, G13 and G7). `scripts/cleanup-anonymous-accounts.js`. Scheduled and armed in the same change that issued PIS v12, and pinned to the notice's wording by `tests/anonymous-identifier-notice.test.js` |
 
 Retention: closed sessions purged 30 days after closure, never-closed sessions
 90 days after creation; research dataset up to 5 years after publication;
 certificate records per their own `retentionUntil`. Enforced by
 `scripts/cleanup-stale-sessions.js` and pinned to the published notice by
-`tests/retention-notice-consistency.test.js`. **The anonymous sign-in account
-has no enforced period yet** — see P10.
+`tests/retention-notice-consistency.test.js`. The anonymous sign-in account is
+removed after 90 days without use — about 120 at most, when a session that
+names it is closed late — and the chat's usage counters within three days (P10,
+pinned by `tests/anonymous-identifier-notice.test.js`).
 
 ---
 

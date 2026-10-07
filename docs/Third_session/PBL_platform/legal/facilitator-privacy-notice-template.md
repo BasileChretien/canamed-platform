@@ -332,6 +332,14 @@ say so here.]
 **From your device / browser**
 
 - A random identifier for your browser tab, created fresh each time.
+- **A sign-in identifier, created for every visitor.** When the platform opens,
+  it signs your browser in anonymously — before you enter a session code or tick
+  anything — and Google's sign-in service gives it a random identifier. It holds
+  no name and no email address, but it is stored on your device and stays the
+  same from one visit to the next. The platform needs it to tell participants
+  apart and to decide what each browser may read and write. If you create an
+  account, it becomes that account's identifier. It is deleted after 90 days
+  without use (section 8).
 - **A longer-lived identifier for your browser**, stored on your device. It
   survives closing the tab, refreshing, and opening a new tab, and it is written
   next to your poll, knowledge-check and wrap-up answers. **Its purpose is to
@@ -748,12 +756,20 @@ strictly than you may expect:
 platform's built-in job deletes a session 30 days after it is closed, or 90 days
 after creation if it is never closed.
 
-**Three things are not deleted automatically at all:**
+**The sign-in identifier your browser is given at startup (section 2) is
+deleted after 90 days without use.** If a session you joined still exists then,
+it goes when that session does — about 30 days later at most. The AI chat's
+usage counters are deleted within three days.
 
-- **your email address in the participant roster** — only written if you signed
-  in *and* consented to research;
-- **your certificate verification record**;
-- **the technical usage log and counters for the AI chat**.
+**Two things are not deleted automatically at all:**
+
+- **your certificate verification record** — a deletion job exists, but its
+  scheduled run only reports what it would delete;
+- **a report you file about a shared scenario**.
+
+*(Two items left this list. Your email address in the participant roster has
+been deleted with its session since 21 August 2026, and the AI chat's usage log
+after 30 days since 12 August 2026.)*
 
 We delete these by hand: **[WHO]** does it, on **[WHAT TRIGGER]**, and the
 periods we have set are in Appendix B. If you want any of them removed sooner,
@@ -1060,9 +1076,11 @@ and is no longer loaded at all.)*
 | Identified nightly backup | Private cloud bucket, expires after **90 days** [TO VERIFY the expiry rule is live on the bucket] | [RETENTION — BACKUP] |
 | Pseudonymised research dataset | Display names replaced with "Student-A/B/…", universities grouped, **AI-chat transcripts dropped entirely**. **Other free text is kept as written** and a name is only replaced where it is the whole content of a name field — so a name written mid-sentence survives. **Account and device identifiers are kept**, so the file can be linked back to a person by anyone who also holds the roster or the identified backup, without the linkage file. File expires after **90 days** [TO VERIFY] | [RETENTION — RESEARCH DATASET] |
 | Re-identification key linking pseudonyms to names | Expires after **14 days** [TO VERIFY — this figure sets the withdrawal deadline in section 10] | [RETENTION — LINKAGE FILE] |
-| **Participant email roster** (only for signed-in participants who consented to research) | ⚠️ **No automated deletion — kept indefinitely** unless someone removes it by hand | [RETENTION — EMAIL ROSTER] · deleted by [WHO], on [WHAT TRIGGER] |
-| **Certificate verification records** | Each carries a retention date about **5 years** out, but ⚠️ **no job deletes them**, and no user of the app can delete one — only the platform operator can | [CERTIFICATE RETENTION] · cleared by [WHO], on [WHAT TRIGGER] |
-| **AI-chat usage log and usage counters** (account id, time, language, message counts, reply length, response time, technical status, provider, token counts, attempts, prompt version, session code) | ⚠️ **No automated deletion; not visible in the app** | [RETENTION — USAGE LOG] · agreed with the platform operator as [PERIOD] |
+| **Participant email roster** (only for signed-in participants who consented to research) | Deleted **with its session**, on the same schedule as the first row, since 2026-08-21. Before that date nothing deleted it | [RETENTION — SESSION DATA] |
+| **Certificate verification records** | Each carries a retention date about **5 years** out. A deletion job exists since 2026-08-21, but ⚠️ **its scheduled run is a dry run — nothing is deleted automatically yet**, and no user of the app can delete one — only the platform operator can | [CERTIFICATE RETENTION] · cleared by [WHO], on [WHAT TRIGGER] |
+| **AI-chat usage log and usage counters** (account id, time, language, message counts, reply length, response time, technical status, provider, token counts, attempts, prompt version, session code) | The usage log is deleted after **30 days** (since 2026-08-12); the usage counters within **three days** (since 2026-10). Not visible in the app | 30 days / three days — fixed by the platform |
+| **Sign-in identifier created at startup** (anonymous; section 2) | Deleted after **90 days** without use, or with the last session that names it — about 30 days later at most. An identifier that became an account is kept with the account (next row) | 90 days — fixed by the platform, and it cannot be lengthened |
+| **Reports about shared scenarios** | ⚠️ **No automated deletion.** Kept under the reporter's sign-in identifier, which may by then belong to no account | [RETENTION — REPORTS] · cleared by [WHO], on [WHAT TRIGGER] |
 | Account profile and session history (only if you create an account) | Kept until you delete it | Until you ask us to delete it |
 | Facilitator-authored scenarios and any shared scenario | Kept until the author deletes them; shared scenarios are readable by any signed-in user of the platform, including the author's display name | [RETENTION — SCENARIOS] |
 

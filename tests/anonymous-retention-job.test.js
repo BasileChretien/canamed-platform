@@ -612,28 +612,25 @@ const RUNNER = fs.readFileSync(path.join(ROOT, "scripts", "cleanup-anonymous-acc
 const liveCrons = (yml) =>
   yml.split("\n").filter((l) => /^\s*-\s*cron:/.test(l) && !/^\s*#/.test(l)).length;
 
-test("the workflow is NOT scheduled while the privacy notice does not describe it", () => {
-  /* A scheduled run sends account identifiers and session member uids to a
-     GitHub runner in the United States every night. privacy.html sections 6-7
-     list what the scheduled jobs read, and section 8 states the retention
-     periods; neither mentions this job. Adding a cron here alone makes the
-     published notice wrong the same night.
-     WHEN YOU SCHEDULE IT: replace this test, in the same change, with one that
-     ties the cron and the armed ANON_CONFIRM to the notice's wording. */
-  assert.strictEqual(liveCrons(WORKFLOW), 0,
-    "cleanup-anonymous-accounts.yml gained a live cron. See the comment above.");
-  const privacy = fs.readFileSync(
-    path.join(ROOT, "docs", "Third_session", "PBL_platform", "privacy.html"), "utf8");
-  assert.ok(!/anonymous(ly)? (sign|account|identifier)/i.test(privacy),
-    "privacy.html now mentions the anonymous identifier — this test is the " +
-    "placeholder that change was meant to replace with a real lockstep.");
+test("the workflow is scheduled, and what ties that to the notice lives next door", () => {
+  /* Until the notice described this job, a test here asserted the workflow had
+     NO cron: a scheduled run sends account identifiers to a US runner every
+     night, and a notice that did not say so would have been wrong the same
+     night. The cron, the armed switch and PIS v12 then landed in one change,
+     and tests/anonymous-identifier-notice.test.js now holds the three
+     together. This only pins that the hand-over happened. */
+  assert.strictEqual(liveCrons(WORKFLOW), 1);
+  assert.ok(fs.existsSync(path.join(ROOT, "tests", "anonymous-identifier-notice.test.js")),
+    "the notice lockstep is gone, and with it the only thing stopping this " +
+    "schedule from outliving the disclosure it depends on");
 });
 
-test("the workflow deletes only on an explicit manual confirm", () => {
-  assert.match(WORKFLOW, /ANON_CONFIRM: \$\{\{ github\.event\.inputs\.confirm == 'true' && '1' \|\| '0' \}\}/);
-  const confirmInput = /confirm:\s*\n(?:\s+.*\n)*?\s+default: (\w+)/.exec(WORKFLOW);
-  assert.ok(confirmInput && confirmInput[1] === "false", "the confirm input must default to false");
+test("the orphan sweep is never on by schedule — only by an explicit manual tick", () => {
+  /* Deleting on schedule is the published policy. Deleting records whose uid
+     has no account is an operator decision, behind a tripwire. */
   assert.match(WORKFLOW, /ANON_SWEEP_ORPHANS: \$\{\{ github\.event\.inputs\.sweep_orphans == 'true' && '1' \|\| '0' \}\}/);
+  const sweepInput = /sweep_orphans:\s*\n(?:\s+.*\n)*?\s+default: (\w+)/.exec(WORKFLOW);
+  assert.ok(sweepInput && sweepInput[1] === "false", "the sweep_orphans input must default to false");
 });
 
 test("the workflow's default window is the one the rules default to", () => {
