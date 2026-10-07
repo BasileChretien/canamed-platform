@@ -147,20 +147,37 @@ function believableLink(cur, parent) {
     !olderThan(cur, parent);
 }
 
-/* Does `pid` descend from `rootPid` (or is it the root), by an unbroken chain
-   of processes all present in `table`? */
-function descendsFrom(table, pid, rootPid) {
+/* Where does the chain of parents from `pid` lead, in this one `table`?
+ *
+ *   "yes"      to `rootPid`, unbroken — or `pid` is the root itself;
+ *   "no"       somewhere else: it stops at a dead parent, or at a PID that has
+ *              been reused (a "parent" younger than its child);
+ *   "unknown"  it stops at a creation time that could not be read, where the
+ *              reused-PID check cannot be made. NOT an answer in either
+ *              direction — "cannot be shown to be ours" is a different thing
+ *              from "shown not to be", and the sim refuses to run on the
+ *              second.
+ */
+function descent(table, pid, rootPid) {
   const root = String(rootPid);
   const seen = new Set();
   let cur = table.get(String(pid));
   while (cur && !seen.has(cur.pid)) {          // PID 0 is its own parent on Windows
-    if (cur.pid === root) return true;
+    if (cur.pid === root) return "yes";
     seen.add(cur.pid);
     const parent = table.get(cur.ppid);
-    if (!believableLink(cur, parent)) return false;
+    if (!parent) return "no";
+    if (cur.born === BORN_UNKNOWN || parent.born === BORN_UNKNOWN) return "unknown";
+    if (olderThan(cur, parent)) return "no";
     cur = parent;
   }
-  return false;
+  return "no";
+}
+
+/* Does `pid` descend from `rootPid` (or is it the root), by an unbroken chain
+   of processes all present in `table`? Only a shown "yes" is one. */
+function descendsFrom(table, pid, rootPid) {
+  return descent(table, pid, rootPid) === "yes";
 }
 
 /* Are two creation times, read at different moments, the same process's?
@@ -182,9 +199,12 @@ function sameBirth(a, b) {
 
 /* Creation time as ms since the Unix epoch, or null. A FILETIME counts 100 ns
    ticks from 1601; lstart ("Wed Oct  7 12:34:56 2026", C locale) is local time
-   to the second. */
+   to the second. BORN_UNKNOWN is null, explicitly: Date.parse("0") is the year
+   2000, which would make a process nothing is known about "older than the
+   run". */
 const FILETIME_TO_UNIX_MS = 11644473600000n;
 function bornMs(proc) {
+  if (proc.born === BORN_UNKNOWN) return null;
   if (/^[1-9]\d*$/.test(proc.born)) {
     return Number(BigInt(proc.born) / 10000n - FILETIME_TO_UNIX_MS);
   }
@@ -297,7 +317,9 @@ function track(rootPid, opts) {
     for (const pid of pending) {
       const proc = table.get(pid);
       if (!proc || proc.born === BORN_UNKNOWN) { miss(pid); continue; }
-      (descendsFrom(table, pid, root) ? ours : notOurs).set(pid, proc.born);
+      const led = descent(table, pid, root);
+      if (led === "unknown") { miss(pid); continue; }
+      (led === "yes" ? ours : notOurs).set(pid, proc.born);
       failures.delete(pid);
     }
   }
@@ -325,6 +347,7 @@ function track(rootPid, opts) {
       else if (proc && ours.has(pid) && sameBirth(ours.get(pid), proc.born)) out.mine.push(row);
       else if (proc && spawnedAt !== null && predatesSpawn(table, pid, spawnedAt, walk)) {
         out.notMine.push(row);
+        notOurs.set(pid, proc.born);   // settled: a later sweep need not look again
       } else {
         out.unproven.push(row);
         /* The table just read fine, so "it could not be read" is not this

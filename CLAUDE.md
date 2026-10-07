@@ -29,9 +29,10 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
     A second run is refused by the preflight; one that slips into the seconds
     between the first run's preflight and its emulator binding fails to start,
     exits non-zero and kills nothing. It says **ANOTHER RUN HOLDS THE EMULATOR
-    PORTS** whenever that can be shown (always on Windows; on POSIX when the
-    listener was seen during the run or is older than it), and otherwise that
-    the listener *could not be shown* to be its own — same warning either way.
+    PORTS** whenever that can be shown — the listener was seen outside the
+    run's own process tree while the run lived, or is older than the run, or
+    (Windows only) hangs off a process that is — and otherwise that the
+    listener *could not be shown* to be its own. Same warning either way.
     Wait for the other run to end. **Do not retry in a loop.**
   - **A held port is not necessarily a leftover.** It may be another session's
     emulator, mid-suite, and nothing can tell the two apart by port number.
@@ -54,10 +55,12 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
     same defect, and worse: its readiness probe succeeds against ANY listener,
     so a run that lost the race went on to run the sim against the other
     session's emulator. It now ends the run the moment its own emulator exits
-    before teardown (that is what losing the race looks like from there), or
-    a listener on the ports is shown not to be its own.
+    before teardown (that is what losing the race looks like from there), and
+    refuses to start the sim if, once the ports answer, a listener on them is
+    shown not to be its own.
     Still by tree, not verified one by one: the runner's Ctrl-C path and the
-    sim's teardown `taskkill /F /T` their OWN live child, as before.
+    sim's teardown `taskkill /F /T` their OWN live children — for the sim that
+    now includes the sim process itself, when a run is cut short.
     **The text check that guarded this was green on the defect**
     (`onlyPids: ownedPids` reads the same whichever set it is handed). The
     real runner is now RUN, in a child process, against a real stranger on

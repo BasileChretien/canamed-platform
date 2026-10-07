@@ -115,7 +115,12 @@ async function startStranger(port, dir, name) {
   const pidFile = path.join(dir, name + ".pid");
   const proc = spawn(process.execPath, [LISTENER, String(port), pidFile],
     { stdio: "ignore", windowsHide: true });
-  await until(name + " to listen on :" + port, () => fs.existsSync(pidFile), 15000);
+  try {
+    await until(name + " to listen on :" + port, () => fs.existsSync(pidFile), 15000);
+  } catch (e) {
+    proc.kill();   // or it outlives the failure and holds this process open
+    throw e;
+  }
   return { proc, pid: proc.pid, port };
 }
 

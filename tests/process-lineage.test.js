@@ -123,6 +123,31 @@ test("a link through a process with no readable creation time is not believed", 
     pid === 210 ? [pid, ppid, lineage.BORN_UNKNOWN] : [pid, ppid, born]));
   assert.ok(!lineage.descendsFrom(t, 220, ROOT));
   assert.ok(lineage.descendsFrom(table(TWO_RUNS), 220, ROOT), "control: the same chain, readable");
+
+  /* Mid-chain, either end of the check would have caught it. At the two ends
+     of a chain only one can — so each is pinned on its own (review round 2:
+     removing either half alone used to leave the suite green). */
+  const unreadableChild = table(TWO_RUNS.map(([pid, ppid, born]) =>
+    pid === 210 ? [pid, ppid, lineage.BORN_UNKNOWN] : [pid, ppid, born]));
+  assert.ok(!lineage.descendsFrom(unreadableChild, 210, ROOT),
+    "the process itself has no creation time: its link to the root is unchecked");
+  const unreadableRoot = table(TWO_RUNS.map(([pid, ppid, born]) =>
+    pid === ROOT ? [pid, ppid, lineage.BORN_UNKNOWN] : [pid, ppid, born]));
+  assert.ok(!lineage.descendsFrom(unreadableRoot, 210, ROOT),
+    "the root has no creation time: nothing can be age-checked against it");
+});
+
+test("an unreadable link is NO verdict — it does not make the listener 'another run's'", () => {
+  /* "Cannot be shown to be ours" and "shown not to be ours" are different
+     answers, and the sim REFUSES TO RUN on the second. A chain that stops at a
+     creation time nobody could read has shown nothing in either direction.
+     (Review round 2: it used to come out "not-ours".) */
+  const t = tracker(TWO_RUNS.map(([pid, ppid, born]) =>
+    pid === 210 ? [pid, ppid, lineage.BORN_UNKNOWN] : [pid, ppid, born]));
+  t.observe([220, 930]);
+  assert.strictEqual(t.verdict(220), null, "ours, behind an unreadable link: no verdict");
+  assert.strictEqual(t.verdict(930), "not-ours",
+    "control: a readable chain that leads elsewhere still is one");
 });
 
 test("the walk terminates on a self-parented PID", () => {
@@ -191,6 +216,21 @@ test("the sweep says WHY a survivor is unproven, even after the table has recove
   /* And a survivor nobody ever failed to look up carries no such reason. */
   const quiet = tracker(AFTER_EXIT);
   assert.deepStrictEqual(quiet.partition([row(9000, 220)]).why, []);
+});
+
+test("with the child gone, the lookups stop too — not one snapshot per poll", () => {
+  /* The runner looks at the ports twice a second until each has a verdict, and
+     with the child gone no verdict will ever come. Each lookup must count, or
+     that poll buys a 1.5–15 s snapshot every time. (Review round 2: nothing
+     pinned this.) */
+  let calls = 0;
+  const t = lineage.track(ROOT, { selfPid: SELF, snapshot: () => {
+    calls++;
+    return table(TWO_RUNS.filter(([pid]) => pid !== ROOT));
+  } });
+  for (let i = 0; i < 10; i++) t.observe([220]);
+  assert.strictEqual(t.verdict(220), null);
+  assert.ok(calls >= 1 && calls <= 3, "took " + calls + " snapshots for 10 looks");
 });
 
 test("a snapshot is taken only when there is something new to decide", () => {
@@ -347,6 +387,19 @@ test("a process created before the child was spawned is shown NOT to be ours", (
   assert.deepStrictEqual(sorted.unproven, [row(9099, 220)],
     "younger than the spawn proves nothing, in either direction");
   assert.deepStrictEqual(sorted.mine, [], "and age NEVER makes anything killable");
+});
+
+test("a survivor with no readable creation time is unproven — not 'older than the run'", () => {
+  /* "0" is what the table prints for a creation time it could not get. Read as
+     a date it is the year 2000 — older than any run — and the survivor was
+     reported as another run's. (Review round 2.) */
+  const rows = [[SELF, 1, filetime(-60000)], [220, 210, lineage.BORN_UNKNOWN]];
+  for (const followParents of [false, true]) {
+    const t = tracker(rows, { spawnedAt: T0_MS, followParents });
+    const sorted = t.partition([row(9000, 220)]);
+    assert.deepStrictEqual(sorted.notMine, [], "followParents=" + followParents);
+    assert.deepStrictEqual(sorted.unproven, [row(9000, 220)]);
+  }
 });
 
 test("where parent links are never rewritten, hanging off an older live process counts too", () => {

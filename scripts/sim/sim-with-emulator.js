@@ -125,8 +125,9 @@ function refuseForeign(rows, how) {
     "open … could not start Database Emulator\"; \"emulator hub unable to start on\n" +
     "port 4400, starting on 4401 instead\" is the tell-tale that another hub is\n" +
     "alive. The sim is not being run against that listener.\n\n" +
-    "NOTHING WAS KILLED. Two sessions cannot run an emulator suite at once:\n" +
-    "wait for the other run to end, then run this again — do not retry in a loop.");
+    "NOTHING OF THEIRS IS KILLED: this run now stops its own processes, and\n" +
+    "those only. Two sessions cannot run an emulator suite at once: wait for\n" +
+    "the other run to end, then run this again — do not retry in a loop.");
   process.exit(1);
 }
 
@@ -310,17 +311,25 @@ function check(cmd, args, label) {
        waitForPort() below is satisfied by ANY listener, so without this the
        sim would go on against whoever holds the ports. It does not depend on
        reading the process table, which may be slow or unavailable. */
-    let others = [];
+    /* WHO holds the ports now decides what is said, not whether the run ends.
+       Only a listener SHOWN not to be ours is called another run's: one left
+       behind by our own emulator crashing looks the same from the port, and
+       blaming another session for that would send the reader the wrong way. */
+    let sorted = { notMine: [], unproven: [] };
     try {
-      others = emulatorPorts.survey([DB_PORT, AUTH_PORT])
-        .filter(r => lineage.verdict(r.pid) !== "ours");
+      sorted = lineage.partition(emulatorPorts.survey([DB_PORT, AUTH_PORT]));
     } catch (_) { /* reported as the plain exit below */ }
-    if (others.length) {
-      refuseForeign(others,
-        "this run's own emulator has exited, so what holds the ports is not it");
+    if (sorted.notMine.length) {
+      refuseForeign(sorted.notMine,
+        "this run's own emulator has exited, and what holds the ports is not it");
     }
     console.error("FATAL: this run's emulator exited before the sim was done " +
-      "(see the firebase CLI's output above).");
+      "(see the firebase CLI's output above)." +
+      (sorted.unproven.length
+        ? "\nStill on the ports, and NOT SHOWN to be this run's:\n" +
+          emulatorPorts.describe(sorted.unproven) + "\n\n" +
+          emulatorPorts.LIVE_RUN_CAVEAT
+        : ""));
     process.exit(1);
   });
   // Wait for BOTH the DB + Auth emulator ports to come up. The DB

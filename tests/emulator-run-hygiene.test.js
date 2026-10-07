@@ -389,8 +389,10 @@ test("the sim ends the run when its own emulator exits before teardown", () => {
   const handler = SIM.slice(at, end + "\n  });".length);
   assert.match(handler, /if \(tearingDown\) return;/,
     "an exit during our own teardown is expected and must not abort anything");
-  assert.match(handler, /refuseForeign\(others,/,
-    "an exit at any other time, with the ports held, must refuse — naming who holds them");
+  assert.match(handler, /refuseForeign\(sorted\.notMine,/,
+    "an exit at any other time, with the ports held by something SHOWN not to " +
+    "be ours, must refuse and name it — and only then call it another run's: " +
+    "our own emulator crashing leaves a listener too");
   assert.match(handler, /process\.exit\(1\);\s*\}\);\s*$/,
     "and with the ports free it must still end the run, not carry on");
   assert.ok(handler.indexOf("if (tearingDown) return;") < handler.indexOf("refuseForeign("),
