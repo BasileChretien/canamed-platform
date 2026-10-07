@@ -242,6 +242,14 @@ describe("the survivor sweep, run for real", { concurrency: true }, () => {
          gone within seconds — before the runner's first look at the ports. No
          verdict was reached while the child lived, so the sweep meets the
          stranger cold. */
+      /* What makes the stranger provably not the runner's, on Windows, is that
+         it hangs off THIS process, which is older than the runner's child. Make
+         that true by a margin no scheduler can eat: this scenario is among the
+         first things the file does, and an earlier version of the test relied
+         on the runner merely taking a while to start (it failed about one
+         loaded run in three). */
+      await until("this process to be clearly older than the run",
+        () => process.uptime() > 1.5, 10000);
       const run = ctx.runner({ FAKE_EXEC_MODE: "port-taken" });
       await until("the stand-in emulators:exec to start",
         () => fs.existsSync(path.join(ctx.dir, "started")), 30000);

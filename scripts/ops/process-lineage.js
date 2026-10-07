@@ -212,10 +212,23 @@ function bornMs(proc) {
   return Number.isNaN(t) ? null : t;
 }
 
-/* lstart is whole seconds, and Date.now() and the kernel's clock are read at
-   different instants; a process is "older than the run" only by a margin
-   neither of those can produce. */
-const BORN_SLACK_MS = 2000;
+/* A process is "older than the run" only by a margin its clock cannot produce
+ * by itself. Two clocks are compared — ours, read before the spawn, and the
+ * kernel's, stamped on the process — so there is always some.
+ *
+ *   lstart (POSIX)     whole seconds, and it can jitter by one: 2 s.
+ *   FILETIME (Windows) exact, but stamped at the kernel's tick (up to ~16 ms
+ *                      behind) while Date.now() is interpolated: 250 ms.
+ *
+ * The POSIX margin was first applied to both. On Windows that made a real
+ * other-run listener "unproven" whenever the process it hangs off was less
+ * than 2 s older than our child — which is the tight race, i.e. the incident
+ * this module exists for. It surfaced as an intermittent failure of the
+ * real-process test under a loaded suite, not as anything killed. */
+const BORN_SLACK_LSTART_MS = 2000;
+const BORN_SLACK_EXACT_MS = 250;
+const bornSlackMs = (proc) =>
+  /^[1-9]\d*$/.test(proc.born) ? BORN_SLACK_EXACT_MS : BORN_SLACK_LSTART_MS;
 
 /* Can `pid` be shown NOT to come from a child spawned at `spawnedAtMs`?
  *
@@ -238,13 +251,12 @@ const BORN_SLACK_MS = 2000;
 function predatesSpawn(table, pid, spawnedAtMs, opts) {
   const followParents = opts && "followParents" in opts ? opts.followParents : IS_WIN;
   const root = opts && opts.root !== undefined ? String(opts.root) : null;
-  const cutoff = spawnedAtMs - BORN_SLACK_MS;
   const seen = new Set();
   let cur = table.get(String(pid));
   while (cur && !seen.has(cur.pid)) {
     if (cur.pid === root) return false;
     const t = bornMs(cur);
-    if (t !== null && t < cutoff) return true;
+    if (t !== null && t < spawnedAtMs - bornSlackMs(cur)) return true;
     if (!followParents) return false;
     seen.add(cur.pid);
     const parent = table.get(cur.ppid);

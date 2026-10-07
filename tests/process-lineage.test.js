@@ -402,6 +402,30 @@ test("a survivor with no readable creation time is unproven — not 'older than 
   }
 });
 
+test("'older than the run' uses the margin the clock needs — small where it is exact", () => {
+  /* The margin exists because lstart is whole seconds (and jitters by one).
+     A FILETIME is exact, so on Windows one second before our spawn IS before
+     our spawn. Applying the POSIX margin there made a real other-run listener
+     "unproven" whenever its parent was less than 2 s older than our child —
+     the tight race, i.e. exactly the incident; it showed up as an intermittent
+     failure of the real-process test under a loaded suite. */
+  const exact = tracker([[SELF, 1, filetime(-60000)], [930, 920, filetime(-1000)]],
+    { spawnedAt: T0_MS, followParents: false });
+  assert.deepStrictEqual(exact.partition([row(9000, 930)]).notMine, [row(9000, 930)]);
+
+  /* The same one second on a whole-second clock proves nothing. */
+  const spawnedAt = Date.parse("Wed Oct  7 10:00:00 2026");
+  const coarse = tracker([[SELF, 1, "Wed Oct  7 09:00:00 2026"], [930, 1, "Wed Oct  7 09:59:59 2026"]],
+    { spawnedAt, followParents: false });
+  assert.deepStrictEqual(coarse.partition([row(9000, 930)]).unproven, [row(9000, 930)]);
+
+  /* And a few milliseconds is inside any clock's noise: two clocks are being
+     compared (ours, read before the spawn; the kernel's, stamped on creation). */
+  const noise = tracker([[SELF, 1, filetime(-60000)], [930, 920, filetime(-20)]],
+    { spawnedAt: T0_MS, followParents: false });
+  assert.deepStrictEqual(noise.partition([row(9000, 930)]).unproven, [row(9000, 930)]);
+});
+
 test("where parent links are never rewritten, hanging off an older live process counts too", () => {
   /* The realistic race on Windows: their java was created AFTER our spawn —
      that is what losing the race by a second looks like — but it hangs, by a
