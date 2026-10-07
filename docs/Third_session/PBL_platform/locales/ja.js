@@ -30,6 +30,7 @@
   "a11y.skip-to-main": "メインコンテンツへスキップ",
   "splash.tagline": "大学間の医学教育連携を支える協働プラットフォーム。",
   "splash.signed-in-as": "ログイン中:",
+  "splash.account": "アカウント",
   "splash.sign-out": "ログアウト",
   "splash.lang-label": "あなたの言語",
   "splash.saved-session-as": "再開ユーザー",

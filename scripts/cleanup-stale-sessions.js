@@ -44,8 +44,12 @@
  *
  * Output:
  *   one line per session in the report — KEEP / PURGE / DRY-RUN (unless CLEANUP_QUIET).
- *   exits non-zero only on infrastructure errors (auth fail, DB unreachable);
- *   "nothing to purge" is success.
+ *   "nothing to purge" is success. Exit codes:
+ *     0  both passes ran clean
+ *     1  a session or a metrics node could not be read or deleted
+ *     2  refused to start (bad retention window), or an uncaught failure
+ *        (auth fail, DB unreachable)
+ *     3  the backup gate blocked the SESSION purge — the metrics pass still ran
  */
 
 "use strict";
@@ -60,6 +64,7 @@ const {
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
 const { readBackupMarker, backupGateReport } = require("./lib/backup-marker");
+const { runCleanupPasses } = require("./lib/cleanup-passes");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -116,7 +121,14 @@ const QUIET = process.env.CLEANUP_QUIET === "1";
  *
  * NB the gate stops SESSION purges only. Metrics pruning has its own clock
  * and is not covered by the session backup, so blocking it here would create
- * a second retention gap while trying to prevent a data-loss one. */
+ * a second retention gap while trying to prevent a data-loss one.
+ *
+ * ⚠ That paragraph was FALSE until 2026-10-07. A blocked gate exited on the
+ * spot, before BOTH passes, so the metrics pruning it promises to leave alone
+ * was skipped too. main() no longer acts on the verdict at all: it hands it to
+ * runCleanupPasses() (scripts/lib/cleanup-passes.js), which skips the session
+ * pass, still runs the metrics pass, and returns exit code 3. The ordering is
+ * run, not grepped, in tests/cleanup-passes.test.js. */
 const REQUIRE_BACKUP = process.env.CLEANUP_REQUIRE_BACKUP === "1";
 const BACKUP_MAX_AGE_DAYS = retentionDays("CLEANUP_BACKUP_MAX_AGE_DAYS", 2);
 
@@ -200,15 +212,32 @@ async function main() {
     maxAgeDays: BACKUP_MAX_AGE_DAYS
   });
   console.log(gate.line);
-  if (gate.block) {
-    /* Exit 3, distinct from 1 (per-session errors) and 2 (fatal/misconfig), so
-     * the workflow log and any future alerting can tell "refused on purpose"
-     * from "broke". Nothing has been deleted at this point. */
-    console.error("BLOCKED: no sessions were purged.");
-    process.exit(3);
-  }
   console.log("");
 
+  /* The verdict is HANDED OVER, never acted on here. Branching on it in main()
+   * is how a blocked gate came to skip the metrics pass as well as the session
+   * one — see the note above REQUIRE_BACKUP. Nothing has been deleted at this
+   * point, and nothing between here and the hand-off may end the run. */
+  const outcome = await runCleanupPasses({
+    gate,
+    purgeSessions: () => purgeSessions(db, locations),
+    pruneMetrics: () => pruneMetrics(db),
+    confirm: CONFIRM,
+    metricsDays: METRICS_DAYS,
+    sessionCount: locations.length
+  });
+  /* Explicit, and the last statement: firebase-admin holds the event loop
+   * open, so returning would hang the job until its timeout. 3 is distinct
+   * from 1 (errors) and 2 (fatal/misconfig), so the workflow log and any
+   * future alerting can tell "refused on purpose" from "broke". What 3 does
+   * NOT say is that nothing else went wrong: a blocked run whose metrics pass
+   * also failed still exits 3, with the failures in the Summary count. */
+  process.exit(outcome.exitCode);
+}
+
+/* The session pass. runCleanupPasses() skips it WHOLE when the backup gate
+   blocks, so it must stay the only place a session is deleted from. */
+async function purgeSessions(db, locations) {
   let kept = 0, purged = 0, errors = 0;
   for (const loc of locations) {
     const label = safeLabel(loc, QUIET);
@@ -331,25 +360,7 @@ async function main() {
     }
   }
 
-  // hfPatient metrics: uid-keyed rows with no session to hang retention off, so
-  // they are pruned on their own clock rather than with the session that
-  // produced them. Runs even when the session pass had errors — an unrelated
-  // session failure must not silently skip a retention obligation.
-  const m = await pruneMetrics(db);
-  errors += m.errors;
-  const verb = CONFIRM ? "purged" : "would-purge";
-  console.log("");
-  console.log(`Metrics (hfPatient, > ${METRICS_DAYS}d): ${verb} ` +
-    `${m.events} events, ${m.usage} uid buckets, ${m.sessionUsage} session buckets, ` +
-    `${m.dailyDays} daily counters, ${m.dailyUids} spent uid nodes. ` +
-    "global/<day> aggregates kept (no identifier).");
-
-  console.log("");
-  console.log(`Summary: ${kept} kept, ${purged} ${CONFIRM ? "purged" : "would-purge"}, ${errors} errors.`);
-  if (!CONFIRM && (purged > 0 || m.events + m.usage + m.sessionUsage + m.dailyDays + m.dailyUids > 0)) {
-    console.log("(Set CLEANUP_CONFIRM=1 in the workflow env to actually delete.)");
-  }
-  process.exit(errors > 0 ? 1 : 0);
+  return { kept, purged, errors };
 }
 
 main().catch((e) => {
