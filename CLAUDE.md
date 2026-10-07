@@ -11,14 +11,61 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
   (`scripts/sim/sim-with-emulator.js`). If 9000/9099 are already taken it now
   **exits during preflight** naming the listener, rather than starting against
   a stale emulator; `npm run emulator:ports` names the squatter and `npm run
-  emulator:free` clears it. Should a run start and then fall back to LocalDB,
-  the report says so — it states the backend it ACTUALLY got instead of
-  claiming LOCAL unconditionally (`scripts/sim/report-mode.js`).
+  emulator:free` clears it — **but read the two-sessions note under
+  `test:e2e:rules` before clearing anything.** Should a run start and then fall
+  back to LocalDB, the report says so — it states the backend it ACTUALLY got
+  instead of claiming LOCAL unconditionally (`scripts/sim/report-mode.js`).
 - `npm run test:e2e:rules` — the emulator-backed Playwright rules suite. Goes
-  through `scripts/ops/run-rules-e2e.js`, which preflights the ports and sweeps
-  any emulator `emulators:exec` failed to reap. Together with `sim:emulator`
-  these are the two ways `database.rules.json` is actually exercised; the LOCAL
-  Playwright suite never touches it.
+  through `scripts/ops/run-rules-e2e.js`, which preflights the ports and, once
+  its child has exited, frees the emulator that `emulators:exec` failed to reap
+  (a Java grandchild on Windows). Together with `sim:emulator` these are the
+  two ways `database.rules.json` is actually exercised; the LOCAL Playwright
+  suite never touches it.
+  - **The rules suite cannot be run by two sessions at once** — nor alongside
+    `sim:emulator`. The emulators bind FIXED ports (9000/9099, hard-coded in
+    `tests-e2e/emulator/fixtures.js`) that every checkout and worktree on the
+    machine shares. Check first that nothing listens on 4400 (the emulator
+    hub), 9000 or 9099: `node scripts/ops/emulator-ports.js check 4400 9000 9099`.
+    A second run is refused by the preflight; one that slips into the seconds
+    between the first run's preflight and its emulator binding fails to start,
+    exits non-zero and kills nothing. It says **ANOTHER RUN HOLDS THE EMULATOR
+    PORTS** whenever that can be shown — the listener was seen outside the
+    run's own process tree while the run lived, or is older than the run, or
+    (Windows only) hangs off a process that is — and otherwise that the
+    listener *could not be shown* to be its own. Same warning either way.
+    Wait for the other run to end. **Do not retry in a loop.**
+  - **A held port is not necessarily a leftover.** It may be another session's
+    emulator, mid-suite, and nothing can tell the two apart by port number.
+    `npm run emulator:free` kills by port: it is for an operator who KNOWS the
+    listener is stale. Every message that offers it now says so first.
+  - **The sweep kills by LINEAGE, never by port** (corrected 2026-10-07). It
+    frees a listener only when that process was shown, while the run was live,
+    to descend from the child the runner spawned, and is still that process at
+    the sweep (`scripts/ops/process-lineage.js`); anything else on the ports is
+    reported with the command to clear it by hand. That includes the run's OWN
+    leftover when it could not be shown to be so — a run that ends before the
+    runner has looked, a process table that will not read: it is then left on
+    the port and named, and the next preflight names it again. The runner's header used to
+    call the sweep "ownership-scoped", meaning it killed every PID it had SEEN
+    on the ports while its child ran. Seeing is not owning: when two sessions
+    overlapped, the one that lost the race for :9000 "observed" the other's
+    java.exe there and killed it in its own sweep — printing "emulators:exec
+    left 1 listener(s) behind; freed them" about a live emulator — and the
+    other session, retrying, did the same in return. `sim:emulator` had the
+    same defect, and worse: its readiness probe succeeds against ANY listener,
+    so a run that lost the race went on to run the sim against the other
+    session's emulator. It now ends the run the moment its own emulator exits
+    before teardown (that is what losing the race looks like from there), and
+    refuses to start the sim if, once the ports answer, a listener on them is
+    shown not to be its own.
+    Still by tree, not verified one by one: the runner's Ctrl-C path and the
+    sim's teardown `taskkill /F /T` their OWN live children — for the sim that
+    now includes the sim process itself, when a run is cut short.
+    **The text check that guarded this was green on the defect**
+    (`onlyPids: ownedPids` reads the same whichever set it is handed). The
+    real runner is now RUN, in a child process, against a real stranger on
+    throwaway ports — with an ALLOW leg, so "kills nothing" cannot pass.
+    `Verify:` `node --test tests/emulator-sweep-lineage.test.js tests/process-lineage.test.js`.
 - `npx playwright test` — E2E suite (`tests-e2e/`), runs in LOCAL mode
   (hermetic, no real Firebase). Projects: chromium/firefox/webkit + perf +
   a11y + mobile-iphone/ipad/android.
