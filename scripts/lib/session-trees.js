@@ -23,7 +23,8 @@
  * @param {object} sessionsVal value of `sessions` (may be null/undefined)
  * @param {object} orgsVal     value of `orgs` (may be null/undefined)
  * @returns {Array<{key:string, code:string, orgSlug:string|null, path:string,
- *                  adminSecretPath:string, roomChatPath:string,
+ *                  adminSecretPath:string, recoveryPath:string,
+ *                  roomChatPath:string,
  *                  roomChatAuthorsPath:string,
  *                  certIdsPath:string, withdrawalsPath:string,
  *                  purgedMarkerPath:string, rosterPath:string, data:object}>}
@@ -69,6 +70,11 @@ function locationFor(orgSlug, code) {
       orgSlug: null,
       path: "sessions/" + code,
       adminSecretPath: "adminSecrets/" + code,
+      // recovery/ mirrors the session path, like rosters/ and UNLIKE
+      // adminSecrets/: the client writes "recovery/" + oPath(code), and oPath
+      // is _sessionPrefix(org) + code. tests/purge-tree-coverage.test.js
+      // derives both branches from database.rules.json.
+      recoveryPath: "recovery/sessions/" + code,
       roomChatPath: "roomChat/" + code,
       roomChatAuthorsPath: "roomChatAuthors/" + code,
       certIdsPath: "certIds/" + code,
@@ -87,6 +93,7 @@ function locationFor(orgSlug, code) {
     orgSlug: orgSlug,
     path: "orgs/" + orgSlug + "/sessions/" + code,
     adminSecretPath: "adminSecrets/orgs/" + orgSlug + "/" + code,
+    recoveryPath: "recovery/orgs/" + orgSlug + "/sessions/" + code,
     roomChatPath: "roomChat/orgs/" + orgSlug + "/" + code,
     roomChatAuthorsPath: "roomChatAuthors/orgs/" + orgSlug + "/" + code,
     certIdsPath: "certIds/orgs/" + orgSlug + "/" + code,
@@ -489,6 +496,31 @@ function makeRestValueReader(opts) {
   return makeRestGetter(opts, "", "read");
 }
 
+/**
+ * A database path as it has to appear in a REST URL: each SEGMENT
+ * percent-encoded, the slashes between them kept.
+ *
+ * A key is not always one the platform generated. The rules validate the org
+ * slug under `orgs/` but not under `recovery/orgs/`, and any signed-in visitor
+ * can write a key of their choosing in either session tree — and a key may
+ * contain `?`, `%`, `&` or a space. Unencoded, a `?` ends the path where the
+ * key began, so the read fails or lands on a different node; and a key that
+ * LOOKS encoded (`x%20y`) asks the server for another key (`x y`) and returns
+ * that one's children. The keys the platform itself writes — session codes,
+ * uids, slugs: letters, digits, `-` and `_` — come out byte-identical.
+ *
+ * ⚠️ THE READERS BELOW DO NOT APPLY THIS THEMSELVES, and must not start to.
+ * The caller encodes, once. scripts/lib/anonymous-retention-job.js already
+ * encodes every path before it calls them; when the reader encoded as well
+ * (for one commit, 2026-10-07) that job asked for `My%2520Code` where the key
+ * was `My Code`, got null, and read it as "this session has no members to
+ * protect" — in a job that deletes on a schedule. Encoding twice is not a
+ * no-op; it is a different node.
+ */
+function encodeRestPath(path) {
+  return String(path).split("/").map(encodeURIComponent).join("/");
+}
+
 function makeRestGetter(opts, query, what) {
   const base = String(opts.databaseURL || "").replace(/\/+$/, "");
   if (!/^https:\/\//.test(base)) {
@@ -549,6 +581,7 @@ module.exports = {
   readSessionLocationsShallow,
   makeRestShallowReader,
   makeRestValueReader,
+  encodeRestPath,
   shallowKeysOf,
   safeLabel
 };

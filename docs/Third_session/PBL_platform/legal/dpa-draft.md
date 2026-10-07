@@ -904,7 +904,7 @@ arising from the termination itself, without prejudice to accrued rights.
 | G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
 | G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
 | G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; they are swept daily since PIS v12 and disclosed in the notice (sections 4 and 8). The Art. 15 route is untouched, and the older usage log is still not in the notice |
-| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed twice on 2026-10-07, still open.** (1) The G13 job removes an ANONYMOUS account's `users/` node; on schedule it deliberately leaves scenarios and moderation reports in place (an operator-dispatched orphan sweep can remove `scenarios/<uid>` for a uid that has no account at all). (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
+| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed three times on 2026-10-07, still open.** (3) Recovery records are now deleted with their session; admin secrets have been since 2026-07-23. The records left behind before that need the one-off sweep, which has NOT been run - see the first note at G8. (1) The G13 job removes an ANONYMOUS account's `users/` node; on schedule it deliberately leaves scenarios and moderation reports in place (an operator-dispatched orphan sweep can remove `scenarios/<uid>` for a uid that has no account at all). (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |
 | G10 no per-session configuration | BLOCKING | [OWNER] | [DATE] | |
 | G11 retention jobs unmonitored | HIGH | [OWNER] | [DATE] | |
@@ -1333,6 +1333,17 @@ account profiles and history (`users/<uid>`), the LLM usage log
 scenarios, abuse reports and moderation records, and **everything under the
 `orgs/` tree**. See Annex VI, items G5–G9. The Controller must not assume
 storage limitation is met for these categories without a manual process.
+
+> ⚠️ **This list is older than several fixes — read each category's Annex VI
+> item for its current state** (checked against the code 2026-10-07). Two
+> entries are corrected here, because this is the change that made the second
+> one false: **admin secrets** have been deleted with their session since
+> 2026-07-23, and **recovery records** since the purge fix of 2026-10-07
+> (Annex VI G8, first note). The recovery records left behind before that fix
+> are not covered by the nightly job and need the one-off sweep described
+> there. Rosters (G5), the
+> LLM usage log (note at G7) and the `orgs/` tree (G9) carry their own
+> corrections in Annex VI and are not restated here.
 
 10.6 **Short retention does not reduce rights.** Under APPI, the pre-2020
 exemption for data deleted within six months has been repealed: 30-day session
@@ -3003,6 +3014,70 @@ that the client's own `accountDelete()` "removes `users/<uid>` but not
 `scenarios/<uid>`, which is then unreadable by anyone and kept for ever". That
 was true when written and is the defect the note below records as fixed the
 same day.)*
+
+> ⚠️ **Narrowed 2026-10-07 for recovery records — and "admin secrets" had been
+> wrong here since 2026-07-23** (both checked by running the purge, not by
+> reading it). Admin secrets (`adminSecrets/…`: the facilitator's password hash
+> and the proof writes) have been deleted with their session since the purge
+> first covered both session trees. Recovery records had not. Creating a
+> session writes one to `recovery/sessions/<code>` — or
+> `recovery/orgs/<slug>/sessions/<id>` — holding a random twelve-character
+> secret that is shown to the facilitator once and that the rules compare
+> against when a forgotten admin password is reset. No script referenced that
+> tree, so every record written from 2026-05-25, when the feature shipped,
+> outlived its session with no retention period.
+>
+> The record names no participant. It is still a retained record that a session
+> with that code existed, and it was not inert — both effects below were
+> measured against the real rules on the emulator before anything was changed
+> (`tests-e2e/emulator/recovery-purge.spec.js`):
+> - **The session code could not be used again.** The node is write-once, so a
+>   later session drawing the same code is refused its own recovery write. The
+>   client reports "Could not create the session — check your connection and
+>   try again", and leaves a session with a creator and no password behind, to
+>   be purged at 90 days. The chance per creation is small — a code is six
+>   characters from a 31-letter alphabet, about 887 million — and it grew with
+>   every record left.
+> - **The old secret still opened the password reset at that code**, for
+>   whoever had kept it, on whatever was created there next.
+>
+> **Now:** the recovery record is deleted in the same atomic update as its
+> session, in both session trees. `tests/purge-tree-coverage.test.js` derives
+> the list of per-session trees from `database.rules.json`, runs the purge, and
+> fails if one is declared there and not deleted — the check whose absence let
+> this through, and let `adminSecrets`, the chat, the certificate map, the
+> roster and the withdrawal records each through before it. It found no other
+> omission. Two session-keyed nodes are deliberately NOT on the session clock
+> and are recorded there with the reason: the proxy's per-session counters
+> (`rateLimits/session/<code>`, on their own two-hour / two-day clock — see the
+> note at G7) and a signed-in participant's own history
+> (`users/<uid>/history/<code>`, which follows the account).
+>
+> **Residual, for the Controller — the records left behind before that fix.**
+> The nightly job cannot find them: it walks sessions, and theirs are gone.
+> `scripts/sweep-orphaned-recovery.js` removes every recovery record that has
+> no session. It runs only when dispatched
+> (`.github/workflows/sweep-orphaned-recovery.yml`), is a dry run unless
+> `confirm` is ticked, and reads keys only: no recovery code and no session
+> content reaches the runner. What does is session codes — the identifier the
+> nightly purge already lists, here including the codes of sessions that are
+> gone. It prints counts only. **It has not been run.** How many records exist
+> is not known until the dry run says.
+> [CONTROLLER — DATE OF THE LIVE RUN AND THE COUNT IT REPORTED: ____ ]
+>
+> **Not changed here, and found in the same pass** (a rule change, proposed
+> separately): the reset rule does not require the session to HAVE a password.
+> So a recovery code — a stale one, or one written for a session that has no
+> password and no code yet, which any signed-in visitor may do while the
+> session-creation gate is not enforced — opens the reset on a session that was
+> never finished, or on one restored from the nightly archive, which is stored
+> without its password and without its recovery code. Annex II §3 says the hash
+> "can only be set initially by the session creator"; through the reset, in
+> those two states, that is not what the rules enforce. **Until that is
+> closed, an open session must not be restored from the archive without the
+> operator re-keying it** — and the recovery code its facilitator wrote down
+> does not work after a restore in any case, because the record is not in the
+> archive.
 
 > ⚠️ **Narrowed again 2026-10-07, for a SIGNED-IN account that deletes ITSELF —
 > the item stays open.** Until then the client's own `accountDelete()` removed

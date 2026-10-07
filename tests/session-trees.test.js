@@ -124,6 +124,19 @@ test("certIds paths mirror the two-tree layout", () => {
   assert.strictEqual(byKey["orgs/caen/XYZ"].rosterPath, "rosters/orgs/caen/sessions/XYZ");
 });
 
+test("recovery paths mirror the session path — the roster's shape, not adminSecrets'", () => {
+  // The client writes "recovery/" + oPath(code), and oPath is the org prefix +
+  // code, so the org branch repeats the literal `sessions`. Built the
+  // adminSecrets way (recovery/orgs/<slug>/<id>) the purge would delete a path
+  // nothing ever wrote to, and report success.
+  const locs = sessionLocations(SESSIONS, ORGS);
+  const byKey = Object.fromEntries(locs.map(l => [l.key, l]));
+  assert.strictEqual(byKey.ABC.recoveryPath, "recovery/sessions/ABC");
+  assert.strictEqual(byKey["orgs/caen/XYZ"].recoveryPath, "recovery/orgs/caen/sessions/XYZ");
+  assert.strictEqual(byKey["orgs/nagoya/ABC"].recoveryPath, "recovery/orgs/nagoya/sessions/ABC",
+    "the same code in another tree must not share a recovery node");
+});
+
 test("cleanup purges the session AND its four out-of-cascade siblings", () => {
   const src = read("cleanup-stale-sessions.js");
   for (const [key, why] of [
@@ -131,6 +144,9 @@ test("cleanup purges the session AND its four out-of-cascade siblings", () => {
       "cleanup must purge by resolved location path, not a hardcoded sessions/ path"],
     ["loc.adminSecretPath",
       "adminSecrets lives outside the session subtree and nothing else purges it"],
+    ["loc.recoveryPath",
+      "the recovery code lives outside the session subtree; left behind it blocks " +
+      "the session code from being used again and still opens the password reset"],
     ["loc.roomChatPath",
       "the free-text chat lives outside the session subtree and must not outlive it"],
     ["loc.certIdsPath",

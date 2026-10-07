@@ -443,16 +443,19 @@ test("REAL SCRIPT, fresh backup: the expired session IS purged, then the metrics
   assert.deepStrictEqual(r.writes, [
     { op: "update", path: "", keys: [
       "adminSecrets/EXPIRED1", "certIds/EXPIRED1", "purgedSessions/EXPIRED1",
-      "roomChat/EXPIRED1", "roomChatAuthors/EXPIRED1", "rosters/sessions/EXPIRED1",
-      "sessions/EXPIRED1"
+      "recovery/sessions/EXPIRED1", "roomChat/EXPIRED1", "roomChatAuthors/EXPIRED1",
+      "rosters/sessions/EXPIRED1", "sessions/EXPIRED1"
     ] }
   ].concat(METRICS_WRITES),
     "one atomic root update for the expired session and its out-of-cascade " +
-    "siblings — the live session untouched — then the metrics. Two things changed " +
-    "on 2026-10-07 and both are deliberate: the update WRITES the purge marker " +
-    "(purgedSessions/<code>), and it no longer deletes withdrawals/<code> whole — " +
+    "siblings — the live session untouched — then the metrics. Three things changed " +
+    "on 2026-10-07 and all are deliberate: the update WRITES the purge marker " +
+    "(purgedSessions/<code>); it no longer deletes withdrawals/<code> whole — " +
     "each record is decided on its own, and this session has none " +
-    "(tests/withdrawal-retention.test.js has the ones that do)." + r.log);
+    "(tests/withdrawal-retention.test.js has the ones that do); and it deletes " +
+    "the recovery code, the one sibling nothing deleted before. Whether this list " +
+    "is COMPLETE is not decided here — tests/purge-tree-coverage.test.js derives " +
+    "it from database.rules.json." + r.log);
   assert.match(r.stdout, /Backup gate: OK — /);
   assert.match(r.stdout, /Summary: 1 kept, 1 purged, 0 errors\./);
   assert.ok(!/EXPIRED1|LIVE0001/.test(r.stdout + r.stderr),
