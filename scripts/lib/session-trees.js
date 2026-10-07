@@ -257,6 +257,24 @@ function makeRestValueReader(opts) {
   return makeRestGetter(opts, "", "read");
 }
 
+/**
+ * A database path as it has to appear in a REST URL: each SEGMENT
+ * percent-encoded, the slashes between them kept.
+ *
+ * A key is not always one the platform generated. The rules validate the org
+ * slug under `orgs/` but not under `recovery/orgs/`, and any signed-in visitor
+ * can write a key of their choosing in either session tree — and a key may
+ * contain `?`, `%`, `&` or a space. Unencoded, a `?` ends the path where the
+ * key began, so the read fails or lands on a different node; and a key that
+ * LOOKS encoded (`x%20y`) asks the server for another key (`x y`) and returns
+ * that one's children. The keys the platform itself writes — session codes,
+ * uids, slugs: letters, digits, `-` and `_` — come out byte-identical, so no
+ * existing caller's request changes.
+ */
+function encodeRestPath(path) {
+  return String(path).split("/").map(encodeURIComponent).join("/");
+}
+
 function makeRestGetter(opts, query, what) {
   const base = String(opts.databaseURL || "").replace(/\/+$/, "");
   if (!/^https:\/\//.test(base)) {
@@ -273,7 +291,7 @@ function makeRestGetter(opts, query, what) {
 
   return async function restGet(path) {
     const { access_token: token } = await cred.getAccessToken();
-    const res = await fetch(base + "/" + path + ".json" + query, {
+    const res = await fetch(base + "/" + encodeRestPath(path) + ".json" + query, {
       headers: { Authorization: "Bearer " + token }
     });
     if (!res.ok) {
@@ -310,6 +328,7 @@ module.exports = {
   readSessionLocationsShallow,
   makeRestShallowReader,
   makeRestValueReader,
+  encodeRestPath,
   shallowKeysOf,
   safeLabel
 };

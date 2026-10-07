@@ -2,8 +2,8 @@
 /* tests/purge-tree-coverage.test.js
  *
  * Everything a session owns OUTSIDE its own subtree has to be named, one path
- * at a time, in the nightly purge — and from 2026-05-25 to 2026-10-08 one of
- * them was not.
+ * at a time, in the nightly purge — and from 2026-05-25 until the fix of
+ * 2026-10-07 one of them was not.
  *
  * Creating a session writes a recovery code to `recovery/sessions/<code>` (or
  * `recovery/orgs/<slug>/sessions/<id>`): a secret, shown to the facilitator
@@ -34,8 +34,22 @@
  *      in-memory database holding one expired and one live session in EACH
  *      session tree, with a record seeded under every derived path.
  *   4. Each derived path of an expired session must be in that session's purge
- *      update, or appear in ACKNOWLEDGED below with the reason — a decision, in
- *      the repository, rather than an omission.
+ *      update — that exact path, deleted whole — or appear in one of the maps
+ *      below with the reason: a decision, in the repository, rather than an
+ *      omission.
+ *
+ * WHAT THIS CAN AND CANNOT SEE. It reads the RULES, so it sees what the rules
+ * declare with a wildcard:
+ *   - A top-level tree in which it finds no session key at all is not waved
+ *     through: it must be listed in NO_SESSION_KEY_IN_RULES with what it is.
+ *     That is how an admin-only tree with no child rules — which may well be
+ *     keyed by session — gets a line here instead of silence.
+ *   - A tree with NO rules entry (`ops/`, `metrics/`, `erasures/`: admin-only by
+ *     the root deny) is invisible. Nothing here speaks for those.
+ *   - A session keyed under a wildcard NAME that NOT_A_SESSION_KEY already
+ *     excuses (`foo/$uid` holding session codes) passes as "not a session".
+ *     The names are a convention, and this trusts it.
+ *   - Under `orgs/<slug>/` it assumes there is only `sessions/`, and checks so.
  *
  * tests/erasure-node-coverage.test.js does the same for the erasure planner and
  * is the model. tests/cleanup-passes.test.js pins the exact key list for one
@@ -98,6 +112,30 @@ const ACKNOWLEDGED = {
     "uid FIRST, so there is no path the purge could address by session without " +
     "enumerating every account, and it is not the session's record: it follows " +
     "the ACCOUNT and is removed with it."
+};
+
+/* Per-session nodes the purge does NOT delete whole: it reads them and decides
+   record by record, so part of a purged session's node may deliberately stay.
+   NONE TODAY. An entry relaxes the check for that rule path from "this exact
+   path is deleted" to "something under it is", so it must say what stays, why,
+   and what deals with the survivors afterwards. */
+const DECIDED_PER_RECORD = {};
+
+/* Top-level trees in which the derivation finds no session key at any depth,
+   each with what it is. A tree absent from here AND yielding nothing fails —
+   which is the only way an admin-only tree with no child rules (the rules can
+   say `.read:false, .write:false` and nothing else about a tree a script keys
+   by session) is ever looked at. If such a tree IS per-session, the entry says
+   so, and names what writes it and what deletes it. */
+const NO_SESSION_KEY_IN_RULES = {
+  credentials: "published certificate records, keyed by certificate id; their own " +
+    "clock (retentionUntil, cleanup-expired-credentials)",
+  facilitatorGate: "one admin-only switch and an allowlist of uids",
+  scenarios: "authored scenarios, keyed by their owner's uid",
+  sharedScenarios: "published scenarios, keyed by share id",
+  moderators: "an admin-only allowlist of uids",
+  reports: "moderation reports, keyed by share id and then by the reporter's uid",
+  moderation: "takedown tombstones, keyed by share id"
 };
 
 /* ── derivation ──────────────────────────────────────────────────────── */
@@ -172,7 +210,7 @@ test("the derivation finds the trees known to be per-session — it is not vacuo
   assert.ok(derived.direct.includes("rosters/orgs/$orgSlug/sessions/$sessionId"),
     "lost the org roster branch");
   assert.ok(derived.direct.length >= 14,
-    "found " + derived.direct.length + " per-session nodes; there were 15 on 2026-10-08 " +
+    "found " + derived.direct.length + " per-session nodes; there were 15 on 2026-10-07 " +
     "(seven trees in two session trees, plus the proxy's counters)");
   assert.ok(derived.nested.includes("users/$uid/history/$code"),
     "the walk no longer looks below a non-session wildcard");
@@ -225,6 +263,44 @@ test("the classification carries nothing the rules do not have", () => {
   const staleAck = Object.keys(ACKNOWLEDGED).filter((p) => !real.has(p));
   assert.deepStrictEqual(staleAck, [],
     "ACKNOWLEDGED excuses nodes the derivation does not find. Remove them.");
+  const stalePerRecord = Object.keys(DECIDED_PER_RECORD).filter((p) => !derived.direct.includes(p));
+  assert.deepStrictEqual(stalePerRecord, [],
+    "DECIDED_PER_RECORD relaxes the check for nodes the derivation does not find. Remove them.");
+  const both = Object.keys(DECIDED_PER_RECORD).filter((p) => p in ACKNOWLEDGED);
+  assert.deepStrictEqual(both, [], "a node is either left alone or decided per record, not both");
+});
+
+test("every top-level tree is accounted for — one with no session key in the rules is not waved through", () => {
+  /* The derivation follows wildcards. A tree declared as `.read:false,
+     .write:false` and nothing else has none, so it yields nothing — and "yields
+     nothing" must not read as "holds nothing per-session": an admin-only tree
+     that a script keys by session code looks exactly like that. */
+  const yielding = new Set(derived.direct.concat(derived.nested).map(treeOf));
+  const tops = Object.keys(rules).filter((k) => !k.startsWith(".") && !SESSION_TREES.includes(k));
+  const unaccounted = tops.filter((t) => !yielding.has(t) && !(t in NO_SESSION_KEY_IN_RULES));
+  assert.deepStrictEqual(unaccounted, [],
+    "the rules declare these top-level trees and this file can find no session key in " +
+    "them. Add each to NO_SESSION_KEY_IN_RULES saying what it is. If a script keys it " +
+    "by session all the same, say so there, with what writes it and what deletes it — " +
+    "the purge's coverage of it cannot be derived from the rules and is then a claim " +
+    "someone has to have checked.");
+
+  const stale = Object.keys(NO_SESSION_KEY_IN_RULES).filter((t) => !tops.includes(t) || yielding.has(t));
+  assert.deepStrictEqual(stale, [],
+    "NO_SESSION_KEY_IN_RULES lists trees the rules no longer have, or in which the " +
+    "derivation now DOES find a session key. Remove them.");
+});
+
+test("nothing but `sessions` lives under an org", () => {
+  /* The walk skips the `orgs` tree whole, on the strength of this: the purge
+     deletes orgs/<slug>/sessions/<id>, and a per-session node anywhere else
+     under an org would never be seen by it or by this file. */
+  const children = (node) => Object.keys(node).filter((k) => !k.startsWith("."));
+  assert.deepStrictEqual(children(rules.orgs), [ORG_KEY]);
+  assert.deepStrictEqual(children(rules.orgs[ORG_KEY]), ["sessions"],
+    "the rules now declare something beside `sessions` under orgs/<slug>/. If it is " +
+    "keyed by session, the purge does not delete it — and nothing here derived it.");
+  assert.deepStrictEqual(children(rules.orgs[ORG_KEY].sessions), ["$sessionId"]);
 });
 
 test("a per-session node the purge cannot address by path is acknowledged, not ignored", () => {
@@ -316,7 +392,15 @@ function updateFor(sessionPath) {
   return hits[0].keys;
 }
 
-const touches = (keys, p) => keys.some((k) => k === p || k.startsWith(p + "/"));
+/* Deleted WHOLE: the node's own path is in the update. A delete of something
+   under it is not the same thing — the rest of the node stays — and only counts
+   for a rule path listed in DECIDED_PER_RECORD, where staying is the decision.
+   (Every node is seeded with one plain record, so "something under it" is at
+   least that record going.) */
+function goesWithSession(keys, rulePath, p) {
+  if (keys.includes(p)) return true;
+  return rulePath in DECIDED_PER_RECORD && keys.some((k) => k.startsWith(p + "/"));
+}
 
 for (const [label, sessionPath, code, wantOrg] of [
   ["default tree", "sessions/" + CODES.dfltExpired, CODES.dfltExpired, false],
@@ -326,15 +410,16 @@ for (const [label, sessionPath, code, wantOrg] of [
     const keys = updateFor(sessionPath);
     const left = derived.direct
       .filter((p) => isOrgRule(p) === wantOrg && !(p in ACKNOWLEDGED))
-      .map((p) => concrete(p, SLUG, code))
-      .filter((p) => !touches(keys, p));
+      .filter((p) => !goesWithSession(keys, p, concrete(p, SLUG, code)))
+      .map((p) => concrete(p, SLUG, code));
     assert.deepStrictEqual(left, [],
       "database.rules.json keys these by session, the session was purged, and they " +
-      "were left behind — in the same update or not at all, because once the session " +
-      "is gone no enumeration can find them again. Add each to locationFor() in " +
-      "scripts/lib/session-trees.js and to the purge map in cleanup-stale-sessions.js, " +
-      "or to ACKNOWLEDGED in this file with the reason.\nThe update wrote:\n  " +
-      keys.join("\n  ") + purge().log);
+      "were not deleted whole — in the same update or not at all, because once the " +
+      "session is gone no enumeration can find them again. Add each to locationFor() " +
+      "in scripts/lib/session-trees.js and to the purge map in " +
+      "cleanup-stale-sessions.js; or, in this file, to ACKNOWLEDGED (left alone on " +
+      "purpose) or DECIDED_PER_RECORD (deleted record by record, some may stay), with " +
+      "the reason.\nThe update wrote:\n  " + keys.join("\n  ") + purge().log);
   });
 
   test("REAL SCRIPT, " + label + ": the recovery code is in the SAME atomic update as the session", () => {

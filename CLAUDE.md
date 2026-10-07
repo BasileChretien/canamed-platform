@@ -1127,13 +1127,13 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   sanitised in `modA-llm-init.js` — the name is scenario-authored, i.e. untrusted.
 
 ## Known security follow-ups (code, tracked)
-- **A session's recovery code is purged with it (2026-10-08) — ⛔ the backlog
+- **A session's recovery code is purged with it (2026-10-07) — ⛔ the backlog
   sweep has NOT been run, and a weakness in the reset rule is OPEN.**
   `createSession()` writes `recovery/sessions/<code>` (org:
   `recovery/orgs/<slug>/sessions/<id>` — the ROSTER's shape, not adminSecrets')
-  and from 2026-05-25 to 2026-10-08 nothing deleted it: the purge named six
-  out-of-cascade siblings and this was not one. It is now `recoveryPath` in
-  `locationFor()` and part of the purge's atomic update.
+  and from 2026-05-25 until the fix of 2026-10-07 nothing deleted it: the purge
+  named six out-of-cascade siblings and this was not one. It is now
+  `recoveryPath` in `locationFor()` and part of the purge's atomic update.
   - **Why that list kept being one short.** adminSecrets, roomChat, certIds,
     rosters, withdrawals and now recovery were each added after someone
     noticed, and each time the test pinned the list AS IT THEN WAS.
@@ -1141,7 +1141,12 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     `database.rules.json`, runs the real purge, and fails on one declared there
     and not deleted. Every wildcard name outside the session trees has to be
     classified in that file — an unknown one fails, so a tree keyed by `$sid`
-    cannot slip past on spelling. Two nodes are acknowledged there with their
+    cannot slip past on spelling — and so does every top-level tree in which
+    it finds no session key (an admin-only tree with no child rules has no
+    wildcard to follow, and may be keyed by session all the same). A node has
+    to be deleted WHOLE unless it is listed there as decided per record. What
+    it cannot see: a tree with no rules entry at all (`ops/`, `metrics/`,
+    `erasures/`). Two nodes are acknowledged there with their
     reasons: `rateLimits/session/$code` (the bucket's clock) and
     `users/$uid/history/$code` (the account's).
   - **What a leftover did — measured on the emulator, not inferred**
@@ -1156,8 +1161,13 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     `sweep-orphaned-recovery.yml`; dry-run unless `confirm`; keys only; counts
     only) removes every recovery record that has no session. It reads the
     recovery lists BEFORE the session lists — the other order condemns a
-    session created mid-sweep — and refuses when the database lists no session
-    at all. **Not run yet.** `Verify:`
+    session created mid-sweep — and refuses when a tree that holds records
+    lists no session. That is counted PER TREE (the default tree, each org):
+    over the whole database, one junk node under any org, which a signed-in
+    visitor can create, vouched for a default tree that listed nothing (found
+    in review). The shared REST reader now percent-encodes each path segment,
+    because the slug under `recovery/orgs/` is validated by no rule.
+    **Not run yet.** `Verify:`
     `gh run list --workflow sweep-orphaned-recovery.yml` shows a run whose log
     says `Mode: LIVE`; a dry run after it ends in `Summary: nothing to sweep.`
   - **⚠️ OPEN — the reset does not require a password to exist** (measured
@@ -1166,8 +1176,9 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     `data.exists()`. So on a session with NO hash: (1) whoever holds its
     recovery code sets the FIRST hash, whatever `creatorUid` says — this is how
     a stale code took over a half-created session; (2) if it has no recovery
-    node either, ANY signed-in user writes one (that rule needs only "no node,
-    no hash") and then does the same. State (2) is exactly a session restored
+    node either, ANY signed-in user writes one and then does the same (that
+    rule asks for no node and no hash — and, while `facilitatorGate` is
+    enforced, a writer on its allowlist). State (2) is exactly a session restored
     by `restore-sessions.js`: the archive is the session body only, with
     `adminPasswordHash` stripped, no `adminSecrets` and no `recovery`. A
     restored CLOSED session is safe (the reset is refused once `closed`
@@ -1175,12 +1186,22 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     enforced `facilitatorGate` the stale-code path also yields an admin hash and
     proof at a code with no session (`created` stays gated, so the stock client
     still treats it as non-existent).
-    **Proposed, not done here** — it is a rules change on the reset path:
-    require `adminPasswordHash.exists()` in `_superadminReset`'s write. A reset
-    needs something to reset; reasoned from the rules (not yet tested), that
-    one predicate closes (1), (2) and the gate case, and a hashless session can
-    then be keyed only by its creator. Until then, do not restore open sessions
-    without re-keying them.
+    **Proposed, not done here** — a rules change on the reset path, in TWO
+    halves, and the first alone is not enough:
+    (a) require `adminPasswordHash.exists()` in `_superadminReset`'s write. A
+    reset needs something to reset. It stops the immediate takeover in (1), (2)
+    and the gate case and leaves legitimate recovery alone.
+    (b) It does NOT close (2) by itself: a stranger can still PLANT a recovery
+    code on a hashless session and wait — once the creator keys the session,
+    the planted code opens the reset. So either the recovery write is bound to
+    the creator as well (`!creatorUid.exists() || creatorUid == auth.uid`, as
+    the hash's first write already is), or a restore writes a fresh recovery
+    node for every session it brings back.
+    Both halves are reasoned from the rules — (a) twice, here and in the
+    independent review of #443, which is where (b) comes from — and NEITHER
+    has been run on the emulator. Until they land, do not restore open sessions
+    without re-keying them; and a restored session's old recovery code is dead
+    in any case, because the node is not in the archive.
     ⚠️ This change removes one accidental mitigation: a session purged BY
     MISTAKE and then restored used to come back beside its old recovery node,
     which blocked (2). It no longer does.

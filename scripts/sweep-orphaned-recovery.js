@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 /* Delete recovery records whose session no longer exists.
  *
- * A ONE-OFF, for a backlog the nightly purge cannot reach. Until 2026-10-08
- * scripts/cleanup-stale-sessions.js deleted a session and left its recovery
- * code at `recovery/sessions/<code>` (or `recovery/orgs/<slug>/sessions/<id>`).
- * It deletes the code with the session now, but it finds its work by walking
- * sessions, and those sessions are gone. scripts/lib/recovery-orphans.js has
- * the reasoning and the one ordering rule that keeps this safe.
+ * A ONE-OFF, for a backlog the nightly purge cannot reach. Until the fix of
+ * 2026-10-07, scripts/cleanup-stale-sessions.js deleted a session and left
+ * its recovery code at `recovery/sessions/<code>` (or
+ * `recovery/orgs/<slug>/sessions/<id>`). It deletes the code with the session
+ * now, but it finds its work by walking sessions, and those sessions are
+ * gone. scripts/lib/recovery-orphans.js has the reasoning and the one ordering
+ * rule that keeps this safe.
  *
  * What a leftover record is, and why it is worth a sweep rather than a shrug:
  *   - a retained record that a session with that code existed, with no
@@ -26,8 +27,9 @@
  *   GOOGLE_APPLICATION_CREDENTIALS      path to the service-account JSON
  *   FIREBASE_DATABASE_URL               the RTDB URL (with region suffix)
  *   RECOVERY_SWEEP_CONFIRM              "1" to actually delete (otherwise report)
- *   RECOVERY_SWEEP_ALLOW_NO_SESSIONS    "1" to proceed when the database lists
- *                                       NO session at all — see below
+ *   RECOVERY_SWEEP_ALLOW_NO_SESSIONS    "1" to proceed when a tree that holds
+ *                                       recovery records lists NO session — see
+ *                                       below
  *
  * Exit codes:
  *   0  clean: nothing to do, a dry run, or everything found was deleted
@@ -41,7 +43,9 @@
 const { initializeApp } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 const { makeRestShallowReader } = require("./lib/session-trees");
-const { findOrphanedRecovery, deleteRecoveryRecords } = require("./lib/recovery-orphans");
+const {
+  findOrphanedRecovery, deleteRecoveryRecords, describeBatchError
+} = require("./lib/recovery-orphans");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -61,11 +65,14 @@ async function main() {
 
   const found = await findOrphanedRecovery(makeRestShallowReader({ app, databaseURL: DB_URL }));
 
+  const emptyTrees = (found.emptyDefaultTree ? 1 : 0) + found.emptyOrgTrees;
   console.log(`Sessions in the database:   ${found.liveSessions}`);
   console.log(`Recovery records:           ${found.records}`);
   console.log(`  with a session (kept):    ${found.kept}`);
   console.log(`  with no session:          ${found.orphans.length} ` +
     `(${found.orphansDefault} default, ${found.orphansOrg} org-scoped)`);
+  console.log(`Trees with records and NO session: ${emptyTrees} ` +
+    `(default tree: ${found.emptyDefaultTree ? "yes" : "no"}; org trees: ${found.emptyOrgTrees})`);
   console.log("");
 
   if (found.orphans.length === 0) {
@@ -73,17 +80,24 @@ async function main() {
     process.exit(0);
   }
 
-  /* AN EMPTY SESSION LIST MAKES EVERY RECORD LOOK ORPHANED — including the
-   * record of every session that is in fact alive, if the list is empty because
-   * something is wrong (the wrong database, a tree that moved) rather than
-   * because there are no sessions. Losing a live session's record is silent and
-   * permanent: its facilitator can no longer reset a forgotten password. So
-   * "no sessions at all" stops the run, in dry-run as well, and has to be
-   * asserted by the person running it. */
-  if (found.liveSessions === 0 && !ALLOW_NO_SESSIONS) {
-    console.error("REFUSED: the database lists no session at all, so every recovery " +
-      "record looks orphaned. If that is really the state of the database, run " +
-      "again with RECOVERY_SWEEP_ALLOW_NO_SESSIONS=1. Nothing was deleted.");
+  /* A TREE THAT LISTS NO SESSION MAKES EVERY RECORD IN IT LOOK ORPHANED —
+   * including the record of every session that is in fact alive, if the list
+   * is empty because something is wrong (the wrong database, a tree that moved)
+   * rather than because there are no sessions. Losing a live session's record
+   * is silent and permanent: its facilitator can no longer reset a forgotten
+   * password. So an empty tree that still holds records stops the run, in
+   * dry-run as well, and has to be asserted by the person running it.
+   *
+   * PER TREE, and that is the point. Counted over the whole database, one node
+   * under any org — which a signed-in visitor can create — says "there are
+   * sessions" for a default tree that listed none, and every default-tree
+   * record is deleted without a word. An org whose sessions have all been
+   * purged trips this too; that is the true state and what the flag is for. */
+  if (emptyTrees > 0 && !ALLOW_NO_SESSIONS) {
+    console.error(`REFUSED: ${emptyTrees} tree(s) hold recovery records and list no ` +
+      "session at all, so every record in them looks orphaned. That is also what " +
+      "the wrong database looks like. If it is the true state, run again with " +
+      "RECOVERY_SWEEP_ALLOW_NO_SESSIONS=1. Nothing was deleted.");
     process.exit(2);
   }
 
@@ -94,10 +108,7 @@ async function main() {
   }
 
   const { deleted, failedBatches } = await deleteRecoveryRecords(db, found.orphans, {
-    // The error CODE only: a firebase-admin message can embed the path, and
-    // the path is a session code.
-    onError: (e, size) => console.error(`ERROR    a batch of ${size} was not deleted: ` +
-      (e && e.code ? e.code : "error"))
+    onError: (e, size) => console.error(describeBatchError(e, size))
   });
 
   console.log(`Summary: ${deleted} deleted, ${found.orphans.length - deleted} left` +

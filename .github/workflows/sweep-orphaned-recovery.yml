@@ -2,9 +2,10 @@
 # (GDPR Art. 5(1)(e) / APPI Art. 21).
 #
 # Creating a session writes a recovery code to `recovery/sessions/<code>` (or
-# `recovery/orgs/<slug>/sessions/<id>`), outside the session subtree. Until
-# 2026-10-08 the nightly purge deleted the session and left that node behind:
-# every recovery record written since 2026-05-25 was still in the database.
+# `recovery/orgs/<slug>/sessions/<id>`), outside the session subtree. Until the
+# fix of 2026-10-07 the nightly purge deleted the session and left that node
+# behind: every recovery record written since 2026-05-25 was still in the
+# database.
 # cleanup-stale-sessions deletes it with the session now — but that job walks
 # sessions, and these sessions are gone. This one starts from the records.
 #
@@ -38,7 +39,7 @@ on:
         required: true
         default: false
       allow_no_sessions:
-        description: "Proceed even if the database lists NO session at all"
+        description: "Proceed even if a tree with recovery records lists NO session"
         type: boolean
         required: true
         default: false

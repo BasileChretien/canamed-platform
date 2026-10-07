@@ -5,14 +5,15 @@
  * WHY THERE ARE ANY. Creating a session writes a recovery code to
  * `recovery/sessions/<code>` (or `recovery/orgs/<slug>/sessions/<id>`), outside
  * the session subtree. From 2026-05-25, when the code was introduced, until
- * 2026-10-08 the nightly purge deleted the session and left that node: no
- * script referenced `recovery` at all. The purge deletes it now — but it walks
- * SESSIONS, so a record whose session is already gone is invisible to it for
- * good. This goes the other way: it starts from the records.
+ * the fix of 2026-10-07 the nightly purge deleted the session and left that
+ * node: no script referenced `recovery` at all. The purge deletes it now — but
+ * it walks SESSIONS, so a record whose session is already gone is invisible to
+ * it for good. This goes the other way: it starts from the records.
  *
- * It is not only the backlog. Any signed-in visitor may write a recovery node
- * at a code that has no session (the rule asks only that the node and the
- * session's password do not exist yet), and nothing else would ever remove one.
+ * It is not only the backlog. A signed-in visitor may write a recovery node at
+ * a code that has no session — the rule asks that the node and the session's
+ * password do not exist yet, and, when the facilitator gate is enforced, that
+ * the writer is on its allowlist — and nothing else would ever remove one.
  *
  * NOTHING HERE READS A RECOVERY CODE. Every read is `?shallow=true`, which
  * returns the keys of a node and never a value — so what reaches the machine
@@ -55,19 +56,37 @@ async function readRecoveryKeys(fetchShallow) {
  * session" is path equality and cannot drift from what the purge deletes — and
  * a code that exists in two trees is two different records.
  *
+ * EMPTY TREES. A tree — the default one, or one org's — that holds recovery
+ * records and lists NO session is reported separately, because that is the one
+ * state in which every record in it looks orphaned, and it is also what a
+ * wrong database or a list that could not really be read looks like. Counted
+ * PER TREE, not over the whole database: a single node under any org, which a
+ * signed-in visitor can create, would otherwise be enough to say "there are
+ * sessions" on behalf of a default tree that listed none. The caller decides
+ * what to do about it; this only counts. Org trees are counted and not named:
+ * a slug under `recovery/orgs/` is whatever its writer typed.
+ *
  * @param {{codes:string[], orgCodes:Object<string,string[]>}} recoveryKeys
- * @param {Array<{recoveryPath:string}>} liveLocations every session that exists
+ * @param {Array<{recoveryPath:string, orgSlug:string|null}>} liveLocations
+ *   every session that exists
  */
 function planRecoverySweep(recoveryKeys, liveLocations) {
   const live = new Set(liveLocations.map((l) => l.recoveryPath));
   const records = sessionLocationsFromKeys(recoveryKeys.codes, recoveryKeys.orgCodes);
   const orphans = records.filter((r) => !live.has(r.recoveryPath));
+
+  const treeOf = (l) => (l.orgSlug ? "org:" + l.orgSlug : "default");
+  const treesWithSessions = new Set(liveLocations.map(treeOf));
+  const emptyTrees = [...new Set(records.map(treeOf))].filter((t) => !treesWithSessions.has(t));
+
   return {
     records: records.length,
     kept: records.length - orphans.length,
     orphans: orphans.map((r) => r.recoveryPath),
     orphansDefault: orphans.filter((r) => !r.orgSlug).length,
-    orphansOrg: orphans.filter((r) => r.orgSlug).length
+    orphansOrg: orphans.filter((r) => r.orgSlug).length,
+    emptyDefaultTree: emptyTrees.includes("default"),
+    emptyOrgTrees: emptyTrees.filter((t) => t !== "default").length
   };
 }
 
@@ -139,11 +158,24 @@ async function deleteRecoveryRecords(db, paths, opts) {
   return { deleted, failedBatches };
 }
 
+/**
+ * The log line for a batch that could not be deleted.
+ *
+ * The error CODE and the size of the batch, never the message: a firebase-admin
+ * message can embed the path it failed on, the path ends in a session code, and
+ * the log this goes to is world-readable.
+ */
+function describeBatchError(e, size) {
+  const code = e && typeof e.code === "string" && e.code ? e.code : "error";
+  return "ERROR    a batch of " + size + " was not deleted: " + code;
+}
+
 module.exports = {
   BATCH_SIZE,
   readRecoveryKeys,
   planRecoverySweep,
   findOrphanedRecovery,
   deleteRecoveryRecords,
+  describeBatchError,
   batches
 };

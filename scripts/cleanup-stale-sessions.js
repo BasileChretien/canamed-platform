@@ -311,14 +311,14 @@ async function purgeSessions(db, locations) {
         // The recovery code (recovery/<session path>): the secret the reset
         // rule compares against when a facilitator has forgotten the admin
         // password. Written at creation OUTSIDE the session subtree, and from
-        // 2026-05-25, when it was introduced, to 2026-10-08 nothing deleted it
-        // — no script referenced the tree at all. Unlike the other leftovers
-        // it is not inert. The node is write-once, so a session that later
-        // draws the same code has its own recovery write refused and its
-        // creation stops half-way; and the old code goes on satisfying the
-        // reset rule at that session code, for whoever wrote it down. Both
-        // measured: tests-e2e/emulator/recovery-purge.spec.js. It goes in the
-        // same update as the hash it resets.
+        // 2026-05-25, when it was introduced, until the fix of 2026-10-07
+        // nothing deleted it — no script referenced the tree at all. Unlike
+        // the other leftovers it is not inert. The node is write-once, so a
+        // session that later draws the same code has its own recovery write
+        // refused and its creation stops half-way; and the old code goes on
+        // satisfying the reset rule at that session code, for whoever wrote it
+        // down. Both measured: tests-e2e/emulator/recovery-purge.spec.js. It
+        // goes in the same update as the hash it resets.
         //
         // NB records orphaned BEFORE this line existed are out of reach from
         // here — their sessions are gone, and this loop walks sessions. That

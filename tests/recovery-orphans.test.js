@@ -4,19 +4,21 @@
  * The one-off sweep for recovery records whose session is gone
  * (scripts/sweep-orphaned-recovery.js, scripts/lib/recovery-orphans.js).
  *
- * The purge deletes a recovery record WITH its session since 2026-10-08; the
- * records it left before that have no session to be found through, so the sweep
- * starts from the records instead. That direction is what makes it dangerous:
- * anything that makes a LIVE session look absent turns its record into an
- * "orphan", and deleting that one is silent and permanent — the facilitator can
- * no longer reset a forgotten password. So most of this file is about what the
- * sweep must NOT delete:
+ * The purge deletes a recovery record WITH its session since the fix of
+ * 2026-10-07; the records it left before that have no session to be found
+ * through, so the sweep starts from the records instead. That direction is what
+ * makes it dangerous: anything that makes a LIVE session look absent turns its
+ * record into an "orphan", and deleting that one is silent and permanent — the
+ * facilitator can no longer reset a forgotten password. So most of this file is
+ * about what the sweep must NOT delete:
  *
  *   - a record whose session exists, in either tree;
  *   - a record whose code is live in the OTHER tree only (same code, two trees);
- *   - anything at all when the session list is empty, unless told to;
+ *   - anything at all when a tree that holds records lists no session, unless
+ *     told to — per tree, so a node in one tree cannot vouch for another;
  *   - anything at all when a list cannot be read as a list;
- *   - a session created while the sweep is reading (the order of the reads).
+ *   - a session created while the sweep is reading (the order of the reads);
+ *   - another slug's records, because a key was put into a URL unencoded.
  *
  * Three levels, as in tests/cleanup-passes.test.js: the pure plan, the reads
  * against an injected reader, then THE REAL SCRIPT in a child process against
@@ -33,14 +35,17 @@ const { spawnSync } = require("node:child_process");
 
 const {
   BATCH_SIZE, readRecoveryKeys, planRecoverySweep, findOrphanedRecovery,
-  deleteRecoveryRecords, batches
+  deleteRecoveryRecords, describeBatchError, batches
 } = require("../scripts/lib/recovery-orphans");
-const { sessionLocationsFromKeys } = require("../scripts/lib/session-trees");
+const {
+  sessionLocationsFromKeys, makeRestShallowReader, makeRestValueReader, encodeRestPath
+} = require("../scripts/lib/session-trees");
 
 const ROOT = path.join(__dirname, "..");
 const SCRIPT_PATH = path.join(ROOT, "scripts", "sweep-orphaned-recovery.js");
 const PRELOAD = path.join(__dirname, "fixtures", "fake-firebase-admin-preload.js");
-const WORKFLOW = path.join(ROOT, ".github", "workflows", "sweep-orphaned-recovery.yml");
+const FAILING_UPDATE = path.join(__dirname, "fixtures", "failing-update-preload.js");
+const WORKFLOW =path.join(ROOT, ".github", "workflows", "sweep-orphaned-recovery.yml");
 
 /* ── the plan ────────────────────────────────────────────────────────── */
 
@@ -79,7 +84,50 @@ test("the same code in two trees is two records — being live in one does not k
 
 test("nothing recorded, nothing to sweep", () => {
   const plan = planRecoverySweep({ codes: [], orgCodes: {} }, sessionLocationsFromKeys(["a"], {}));
-  assert.deepStrictEqual(plan, { records: 0, kept: 0, orphans: [], orphansDefault: 0, orphansOrg: 0 });
+  assert.deepStrictEqual(plan, {
+    records: 0, kept: 0, orphans: [], orphansDefault: 0, orphansOrg: 0,
+    emptyDefaultTree: false, emptyOrgTrees: 0
+  });
+});
+
+test("EMPTY TREES are counted per tree — a session in one tree does not vouch for another", () => {
+  const keys = { codes: ["old-aaa"], orgCodes: { partner: ["old-bbb"], gone: ["old-ccc"] } };
+  const empty = (live) => {
+    const p = planRecoverySweep(keys, live);
+    return [p.emptyDefaultTree, p.emptyOrgTrees];
+  };
+
+  assert.deepStrictEqual(empty(sessionLocationsFromKeys([], {})), [true, 2],
+    "no session anywhere: all three trees hold records and list nothing");
+  /* THE CASE THIS EXISTS FOR. One node under some org — which a signed-in
+     visitor can create — while the default tree lists none. Counted over the
+     whole database that reads as "there are sessions". */
+  assert.deepStrictEqual(empty(sessionLocationsFromKeys([], { junk: ["x"] })), [true, 2],
+    "a node in an unrelated org tree must not clear the default tree or the other orgs");
+  assert.deepStrictEqual(empty(sessionLocationsFromKeys(["liv"], {})), [false, 2],
+    "the default tree has a session; the two org trees still list none");
+  assert.deepStrictEqual(empty(sessionLocationsFromKeys(["liv"], { partner: ["liv"] })), [false, 1]);
+  assert.deepStrictEqual(empty(sessionLocationsFromKeys(["liv"], { partner: ["a"], gone: ["b"] })),
+    [false, 0], "the control: every tree with records lists a session");
+
+  /* A tree with NO records is never "empty with records", sessions or not. */
+  const none = planRecoverySweep({ codes: [], orgCodes: { partner: [] } }, sessionLocationsFromKeys([], {}));
+  assert.deepStrictEqual([none.emptyDefaultTree, none.emptyOrgTrees], [false, 0]);
+});
+
+test("the error line for a failed batch carries the CODE and the size — never the message", () => {
+  /* The message is where firebase-admin puts the path, and the path ends in a
+     session code. */
+  const e = Object.assign(new Error("update at /recovery/sessions/abc-234 failed: permission_denied"),
+    { code: "PERMISSION_DENIED" });
+  const line = describeBatchError(e, 12);
+  assert.strictEqual(line, "ERROR    a batch of 12 was not deleted: PERMISSION_DENIED");
+  assert.ok(!line.includes("abc-234"));
+
+  for (const odd of [new Error("x at recovery/sessions/abc-234"), { code: "" }, { code: 7 }, null, undefined, "abc-234"]) {
+    assert.strictEqual(describeBatchError(odd, 3), "ERROR    a batch of 3 was not deleted: error",
+      "with no usable code the line says only that it failed");
+  }
 });
 
 test("batches() covers every path once, in order", () => {
@@ -219,18 +267,93 @@ test("a list that is not a list stops the sweep — it is never read as 'no sess
   }
 });
 
+/* ── the REST reader: a key is not always one the platform wrote ─────────
+ * Found in review. The sweep is the first job to read lists under
+ * `recovery/orgs/<slug>`, and no rule validates that slug (the one under
+ * `orgs/` must match /^[a-z0-9-]+$/; this one may be anything a key may be).
+ * The shared reader put the path into the URL as it stood. */
+
+const FAKE_APP = { options: { credential: { getAccessToken: async () => ({ access_token: "t" }) } } };
+
+/* The URLs the REAL reader requests, with fetch stubbed for the duration. */
+async function urlsFor(makeReader, paths) {
+  const realFetch = globalThis.fetch;
+  const urls = [];
+  globalThis.fetch = async (url) => { urls.push(String(url)); return { ok: true, status: 200, json: async () => null }; };
+  try {
+    const read = makeReader({ app: FAKE_APP, databaseURL: "https://db.invalid/" });
+    for (const p of paths) await read(p);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+  return urls;
+}
+
+test("REST reader: every path an existing job passes today is requested byte-for-byte as before", async () => {
+  /* The reader is shared with the nightly purge and the anonymous-account job.
+     Session codes, uids and slugs are letters, digits, `-` and `_`, which
+     encodeURIComponent leaves alone — so encoding must change none of these. */
+  const today = [
+    "sessions", "orgs", "orgs/caen-nagoya/sessions", "orgs/partner-2/sessions",
+    "sessions/abc-234/members", "sessions/ABC-234/roomOf", "users", "rateLimits/uid",
+    "rateLimits/session", "users/AbCdEf0123456789_xyzUID12345Qq/history",
+    "recovery/sessions", "recovery/orgs", "recovery/orgs/partner/sessions"
+  ];
+  for (const p of today) assert.strictEqual(encodeRestPath(p), p, "encoding changed '" + p + "'");
+
+  assert.deepStrictEqual(await urlsFor(makeRestShallowReader, today),
+    today.map((p) => "https://db.invalid/" + p + ".json?shallow=true"));
+  assert.deepStrictEqual(await urlsFor(makeRestValueReader, today),
+    today.map((p) => "https://db.invalid/" + p + ".json"));
+});
+
+test("REST reader: a key with a '?' stays inside the path instead of ending it", async () => {
+  /* Unencoded, the request is for `recovery/orgs/a` with a query string of
+     `b/sessions.json?shallow=true` — not the list that was asked for, and with
+     the `shallow` flag no longer a parameter of its own. */
+  const [url] = await urlsFor(makeRestShallowReader, ["recovery/orgs/a?b/sessions"]);
+  assert.strictEqual(url, "https://db.invalid/recovery/orgs/a%3Fb/sessions.json?shallow=true");
+  assert.strictEqual(url.split("?").length, 2, "exactly one '?': the one before shallow=true");
+});
+
+test("REST reader: a key that LOOKS encoded is not decoded into a different key", async () => {
+  /* `x%20y` is a legal key, and so is `x y`. Sent as it stands, the server
+     decodes the first into the second and answers with the OTHER slug's
+     sessions — which the sweep would then plan against the first slug's paths,
+     as orphans that are never there to delete and never go away. */
+  const urls = await urlsFor(makeRestShallowReader,
+    ["recovery/orgs/x%20y/sessions", "recovery/orgs/x y/sessions", "recovery/orgs/a&b=c/sessions"]);
+  assert.deepStrictEqual(urls, [
+    "https://db.invalid/recovery/orgs/x%2520y/sessions.json?shallow=true",
+    "https://db.invalid/recovery/orgs/x%20y/sessions.json?shallow=true",
+    "https://db.invalid/recovery/orgs/a%26b%3Dc/sessions.json?shallow=true"
+  ]);
+  assert.notStrictEqual(urls[0], urls[1], "two different keys must be two different requests");
+  for (const u of urls) {
+    const path = new URL(u).pathname;
+    assert.ok(path.endsWith("/sessions.json"), "the path no longer ends at the list: " + path);
+    assert.strictEqual(new URL(u).search, "?shallow=true");
+  }
+});
+
+test("REST reader: the slashes BETWEEN segments are kept", () => {
+  assert.strictEqual(encodeRestPath("a/b c/d"), "a/b%20c/d");
+  assert.strictEqual(encodeRestPath("recovery/orgs/é/sessions"), "recovery/orgs/%C3%A9/sessions");
+});
+
 /* ── THE REAL SCRIPT, in a child process ─────────────────────────────── */
 
 const HANG_TIMEOUT_MS = 20000;
 
-function runSweep(tree, extraEnv) {
+function runSweep(tree, extraEnv, extraPreloads) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "recovery-sweep-"));
   const outFile = path.join(dir, "writes.json");
   const env = Object.assign({}, process.env);
   // Hermetic: nothing in the developer's shell may arm a delete.
   for (const k of Object.keys(env)) if (/^(RECOVERY_SWEEP_|FAKE_DB_)/.test(k)) delete env[k];
+  const preloads = [PRELOAD].concat(extraPreloads || []).flatMap((p) => ["-r", p]);
   try {
-    const r = spawnSync(process.execPath, ["-r", PRELOAD, SCRIPT_PATH], {
+    const r = spawnSync(process.execPath, preloads.concat(SCRIPT_PATH), {
       encoding: "utf8",
       timeout: HANG_TIMEOUT_MS,
       env: Object.assign(env, {
@@ -304,23 +427,82 @@ test("REAL SCRIPT: nothing orphaned — no write, exit 0", () => {
   assert.match(r.stdout, /Summary: nothing to sweep\./);
 });
 
+const ALLOW = { RECOVERY_SWEEP_CONFIRM: "1", RECOVERY_SWEEP_ALLOW_NO_SESSIONS: "1" };
+
+function assertRefused(r, trees) {
+  assert.strictEqual(r.status, 2, "a tree with records and no session must stop the run." + r.log);
+  assert.deepStrictEqual(r.writes, [], "a refused run must not write." + r.log);
+  assert.match(r.stderr, new RegExp("REFUSED: " + trees + " tree\\(s\\) hold recovery records and list no session"));
+  assertNothingSensitive(r);
+}
+
 test("REAL SCRIPT: NO session listed at all — refused, exit 2, nothing deleted, even when confirmed", () => {
   /* The state in which every record looks orphaned. It is also what a wrong
      database URL, or a tree that moved, looks like. */
   const empty = { recovery: TREE.recovery };
-  const r = runSweep(empty, { RECOVERY_SWEEP_CONFIRM: "1" });
-  assert.strictEqual(r.status, 2, r.log);
-  assert.deepStrictEqual(r.writes, [], "a refused run must not write." + r.log);
-  assert.match(r.stderr, /REFUSED: the database lists no session at all/);
-  assertNothingSensitive(r);
+  assertRefused(runSweep(empty, { RECOVERY_SWEEP_CONFIRM: "1" }), 2);
+  assertRefused(runSweep(empty, {}), 2);       // a dry run is refused too: its count would mislead
 
   // …and the same database, with the operator saying so: all four go.
-  const allowed = runSweep(empty, {
-    RECOVERY_SWEEP_CONFIRM: "1", RECOVERY_SWEEP_ALLOW_NO_SESSIONS: "1"
-  });
+  const allowed = runSweep(empty, ALLOW);
   assert.strictEqual(allowed.status, 0, allowed.log);
   assert.strictEqual(allowed.writes.length, 1);
   assert.strictEqual(allowed.writes[0].keys.length, 4);
+});
+
+test("REAL SCRIPT: the default tree lists nothing and ONE junk node sits under an org — still refused", () => {
+  /* Found in review. Any signed-in visitor can create a node under
+     orgs/<anything>/sessions/<anything>. Counting sessions over the whole
+     database, that one node said "there are sessions", and a confirmed run
+     deleted every default-tree record without refusing. */
+  const junk = {
+    orgs: { squat: { sessions: { x: { members: { u1: { at: 1 } } } } } },
+    recovery: { sessions: TREE.recovery.sessions }
+  };
+  const r = runSweep(junk, { RECOVERY_SWEEP_CONFIRM: "1" });
+  assertRefused(r, 1);
+  assert.match(r.stdout, /Sessions in the database:\s+1/, "precondition: the junk node IS counted as a session");
+  assert.match(r.stdout, /Trees with records and NO session: 1 \(default tree: yes; org trees: 0\)/);
+
+  // The control: same database, the operator asserts it. Both default records go.
+  const allowed = runSweep(junk, ALLOW);
+  assert.strictEqual(allowed.status, 0, allowed.log);
+  assert.deepStrictEqual(allowed.writes,
+    [{ op: "update", path: "", keys: ["recovery/sessions/liv-aaa", "recovery/sessions/old-aaa"] }]);
+});
+
+test("REAL SCRIPT: an ORG tree with records and no session is refused even when the default tree is healthy", () => {
+  /* The same guard from the other side: the default tree's sessions must not
+     vouch for an org whose list came back empty. */
+  const lopsided = {
+    sessions: TREE.sessions,
+    recovery: { sessions: TREE.recovery.sessions, orgs: TREE.recovery.orgs }
+  };
+  const r = runSweep(lopsided, { RECOVERY_SWEEP_CONFIRM: "1" });
+  assertRefused(r, 1);
+  assert.match(r.stdout, /Trees with records and NO session: 1 \(default tree: no; org trees: 1\)/);
+  assert.ok(!(r.stdout + r.stderr).includes("partner"),
+    "an org tree is counted, not named: a slug under recovery/orgs is whatever its writer typed");
+
+  const allowed = runSweep(lopsided, ALLOW);
+  assert.strictEqual(allowed.status, 0, allowed.log);
+  assert.deepStrictEqual(allowed.writes, [{ op: "update", path: "", keys: [
+    "recovery/orgs/partner/sessions/liv-bbb", "recovery/orgs/partner/sessions/old-bbb",
+    "recovery/sessions/old-aaa"
+  ] }], "with the flag: the org's two records and the default tree's one orphan — " +
+    "and NOT the default tree's live record");
+});
+
+test("REAL SCRIPT: a batch the database refuses — exit 1, and the log has the code, not the path", () => {
+  /* A second preload makes every root update reject the way firebase-admin
+     does: a `code`, and a message that NAMES THE PATH. The path ends in a
+     session code, so printing e.message here is a leak; this is the only test
+     that runs the script's own error line. */
+  const r = runSweep(TREE, { RECOVERY_SWEEP_CONFIRM: "1" }, [FAILING_UPDATE]);
+  assert.strictEqual(r.status, 1, r.log);
+  assert.match(r.stderr, /^ERROR {4}a batch of 2 was not deleted: PERMISSION_DENIED$/m);
+  assert.match(r.stdout, /Summary: 0 deleted, 2 left \(1 batch\(es\) failed — run again\)\./);
+  assertNothingSensitive(r);
 });
 
 test("REAL SCRIPT: cannot start — exit 2, nothing written, and it still ends by itself", () => {
@@ -359,8 +541,10 @@ test("workflow: dispatch only — a one-off never grows a schedule unnoticed", (
   assert.match(ymlCode, /^\s*workflow_dispatch:/m);
   assert.ok(!/^\s*schedule:/m.test(ymlCode) && !/^\s*-\s*cron:/m.test(ymlCode),
     "the sweep has a cron. A scheduled job that lists session codes on a runner is " +
-    "a nightly transfer, and the notice describes the scheduled jobs by name " +
-    "(tests/ops-transfer-notice.test.js) — that is a decision, not a tidy-up.");
+    "a nightly transfer, which the privacy notice would have to describe — and " +
+    "this assertion is the ONLY thing in the suite that notices one being added " +
+    "(the notice lockstep in tests/ops-transfer-notice.test.js passes with it). " +
+    "That is a decision, not a tidy-up.");
   assert.ok(!/^\s*(push|pull_request):/m.test(ymlCode), "it must not run on a push");
 });
 

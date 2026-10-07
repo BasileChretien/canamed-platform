@@ -2,7 +2,7 @@
  *
  * What a recovery code that OUTLIVES its session does, on the real rules — and
  * that deleting it with the session (scripts/cleanup-stale-sessions.js, since
- * 2026-10-08) puts both things right.
+ * the fix of 2026-10-07) puts both things right.
  *
  * Creating a session writes `recovery/sessions/<code>` (or, for an organisation
  * session, `recovery/orgs/<slug>/sessions/<id>`). The purge deleted a session
