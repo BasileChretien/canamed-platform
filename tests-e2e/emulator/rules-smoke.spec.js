@@ -2339,6 +2339,119 @@ test("rules: a withdrawal can only name a session that was created or was purged
   expect(await tryWrite(page, orgRecord(ORG_ONLY), request())).toBe("ALLOWED");
 });
 
+test("rules: an old withdrawal cannot be turned into a request that is already overdue", async ({ page }) => {
+  /* Review finding B2 on #437. The window on `at` (a day back, five seconds
+   * ahead) sat on the `at` child alone, and a `.validate` runs for the node
+   * written and its ancestors — never for a sibling. So `…/erasure = true`,
+   * written on its own, was judged without anyone looking at the date: a bare
+   * withdrawal from day 0, which the monitor ignores, became on day 40 an
+   * erasure request that was 40 days old the first time it could be seen. One
+   * write, and the monitor is red for a request that was never open.
+   *
+   * The window is now on the record. The old record is SEEDED by the owner —
+   * the rule rightly refuses a client that date, which is the whole point —
+   * and everything after it goes through the page and the real rules. Each
+   * denial is followed by an ALLOW of the same payload at the same child of a
+   * record that differs in one thing: its date. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  const OLD = "WB" + stamp, FRESH = "WF" + stamp;
+  const slug = "wb-" + stamp.toLowerCase();
+  const DAY = 86400000;
+  const denied = (r) => expect(String(r)).toMatch(/permission[_ ]denied/i);
+  const trees = [
+    { label: "default", session: (c) => `sessions/${c}`, record: (c) => `withdrawals/${c}/${uid}` },
+    { label: "orgs", session: (c) => `orgs/${slug}/sessions/${c}`, record: (c) => `withdrawals/orgs/${slug}/${c}/${uid}` },
+  ];
+
+  for (const t of trees) {
+    await adminPut(`${t.session(OLD)}/created`, { at: Date.now(), by: "t" });
+    await adminPut(`${t.session(FRESH)}/created`, { at: Date.now(), by: "t" });
+    const oldAt = Date.now() - 40 * DAY;
+    await adminPut(t.record(OLD), { research: false, at: oldAt });
+
+    // One field, on its own, on the old record.
+    denied(await tryWrite(page, `${t.record(OLD)}/erasure`, true));
+    expect(await dbReadAsOwner(t.record(OLD)), `${t.label}: the denied write must have changed nothing`)
+      .toEqual({ research: false, at: oldAt });
+
+    // The same field, the same value, on a record that carries today's date.
+    expect(await tryWrite(page, t.record(FRESH), { research: false, at: Date.now() }),
+      `${t.label}: a bare withdrawal, as the client writes it`).toBe("ALLOWED");
+    expect(await tryWrite(page, `${t.record(FRESH)}/erasure`, true),
+      `${t.label}: the same one-field write, on a record dated today`).toBe("ALLOWED");
+    expect(await dbReadAsOwner(`${t.record(FRESH)}/erasure`)).toBe(true);
+
+    // No other single field gets past the old date either.
+    denied(await tryWrite(page, `${t.record(OLD)}/research`, false));
+    expect(await tryWrite(page, `${t.record(FRESH)}/research`, false)).toBe("ALLOWED");
+
+    /* And the old record is not stuck. What the client really does — the whole
+       record, dated now — is accepted, and the request then starts its 30 days
+       today, which is when it was made. */
+    expect(await tryWrite(page, t.record(OLD), { research: false, erasure: true, at: Date.now() }),
+      `${t.label}: asking for erasure on an old withdrawal, the way the client does`).toBe("ALLOWED");
+    const after = await dbReadAsOwner(t.record(OLD));
+    expect(after.erasure).toBe(true);
+    expect(Math.abs(Date.now() - after.at), `${t.label}: the request is dated when it was made`)
+      .toBeLessThan(10 * 60000);
+  }
+});
+
+test("rules: a listing of integer keys is still a listing (what ?shallow=true returns)", async ({ page }) => {
+  /* The retention purge, the data-rights monitor and the marker backfill list
+   * sessions over REST with `?shallow=true`, and the reader threw on anything
+   * but an object. RTDB renders a node keyed 0, 1, 2… as an ARRAY over REST;
+   * whether a shallow listing does too was not established when #437 was
+   * reviewed. If it does, one write by any signed-in visitor — the membership
+   * row below — stopped all three jobs until somebody removed the node.
+   *
+   * This asserts what matters, and it holds for either shape: the reader the
+   * jobs use gets the keys. The shape itself is printed, because that is the
+   * open question — and note what it answers: what the EMULATOR does. The
+   * production REST API is not reachable from here. */
+  const { shallowKeysOf } = require("../../scripts/lib/session-trees");
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "sk-" + Date.now().toString(36).slice(-5);
+  const listing = async (path, shallow) => {
+    const res = await fetch(`${EMU_DB_REST}/${path}.json?ns=${EMU_NS}${shallow ? "&shallow=true" : ""}`,
+      { headers: { "Authorization": "Bearer owner" } });
+    if (!res.ok) throw new Error(`listing -> ${res.status}`);
+    return res.json();
+  };
+  const shape = (v) => (Array.isArray(v) ? "array" : v === null ? "null" : typeof v);
+
+  // The visitor's one write: their own membership row, under a code they chose.
+  const dense = `orgs/${slug}/sessions`;
+  expect(await tryWrite(page, `${dense}/0/members/${uid}`, { at: Date.now() })).toBe("ALLOWED");
+  const one = await listing(dense, true);
+  expect(shallowKeysOf(one, dense)).toEqual(["0"]);
+
+  await adminPut(`${dense}/1/created`, { at: Date.now(), by: "t" });
+  await adminPut(`${dense}/2/created`, { at: Date.now(), by: "t" });
+  const three = await listing(dense, true);
+  expect(shallowKeysOf(three, dense).sort()).toEqual(["0", "1", "2"]);
+
+  // With a gap: the shape an array would need a null for.
+  const gapped = `orgs/${slug}-g/sessions`;
+  await adminPut(`${gapped}/0/created`, { at: Date.now(), by: "t" });
+  await adminPut(`${gapped}/2/created`, { at: Date.now(), by: "t" });
+  const two = await listing(gapped, true);
+  expect(shallowKeysOf(two, gapped).sort()).toEqual(["0", "2"]);
+
+  /* The slug level is listed the same way, and a slug can be an integer too. */
+  const slugs = shallowKeysOf(await listing("orgs", true), "orgs");
+  expect(slugs).toContain(slug);
+
+  const deep = await listing(dense, false);
+  const line = `shallow listing of integer keys: one key -> ${shape(one)}, three keys -> ${shape(three)}, ` +
+    `gapped -> ${shape(two)}; the same node read whole -> ${shape(deep)}`;
+  test.info().annotations.push({ type: "emulator-shallow-shape", description: line });
+  console.log(line);
+});
+
 test("rules: the roomChat author index records who spoke and is unreadable by everyone", async ({ page, browser }) => {
   /* Annex VI G12's roomChat limb. Two properties, and they pull against each
    * other — which is why the index is a separate tree rather than a field on

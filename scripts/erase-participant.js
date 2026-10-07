@@ -289,23 +289,47 @@ async function planPurged(db, locations, args) {
     keys.add(args.session);
   }
 
+  /* THE MARKER DECIDES, not whether something is in the database. A marker
+     means a session with this code was purged and the snapshots still hold
+     it; a node under `sessions/<code>` now does not undo that, and anyone can
+     put one there — their own membership row is writable under any code, and
+     a `created` dated in the future is never purged. This used to skip every
+     key that is in the database, which turned "answer this request" into
+     "nothing to erase, dismiss it" for a purged session the moment a stranger
+     wrote one row under its code.
+       marker                 -> answered here, whatever is in the database now
+       no marker, in database -> a live session's request (planLive owns the
+                                 erasing; reported if there is nothing to erase)
+       no marker, not there   -> nothing shows it existed */
   const closable = [];
   const noMarker = [];
+  const liveRequests = [];
   for (const key of [...keys].sort()) {
     if (args.session && key !== args.session) continue;
-    if (live.has(key)) continue;
     const record = byLocation[key] ? byLocation[key][args.uid] : null;
     const requestAt = isObj(record) && typeof record.at === "number" ? record.at : null;
-    if (marked(key)) closable.push({ locationKey: key, purgedAt: markers[key], requestAt, inQueue: isObj(record) });
-    else noMarker.push({ locationKey: key, requestAt });
+    if (marked(key)) {
+      closable.push({
+        locationKey: key, purgedAt: markers[key], requestAt,
+        inQueue: isObj(record), inDatabaseAgain: live.has(key),
+      });
+    } else if (live.has(key)) {
+      liveRequests.push(key);
+    } else {
+      noMarker.push({ locationKey: key, requestAt });
+    }
   }
-
-  /* Requests of this person that sit under a session which IS in the database
-     — reported when the erasure path finds nothing of theirs there, so the run
-     does not just say "nothing to erase" about a request the monitor is
-     counting. */
-  const liveRequests = [...keys].filter((key) => live.has(key) && (!args.session || key === args.session));
   return { closable, noMarker, needsUid: false, liveRequests };
+}
+
+/** The `at` of the erasure request this person has open under a session, or 0.
+ *  It is what a record is stamped with, so that "answered" is a match on the
+ *  request's own date and never a comparison between two clocks. */
+async function requestStamp(db, loc, uid) {
+  if (!uid) return 0;
+  const snap = await db.ref(`${loc.withdrawalsPath}/${uid}`).get();
+  const record = snap.exists() ? snap.val() : null;
+  return isObj(record) && record.erasure === true && typeof record.at === "number" ? record.at : 0;
 }
 
 const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -344,11 +368,13 @@ function printLivePlan(live) {
 }
 
 function printPurgedPlan(closable) {
-  console.log(`PURGED SESSIONS — ${closable.length} request(s) for a session that is ` +
-              "no longer in the database:");
+  console.log(`PURGED SESSIONS — ${closable.length} request(s) for a session that has ` +
+              "been purged:");
   for (const g of closable) {
     console.log(`  ${g.locationKey}: purged ${day(g.purgedAt)}; ` +
-      (g.inQueue ? `requested ${age(g.requestAt)}` : "no request in the queue — recorded on your word"));
+      (g.inQueue ? `requested ${age(g.requestAt)}` : "no request in the queue — recorded on your word") +
+      (g.inDatabaseAgain ? "; something is in the database under this code again, " +
+        "which does not change what was purged" : ""));
   }
   console.log("  For each: one suppression record (identifiers only), so that a " +
               "restore from the nightly snapshots leaves this participant out, " +
@@ -419,6 +445,18 @@ async function dismiss(db, locations, args) {
     return refuse("--dismiss needs --reason. You are setting aside something recorded " +
                   "as a person's request; say why.");
   }
+  /* THE MARKER FIRST, whatever is in the database. A session that was purged
+     is still in the snapshots, so a request about it is answered with a
+     suppression record — never dismissed. This used to be checked only when
+     the session was absent; one row written under the code by anyone made it
+     "a live session the person has nothing in", and the request was deleted
+     with nothing telling a restore to leave the person out. */
+  if ((await db.ref(locationForKey(args.session).purgedMarkerPath).get()).exists()) {
+    return refuse("the purge left a marker for that session: it existed, and the " +
+                  "snapshots may still hold it. Answer the request " +
+                  "(--research-copy-checked) rather than dismissing it — whatever " +
+                  "is in the database under that code now.");
+  }
   const liveLoc = locations.find((l) => l.key === args.session);
   let why;
   if (liveLoc) {
@@ -430,11 +468,9 @@ async function dismiss(db, locations, args) {
       return refuse("that session is in the database and this person has data in it, " +
                     "so the request is real. Run the erasure (without --dismiss).");
     }
-    why = "The session is in the database and this person has nothing in it: no " +
-          "entry, no roster row, no chat turn. There is nothing to erase.";
-  } else if ((await db.ref(locationForKey(args.session).purgedMarkerPath).get()).exists()) {
-    return refuse("the purge left a marker for that session: it existed. Answer the " +
-                  "request (--research-copy-checked) rather than dismissing it.");
+    why = "The session is in the database, was never purged, and this person has " +
+          "nothing in it: no entry, no roster row, no chat turn. There is " +
+          "nothing to erase.";
   } else {
     why = "The session is not in the database and has no purge marker.";
   }
@@ -581,8 +617,16 @@ async function main() {
   const at = new Date(Date.now()).toISOString();
   const reason = canonicalReason(args.reason);
   const updates = Object.assign({}, live ? live.updates : {});
-  const records = (live ? live.suppressed : []).map((s) =>
-    buildRecord({ locationKey: s.locationKey, identity: s.identity, at, reason }));
+  /* Each record is stamped with the request it answers (requestStamp above). */
+  const records = [];
+  for (const s of (live ? live.suppressed : [])) {
+    const loc = locations.find((l) => l.key === s.locationKey);
+    records.push(buildRecord({
+      locationKey: s.locationKey, identity: s.identity, at, reason,
+      requestAt: await requestStamp(db, loc, s.identity.uid),
+    }));
+  }
+  const erasedLive = new Set(records.map((r) => r.locationKey));
   /* The uid reaches everything the session's mapping tables join to it. A
      browser that dropped out mid-join left a pool row and no mapping row, and
      nothing here can find that once the session is gone — so an identifier the
@@ -594,8 +638,14 @@ async function main() {
     stableIds: args.stableId ? [args.stableId] : [],
   };
   for (const g of gone.closable) {
+    /* A purged code that is a real session again, with this person in it: the
+       live half has just written the record for this person and this key, and
+       it is re-resolved against every snapshot, old and new. One request, one
+       record. */
+    if (erasedLive.has(g.locationKey)) continue;
     records.push(buildRecord({
       locationKey: g.locationKey, identity: purgedIdentity, at, reason,
+      requestAt: g.requestAt === null ? 0 : g.requestAt,
       sessionPurged: true, researchCopyChecked: true,
     }));
     /* The history is keyed by the bare code in both trees. Skipped when the

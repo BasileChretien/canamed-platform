@@ -152,15 +152,25 @@ in §6 watches the clock. Nothing is deleted until you run the tool below
 
 ```bash
 # 1. ALWAYS look first. Dry run is the default; nothing is written.
-node scripts/erase-participant.js --uid <uid>
+#    A request made in the product is about ONE session: name it.
+node scripts/erase-participant.js --uid <uid> --session <code>
 ```
 
-⚠️ **That command is the person, everywhere.** It erases them from every
-session in the database, answers every open request they have for a purged
-session (§4.1), and deletes their account record. A request made in the
-product is about **one** session: answer it with `--uid <uid> --session <code>`
-(`orgs/<slug>/<code>` for an organisation's session). For a session that is in
-the database the account record (`users/<uid>`) is deleted either way.
+For an organisation's session the key is `orgs/<slug>/<code>`.
+
+⚠️ **Leave `--session` out and the run is the person, everywhere.** It erases
+them from every session in the database and answers every open request they
+have for a purged session (§4.1). That is the right run for "erase me from the
+platform" and the wrong one for a request about one session — which is why
+both commands in this section carry `--session`. (Until 2026-10-07 step 2
+below did not, so copying steps 1 and 2 ran the everywhere run.)
+
+**The account record.** Whenever the tool finds the person in a session that is
+in the database, it deletes `users/<uid>` whole — profile and the history of
+every session — with or without `--session`. When it finds them in none (every
+session of theirs has been purged), the account record stays, apart from the
+history rows of the purged sessions it answers. The plan lists the paths; read
+them rather than this paragraph.
 
 Read the whole report before confirming. It prints three things:
 
@@ -173,8 +183,8 @@ Read the whole report before confirming. It prints three things:
   roommates'. Erasing it means erasing other people's data.
 
 ```bash
-# 2. Then, and only then:
-ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> --reason "Art. 17 request"
+# 2. Then, and only then — the SAME scope as the run you just read:
+ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> --session <code> --reason "Art. 17 request"
 ```
 
 The run writes a **suppression record** at `erasures/`. ⚠️ **Do not delete
@@ -224,8 +234,9 @@ node scripts/erase-participant.js --uid <uid> --session <code>
 
 ⚠️ **`--uid` without `--session` means the person, everywhere**: every purged
 session they have an open request for, **and every session still in the
-database, and their whole account record** (`users/<uid>`), whether or not they
-asked about those. That is the right run for "erase me from the platform" and
+database — and, if it finds them in one, their whole account record**
+(`users/<uid>`), whether or not they asked about those (§4, "The account
+record"). That is the right run for "erase me from the platform" and
 the wrong one for a request about one session. The tool prints a `SCOPE` line
 at the top of its plan when it is about to do the first; an argument it does
 not recognise stops it, so a mistyped `--session` cannot turn into that run.
@@ -296,6 +307,21 @@ which of these it is:
 `--dismiss` also removes that session's row from the person's history, and is
 refused for a session that carries a purge marker: that session existed, so the
 request is answered, not dismissed.
+
+⚠️ **The marker decides, whatever is in the database.** Anyone signed in can
+put a node back under a purged session's code — their own membership row is
+enough — and a facilitator can reuse a code. Neither un-purges the session that
+was purged: it is still in the snapshots, and the request is still answered
+with the command above. The tool and the monitor say "its code is in the
+database again" when they see this; it changes nothing you do. (Until the
+review of 2026-10-07 the tool treated such a code as a live session, found
+nothing of the person's in it, and offered `--dismiss` — which closed a real
+request unanswered.)
+
+**The backfill marks only what was a session**: a node that had a `created` or
+a `closed` timestamp in some snapshot, the same test the purge applies. A
+snapshot also holds whatever visitors wrote under made-up codes; the script
+counts those ("no timestamp, never a session") and leaves them unmarked.
 
 ## 5. Rectification requests (GDPR Art. 16, APPI Art. 34)
 

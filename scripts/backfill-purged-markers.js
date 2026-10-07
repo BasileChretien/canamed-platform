@@ -11,12 +11,22 @@
  * session they really took part in.
  *
  * WHERE THE EVIDENCE COMES FROM. The nightly snapshots. A session a snapshot
- * holds and the database does not was purged, and nothing a participant can
- * write is involved in establishing that. The snapshots reach back 90 days,
- * which is also exactly as long as a suppression record for that session can
- * matter (it exists so a restore leaves the participant out). A session purged
- * longer ago than that gets no marker: no copy this platform could restore
- * still holds it, and a request about it is for the human contact.
+ * holds and the database does not was purged. The snapshots reach back 90
+ * days, which is also exactly as long as a suppression record for that session
+ * can matter (it exists so a restore leaves the participant out). A session
+ * purged longer ago than that gets no marker: no copy this platform could
+ * restore still holds it, and a request about it is for the human contact.
+ *
+ * WHAT COUNTS AS A SESSION IN A SNAPSHOT. Only a node with a `created/at` or a
+ * `closed/at` — the purge's own criterion (session-trees.js,
+ * `bodyWasSession`). A snapshot is a copy of everything under `sessions/`,
+ * and that includes what a participant can write: any signed-in visitor may
+ * put their own membership row under a code nobody ever created. Such a node
+ * is in the snapshot, the purge removes it WITHOUT leaving a marker, and this
+ * script must not then hand it one. Until 2026-10-07 it marked every key it
+ * found, and this paragraph said nothing a participant can write was involved.
+ * That was false. What a participant cannot write is `created` (without
+ * creating a session) or `closed`.
  *
  * ⚠️ RUN IT BEFORE THE RULE IS DEPLOYED, or in the same hour. Between the
  * deploy and this run, withdrawals for already-purged sessions are refused.
@@ -45,7 +55,7 @@ const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
 const {
-  readSessionLocationsShallow, locationForKey, purgedMarkers,
+  readSessionLocationsShallow, locationForKey, purgedMarkers, bodyWasSession,
 } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -85,10 +95,15 @@ function isLocationKey(key) {
  * a "good" file when another one could not be vouched for: a half-read set
  * dates markers by the wrong snapshot.
  *
- * @returns {{lastSeen: Object<string, number>, malformed: number}}
+ * `lastSeen` holds a key only if some snapshot shows it AS A SESSION, dated by
+ * the last snapshot that does. `named` is every well-formed key, session or
+ * not, so the run can say how many it left unmarked and why.
+ *
+ * @returns {{lastSeen: Object<string, number>, named: Set<string>, malformed: number}}
  */
 function readSnapshots(files, now) {
   const lastSeen = {};
+  const named = new Set();
   let malformed = 0;
   for (const file of files) {
     let payload;
@@ -118,10 +133,12 @@ function readSnapshots(files, now) {
     }
     for (const key of Object.keys(sessions)) {
       if (!isLocationKey(key)) { malformed++; continue; }
+      named.add(key);
+      if (!bodyWasSession(sessions[key])) continue;
       if (!(key in lastSeen) || takenAt > lastSeen[key]) lastSeen[key] = takenAt;
     }
   }
-  return { lastSeen, malformed };
+  return { lastSeen, named, malformed };
 }
 
 async function main() {
@@ -165,12 +182,19 @@ async function main() {
   }
 
   console.log(`Snapshot files read:          ${args.files.length}`);
-  console.log(`Sessions named in them:       ${Object.keys(snapshots.lastSeen).length}`);
+  const sessionCount = Object.keys(snapshots.lastSeen).length;
+  console.log(`Sessions held in them:        ${sessionCount}`);
   console.log(`  still in the database:      ${stillLive}`);
   console.log(`  already marked:             ${alreadyMarked}`);
   console.log(`  to mark:                    ${toMark.length}`);
+  /* Said, not swallowed: an operator who expected a marker for one of these
+     should learn here that it was left out, and why. */
+  const noTimestamp = snapshots.named.size - sessionCount;
+  if (noTimestamp) {
+    console.log(`Nodes with no timestamp, never a session: ${noTimestamp} (not marked)`);
+  }
   if (snapshots.malformed) {
-    console.log(`  not a session location:     ${snapshots.malformed} (skipped)`);
+    console.log(`Keys that are not a session location:     ${snapshots.malformed} (skipped)`);
   }
   if (args.list) for (const key of toMark) console.log(`    ${key}`);
   console.log("");

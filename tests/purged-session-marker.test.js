@@ -201,6 +201,9 @@ function backfill(tree, snapshots, env, extraArgs) {
 }
 
 const TAKEN = "2026-09-20T02:47:11.000Z";
+/* A session body as a snapshot holds it, reduced to the one thing the backfill
+   looks at: it had a timestamp, so it was a session. */
+const REAL = { created: { at: 1 } };
 /* What the script under test is pointed at (tests/fixtures/run-ops-script.js). */
 const THIS_DB = "https://fake-rtdb.example.test";
 const snapshot = (sessions, takenAt) => ({
@@ -214,8 +217,8 @@ test("the backfill marks sessions a snapshot holds and the database no longer do
     purgedSessions: { "HAS-ONE": 1234 },
   };
   const snap = snapshot({
-    "STILL-HERE": {}, "GONE-1": {}, "HAS-ONE": {},
-    "orgs/uni-x/ORG-HERE": {}, "orgs/uni-x/ORG-GONE": {},
+    "STILL-HERE": REAL, "GONE-1": REAL, "HAS-ONE": REAL,
+    "orgs/uni-x/ORG-HERE": REAL, "orgs/uni-x/ORG-GONE": REAL,
   });
 
   const dry = backfill(tree, [snap]);
@@ -236,12 +239,47 @@ test("the backfill marks sessions a snapshot holds and the database no longer do
   assert.deepStrictEqual(live.tree.orgs, tree.orgs);
 });
 
+test("the backfill marks only what the purge would have marked: a session with a timestamp", () => {
+  /* The purge leaves no marker for a node with neither `created/at` nor
+     `closed/at`: any signed-in visitor can write their own membership row
+     under any code, and that is not a session. Such a node is in the nightly
+     snapshot like everything else under `sessions/`, and the backfill marked
+     every key it found — handing a made-up code the five-year marker the purge
+     had just refused it. (Review finding B4. Every fixture here used an empty
+     body, so the tests had the mistake built in.) */
+  const junk = { members: { uidVisitor: { at: ago(1) } } };
+  const r = backfill({}, [snapshot({
+    "JUNK-1": junk, "EMPTY-1": {}, "NULL-1": null, "TEXT-1": "x",
+    "REAL-1": { created: { at: ago(80) } },
+    "REAL-2": { closed: { at: ago(40) } },
+    "orgs/uni-x/JUNK-2": junk,
+    "orgs/uni-x/REAL-3": { created: { at: ago(80) }, closed: { at: ago(70) } },
+  })], { BACKFILL_CONFIRM: "1" });
+  assert.strictEqual(r.code, 0, r.out);
+  assert.deepStrictEqual(Object.keys(purgedMarkers(r.tree.purgedSessions)).sort(),
+    ["REAL-1", "REAL-2", "orgs/uni-x/REAL-3"]);
+  assert.match(r.out, /no timestamp[^\n]*:\s+5\b/i, "it must say how many it would not mark, and why");
+
+  /* The same criterion as the purge, shown on the same node: neither marks it. */
+  const purged = purge({ sessions: { "JUNK-1": junk } });
+  assert.strictEqual(at(purged.tree, "sessions/JUNK-1"), null);
+  assert.strictEqual(at(purged.tree, "purgedSessions"), null);
+
+  // A session that had a timestamp in ONE snapshot is a session; it is dated
+  // by the last snapshot that showed it as one.
+  const mixed = backfill({}, [
+    snapshot({ "S-1": { created: { at: ago(80) } } }, "2026-08-01T02:47:00.000Z"),
+    snapshot({ "S-1": junk }, "2026-08-20T02:47:00.000Z"),
+  ], { BACKFILL_CONFIRM: "1" });
+  assert.deepStrictEqual(mixed.tree.purgedSessions, { "S-1": Date.parse("2026-08-01T02:47:00.000Z") });
+});
+
 test("the backfill dates a marker by the LAST snapshot that holds the session", () => {
   /* Not by today: the marker says when a session was last known to exist. */
   const r = backfill({}, [
-    snapshot({ "GONE-1": {} }, "2026-08-01T02:47:00.000Z"),
-    snapshot({ "GONE-1": {}, "GONE-2": {} }, "2026-08-20T02:47:00.000Z"),
-    snapshot({ "GONE-2": {} }, "2026-08-05T02:47:00.000Z"),
+    snapshot({ "GONE-1": REAL }, "2026-08-01T02:47:00.000Z"),
+    snapshot({ "GONE-1": REAL, "GONE-2": REAL }, "2026-08-20T02:47:00.000Z"),
+    snapshot({ "GONE-2": REAL }, "2026-08-05T02:47:00.000Z"),
   ], { BACKFILL_CONFIRM: "1" });
   assert.strictEqual(r.code, 0, r.out);
   assert.deepStrictEqual(r.tree.purgedSessions, {
@@ -254,18 +292,18 @@ test("the backfill refuses a file it cannot vouch for, and writes nothing", () =
   /* A marker is a standing permission to record a withdrawal and to write a
      permanent suppression record. It is issued for what a real snapshot shows,
      or not at all. */
-  const good = snapshot({ "GONE-1": {} });
+  const good = snapshot({ "GONE-1": REAL });
   const cases = [
     ["not a backup payload", { some: "export" }],
-    ["no date", { databaseUrl: THIS_DB, sessions: { "GONE-1": {} } }],
-    ["an unreadable date", { backupTakenAt: "last tuesday", databaseUrl: THIS_DB, sessions: { "GONE-1": {} } }],
+    ["no date", { databaseUrl: THIS_DB, sessions: { "GONE-1": REAL } }],
+    ["an unreadable date", { backupTakenAt: "last tuesday", databaseUrl: THIS_DB, sessions: { "GONE-1": REAL } }],
     /* A snapshot of ANOTHER database — the emulator, a test project — names
        sessions that were never in this one. Markers minted from it would let
        requests be recorded here for sessions this database never held. */
     ["a snapshot of another database",
-      Object.assign(snapshot({ "GONE-1": {} }), { databaseUrl: "https://other.example.test" })],
-    ["a snapshot that does not say which database it is of", { backupTakenAt: TAKEN, sessions: { "GONE-1": {} } }],
-    ["a date in the future", snapshot({ "GONE-1": {} }, new Date(NOW + DAY).toISOString())],
+      Object.assign(snapshot({ "GONE-1": REAL }), { databaseUrl: "https://other.example.test" })],
+    ["a snapshot that does not say which database it is of", { backupTakenAt: TAKEN, sessions: { "GONE-1": REAL } }],
+    ["a date in the future", snapshot({ "GONE-1": REAL }, new Date(NOW + DAY).toISOString())],
     ["not JSON", "{ nope"],
   ];
   for (const [label, bad] of cases) {
@@ -280,7 +318,7 @@ test("the backfill refuses a file it cannot vouch for, and writes nothing", () =
 
 test("the backfill skips a key that is not a session location, and says how many", () => {
   const r = backfill({}, [snapshot({
-    "GONE-1": {}, "a/b": {}, "orgs/uni-x": {}, "orgs/uni-x/GONE-2/extra": {}, "bad.key": {}, "": {},
+    "GONE-1": REAL, "a/b": REAL, "orgs/uni-x": REAL, "orgs/uni-x/GONE-2/extra": REAL, "bad.key": REAL, "": REAL,
     orgs: {},                                    // the organisation subtree's own name
   })], { BACKFILL_CONFIRM: "1" });
   assert.strictEqual(r.code, 0, r.out);
@@ -289,7 +327,7 @@ test("the backfill skips a key that is not a session location, and says how many
 });
 
 test("the backfill prints session codes only when asked", () => {
-  const snap = snapshot({ "SECRETCODE-1": {} });
+  const snap = snapshot({ "SECRETCODE-1": REAL });
   const quiet = backfill({}, [snap]);
   assert.doesNotMatch(quiet.out, /SECRETCODE/);
   assert.match(quiet.out, /to mark:\s+1\b/i, "positive control: it found the session");

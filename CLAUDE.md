@@ -960,11 +960,16 @@ read that before describing any of this as done.
   tells a purged session from a code that never was one.
 - **The rule accepts a withdrawal only if the session's `created` record
   exists, or the code has a marker**, in both trees, and `at` must be within
-  24 h behind / 5 s ahead of the server clock. Before, any signed-in visitor
-  could file a request for any code, and one write with `at: 1` turned the
-  daily monitor red on its next run. (The old rule also allowed NO clock lead,
-  `at <= now`, alone in the file: a device a little fast was refused its
-  withdrawal. A unit test now fails on any timestamp rule without `+ 5000`.)
+  24 h behind / 5 s ahead of the server clock — a window that sits on the
+  RECORD (`$uid` `.validate`), so a write to one field is judged against it
+  too. Before, any signed-in visitor could file a request for any code, and
+  one write with `at: 1` turned the daily monitor red on its next run. (The old
+  rule also allowed NO clock lead, `at <= now`, alone in the file: a device a
+  little fast was refused its withdrawal. A unit test fails if the text
+  `.val() <= now` appears anywhere in the rules with no tolerance after it —
+  that is ALL it checks. It does not see a timestamp with no upper bound at
+  all, and `created/at` and `closed/at` have none; an earlier wording here
+  claimed it covered "any timestamp rule".)
 - **The purge keeps an erasure request nobody has answered**, with no time
   limit. It used to delete the whole branch with the session: measured on the
   real schedule (purge 03:17, monitor 04:11), a request made from about the
@@ -978,6 +983,8 @@ read that before describing any of this as done.
   `--uid` required, and it refuses to write without `--research-copy-checked`.
   It writes nothing for a session with no marker (exit 3); `--dismiss` removes
   such a request, or one under a live session the person left nothing in.
+  **The marker decides, whatever is in the database**: under a marker a
+  request is answered and never dismissed, even when the code is in use again.
   Procedure: `ARCHITECTURE/OPERATOR_POLICY.md` §4.1.
 - **`--reason` is a closed list** (`ERASURE_REASONS` in `scripts/lib/suppression.js`):
   it is written into `erasures/`, which is never deleted and which two daily
@@ -1020,12 +1027,45 @@ shipped — the lessons are general:**
    enumerators skip the key, `locationFor()` throws. **A new per-session tree
    with an `orgs/` branch inherits this for free only because of those three.**
 4. **`--uid` without `--session` is the person, everywhere** — every live
-   session and the whole `users/<uid>` record. The first operator text gave
-   that command for answering one request. The tool prints `SCOPE` and rejects
-   unknown arguments (a mistyped `--session` used to be ignored).
-5. **A ledger that is never deleted needs dates.** "Answered" matched a record
-   of any age, so a second request after an erasure was closed on arrival and
-   deleted by the purge. A record answers only what it post-dates.
+   session and, when it finds them in one, the whole `users/<uid>` record. The
+   first operator text gave that command for answering one request. The tool
+   prints `SCOPE` and rejects unknown arguments (a mistyped `--session` used
+   to be ignored).
+5. **A ledger that is never deleted needs to say WHICH request a record
+   answers.** "Answered" first matched a record of any age, so a second
+   request after an erasure was closed on arrival and deleted by the purge.
+   The fix compared dates — and that compared the operator's clock with the
+   participant's device, which the rule accepts a day slow, so a second
+   request could still read as answered. **Never order two events by
+   timestamps from two machines.** The record now carries the `at` of the
+   request it answers (`requestAt`) and is matched on that.
+6. **A `.validate` on a field does not run when its sibling is written.** The
+   date window sat on `at`; writing `erasure: true` alone onto a 40-day-old
+   bare withdrawal produced a request that was overdue the moment it became
+   visible. A constraint that must hold for the record belongs on the record.
+   (`tests-e2e/emulator/pool-stale-at-rules.spec.js` had already recorded the
+   mechanism on another node.)
+7. **A purged code can be occupied again, by anyone.** The tool looked for the
+   marker only when the session was absent; one membership row under the code
+   made the request unanswerable and `--dismiss` available, and the monitor
+   advised it. Decide on the durable fact (the Admin-only marker), never on
+   "is something there now".
+8. **Two jobs that must agree need one definition, not two copies.** The purge
+   marks only a session with a timestamp; the backfill marked every key in a
+   snapshot, and so handed a visitor's made-up code the marker the purge had
+   refused it. Both now call `hadSessionTimestamp` / `bodyWasSession`
+   (`scripts/lib/session-trees.js`). Every backfill fixture had used an empty
+   body, so the tests had the mistake built in — **a fixture simpler than the
+   data it stands for can only confirm the simple case.**
+
+**Listing sessions over REST: an array is a listing too.** `shallowKeysOf()`
+threw on anything but an object, and RTDB renders a node keyed 0, 1, 2… as an
+array. A session code is chosen by whoever writes under it, so if a
+`?shallow=true` listing comes back that way, one visitor write stopped the
+purge, the monitor and the backfill. Whether it does was not established; both
+shapes are now read, and the emulator suite prints which one the EMULATOR
+returns ("a listing of integer keys"). That says nothing certain about
+production.
 
 ⚠️ **Still open, and not this change's to settle** (all in the DPA paragraph):
 the marker's lifetime is five years by a constant
@@ -1036,8 +1076,12 @@ certificate published for a purged session cannot be found from a uid;
 `privacy.html` §6 does not list what the daily jobs read of withdrawal and
 erasure records (true of the monitor since 2026-09-03); for a session still in
 the database the tool deletes the whole `users/<uid>` even with `--session`;
-and **a session whose `created/at` or `closed/at` is dated in the future is
-never purged** — the rules bound neither, and the purge was run to confirm it.
+**a session purged more than 90 days before the backfill runs can never get a
+marker, so its participants are refused in the product for good and told to
+"try again"** — a trade-off made in code that wants Basile's explicit sign-off;
+a device clock more than 5 s fast is still refused; and **a session whose
+`created/at` or `closed/at` is dated in the future is never purged** — the
+rules bound neither, and the purge was run to confirm it.
 
 **Three traps met on the way:**
 1. **The ops scripts can be RUN in a test.** `tests/fixtures/run-ops-script.js`

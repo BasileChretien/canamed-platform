@@ -99,6 +99,35 @@ test("an erasure record answers only a request made BEFORE it", () => {
   assert.strictEqual(pendingErasures(again, twice.slice().reverse(), NOW).handled, 1);
 });
 
+test("a record answers the request it was written for — matched by that request's own date, not by comparing clocks", () => {
+  /* The record's date is the operator's clock; the request's is the
+     participant's device, and the rules let it be up to a day behind the
+     server. "Record dated at or after the request" therefore called a second
+     request answered whenever its device was slow enough — and the purge then
+     deleted it. A record written from 2026-10-07 on carries `requestAt`, the
+     `at` of the request it answers, and is matched on that alone. */
+  const T1 = ago(10);
+  const stamped = (requestAt) => ({
+    locationKey: "ABC", uid: "u", at: new Date(T1).toISOString(), requestAt,
+  });
+  const HOUR = 3600000;
+
+  const answeredOne = { ABC: { u: { erasure: true, at: T1 - 5 * HOUR } } };
+  assert.strictEqual(pendingErasures(answeredOne, [stamped(T1 - 5 * HOUR)], NOW).handled, 1);
+
+  // A different request, whatever its date says relative to the record's.
+  for (const secondAt of [T1 - HOUR, T1 - 23 * HOUR, T1, T1 + HOUR]) {
+    const r = pendingErasures({ ABC: { u: { erasure: true, at: secondAt } } }, [stamped(T1 - 5 * HOUR)], NOW);
+    assert.deepStrictEqual([r.handled, r.pending.length], [0, 1],
+      "a request with at=" + (secondAt - T1) / HOUR + "h from the erasure was read as answered by it");
+  }
+  // A record written with no request in the queue (requestAt 0) answers none.
+  assert.strictEqual(pendingErasures(answeredOne, [stamped(0)], NOW).pending.length, 1);
+  // Answering the second request closes the second request.
+  const two = [stamped(T1 - 5 * HOUR), stamped(T1 - HOUR)];
+  assert.strictEqual(pendingErasures({ ABC: { u: { erasure: true, at: T1 - HOUR } } }, two, NOW).handled, 1);
+});
+
 test("a record with no readable date answers nothing that has one", () => {
   /* It cannot be shown to come after the request. Every record the tool writes
      is dated, so this is about data something else wrote — and the safe reading
@@ -468,6 +497,21 @@ test("the monitor says which open requests name a session that is not in the dat
   });
   assert.match(purgedOnly.text, /--research-copy-checked/);
   assert.doesNotMatch(purgedOnly.text, /--dismiss|backfill/);
+
+  /* A purged session whose code is in the database again is still a purged
+     session: the advice is to answer it, and the --dismiss hint — which is for
+     a session that was never purged — must not appear. */
+  const reoccupied = await monitor({
+    sessions: { "LIVE-1": { created: { at: ago(50) } }, "PURGED-1": { members: { stranger: { at: ago(0) } } } },
+    purgedSessions: { "PURGED-1": ago(35) },
+    withdrawals: { "PURGED-1": { uidB: request(40) } },
+  });
+  assert.strictEqual(reoccupied.code, 1);
+  assert.match(reoccupied.text, /1 of them name a session that has been purged/i);
+  assert.match(reoccupied.text, /--research-copy-checked/);
+  assert.doesNotMatch(reoccupied.text, /--dismiss/,
+    "the monitor sent the operator to --dismiss for a purged session");
+  assert.match(reoccupied.text, /in the database again/i);
 });
 
 test("the monitor prints no uid and no session code — its logs are public", async () => {
@@ -588,13 +632,16 @@ test("the queue tells a PURGED session from one nothing shows ever existed", () 
   assert.deepStrictEqual(q.sessionGone.map((p) => p.uid).sort(), ["b", "c", "d"]);
   assert.deepStrictEqual(q.noMarker.map((p) => p.uid), ["c"]);
 
-  /* A session that is back in the database (a restore, or a reused code) is
-     LIVE, whatever marker an earlier purge left: the live path can act on it. */
+  /* A code that is in the database AND carries a marker is both: something is
+     there now, and a session with that code was purged. The two facts are
+     independent — anyone can put a node under a purged code — so neither
+     hides the other. It is not "no marker", and it is not "not in the database". */
   const back = erasureQueue({
     withdrawals: { "BACK-1": { a: { erasure: true, at: ago(3) } } }, erasureRecords: [],
     liveLocationKeys: ["BACK-1"], purgedLocationKeys: ["BACK-1"], now: NOW,
   });
-  assert.deepStrictEqual([back.pending[0].sessionInDatabase, back.pending[0].sessionPurged], [true, false]);
+  assert.deepStrictEqual([back.pending[0].sessionInDatabase, back.pending[0].sessionPurged], [true, true]);
+  assert.deepStrictEqual([back.sessionGone.length, back.noMarker.length], [0, 0]);
 
   // Callers that pass no marker list get the old answer, not a crash.
   const old = erasureQueue({

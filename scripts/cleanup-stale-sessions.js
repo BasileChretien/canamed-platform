@@ -69,6 +69,7 @@ const { getDatabase } = require("firebase-admin/database");
 const {
   readSessionLocations,
   readSessionLocationsShallow,
+  hadSessionTimestamp,
   safeLabel
 } = require("./lib/session-trees");
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
@@ -484,7 +485,7 @@ async function purgeSessions(db, locations) {
         // `sessions/<any code>/members/<own uid>` without the session ever
         // having been created. A marker for that would be this job certifying
         // a made-up code.
-        if (typeof createdAt === "number" || typeof closedAt === "number") {
+        if (hadSessionTimestamp(createdAt, closedAt)) {
           purge[loc.purgedMarkerPath] = Date.now();
         }
 

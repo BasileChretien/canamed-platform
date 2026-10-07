@@ -3465,6 +3465,24 @@ now exists; that is not the same as the duty being discharged.
      which would need a change to the product's wording first. The marker
      holds a session code and a date and names nobody; it is still a
      retention period, and it is the Controller's to settle.
+   - **Sessions purged more than 90 days before the backfill are refused in
+     the product for good — a trade-off made in code, which the Controller has
+     not signed off.** The backfill can only rebuild a marker from a snapshot,
+     and the snapshots reach back 90 days. A participant of a session purged
+     before that has no marker and never will, so the history row's "Withdraw"
+     answers "Could not record your withdrawal — please try again, or contact
+     the facilitator", every time. "Try again" is wrong for them: it cannot
+     succeed. This sits badly beside the five-year marker above, which is
+     justified by a withdrawal still having an object for five years. The
+     alternatives are a change to the product's wording for that case (a
+     client change, and a shell version), or accepting a withdrawal for any
+     code again, which is the spoofable state this change closed. Until one
+     is chosen, those participants reach the human contact and nothing else.
+   - **A device whose clock is more than five seconds fast is still refused
+     its withdrawal.** Five seconds is the tolerance every timestamp rule in
+     the file has, and better than the none this rule had; it is not a
+     measured bound on real devices. The root is that the date on a request is
+     the device's and not the server's, which only a client change can alter.
    - **A record with neither a session nor a marker is never swept.** The
      sweep below acts only under a marker. A record written before the rule
      required one, for a session purged before the purge wrote markers, stays
@@ -3491,9 +3509,13 @@ now exists; that is not the same as the duty being discharged.
      is about one session, and is answered with `--uid` **and** `--session`:
      then only that session is touched, and nothing else of the account.
      `--uid` alone has always meant "this person, everywhere": it also erases
-     them from every session still in the database and deletes their whole
-     account record (`users/<uid>`, profile and history), whether or not they
-     asked about those. The tool now says so at the top of its plan, the
+     them from every session still in the database and, **when it finds them
+     in at least one such session**, deletes their whole account record
+     (`users/<uid>`, profile and history), whether or not they asked about
+     those. (When every session of theirs has been purged it finds none, and
+     the account record stays apart from the history rows of the purged
+     sessions it answers — an earlier wording here said "whole account
+     record" without that condition.) The tool now says so at the top of its plan, the
      monitor's failure message and the operator procedure name `--session`,
      and an argument the tool does not recognise stops the run — a mistyped
      `--session` used to be ignored, which made it a run on everything.
@@ -3505,11 +3527,21 @@ now exists; that is not the same as the duty being discharged.
      uid, and with the session gone the tool cannot find it. If the operator
      has the client id, `--client-id` alongside `--uid` carries it into the
      record and the restore strips that row too.
-     *"Answered" has a date.* A request counts as answered only by a record
-     dated at or after it. The ledger is never deleted, so matching on person
-     and session alone meant a second request — erased, back in the same
-     session on the same account, new work, asks again — was answered before
-     it was made: never shown by the monitor, and deleted by the purge.
+     *"Answered" means this request, not this person.* The ledger is never
+     deleted, so matching on person and session alone meant a second request —
+     erased, back in the same session on the same account, new work, asks
+     again — was answered before it was made: never shown by the monitor, and
+     deleted by the purge. The first fix compared dates: a record answered a
+     request dated at or before it. ⚠️ **That compared two clocks, and the
+     review of this change showed it failing.** The record's date is the
+     operator's machine; the request's is the participant's device, which the
+     rule accepts up to a day slow. A second request from a device two hours
+     behind, an hour after an erasure, read as already answered — and the next
+     purge deleted it. The tool now copies the request's own date into the
+     record it writes (`requestAt`), and a request is answered only by a
+     record carrying its date. A record with no such stamp — every one written
+     before this change — still answers by the old comparison, since nothing
+     else is known about it.
      *What it will not do:* write a record for a session that has **no**
      marker. `erasures/` is never deleted, so it must not fill with records
      for sessions nothing shows ever existed. It reports such a request and
@@ -3526,6 +3558,19 @@ now exists; that is not the same as the duty being discharged.
      for anyone with data in a live session. ⚠️ A dismissal leaves **no trace
      in the database**; the reason is printed and the operator's own register
      is the record of it.
+     ⚠️ **"Refused under a marker" was false in one state until the review of
+     this change found it.** The tool looked for the marker only when the
+     session was *not* in the database, and any signed-in visitor can put a
+     node back under a purged code (their own membership row is enough). With
+     that one write in place the tool could no longer answer the request —
+     "Nothing to erase", exit 3 — the monitor's advice was to dismiss it, and
+     `--dismiss` then deleted it: a legal request closed unanswered, by an
+     operator following the tool's own instructions, with the participant
+     still in every snapshot. The marker now decides, whatever is in the
+     database: under a marker the request is answered with a suppression
+     record and never dismissed, and the tool and the monitor both say when
+     the code is in use again. The live session under that code, if it is one,
+     is a different session and is handled as any live session is.
      *Found on the way:* the tool never ended after a successful erasure of a
      live session. It set an exit code and returned, and the database
      connection holds the process open; the check meant to catch that reads
@@ -3674,6 +3719,19 @@ now exists; that is not the same as the duty being discharged.
      **or** the code carries a marker, in both rule trees, each addressing its
      own; and `at` must be no more than 24 hours behind the server's clock and
      no more than 5 seconds ahead of it.
+     ⚠️ **"Cannot be back-dated" was not true of a write to one field, and the
+     review of this change found it.** The window sat on the `at` field. A
+     rule of that kind is checked for the field being written and for what
+     contains it, never for the field beside it — so writing `erasure: true`
+     on its own, onto a withdrawal recorded forty days earlier, was judged
+     without the date being looked at. A bare withdrawal is invisible to the
+     monitor; that one write turned it into an erasure request that was forty
+     days old, and overdue, the first time anyone could see it. The window is
+     now on the record as a whole, in both trees: any write under it is judged
+     against the date the record will then carry. The product writes the whole
+     record with the current date, so nothing it does is affected; someone
+     adding an erasure request to an old withdrawal gets a request dated the
+     day they made it.
      ⚠️ **The first version of this rule did not do what this paragraph said,
      and the independent review caught it before it left the branch.** It
      tested whether *anything* existed under the code. Any signed-in visitor
@@ -3725,7 +3783,15 @@ now exists; that is not the same as the duty being discharged.
      until the markers are rebuilt from the nightly snapshots:
      `scripts/backfill-purged-markers.js`, run once by hand, dry-run by
      default, **before or with the deploy of the rule**. It reaches back as far
-     as the snapshots do (90 days) and no further. (iii) Records already in the
+     as the snapshots do (90 days) and no further — see "Sessions purged more
+     than 90 days before the backfill" under the open points, which wants a
+     decision. It marks only what the purge itself would have marked: a node
+     that had a `created` or `closed` timestamp in some snapshot. (Until the
+     review of this change it marked every key a snapshot held, and a
+     visitor's membership row under a made-up code is in the snapshot like
+     everything else — so the backfill handed such a code the marker the purge
+     had just refused it. The purge and the backfill now share one definition
+     of "this was a session".) (iii) Records already in the
      database that have neither a session nor a marker are still counted by the
      monitor, which now says how many there are; it cannot say whether one is a
      real request for a session purged long ago or something written for a
@@ -3738,7 +3804,10 @@ now exists; that is not the same as the duty being discharged.
      where: the emulator test failed against the original rule and passed
      against the first version of the new one; the `created` check, the
      reserved key and the five-second tolerance were added after that run and
-     are exercised by the pull request's own emulator job, not by a local run.
+     were first exercised by the pull request's own emulator job, where they
+     passed. The one-field case ("an old withdrawal cannot be turned into a
+     request that is already overdue") was written after the review and has
+     likewise been run only by that job, never locally.
    ⚠️ **Three conditions on the route itself.** (a) The participant has to be
    signed in to the SAME account: the row is not shown to an anonymous
    visitor, and the history is keyed by the account. (b) Deleting the account

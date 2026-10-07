@@ -89,13 +89,45 @@ test("shallowKeysOf treats only a genuinely empty node as empty", () => {
 });
 
 test("shallowKeysOf throws on anything else rather than reporting nothing", () => {
-  for (const bad of [true, false, 0, 42, "", "oops", ["A"]]) {
+  for (const bad of [true, false, 0, 42, "", "oops", ["A"], [], [null], [null, null], [{ a: 1 }], [true, "A"]]) {
     assert.throws(
       () => shallowKeysOf(bad, "sessions"),
       /expected an object of keys or null/,
       "shallowKeysOf(" + JSON.stringify(bad) + ") must throw, not return []"
     );
   }
+});
+
+test("a node whose keys are all small integers is still a list of keys", () => {
+  /* RTDB renders a node keyed 0, 1, 2… as an ARRAY over REST, with null in the
+     gaps. A session code is chosen by whoever writes under it, and any
+     signed-in visitor can write their own membership row under
+     `orgs/<any slug>/sessions/0`. If that listing came back as `[true]` and
+     this threw, ONE such write would stop the retention purge, the data-rights
+     monitor and the marker backfill — every job that lists sessions this way —
+     until somebody deleted the node by hand. Whether a `?shallow=true` listing
+     really comes back as an array was not established (review of #437), so
+     both shapes are read. Only the array a listing could be: `true` where a
+     key exists, null where none does, and at least one `true`. */
+  assert.deepStrictEqual(shallowKeysOf([true], "orgs/x/sessions"), ["0"]);
+  assert.deepStrictEqual(shallowKeysOf([true, null, true], "orgs/x/sessions"), ["0", "2"]);
+  assert.deepStrictEqual(shallowKeysOf([null, true], "orgs/x/sessions"), ["1"]);
+  assert.deepStrictEqual(shallowKeysOf({ 0: true, 2: true }, "orgs/x/sessions"), ["0", "2"]);
+});
+
+test("an organisation whose session codes are all integers is enumerated, not fatal", async () => {
+  const bodies = {
+    sessions: { "ABC-1": true },
+    orgs: { "uni-x": true },
+    "orgs/uni-x/sessions": [true, null, true],
+  };
+  const locations = await readSessionLocationsShallow({
+    fetchShallow: async (p) => (p in bodies ? bodies[p] : null),
+  });
+  assert.deepStrictEqual(locations.map((l) => l.key).sort(),
+    ["ABC-1", "orgs/uni-x/0", "orgs/uni-x/2"]);
+  assert.deepStrictEqual(locations.find((l) => l.key === "orgs/uni-x/2").path,
+    "orgs/uni-x/sessions/2");
 });
 
 test("a failing fetch propagates instead of yielding an empty session list", async () => {

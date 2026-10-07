@@ -298,6 +298,26 @@ test("a second request, made after the person was already erased once, is a new 
   assert.strictEqual((await monitor(r.tree, C + 41 * DAY)).code, 1, "and it turns late on its own 30th day");
 });
 
+test("a second request dated BEFORE the first erasure is still a request, and the purge keeps it", async () => {
+  /* The review's reproduction. Erased at T1; an hour later the same person
+     asks again from a device two hours slow, so the request is dated an hour
+     before the erasure. Compared by date it was "answered", shown by nothing,
+     and deleted by this purge. The record now names the request it answers. */
+  const T1 = C + 2 * DAY;
+  const tree = {
+    sessions: { "S-1": closedAt(C) },
+    withdrawals: { "S-1": { u: request(T1 - HOUR) } },
+    erasures: { e1: { at: new Date(T1).toISOString(), records: [
+      { locationKey: "S-1", uid: "u", at: new Date(T1).toISOString(), requestAt: C + DAY },
+    ] } },
+  };
+  assert.deepStrictEqual((await monitor(tree, C + 5 * DAY)).open, 1, "the monitor does not show the new request");
+  const r = purge(tree, C + 31 * DAY);
+  assert.strictEqual(at(r.tree, "sessions/S-1"), null, "positive control: purged");
+  assert.deepStrictEqual(at(r.tree, "withdrawals/S-1/u"), request(T1 - HOUR),
+    "the purge deleted a request nobody answered");
+});
+
 test("the purge reads the erasure ledger only when the session it purges holds a request", () => {
   /* The ledger is account identifiers and dates, read onto a hosted runner.
      A session with no erasure request under it gives no reason to read it —

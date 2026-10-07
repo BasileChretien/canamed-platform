@@ -86,6 +86,7 @@ test("a request for a purged session is carried out: the record is written, and 
   assert.deepStrictEqual(recs[0], {
     locationKey: "GONE-1", uid: "uidA",
     at: new Date(NOW).toISOString(), reason: "Art. 17 request",
+    requestAt: ago(45),
     sessionPurged: true, researchCopyChecked: true,
   }, "RTDB stores no empty arrays, so a uid-only record has no clientIds / stableIds");
 
@@ -190,8 +191,19 @@ test("two runs leave two ledger entries, and the second request is answered by t
   const first = erase(tree, ["--uid", "uidA", "--session", "GONE-1", ATTEST], LIVE);
   assert.strictEqual(Object.keys(first.tree.erasures).length, 1);
 
+  /* The second request carries a date EARLIER than the first erasure — a
+     device whose clock is slow, or simply an `at` chosen inside the 24 hours
+     the rule allows. Comparing its date with the record's would call it
+     answered. It is a different request: its own date differs from the one
+     the first record was written for. (Review finding B3.) */
   const later = JSON.parse(JSON.stringify(first.tree));
-  later.withdrawals = { "GONE-1": { uidA: { research: false, erasure: true, at: NOW + 2 * DAY } } };
+  later.withdrawals = { "GONE-1": { uidA: { research: false, erasure: true, at: NOW - 3600000 } } };
+  const pendingAgain = erasureQueue({
+    withdrawals: later.withdrawals, erasureRecords: records(later),
+    liveLocationKeys: ["LIVE-1"], purgedLocationKeys: ["GONE-1"], now: NOW + 3 * DAY,
+  });
+  assert.deepStrictEqual([pendingAgain.pending.length, pendingAgain.handled], [1, 0],
+    "a request dated before the last erasure was read as already answered");
   const second = runOpsScript("erase-participant.js", {
     tree: later, now: NOW + 3 * DAY,
     args: ["--uid", "uidA", "--session", "GONE-1", ATTEST], env: LIVE,
@@ -220,6 +232,81 @@ test("the tool as it stood is what this replaces: no record, exit 0", () => {
   assert.match(r.out, /backfill-purged-markers\.js/);
   assert.match(r.out, /--dismiss/);
   assert.deepStrictEqual(r.tree, tree, "nothing may be written");
+});
+
+// ------------------------------ purged, and its code is in the database again
+
+/* A purge marker says a session with this code was purged; the snapshots
+   still hold it. If something sits under `sessions/<code>` again, that does
+   not un-purge it — and anyone can put something there: a signed-in visitor
+   may write their own membership row under ANY code, and a `created` record
+   dated in the future is never purged. The tool used to skip every key that
+   is in the database, so for such a code it said "Nothing to erase … NOT
+   ACTED ON" and pointed at --dismiss; --dismiss looked for the marker only
+   when the session was absent, so it deleted the request with no suppression
+   record. The monitor went green and a restore brought the person back.
+   Found by the independent review of this change (its B1). */
+
+const reoccupied = (how) => {
+  const tree = purgedTree();
+  tree.sessions["GONE-1"] = how === "stranger"
+    ? { members: { uidStranger: { at: ago(0.01) } } }
+    : { created: { by: "x", at: NOW + 3650 * DAY } };
+  return tree;
+};
+
+for (const how of ["stranger", "future-dated created"]) {
+  test("a request for a purged session is still ANSWERED when its code is in the database again (" + how + ")", () => {
+    const before = reoccupied(how);
+
+    const dismissed = erase(before,
+      ["--uid", "uidA", "--session", "GONE-1", "--dismiss", "--reason", "nothing to erase"], LIVE);
+    assert.strictEqual(dismissed.code, 2, "--dismiss must be refused under a purge marker:\n" + dismissed.out);
+    assert.deepStrictEqual(dismissed.tree, before, "the request was deleted without being answered");
+
+    const dry = erase(before, ["--uid", "uidA", "--session", "GONE-1"]);
+    assert.doesNotMatch(dry.out, /--dismiss/, "the tool must not point at --dismiss for a purged session");
+    assert.match(dry.out, /--research-copy-checked/);
+
+    const r = erase(before, ["--uid", "uidA", "--session", "GONE-1", "--reason", "art17", ATTEST], LIVE);
+    assert.strictEqual(r.code, 0, r.out);
+    const recs = records(r.tree);
+    assert.deepStrictEqual(recs.map((x) => [x.locationKey, x.uid, x.sessionPurged, x.requestAt]),
+      [["GONE-1", "uidA", true, ago(45)]]);
+    assert.deepStrictEqual(r.tree.sessions, before.sessions, "whatever sits under the code now is not theirs");
+
+    // What it is for: a restore of the pre-purge snapshot leaves them out.
+    const restored = applySuppression(
+      { backupTakenAt: "x", sessions: { "GONE-1": sessionAsArchived() } }, recs).payload.sessions["GONE-1"];
+    assert.deepStrictEqual(Object.keys(restored.pool), ["c3"]);
+    // And the monitor's queue has nothing left open.
+    const q = erasureQueue({
+      withdrawals: r.tree.withdrawals, erasureRecords: recs,
+      liveLocationKeys: Object.keys(r.tree.sessions), purgedLocationKeys: ["GONE-1"], now: NOW,
+    });
+    assert.deepStrictEqual([q.pending.length, q.handled], [0, 1]);
+  });
+}
+
+test("a purged code that is a real session again: one record, the live work erased, and still the attestation", () => {
+  /* A restore, or a code allocated twice. The person is in the session that is
+     there now, and was in the one that was purged. One answer covers both: the
+     live path's record is re-resolved against every snapshot, old and new. */
+  const tree = purgedTree();
+  tree.sessions["GONE-1"] = {
+    created: { at: ago(3) }, clientMapping: { cNew: "uidA" }, pool: { cNew: { name: "Asker" } },
+  };
+  const refused = erase(tree, ["--uid", "uidA", "--session", "GONE-1"], LIVE);
+  assert.strictEqual(refused.code, 2, "a purged incarnation exists: the research copy still has to be vouched for");
+  assert.deepStrictEqual(refused.tree, tree);
+
+  const r = erase(tree, ["--uid", "uidA", "--session", "GONE-1", ATTEST], LIVE);
+  assert.strictEqual(r.code, 0, r.out);
+  assert.strictEqual(at(r.tree, "sessions/GONE-1/pool"), null);
+  const recs = records(r.tree);
+  assert.strictEqual(recs.length, 1, "one request, one record");
+  assert.deepStrictEqual([recs[0].locationKey, recs[0].uid, recs[0].clientIds, recs[0].requestAt],
+    ["GONE-1", "uidA", ["cNew"], ago(45)]);
 });
 
 // ---------------------------------------------------------- how it is asked
@@ -401,6 +488,12 @@ test("a session that is in the database is erased as before, needs no attestatio
   const r = erase(before, ["--uid", "uidA", "--reason", "Art. 17 request"], LIVE);
   assert.strictEqual(r.code, 0, r.out);
   assert.strictEqual(records(r.tree)[0].reason, "Art. 17 request");
+  assert.strictEqual(records(r.tree)[0].requestAt, before.withdrawals["LIVE-1"].uidA.at,
+    "the record must name the request it answers, by that request's own date");
+  // With no request in the queue (an erasure asked for by other means): 0.
+  const unasked = liveTree();
+  delete unasked.withdrawals;
+  assert.strictEqual(records(erase(unasked, ["--uid", "uidA"], LIVE).tree)[0].requestAt, 0);
   assert.deepStrictEqual(at(r.tree, "sessions/LIVE-1/pool"), { c3: before.sessions["LIVE-1"].pool.c3 });
   assert.deepStrictEqual(at(r.tree, "sessions/LIVE-1/members"), { uidB: true });
   assert.deepStrictEqual(Object.keys(at(r.tree, "rosters/sessions/LIVE-1")), ["uidB"]);
@@ -586,13 +679,22 @@ test("a suppression record for a purged session is uid-only and says so", () => 
   });
   assert.deepStrictEqual(rec, {
     locationKey: "GONE-1", uid: "uidA", clientIds: [], stableIds: [],
-    at: "2026-10-07T00:00:00.000Z", reason: "erasure request",
+    at: "2026-10-07T00:00:00.000Z", reason: "erasure request", requestAt: 0,
     sessionPurged: true, researchCopyChecked: true,
   });
-  // The ordinary record is unchanged: no new keys appear on it.
+  /* Every record carries `requestAt`: the `at` of the request it answers, or 0
+     when it was written with no request in the queue. Its PRESENCE is what
+     tells a record that is matched to a request by that stamp from an older
+     one that can only be compared by date. */
   const live = buildRecord({ locationKey: "L", identity: { uid: "u", clientIds: ["c"] }, at: "t" });
   assert.deepStrictEqual(Object.keys(live).sort(),
-    ["at", "clientIds", "locationKey", "reason", "stableIds", "uid"]);
+    ["at", "clientIds", "locationKey", "reason", "requestAt", "stableIds", "uid"]);
+  assert.strictEqual(live.requestAt, 0);
+  assert.strictEqual(buildRecord({ locationKey: "L", identity: { uid: "u" }, at: "t", requestAt: 1234 }).requestAt, 1234);
+  for (const bad of [-1, 1.5, "1234", NaN, Infinity]) {
+    assert.throws(() => buildRecord({ locationKey: "L", identity: { uid: "u" }, at: "t", requestAt: bad }),
+      /requestAt/, "requestAt=" + String(bad));
+  }
   // A purged-session record needs the uid: there is no session to resolve a
   // clientId against, and the request queue is keyed by uid.
   assert.throws(() => buildRecord({

@@ -143,6 +143,33 @@ test("the request's date is the server's, to within a day", () => {
   }
 });
 
+test("the date is judged on the RECORD, so one field cannot be added to an old one", () => {
+  /* A `.validate` runs for the node being written and for its ancestors — not
+     for its siblings. With the window on the `at` child alone, writing
+     `…/erasure = true` on its own never looked at the date: a bare withdrawal
+     recorded on day 0 (which the monitor ignores) became, on day 40, an
+     erasure request that was "40 days old" the first time anyone could see it.
+     One write, the monitor red, for a request that was never open. (Review
+     finding B2; tests-e2e/emulator/pool-stale-at-rules.spec.js records the
+     same mechanism on another node.)
+
+     So the window is on the record: any write under it — whole or one field —
+     is judged against the date the record will then carry. The client writes
+     the whole record with today's date, so nothing it does changes. What the
+     rule really does is the emulator suite's to show ("an old withdrawal
+     cannot be turned into a request that is already overdue"). */
+  const WINDOW = "newData.child('at').val() <= now + 5000 && newData.child('at').val() >= now - 86400000";
+  for (const [label, get] of LEAVES) {
+    assert.strictEqual(get()[".validate"],
+      "newData.hasChildren(['research','at']) && newData.child('at').isNumber() && " + WINDOW,
+      `${label}: a write to one field of the record is not judged against its date`);
+    /* The same window as the field's own rule — two copies, so they are held
+       together here rather than left to drift. */
+    assert.strictEqual(get().at[".validate"],
+      "newData.isNumber() && " + WINDOW.split("newData.child('at').val()").join("newData.val()"), label);
+  }
+});
+
 test("a device clock a few seconds fast does not cost someone their withdrawal", () => {
   /* The client stamps the record with its own clock. Every other timestamp
      rule in this file allows five seconds of lead for exactly that reason;

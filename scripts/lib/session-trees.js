@@ -211,6 +211,33 @@ function asKeyed(v) {
 }
 
 /**
+ * WAS THIS EVER A SESSION? Only if it had a `created/at` or a `closed/at`.
+ *
+ * Something under `sessions/<code>` is not evidence of a session: any signed-in
+ * visitor may write their own membership row under any code, created or not.
+ * `created` is written by whoever creates a session and `closed` by its
+ * administrator. ONE definition, used by the purge (which leaves a marker
+ * only for a session) and by the marker backfill (which rebuilds exactly the
+ * markers the purge would have left) — they disagreed once, and the backfill
+ * handed a made-up code the five-year marker the purge had just refused it.
+ *
+ * @param {*} createdAt value of `created/at`
+ * @param {*} closedAt  value of `closed/at`
+ */
+function hadSessionTimestamp(createdAt, closedAt) {
+  return typeof createdAt === "number" || typeof closedAt === "number";
+}
+
+/** The same question of a whole session body, as a snapshot holds it. */
+function bodyWasSession(body) {
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  if (!isObj(body)) return false;
+  return hadSessionTimestamp(
+    isObj(body.created) ? body.created.at : undefined,
+    isObj(body.closed) ? body.closed.at : undefined);
+}
+
+/**
  * The location a KEY names, whether or not that session is in the database.
  *
  * Needed by everything that starts from a record rather than from a session:
@@ -300,9 +327,24 @@ async function readSessionLocations(db) {
  * deleted again — a storage-limitation breach that is invisible in the logs.
  * So anything that is not a genuine empty node THROWS. `null` is the one
  * legitimate empty: that is what RTDB returns for a path with no children.
+ *
+ * AN ARRAY IS A LISTING TOO, when it is the array a listing could be. RTDB
+ * renders a node keyed 0, 1, 2… as an array over REST, null in the gaps, and
+ * a key is chosen by whoever writes under it: any signed-in visitor can put
+ * their own membership row under `orgs/<any slug>/sessions/0`. Whether a
+ * `?shallow=true` listing really comes back as an array was not established
+ * when this was written — the emulator suite records what the emulator does
+ * ("a listing of integer keys") — so both shapes are read rather than letting
+ * one write stop every job that lists sessions. Accepted only as `true` where
+ * a key exists and null where none does, with at least one key: an empty or
+ * all-null array is not something a listing produces, and still throws.
  */
 function shallowKeysOf(body, path) {
   if (body === null || body === undefined) return [];
+  if (Array.isArray(body) && body.length > 0
+      && body.every((v) => v === true || v === null) && body.some((v) => v === true)) {
+    return body.map((v, i) => (v === true ? String(i) : null)).filter((k) => k !== null);
+  }
   if (typeof body !== "object" || Array.isArray(body)) {
     throw new Error(
       "shallow read of '" + path + "' returned " + typeof body +
@@ -419,6 +461,8 @@ module.exports = {
   sessionLocations,
   sessionLocationsFromKeys,
   withdrawalLocations,
+  hadSessionTimestamp,
+  bodyWasSession,
   locationForKey,
   purgedMarkers,
   readSessionLocations,

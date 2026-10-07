@@ -90,6 +90,8 @@ function describeReasons() {
  *   so a caller cannot get a different plan by running it at a different time)
  * @param {string} [args.reason] a code or text from ERASURE_REASONS; anything
  *   else throws
+ * @param {number} [args.requestAt] the `at` of the request this answers; 0 or
+ *   omitted when there was none in the queue
  * @param {boolean} [args.sessionPurged] the session was no longer in the
  *   database when this was written. Nothing was deleted from the live tree —
  *   the purge had already done that for everyone — and the record carries the
@@ -100,9 +102,22 @@ function describeReasons() {
  *   operator stated that the participant is not in the research copy. The
  *   record cannot show that it is true, only that it was said.
  */
-function buildRecord({ locationKey, identity, at, reason, sessionPurged, researchCopyChecked }) {
+function buildRecord({ locationKey, identity, at, reason, requestAt, sessionPurged, researchCopyChecked }) {
   if (!locationKey) throw new Error("suppression record needs a locationKey");
   if (!at) throw new Error("suppression record needs an explicit `at`");
+  /* WHICH REQUEST THIS ANSWERS: the `at` of the withdrawal record it was
+     written for, copied — not compared. `at` above is the operator's clock;
+     a request's `at` is the participant's device, which the rules let run up
+     to a day behind the server. Deciding "answered" by comparing the two
+     called a second request answered whenever its device was slow enough,
+     and the purge then deleted it. 0 = written with no request in the queue.
+     ALWAYS present, so a record that is matched by this stamp can be told
+     from an older one that can only be compared by date. */
+  const stamp = requestAt === undefined || requestAt === null ? 0 : requestAt;
+  if (!Number.isSafeInteger(stamp) || stamp < 0) {
+    throw new Error("a suppression record's requestAt is the `at` of the request " +
+      "it answers (epoch ms), or 0 when there is none");
+  }
   const ids = identity || {};
   if (!ids.uid && !(ids.clientIds || []).length && !(ids.stableIds || []).length) {
     throw new Error(
@@ -128,6 +143,7 @@ function buildRecord({ locationKey, identity, at, reason, sessionPurged, researc
     stableIds: [...(ids.stableIds || [])].sort(),
     at,
     reason: why,
+    requestAt: stamp,
   };
   /* Added only when true, so an ordinary record keeps exactly the shape it
      has always had. */

@@ -141,6 +141,10 @@ async function run(db, opts) {
   if (noMarker.length) {
     out(`    of which with no purge marker: ${noMarker.length}`);
   }
+  const reoccupied = pending.filter((p) => p.sessionInDatabase && p.sessionPurged).length;
+  if (reoccupied) {
+    out(`  session purged, its code in the database again: ${reoccupied}`);
+  }
   out(`Deadline:                ${DEADLINE} days (Art. 12(3)); warn at ${WARN}`);
 
   /* Records whose `reason` is text somebody typed. Until 2026-10-07 the
@@ -163,7 +167,8 @@ async function run(db, opts) {
     const age = p.ageDays === null ? "undated" : `${p.ageDays}d`;
     const flag = p.overdue ? "OVERDUE" : (p.ageDays !== null && p.ageDays >= WARN ? "due soon" : "open");
     out(`  - request age ${age} [${flag}]` +
-      (p.sessionInDatabase ? ""
+      (p.sessionInDatabase
+        ? (p.sessionPurged ? " (session purged; its code is in the database again)" : "")
         : p.sessionPurged ? " (session not in the database)"
           : " (session not in the database, no purge marker)"));
   }
@@ -187,6 +192,14 @@ async function run(db, opts) {
         "for a purged session nothing but you takes the participant out of " +
         "the research copy. Run it without ERASE_CONFIRM first and read what " +
         "it cannot reach.");
+      const again = overdue.filter((p) => p.sessionPurged && p.sessionInDatabase).length;
+      if (again) {
+        /* Anyone can put a node under a purged code. It does not un-purge the
+           session, and it must not turn "answer this" into "dismiss this". */
+        err(`For ${again} of those, something is in the database again under the ` +
+          "session's code. That changes nothing: the session that was purged is " +
+          "still in the snapshots, and the request is answered the same way.");
+      }
     }
     const untraced = overdue.filter((p) => !p.sessionInDatabase && !p.sessionPurged).length;
     if (untraced) {
@@ -198,7 +211,9 @@ async function run(db, opts) {
         "scripts/backfill-purged-markers.js; otherwise remove the request with " +
         "erase-participant.js --dismiss. See DPA Annex VI, G12.");
     }
-    if (overdue.some((p) => p.sessionInDatabase)) {
+    /* Only for a session that was never purged. Under a purge marker the tool
+       refuses --dismiss, and this must not send anyone to try. */
+    if (overdue.some((p) => p.sessionInDatabase && !p.sessionPurged)) {
       err("");
       err("If the tool answers \"Nothing to erase\" for a session that IS in the " +
         "database, the person has nothing left in it (already erased and asked " +
