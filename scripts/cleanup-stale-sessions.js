@@ -42,6 +42,13 @@
  * purged. Purging a session also removes its `adminSecrets/...` entry, which
  * lives outside the session subtree and nothing else cleans up.
  *
+ * TWO THINGS A PURGE DELIBERATELY LEAVES (2026-10-07):
+ *   - an erasure request nobody has answered yet (`withdrawals/<code>/<uid>`
+ *     with `erasure: true` and no matching record under `erasures/`). It used
+ *     to go with the session, unanswered. See lib/withdrawal-retention.js.
+ *   - a marker, `purgedSessions/<code>` = the time of the purge: the only
+ *     thing left that shows the session existed. A code and a date.
+ *
  * Output:
  *   one line per session in the report — KEEP / PURGE / DRY-RUN (unless CLEANUP_QUIET).
  *   "nothing to purge" is success. Exit codes:
@@ -65,6 +72,8 @@ const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
 const { readBackupMarker, backupGateReport } = require("./lib/backup-marker");
 const { runCleanupPasses } = require("./lib/cleanup-passes");
+const { answeredKeys, flattenErasures } = require("./lib/data-rights");
+const { planPurgedSessionWithdrawals } = require("./lib/withdrawal-retention");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -239,6 +248,30 @@ async function main() {
    blocks, so it must stay the only place a session is deleted from. */
 async function purgeSessions(db, locations) {
   let kept = 0, purged = 0, errors = 0;
+
+  /* Which erasure requests have been answered — the `erasures` ledger, read
+     ONCE and only when a session is actually about to be purged (a dry run,
+     or a night with nothing due, reads no identifier at all). If it cannot be
+     read, nothing can be shown to be answered: every request is then kept,
+     the purge itself still happens, and the run is marked failed — an
+     unreadable ledger is also a restore that would refuse to run. */
+  let requestsKept = 0;
+  let answered;                       // undefined = not read yet; null = unreadable
+  async function answeredRequests() {
+    if (answered !== undefined) return answered;
+    try {
+      const snap = await db.ref("erasures").once("value");
+      answered = answeredKeys(flattenErasures(snap.val()));
+    } catch (e) {
+      answered = null;
+      errors++;
+      console.error("ERROR    could not read the erasure ledger: " +
+        (QUIET ? (e && e.code ? e.code : "error") : (e && e.message)) +
+        " — every erasure request is being kept.");
+    }
+    return answered;
+  }
+
   for (const loc of locations) {
     const label = safeLabel(loc, QUIET);
     try {
@@ -318,16 +351,26 @@ async function purgeSessions(db, locations) {
         // what after the words themselves were deleted, which is the worse
         // half to retain.
         purge[loc.roomChatAuthorsPath] = null;
-        // ⚠️ Withdrawal records (withdrawals/<code>/<uid>). These were added
-        // on 2026-09-03 for GDPR Art. 7(3) and NOTHING purged them — a
-        // retention gap introduced by that change and caught here. They
-        // exist to keep a participant out of the research export, and the
+        // ⚠️ Withdrawal records (withdrawals/<code>/<uid>) — ALL BUT ONE KIND.
+        // A record keeps a participant out of the research export, and the
         // export only ever reads LIVE sessions, so once the session is gone
-        // the record protects nothing and is just a retained fact about a
-        // person. NB this is the opposite of the `erasures/` suppression
-        // records, which must OUTLIVE the snapshots they suppress and are
-        // deliberately not purged here.
-        purge[loc.withdrawalsPath] = null;
+        // that protects nothing and the record is just a retained fact about
+        // a person: it goes. But a record with `erasure: true` is also a
+        // REQUEST with a legal time limit, and until 2026-10-07 this line
+        // deleted the whole branch — so a request nobody had answered was
+        // removed with its session, usually before the monitor's 30 days were
+        // up and always without an erasure record. An unanswered request now
+        // STAYS, where the monitor keeps counting it; everything else goes as
+        // before. See lib/withdrawal-retention.js for the measured cases.
+        //
+        // The branch is read here, inside the try: if it cannot be read the
+        // session is not purged tonight (the update is all-or-nothing) rather
+        // than purged blind. NB `erasures/` itself is never deleted from — it
+        // must OUTLIVE the snapshots it suppresses.
+        const withdrawalsSnap = await db.ref(loc.withdrawalsPath).once("value");
+        const records = planPurgedSessionWithdrawals(
+          withdrawalsSnap.val(), loc.key, await answeredRequests());
+        for (const uid of records.deleteUids) purge[`${loc.withdrawalsPath}/${uid}`] = null;
         // Certificate-id map (certIds/<code>): another out-of-cascade top-level
         // tree, so it needs the same explicit purge or it orphans a map of
         // published cert ids after its session is gone. A no-op on deployments
@@ -360,6 +403,7 @@ async function purgeSessions(db, locations) {
         purge[loc.purgedMarkerPath] = Date.now();
 
         await db.ref().update(purge);
+        requestsKept += records.keptUids.length;
       }
       if (verdict === "PURGE") purged++;
       else kept++;
@@ -370,6 +414,13 @@ async function purgeSessions(db, locations) {
       // which includes the session code. Use the error code only.
       console.error(`ERROR    ${label}  ${QUIET ? (e && e.code ? e.code : "error") : (e && e.message)}`);
     }
+  }
+
+  if (requestsKept > 0) {
+    /* A count, never whose. These are now the data-rights monitor's to chase. */
+    console.log("");
+    console.log(`Erasure requests kept past their session: ${requestsKept} ` +
+      "(unanswered — see scripts/data-rights-monitor.js).");
   }
 
   return { kept, purged, errors };

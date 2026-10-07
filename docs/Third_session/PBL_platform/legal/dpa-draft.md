@@ -3394,17 +3394,67 @@ now exists; that is not the same as the duty being discharged.
    - **The record has no end of life.** `withdrawals/<code>` is deleted only in
      the update that deletes its session, so a record written afterwards is
      kept indefinitely: a uid, a session code and a date.
+   - **The participant notice does not list what the daily jobs read of these
+     records — found 2026-10-07, open.** `privacy.html` section 6 (PIS v11,
+     EN/FR/JA) says the jobs that run every day read "a list of session
+     identifiers and, for each session, the two dates that decide when it is
+     deleted; one also reads the certificate records". The data-rights
+     monitor has read withdrawal records and the whole `erasures` tree every
+     day since it was added (2026-09-03): the account identifier, the session
+     code and the date of people who have asked for erasure or been erased, on
+     a GitHub-hosted runner in the United States. The purge job now reads the
+     same on a night when it purges a session with such records. That is
+     personal data reaching a recipient the notice names, described there as
+     less than it is. Not corrected here: the notice is twelve surfaces in
+     eight languages with its own version, and a revision of it (PIS v12) is
+     open elsewhere.
    - **Marker lifetime — new, and open.** The purge marker described below
      (`purgedSessions/<code>`) is written and, as of this change, never
      deleted. It holds no participant identifier, but it is a new record with
      no end of life.
-   - **Related, and older than this change (by reading, not reproduced): a
-     request made after a session has closed can be deleted unanswered.** The
-     purge removes `withdrawals/<code>` together with the session, 30 days
-     after it closes, and the monitor's limit is also 30 days — so such a
-     request is always younger than the limit when the purge deletes it, and
-     never turns the job red.
    **Closed since, in code — none of it true in production until deployed:**
+   - **The purge no longer deletes an erasure request nobody has answered**
+     (2026-10-07). *What was wrong, now measured rather than read:* the purge
+     removed `withdrawals/<code>` whole, in the update that deletes the
+     session. Run on the real schedule — purge at 03:17 UTC, monitor at 04:11 —
+     against an in-memory database, that deleted **any** unanswered request,
+     whenever it had been made, and the earlier wording here ("a request made
+     after a session has closed") understated it:
+
+     | request made | monitor runs that were red | at the purge |
+     | --- | --- | --- |
+     | 10 minutes after the session closed | 0 | deleted |
+     | 20 days after it closed | 0 | deleted |
+     | 2 hours **before** it closed | 0 | deleted |
+     | 5 days before it closed | 5 | deleted — the job went green by itself |
+     | day 70 of a session that was never closed | 0 | deleted |
+
+     No erasure record existed in any of them, so the nightly snapshots had
+     nothing telling a restore to leave the participant out. (One narrow
+     exception to "never red": a session closed, and a request made, both
+     between 03:17 and 04:11 UTC gave a single red run the day before the
+     purge.)
+     *What changed:* when the purge removes a session it keeps a withdrawal
+     record that carries `erasure: true` and has no matching record under
+     `erasures/`, and deletes the rest as before — a withdrawal with no erasure
+     ask, and a request already answered. A kept request has **no time limit**:
+     it stays, and stays red in the monitor from its 30th day, until an
+     operator acts on it. "Answered" is one function shared by the purge and
+     the monitor, so the purge cannot delete something the monitor is counting.
+     If the session's withdrawal records cannot be read, that session is not
+     purged that night; if the erasure ledger cannot be read, the session is
+     purged, every request is kept, and the run fails.
+     ⚠️ **What this does NOT do.** It keeps the request; it does not carry it
+     out. The participant's work in the live database is deleted by the purge
+     like everyone else's, but until an operator acts there is still no
+     suppression record for the snapshots. And the purge job now reads
+     `withdrawals/<code>` for a session it is purging, and the `erasures`
+     ledger — participant identifiers and dates, on the same hosted runner the
+     monitor already reads them on, and only on a night when something is
+     actually purged.
+     `Verify:` `node --test tests/withdrawal-retention.test.js`, which runs the
+     real purge script night after night and then the monitor on what it
+     leaves; it was red against the purge as it stood.
    - **A record can no longer be made for a code that never existed, or
      back-dated** (2026-10-07). *What was wrong:* the rule on
      `withdrawals/<code>/<uid>` looked at the uid and nothing else, so any
