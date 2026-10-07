@@ -3362,8 +3362,10 @@ now exists; that is not the same as the duty being discharged.
    and a job now WATCHES it. Nothing else happens by itself — do not read this
    as "the withdrawal is carried out".** What is true, and what shows it:
    - *The record is written.* `withdrawals/<code>/<uid>` is writable by its
-     owner whether or not `sessions/<code>` still exists, and the page then
-     says the deletion request is recorded.
+     owner when `sessions/<code>` no longer exists, **provided the purge left
+     its marker for that session** (see "Closed since" below — until
+     2026-10-07 the rule did not look at the session at all), and the page
+     then says the deletion request is recorded.
    - *The monitor counts it* — since the same change, and only since then.
      `scripts/data-rights-monitor.js` used to read `withdrawals/<code>` only
      for the sessions it found in the database, so this request was never
@@ -3373,7 +3375,8 @@ now exists; that is not the same as the duty being discharged.
      session, on the strength of a test that only read the record back.) The
      monitor now reads the whole `withdrawals` tree, flags a request in its log
      at 21 days, fails at 30, and says how many open requests name a session
-     that is not in the database.
+     that is not in the database — and, of those, how many have no purge
+     marker either.
    `Verify:` `node --test tests/data-rights.test.js`, which RUNS the monitor
    against a stand-in database and fails if the per-session read is put back;
    and `tests-e2e/emulator/account-delete.spec.js`, "a withdrawal made from
@@ -3391,16 +3394,61 @@ now exists; that is not the same as the duty being discharged.
    - **The record has no end of life.** `withdrawals/<code>` is deleted only in
      the update that deletes its session, so a record written afterwards is
      kept indefinitely: a uid, a session code and a date.
-   - **It cannot be told from noise.** Any signed-in visitor, an anonymous one
-     included, may write a withdrawal record under ANY code for their own uid.
-     "Not in the database" therefore covers a purged session and a code that
-     never existed alike, and the monitor counts both.
+   - **Marker lifetime — new, and open.** The purge marker described below
+     (`purgedSessions/<code>`) is written and, as of this change, never
+     deleted. It holds no participant identifier, but it is a new record with
+     no end of life.
    - **Related, and older than this change (by reading, not reproduced): a
      request made after a session has closed can be deleted unanswered.** The
      purge removes `withdrawals/<code>` together with the session, 30 days
      after it closes, and the monitor's limit is also 30 days — so such a
      request is always younger than the limit when the purge deletes it, and
      never turns the job red.
+   **Closed since, in code — none of it true in production until deployed:**
+   - **A record can no longer be made for a code that never existed, or
+     back-dated** (2026-10-07). *What was wrong:* the rule on
+     `withdrawals/<code>/<uid>` looked at the uid and nothing else, so any
+     signed-in visitor, an anonymous one included, could record an "erasure
+     request" under any code, and the monitor — which could not tell a purged
+     session from a code that never was — counted it. It was also immediate,
+     not a month away: the rule accepted any `at` up to the present, and a
+     record written with `at: 1` was overdue on the monitor's next run (the
+     monitor half was run; the rule half was read, then shown on the emulator
+     by the test below failing against the old rule).
+     *What changed:* the nightly purge now writes a **marker**,
+     `purgedSessions/<code>` = the time of the purge, in the same update that
+     deletes the session. No client can read or write it. The rule accepts a
+     withdrawal only if the session is in the database **or** carries a marker,
+     in both rule trees, each addressing its own; and `at` must be within 24
+     hours of the server's clock.
+     *What was considered and rejected:* accepting the record when
+     `users/<uid>/history/<code>` exists. That node is writable by its owner,
+     so it would cost a spoofer one more write and stop nobody; the emulator
+     test writes such a row and shows the withdrawal still refused.
+     *What the marker holds, and for how long:* a session code and a date — no
+     participant, no content. See "Marker lifetime" under the open points
+     below; it is a retention period nobody but the Controller should settle.
+     ⚠️ **What this does NOT close.** (i) Anyone who knows the code of a session
+     that really existed, live or purged, can still record a request under
+     their own uid without having taken part. The code is the capability
+     throughout this platform; the noise is now bounded by who holds a real
+     code. (ii) **Sessions purged before the purge wrote markers have none**,
+     and a participant returning to one is refused in the product ("Could not
+     record your withdrawal — please try again, or contact the facilitator")
+     until the markers are rebuilt from the nightly snapshots:
+     `scripts/backfill-purged-markers.js`, run once by hand, dry-run by
+     default, **before or with the deploy of the rule**. It reaches back as far
+     as the snapshots do (90 days) and no further. (iii) Records already in the
+     database that have neither a session nor a marker are still counted by the
+     monitor, which now says how many there are; it cannot say whether one is a
+     real request for a session purged long ago or something written for a
+     made-up code before the rule.
+     `Verify:` `node --test tests/purged-session-marker.test.js
+     tests/withdrawal.test.js` (the first RUNS the purge and the backfill
+     against an in-memory database); and on the emulator, `npm run
+     test:e2e:rules -- -g "can only name a session"` — every denial there is
+     paired with an allow of the same payload, in both trees, and the test
+     fails against the rule as it stood.
    ⚠️ **Three conditions on the route itself.** (a) The participant has to be
    signed in to the SAME account: the row is not shown to an anonymous
    visitor, and the history is keyed by the account. (b) Deleting the account

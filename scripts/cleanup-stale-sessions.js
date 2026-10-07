@@ -346,6 +346,18 @@ async function purgeSessions(db, locations) {
         // certificate would retain names for five years for no functional
         // reason.
         purge[loc.rosterPath] = null;
+        // The one thing this update WRITES: a marker that the session existed
+        // and when it was purged (purgedSessions/<code> = epoch ms). A code and
+        // a date — no participant, no content. Once the session is gone,
+        // nothing else in the database tells a purged session from a code that
+        // never was, and three things need to: the rule that lets someone
+        // withdraw from a session after it has been purged, the erasure tool
+        // (which must not write a permanent suppression record for a session
+        // that never existed), and the sweep below (which deletes a withdrawal
+        // record only where a marker shows its session really was purged).
+        // In the SAME update as the deletions, so there is never a purged
+        // session without one. See purgedMarkers() in lib/session-trees.js.
+        purge[loc.purgedMarkerPath] = Date.now();
 
         await db.ref().update(purge);
       }

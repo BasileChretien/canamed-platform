@@ -711,14 +711,18 @@
         }
       }
     },
+    "purgedSessions": {
+      ".read": false,
+      ".write": false
+    },
     "withdrawals": {
       "$sessionId": {
         "$uid": {
           ".read": "auth != null && auth.uid == $uid",
-          ".write": "auth != null && auth.uid == $uid",
+          ".write": "auth != null && auth.uid == $uid && (root.child('sessions').child($sessionId).exists() || root.child('purgedSessions').child($sessionId).exists())",
           ".validate": "newData.hasChildren(['research','at'])",
           "research": { ".validate": "newData.isBoolean() && newData.val() === false" },
-          "at": { ".validate": "newData.isNumber() && newData.val() <= now" },
+          "at": { ".validate": "newData.isNumber() && newData.val() <= now && newData.val() >= now - 86400000" },
           "erasure": { ".validate": "newData.isBoolean()" },
           "$other": { ".validate": false }
         }
@@ -728,10 +732,10 @@
           "$sessionId": {
             "$uid": {
               ".read": "auth != null && auth.uid == $uid",
-              ".write": "auth != null && auth.uid == $uid",
+              ".write": "auth != null && auth.uid == $uid && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).exists() || root.child('purgedSessions').child('orgs').child($orgSlug).child($sessionId).exists())",
               ".validate": "newData.hasChildren(['research','at'])",
               "research": { ".validate": "newData.isBoolean() && newData.val() === false" },
-              "at": { ".validate": "newData.isNumber() && newData.val() <= now" },
+              "at": { ".validate": "newData.isNumber() && newData.val() <= now && newData.val() >= now - 86400000" },
               "erasure": { ".validate": "newData.isBoolean()" },
               "$other": { ".validate": false }
             }

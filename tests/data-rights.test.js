@@ -326,8 +326,9 @@ test("the monitor never reads a session body — it lists session KEYS and nothi
   };
   const r = await monitor(tree);
 
-  assert.deepStrictEqual([...r.reads].sort(), ["erasures", "withdrawals"],
-    "the only trees read whole are the request queue and the erasure ledger");
+  assert.deepStrictEqual([...r.reads].sort(), ["erasures", "purgedSessions", "withdrawals"],
+    "the only trees read whole are the request queue, the erasure ledger and " +
+    "the purge markers (a session code and a date each)");
   assert.ok(!r.reads.some((p) => p === "sessions" || p === "orgs" ||
                                   p.startsWith("sessions/") || p.startsWith("orgs/")),
     "the monitor read session bodies");
@@ -471,6 +472,86 @@ test("erasureQueue marks which open requests have no session, without changing t
   const direct = pendingErasures(withdrawalLocations(withdrawals), [], NOW, 30);
   assert.strictEqual(q.pending.length, direct.pending.length);
   assert.strictEqual(q.handled, direct.handled);
+});
+
+test("the queue tells a PURGED session from one nothing shows ever existed", () => {
+  /* "Not in the database" used to cover both, and the monitor could not tell
+     a participant's request from a record written for a made-up code. The
+     purge now leaves a marker (purgedSessions/<code>), and the rules accept a
+     withdrawal only for a session that exists or has one — so a record with
+     neither was written before that rule, or its session was purged before
+     the purge wrote markers. Those are the ones a human has to look at. */
+  const q = erasureQueue({
+    withdrawals: {
+      "LIVE-1": { a: { erasure: true, at: ago(3) } },
+      "PURGED-1": { b: { erasure: true, at: ago(3) } },
+      "NO-TRACE": { c: { erasure: true, at: ago(3) } },
+      orgs: { "uni-x": { "PURGED-2": { d: { erasure: true, at: ago(3) } } } },
+    },
+    erasureRecords: [],
+    liveLocationKeys: ["LIVE-1"],
+    purgedLocationKeys: ["PURGED-1", "orgs/uni-x/PURGED-2"],
+    now: NOW, deadlineDays: 30,
+  });
+  const state = Object.fromEntries(q.pending.map((p) => [p.uid, [p.sessionInDatabase, p.sessionPurged]]));
+  assert.deepStrictEqual(state, {
+    a: [true, false], b: [false, true], c: [false, false], d: [false, true],
+  });
+  assert.deepStrictEqual(q.sessionGone.map((p) => p.uid).sort(), ["b", "c", "d"]);
+  assert.deepStrictEqual(q.noMarker.map((p) => p.uid), ["c"]);
+
+  /* A session that is back in the database (a restore, or a reused code) is
+     LIVE, whatever marker an earlier purge left: the live path can act on it. */
+  const back = erasureQueue({
+    withdrawals: { "BACK-1": { a: { erasure: true, at: ago(3) } } }, erasureRecords: [],
+    liveLocationKeys: ["BACK-1"], purgedLocationKeys: ["BACK-1"], now: NOW,
+  });
+  assert.deepStrictEqual([back.pending[0].sessionInDatabase, back.pending[0].sessionPurged], [true, false]);
+
+  // Callers that pass no marker list get the old answer, not a crash.
+  const old = erasureQueue({
+    withdrawals: { "GONE-1": { a: { erasure: true, at: ago(3) } } }, erasureRecords: [],
+    liveLocationKeys: [], now: NOW,
+  });
+  assert.strictEqual(old.pending[0].sessionPurged, false);
+  assert.strictEqual(old.noMarker.length, 1);
+});
+
+test("the monitor reads the purge markers and says how many open requests have none", async () => {
+  const sessions = { "LIVE-1": { created: { at: ago(50) } } };
+  const r = await monitor({
+    sessions,
+    purgedSessions: { "PURGED-1": ago(20), orgs: { "uni-x": { "PURGED-2": ago(20) } } },
+    withdrawals: {
+      "LIVE-1": { a: request(3) }, "PURGED-1": { b: request(3) }, "NO-TRACE": { c: request(3) },
+      orgs: { "uni-x": { "PURGED-2": { d: request(3) } } },
+    },
+  });
+  assert.strictEqual(r.code, 0);
+  assert.ok(r.reads.includes("purgedSessions"), "the monitor never read the markers");
+  assert.match(r.text, /Erasure requests open:\s+4\b/);
+  assert.match(r.text, /session not in the database:\s+3\b/i);
+  assert.match(r.text, /no purge marker:\s+1\b/i);
+
+  // No such line when every gone session has its marker: it would be noise.
+  const clean = await monitor({
+    sessions, purgedSessions: { "PURGED-1": ago(20) },
+    withdrawals: { "PURGED-1": { b: request(3) } },
+  });
+  assert.match(clean.text, /session not in the database:\s+1\b/i);
+  assert.doesNotMatch(clean.text, /no purge marker/i);
+
+  // An unreadable marker tree stops the job: read as "no markers", every
+  // purged session's request would be reported as a record with no trace.
+  const db = fakeDb({ sessions: {} });
+  const ref = db.ref;
+  db.ref = (p) => (p === "purgedSessions"
+    ? { get: async () => { throw new Error("permission denied"); } }
+    : ref(p));
+  await assert.rejects(
+    () => runMonitor(db, { now: NOW, deadlineDays: 30, warnDays: 21, out() {}, err() {},
+                           liveLocations: async () => [] }),
+    /permission denied/);
 });
 
 test("no script is stored with a raw control byte in it", () => {

@@ -17,17 +17,20 @@
  * has lost real failures to alert fatigue more than once; a monitor that cries
  * every morning would be worse than none.
  *
- * WHAT IT READS. The `withdrawals` and `erasures` trees, whole — identifiers
- * and dates — and the KEYS of `sessions` and `orgs/<slug>/sessions`. No session
- * body: it runs daily on a hosted runner outside the EEA, and the privacy
- * notice says the daily jobs do not read session content.
+ * WHAT IT READS. The `withdrawals`, `erasures` and `purgedSessions` trees,
+ * whole — identifiers and dates — and the KEYS of `sessions` and
+ * `orgs/<slug>/sessions`. No session body: it runs daily on a hosted runner
+ * outside the EEA, and the privacy notice says the daily jobs do not read
+ * session content.
  *
- * WHAT IT CANNOT TELL YOU. It counts a request whether or not its session is
- * still in the database, and says how many are in the second group — but for
- * those it cannot distinguish a session that was purged from a code that never
- * existed (any signed-in visitor may write a withdrawal record for any code),
- * and scripts/erase-participant.js cannot act on them. Both are open in DPA
- * Annex VI, G12.
+ * WHAT IT CAN AND CANNOT TELL YOU. It counts a request whether or not its
+ * session is still in the database, and says how many are in the second group.
+ * Within that group it separates a session the purge removed (it left a marker
+ * under `purgedSessions`) from one that nothing shows ever existed. The rules
+ * accept a withdrawal only for a session that exists or carries a marker, so a
+ * record with neither predates that rule, or names a session purged before the
+ * purge wrote markers — it cannot say which. scripts/erase-participant.js
+ * cannot act on a session that is gone; that is open in DPA Annex VI, G12.
  *
  * ENV
  *   DATA_RIGHTS_DEADLINE_DAYS  default 30 (Art. 12(3))
@@ -41,8 +44,8 @@
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
-const { readSessionLocationsShallow } = require("./lib/session-trees");
-const { erasureQueue, DEADLINE_DAYS } = require("./lib/data-rights");
+const { readSessionLocationsShallow, purgedMarkers } = require("./lib/session-trees");
+const { erasureQueue, flattenErasures, DEADLINE_DAYS } = require("./lib/data-rights");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -66,16 +69,6 @@ function initAdmin() {
   return raw
     ? initializeApp({ credential: cert(JSON.parse(raw)), databaseURL: DB_URL })
     : initializeApp({ databaseURL: DB_URL });
-}
-
-function flattenErasures(node) {
-  const out = [];
-  for (const id of Object.keys(node || {})) {
-    const entry = node[id];
-    if (!entry || typeof entry !== "object") continue;
-    for (const rec of entry.records || []) out.push(rec);
-  }
-  return out;
 }
 
 /**
@@ -121,11 +114,16 @@ async function run(db, opts) {
   const locations = await opts.liveLocations();
   const withdrawalsSnap = await db.ref("withdrawals").get();
   const erasuresSnap = await db.ref("erasures").get();
+  /* The purge's markers: a session code and a date each. A failed read throws
+     like the two above — read as "no markers", every request for a purged
+     session would be reported as a record that nothing accounts for. */
+  const markersSnap = await db.ref("purgedSessions").get();
 
-  const { pending, overdue, handled, sessionGone } = erasureQueue({
+  const { pending, overdue, handled, sessionGone, noMarker } = erasureQueue({
     withdrawals: withdrawalsSnap.exists() ? withdrawalsSnap.val() : {},
     erasureRecords: flattenErasures(erasuresSnap.exists() ? erasuresSnap.val() : {}),
     liveLocationKeys: locations.map((loc) => loc.key),
+    purgedLocationKeys: Object.keys(purgedMarkers(markersSnap.exists() ? markersSnap.val() : {})),
     now: opts.now,
     deadlineDays: DEADLINE,
   });
@@ -135,6 +133,9 @@ async function run(db, opts) {
   out(`Erasure requests open:   ${pending.length}`);
   if (sessionGone.length) {
     out(`  session not in the database: ${sessionGone.length}`);
+  }
+  if (noMarker.length) {
+    out(`    of which with no purge marker: ${noMarker.length}`);
   }
   out(`Deadline:                ${DEADLINE} days (Art. 12(3)); warn at ${WARN}`);
 
@@ -146,7 +147,9 @@ async function run(db, opts) {
     const age = p.ageDays === null ? "undated" : `${p.ageDays}d`;
     const flag = p.overdue ? "OVERDUE" : (p.ageDays !== null && p.ageDays >= WARN ? "due soon" : "open");
     out(`  - request age ${age} [${flag}]` +
-      (p.sessionInDatabase ? "" : " (session not in the database)"));
+      (p.sessionInDatabase ? ""
+        : p.sessionPurged ? " (session not in the database)"
+          : " (session not in the database, no purge marker)"));
   }
 
   if (overdue.length) {

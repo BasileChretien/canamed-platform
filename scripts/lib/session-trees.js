@@ -26,7 +26,7 @@
  *                  adminSecretPath:string, roomChatPath:string,
  *                  roomChatAuthorsPath:string,
  *                  certIdsPath:string, withdrawalsPath:string,
- *                  rosterPath:string, data:object}>}
+ *                  purgedMarkerPath:string, rosterPath:string, data:object}>}
  *   `key` is unique across trees and is what exports should be keyed by — two
  *   orgs can legitimately use the same session code, so keying an export by the
  *   bare code would silently overwrite one with the other.
@@ -48,6 +48,8 @@ function locationFor(orgSlug, code) {
       roomChatAuthorsPath: "roomChatAuthors/" + code,
       certIdsPath: "certIds/" + code,
       withdrawalsPath: "withdrawals/" + code,
+      // WRITTEN by the purge, not deleted by it — see purgedMarkers() below.
+      purgedMarkerPath: "purgedSessions/" + code,
       // rosters/ mirrors the session path exactly — the client writes
       // "rosters/" + sPath(uid), and sPath is _sessionPrefix(org) + code, so
       // this is that same prefix with the uid left off.
@@ -64,6 +66,7 @@ function locationFor(orgSlug, code) {
     roomChatAuthorsPath: "roomChatAuthors/orgs/" + orgSlug + "/" + code,
     certIdsPath: "certIds/orgs/" + orgSlug + "/" + code,
     withdrawalsPath: "withdrawals/orgs/" + orgSlug + "/" + code,
+    purgedMarkerPath: "purgedSessions/orgs/" + orgSlug + "/" + code,
     rosterPath: "rosters/orgs/" + orgSlug + "/sessions/" + code
   };
 }
@@ -153,6 +156,71 @@ function withdrawalLocations(withdrawalsVal) {
     if (!isObj(orgs[slug])) continue;
     for (const code of Object.keys(orgs[slug])) {
       if (isObj(orgs[slug][code])) out[locationFor(slug, code).key] = orgs[slug][code];
+    }
+  }
+  return out;
+}
+
+/**
+ * The location a KEY names, whether or not that session is in the database.
+ *
+ * Needed by everything that starts from a record rather than from a session:
+ * an erasure request or a purge marker carries a location key, and the paths
+ * that belong to it (its withdrawal branch, its marker) must come from the
+ * same builder the purge uses, not from a second parser of the key.
+ *
+ * A key is "<code>" or "orgs/<slug>/<code>". Neither a code nor a slug can
+ * contain "/" — they are database keys — so the split is unambiguous.
+ *
+ * @param {string} key
+ */
+function locationForKey(key) {
+  const m = /^orgs\/([^/]+)\/([^/]+)$/.exec(String(key));
+  return m ? locationFor(m[1], m[2]) : locationFor(null, String(key));
+}
+
+/**
+ * The `purgedSessions` tree, regrouped by location key:
+ *
+ *   purgedSessions/<code>               = <when it was purged, epoch ms>
+ *   purgedSessions/orgs/<slug>/<code>   = <the same>
+ *
+ * WHAT A MARKER IS. The purge writes one, in the same update that deletes the
+ * session, and nothing else can: the node has no client write. It holds a
+ * session code and a date — no participant, no content — and it is the only
+ * thing left in the database that shows a session EXISTED. Three things lean
+ * on that:
+ *   - the rule on `withdrawals/<code>/<uid>` accepts a record only for a
+ *     session that is in the database or has a marker, so a request can no
+ *     longer be made for a code that never was;
+ *   - the erasure tool writes a suppression record for a session that is gone
+ *     only under a marker — `erasures/` is never deleted, so it must not fill
+ *     with records for sessions that did not exist;
+ *   - the nightly sweep deletes an answered withdrawal record only under a
+ *     marker, never because a session merely failed to appear in a listing.
+ *
+ * A value that is not a number is not a marker and is left out: every caller
+ * treats "no marker" as "nothing shows this session existed", which is the
+ * safe reading of something this code did not write.
+ *
+ * @param {object} markersVal value of `purgedSessions` (may be null/undefined)
+ * @returns {Object<string, number>} locationKey -> purged-at, epoch ms
+ */
+function purgedMarkers(markersVal) {
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const out = {};
+  if (!isObj(markersVal)) return out;
+
+  for (const code of Object.keys(markersVal)) {
+    if (code === "orgs") continue;
+    if (typeof markersVal[code] === "number") out[locationFor(null, code).key] = markersVal[code];
+  }
+
+  const orgs = isObj(markersVal.orgs) ? markersVal.orgs : {};
+  for (const slug of Object.keys(orgs)) {
+    if (!isObj(orgs[slug])) continue;
+    for (const code of Object.keys(orgs[slug])) {
+      if (typeof orgs[slug][code] === "number") out[locationFor(slug, code).key] = orgs[slug][code];
     }
   }
   return out;
@@ -299,6 +367,8 @@ module.exports = {
   sessionLocations,
   sessionLocationsFromKeys,
   withdrawalLocations,
+  locationForKey,
+  purgedMarkers,
   readSessionLocations,
   readSessionLocationsShallow,
   makeRestShallowReader,

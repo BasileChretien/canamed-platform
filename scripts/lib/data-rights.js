@@ -35,6 +35,44 @@ const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
    request from the day it was added (2026-09-03) until 2026-10-07. */
 const SEP = String.fromCharCode(0);
 
+/** One request: this person, in this session. */
+const requestKey = (locationKey, uid) => locationKey + SEP + uid;
+
+/** `erasures/<pushId>.records[]`, as one list. */
+function flattenErasures(node) {
+  const out = [];
+  for (const id of Object.keys(isObj(node) ? node : {})) {
+    const entry = node[id];
+    if (!isObj(entry)) continue;
+    for (const rec of Object.values(entry.records || {})) out.push(rec);
+  }
+  return out;
+}
+
+/**
+ * Which requests have been ANSWERED: an erasure record exists for the same
+ * person in the same session. Matching on uid AND location, not uid alone:
+ * someone may withdraw from one session and not another, and treating any past
+ * erasure as covering every future request would mark new requests done on
+ * arrival.
+ *
+ * ONE DEFINITION, SHARED. The monitor uses it to decide what is still open;
+ * the nightly purge and sweep use it to decide which withdrawal records may be
+ * deleted (scripts/lib/withdrawal-retention.js). If those two ever disagreed,
+ * the purge would delete a request the monitor still counted as open — which
+ * is the defect this arrangement exists to end.
+ *
+ * @param {object[]} erasureRecords flattened `erasures/*.records[]`
+ * @returns {Set<string>} of requestKey()s
+ */
+function answeredKeys(erasureRecords) {
+  const done = new Set();
+  for (const rec of erasureRecords || []) {
+    if (rec && rec.uid && rec.locationKey) done.add(requestKey(rec.locationKey, rec.uid));
+  }
+  return done;
+}
+
 /**
  * Which erasure requests are still outstanding, and which are late.
  *
@@ -46,14 +84,7 @@ const SEP = String.fromCharCode(0);
  */
 function pendingErasures(withdrawalsByLocation, erasureRecords, now,
                          deadlineDays = DEADLINE_DAYS) {
-  /* A request is handled when an erasure record exists for the same person in
-     the same session. Matching on uid AND location, not uid alone: someone may
-     withdraw from one session and not another, and treating any past erasure as
-     covering every future request would mark new requests done on arrival. */
-  const done = new Set();
-  for (const rec of erasureRecords || []) {
-    if (rec && rec.uid && rec.locationKey) done.add(rec.locationKey + SEP + rec.uid);
-  }
+  const done = answeredKeys(erasureRecords);
 
   const pending = [];
   let handled = 0;
@@ -66,7 +97,7 @@ function pendingErasures(withdrawalsByLocation, erasureRecords, now,
          full effect the moment it is written — the export honours it — so
          listing those as "outstanding" would bury the real ones in noise. */
       if (!isObj(w) || w.erasure !== true) continue;
-      if (done.has(locationKey + SEP + uid)) { handled++; continue; }
+      if (done.has(requestKey(locationKey, uid))) { handled++; continue; }
       const at = typeof w.at === "number" ? w.at : null;
       const ageDays = at === null ? null : Math.floor((now - at) / DAY_MS);
       pending.push({
@@ -100,25 +131,35 @@ function pendingErasures(withdrawalsByLocation, erasureRecords, now,
  * @param {object} args.withdrawals value of `withdrawals` (both trees)
  * @param {object[]} args.erasureRecords flattened `erasures/*.records[]`
  * @param {string[]} args.liveLocationKeys keys of the sessions in the database
+ * @param {string[]} [args.purgedLocationKeys] keys that carry a purge marker
+ *   (session-trees purgedMarkers()). Omitted = none known.
  * @param {number} args.now epoch ms
  * @param {number} [args.deadlineDays]
  * @returns {{pending: object[], overdue: object[], handled: number,
- *            sessionGone: object[]}} as pendingErasures(), each pending item
- *   also carrying `sessionInDatabase`; `sessionGone` is the pending items
- *   whose session is not there. NB "not there" means purged OR never existed:
- *   see withdrawalLocations().
+ *            sessionGone: object[], noMarker: object[]}} as pendingErasures(),
+ *   each pending item also carrying `sessionInDatabase` and `sessionPurged`.
+ *   `sessionGone` is the pending items whose session is not in the database;
+ *   `noMarker` is the part of those that NOTHING shows ever existed — written
+ *   before the rules required a session or a marker, or for a session purged
+ *   before the purge wrote markers. A session that is in the database is live
+ *   whatever marker an earlier purge left (a restore, a reused code).
  */
-function erasureQueue({ withdrawals, erasureRecords, liveLocationKeys, now, deadlineDays }) {
+function erasureQueue({ withdrawals, erasureRecords, liveLocationKeys, purgedLocationKeys,
+                        now, deadlineDays }) {
   const live = new Set(liveLocationKeys || []);
+  const purged = new Set(purgedLocationKeys || []);
   const found = pendingErasures(
     withdrawalLocations(withdrawals), erasureRecords, now, deadlineDays);
-  const pending = found.pending.map(
-    (p) => ({ ...p, sessionInDatabase: live.has(p.locationKey) }));
+  const pending = found.pending.map((p) => {
+    const sessionInDatabase = live.has(p.locationKey);
+    return { ...p, sessionInDatabase, sessionPurged: !sessionInDatabase && purged.has(p.locationKey) };
+  });
   return {
     pending,
     overdue: pending.filter((p) => p.overdue),
     handled: found.handled,
     sessionGone: pending.filter((p) => !p.sessionInDatabase),
+    noMarker: pending.filter((p) => !p.sessionInDatabase && !p.sessionPurged),
   };
 }
 
@@ -184,6 +225,9 @@ module.exports = {
   DEADLINE_DAYS,
   RECTIFIABLE,
   ROSTER_FIELDS,
+  requestKey,
+  flattenErasures,
+  answeredKeys,
   pendingErasures,
   erasureQueue,
   planRectification,

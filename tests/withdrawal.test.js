@@ -81,11 +81,66 @@ test("unknown keys are rejected and the timestamp cannot be in the future", () =
   }
 });
 
-test("both trees carry the identical leaf", () => {
-  assert.deepStrictEqual(LEAVES[1][1](), LEAVES[0][1](),
+/* The one place the two leaves may differ: each addresses its OWN tree's
+   session and its own tree's purge marker. */
+const SESSION_AT = {
+  default: "root.child('sessions').child($sessionId)",
+  orgs: "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)",
+};
+const MARKER_AT = {
+  default: "root.child('purgedSessions').child($sessionId)",
+  orgs: "root.child('purgedSessions').child('orgs').child($orgSlug).child($sessionId)",
+};
+
+test("both trees carry the same leaf, each addressing its own tree", () => {
+  /* Compared as a re-prefix, not as text: the default leaf, with its session
+     and marker paths rewritten for the org tree, must BE the org leaf. Editing
+     one copy alone fails here. */
+  const asOrg = JSON.parse(JSON.stringify(LEAVES[0][1]())
+    .split(SESSION_AT.default).join(SESSION_AT.orgs)
+    .split(MARKER_AT.default).join(MARKER_AT.orgs));
+  assert.deepStrictEqual(LEAVES[1][1](), asOrg,
     "the org and default withdrawal rules differ — one of them is wrong, and " +
     "the client picks the tree by deployment, so the difference would only " +
     "show up for whichever tenant is unlucky");
+});
+
+test("a withdrawal can only name a session that is in the database or was purged", () => {
+  /* Until 2026-10-07 the write looked at the uid and nothing else, so any
+     signed-in visitor — anonymous included — could record an erasure request
+     for a code that never existed, and the daily monitor counted it.
+     `users/<uid>/history/<code>` cannot serve as the evidence: that node is
+     writable by its owner. The purge marker can: no client can write it. */
+  for (const [label, get] of LEAVES) {
+    const w = get()[".write"];
+    assert.strictEqual(w,
+      `auth != null && auth.uid == $uid && (${SESSION_AT[label]}.exists() || ${MARKER_AT[label]}.exists())`,
+      `${label}: the write is not bound to its own session or its own marker`);
+  }
+  /* A mis-copied prefix here fails OPEN in one direction — an org record
+     accepted because some unrelated default-tree session shares the code. */
+  const org = LEAVES[1][1]()[".write"];
+  assert.ok(!org.includes(SESSION_AT.default) && !org.includes(MARKER_AT.default + ".exists()"),
+    "the org rule addresses the default tree");
+});
+
+test("the request's date is the server's, to within a day", () => {
+  /* `at` starts the Art. 12(3) clock, and it is typed by the client. With only
+     `<= now` a record written today with `at: 1` was decades overdue on the
+     monitor's next run. A day of slack is for a slow device clock; a working
+     client is never further behind than that (TLS fails first). */
+  for (const [label, get] of LEAVES) {
+    const v = get().at[".validate"];
+    assert.match(v, /newData\.val\(\) <= now\b/, label);
+    assert.match(v, /newData\.val\(\) >= now - 86400000\b/, `${label}: the date can be back-dated`);
+  }
+});
+
+test("the purge marker is written by the Admin SDK and by nothing else", () => {
+  assert.deepStrictEqual(rules.purgedSessions, { ".read": false, ".write": false },
+    "purgedSessions must be closed to every client, with no child rule that " +
+    "could reopen it — a client-writable marker is a self-issued permission " +
+    "to record a withdrawal for any code");
 });
 
 // -------------------------------------------------------- the export gate
