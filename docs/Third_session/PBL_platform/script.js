@@ -12374,13 +12374,15 @@ function loadProfile() {
     .then(snap => snap.val()).catch(() => null);
 }
 
+/* Resolves null, and changes nothing, if the account went while it was saving. */
 function saveProfile(updates) {
-  if (!currentUser || currentUser.isAnonymous || !db) return Promise.reject(new Error("Not signed in"));
+  const user = currentUser;
+  if (!user || user.isAnonymous || !db) return Promise.reject(new Error("Not signed in"));
   const now = Date.now();
   const merged = Object.assign({}, currentProfile || {}, updates, { updatedAt: now });
   if (!merged.createdAt) merged.createdAt = now;
-  return db.ref("users/" + currentUser.uid + "/profile").set(merged)
-    .then(() => { currentProfile = merged; return merged; });
+  return db.ref("users/" + user.uid + "/profile").set(merged)
+    .then(() => (currentUser === user ? (currentProfile = merged) : null));
 }
 
 /* Log a session join to the SIGNED-IN user's history. Idempotent: writing the
@@ -12505,7 +12507,8 @@ function profileSetupSubmit() {
   if (!uni) { splashHintErr(hint, "Pick your university."); return; }
   splashHintOk(hint, "Saving your profile…");
   const updates = profileUpdatesForRole(role, name, uni, "splash-prof-year", "splash-prof-english");
-  saveProfile(updates).then(() => {
+  saveProfile(updates).then(p => {
+    if (!p) return;
     splashHintOk(hint, "");
     paintUserChip();
     splashShowView("enter");
@@ -12623,7 +12626,8 @@ function accountSaveBtn() {
   const uni = (el("account-uni").value || "").trim();
   if (!name) { splashHintErr(hint, "Enter your name."); return; }
   const updates = profileUpdatesForRole(role, name, uni, "account-year", "account-english");
-  saveProfile(updates).then(() => {
+  saveProfile(updates).then(p => {
+    if (!p) return;
     splashHintOk(hint, "Profile saved.");
     paintUserChip();
     applyProfileToJoinForm();

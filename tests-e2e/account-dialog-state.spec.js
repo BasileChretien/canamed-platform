@@ -627,3 +627,67 @@ test("F: the sign-in form keeps nobody's e-mail address or password", async ({ p
   await expect(meter, "and the meter must not go on rating the previous person's password").toHaveText(idle);
   expect(errors).toEqual([]);
 });
+
+/* ======================= G. a save acknowledged too late ===================
+ *
+ * Found in review (finding 4). A profile read that comes back after its
+ * account has gone is dropped; the acknowledgement of a profile SAVE was not.
+ * If the account changed while a save was in flight, the acknowledgement made
+ * the departed account's profile the current one, repainted the row with its
+ * name, refilled the lobby's join form — and, from profile setup, sent whoever
+ * was now on screen out of their own setup form.
+ */
+
+/* A slow network the other way: a write to `path` lands, but its
+   acknowledgement stays back until __releaseAck(). */
+async function holdAck(page, path) {
+  await page.evaluate((path) => {
+    const ref = db.ref.bind(db);
+    db.ref = (p) => {
+      const r = ref(p);
+      if (p === path) {
+        const set = r.set.bind(r);
+        r.set = (v) => {
+          set(v);
+          return new Promise((resolve) => { window.__releaseAck = () => { db.ref = ref; resolve(); }; });
+        };
+      }
+      return r;
+    };
+  }, path);
+}
+
+test("G: a profile save acknowledged after another account took over changes nothing for that account", async ({ page }) => {
+  const errors = collectErrors(page);
+  await frontPage(page);
+  await signIn(page, ALICE);                  // a new account, on profile setup
+  await expect(page.locator("#splash-view-profile-setup")).toBeVisible();
+  await page.locator("#splash-prof-name").fill("Alice A");
+  await page.locator("#splash-prof-uni").selectOption("Nagoya");
+  await holdAck(page, "users/u_alice/profile");
+  await page.locator("#splash-profile-setup-submit").click();
+  await expect(page.locator("#splash-profile-setup-hint"), "premise: her save is in flight")
+    .toHaveText(/Saving your profile/);
+  expect((await stored(page, "users/u_alice/profile")).name, "premise: the write itself has landed")
+    .toBe("Alice A");
+
+  await signIn(page, BOB);                    // Bob signs in meanwhile: a new account too
+  await expect(page.locator("#splash-prof-name"), "premise: Bob is asked for HIS profile").toHaveValue("bob");
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("bob@example.test");
+
+  await page.evaluate(async () => {
+    window.__releaseAck();
+    // Every chance for the acknowledgement's follow-ups to run.
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 20));
+  });
+
+  await expect(page.locator("#splash-view-profile-setup"), "her acknowledgement must not take his form away")
+    .toBeVisible();
+  await expect(page.locator("#splash-prof-name")).toHaveValue("bob");
+  await expect(page.locator("#splash-signed-in-name"), "nor repaint the row with her name")
+    .toHaveText("bob@example.test");
+  expect(await page.evaluate(() => currentProfile), "nor make her profile his current one").toBeNull();
+  expect((await joinFields(page)).name, "nor fill the lobby's join form with it").toBe("");
+  expect((await stored(page, "users/u_alice/profile")).name, "her own save stays where it landed").toBe("Alice A");
+  expect(errors).toEqual([]);
+});

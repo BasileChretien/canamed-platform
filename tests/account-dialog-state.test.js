@@ -1065,3 +1065,56 @@ test("F: the first auth event of a page load leaves the form alone", async () =>
   assert.ok(w.sandbox.currentUser.isAnonymous, "premise: the first event has arrived");
   assert.deepStrictEqual(w.signInForm(), { email: "saved@example.test", password: "from-the-browser", confirm: "" });
 });
+
+/* ======================= G. a save acknowledged too late ===================
+ *
+ * FOUND IN REVIEW (finding 4). The late profile READ is dropped when its
+ * account has gone (section B); the acknowledgement of a profile SAVE was not.
+ * If the account changes while a save is in flight, the acknowledgement made
+ * the departed account's profile the current one, repainted the row with its
+ * name, refilled the lobby's join form with it — and, from profile setup, sent
+ * whoever was now on screen back to "enter a session".
+ */
+
+test("G: a profile-setup save acknowledged after another account took over changes nothing for that account", async () => {
+  const w = makeWorld();
+  await w.signIn(ALICE);                      // a new account, on profile setup
+  w.fill("splash-prof", { name: "Alice A", university: "Nagoya", year: "5", english: "C1" });
+  w.db.holdAck("users/uidAlice/profile");
+  w.sandbox.profileSetupSubmit();             // the write is sent; its acknowledgement is not back
+  await w.settle();
+  await w.replaceWith(BOB);                   // Bob signs in meanwhile: a new account too
+  assert.deepStrictEqual(w.views(), ["profile-setup"], "premise: Bob is asked for HIS profile");
+  assert.strictEqual(w.setupForm().name, "bob", "premise");
+
+  w.db.releaseAck("users/uidAlice/profile");
+  await w.settle();
+
+  assert.strictEqual(w.sandbox.currentProfile, null, "her saved profile must not become his current one");
+  assert.deepStrictEqual(w.views(), ["profile-setup"], "her acknowledgement must not take his form away");
+  assert.strictEqual(w.signedIn().name, "bob@example.test", "nor repaint the row with her name");
+  assert.strictEqual(w.joinForm().name, "", "nor fill the lobby's join form with it");
+  assert.deepStrictEqual(w.stored("uidAlice"),
+    { name: "Alice A", university: "Nagoya", role: "student", year: 5, english: "C1" },
+    "her own save did land — it was hers to make");
+});
+
+test("G: a save from the dialog acknowledged after sign-out changes nothing for the visitor", async () => {
+  const w = makeWorld();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.sandbox.openAccountDialog();
+  w.el("account-name").value = "Alice B";
+  w.db.holdAck("users/uidAlice/profile");
+  w.sandbox.accountSaveBtn();
+  await w.settle();
+  await w.signOut();
+  assert.ok(w.sandbox.currentUser.isAnonymous, "premise: she has gone before the acknowledgement");
+
+  w.db.releaseAck("users/uidAlice/profile");
+  await w.settle();
+
+  assert.strictEqual(w.sandbox.currentProfile, null);
+  assert.notStrictEqual(w.el("account-action-hint").textContent, "Profile saved.");
+  assert.deepStrictEqual(w.joinForm(), NOBODY, "the join form must not be refilled with her details");
+  assert.deepStrictEqual([w.signedIn().row, w.signedIn().chip], [false, false]);
+});
