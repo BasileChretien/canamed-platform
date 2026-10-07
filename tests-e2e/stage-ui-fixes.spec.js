@@ -101,7 +101,13 @@ test.describe("Stage bar redundancy + observer button removal", () => {
        second masthead: a navy band with a tricolour rule across the paper
        chart, and the masthead's white ink inherited by the names — white on
        the chips' white, in the light theme. Each chip showed its dot and no
-       name. The masthead rules are now `body > header`. */
+       name. The masthead rules are now `body > header`.
+
+       With the band gone, the bar's own fill showed: a hard-coded 45% WHITE.
+       On the light chart that is a faint highlight; on the dark chart it
+       composites to a mid-grey slab, and the "Everyone taking part:" label
+       (--muted, which is LIGHT in the dark theme) sat on it at 1.67:1. The
+       fill is now a themed token. */
     await surfaceApp(page);
     await showStage(page, "stage-1");
     await page.waitForFunction(() => typeof renderContrib === "function");
@@ -120,9 +126,36 @@ test.describe("Stage bar redundancy + observer button removal", () => {
         const lum = (rgb) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); };
         const parse = (s) => (s.match(/\d+(\.\d+)?/g) || [0, 0, 0]).map(Number);
         const head = getComputedStyle(document.querySelector(".consultation-note-head"));
+        // The label paints no fill, so it is drawn on whatever is under it.
+        // The first non-transparent background-color on the way up is NOT that
+        // colour when it is translucent (the walk-up helper above would take a
+        // 45% white for white): collect every layer down to the first OPAQUE
+        // one, then composite them back up over it.
+        const label = document.querySelector(".consultation-note-head .contrib-label");
+        const layers = [];
+        for (let n = label; n; n = n.parentElement) {
+          const s = getComputedStyle(n), c = parse(s.backgroundColor);
+          if (!/^rgba?\(/.test(s.backgroundColor)) throw new Error("cannot composite " + s.backgroundColor);
+          layers.push({ rgb: c.slice(0, 3), a: c.length > 3 ? c[3] : 1, image: s.backgroundImage });
+          if (layers[layers.length - 1].a === 1) break;
+        }
+        const base = layers.pop();
+        const under = layers.reduceRight((below, l) => below.map((b, k) => l.rgb[k] * l.a + b * (1 - l.a)), base.rgb);
+        const labelInk = getComputedStyle(label).color;
+        const lfg = lum(parse(labelInk)), lbg = lum(under);
         return {
           masthead: getComputedStyle(document.querySelector("body > header")).backgroundImage,
           image: head.backgroundImage, rule: head.borderBottomWidth, shadow: head.boxShadow,
+          label: {
+            ink: labelInk, on: "rgb(" + under.map(Math.round).join(", ") + ")",
+            // false = the walk ran off the top of the document without ever
+            // reaching an opaque fill, so `on` is not a colour anything is on.
+            grounded: base.a === 1,
+            // Only flat fills composite like this. (The opaque base, the chart,
+            // is exempt: its one image is the stripe along its BOTTOM edge.)
+            images: layers.map((l) => l.image),
+            ratio: (Math.max(lfg, lbg) + 0.05) / (Math.min(lfg, lbg) + 0.05)
+          },
           chips: [...document.querySelectorAll(".consultation-note-head .contrib-chip")].map((chip) => {
             // A chip paints its own opaque fill, so that is what its name is on.
             const s = getComputedStyle(chip);
@@ -146,6 +179,11 @@ test.describe("Stage bar redundancy + observer button removal", () => {
         expect(c.opaque, `${at}: a chip paints its own fill (${c.fill})`).toBe(true);
         expect(c.ratio, `${at}: a participant's name (${c.ink} on ${c.fill})`).toBeGreaterThanOrEqual(4.5);
       }
+      expect(m.label.grounded, `${at}: the label's backdrop ends on an opaque fill`).toBe(true);
+      for (const image of m.label.images) {
+        expect(image, `${at}: only flat fills between the label and the chart`).toBe("none");
+      }
+      expect(m.label.ratio, `${at}: the tally's label (${m.label.ink} on ${m.label.on})`).toBeGreaterThanOrEqual(4.5);
     }
   });
 });
