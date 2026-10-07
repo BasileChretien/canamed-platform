@@ -3069,13 +3069,27 @@ same day.)*
 > Firebase refuses it without a recent sign-in — the user is told what is
 > already gone and has to sign in and repeat it. (2) Nothing here is
 > *automated*: an account nobody deletes keeps everything in this item
-> indefinitely, which is why the severity is unchanged. (3) **The account
-> dialog can only be opened from inside a session.** The control that opens it
-> is in the page header, which the front page hides until a session code has
-> been entered. A signed-in user with no working session code cannot reach
-> "Delete account" at all — nor the retry in (1) — and has only the contact in
-> the notice. That is the product as built, not a regression, and it bounds
-> every self-service claim in this item.
+> indefinitely, which is why the severity is unchanged. (3) **The route needs
+> a working sign-in, and — until the deploy carrying the fix below is live —
+> a working session code as well.** See the next note for the second half.
+>
+> ✅ **The account dialog no longer needs a session — fixed 2026-10-07.** This
+> item used to say the dialog "can only be opened from inside a session", and
+> that was accurate: its one opener was the chip in the page header, which
+> the front page hides until a session code has been entered. A signed-in
+> user with no working code could not reach "Delete account" at all — nor
+> the retry in (1) — and had only the contact in the notice. The front
+> page's "Signed in as …" row now carries an **Account** link that opens the
+> same dialog, so deletion, the retry and the profile are reachable with no
+> code. What still bounds it: the row is shown to a signed-in account only
+> (never to an anonymous visitor), so someone who can no longer sign in is
+> back to the contact; and the statement is false in production until that
+> change is deployed. `Verify:` `tests-e2e/account-dialog.spec.js` ("…opens the
+> dialog from the front page, without a session code", on desktop and the
+> three mobile viewports — it asserts the page is still locked and the header
+> chip is not displayed, so it cannot pass from inside a session) and
+> `tests-e2e/emulator/account-delete.spec.js`, which now reaches "Delete
+> account" by clicking that link with a real account and no session.
 >
 > ⚠️ **This route was unreachable from 2026-07-31 until the same change.** The
 > account dialog — which hosts "Delete account" and the per-session withdrawal
@@ -3334,14 +3348,32 @@ now exists; that is not the same as the duty being discharged.
    `tests-e2e/emulator/account-delete.spec.js` and, on every viewport, by
    `tests-e2e/account-dialog.spec.js`. The waiting-screen control was not
    affected.
-   ⚠️ **And "weeks later" has a condition this paragraph never stated.** The
-   account dialog opens only from the page header, which the front page hides
-   until a session code has been entered. So the history route serves someone
-   who is in a session at the time — their own, if it has not yet been purged,
-   or another one — and nobody else. A participant whose session has expired
-   and who has no other code is, again, back to the human contact. Deleting the
-   account also removes this list, which the deletion dialog now says before it
-   proceeds.
+   ✅ **"Weeks later" had a condition this paragraph never stated — removed
+   2026-10-07.** The account dialog opened only from the page
+   header, which the front page hides until a session code has been entered.
+   So the history route served someone who was in a session at the time —
+   their own, if not yet purged, or another one — and nobody else; a
+   participant whose session had expired and who had no other code was back to
+   the human contact. Sessions are purged 30 days after closing and 90 after
+   creation, so that was the ordinary case, not an edge. The front page's
+   "Signed in as …" row now carries an **Account** link that opens the same
+   dialog with no session code, and the withdrawal row in it works for a
+   session that is no longer in the database: `withdrawals/<code>/<uid>` is
+   writable by its owner whether or not `sessions/<code>` still exists.
+   `Verify:` `tests-e2e/emulator/account-delete.spec.js`, "a signed-in
+   participant withdraws from the front page, for a session that has been
+   purged" — real account, real rules, no session code entered, and the
+   session absent from the database; it reads the withdrawal record back.
+   ⚠️ **Three conditions remain, and they are real.** (a) The participant has
+   to be signed in to the SAME account: the row is not shown to an anonymous
+   visitor, and the history is keyed by the account. (b) Deleting the account
+   removes this list — which the deletion dialog says before it proceeds — so
+   someone who deletes first has no row left to withdraw from. (c) After a
+   purge the record is an instruction about copies that outlive the session
+   (the research dataset, backups), not about the live session, which is
+   already gone; acting on it for those copies is the operator's step, as the
+   next note says. And none of it is true in production until that change is
+   deployed.
    ⚠️ **What it does NOT do: delete.** The control records an erasure request;
    the deletion is still `scripts/erase-participant.js`, run by an operator.
    Art. 17 remains satisfiable-by-operator, not self-service — deleting a

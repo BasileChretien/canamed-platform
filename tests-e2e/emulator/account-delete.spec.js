@@ -21,6 +21,11 @@
  * shim in script.js loads it on the click. So this is also the only test that
  * runs that load in a real browser against a real account.
  *
+ * Both tests reach the dialog the way someone who is NOT in a session does:
+ * "Account" in the front page's signed-in row. The second one is the dialog's
+ * other job — withdrawing from a past session — in the case that route exists
+ * for: the session has already been purged.
+ *
  * Conventions (CLAUDE.md): every "gone" is asserted on the DATABASE with
  * dbReadAsOwner(), and only after the same read showed the node PRESENT —
  * a node that was never written is also "gone". Every denial is paired with an
@@ -214,14 +219,17 @@ test("account deletion removes the profile, the authored scenarios and their pub
   // ---- DELETE: the real button, the real handler ----
   expect(await page.evaluate(() => typeof window.deleteMyAccount),
     "the deletion code is lazy: it must not be on the page before the click").toBe("undefined");
-  /* Opened by the app's own function rather than by clicking #user-chip: the
-     chip sits in the page header, which `body.locked` hides until a session
-     code has been entered, so on the front page there is nothing to click.
-     (That the dialog is reachable ONLY from inside a session is a limitation
-     of the product, recorded in DPA Annex VI G8/G12 — not something this test
-     should paper over by joining a session it does not otherwise need.) */
+  /* Opened the way a person does it from the front page: "Account" in the
+     signed-in row. No session code is entered anywhere in this test, so the
+     header chip — the dialog's only opener until 2026-10-07 — is still hidden
+     behind `body.locked`; asserted, so that this stays a test of the route
+     that needs no session rather than quietly becoming one that has one. With
+     a real account this is also the only place the row is painted by the
+     app's own auth-state handler instead of by a test. */
+  await expect(page.locator("body")).toHaveClass(/(^|\s)locked(\s|$)/);
   await expect(page.locator("#user-chip")).toBeHidden();
-  await page.evaluate(() => openAccountDialog());
+  await expect(page.locator("#splash-signed-in")).toBeVisible();
+  await page.locator("#splash-signed-in-account").click();
   await expect(page.locator("#account-dialog")).toBeVisible();
   /* The dialog had not been able to open since #264 (an undeclared variable
      threw before dialogShow()), which also hid the one in-product route a
@@ -286,4 +294,64 @@ test("account deletion removes the profile, the authored scenarios and their pub
   expect(await tryWrite(pageB, theirs, null)).toBe("ALLOWED");
   expect(await dbReadAsOwner(theirs)).toBeNull();
   await ctxB.close();
+});
+
+/* ---- the other thing the dialog is for, reached the same way ---------------
+ *
+ * DPA Annex VI G12 names the account dialog's session history as the route a
+ * signed-in participant has to withdraw "weeks later". Sessions are purged 30
+ * days after closing and 90 after creation, so weeks later the participant's
+ * own code may open nothing — and until 2026-10-07 the dialog could only be
+ * opened from inside a session. This is that case end to end: no session code
+ * is entered, and the session named in the history is NOT in the database.
+ *
+ * It needs the emulator because the claim is about the RULES: that
+ * `withdrawals/<code>/<uid>` accepts the write when `sessions/<code>` no longer
+ * exists. (Withdrawal on a session that is closed but still present, and the
+ * denial for another participant's uid, are in rules-smoke.spec.js.)
+ */
+test("a signed-in participant withdraws from the front page, for a session that has been purged", async ({ page }) => {
+  const stamp = Date.now().toString(36) + Math.floor(Math.random() * 1e4);
+  const CODE = "EMU-GONE";
+
+  await page.goto("/");
+  const anonUid = await waitForUid(page);
+  const email = "acct-wdr-" + stamp + "@example.test";
+  const password = "Emu-" + stamp + "-Aa1!";
+  await page.evaluate(({ email, password }) =>
+    firebase.auth().createUserWithEmailAndPassword(email, password), { email, password });
+  await page.waitForFunction(() => {
+    const u = firebase.auth().currentUser;
+    return !!u && !u.isAnonymous && currentUser && currentUser.uid === u.uid;
+  }, null, { timeout: 20_000 });
+  const uid = await page.evaluate(() => firebase.auth().currentUser.uid);
+  expect(uid).not.toBe(anonUid);
+  await expect(page.locator("#splash-view-profile-setup")).toBeVisible({ timeout: 20_000 });
+
+  // What a past session leaves on the account once the session itself is gone.
+  expect(await tryWrite(page, `users/${uid}/history/${CODE}`, { code: CODE, joinedAt: Date.now() }))
+    .toBe("ALLOWED");
+  const record = `withdrawals/${CODE}/${uid}`;
+  expect(await dbReadAsOwner(`sessions/${CODE}`),
+    "positive control: the session is not in the database").toBeNull();
+  expect(await dbReadAsOwner(record),
+    "positive control: nothing is recorded before the click").toBeNull();
+
+  // The front page, with no session: the row, then the dialog, then the row's button.
+  await expect(page.locator("body")).toHaveClass(/(^|\s)locked(\s|$)/);
+  await page.locator("#splash-signed-in-account").click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await expect(page.locator("#account-history .account-history-code")).toHaveText(CODE);
+  await page.locator("#account-history .account-history-withdraw").click();
+  await expect(page.locator("#canamed-modal")).toBeVisible();
+  await page.locator("#canamed-modal-confirm").click();
+
+  // The database first: the withdrawal AND the erasure request it carries.
+  await expect.poll(() => dbReadAsOwner(record), { timeout: 15_000 })
+    .toMatchObject({ research: false, erasure: true });
+  expect(typeof (await dbReadAsOwner(record)).at).toBe("number");
+  // Then the page says so, and has not reported a failure.
+  const hint = page.locator("#account-action-hint");
+  await expect(hint).toHaveText(/Withdrawn/);
+  await expect(hint).not.toHaveClass(/(^|\s)err(\s|$)/);
 });

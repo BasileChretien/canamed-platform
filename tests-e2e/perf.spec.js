@@ -700,6 +700,21 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     the +54 bytes are a re-added declaration and its comment. data-rights.js
 //     is 6.3 KB gz, lazy. ⚠️ THE MARGIN IS ~1.45 KB, not 3.4: the next eager
 //     addition of any size needs a reclaim first.
+//   2026-10-07 (2): CAP UNCHANGED (326). The splash's signed-in row gained an
+//     "Account" link — the only opener of the account dialog outside a
+//     session. The splash IS the eager surface, so this could not be made
+//     lazy, and NO reclaim was done for it: it was cut to +120 B gz instead
+//     (script.js +60: two lines of wiring; style.css +49: the row wraps and
+//     the name may break; i18n.js +11: one key. index.html is not counted).
+//     Measured, same method as the test (LF-normalised, gzip level 9, the 15
+//     counted assets): 323.99 -> 324.11 KB.
+//     ⚠️ That baseline is NOT the 324.55 the entry above records, and the
+//     difference was not explained: computed from the commit itself the
+//     previous change comes to 323.99, and CI's own perf job on it printed
+//     script.js at 191.1 KB (the entry says 191.34). So the margin is either
+//     ~1.9 KB (these numbers) or ~1.3 KB (that entry's, plus this change).
+//     Plan on the smaller one; read the next figure from the CI log's
+//     critical_assets list rather than from either entry.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
