@@ -374,7 +374,7 @@ test("the notice says the daily jobs read withdrawal and erasure requests", () =
     fr: [/Les demandes de retrait du consentement ou d'effacement des données sont lues elles aussi, ainsi que la trace de celles déjà traitées/,
          /pour chacune, l'identifiant de la séance, les identifiants techniques de la personne, une date et l'objet de la demande/],
     ja: [/同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も読み込みます/,
-         /それぞれについて読み込むのは、セッションの識別子、ご本人の技術的識別子、日付、ご請求の内容です/]
+         /それぞれについて読み込むのは、セッション識別子、ご本人の技術的識別子、日付、ご請求の内容です/]
   };
   for (const lang of ["en", "fr", "ja"]) {
     const sec = recipientsAndTransfers(s[lang], lang);
