@@ -111,3 +111,32 @@ test("the live consent string is not stuck behind the published notice", () => {
     `issued at v${current} — the exact drift found on 2026-09-02, when the ` +
     `consent string was NINE versions stale`);
 });
+
+test("the stamp written on each consent record names the notice version being shown", () => {
+  /* The tenth surface, and the one that is not a string anyone reads.
+     `CONSENT_NOTICE_VERSION` is stored next to every consent record, and the
+     resume path compares it to decide whether to ask again. It sat at
+     "PIS-v3-2026-07" from July to October 2026 while everything checked above
+     moved from v3 to v11 — so consent records named a notice eight versions
+     old, and a participant resuming a session was never re-asked, although
+     section 16 promises re-consent after a material change. Found 2026-10-07
+     by an independent fact-check of the v12 text. */
+  const script = read("script.js");
+  const m = script.match(/const CONSENT_NOTICE_VERSION = "PIS-v(\d+)-(\d{4}-\d{2})";/);
+  assert.ok(m, "script.js no longer declares CONSENT_NOTICE_VERSION in the form PIS-v<n>-<yyyy-mm>");
+
+  const privacy = read("privacy.html");
+  const current = Math.max(...declarationsIn(privacy));
+  assert.strictEqual(Number(m[1]), current,
+    `consent records are stamped PIS v${m[1]} while the published notice is issued at ` +
+    `v${current}. The record would name a notice the participant was not shown, and the ` +
+    `resume path would skip the re-consent that section 16 promises.`);
+
+  const issued = privacy.match(new RegExp("PIS v" + current + "\\s*(?:·|&middot;)\\s*(\\d{4}-\\d{2})"));
+  assert.ok(issued, "could not read the issue date of PIS v" + current + " from privacy.html");
+  assert.strictEqual(m[2], issued[1], "the stamp's date differs from the notice's");
+
+  assert.match(script, /prior\.version === CONSENT_NOTICE_VERSION/,
+    "the resume path no longer compares the stored consent version — re-consent on a " +
+    "material change now depends on something this test cannot see");
+});
