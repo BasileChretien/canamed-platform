@@ -193,7 +193,11 @@ test("a signed-in participant who joins a multi-section session gets a history e
   expect(entry.scenarioName.length, "the stored name fits the rule").toBeLessThanOrEqual(NAME_MAX);
   expect(entry.scenarioName, "it names the first section, whole, and counts the rest")
     .toBe(names[0] + " + 1 more");
-  expect(entry.workshopName.length).toBeLessThanOrEqual(NAME_MAX);
+  /* The workshop's own name, not merely "something short": an empty string
+     would satisfy a length check and say nothing. */
+  const workshop = await p.evaluate(() => CFG.workshopName);
+  expect(workshop, "the premise: this deployment has a workshop name").toBeTruthy();
+  expect(entry.workshopName).toBe(workshop);
 
   expect(await historyFailures(p), "the app recorded no failed history write").toEqual([]);
 
@@ -210,6 +214,10 @@ test("a signed-in participant who joins a multi-section session gets a history e
   await ctx.close();
 });
 
+/* This one pins the RULE, not the fix: it writes straight to the database and
+   passes with or without the client change. It is here because the fix is
+   "fit to what the rule allows" — so what the rule allows, and that one long
+   field costs the whole entry, have to be on record somewhere that runs. */
 test("the history rule refuses a whole entry over one long field, at exactly the limits the client fits to", async ({ page }) => {
   await page.goto("/");
   /* The start-up anonymous user is enough here: the rule is owner-only and does
@@ -266,7 +274,11 @@ test("a history write the rules refuse is recorded where a test can read it, and
 
   expect(await page.evaluate((c) => pushSessionToHistory(c), ok),
     "allow leg: the same call with a code the rule accepts").toBe(true);
-  expect((await dbReadAsOwner(`users/${uid}/history/${ok}`)).code).toBe(ok);
+  const stored = await dbReadAsOwner(`users/${uid}/history/${ok}`);
+  expect(stored.code).toBe(ok);
+  /* True whether or not the section library has been fetched yet on this
+     front page: with it or without it, a short name is stored as it is. */
+  expect(stored.workshopName).toBe(await page.evaluate(() => CFG.workshopName));
   expect(await historyFailures(page)).toEqual([]);
 
   expect(await page.evaluate((c) => pushSessionToHistory(c), tooLong),

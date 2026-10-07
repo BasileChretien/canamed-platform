@@ -277,10 +277,54 @@ test("pushSessionToHistory fits both names to the rule's limit before writing", 
   /* BOTH fields, and by the fitted value itself: a field assigned the raw name
      beside a fitted copy nobody uses would satisfy a looser check. */
   const write = body.slice(body.indexOf("db.ref("));
-  assert.match(write, /workshopName:\s*fit\(/, "workshopName must be the fitted value");
+  assert.match(write, /workshopName:\s*fit\(\[CFG\.workshopName\]\)/,
+    "workshopName must be the deployment's own name, fitted — not an empty or unrelated value");
   assert.match(write, /scenarioName:\s*fit\(/, "scenarioName must be the fitted value");
   assert.doesNotMatch(write, /scenarioName:\s*tc\(/,
     "the session's whole name must not be written as it stands — that is the defect");
+});
+
+/* `fit` is the two-line arrow inside pushSessionToHistory(). It is lifted out
+   of the source and RUN here, both ways: with sectionsLabel() in scope, and
+   without it — the state the page is in when section-registry.js failed to
+   load, which the loader swallows by design and nothing else exercises. */
+function liftFit(withHelper) {
+  const m = bodyOf("pushSessionToHistory").match(/const fit = ([\s\S]*?);\n/);
+  assert.ok(m, "pushSessionToHistory must define `fit`");
+  // eslint-disable-next-line no-new-func
+  return withHelper
+    ? new Function("sectionsLabel", "return (" + m[1] + ");")(sectionsLabel)
+    : new Function("return (" + m[1] + ");")();
+}
+
+test("with the section library loaded, the write site stores what sectionsLabel() returns", () => {
+  const fit = liftFit(true);
+  const six = [1, 2, 3, 4, 5, 6].map(n => enName("mayumi-" + n + "-pbl"));
+  assert.strictEqual(fit(six), sectionsLabel(six, NAME_MAX));
+  assert.strictEqual(fit(["CaNaMED Session 3"]), "CaNaMED Session 3");
+  assert.strictEqual(fit([undefined]), "", "a deployment with no workshop name stores an empty one");
+});
+
+test("without the section library the names are still stored, and still fit", () => {
+  /* Unnamed entries were the first draft of this fallback. A rejoin REPLACES
+     the node, so a single failed chunk load would have blanked a name that had
+     been stored correctly — an independent review caught that. */
+  const fit = liftFit(false);
+  assert.strictEqual(fit(["CaNaMED Session 3"]), "CaNaMED Session 3");
+  assert.strictEqual(fit(["Alpha", "Bravo"]), "Alpha + Bravo");
+  assert.strictEqual(fit([undefined]), "");
+  const long = fit(["x".repeat(NAME_MAX + 40)]);
+  assert.strictEqual(long.length, NAME_MAX, "the fallback is clamped to the rule's limit too");
+  const six = [1, 2, 3, 4, 5, 6].map(n => enName("mayumi-" + n + "-pbl"));
+  assert.ok(fit(six).length <= NAME_MAX);
+  assert.ok(fit(six).startsWith(six[0]), "and it still starts with the first section");
+});
+
+test("the fallback is clamped to the same limit as the rule", () => {
+  const body = bodyOf("pushSessionToHistory");
+  const clamps = [...body.matchAll(/\.slice\(0,\s*(\d+)\)/g)];
+  assert.ok(clamps.length >= 1, "the no-library fallback must clamp");
+  clamps.forEach(m => assert.strictEqual(Number(m[1]), NAME_MAX));
 });
 
 test("the names are fitted from the picked SECTIONS, not by splitting the joined name", () => {
@@ -302,9 +346,10 @@ test("a history write that fails is recorded, without the uid or the session cod
   const body = bodyOf("pushSessionToHistory");
   const rec = body.match(/CanamedTelemetry\.record\(([^;]*)\)\s*;/);
   assert.ok(rec, "a failed write must reach the telemetry buffer, not only the console");
-  assert.match(rec[1], /"history-write-failed"/);
-  /* The buffer is downloadable by a facilitator: what failed, never whose.
-     `e.code` (the error's own code) is fine; a bare `code` is the session's. */
-  assert.doesNotMatch(rec[1], /\buid\b|\bpath\b|(?<![.\w])code\s*[,})]|currentUser/,
-    "the record must not carry the account or the session");
+  /* The buffer is downloadable by a facilitator: what failed, never whose. The
+     payload is pinned WHOLE — one key, the error's own code — because a
+     deny-list of names (uid, path, code…) cannot see a field it did not think
+     of, such as `s: sessionNum`. */
+  assert.match(rec[1], /^\s*"history-write-failed",\s*\{\s*code:\s*String\(e && e\.code\)\s*\}\s*$/,
+    "the record must carry the kind and the error's code, and nothing else");
 });
