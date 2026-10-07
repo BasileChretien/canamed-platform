@@ -19,8 +19,10 @@
  *   3. Because nothing opened it, nobody had seen it on a phone either. The
  *      profile form stuck out of the dialog, which scrolled sideways, and a
  *      history row broke its session code and its withdraw button across lines
- *      (style.css, "My-account dialog"). Both are pinned here, at explicit
- *      phone widths as well as at each project's own viewport.
+ *      (style.css, "My-account dialog"). Both are pinned here: at explicit
+ *      widths as well as each project's own viewport, under each of the three
+ *      languages the withdraw button is labelled in, with a sign-in address
+ *      and scenario names as long as real ones, and with text enlarged.
  *   4. Nor had anybody seen its title row, which is a <header>. style.css
  *      styled the page masthead through bare `header` rules, so the row was
  *      painted as a second masthead: the navy gradient, its tricolour rule,
@@ -52,18 +54,22 @@ const { test, expect } = require("./fixtures.js");
 
 const CODE = "ABC-123";
 
-async function openDialog(page) {
+async function openDialog(page, email) {
   await page.goto("/");
+  await openDialogOnThisPage(page, email);
+}
+
+async function openDialogOnThisPage(page, email = "local@example.test") {
   await page.waitForFunction(() =>
     typeof openAccountDialog === "function" && typeof dbInit === "function");
-  await page.evaluate(async (code) => {
+  await page.evaluate(async ([code, email]) => {
     dbInit();
     /* `currentUser` is a script-scope `let`, so this assigns the app's own
        binding. */
-    currentUser = { uid: "u_local", email: "local@example.test", isAnonymous: false };
+    currentUser = { uid: "u_local", email, isAnonymous: false };
     await db.ref("users/u_local/history/" + code).set({ code, joinedAt: Date.now() });
     openAccountDialog();
-  }, CODE);
+  }, [CODE, email]);
 }
 
 test("the account dialog opens and lists joined sessions with a withdraw control", async ({ page }) => {
@@ -136,145 +142,215 @@ test("the dialog says what Delete account removes and what it does not, without 
 });
 
 /** Phone widths that matter — iPhone SE, small Android, iPhone 14 Pro, Pixel 7 —
-    run on every project, as tests-e2e/splash-overflow.spec.js does. Each
-    project's own viewport is added to them, for the tablet and the desktop. */
-const PHONE_WIDTHS = [320, 360, 393, 412];
+    run on every project, as tests-e2e/splash-overflow.spec.js does, and then
+    the two sides of the 720px break in style.css. At 700 the dialog is already
+    at its full width, so only the break — not a lack of room — stacks the row;
+    without a width there, neither the break nor the stacked layout's
+    `flex-basis: 100%` is exercised by anything. Each project's own viewport is
+    added to them, for the tablet and the desktop. */
+const TESTED_WIDTHS = [320, 360, 393, 412, 700, 760];
 
-test("the dialog fits every width, and a history row keeps its code and its button on one line", async ({ page }) => {
-  await openDialog(page);
-  /* pushSessionToHistory() stores the scenario's name with the entry, and that
-     long text is what squeezed the code and the button — at desktop width too.
-     The rules allow a name 80 characters of anything, so the third row carries
-     one with nowhere to break. The dialog's listener is live: the rows arrive
-     without reopening. */
-  await page.evaluate(async () => {
+/* A participant reads the withdraw button in their browser's language, and the
+   three labels differ in width by a factor of two (French is the longest). A
+   layout that holds under one of them proves little about the others. */
+const LOCALES = ["en-US", "fr-FR", "ja-JP"];
+const ENGLISH_LABEL = "Withdraw consent";
+
+/* University addresses run past fifty characters, and one with no hyphen has
+   nowhere to break. */
+const LONG_EMAIL = "given.second.third.familyname.u4@s.mail.exampleuniversity.test";
+
+/* pushSessionToHistory() stores the scenario's name with the entry, and that
+   long text is what squeezed the code and the button — at desktop width too.
+   The rules allow a name 80 characters of anything: one row carries two section
+   names joined the way a multi-section session joins them, cut at that limit,
+   and one carries 80 characters with nowhere to break. */
+const NAMED_SESSIONS = [
+  { code: "XYZ-789", scenarioName: "A Difficult Child (Mayumi) — Step 3 of 6" },
+  { code: "LNG-080", scenarioName: ("A Difficult Child (Mayumi) — Step 1 of 6 + " +
+                                    "A Difficult Child (Mayumi) — Step 2 of 6").slice(0, 80) },
+  { code: "QRS-456", scenarioName: "Pharmacovigilance".repeat(5).slice(0, 80) }
+];
+const ALL_CODES = [CODE, ...NAMED_SESSIONS.map(r => r.code)];
+
+/* Opens the dialog in the context's language with the named sessions listed.
+   The withdraw label comes from a lazily loaded locale chunk: opening before
+   it has arrived would measure the English label under a French heading. */
+async function openDialogWithHistory(page, locale, email) {
+  await page.goto("/");
+  if (!locale.startsWith("en")) {
+    await page.waitForFunction((english) =>
+      typeof t === "function" && t("data-rights.withdraw-btn-short") !== english, ENGLISH_LABEL);
+  }
+  await openDialogOnThisPage(page, email);
+  /* The dialog's listener is live: the rows arrive without reopening. */
+  await page.evaluate(async (rows) => {
     const day = 86400000, now = Date.now();
-    await db.ref("users/u_local/history/XYZ-789").set({
-      code: "XYZ-789", joinedAt: now - day,
-      scenarioName: "A Difficult Child (Mayumi) — Step 3 of 6"
+    for (let i = 0; i < rows.length; i++) {
+      await db.ref("users/u_local/history/" + rows[i].code).set({ ...rows[i], joinedAt: now - (i + 1) * day });
+    }
+  }, NAMED_SESSIONS);
+  await expect(page.locator("#account-history .account-history-row")).toHaveCount(ALL_CODES.length);
+  const label = await page.locator("#account-history .account-history-withdraw").first().textContent();
+  if (locale.startsWith("en")) expect(label).toBe(ENGLISH_LABEL);
+  else expect(label, `the withdraw label must be the ${locale} one`).not.toBe(ENGLISH_LABEL);
+}
+
+for (const locale of LOCALES) {
+  test.describe(`the dialog's layout under the ${locale} labels`, () => {
+    test.use({ locale });
+
+    test("the dialog fits every width, and a history row keeps its code and its button on one line", async ({ page }) => {
+      await openDialogWithHistory(page, locale, LONG_EMAIL);
+      await expect(page.locator("#account-email")).toHaveText(LONG_EMAIL);
+
+      const own = page.viewportSize();
+      for (const width of [own.width, ...TESTED_WIDTHS]) {
+        await page.setViewportSize({ width, height: own.height });
+        const m = await page.evaluate(() => {
+          const inner = document.querySelector(".account-dialog-inner");
+          const contentRight = inner.getBoundingClientRect().right -
+            parseFloat(getComputedStyle(inner).paddingRight);
+          // The number of line boxes an element's text occupies.
+          const lines = (el) => {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            return new Set([...range.getClientRects()]
+              .filter(b => b.width > 0).map(b => Math.round(b.top))).size;
+          };
+          return {
+            vw: window.innerWidth, docScroll: document.documentElement.scrollWidth,
+            innerScroll: inner.scrollWidth, innerClient: inner.clientWidth,
+            emailOver: Math.round(document.getElementById("account-email").getBoundingClientRect().right - contentRight),
+            wideFieldsets: [...inner.querySelectorAll("fieldset")]
+              .filter(f => f.getBoundingClientRect().right > contentRight + 1)
+              .map(f => f.querySelector("legend").textContent.trim()),
+            rows: [...inner.querySelectorAll(".account-history-row")].map(li => {
+              const row = li.getBoundingClientRect();
+              const code = li.querySelector(".account-history-code");
+              const btn = li.querySelector(".account-history-withdraw");
+              const c = code.getBoundingClientRect(), b = btn.getBoundingClientRect();
+              const meta = li.querySelector(".account-history-meta").getBoundingClientRect();
+              return {
+                code: code.textContent, codeLines: lines(code), btnLines: lines(btn),
+                metaBelowCode: meta.top >= c.bottom - 1,
+                metaBetweenCodeAndButton: meta.left >= c.right - 1 && b.left >= meta.right - 1,
+                buttonAboveMeta: b.top < meta.top - 1,
+                inside: [...li.children].every(child => {
+                  const r = child.getBoundingClientRect();
+                  return r.left >= row.left - 1 && r.right <= row.right + 1;
+                })
+              };
+            })
+          };
+        });
+        const at = `at ${width}px`;
+        expect(m.vw, `${at}: the resize took effect`).toBe(width);
+        /* The named checks come first, because they say what is too wide. The
+           scroll check after them also catches what no box measurement shows:
+           WebKit counts a <select>'s longest option toward the scroll width
+           whatever the select is sized to, which is the case at 320 on the three
+           WebKit-family projects. */
+        expect(m.emailOver, `${at}: the sign-in address must wrap inside the dialog`).toBeLessThanOrEqual(1);
+        expect(m.wideFieldsets, `${at}: no fieldset may stick out of the dialog`).toEqual([]);
+        expect(m.innerScroll, `${at}: the dialog must not scroll sideways`).toBeLessThanOrEqual(m.innerClient + 1);
+        expect(m.docScroll, `${at}: the page must not scroll sideways`).toBeLessThanOrEqual(m.vw + 1);
+        expect(m.rows.map(r => r.code), `${at}: every session is listed`).toEqual(ALL_CODES);
+        for (const r of m.rows) {
+          expect(r.codeLines, `${at}: the code ${r.code} must stay on one line`).toBe(1);
+          expect(r.btnLines, `${at}: the withdraw button of ${r.code} must stay on one line`).toBe(1);
+          expect(r.inside, `${at}: the row of ${r.code} must contain its code, date and button`).toBe(true);
+          /* Where there is room (style.css breaks at 720px) the date and scenario
+             name sit between the code and the button. Where there is not, they go
+             last, on their own line: under the code AND under the button. */
+          if (width > 720) {
+            expect(r.metaBetweenCodeAndButton, `${at}: the date and name of ${r.code} sit between its code and its button`).toBe(true);
+            expect(r.metaBelowCode, `${at}: the date and name of ${r.code} share the code's line`).toBe(false);
+          } else {
+            expect(r.metaBelowCode, `${at}: the date and name of ${r.code} go under its code`).toBe(true);
+            expect(r.buttonAboveMeta, `${at}: the button of ${r.code} comes before its date and name`).toBe(true);
+          }
+        }
+      }
     });
-    await db.ref("users/u_local/history/QRS-456").set({
-      code: "QRS-456", joinedAt: now - 2 * day, scenarioName: "Pharmacovigilance".repeat(5).slice(0, 80)
+
+    test("enlarged text never leaves the date and scenario name less than their floor", async ({ page }) => {
+      await openDialogWithHistory(page, locale);
+
+      /* Desktop width on every project: the side-by-side layout, where the date
+         and name get what the code and the button leave. With a zero flex basis
+         that fell to 25px (thirty-one lines) at 221% text. The floor is the
+         basis style.css gives the column, 20 zeros of its own font: once less
+         than that is left, the button wraps to the next line instead.
+
+         Text-only zoom and a larger default font are approximated through the
+         root font size — every size in the row is rem-based or inherited, and the
+         gaps and the dialog's width are px, as they are for a real user. Page
+         zoom is not this case: it scales the dialog with the text, so the row is
+         simply the 100% layout. */
+      await page.setViewportSize({ width: 1280, height: page.viewportSize().height });
+      const result = await page.evaluate(() => {
+        const root = document.documentElement;
+        const inner = document.querySelector(".account-dialog-inner");
+        const basePx = parseFloat(getComputedStyle(root).fontSize);
+        const lines = (el) => {
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          return new Set([...range.getClientRects()]
+            .filter(b => b.width > 0).map(b => Math.round(b.top))).size;
+        };
+        const out = { vw: window.innerWidth, sizes: 0, rows: 0, narrowestOverFloor: Infinity, violations: [] };
+        for (let pct = 100; pct <= 300; pct += 5) {
+          root.style.fontSize = pct + "%";
+          out.sizes++;
+          const rootPx = parseFloat(getComputedStyle(root).fontSize);
+          if (Math.abs(rootPx - basePx * pct / 100) > 0.5) {
+            out.violations.push(`${pct}%: the text was not enlarged (root font ${rootPx}px)`);
+          }
+          if (inner.scrollWidth > inner.clientWidth + 1) {
+            out.violations.push(`${pct}%: the dialog scrolls sideways (${inner.scrollWidth} > ${inner.clientWidth})`);
+          }
+          for (const li of inner.querySelectorAll(".account-history-row")) {
+            out.rows++;
+            const row = li.getBoundingClientRect();
+            const code = li.querySelector(".account-history-code");
+            const meta = li.querySelector(".account-history-meta");
+            const name = code.textContent;
+            const probe = document.createElement("span");
+            probe.style.cssText = "position:absolute;visibility:hidden;width:20ch";
+            meta.appendChild(probe);
+            const floor = probe.getBoundingClientRect().width;
+            probe.remove();
+            const width = meta.getBoundingClientRect().width;
+            out.narrowestOverFloor = Math.min(out.narrowestOverFloor, width - floor);
+            if (width < floor - 1) {
+              out.violations.push(`${pct}%: ${name}: the date and name have ${Math.round(width)}px, under their ${Math.round(floor)}px floor`);
+            }
+            if (lines(code) !== 1) out.violations.push(`${pct}%: ${name}: the code is broken across lines`);
+            if (lines(li.querySelector(".account-history-withdraw")) !== 1) {
+              out.violations.push(`${pct}%: ${name}: the withdraw button is broken across lines`);
+            }
+            for (const child of li.children) {
+              const r = child.getBoundingClientRect();
+              if (r.left < row.left - 1 || r.right > row.right + 1) {
+                out.violations.push(`${pct}%: ${name}: ${child.className} sticks out of its row`);
+              }
+            }
+          }
+        }
+        return out;
+      });
+      expect(result.vw, "the viewport is the desktop one").toBe(1280);
+      // 100% to 300% in steps of 5, four sessions each: the loop cannot have run empty.
+      expect(result.sizes).toBe(41);
+      expect(result.rows).toBe(41 * ALL_CODES.length);
+      expect(result.violations.length, result.violations.slice(0, 6).join("\n")).toBe(0);
+      // The floor is reached, not merely cleared from a distance: some size in
+      // the sweep leaves the column within a few px of it.
+      expect(result.narrowestOverFloor, "the sweep samples the floor itself").toBeLessThan(12);
     });
   });
-  await expect(page.locator("#account-history .account-history-row")).toHaveCount(3);
-
-  const own = page.viewportSize();
-  for (const width of [own.width, ...PHONE_WIDTHS]) {
-    await page.setViewportSize({ width, height: own.height });
-    const m = await page.evaluate(() => {
-      const inner = document.querySelector(".account-dialog-inner");
-      const contentRight = inner.getBoundingClientRect().right -
-        parseFloat(getComputedStyle(inner).paddingRight);
-      // The number of line boxes an element's text occupies.
-      const lines = (el) => {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        return new Set([...range.getClientRects()]
-          .filter(b => b.width > 0).map(b => Math.round(b.top))).size;
-      };
-      return {
-        vw: window.innerWidth, docScroll: document.documentElement.scrollWidth,
-        innerScroll: inner.scrollWidth, innerClient: inner.clientWidth,
-        wideFieldsets: [...inner.querySelectorAll("fieldset")]
-          .filter(f => f.getBoundingClientRect().right > contentRight + 1)
-          .map(f => f.querySelector("legend").textContent.trim()),
-        rows: [...inner.querySelectorAll(".account-history-row")].map(li => {
-          const row = li.getBoundingClientRect();
-          const code = li.querySelector(".account-history-code");
-          const btn = li.querySelector(".account-history-withdraw");
-          const meta = li.querySelector(".account-history-meta").getBoundingClientRect();
-          return {
-            code: code.textContent, codeLines: lines(code), btnLines: lines(btn),
-            metaBelowCode: meta.top >= code.getBoundingClientRect().bottom - 1,
-            inside: [...li.children].every(c => {
-              const b = c.getBoundingClientRect();
-              return b.left >= row.left - 1 && b.right <= row.right + 1;
-            })
-          };
-        })
-      };
-    });
-    const at = `at ${width}px`;
-    /* First, because it names the form that is too wide. The scroll check
-       after it also catches what no box measurement shows: WebKit counts a
-       <select>'s longest option toward the scroll width whatever the select is
-       sized to, which is the case at 320 on the three WebKit-family projects. */
-    expect(m.wideFieldsets, `${at}: no fieldset may stick out of the dialog`).toEqual([]);
-    expect(m.innerScroll, `${at}: the dialog must not scroll sideways`).toBeLessThanOrEqual(m.innerClient + 1);
-    expect(m.docScroll, `${at}: the page must not scroll sideways`).toBeLessThanOrEqual(m.vw + 1);
-    expect(m.rows.map(r => r.code), `${at}: every session is listed`).toEqual(["ABC-123", "XYZ-789", "QRS-456"]);
-    for (const r of m.rows) {
-      expect(r.codeLines, `${at}: the code ${r.code} must stay on one line`).toBe(1);
-      expect(r.btnLines, `${at}: the withdraw button of ${r.code} must stay on one line`).toBe(1);
-      expect(r.inside, `${at}: the row of ${r.code} must contain its code, date and button`).toBe(true);
-      /* The date and scenario name sit beside the code where there is room and
-         on their own line under it where there is not (style.css breaks at
-         720px). What keeps them from becoming a sliver between the code and the
-         button is the next test's business. */
-      expect(r.metaBelowCode, `${at}: where the date and scenario name of ${r.code} sit`).toBe(width <= 720);
-    }
-  }
-});
-
-test("enlarged text does not squeeze the date and scenario name into a sliver", async ({ page }) => {
-  await openDialog(page);
-  await page.evaluate(() => db.ref("users/u_local/history/XYZ-789").set({
-    code: "XYZ-789", joinedAt: Date.now() - 86400000,
-    scenarioName: "A Difficult Child (Mayumi) — Step 3 of 6"
-  }));
-  await expect(page.locator("#account-history .account-history-row")).toHaveCount(2);
-
-  /* Desktop width on every project: this is the side-by-side layout, where the
-     date and name only get what the code and the button leave. With a zero flex
-     basis that was 62px (2.3em, eleven lines, a 480px row in a 240px list) at
-     200% text. Below 720px the row stacks and the name has the full width. */
-  await page.setViewportSize({ width: 1280, height: page.viewportSize().height });
-  for (const pct of [100, 150, 175, 200]) {
-    const m = await page.evaluate((pct) => {
-      /* Text-only zoom, approximated through the root font size: the sizes in
-         this row are rem-based. Page zoom is a different thing — it narrows the
-         viewport, which lands in the stacked layout. */
-      document.documentElement.style.fontSize = pct + "%";
-      const inner = document.querySelector(".account-dialog-inner");
-      const lines = (el) => {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        return new Set([...range.getClientRects()]
-          .filter(b => b.width > 0).map(b => Math.round(b.top))).size;
-      };
-      return {
-        vw: window.innerWidth,
-        innerScroll: inner.scrollWidth, innerClient: inner.clientWidth,
-        rows: [...inner.querySelectorAll(".account-history-row")].map(li => {
-          const row = li.getBoundingClientRect();
-          const code = li.querySelector(".account-history-code");
-          const meta = li.querySelector(".account-history-meta");
-          return {
-            code: code.textContent, codeLines: lines(code),
-            btnLines: lines(li.querySelector(".account-history-withdraw")),
-            metaEm: meta.getBoundingClientRect().width / parseFloat(getComputedStyle(meta).fontSize),
-            inside: [...li.children].every(c => {
-              const b = c.getBoundingClientRect();
-              return b.left >= row.left - 1 && b.right <= row.right + 1;
-            })
-          };
-        })
-      };
-    }, pct);
-    const at = `at ${pct}% text`;
-    expect(m.vw, "the viewport is the desktop one").toBe(1280);
-    expect(m.innerScroll, `${at}: the dialog must not scroll sideways`).toBeLessThanOrEqual(m.innerClient + 1);
-    expect(m.rows.map(r => r.code), `${at}: every session is listed`).toEqual(["ABC-123", "XYZ-789"]);
-    for (const r of m.rows) {
-      // A date alone is about 5em; less than that is a column of fragments.
-      expect(r.metaEm, `${at}: the date and scenario name of ${r.code} need a readable column`).toBeGreaterThanOrEqual(5);
-      expect(r.codeLines, `${at}: the code ${r.code} must stay on one line`).toBe(1);
-      expect(r.btnLines, `${at}: the withdraw button of ${r.code} must stay on one line`).toBe(1);
-      expect(r.inside, `${at}: the row of ${r.code} must contain its code, date and button`).toBe(true);
-    }
-  }
-});
+}
 
 const THEMES = ["light", "dark", "high-contrast"];
 

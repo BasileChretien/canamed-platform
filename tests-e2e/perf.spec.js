@@ -721,8 +721,9 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     default), as this entry's first draft was until review caught it; the
 //     deltas are right. At level 9 that entry reads script.js 191.05 ->
 //     191.10 and first-party 323.94 -> 323.99, so the margin it calls ~1.45 KB
-//     was 2.0. Measure with { level: 9 }, or read critical_kb_gz off the perf
-//     job, or this ledger drifts away from the check it documents.
+//     was 2.0. Measure with { level: 9 }, or this ledger drifts away from the
+//     check it documents. (critical_kb_gz in the perf job's log is rounded to
+//     whole KB — it prints 325 for 324.58 — so it cannot confirm hundredths.)
 //   2026-10-07 (third entry): CAP UNCHANGED (326). The splash's signed-in row
 //     gained an "Account" link — the only opener of the account dialog outside
 //     a session, where its header chip is hidden. Measured the way this spec
@@ -741,6 +742,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     click on the header chip". It has two openers now, the chip and this
 //     link, and both call openAccountDialog() — so a lazily linked sheet has
 //     to be awaited THERE, not in a click handler.
+//   2026-10-07 (fourth entry): CAP UNCHANGED (326), AND NOT AN ADDITION. The
+//     follow-up to the SECOND entry of this date (a long sign-in address wraps
+//     instead of scrolling the account dialog; the floor of a history row's
+//     date + name column goes from 12ch to 20ch) is -13 B on style.css,
+//     measured the way this spec measures against main at v181: style.css
+//     46.30 -> 46.28 KB gz, first-party 324.61 -> 324.60, margin ~1.4 KB.
+//     Two declarations, paid for by rewording that block's own comments, which
+//     the review of the second entry had measured at ~400 B of the ~600 it
+//     added. Said plainly because the 316 entry calls trimming prose to land a
+//     symptom of a budget with no room: that is where this budget is. THE
+//     RECLAIM IS STILL OWED.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
