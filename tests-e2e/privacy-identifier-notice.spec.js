@@ -26,21 +26,21 @@ const LANGS = {
     url: "/privacy.html",
     identifier: /signed in\s+anonymously/,
     period: /90 days\s+without being used/,
-    counters: /usage counters are deleted within\s+three days/,
+    counters: /usage counters are deleted within\s+about three days/,
     device: /sign-in credential behind the technical\s+identifier/
   },
   fr: {
     url: "/privacy.html?lang=fr",
     identifier: /connecté\s+de façon\s+anonyme/,
     period: /90 jours\s+sans utilisation/,
-    counters: /sont supprimés sous trois jours/,
+    counters: /sont supprimés sous trois jours environ/,
     device: /informations de connexion\s+correspondant à l'identifiant technique/
   },
   ja: {
     url: "/privacy.html?lang=ja",
     identifier: /匿名でサインインされます/,
     period: /90日間利用がなければ削除します/,
-    counters: /利用回数カウンターは3日以内に削除します/,
+    counters: /利用回数カウンターは、おおむね3日以内に削除します/,
     device: /技術的識別子のサインイン情報も保存されます/
   }
 };

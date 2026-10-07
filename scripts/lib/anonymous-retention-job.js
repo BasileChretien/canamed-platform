@@ -9,29 +9,39 @@
  * WHAT CROSSES TO THE RUNNER, and nothing else:
  *   - per Auth account: uid, three dates, the names of its sign-in providers
  *   - per live session: the uids of its members and of its creator
+ *   - the uids on the two operator allowlists (facilitatorGate/allow,
+ *     moderators)
  *   - the KEYS of users/ and scenarios/, and of each quiet anonymous
  *     account's users/ node ("history", "profile" — never what is in them)
  *   - the KEYS of rateLimits/: uid or session code, and the time buckets
  * No name, no e-mail address, no session content, no scenario body. Every
  * database read below is `shallow` except one: a session's `creatorUid`.
+ * privacy.html section 6 lists the same things; keep the two in step.
  *
- * THE ORDER, and why each step is where it is:
+ * TWO PHASES, AND THE FIRST DOES NOT DEPEND ON THE SECOND.
+ *
+ * Phase 1 sweeps the chat's rate-limit counters. It needs nothing from Firebase
+ * Auth, so it runs — and writes — before the account listing is even asked
+ * for. The notice promises those counters gone within about three days; if
+ * that promise hung on the account half, every refused or failed listing would
+ * quietly break it. A participant can also write under their own counters,
+ * which makes this the one read an outsider could cause to fail: it is read
+ * per id, each failure is counted, and nothing here can stop phase 2.
+ *
+ * Phase 2 removes idle anonymous accounts, in this order and for these reasons:
  *   1. record keys BEFORE the account listing. An orphan is "a key with no
  *      account"; read the other way round, someone who signed up in between
  *      would have a key and no place in the list.
  *   2. list, classify, sanity-check the listing as a whole.
  *   3. spare anything the database contradicts.
  *   4. RE-CHECK every account about to be acted on, by fetching it again. The
- *      listing is minutes old by now, and the delete is irreversible.
+ *      listing is minutes old by now, and the delete is irreversible. No
+ *      database read comes after this.
  *   5. database records first, the Auth account second — the order the
  *      client's own accountDelete() uses and for the same reason: if the
  *      second step fails the account is still there and the next run finds it
- *      again. If ANY database write fails, no account is deleted in that run.
- *
- * The rate-limit sweep is deliberately NOT allowed to stop any of that. A
- * participant can write under their own counters, so a read of that tree is
- * the one thing here an outsider could make fail; it is read per id, each
- * failure is counted, and the run carries on and exits non-zero.
+ *      again. If any write of those RECORDS fails, no account is deleted in
+ *      that run.
  */
 
 const { readSessionLocationsShallow, shallowKeysOf } = require("./session-trees");
@@ -255,29 +265,28 @@ function reportOf({ sessions, cls, checked, plan, found, limits, pathCount }) {
 }
 
 /**
- * Everything up to the point of writing: what would be deleted, and the
- * counts that describe it. Throws a Refusal when the run should not proceed.
+ * Phase 2, up to the point of writing: which accounts and records would go,
+ * and the counts that describe them. Throws a Refusal when the account half
+ * should not proceed.
  */
-async function planRun(deps, opts) {
+async function planAccounts(deps, read, opts) {
   const { nowMs, windowMs } = opts;
   const sweepOrphans = !!opts.sweepOrphans;
-  const read = { shallow: labelled(deps.fetchShallow), value: labelled(deps.readValue) };
 
   const keysets = await collectKeysets(read);
   const accounts = await deps.listAccounts();
   if (!accounts.length) {
     /* Every visitor gets an account, so an empty list is a broken listing. */
-    throw new Refusal("the account listing came back empty. Nothing was deleted.");
+    throw new Refusal(
+      "the account listing came back empty. No account or user record was deleted.");
   }
   const { protectedUids, sessions } = await collectProtectedUids(read);
   let cls = classifyAccounts(accounts, { nowMs, windowMs, protectedUids });
   const sane = listingSanity(cls);
   if (!sane.ok) throw new Refusal(sane.error);
 
-  /* Every remaining database read happens HERE, before the re-check. The
-     re-check is only worth anything if nothing slow comes after it, and the
-     counter sweep is one request per counter. */
-  const limits = await planRateLimits(read, nowMs);
+  /* The last database reads. Nothing is read after the re-check below: it is
+     only worth anything if nothing slow comes between it and the delete. */
   const found = await findContradictions(read, cls, keysets);
   cls = sparing(cls, found.contradicted, "contradicted");
   const checked = await recheckCandidates(
@@ -291,13 +300,18 @@ async function planRun(deps, opts) {
     if (!trip.ok) throw new Refusal(trip.error);
   }
 
-  const paths = dropDescendants(plan.paths.concat(limits.paths));
+  const paths = dropDescendants(plan.paths);
   assertSafePaths(paths);
+  return { paths, expired: checked.expired, parts: { sessions, cls, checked, plan, found } };
+}
 
+const noWrites = () => ({ paths: 0, failedUpdates: 0, errorCodes: [] });
+
+function addWrites(a, b) {
   return {
-    paths,
-    expired: checked.expired,
-    report: reportOf({ sessions, cls, checked, plan, found, limits, pathCount: paths.length })
+    paths: a.paths + b.paths,
+    failedUpdates: a.failedUpdates + b.failedUpdates,
+    errorCodes: [...new Set(a.errorCodes.concat(b.errorCodes))]
   };
 }
 
@@ -315,13 +329,36 @@ async function planRun(deps, opts) {
  * @returns {Promise<object>} a report of COUNTS — no uid, no session code
  */
 async function runAnonymousRetention(deps, opts) {
-  const { paths, expired, report } = await planRun(deps, opts);
+  const read = { shallow: labelled(deps.fetchShallow), value: labelled(deps.readValue) };
+
+  /* PHASE 1 — the counters. Planned, checked and written before anything is
+     asked of Firebase Auth. */
+  const limits = await planRateLimits(read, opts.nowMs);
+  const limitPaths = dropDescendants(limits.paths);
+  assertSafePaths(limitPaths);
+  const swept = opts.confirm ? await writeDeletions(deps.updateRoot, limitPaths) : noWrites();
+
+  /* PHASE 2 — the accounts. */
+  let acc;
+  try {
+    acc = await planAccounts(deps, read, opts);
+  } catch (e) {
+    /* Phase 1 has already happened. Whoever reports this failure should be
+       able to say so: counts only, like everything else that is printed. */
+    if (e && typeof e === "object") e.rateLimits = Object.assign({ written: swept }, limits.counts);
+    throw e;
+  }
+  const { paths, expired } = acc;
+  const report = reportOf(Object.assign({}, acc.parts,
+    { limits, pathCount: limitPaths.length + paths.length }));
+  report.written = swept;
   if (!opts.confirm) return report;
 
-  report.written = await writeDeletions(deps.updateRoot, paths);
+  const records = await writeDeletions(deps.updateRoot, paths);
+  report.written = addWrites(swept, records);
   if (!expired.length) return report;
-  if (report.written.failedUpdates) {
-    /* An account goes only after its records. See THE ORDER above. */
+  if (records.failedUpdates) {
+    /* An account goes only after its records. See phase 2, step 5, above. */
     report.auth.skipped = true;
     return report;
   }

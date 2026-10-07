@@ -38,7 +38,9 @@ const {
   DEFAULT_RETENTION_DAYS, MAX_RETENTION_DAYS, assertSafePaths
 } = require("../scripts/lib/anonymous-retention");
 const { TTL_WINDOWS } = require("../scripts/lib/rate-limit-retention");
-const { FIELD_MASK } = require("../scripts/lib/auth-accounts");
+const {
+  FIELD_MASK, USER_MASK, ACCOUNT_KEYS, PROVIDER_KEYS
+} = require("../scripts/lib/auth-accounts");
 
 const ROOT = path.join(__dirname, "..");
 const PLATFORM = path.join(ROOT, "docs", "Third_session", "PBL_platform");
@@ -131,6 +133,23 @@ test("the job DELETES on schedule: a scheduled run is not a dry run", () => {
     "a MANUAL dispatch must still default to a dry run");
 });
 
+test("nothing in the workflow lets a scheduled run skip the job, or run something else", () => {
+  /* An independent fact-check made the notice false three ways while the two
+     tests above stayed green: an `if:` on the job that excluded the schedule,
+     a `run:` line replaced by `echo`, and a commented-out `schedule:` key
+     above a cron line that was still "live" to a regex. */
+  assert.ok(!/^\s*if:/m.test(WORKFLOW),
+    "the workflow gained an `if:`. A condition that skips the job on schedule leaves the " +
+    "cron and ANON_CONFIRM untouched and deletes nothing.");
+  assert.match(WORKFLOW, /^on:\n  schedule:\n    - cron: "\d+ \d+ \* \* \*"/m,
+    "the cron line is not under a live `schedule:` key directly beneath `on:`");
+  const runs = [...WORKFLOW.matchAll(/^\s+run:\s*(.+)$/gm)].map((m) => m[1].trim());
+  assert.ok(runs.includes("node scripts/cleanup-anonymous-accounts.js"),
+    "no step runs the retention script any more. Steps found: " + JSON.stringify(runs));
+  assert.ok(!/continue-on-error:\s*true/.test(WORKFLOW),
+    "a failed run must fail the workflow, or nobody is told the deletion stopped");
+});
+
 test("the window the workflow passes is the one the rules default to, and its ceiling", () => {
   const m = /ANON_RETENTION_DAYS: \$\{\{ github\.event\.inputs\.retention_days \|\| '(\d+)' \}\}/.exec(WORKFLOW);
   assert.ok(m, "ANON_RETENTION_DAYS is no longer wired to the dispatch input");
@@ -211,7 +230,7 @@ test("section 8 does not state the period as a bare number: the live-session cla
     en: new RegExp("If a session you joined still exists.*about " + CLOSED_DAYS + " days later at most"),
     fr: new RegExp("Si une séance à laquelle vous avez participé existe encore.*environ " + CLOSED_DAYS +
                    " jours plus tard au maximum"),
-    ja: new RegExp("参加したセッションがまだ残っている場合は.*最長で約" + CLOSED_DAYS + "日後")
+    ja: new RegExp("参加したセッションがその時点でまだ残っている場合は.*最長で約" + CLOSED_DAYS + "日後")
   };
   for (const lang of LANGS) {
     const li = retentionItem(lang, item[lang]);
@@ -222,18 +241,52 @@ test("section 8 does not state the period as a bare number: the live-session cla
 });
 
 test("section 8 states when the usage counters go, and the figure is the real one", () => {
+  /* "About", because the bound has no slack: a day bucket goes stale two days
+     after it starts and the sweep runs once a day, so one missed night already
+     exceeds three days exactly. The figure is still tied to the code. */
   assert.strictEqual(COUNTER_DAYS, 3,
     "the proxy's TTL or the sweep's factor changed: the counters now live " + COUNTER_DAYS +
-    " days at most, and the notice says three. Change both.");
+    " days at most, and the notice says about three. Change both.");
   const must = {
-    en: /usage counters are deleted within three days/,
-    fr: /compteurs d'utilisation de la conversation avec le patient simulé sont supprimés sous trois jours/,
-    ja: /利用回数カウンターは3日以内に削除します/
+    en: /usage counters are deleted within about three days/,
+    fr: /compteurs d'utilisation de la conversation avec le patient simulé sont supprimés sous trois jours environ/,
+    ja: /利用回数カウンターは、おおむね3日以内に削除します/
   };
   for (const lang of LANGS) {
     assert.ok(must[lang].test(part(lang, 8, 9)),
       "privacy.html [" + lang + "] section 8 does not state the counters' retention");
   }
+});
+
+test("section 8 states the two things that outlast the period, instead of a bare number", () => {
+  /* Found by an independent fact-check: "deleted after 90 days" was stated
+     flatly, while (a) the identifier survives in the nightly backups of the
+     sessions it joined, and (b) the job deliberately keeps an account an
+     operator has allowlisted, or one the database says is not anonymous. */
+  const item = { en: /technical identifier your browser is given/, fr: /identifiant technique attribué/,
+                 ja: /割り当てられる技術的識別子/ };
+  const must = {
+    en: [/remain in the nightly backups until those expire/,
+         /kept longer only if it belongs to an approved facilitator or moderator, or if a profile or authored scenarios are stored under it/],
+    fr: [/subsistent dans les sauvegardes nocturnes jusqu'à leur expiration/,
+         /conservé plus longtemps que s'il appartient à un animateur ou à un modérateur approuvé, ou si un profil ou des scénarios rédigés sont enregistrés/],
+    ja: [/毎晩のバックアップに残る複製は、この一覧の2番目の項の期間で失効します/,
+         /承認済みのファシリテーターまたはモデレーターの識別子である場合と、プロフィールまたは作成したシナリオが保存されている場合に限り、これより長く保持します/]
+  };
+  for (const lang of LANGS) {
+    const li = retentionItem(lang, item[lang]);
+    for (const re of must[lang]) {
+      assert.ok(re.test(li), "privacy.html [" + lang + "] section 8 no longer says: " + re);
+    }
+  }
+  /* The exceptions are the job's, so they are read from it. */
+  const job = read(ROOT, "scripts", "lib", "anonymous-retention-job.js");
+  assert.match(job, /\["facilitatorGate\/allow", "moderators"\]/,
+    "the job no longer protects allowlisted accounts, but the notice says it does");
+  assert.match(job, /hasOwnProperty\.call\(node, "profile"\)/,
+    "the job no longer spares an account with a profile, but the notice says it does");
+  assert.match(job, /if \(scenarios\.has\(uid\)\) contradicted\.add\(uid\)/,
+    "the job no longer spares an account with scenarios, but the notice says it does");
 });
 
 test("section 8 says a moderation report is KEPT — and the job really cannot delete one", () => {
@@ -257,13 +310,25 @@ test("sections 6-7 say what the job reads, and that it reads no name and no e-ma
   const reads = {
     en: [/A further job, which deletes technical identifiers that are no longer in use/,
          /identifiers of the members and the creator of each current session/,
-         /receives no name and no e-mail address/],
+         /whether a profile, a session history or authored scenarios are stored under an identifier, but not what they contain/,
+         /operator's lists of approved facilitators and moderators/,
+         /which identifier or session it belongs to and its time slot/,
+         /receives no name and no e-mail address/,
+         /only its identifier, its dates and the name of the sign-in method/],
     fr: [/Une autre tâche, qui supprime les identifiants techniques devenus inutiles/,
          /identifiants des membres et du créateur de chaque séance en cours/,
-         /ne reçoit ni nom ni adresse électronique/],
+         /d'un profil, d'un historique de séances ou de scénarios rédigés, mais pas leur contenu/,
+         /listes d'animateurs et de modérateurs approuvés tenues par l'exploitant/,
+         /l'identifiant ou la séance auquel il se rapporte et son créneau horaire/,
+         /ne reçoit ni nom ni adresse électronique/,
+         /seulement son identifiant, ses dates et le nom du mode de connexion/],
     ja: [/さらに別の処理が、使われなくなった技術的識別子を削除します/,
-         /現在あるセッションの各メンバーおよび作成者の識別子/,
-         /氏名やメールアドレスは受け取りません/]
+         /現在あるセッションの各メンバーおよび作成者の識別子も読み込みます/,
+         /作成したシナリオが保存されているかどうかも確認しますが、その内容は読み込みません/,
+         /運営者が管理する承認済みファシリテーターとモデレーターの一覧も読み込みます/,
+         /対象の識別子またはセッションと、その時間帯を読み込みます/,
+         /氏名やメールアドレスは受け取りません/,
+         /受け取るのは識別子と日付、サインイン方法の名称だけです/]
   };
   for (const lang of LANGS) {
     const s = part(lang, 6, 8);
@@ -271,12 +336,43 @@ test("sections 6-7 say what the job reads, and that it reads no name and no e-ma
       assert.ok(re.test(s), "privacy.html [" + lang + "] sections 6-7 no longer say: " + re);
     }
   }
-  /* The claim is only as good as the mask behind it. */
-  for (const banned of ["email", "displayName", "photoUrl", "phoneNumber"]) {
-    assert.ok(!FIELD_MASK.includes(banned),
-      "the account listing now requests `" + banned + "`, but the notice tells " +
-      "participants the job receives no name and no e-mail address");
-  }
+});
+
+test("the job RECEIVES exactly what the notice says: five fields, provider names only", () => {
+  /* "No name and no e-mail address — only its identifier, its dates and the
+     name of the sign-in method" is only as good as the mask behind it, and a
+     ban list is not enough: an independent fact-check widened the mask to ask
+     for Google's persistent account id (`rawId`) and the earlier version of
+     this test, which banned four field names, still passed. So the allowlist
+     is pinned whole. Add a field here and the sentence above has to change. */
+  assert.deepStrictEqual(ACCOUNT_KEYS,
+    ["localId", "createdAt", "lastLoginAt", "lastRefreshAt", "providerUserInfo"]);
+  assert.deepStrictEqual(PROVIDER_KEYS, ["providerId"]);
+  assert.strictEqual(USER_MASK,
+    "users(localId,createdAt,lastLoginAt,lastRefreshAt,providerUserInfo(providerId))");
+  assert.strictEqual(FIELD_MASK, "nextPageToken," + USER_MASK);
+});
+
+test("the job READS exactly what the notice lists: a new read fails here", () => {
+  /* Section 6 enumerates what this job reads, and it reads as exhaustive. The
+     first version of it left out the operator's allowlists and the per-account
+     key check, and nothing noticed. Every database read in the job goes through
+     `read.shallow` / `read.value`, so they can be listed from the source. */
+  const job = read(ROOT, "scripts", "lib", "anonymous-retention-job.js");
+  const targets = [...job.matchAll(/read\.(shallow|value)\(\s*([^,]+),/g)]
+    .map((m) => m[1] + " " + m[2].replace(/\s+/g, " ").trim());
+  assert.deepStrictEqual([...new Set(targets)].sort(), [
+    'shallow "rateLimits/" + scope + "/" + id',   // usage counters: identifier or session, time slot
+    'shallow "users/" + uid',                      // is a profile / a history stored under it
+    "shallow label",                               // rateLimits/<scope>: which identifiers and sessions
+    'shallow loc.path + "/members"',               // members of each current session
+    "shallow node",                                // the two operator allowlists
+    "shallow p",                                   // the list of sessions
+    "shallow path",                                // which identifiers have users/ or scenarios/ records
+    'value loc.path + "/creatorUid"'               // creator of each current session
+  ], "the job's database reads changed. privacy.html section 6 lists them, in three " +
+     "languages — update the notice, the job's header and this list together.");
+  assert.match(job, /users: await keys\("users"\), scenarios: await keys\("scenarios"\)/);
 });
 
 test("section 7 says the identifiers cross the border with the rest", () => {

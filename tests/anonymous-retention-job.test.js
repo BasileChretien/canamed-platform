@@ -24,7 +24,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { runAnonymousRetention, UPDATE_CHUNK } = require("../scripts/lib/anonymous-retention-job");
-const { exitCodeFor, formatReport } = require("../scripts/lib/anonymous-retention-report");
+const {
+  exitCodeFor, formatReport, formatSweepOnly
+} = require("../scripts/lib/anonymous-retention-report");
 const { DEFAULT_RETENTION_DAYS, DAY_MS } = require("../scripts/lib/anonymous-retention");
 const { HOUR_MS } = require("../scripts/lib/rate-limit-retention");
 const { dayKey } = require("../docs/Third_session/PBL_platform/functions/lib/hf-helpers");
@@ -178,9 +180,8 @@ test("live: deletes exactly the planned paths, then exactly the idle account", a
   const h = harness(world());
   const r = await h.run({ confirm: true });
 
-  assert.strictEqual(h.updates().length, 1);
   assert.deepStrictEqual(h.writtenPaths(), EXPECTED_PATHS);
-  for (const v of Object.values(h.updates()[0])) assert.strictEqual(v, null);
+  for (const u of h.updates()) for (const v of Object.values(u)) assert.strictEqual(v, null);
 
   assert.deepStrictEqual(h.deletedUids(), ["idleAnon"]);
   assert.deepStrictEqual(r.written, { paths: EXPECTED_PATHS.length, failedUpdates: 0, errorCodes: [] });
@@ -198,16 +199,24 @@ test("live: the ORDER — record keys, then the listing, then the re-check, reco
      it — and an orphan sweep would delete a brand-new user's data. */
   const usersKeys = h.log.findIndex((l) => l.op === "shallow" && l.path === "users");
   assert.ok(usersKeys !== -1 && usersKeys < first("list"), "record keys must be read before the listing");
-  /* The re-check has to be the last thing before the writes: it is only worth
-     anything if nothing slow happens after it. */
+  /* The counters are a phase of their own and go FIRST: before the listing is
+     even asked for, so that nothing the account half does can hold them up. */
+  const isCounters = (l) => l.op === "update" &&
+    Object.keys(l.update).every((p) => p.startsWith("rateLimits/"));
+  const isRecords = (l) => l.op === "update" &&
+    Object.keys(l.update).some((p) => p.startsWith("users/"));
+  const counters = h.log.findIndex(isCounters), records = h.log.findIndex(isRecords);
+  assert.ok(counters !== -1 && counters < first("list"),
+    "the counter sweep must be written before the account listing is requested");
+  /* The re-check has to be the last thing before the account's records go: it
+     is only worth anything if nothing slow happens after it. */
   assert.ok(first("lookup") > first("list"));
-  assert.ok(first("lookup") < first("update"));
+  assert.ok(records !== -1 && first("lookup") < records);
   assert.ok(Math.max(last("shallow"), last("value")) < first("lookup"),
-    "a database read happens AFTER the re-check — the counter sweep is one " +
-    "request per counter, and every one of them widens the gap the re-check closes");
+    "a database read happens AFTER the re-check, widening the gap it exists to close");
   /* If the account went first and the write then failed, the records would sit
      under a uid no listing returns — unreachable by every later run. */
-  assert.ok(last("update") < first("deleteAccounts"));
+  assert.ok(records < first("deleteAccounts"));
 });
 
 test("live: a SIGNED-IN account and its records are never touched", async () => {
@@ -335,7 +344,7 @@ test("(review) an account that no longer exists at the re-check is not acted on"
 test("(review) a re-check that FAILS stops the run with nothing written", async () => {
   const h = harness(world(), { lookupThrows: "account re-check failed: HTTP 503" });
   await assert.rejects(h.run({ confirm: true }), /HTTP 503/);
-  assert.deepStrictEqual(h.updates(), []);
+  assert.deepStrictEqual(h.writtenPaths().filter((p) => !p.startsWith("rateLimits/")), []);
   assert.deepStrictEqual(h.deletedUids(), []);
 });
 
@@ -346,7 +355,7 @@ test("live: a failed database write means NO account is deleted", async () => {
   const r = await h.run({ confirm: true });
   assert.deepStrictEqual(h.deletedUids(), [], "an account must not outlive its records' deletion failing");
   assert.strictEqual(r.auth.skipped, true);
-  assert.strictEqual(r.written.failedUpdates, 1);
+  assert.strictEqual(r.written.failedUpdates, 2, "the counter update and the record update");
   assert.deepStrictEqual(r.written.errorCodes, ["PERMISSION_DENIED"]);
   assert.strictEqual(r.written.paths, 0);
   assert.strictEqual(exitCodeFor(r), 1);
@@ -416,10 +425,15 @@ test("(review) live: ONE failed chunk among several still means no account is de
 
 // ── refusals: nothing may be written first ──────────────────────────────────
 
+/* The counter sweep is a phase of its own that runs first and needs nothing
+   from the account half, so a refusal there may come AFTER the counters were
+   written. What must never have happened is anything to an account or to a
+   user record. */
 const neverActed = (h) => {
-  assert.deepStrictEqual(h.updates(), []);
+  assert.deepStrictEqual(h.writtenPaths().filter((p) => !p.startsWith("rateLimits/")), []);
   assert.deepStrictEqual(h.deletedUids(), []);
 };
+const COUNTER_PATHS = EXPECTED_PATHS.filter((p) => p.startsWith("rateLimits/"));
 
 test("an EMPTY account listing is refused", async () => {
   /* Every visitor gets an account, so "no accounts" is a broken listing — and
@@ -484,6 +498,55 @@ test("orphans: a plausible number is removed when asked", async () => {
   assert.ok(h.writtenPaths().includes("scenarios/ghost"));
   assert.strictEqual(r.records.orphanPaths, 1);
   assert.ok(!h.deletedUids().includes("ghost"), "an orphan has no account to delete");
+});
+
+// ── (review) neither half may be able to stop the other ─────────────────────
+
+test("(review) the counters are swept even when the account half REFUSES", async () => {
+  /* The notice promises the counters gone within about three days. If that hung
+     on the account half, every refused listing — and there are three ways to
+     refuse one — would quietly break a published period. */
+  const w = world();
+  w.accounts = w.accounts.map((a) => Object.assign({}, a, { providers: [] }));
+  const h = harness(w);
+  const err = await h.run({ confirm: true }).then(() => null, (e) => e);
+  assert.ok(err && err.refusal === true);
+  assert.deepStrictEqual(h.writtenPaths(), COUNTER_PATHS);
+  /* ...and whoever reports the refusal can say what was done. Counts only. */
+  assert.strictEqual(err.rateLimits.staleUid, 2);
+  assert.strictEqual(err.rateLimits.staleSession, 1);
+  assert.strictEqual(err.rateLimits.written.paths, COUNTER_PATHS.length);
+  const printed = formatSweepOnly(err.rateLimits, true).join("\n");
+  assert.match(printed, /Rate limits: 2 per-uid \+ 1 per-session/);
+  assert.match(printed, /3 counter path\(s\) removed/);
+  for (const s of secretsOf(w)) assert.ok(!printed.includes(s), "leaked " + JSON.stringify(s));
+});
+
+test("(review) the counters are swept even when the account LISTING fails outright", async () => {
+  const h = harness(world(), { listThrows: "account listing failed: HTTP 403" });
+  await assert.rejects(h.run({ confirm: true }), /HTTP 403/);
+  assert.deepStrictEqual(h.writtenPaths(), COUNTER_PATHS);
+});
+
+test("(review) a dry run sweeps nothing even when the account half refuses", async () => {
+  const h = harness(world({ accounts: [] }));
+  const err = await h.run().then(() => null, (e) => e);
+  assert.ok(err && err.refusal === true);
+  assert.deepStrictEqual(h.updates(), []);
+  assert.strictEqual(err.rateLimits.written.paths, 0);
+  assert.match(formatSweepOnly(err.rateLimits, false).join("\n"), /dry run: nothing written/);
+});
+
+test("(review) a failed COUNTER write does not stop the account being removed", async () => {
+  /* The rule is that an account goes only after ITS records. The counters are
+     not its records: they expire on their own clock whoever owns them. */
+  const h = harness(world(), { failUpdate: 0 });          // the first update is the counters
+  const r = await h.run({ confirm: true });
+  assert.deepStrictEqual(h.deletedUids(), ["idleAnon"]);
+  assert.strictEqual(r.auth.skipped, false);
+  assert.strictEqual(r.written.failedUpdates, 1);
+  assert.strictEqual(r.written.paths, 2, "the two user-record paths still went");
+  assert.strictEqual(exitCodeFor(r), 1, "but the run must not report a clean sweep");
 });
 
 // ── (review) the counter sweep must not be able to stop the job ─────────────

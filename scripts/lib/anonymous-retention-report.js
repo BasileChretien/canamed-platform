@@ -29,6 +29,32 @@ function exitCodeFor(report) {
   return failed ? 1 : 0;
 }
 
+/** The counter sweep, in one line. Also printed on its own when the account
+ *  half refuses or fails: the sweep has run by then, and a log that said only
+ *  "REFUSED" would hide that it had. */
+function formatRateLimits(l) {
+  return `Rate limits: ${l.staleUid} per-uid + ${l.staleSession} per-session bucket(s) past ` +
+    `their window, ${l.kept} current` +
+    (l.unparsed ? `, ${l.unparsed} in no known format` : "") +
+    (l.readErrors ? ` — ${l.readErrors} READ(S) FAILED, those counters were not swept` : "");
+}
+
+/**
+ * What to print when the account half threw after the counters were swept.
+ * @param {object} l       `error.rateLimits` as attached by the job
+ * @param {boolean} confirm
+ * @returns {string[]}
+ */
+function formatSweepOnly(l, confirm) {
+  const w = l.written || { paths: 0, failedUpdates: 0, errorCodes: [] };
+  const out = [formatRateLimits(l)];
+  out.push(confirm
+    ? `Written:     ${w.paths} counter path(s) removed` +
+      (w.failedUpdates ? `, ${w.failedUpdates} update(s) FAILED [${w.errorCodes.join(", ")}]` : "")
+    : "             (dry run: nothing written)");
+  return out;
+}
+
 /**
  * @param {object} report from runAnonymousRetention()
  * @param {object} opts   { confirm:boolean, days:number, sweepOrphans:boolean }
@@ -57,10 +83,7 @@ function formatReport(report, opts) {
   if (r.readErrors) {
     out.push(`Unreadable:  ${r.readErrors} users/ node(s) could not be read; their accounts were spared`);
   }
-  out.push(`Rate limits: ${l.staleUid} per-uid + ${l.staleSession} per-session bucket(s) past ` +
-    `their window, ${l.kept} current` +
-    (l.unparsed ? `, ${l.unparsed} in no known format` : "") +
-    (l.readErrors ? ` — ${l.readErrors} READ(S) FAILED, those counters were not swept` : ""));
+  out.push(formatRateLimits(l));
   out.push(`Paths:       ${report.paths} database path(s) — ${opts.confirm ? "deleted" : "would delete"}`);
   if (!opts.confirm) {
     if (report.paths + a.expired > 0) out.push("(Set ANON_CONFIRM=1 to actually delete.)");
@@ -82,4 +105,4 @@ function formatReport(report, opts) {
   return out;
 }
 
-module.exports = { exitCodeFor, formatReport };
+module.exports = { exitCodeFor, formatReport, formatSweepOnly };

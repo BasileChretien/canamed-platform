@@ -146,8 +146,9 @@
       database uses it to decide what each browser may read and write. If you
       later create an account, that identifier becomes the account's.</p>
     <p>If you use the simulated-patient chat, the number of messages you send
-      per hour and per day is counted against that identifier, to enforce a
-      usage limit.</p>
+      per hour and per day is counted against that identifier, and the number
+      sent per hour in your session is counted against the session, to enforce
+      usage limits.</p>
 
     <h2>5. Sensitive personal information</h2>
     <p>The workshop scenarios cover opioid prescribing, breaking bad news,
@@ -186,9 +187,13 @@
       content.</strong> They read a list of session identifiers and, for each session, the two dates that
       decide when it is deleted; one also reads the certificate records. A further
       job, which deletes technical identifiers that are no longer in use
-      (section 8), reads the list of those identifiers with the dates they were
-      created and last used, the identifiers of the members and the creator of
-      each current session, and the time slots of the chat's usage counters. It receives no
+      (section 8), reads: the list of those identifiers with the dates they were
+      created and last used; the identifiers of the members and the creator of
+      each current session; whether a profile, a session history or authored
+      scenarios are stored under an identifier, but not what they contain; the
+      operator's lists of approved facilitators and moderators; and, for each of
+      the chat's usage counters, which identifier or session it belongs to and
+      its time slot. It receives no
       name and no e-mail address &mdash; for an account you signed in with,
       only its identifier, its dates and the name of the sign-in method. Until
       2026-09-01 two of these jobs copied the <strong>whole live session
@@ -262,11 +267,15 @@
         opens (section 4) is deleted once it has gone <strong>90 days</strong>
         without being used. If a session you joined still exists at that point,
         the identifier is deleted when that session is &mdash; about 30 days
-        later at most. If you come back afterwards, your browser is simply
+        later at most. Copies of the sessions you joined, which contain it,
+        remain in the nightly backups until those expire (second point of this
+        list). It is kept longer only if it belongs to an approved facilitator
+        or moderator, or if a profile or authored scenarios are stored under it.
+        If you come back after it has been deleted, your browser is simply
         given a new one. An identifier that has become an account is kept with
         that account instead (last line of this list).</li>
       <li>The simulated-patient chat's usage counters are deleted within
-        three days.</li>
+        about three days.</li>
       <li>If you report a shared scenario as inappropriate, the report is kept
         under that identifier and is not deleted automatically; you can ask us
         to delete it (section 9).</li>
@@ -322,13 +331,14 @@
       counters of the simulated-patient chat. Earlier versions mentioned
       neither. Section 8 states how long each is kept: until October 2026
       neither was deleted at all; the identifier is now deleted after 90 days
-      without use and the counters within three days. Sections 6 and 7 say what
+      without use and the counters within about three days. Sections 6 and 7 say
+      what
       the job that does this reads, and that it runs outside the EEA.
       Separately: until 2026-08-25 a programming error recorded, under that
       identifier, the code of each session joined, with the workshop and
       scenario names and the time &mdash; including for participants who never
-      created an account. It stopped on 2026-08-25, and what it left behind is
-      deleted by the same job.
+      created an account. The error was corrected on 2026-08-25, and what it left
+      behind is deleted by the same job.
       Material changes are issued under a new version with re-consent on next join.
       <strong>Material changes since PIS v10, carried forward:</strong>
       section 1 no longer states that Université de Caen Normandie and Nagoya
@@ -514,7 +524,8 @@
       identifiant devient celui du compte.</p>
     <p>Si vous utilisez la conversation avec le patient simulé, le nombre de
       messages que vous envoyez par heure et par jour est décompté sous cet
-      identifiant, afin d'appliquer une limite d'utilisation.</p>
+      identifiant, et le nombre envoyé par heure dans votre séance est décompté
+      pour la séance, afin d'appliquer des limites d'utilisation.</p>
 
     <h2>5. Informations personnelles sensibles</h2>
     <p>Les scénarios portent sur opioïdes, mauvaise nouvelle, fin de vie,
@@ -556,10 +567,14 @@
       de vos séances.</strong> Elles lisent une liste d'identifiants de séance et, pour chaque séance, les deux
       dates qui déterminent le moment de sa suppression ; l'une lit également les
       enregistrements de certificats. Une autre tâche, qui supprime les
-      identifiants techniques devenus inutiles (section 8), lit la liste de ces
-      identifiants avec leurs dates de création et de dernière utilisation, les
-      identifiants des membres et du créateur de chaque séance en cours, ainsi
-      que les créneaux horaires des compteurs d'utilisation de la conversation. Elle ne
+      identifiants techniques devenus inutiles (section 8), lit : la liste de ces
+      identifiants avec leurs dates de création et de dernière utilisation ; les
+      identifiants des membres et du créateur de chaque séance en cours ; la
+      présence, sous un identifiant, d'un profil, d'un historique de séances ou
+      de scénarios rédigés, mais pas leur contenu ; les listes d'animateurs et de
+      modérateurs approuvés tenues par l'exploitant ; et, pour chaque compteur
+      d'utilisation de la conversation, l'identifiant ou la séance auquel il se
+      rapporte et son créneau horaire. Elle ne
       reçoit ni nom ni adresse électronique &mdash; pour un compte auquel vous
       vous êtes connecté, seulement son identifiant, ses dates et le nom du
       mode de connexion. Jusqu'au 01/09/2026, deux de ces tâches
@@ -644,12 +659,17 @@
         la plateforme (section 4) est supprimé après <strong>90 jours</strong>
         sans utilisation. Si une séance à laquelle vous avez participé existe
         encore à ce moment-là, l'identifiant est supprimé en même temps
-        qu'elle &mdash; soit environ 30 jours plus tard au maximum. Si vous
-        revenez ensuite, votre navigateur en reçoit simplement un nouveau. Un
-        identifiant devenu celui d'un compte est conservé avec ce compte
-        (dernière ligne de cette liste).</li>
+        qu'elle &mdash; soit environ 30 jours plus tard au maximum. Les copies
+        des séances auxquelles vous avez participé, qui le contiennent,
+        subsistent dans les sauvegardes nocturnes jusqu'à leur expiration
+        (deuxième point de cette liste). Il n'est conservé plus longtemps que
+        s'il appartient à un animateur ou à un modérateur approuvé, ou si un
+        profil ou des scénarios rédigés sont enregistrés sous cet identifiant.
+        Si vous revenez après sa suppression, votre navigateur en reçoit
+        simplement un nouveau. Un identifiant devenu celui d'un compte est
+        conservé avec ce compte (dernière ligne de cette liste).</li>
       <li>Les compteurs d'utilisation de la conversation avec le patient simulé
-        sont supprimés sous trois jours.</li>
+        sont supprimés sous trois jours environ.</li>
       <li>Si vous signalez un scénario partagé comme inapproprié, le signalement
         est conservé sous cet identifiant et n'est pas supprimé
         automatiquement ; vous pouvez en demander la suppression
@@ -713,13 +733,14 @@
       mentionnaient ni l'un ni les autres. La section 8 indique combien de
       temps chacun est conservé : jusqu'en octobre 2026, aucun n'était
       supprimé ; l'identifiant est désormais supprimé après 90 jours sans
-      utilisation et les compteurs sous trois jours. Les sections 6 et 7
+      utilisation et les compteurs sous trois jours environ. Les sections 6 et 7
       précisent ce que lit la tâche qui s'en charge, et qu'elle s'exécute hors
       EEE. Par ailleurs, jusqu'au 25/08/2026, une erreur de programmation
       enregistrait sous cet identifiant le code de chaque séance rejointe, avec
       le nom de l'atelier, celui du scénario et l'heure &mdash; y compris pour
-      les participants n'ayant jamais créé de compte. Cet enregistrement a
-      cessé le 25/08/2026 et ce qu'il a laissé est supprimé par la même tâche.
+      les participants n'ayant jamais créé de compte. L'erreur a été
+      corrigée le 25/08/2026 et ce qu'elle a laissé est supprimé par la même
+      tâche.
       Les modifications substantielles font l'objet d'une nouvelle version avec re-consentement à la prochaine participation.
       <strong>Modifications substantielles depuis la version PIS v10, reprises :</strong>
       la section 1 n'affirme plus que l'Université de Caen Normandie et
@@ -909,7 +930,9 @@
       データベースは、各ブラウザが読み書きできる範囲をこの識別子で判断します。
       あとでアカウントを作成すると、この識別子がそのアカウントの識別子になります。</p>
     <p>模擬患者とのチャットを利用すると、1時間ごと・1日ごとの送信メッセージ数が、
-      この識別子と結びつけて数えられます。これは利用上限を適用するためです。</p>
+      この識別子と結びつけて数えられます。
+      セッション全体の1時間ごとの送信数も、セッションと結びつけて数えられます。
+      これらは利用上限を適用するためです。</p>
 
     <h2>5. 要配慮個人情報</h2>
     <p>シナリオはオピオイド、悪い知らせ、終末期、家族対自律の倫理を
@@ -945,9 +968,13 @@
       セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付だけです。
       1つの処理は証明書レコードも読み込みます。
       さらに別の処理が、使われなくなった技術的識別子を削除します（第8条）。
-      この処理が読み込むのは、識別子の一覧と、それぞれの作成日および最終利用日です。
-      あわせて、現在あるセッションの各メンバーおよび作成者の識別子と、
-      チャットの利用回数カウンターの時間帯も読み込みます。
+      この処理は、識別子の一覧と、それぞれの作成日および最終利用日を読み込みます。
+      現在あるセッションの各メンバーおよび作成者の識別子も読み込みます。
+      各識別子のもとにプロフィール、セッション履歴、
+      作成したシナリオが保存されているかどうかも確認しますが、その内容は読み込みません。
+      運営者が管理する承認済みファシリテーターとモデレーターの一覧も読み込みます。
+      チャットの利用回数カウンターについては、
+      対象の識別子またはセッションと、その時間帯を読み込みます。
       氏名やメールアドレスは受け取りません。
       サインインして作成したアカウントの場合も、
       受け取るのは識別子と日付、サインイン方法の名称だけです。
@@ -1014,12 +1041,16 @@
         ご請求があればそれ以前でも削除します。</li>
       <li>本プラットフォームを開いたときにブラウザへ割り当てられる技術的識別子（第4条）は、
         <strong>90日間</strong>利用がなければ削除します。
-        その時点で参加したセッションがまだ残っている場合は、
-        そのセッションと一緒に削除するため、削除は最長で約30日後になります。
-        その後にふたたびアクセスしたときは、ブラウザに新しい識別子が割り当てられるだけです。
+        参加したセッションがその時点でまだ残っている場合は、
+        そのセッションと一緒に削除するため、削除は最長で約30日後です。
+        参加したセッションの複製にはこの識別子が含まれており、
+        毎晩のバックアップに残る複製は、この一覧の2番目の項の期間で失効します。
+        承認済みのファシリテーターまたはモデレーターの識別子である場合と、
+        プロフィールまたは作成したシナリオが保存されている場合に限り、これより長く保持します。
+        削除後にふたたびアクセスしたときは、ブラウザに新しい識別子が割り当てられるだけです。
         アカウントの識別子になったものは、そのアカウントとともに保持します。
         保持期間はこの一覧の最後の項のとおりです。</li>
-      <li>模擬患者チャットの利用回数カウンターは3日以内に削除します。</li>
+      <li>模擬患者チャットの利用回数カウンターは、おおむね3日以内に削除します。</li>
       <li>共有シナリオを不適切として報告した場合、
         その報告はこの識別子と結びつけて保持します。
         この報告は自動的には削除されません。
@@ -1077,14 +1108,14 @@
       従来のバージョンには、どちらの記載もありませんでした。
       第8条には、それぞれの保有期間を記載しています。
       2026年10月までは、どちらも削除していませんでした。
-      現在は、識別子を90日間利用がなければ削除し、カウンターを3日以内に削除します。
+      現在は、識別子を90日間利用がなければ削除し、カウンターをおおむね3日以内に削除します。
       第6条と第7条には、この削除を行う処理が読み込む情報と、
       その処理がEEA域外で実行されることを記載しています。
       これとは別に、2026年8月25日までは、プログラムの誤りによる記録がありました。
       この識別子と結びつけて記録されていたのは、
       参加した各セッションのコード、ワークショップ名、シナリオ名および日時です。
       アカウントを作成していない参加者も対象でした。
-      この記録は2026年8月25日に止まっており、残っていた記録は同じ処理で削除します。
+      この誤りは2026年8月25日に修正しており、残っていた記録は同じ処理で削除します。
       重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
       <strong>PIS v10からの重要な変更（継続掲載）：</strong>第1条は、カーン・ノルマンディー大学と
       名古屋大学が<em>すべての</em>セッションの管理者であるとは記載しなくなりました。

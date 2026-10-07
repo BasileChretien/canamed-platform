@@ -388,9 +388,22 @@ mask honoured; every anonymous account dated; 119 database paths would go.
   Orphans (a uid with records and no account) are counted and left alone unless
   `sweep_orphans` is ticked, behind a tripwire; record keys are read BEFORE the
   account listing so a new sign-up can never look like one.
-- **The counter sweep cannot stop the job.** Participants can write under their
-  own `rateLimits` node, so it is read per id, shallow, and a failure is
-  counted (exit 1) rather than thrown.
+- **Two phases, and neither can stop the other.** The counter sweep runs FIRST
+  and is written before the account listing is requested, because the notice
+  promises the counters gone in about three days and that must not hang on the
+  account half (which can refuse). Participants can write under their own
+  `rateLimits` node, so it is read per id, shallow, and a failure is counted
+  (exit 1) rather than thrown. Exit 3 therefore means "the ACCOUNT half
+  refused", not "nothing happened" — the log still carries a `Rate limits:` line.
+- **The account half refuses if the listing has NO signed-in account** (two
+  exist today). Deliberate, but if both ever go, every nightly run exits 3 and
+  no anonymous account is removed until someone intervenes.
+- **`CONSENT_NOTICE_VERSION` (script.js) is the TENTH notice-version surface.**
+  It is stamped on every consent record and decides whether a resuming
+  participant is asked again. It sat at `PIS-v3-2026-07` from v3 to v11, so
+  consent records from July–October 2026 all say v3 and nobody resuming was
+  re-asked. `tests/pis-version-lockstep.test.js` now ties it to the notice —
+  bump it with every PIS version.
 - **No e-mail address reaches the runner.** The Admin SDK's `listUsers()`
   returns whole records, so the listing goes over REST with a `fields` mask
   and then VERIFIES it: one unrequested key aborts the run. The check can only
@@ -408,6 +421,10 @@ mask honoured; every anonymous account dated; 119 database paths would go.
   controller / DPO; how long an unactioned moderation report is kept; and the
   operator's acceptance of the GitHub transfer (R9) was given for narrower
   content than this job sends.
+- ⚠️ **NOTHING MONITORS THAT IT RUNS (DPA G11).** A failed run mails the repo
+  owner; a workflow that never starts — disabled, secret revoked — does not,
+  and §8 of the notice would then be false with no signal. The `Verify:` below
+  is the only check and it is manual.
 - **Two emulator divergences, both measured.** The Auth emulator ignores
   `fields` (so it serves as the positive control for the mask check), and it
   answers a deleted account's refresh with `INVALID_REFRESH_TOKEN` where Google
