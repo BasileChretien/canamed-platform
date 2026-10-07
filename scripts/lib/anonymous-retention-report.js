@@ -89,7 +89,7 @@ function formatReport(report, opts) {
     out.push(`Unreadable:  ${r.readErrors} users/ node(s) could not be read; their accounts were spared`);
   }
   out.push(formatRateLimits(l));
-  out.push(`Paths:       ${report.paths} database path(s) — ${opts.confirm ? "deleted" : "would delete"}`);
+  out.push(`Paths:       ${report.paths} database path(s) — ${opts.confirm ? "to delete" : "would delete"}`);
   if (!opts.confirm) {
     if (report.paths + a.expired > 0) out.push("(Set ANON_CONFIRM=1 to actually delete.)");
     return out;

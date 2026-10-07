@@ -406,6 +406,101 @@ test("the notice admits the month in which a third daily job copied every sessio
   }
 });
 
+/* Section 16 only: the changelog of the version in force. */
+function changelog(body, lang) {
+  const start = body.indexOf("<h2>16.");
+  const end = body.indexOf("<h2>17.");
+  assert.ok(start >= 0 && end > start, "section 16 not found in the " + lang + " body");
+  return flat(body.slice(start, end));
+}
+
+test("the full copies are made on a GitHub machine, and the notice says session content crosses for them", () => {
+  /* The backup and the research export write to storage in Paris, and the
+     notice said so — and, one section later, that "what crosses is session
+     identifiers ... rather than your session content". But both jobs RUN on
+     GitHub-hosted runners: to make the copy they read the whole database
+     there, every night. The destination was disclosed; the place where the
+     reading happens was not, and section 7 denied it. Found by an independent
+     review of PIS v12; true since those jobs were introduced.
+
+     Derived from the workflows: while a full-copy job runs on a GitHub-hosted
+     runner the notice must say the content crosses. Move them to a runner in
+     the EEA and this fails until the notice is changed back. */
+  const fullCopy = scheduledWorkflows()
+    .filter((w) => scriptsOf(w.yml).some((rel) => FULL_COPY.includes(rel)));
+  const hosted = fullCopy
+    .filter((w) => /^\s*runs-on:\s*(ubuntu|windows|macos)-/m.test(w.yml))
+    .map((w) => w.file);
+  /* The notice says "these two jobs", so it is BOTH or the sentence is wrong:
+     one job moved to a runner in the EEA leaves the notice overstating the
+     transfer for that one, and a third full-copy job leaves it understating. */
+  assert.equal(fullCopy.length, FULL_COPY.length,
+    "the notice describes " + FULL_COPY.length + " scheduled full-copy jobs; the workflows have " +
+    fullCopy.map((w) => w.file).join(", "));
+  assert.deepEqual(hosted, fullCopy.map((w) => w.file),
+    "a scheduled full-copy job no longer runs on a GitHub-hosted runner. If that is true, " +
+    "sections 6 and 7 of the notice now overstate the transfer for it; if not, this derivation is broken.");
+
+  const s = privacySections();
+  const said = {
+    en: [/Apart from the two full copies described at the end of this paragraph, the jobs that run every day do not read your session content/,
+         /each of these two jobs reads the whole database on the same GitHub machines as the other jobs, once a night, and the content is on that machine for as long as the job runs/,
+         /For all but two of them, what crosses is session identifiers, two dates per session and the certificate records, rather than your session content/,
+         /The two that copy the database in full \(section 6\) are the exception: they read all of it on a GitHub machine, so your session content does cross, once a night for each, while the job runs/],
+    fr: [/À l'exception des deux copies intégrales décrites à la fin de ce paragraphe, les tâches qui s'exécutent chaque jour ne lisent pas le contenu de vos séances/,
+         /chacune de ces deux tâches lit l'intégralité de la base sur les mêmes machines GitHub que les autres tâches, une fois par nuit, et le contenu se trouve sur cette machine pendant toute la durée de la tâche/,
+         /Pour toutes sauf deux, ce qui franchit la frontière, ce sont des identifiants de séance, deux dates par séance et les enregistrements de certificats, et non le contenu de vos séances/,
+         /Les deux tâches qui copient la base intégralement \(section 6\) font exception : elles la lisent en entier sur une machine GitHub, de sorte que le contenu de vos séances franchit bien la frontière, une fois par nuit pour chacune, pendant la durée de la tâche/],
+    ja: [/この段落の最後で述べる、データベース全体を複製する2つの処理を除き、毎日実行される処理は、セッションの内容を読み込みません/,
+         /この2つの処理は、複製を作るために、ほかの処理と同じGitHubのマシン上でデータベース全体を毎晩1回ずつ読み込みます/,
+         /ただし2つの処理を除けば、国境を越えるのは、セッション識別子、各セッションの2つの日付、および証明書レコードであり、セッションの内容ではありません/,
+         /この2つはGitHubのマシン上でデータベース全体を読み込むため、処理が動いているあいだ、セッションの内容も毎晩国境を越えます/]
+  };
+  for (const lang of ["en", "fr", "ja"]) {
+    const sec = recipientsAndTransfers(s[lang], lang);
+    for (const re of said[lang]) {
+      assert.ok(re.test(sec), "privacy.html [" + lang + "] sections 6-7 do not say: " + re +
+        "\nFull-copy jobs on a GitHub-hosted runner: " + hosted.join(", "));
+    }
+    /* ...and the unqualified denial must not come back. */
+    const denial = { en: /&mdash; what crosses is session identifiers/, fr: /&mdash; ce qui franchit la frontière, ce sont des identifiants/,
+                     ja: /ただし国境を越えるのは、セッション識別子/ }[lang];
+    assert.ok(!denial.test(sec), "privacy.html [" + lang + "] section 7 again says, without exception, " +
+      "that only identifiers and dates cross the border");
+  }
+});
+
+test("section 7 says the requests cross too, and section 16 records what v12 added to sections 6 and 7", () => {
+  /* Each of these was changed during review and was pinned by nothing: a
+     revert of the corrected date in the changelog passed the whole suite. */
+  const s = privacySections();
+  const transfers = {
+    en: /So do the requests to withdraw consent or to have data erased, and the record of those carried out/,
+    fr: /Il en va de même des demandes de retrait du consentement ou d'effacement et de la trace de celles déjà traitées/,
+    ja: /同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も国境を越えます/
+  };
+  const log = {
+    en: [/the daily jobs read requests to withdraw consent or to have data erased, which earlier versions did not mention/,
+         /one of them copied the whole live session database to a GitHub machine every day from 2026-09-04 to 2026-10-07 without needing to/,
+         /the nightly backup and the research export read the whole database on a GitHub machine, so that session content crosses the border while they run; earlier versions said it did not/],
+    fr: [/les tâches quotidiennes lisent les demandes de retrait du consentement ou d'effacement, ce que les versions précédentes ne mentionnaient pas/,
+         /du 04\/09\/2026 au 07\/10\/2026, sans en avoir besoin/,
+         /la sauvegarde nocturne et l'export de recherche lisent l'intégralité de la base sur une machine GitHub, de sorte que le contenu des séances franchit la frontière pendant leur exécution ; les versions précédentes affirmaient le contraire/],
+    ja: [/毎日実行される処理が同意の撤回やデータ削除のご請求を読み込むことも記載しました/,
+         /そのうち1つの処理は、2026年9月4日から2026年10月7日まで、/,
+         /毎晩のバックアップと研究用エクスポートがGitHubのマシン上でデータベース全体を読み込むことも、今回はじめて記載しました/,
+         /従来のバージョンには、越えないと記載していました/]
+  };
+  for (const lang of ["en", "fr", "ja"]) {
+    assert.ok(transfers[lang].test(recipientsAndTransfers(s[lang], lang)),
+      "privacy.html [" + lang + "] section 7 does not say the requests cross the border");
+    const cl = changelog(s[lang], lang);
+    for (const re of log[lang]) {
+      assert.ok(re.test(cl), "privacy.html [" + lang + "] section 16 does not record: " + re);
+    }
+  }
+});
+
 test("if a scheduled job DOES copy the database, the notice says so and says where", () => {
   /* The backup and the pseudonymised export copy everything — that is their
      purpose, and they were re-enabled on 2026-09-01 after five days in which the

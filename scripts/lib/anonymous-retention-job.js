@@ -269,13 +269,16 @@ async function planRateLimits(read, nowMs, budget) {
  *  with many. When the sweep runs out of time it is then the flood that waits,
  *  not everyone else's counters. Stable within an id. */
 function smallestIdsFirst(paths) {
-  const idOf = (p) => p.split("/").slice(0, 3).join("/");
+  /* The id of each path is worked out ONCE: a flood is a million paths, and a
+     comparator that re-split both strings every time spent seconds of the
+     sweep's own budget here. */
+  const ids = paths.map((p) => p.split("/", 3).join("/"));
   const size = new Map();
-  for (const p of paths) size.set(idOf(p), (size.get(idOf(p)) || 0) + 1);
+  for (const id of ids) size.set(id, (size.get(id) || 0) + 1);
   return paths
-    .map((p, i) => [p, i])
-    .sort((a, b) => (size.get(idOf(a[0])) - size.get(idOf(b[0]))) || (a[1] - b[1]))
-    .map((x) => x[0]);
+    .map((p, i) => i)
+    .sort((a, b) => (size.get(ids[a]) - size.get(ids[b])) || (a - b))
+    .map((i) => paths[i]);
 }
 
 /** Null every path, one atomic update per chunk. A failed chunk is counted,
