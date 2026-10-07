@@ -42,7 +42,11 @@ const { FIELD_MASK } = require("../scripts/lib/auth-accounts");
 
 const ROOT = path.join(__dirname, "..");
 const PLATFORM = path.join(ROOT, "docs", "Third_session", "PBL_platform");
-const read = (...p) => fs.readFileSync(path.join(...p), "utf8");
+/* Read as LF, whatever the checkout. With core.autocrlf=true the working tree
+   is CRLF, and `.` does not match `\r` — so a pattern that walks lines with
+   `.*\n` finds nothing on Windows while passing in CI. The first version of
+   the job's own workflow test had exactly that fault. */
+const read = (...p) => fs.readFileSync(path.join(...p), "utf8").replace(/\r\n/g, "\n");
 
 // ---- the enforced side -----------------------------------------------------
 
