@@ -30,6 +30,7 @@
   "a11y.skip-to-main": "본문으로 건너뛰기",
   "splash.tagline": "대학 간 의학 교육 파트너십을 위한 협업 플랫폼입니다.",
   "splash.signed-in-as": "로그인:",
+  "splash.account": "계정",
   "splash.sign-out": "로그아웃",
   "splash.lang-label": "언어",
   "privacy.title": "CaNaMED — 개인정보 처리방침",

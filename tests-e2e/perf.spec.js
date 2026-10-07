@@ -723,6 +723,24 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     191.10 and first-party 323.94 -> 323.99, so the margin it calls ~1.45 KB
 //     was 2.0. Measure with { level: 9 }, or read critical_kb_gz off the perf
 //     job, or this ledger drifts away from the check it documents.
+//   2026-10-07 (third entry): CAP UNCHANGED (326). The splash's signed-in row
+//     gained an "Account" link — the only opener of the account dialog outside
+//     a session, where its header chip is hidden. Measured the way this spec
+//     measures, LF-normalised at gzip LEVEL 9, against main at v180 (which
+//     already holds the entry above and two later style.css fixes that have
+//     no entry here): first-party 324.50 -> 324.61 KB, +112 B —
+//     script.js +60 (two lines of wiring), style.css +42 (the row wraps, the
+//     name may break), i18n.js +11 (one key); script-loader.js is 1 B smaller
+//     from the version string. index.html is not counted.
+//     ⚠️ THIS IS A SECOND EAGER ADDITION WITHOUT THE RECLAIM the two entries
+//     above say is owed. It could not be made lazy — the splash is the eager
+//     surface — so it was cut instead (the first draft was +260 B), and the
+//     brief for it allowed spending headroom but not raising the cap. THE
+//     MARGIN IS NOW ~1.4 KB. The reclaim is still owed.
+//     For whoever takes that reclaim: the dialog no longer opens "from ONE
+//     click on the header chip". It has two openers now, the chip and this
+//     link, and both call openAccountDialog() — so a lazily linked sheet has
+//     to be awaited THERE, not in a click handler.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
