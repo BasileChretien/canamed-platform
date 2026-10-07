@@ -73,21 +73,25 @@ async function standInAuth(page) {
              the SDK shipped here (12.17.1) reports to onAuthStateChanged only
              when the uid changes — so the app's handler is not called. */
           linkWithCredential(cred) {
-            // An address that already is an account cannot be linked.
-            if (accounts[cred.email]) return refuse("auth/email-already-in-use");
-            user.isAnonymous = false;
-            user.email = cred.email;
-            return Promise.resolve({ user });
+            return Promise.resolve().then(() => {
+              // An address that already is an account cannot be linked.
+              if (accounts[cred.email]) return refuse("auth/email-already-in-use");
+              user.isAnonymous = false;
+              user.email = cred.email;
+              return { user };
+            });
           },
           /* The same upgrade through a provider's popup. window.__popup is
              what happens in it: { email, displayName }, or { error: code }. */
           linkWithPopup() {
             const p = window.__popup;
-            if (p.error) return refuse(p.error);
-            user.isAnonymous = false;
-            user.email = p.email;
-            user.displayName = p.displayName || null;
-            return Promise.resolve({ user });
+            return Promise.resolve().then(() => {
+              if (p.error) return refuse(p.error);
+              user.isAnonymous = false;
+              user.email = p.email;
+              user.displayName = p.displayName || null;
+              return { user };
+            });
           }
         };
         auth.currentUser = user;
@@ -100,7 +104,26 @@ async function standInAuth(page) {
         return later(a.user).then(() => ({ user: a.user }));
       },
       signInWithCredential(cred) { return auth.signInWithEmailAndPassword(cred.email, cred.password); },
+      /* A provider's popup for somebody who is not anonymous here: it signs in
+         to the account that identity already is. */
+      signInWithPopup() {
+        const p = window.__popup;
+        const a = accounts[p.email];
+        if (p.error || !a) return refuse(p.error || "auth/user-not-found");
+        auth.currentUser = a.user;
+        return later(a.user).then(() => ({ user: a.user }));
+      },
       signOut() { auth.currentUser = null; return later(null); }
+    };
+    /* ANOTHER TAB of this browser creates the account. The SDK copies the
+       change into this tab's user object and, the uid being the same, reports
+       nothing: the user here is an account and the page has not been told. */
+    window.__otherTabUpgrades = (email, password, displayName) => {
+      const user = auth.currentUser;
+      user.isAnonymous = false;
+      user.email = email;
+      user.displayName = displayName || null;
+      accounts[email] = { user, password };
     };
     /* LOCAL mode never calls the SDK; the sign-up and provider paths ask it
        for a credential and a provider object. */
@@ -896,7 +919,11 @@ test("I: so is an account made with the Google button, and a popup that is close
   await page.locator("#splash-go-account").click();
   await expect(page.locator("#splash-view-account")).toBeVisible();
 
-  // 1. The popup is closed without choosing an account.
+  /* 1. An address and a password typed first, then the Google button instead —
+        and the popup is closed without choosing an account. Only a sign-in that
+        WORKED empties the form: what was typed is still there. */
+  await page.locator("#splash-email-input").fill("half@example.test");
+  await page.locator("#splash-password-input").fill("Half-typed-1");
   let since = await mark(page);
   await page.evaluate(() => { window.__popup = { error: "auth/popup-closed-by-user" }; });
   await page.locator("#splash-google-signin").click();
@@ -906,10 +933,10 @@ test("I: so is an account made with the Google button, and a popup that is close
     .toEqual({ uid, anonymous: true, reported: [], handled: [] });
   await expect(page.locator("#splash-view-account")).toBeVisible();
   await expect(page.locator("#splash-signed-in")).toBeHidden();
+  expect(await signInFields(page), "a failed attempt keeps what was typed")
+    .toEqual({ email: "half@example.test", password: "Half-typed-1", confirm: "" });
 
-  // 2. An address and a password typed first, then the Google button instead.
-  await page.locator("#splash-email-input").fill("half@example.test");
-  await page.locator("#splash-password-input").fill("Half-typed-1");
+  // 2. The Google button again, and this time an account is chosen.
   since = await mark(page);
   await page.evaluate((email) => { window.__popup = { email, displayName: "Nova Example" }; }, NEW);
   await page.locator("#splash-google-signin").click();
@@ -947,5 +974,57 @@ test("I: a sign-up that turns out to be another account is reported by the SDK a
   expect(await pageState(page, since))
     .toEqual({ uid: "u_alice", anonymous: false, reported: ["u_alice"], handled: ["u_alice"] });
   expect(await signInFields(page)).toEqual(NOTHING);
+  expect(errors).toEqual([]);
+});
+
+test("I: an account created in another tab is shown here as soon as somebody signs in, by e-mail or with Google", async ({ page }) => {
+  /* Found in review. Another tab of the same browser creates the account: the
+     SDK changes THIS tab's user object under the page and reports nothing, the
+     uid being the same. Whoever then signed in here was signed in to a page
+     that went on showing nobody. The second tab is the stand-in's
+     __otherTabUpgrades(); a real second tab is not opened. */
+  test.setTimeout(90_000);
+  const errors = collectErrors(page);
+  await frontPage(page);
+
+  // 1. By e-mail, with the address the other tab has just registered.
+  const uid = await page.evaluate(() => currentUser.uid);
+  await page.evaluate(({ email, password }) => { window.__otherTabUpgrades(email, password); },
+    { email: NEW, password: PASSWORD });
+  expect(await page.evaluate(() => auth.currentUser.isAnonymous), "premise: the user is an account already").toBe(false);
+  await expect(page.locator("#splash-signed-in"), "premise: and the page, told nothing, shows nobody").toBeHidden();
+  await page.locator("#splash-go-account").click();
+  await page.locator("#splash-email-input").fill(NEW);
+  await page.locator("#splash-password-input").fill(PASSWORD);
+  let since = await mark(page);
+  await page.locator("#splash-email-submit").click();
+
+  await expect(page.locator("#splash-view-profile-setup")).toBeVisible();
+  expect(await pageState(page, since), "the same uid, unreported; handled once by the page itself")
+    .toEqual({ uid, anonymous: false, reported: [], handled: [uid] });
+  await expect(page.locator("#splash-signed-in-name")).toHaveText(NEW);
+  expect(await signInFields(page)).toEqual(NOTHING);
+
+  await page.locator("#splash-signed-in-out").click();
+  await expect(page.locator("#splash-signed-in")).toBeHidden();
+  await expect.poll(() => page.evaluate(() => !!(currentUser && currentUser.isAnonymous && currentUser.uid)),
+    { message: "premise: an anonymous visitor again" }).toBe(true);
+
+  // 2. With Google, for an account the other tab made with Google.
+  const uid2 = await page.evaluate(() => currentUser.uid);
+  expect(uid2).not.toBe(uid);
+  await page.evaluate(() => { window.__otherTabUpgrades("otto@example.test", undefined, "Otto Example"); });
+  await expect(page.locator("#splash-signed-in")).toBeHidden();
+  await page.locator("#splash-go-account").click();
+  await expect(page.locator("#splash-view-account")).toBeVisible();
+  since = await mark(page);
+  await page.evaluate(() => { window.__popup = { email: "otto@example.test" }; });
+  await page.locator("#splash-google-signin").click();
+
+  await expect(page.locator("#splash-view-profile-setup")).toBeVisible();
+  expect(await pageState(page, since))
+    .toEqual({ uid: uid2, anonymous: false, reported: [], handled: [uid2] });
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("otto@example.test");
+  await expect(page.locator("#splash-prof-name"), "starting from the name Google gave").toHaveValue("Otto");
   expect(errors).toEqual([]);
 });

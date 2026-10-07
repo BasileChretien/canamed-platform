@@ -12000,7 +12000,6 @@ function signInWithProvider(name) {
      AS it with the credential the error carries (no second popup to block);
      what was under the throwaway anonymous uid is then left behind. */
   const cur = auth.currentUser;
-  const anon = cur && cur.isAnonymous && cur.uid;
   const popupSignIn = () => auth.signInWithPopup(provider);
   const salvageSignIn = e =>
     (e && e.credential) ? auth.signInWithCredential(e.credential) : popupSignIn();
@@ -12019,7 +12018,7 @@ function signInWithProvider(name) {
       ? c.linkWithRedirect(provider)
       : auth.signInWithRedirect(provider);
   };
-  const link = anon
+  const link = (cur && cur.isAnonymous)
     ? cur.linkWithPopup(provider).catch(e => {
         if (e && (e.code === "auth/credential-already-in-use" ||
                   e.code === "auth/email-already-in-use")) {
@@ -12031,7 +12030,7 @@ function signInWithProvider(name) {
         throw e;
       })
     : popupSignIn();
-  link.then(() => signInDone(hint, anon)).catch(e => {
+  link.then(() => signInDone(hint)).catch(e => {
     if (popupBlocked(e)) {
       redirectSignIn().catch(err => splashHintErr(hint, authErrorMessage(err)));
       return;
@@ -12195,9 +12194,8 @@ function signUpWithEmail(email, password) {
   }
   splashHintOk(hint, "Creating your account…");
   const cur = auth.currentUser;
-  const anon = cur && cur.isAnonymous && cur.uid;
   const cred = firebase.auth.EmailAuthProvider.credential(email, password);
-  const link = anon
+  const link = (cur && cur.isAnonymous)
     ? cur.linkWithCredential(cred).catch(e => {
         if (e && (e.code === "auth/credential-already-in-use" ||
                   e.code === "auth/email-already-in-use")) {
@@ -12212,15 +12210,13 @@ function signUpWithEmail(email, password) {
           }
           throw e;
         });
-  link.then(() => signInDone(hint, anon))
+  link.then(() => signInDone(hint))
       .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
-/* Returns a promise that resolves once auth.currentUser is non-null. If
-   no user exists yet (first tab load, or someone signed out), kicks off
-   an anonymous sign-in. Idempotent — concurrent callers share one
-   in-flight promise. Returns a resolved promise immediately in solo /
-   local mode (no Firebase), so calling code can always `.then()`. */
+/* Resolves once somebody is signed in, signing in anonymously if nobody is
+   (first load, or after a sign-out). Concurrent callers share one promise. In
+   local mode (no Firebase) it resolves at once: a caller can always `.then()`. */
 function ensureSignedIn() {
   if (!auth) return Promise.resolve(null);
   if (auth.currentUser) return Promise.resolve(auth.currentUser);
@@ -12233,9 +12229,8 @@ function ensureSignedIn() {
     .catch(err => {
       _anonSignInPromise = null;
       console.warn("Anonymous sign-in failed; DB writes may be denied", err);
-      // resolve authReady with null so UI doesn't hang; subsequent DB
-      // writes will surface permission-denied errors visibly. Surface a
-      // hint to the operator if anonymous auth simply isn't enabled.
+      // authReady resolves with null so the UI does not hang; DB writes then
+      // fail visibly. Tell the operator if anonymous auth is simply not enabled.
       if (_authReadyResolve) { _authReadyResolve(null); _authReadyResolve = null; }
       if (err && err.code === "auth/operation-not-allowed") {
         const banner = el("connection-badge");
@@ -12251,10 +12246,11 @@ function ensureSignedIn() {
 }
 
 /* Who is signed in: the page's ONE path to it. The SDK calls this when the uid
-   changes, and only then; signInDone() calls it after a link, which keeps it. */
+   changes, and only then; signInDone() calls it when it has not. */
 function handleAuthStateChange(user) {
   if ((currentUser && currentUser.uid) !== (user && user.uid)) resetAccountUI();
   currentUser = user || null;
+  _anonShown = user && user.isAnonymous ? user.uid : null;
   // An account's stableId is its uid, on every tab and device (see stableId).
   // An anonymous visitor keeps the random one minted at load.
   if (currentUser && !currentUser.isAnonymous && currentUser.uid) {
@@ -12349,14 +12345,18 @@ function clearSignInForm() {
   });
 }
 
-/* A sign-in or sign-up succeeded. `anon` is the uid of the anonymous visitor
-   it started from, if any: when that is still the uid, it was a link, the SDK
-   reports nothing, and the page is brought to the account from here. */
-function signInDone(hint, anon) {
+/* The uid last handled as an ANONYMOUS visitor, else null. It can become an
+   account unreported: a link keeps the uid, and so does an account made in
+   another tab, which alters the live user object under this page. */
+let _anonShown = null;
+
+/* A sign-in or sign-up succeeded: an account the page still shows as a visitor
+   is handled here. (A tab nobody signs in on shows the visitor until reloaded.) */
+function signInDone(hint) {
   clearSignInForm();
   splashHintOk(hint, "");
   const u = auth.currentUser;
-  if (anon && u && u.uid === anon) handleAuthStateChange(u);
+  if (u && !u.isAnonymous && u.uid === _anonShown) handleAuthStateChange(u);
 }
 
 function loadProfile() {
@@ -12439,10 +12439,8 @@ function populateProfileSelects(selectId) {
 function paintUserChip(hide) {
   const chip = el("user-chip");
   const splashRow = el("splash-signed-in");
-  // Anonymous users are treated as "not signed in" UI-wise — the chip / row
-  // belong to identified (Google) users only. Round-2 introduced an
-  // always-on anonymous user under the hood for DB-rule purposes, but it
-  // is intentionally invisible to the participant.
+  // An anonymous visitor is "not signed in" on screen: the chip and the row are
+  // for accounts. The anonymous user is there for the DB rules, and unseen.
   if (hide || !currentUser || currentUser.isAnonymous) {
     if (chip) chip.classList.add("hidden");
     if (splashRow) splashRow.hidden = true;
