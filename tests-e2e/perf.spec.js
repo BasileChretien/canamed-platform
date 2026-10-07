@@ -742,21 +742,42 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     click on the header chip". It has two openers now, the chip and this
 //     link, and both call openAccountDialog() — so a lazily linked sheet has
 //     to be awaited THERE, not in a click handler.
-//   2026-10-07 (fourth entry): CAP UNCHANGED (326). The follow-up to the SECOND
-//     entry of this date, all in the account dialog: a long sign-in address
-//     wraps instead of scrolling it; the floor of a history row's date + name
-//     column goes from 12ch to 20ch; and with enlarged text on a phone the two
-//     role options stack and a bare domain in a hint breaks. +29 B on
-//     style.css, measured the way this spec measures against main at v181:
-//     style.css 46.30 -> 46.33 KB gz, first-party 324.61 -> 324.64, margin
-//     ~1.4 KB.
+//   2026-10-07 (fourth entry): CAP UNCHANGED (326). PIS v12 (#429) moves the
+//     consent stamp in script.js from PIS-v3 to PIS-v12 and the version label
+//     in i18n.js with it. Same method (LF, gzip level 9, the 15 counted
+//     assets), against main at v183: first-party 324.90 -> 324.93 KB, +30 B
+//     (script.js, i18n.js, and a version string). The first draft was +156 B,
+//     nearly all of it two comments in script.js; they were cut to one line
+//     each. Not a feature and not avoidable: the stamp has to name the notice.
+//     Main itself went 324.61 -> 324.90 with #436 (the consent records kept
+//     across a reload), which left no entry here. MARGIN ~1.07 KB; the
+//     reclaim the entries above call owed is still owed.
+//   2026-10-08: CAP UNCHANGED (326). #441 fits the two names a signed-in
+//     participant's history entry stores to the rule's 80 characters, at the
+//     write site in script.js; the fitting itself is in the lazy
+//     section-registry.js and costs nothing here. Same method, against main
+//     at v184: first-party 324.93 -> 325.13 KB, +206 B, all of it script.js.
+//     Not avoidable without moving pushSessionToHistory() out of the eager
+//     file: the entry was being refused whole. MARGIN ~0.87 KB, and that is
+//     the third small eager addition in a row with no reclaim (#436, #429,
+//     this one) — the next change to an eager file should bring one.
+//   2026-10-08 (second entry): CAP UNCHANGED (326). #442, the follow-up to the
+//     second entry of 2026-10-07, all in the account dialog: a long sign-in
+//     address wraps instead of scrolling it; the floor of a history row's date
+//     + name column goes from 12ch to 20ch; a bare domain in a hint breaks;
+//     and the two role options stack when they do not fit. That last one is
+//     not only an enlarged-text change: at 320px they stack at default text
+//     size too, where on main they overhung their column by about 12px.
+//     +29 B on style.css, measured the way this spec measures, against main
+//     at v185: style.css 46.30 -> 46.33 KB gz, first-party 325.13 -> 325.16,
+//     MARGIN ~0.84 KB.
 //     Four declarations. The first two were paid for by rewording that block's
-//     own comments (-13 B at that point; the review of the second entry had
-//     measured those comments at ~400 B of the ~600 it added). The last two,
-//     added after this change's own review, are not paid for. Said plainly
-//     because the 316 entry calls trimming prose to land a symptom of a budget
-//     with no room: that is where this budget is.
-//     ⚠️ A THIRD SMALL EAGER ADDITION WITHOUT THE RECLAIM, which is still owed.
+//     own comments (-13 B at that point; the review of the 2026-10-07 second
+//     entry had measured those comments at ~400 B of the ~600 it added). The
+//     last two, added after this change's own review, are not paid for. Said
+//     plainly because the 316 entry calls trimming prose to land a symptom of
+//     a budget with no room: that is where this budget is.
+//     ⚠️ ANOTHER SMALL EAGER ADDITION WITHOUT THE RECLAIM, which is still owed.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

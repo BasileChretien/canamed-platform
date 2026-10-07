@@ -352,6 +352,8 @@ for (const locale of LOCALES) {
 
     test("on a phone, enlarged text does not make the dialog scroll sideways", async ({ page }) => {
       await openDialogWithHistory(page, locale, LONG_EMAIL);
+      // A closed dialog measures 0 against 0 and would pass every size below.
+      await expect(page.locator("#account-dialog")).toBeVisible();
 
       /* The width test above runs at 100% text and the sweep above at desktop
          width; neither sees a phone with enlarged text, where a word that

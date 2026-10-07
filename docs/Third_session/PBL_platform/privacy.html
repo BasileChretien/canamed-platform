@@ -69,7 +69,7 @@
     <!-- ================== ENGLISH (canonical, legally binding) ===================== -->
     <section data-priv-lang="en">
     <p class="meta">
-      Notice version <strong>PIS v11 · 2026-09</strong>.
+      Notice version <strong>PIS v12 · 2026-10</strong>.
       <a href="index.html">← Back to the platform</a>
     </p>
 
@@ -136,6 +136,19 @@
       votes, reveals, presence, points. From your device: a random per-tab
       client ID in sessionStorage. From Google (if you sign in): email,
       display name, optional profile picture.</p>
+    <p>From <strong>Google Firebase Authentication</strong>, for every
+      visitor: when the platform opens, your browser is signed in
+      <strong>anonymously</strong> &mdash; before you enter a session code or
+      tick any box. That gives it a random technical identifier. The identifier
+      carries no name and no e-mail address, but it is kept in this browser's
+      storage and stays the same from one visit to the next. The platform needs
+      it to tell one participant's contributions from another's, and the
+      database uses it to decide what each browser may read and write. If you
+      later create an account, that identifier becomes the account's.</p>
+    <p>If you use the simulated-patient chat, the number of messages you send
+      per hour and per day is counted against that identifier, and the number
+      sent per hour in your session is counted against the session, to enforce
+      usage limits.</p>
 
     <h2>5. Sensitive personal information</h2>
     <p>The workshop scenarios cover opioid prescribing, breaking bad news,
@@ -170,22 +183,42 @@
       ask in a real consultation.</p>
 
     <p>The platform's scheduled maintenance jobs run on <strong>GitHub
-      Actions</strong> (GitHub, Inc., United States). <strong>The jobs that run every day do not read your session
+      Actions</strong> (GitHub, Inc., United States). <strong>Apart from the two full copies described at the end of this paragraph, the jobs that run every day do not read your session
       content.</strong> They read a list of session identifiers and, for each session, the two dates that
-      decide when it is deleted; one also reads the certificate records. Until
+      decide when it is deleted; one also reads the certificate records. Requests
+      to withdraw consent or to have data erased are read too, with the record of
+      those already carried out: for each, the session's identifier, the person's
+      technical identifiers, a date and what was asked, and for a request
+      already carried out the operator's note of the reason. A further
+      job, which deletes technical identifiers that are no longer in use
+      (section 8), reads: the list of those identifiers with the dates they were
+      created and last used; the identifiers of the members and the creator of
+      each current session; whether a profile, a session history or authored
+      scenarios are stored under an identifier, but not what they contain; the
+      operator's lists of approved facilitators and moderators; and, for each of
+      the chat's usage counters, which identifier or session it belongs to and
+      its time slot. It receives no
+      name and no e-mail address &mdash; for an account you signed in with,
+      only its identifier, its dates and the name of the sign-in method. Until
       2026-09-01 two of these jobs copied the <strong>whole live session
       database</strong> onto a GitHub machine every day &mdash; one to decide
       what to delete, one to weigh how large the database had become. Neither
-      needed the contents to do its work, and neither does it any more. These jobs report only counts and dates &mdash; no personal
+      needed the contents to do its work, and neither does it any more. A third
+      job, which watches for erasure requests that have gone unanswered, did the
+      same from 2026-09-04 to 2026-10-07, although it needed only the requests;
+      it has been corrected. These jobs report only counts and dates &mdash; no personal
       data is written into their logs. Two
-      further jobs that copy the database in full, a backup and the
+      further jobs that copy the session database in full, a backup and the
       pseudonymised research export, are running again as of
       2026-09-01. They write to <strong>Scaleway</strong> object storage in
       <strong>Paris</strong>, the same processor that relays the AI chat; the
       copies stay inside the EEA and are readable only by the platform
-      administrator. They had been switched off since 2026-08-27, when the
+      administrator. To make them, each of these two jobs reads the whole live
+      session database on the same GitHub machines as the other jobs, once a day,
+      and the content is on that machine for as long as the job runs. From 2026-08-27, when the
       platform left Google's paid plan and the storage they used stopped
-      accepting writes.</p>
+      accepting writes, they still ran each day but could store no copy; they
+      were switched off on 2026-08-31.</p>
 
     <h2>7. International transfers</h2>
     <p>The database is hosted in <strong>Belgium
@@ -202,8 +235,15 @@
       Cloud; it moved to Scaleway when the platform left Google's paid plan.</p>
 
     <p>Those maintenance jobs are still a transfer <strong>outside the
-      EEA</strong> &mdash; what crosses is session identifiers, two dates per
+      EEA</strong>. For all but two of them, what crosses is session identifiers, two dates per
       session and the certificate records, rather than your session content.
+      The two that copy the session database in full (section 6) are the exception:
+      they read all of it on a GitHub machine, so your session content does
+      cross, once a day for each, while the job runs.
+      The technical identifiers described in section 4 cross with them,
+      together with their dates and the time slots of their usage counters.
+      So do the requests to withdraw consent or to have data erased, and the
+      record of those carried out.
       GitHub, Inc. is established in the <strong>United States</strong>, and the
       jobs run on Microsoft Azure machines whose region GitHub does not publish
       and which we cannot choose. The safeguard for this transfer is the <strong>EU&ndash;US Data Privacy
@@ -238,6 +278,24 @@
         the video conference are retained up to 5 years after publication,
         with the same restricted access as the rest of the research dataset,
         and are deleted earlier on request.</li>
+      <li>The technical identifier your browser is given when the platform
+        opens (section 4) is deleted once it has gone <strong>90 days</strong>
+        without being used. If a session you joined still exists at that point,
+        the identifier is deleted when that session is &mdash; about 30 days
+        later at most. Copies of the sessions you joined, which contain it,
+        remain in the nightly backups until those expire (second point of this
+        list). It is kept longer if it belongs to an approved facilitator
+        or moderator, or if a profile or authored scenarios are stored under it.
+        It is also kept when it cannot be established when it was last used, or
+        what is stored under it: in doubt, nothing is deleted.
+        If you come back after it has been deleted, your browser is simply
+        given a new one. An identifier that has become an account is kept with
+        that account instead (last line of this list).</li>
+      <li>The simulated-patient chat's usage counters are deleted within
+        about three days.</li>
+      <li>If you report a shared scenario as inappropriate, the report is kept
+        under that identifier and is not deleted automatically; you can ask us
+        to delete it (section 9).</li>
       <li>Google profile + history retained until you delete your account.</li>
     </ul>
 
@@ -284,7 +342,30 @@
       filled in per cohort).</p>
 
     <h2>16. Versioning</h2>
-    <p>Version <strong>PIS v11 · 2026-09</strong>. <strong>Material changes since PIS v10:</strong>
+    <p>Version <strong>PIS v12 · 2026-10</strong>. <strong>Material changes since PIS v11:</strong>
+      section 4 now describes the technical identifier your browser is given
+      when the platform opens &mdash; before any consent &mdash; and the usage
+      counters of the simulated-patient chat. Earlier versions mentioned
+      neither. Section 8 states how long each is kept: until October 2026
+      neither was deleted at all; the identifier is now deleted after 90 days
+      without use and the counters within about three days. Sections 6 and 7 say
+      what
+      the job that does this reads, and that it runs outside the EEA.
+      Separately: until 2026-08-25 a programming error recorded, under that
+      identifier, the code of each session joined, with the workshop and
+      scenario names and the time &mdash; including for participants who never
+      created an account. The error was corrected on 2026-08-25, and what it left
+      behind is deleted by the same job.
+      Section 6 now also says that the daily jobs read requests to withdraw
+      consent or to have data erased, which earlier versions did not mention,
+      and that one of them copied the whole live session database to a GitHub
+      machine every day from 2026-09-04 to 2026-10-07 without needing to.
+      Sections 6 and 7 also say, for the first time, that the backup
+      and the research export read the whole live session database on a GitHub
+      machine once a day, so that session content crosses the border while they
+      run; earlier versions said it did not.
+      Material changes are issued under a new version with re-consent on next join.
+      <strong>Material changes since PIS v10, carried forward:</strong>
       section 1 no longer states that Université de Caen Normandie and Nagoya
       University are the controllers of <em>every</em> session. Any facilitator
       can run a session on this platform, and theirs is the institution
@@ -328,6 +409,8 @@
       United States is session identifiers, two dates per session and the
       certificate records (sections 6 and 7). Like the v6 change below, this
       <strong>reduces</strong> what leaves the EEA.
+      Corrected in v12, above: the backup and the research export do read
+      session content.
       Material changes are issued under a new version with re-consent on next join.
       <strong>Material changes since PIS v5, carried forward:</strong>
       the job that deletes old sessions no longer reads your session data at
@@ -362,6 +445,12 @@
       details, sound preference, UI language, facilitator's last workshop
       setup (<strong>never any password</strong>). No third-party cookies,
       no tracking pixels.</p>
+    <p>The browser also stores the sign-in credential behind the technical
+      identifier described in section 4 (in IndexedDB, or in localStorage
+      where IndexedDB is unavailable). That is what keeps the identifier the
+      same from one visit to the next. Clearing this site's data in your
+      browser removes it from your device; the identifier itself is then
+      deleted on the schedule in section 8.</p>
 
     
     <h2>18. Certificate verification</h2>
@@ -381,7 +470,7 @@
     <!-- ================== FRANÇAIS ===================== -->
     <section data-priv-lang="fr" hidden>
     <p class="meta">
-      Version de la notice <strong>PIS v11 · 2026-09</strong>.
+      Version de la notice <strong>PIS v12 · 2026-10</strong>.
       <a href="index.html">← Retour à la plateforme</a>
     </p>
 
@@ -449,6 +538,21 @@
       révélations, présence, points. De votre terminal : identifiant
       client aléatoire par onglet en sessionStorage. De Google
       (si connexion) : email, nom d'affichage, photo facultative.</p>
+    <p>De <strong>Google Firebase Authentication</strong>, pour chaque
+      visiteur : à l'ouverture de la plateforme, votre navigateur est connecté
+      de façon <strong>anonyme</strong> &mdash; avant que vous ne saisissiez un
+      code de séance ou ne cochiez la moindre case. Il reçoit ainsi un
+      identifiant technique aléatoire. Cet identifiant ne comporte ni nom ni
+      adresse électronique, mais il est conservé dans le stockage de ce
+      navigateur et reste le même d'une visite à l'autre. La plateforme en a
+      besoin pour distinguer les contributions d'un participant de celles d'un
+      autre, et la base de données s'en sert pour déterminer ce que chaque
+      navigateur peut lire et écrire. Si vous créez ensuite un compte, cet
+      identifiant devient celui du compte.</p>
+    <p>Si vous utilisez la conversation avec le patient simulé, le nombre de
+      messages que vous envoyez par heure et par jour est décompté sous cet
+      identifiant, et le nombre envoyé par heure dans votre séance est décompté
+      pour la séance, afin d'appliquer des limites d'utilisation.</p>
 
     <h2>5. Informations personnelles sensibles</h2>
     <p>Les scénarios portent sur opioïdes, mauvaise nouvelle, fin de vie,
@@ -486,23 +590,47 @@
       consultation réelle.</p>
 
     <p>Les tâches de maintenance planifiées de la plateforme s'exécutent sur
-      <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). <strong>Les tâches qui s'exécutent chaque jour ne lisent pas le contenu
+      <strong>GitHub Actions</strong> (GitHub, Inc., États-Unis). <strong>À l'exception des deux copies intégrales décrites à la fin de ce paragraphe, les tâches qui s'exécutent chaque jour ne lisent pas le contenu
       de vos séances.</strong> Elles lisent une liste d'identifiants de séance et, pour chaque séance, les deux
       dates qui déterminent le moment de sa suppression ; l'une lit également les
-      enregistrements de certificats. Jusqu'au 01/09/2026, deux de ces tâches
+      enregistrements de certificats. Les demandes de retrait du consentement ou
+      d'effacement des données sont lues elles aussi, ainsi que la trace de
+      celles déjà traitées : pour chacune, l'identifiant de la séance, les
+      identifiants techniques de la personne, une date et l'objet de la demande,
+      ainsi que, pour une demande déjà traitée, le motif noté par l'exploitant.
+      Une autre tâche, qui supprime les
+      identifiants techniques devenus inutiles (section 8), lit : la liste de ces
+      identifiants avec leurs dates de création et de dernière utilisation ; les
+      identifiants des membres et du créateur de chaque séance en cours ; la
+      présence, sous un identifiant, d'un profil, d'un historique de séances ou
+      de scénarios rédigés, mais pas leur contenu ; les listes d'animateurs et de
+      modérateurs approuvés tenues par l'exploitant ; et, pour chaque compteur
+      d'utilisation de la conversation, l'identifiant ou la séance auquel il se
+      rapporte et son créneau horaire. Elle ne
+      reçoit ni nom ni adresse électronique &mdash; pour un compte auquel vous
+      vous êtes connecté, seulement son identifiant, ses dates et le nom du
+      mode de connexion. Jusqu'au 01/09/2026, deux de ces tâches
       copiaient <strong>l'intégralité de la base de session en cours</strong> sur
       une machine GitHub chaque jour &mdash; l'une pour décider quoi supprimer,
       l'autre pour mesurer la taille de la base. Ni l'une ni l'autre n'avait
-      besoin du contenu pour accomplir sa tâche, et ce n'est plus le cas. Ces tâches ne consignent que des décomptes et des dates
-      &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base intégralement,
+      besoin du contenu pour accomplir sa tâche, et ce n'est plus le cas. Une
+      troisième tâche, qui surveille les demandes d'effacement restées sans
+      réponse, a fait de même du 04/09/2026 au 07/10/2026, alors qu'elle n'avait
+      besoin que des demandes ; elle a été corrigée. Ces tâches ne consignent que des décomptes et des dates
+      &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base de session intégralement,
       une sauvegarde et l'export de recherche pseudonymisé, sont de nouveau actives
       depuis le 01/09/2026. Elles écrivent sur le stockage objet de
       <strong>Scaleway</strong> à <strong>Paris</strong>, le même sous-traitant
       que celui qui relaie la conversation avec le patient simulé ; les copies
       restent dans l'EEE et ne sont accessibles qu'à l'administrateur de la
-      plateforme. Elles étaient désactivées depuis le 27/08/2026, date à laquelle
+      plateforme. Pour les produire, chacune de ces deux tâches lit
+      l'intégralité de la base de session en cours sur les mêmes machines GitHub que les autres
+      tâches, une fois par jour, et le contenu se trouve sur cette machine
+      pendant toute la durée de la tâche. À partir du 27/08/2026, date à laquelle
       la plateforme a quitté l'offre payante de Google et le stockage qu'elles
-      utilisaient a cessé d'accepter les écritures.</p>
+      utilisaient a cessé d'accepter les écritures, elles s'exécutaient encore
+      chaque jour mais ne pouvaient plus enregistrer de copie ; elles ont été
+      désactivées le 31/08/2026.</p>
 
     <h2>7. Transferts internationaux</h2>
     <p>La base est hébergée en <strong>Belgique (région Google
@@ -521,9 +649,17 @@
       quitté l'offre payante de Google.</p>
 
     <p>Ces tâches de maintenance constituent toujours un transfert
-      <strong>hors EEE</strong> &mdash; ce qui franchit la frontière, ce sont des
+      <strong>hors EEE</strong>. Pour toutes sauf deux, ce qui franchit la frontière, ce sont des
       identifiants de séance, deux dates par séance et les enregistrements de
-      certificats, et non le contenu de vos séances. GitHub, Inc. est établie aux <strong>États-Unis</strong>, et
+      certificats, et non le contenu de vos séances. Les deux tâches qui
+      copient la base de session intégralement (section 6) font exception : elles la
+      lisent en entier sur une machine GitHub, de sorte que le contenu de vos
+      séances franchit bien la frontière, une fois par jour pour chacune,
+      pendant la durée de la tâche. Les identifiants
+      techniques décrits en section 4 la franchissent également, avec leurs
+      dates et les créneaux horaires de leurs compteurs d'utilisation. Il en va
+      de même des demandes de retrait du consentement ou d'effacement et de la
+      trace de celles déjà traitées. GitHub, Inc. est établie aux <strong>États-Unis</strong>, et
       les tâches s'exécutent sur des machines Microsoft Azure dont GitHub ne
       publie pas la région et que nous ne pouvons pas choisir. La garantie encadrant ce transfert est le <strong>cadre de protection
       des données UE&ndash;États-Unis</strong> (<i>Data Privacy Framework</i>) :
@@ -565,6 +701,28 @@
         jusqu'à 5 ans après publication, avec les mêmes accès restreints que
         le reste du jeu de données de recherche, et sont supprimés plus tôt
         sur demande.</li>
+      <li>L'identifiant technique attribué à votre navigateur à l'ouverture de
+        la plateforme (section 4) est supprimé après <strong>90 jours</strong>
+        sans utilisation. Si une séance à laquelle vous avez participé existe
+        encore à ce moment-là, l'identifiant est supprimé en même temps
+        qu'elle &mdash; soit environ 30 jours plus tard au maximum. Les copies
+        des séances auxquelles vous avez participé, qui le contiennent,
+        subsistent dans les sauvegardes nocturnes jusqu'à leur expiration
+        (deuxième point de cette liste). Il est conservé plus longtemps
+        s'il appartient à un animateur ou à un modérateur approuvé, ou si un
+        profil ou des scénarios rédigés sont enregistrés sous cet identifiant.
+        Il l'est aussi lorsqu'il n'est pas possible d'établir quand il a été
+        utilisé pour la dernière fois, ou ce qui est enregistré sous cet
+        identifiant : dans le doute, rien n'est supprimé.
+        Si vous revenez après sa suppression, votre navigateur en reçoit
+        simplement un nouveau. Un identifiant devenu celui d'un compte est
+        conservé avec ce compte (dernière ligne de cette liste).</li>
+      <li>Les compteurs d'utilisation de la conversation avec le patient simulé
+        sont supprimés sous trois jours environ.</li>
+      <li>Si vous signalez un scénario partagé comme inapproprié, le signalement
+        est conservé sous cet identifiant et n'est pas supprimé
+        automatiquement ; vous pouvez en demander la suppression
+        (section 9).</li>
       <li>Profil Google + historique conservés jusqu'à suppression de
         votre compte.</li>
     </ul>
@@ -615,8 +773,35 @@
       cohorte).</p>
 
     <h2>16. Versionnement</h2>
-    <p>Version <strong>PIS v11 · 2026-09</strong>.
-      <strong>Modifications substantielles depuis la version PIS v10 :</strong>
+    <p>Version <strong>PIS v12 · 2026-10</strong>.
+      <strong>Modifications substantielles depuis la version PIS v11 :</strong>
+      la section 4 décrit désormais l'identifiant technique attribué à votre
+      navigateur à l'ouverture de la plateforme &mdash; avant tout
+      consentement &mdash; ainsi que les compteurs d'utilisation de la
+      conversation avec le patient simulé. Les versions précédentes ne
+      mentionnaient ni l'un ni les autres. La section 8 indique combien de
+      temps chacun est conservé : jusqu'en octobre 2026, aucun n'était
+      supprimé ; l'identifiant est désormais supprimé après 90 jours sans
+      utilisation et les compteurs sous trois jours environ. Les sections 6 et 7
+      précisent ce que lit la tâche qui s'en charge, et qu'elle s'exécute hors
+      EEE. Par ailleurs, jusqu'au 25/08/2026, une erreur de programmation
+      enregistrait sous cet identifiant le code de chaque séance rejointe, avec
+      le nom de l'atelier, celui du scénario et l'heure &mdash; y compris pour
+      les participants n'ayant jamais créé de compte. L'erreur a été
+      corrigée le 25/08/2026 et ce qu'elle a laissé est supprimé par la même
+      tâche.
+      La section 6 indique désormais aussi que les tâches quotidiennes lisent
+      les demandes de retrait du consentement ou d'effacement, ce que les
+      versions précédentes ne mentionnaient pas, et que l'une d'elles a copié
+      chaque jour l'intégralité de la base de session en cours sur une machine
+      GitHub, du 04/09/2026 au 07/10/2026, sans en avoir besoin.
+      Les sections 6 et 7 indiquent aussi, pour la première fois, que la
+      sauvegarde et l'export de recherche lisent chaque jour l'intégralité de la
+      base de session en cours sur une machine GitHub, de sorte que le contenu des séances franchit
+      la frontière pendant leur exécution ; les versions précédentes
+      affirmaient le contraire.
+      Les modifications substantielles font l'objet d'une nouvelle version avec re-consentement à la prochaine participation.
+      <strong>Modifications substantielles depuis la version PIS v10, reprises :</strong>
       la section 1 n'affirme plus que l'Université de Caen Normandie et
       l'Université de Nagoya sont responsables de <em>toutes</em> les séances.
       Toute personne peut animer une séance sur cette plateforme, et c'est son
@@ -666,6 +851,8 @@
       identifiants de séance, deux dates par séance et les enregistrements de
       certificats (sections 6 et 7). Comme la modification v6 ci-dessous, celle-ci
       <strong>réduit</strong> ce qui sort de l'EEE.
+      Corrigé en v12, ci-dessus : la sauvegarde et l'export de recherche lisent
+      bien le contenu des séances.
       Toute modification substantielle donne lieu à un nouveau numéro de version
       avec re-consentement à la prochaine inscription.
       <strong>Modifications substantielles depuis la version PIS v5, reprises :</strong>
@@ -708,6 +895,13 @@
       langue UI, configuration du dernier atelier (animateur uniquement,
       <strong>jamais aucun mot de passe</strong>). Aucun cookie tiers,
       aucun pisteur publicitaire.</p>
+    <p>Le navigateur conserve également les informations de connexion
+      correspondant à l'identifiant technique décrit en section 4 (dans
+      IndexedDB, ou dans localStorage lorsque IndexedDB n'est pas disponible).
+      C'est ce qui maintient cet identifiant d'une visite à l'autre. Effacer
+      les données de ce site dans votre navigateur les supprime de votre
+      terminal ; l'identifiant lui-même est ensuite supprimé selon le
+      calendrier de la section 8.</p>
 
     
     <h2>18. Vérification publique du certificat</h2>
@@ -727,7 +921,7 @@
     <!-- ================== 日本語 ===================== -->
     <section data-priv-lang="ja" hidden>
     <p class="meta">
-      通知バージョン <strong>PIS v11 · 2026-09</strong>。
+      通知バージョン <strong>PIS v12 · 2026-10</strong>。
       <a href="index.html">← プラットフォームへ戻る</a>
     </p>
 
@@ -762,6 +956,19 @@
     <h2>4. 収集する情報</h2>
     <p>ご本人から：お名前、所属大学、学年、英語レベル（CEFR）。
       ワークショップ中の活動から：自由記述の回答、投票、明らかにした所見、在室状況、得点。端末から：タブごとのクライアントID（sessionStorage）。Googleから（サインインした場合）：メールアドレス、表示名、任意のプロフィール画像。</p>
+    <p><strong>Google Firebase Authentication</strong>から（すべての訪問者について）：本プラットフォームを開くと、
+      セッションコードの入力や同意欄へのチェックよりも前に、
+      お使いのブラウザは<strong>匿名で</strong>サインインされます。
+      このときブラウザには、ランダムな技術的識別子が割り当てられます。
+      この識別子に氏名やメールアドレスは含まれません。
+      ただし、このブラウザに保存されるため、次に訪問したときも同じ識別子が使われます。
+      本プラットフォームが参加者ごとの投稿を区別するには、この識別子が必要です。
+      データベースは、各ブラウザが読み書きできる範囲をこの識別子で判断します。
+      あとでアカウントを作成すると、この識別子がそのアカウントの識別子になります。</p>
+    <p>模擬患者とのチャットを利用すると、1時間ごと・1日ごとの送信メッセージ数が、
+      この識別子と結びつけて数えられます。
+      セッション全体の1時間ごとの送信数も、セッションと結びつけて数えられます。
+      これらは利用上限を適用するためです。</p>
 
     <h2>5. 要配慮個人情報</h2>
     <p>シナリオはオピオイド、悪い知らせ、終末期、家族対自律の倫理を扱います。自由記述で健康、宗教、哲学的見解を開示する可能性があり、これらは<strong>要配慮個人情報</strong>として、明示的な同意がある場合にのみ取り扱います。</p>
@@ -779,12 +986,27 @@
       このチャットに入力した内容はプラットフォームの外に送信されます。まず<strong>Scaleway SAS</strong>（フランス・パリ）に送られ、同社は要求を中継するだけで何も保存しません。次に<strong>Hugging Face</strong>がモデル提供者へ振り分け、最後に<strong>OVHcloud</strong>（フランス・グラヴリーヌ）がモデルを実行して返答を生成します。これら3社はいずれも当方の委託先または再委託先です。Scalewayはさらに、ログイン用トークンとセッション名・ルーム名を受け取りますが、これはあなたが当該ルームの参加者であることの確認のみに用いられ、
       その先へは渡されません。Hugging FaceとOVHcloudが受け取るのは、会話の内容とシナリオの指示だけです。実際の診察で尋ねる内容のみを入力してください。</p>
 
-    <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>（GitHub, Inc.、米国）上で実行されます。<strong>毎日実行される処理は、セッションの内容を読み込みません。</strong>
+    <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>（GitHub, Inc.、米国）上で実行されます。<strong>この段落の最後で述べる、セッションデータベース全体を複製する2つの処理を除き、毎日実行される処理は、セッションの内容を読み込みません。</strong>
       読み込むのは、
-      セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付だけです。
-      1つの処理は証明書レコードも読み込みます。2026年9月1日までは、このうち2つの処理が<strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定のためです）。いずれも本来その内容を必要としておらず、現在は複製していません。これらの処理が記録するのは件数と日付だけで、実行ログに個人データが書き込まれることはありません。データベース全体を複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は、2026年9月1日に再開しました。保存先は<strong>Scaleway</strong>の<strong>パリ</strong>のオブジェクトストレージで、
+      セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付です。
+      1つの処理は証明書レコードも読み込みます。
+      同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も読み込みます。
+      それぞれについて読み込むのは、セッション識別子、ご本人の技術的識別子、日付、ご請求の内容です。
+      対応済みのご請求については、運営者が記録した理由も読み込みます。
+      さらに別の処理が、使われなくなった技術的識別子を削除します（第8条）。
+      この処理は、識別子の一覧と、それぞれの作成日および最終利用日を読み込みます。
+      現在あるセッションの各メンバーおよび作成者の識別子も読み込みます。
+      各識別子のもとにプロフィール、セッション履歴、
+      作成したシナリオが保存されているかどうかも確認しますが、その内容は読み込みません。
+      運営者が管理する承認済みファシリテーターとモデレーターの一覧も読み込みます。
+      チャットの利用回数カウンターについては、
+      対象の識別子またはセッションと、その時間帯を読み込みます。
+      氏名やメールアドレスは受け取りません。
+      サインインして作成したアカウントの場合も、
+      受け取るのは識別子と日付、サインイン方法の名称だけです。
+      2026年9月1日までは、このうち2つの処理が<strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定のためです）。いずれも本来その内容を必要としておらず、現在は複製していません。対応されていない削除のご請求を監視する3つ目の処理も、2026年9月4日から2026年10月7日まで同じように複製していました。この処理に必要だったのはご請求の記録だけで、現在は修正済みです。これらの処理が記録するのは件数と日付だけで、実行ログに個人データが書き込まれることはありません。セッションデータベース全体を複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は、2026年9月1日に再開しました。保存先は<strong>Scaleway</strong>の<strong>パリ</strong>のオブジェクトストレージで、
       模擬患者チャットを中継しているのと同じ委託先です。複製はEEA域内に留まり、
-      アクセスできるのはプラットフォーム管理者のみです。これらの処理は2026年8月27日以降停止していました。本プラットフォームがGoogleの有料プランを離れ、それまで使用していたストレージが書き込みを受け付けなくなったためです。</p>
+      アクセスできるのはプラットフォーム管理者のみです。この2つの処理は、複製を作るために、ほかの処理と同じGitHubのマシン上で稼働中のセッションデータベース全体を1日1回ずつ読み込みます。処理が終わるまでのあいだ、その内容はそのマシン上にあります。2026年8月27日に本プラットフォームがGoogleの有料プランを離れ、それまで使用していたストレージが書き込みを受け付けなくなりました。これらの処理はその後も毎日実行されていましたが、複製を保存できず、2026年8月31日に停止しました。</p>
 
     <h2>7. 越境移転</h2>
     <p>データベースは<strong>ベルギー（Google <code>europe-west1</code>リージョン）</strong>にホストされています。日本の参加者にとってはAPPI第28条に基づく越境移転であり、2019年のEU・日本相互十分性認定（PPC）により保護されます。</p>
@@ -794,7 +1016,12 @@
       2026年8月31日までこの中継はGoogle Cloud上で稼働していましたが、本プラットフォームがGoogleの有料プランを離れたことに伴いScalewayへ移行しました。</p>
 
     <p>これらのメンテナンス処理は現在も<strong>EEA域外</strong>への移転にあたります。
-      ただし国境を越えるのは、セッション識別子、各セッションの2つの日付、および証明書レコードであり、セッションの内容ではありません。
+      ただし2つの処理を除けば、国境を越えるのは、セッション識別子、各セッションの2つの日付、および証明書レコードであり、セッションの内容ではありません。
+      例外は、セッションデータベース全体を複製する2つの処理です（第6条）。
+      この2つはGitHubのマシン上でその全体を読み込むため、処理が動いているあいだ、セッションの内容も毎日国境を越えます。
+      第4条に記載した技術的識別子も、
+      その日付および利用回数カウンターの時間帯とともに国境を越えます。
+      同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も国境を越えます。
       GitHub, Inc. は<strong>米国</strong>に所在し、処理はMicrosoft Azureのマシン上で実行されますが、そのリージョンをGitHubは公表しておらず、
       当方が選択することもできません。この移転を担保するのは<strong>EU・米国データプライバシーフレームワーク（DPF）</strong>です。GitHub, Inc. は2017年以来の認証参加者であり、2027年8月まで認証が更新されています。同社の認証は、無料アカウント利用者のデータを明示的に対象としています。認証を受けた組織への移転は、2023年7月10日の欧州委員会による十分性認定の対象となるため、追加の契約条項は必要ありません。
       （本通知の従来のバージョンではこの確認が未完了である旨を記載していましたが、
@@ -810,6 +1037,23 @@
       <li>同意された場合（ロビーの3つ目の同意欄）、セッションの書き起こし（文字起こし）およびビデオ会議の音声・映像の記録を、公表から最長5年間、
         研究データセットの他の部分と同じ制限されたアクセス範囲で保持します。
         ご請求があればそれ以前でも削除します。</li>
+      <li>本プラットフォームを開いたときにブラウザへ割り当てられる技術的識別子（第4条）は、
+        <strong>90日間</strong>利用がなければ削除します。
+        参加したセッションがその時点でまだ残っている場合は、
+        そのセッションと一緒に削除するため、削除は最長で約30日後です。
+        参加したセッションの複製にはこの識別子が含まれており、
+        毎晩のバックアップに残る複製は、この一覧の2番目の項の期間で失効します。
+        承認済みのファシリテーターまたはモデレーターの識別子である場合と、
+        プロフィールまたは作成したシナリオが保存されている場合は、これより長く保持します。
+        最終利用日や、何が保存されているかを確認できない場合も、削除せずに保持します。
+        削除後にふたたびアクセスしたときは、ブラウザに新しい識別子が割り当てられるだけです。
+        アカウントの識別子になったものは、そのアカウントとともに保持します。
+        保持期間はこの一覧の最後の項のとおりです。</li>
+      <li>模擬患者チャットの利用回数カウンターは、おおむね3日以内に削除します。</li>
+      <li>共有シナリオを不適切として報告した場合、
+        その報告はこの識別子と結びつけて保持します。
+        この報告は自動的には削除されません。
+        削除を希望する場合は、第9条の方法で請求できます。</li>
       <li>Googleプロフィールと履歴はアカウント削除まで保持。</li>
     </ul>
 
@@ -842,8 +1086,31 @@
     <p>本研究はカーン側倫理委員会および名古屋側生命倫理委員会により審査・承認されています（番号と日付はコホート毎に記入）。</p>
 
     <h2>16. バージョン管理</h2>
-    <p>バージョン<strong>PIS v11 · 2026-09</strong>。
-      <strong>PIS v10からの重要な変更：</strong>第1条は、カーン・ノルマンディー大学と名古屋大学が<em>すべての</em>セッションの管理者であるとは記載しなくなりました。
+    <p>バージョン<strong>PIS v12 · 2026-10</strong>。
+      <strong>PIS v11からの重要な変更：</strong>第4条に、
+      技術的識別子と模擬患者チャットの利用回数カウンターの記載を追加しました。
+      技術的識別子は、本プラットフォームを開いたときに、
+      同意よりも前にブラウザへ割り当てられるものです。
+      従来のバージョンには、どちらの記載もありませんでした。
+      第8条には、それぞれの保有期間を記載しています。
+      2026年10月までは、どちらも削除していませんでした。
+      現在は、識別子を90日間利用がなければ削除し、カウンターをおおむね3日以内に削除します。
+      第6条と第7条には、この削除を行う処理が読み込む情報と、
+      その処理がEEA域外で実行されることを記載しています。
+      これとは別に、2026年8月25日までは、プログラムの誤りによる記録がありました。
+      この識別子と結びつけて記録されていたのは、
+      参加した各セッションのコード、ワークショップ名、シナリオ名および日時です。
+      アカウントを作成していない参加者も対象でした。
+      この誤りは2026年8月25日に修正しており、残っていた記録は同じ処理で削除します。
+      第6条には、毎日実行される処理が同意の撤回やデータ削除のご請求を読み込むことも記載しました。
+      従来のバージョンには、この記載がありませんでした。
+      そのうち1つの処理は、2026年9月4日から2026年10月7日まで、
+      必要がないのに稼働中のセッションデータベース全体を毎日GitHubのマシンへ複製していました。
+      第6条と第7条には、バックアップと研究用エクスポートがGitHubのマシン上で稼働中のセッションデータベース全体を毎日読み込むことも、今回はじめて記載しました。
+      これらの処理が動いているあいだは、セッションの内容も国境を越えます。
+      従来のバージョンには、越えないと記載していました。
+      重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
+      <strong>PIS v10からの重要な変更（継続掲載）：</strong>第1条は、カーン・ノルマンディー大学と名古屋大学が<em>すべての</em>セッションの管理者であるとは記載しなくなりました。
       本プラットフォームでは誰でもセッションを運営でき、その運営者の所属機関が皆さんのデータについて責任を負います。機関名は同意欄の前に参加画面に表示されます。<strong>データの取り扱い自体に変更はありません。</strong>他の方が運営するセッションについて、通知が誤った組織を示していました。
       重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
       <strong>PIS v9からの重要な変更（継続掲載）：</strong>第8条の削除に関する記載を訂正しました。ライブセッションのデータは従来どおりセッション終了から30日以内（終了操作が行われない場合は作成から90日以内）に削除しますが、
@@ -858,6 +1125,7 @@
       <strong>PIS v6からの重要な変更（継続掲載）：</strong>定期メンテナンス処理は、
       セッションの内容を一切読み込まなくなりました。最後まで読み込んでいたのはストレージ監視の処理で、容量を測定するためだけに毎日データベース全体を読み込んでいましたが、現在はセッション数を監視する方式に変更しています。
       引き続き米国へ渡るのは、セッション識別子、各セッションの2つの日付、および証明書レコードです（第6条・第7条）。下記のv6の変更と同様、本変更はEEA域外へ出るデータを<strong>減らす</strong>ものです。
+      この記載は、バックアップと研究用エクスポートについては誤りでした。v12（上記）で訂正しています。
       重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
       <strong>PIS v5からの重要な変更（継続掲載）：</strong>古いセッションを削除する処理は、
       あなたのセッションデータを一切読み込まなくなりました。現在読み込むのはセッション識別子の一覧と各セッションの2つの日付のみであり、データベース全体を毎日米国のマシンへ複製する処理はなくなりました（ストレージ監視の処理では引き続き複製が行われます。第6条）。この変更はEEA域外へ出るデータを<strong>増やすのではなく減らす</strong>ものですが、第6条の記載が「2つ」から「1つ」に変わるため記載しています。
@@ -874,6 +1142,11 @@
     <p>sessionStorage：タブごとのクライアントID（タブを閉じると消去）、
       エラーログバッファ（タブを閉じると消去）。localStorage：セッションコード、復帰情報、サウンド設定、UI言語、直近のワークショップ設定（ファシリテーター用、<strong>パスワードは一切含みません</strong>）。
       サードパーティCookie、トラッキングピクセル、広告識別子は使用しません。</p>
+    <p>ブラウザには、第4条に記載した技術的識別子のサインイン情報も保存されます。
+      保存先はIndexedDBで、IndexedDBが使えない場合はlocalStorageです。
+      この情報があるため、次に訪問したときも同じ識別子が使われます。
+      ブラウザでこのサイトのデータを消去すると、この情報は端末から削除されます。
+      識別子そのものは、第8条の期間に従って削除します。</p>
 
     
     <h2>18. 証明書の公開検証</h2>

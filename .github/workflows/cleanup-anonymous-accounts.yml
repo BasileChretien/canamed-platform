@@ -11,22 +11,28 @@
 # anonymous joiner (#348), and sweeps the LLM proxy's rate-limit counters, which
 # nothing swept despite a code comment saying otherwise.
 #
-# ⚠️ NOT SCHEDULED, ON PURPOSE. Read this before adding a cron.
+# ⚠️ THE SCHEDULE, THE ARMED CONFIRM AND THE PRIVACY NOTICE ARE ONE THING.
 #
-#   A scheduled run is a NIGHTLY TRANSFER: account identifiers, their dates and
-#   the member uids of every live session reach a GitHub runner in the United
-#   States. The privacy notice lists what the scheduled jobs read (privacy.html
-#   sections 6 and 7) and does not list that, and it states no retention period
-#   for the anonymous identifier at all. So the cron, the armed ANON_CONFIRM and
-#   the notice that describes both have to land in ONE change — a schedule added
-#   here alone makes the published notice wrong the same night.
+#   A scheduled run is a NIGHTLY TRANSFER: account identifiers, their dates, the
+#   member uids of every live session and the time slots of the chat's usage
+#   counters reach a GitHub runner in the United States. privacy.html says so
+#   (sections 6 and 7, since PIS v12) and states the period this job enforces
+#   (section 8). Those three move together or not at all:
 #
-#   Until then this runs only when someone dispatches it, and deletes only when
-#   that person ticks `confirm`. The first dispatch should be a dry run: it has
-#   never met production, and it is the test of two things nothing local can
-#   show — that the service account may list accounts, and that Google honours
-#   the partial-response mask (the job refuses to continue if an e-mail address
-#   comes back; see scripts/lib/auth-accounts.js).
+#     - remove the cron and the notice promises a deletion nothing performs;
+#     - disarm ANON_CONFIRM on schedule and the same is true, more quietly;
+#     - change the default window and section 8 states the wrong number.
+#
+#   tests/anonymous-identifier-notice.test.js holds them together, in all three
+#   published languages.
+#
+#   The scheduled run is LIVE, unlike cleanup-expired-credentials.yml, and that
+#   rests on evidence rather than optimism. It was dispatched as a dry run
+#   against production on 2026-10-07 (run 37576812113) before the cron existed:
+#   338 accounts listed, the partial-response mask honoured, every anonymous
+#   account dated, 185 idle past the window. And what it deletes is not
+#   something anyone comes back for — an account's owner is signed in afresh on
+#   their next visit (tests-e2e/emulator/anonymous-account-retention.spec.js).
 #
 # There is no verbose mode. The script prints counts only, because this
 # repository's Actions logs are world-readable and a uid is the identifier this
@@ -35,8 +41,8 @@
 name: Cleanup anonymous accounts
 
 on:
-  # schedule:
-  #   - cron: "37 4 * * *"   # after the 04:07 credential cleanup — see the header
+  schedule:
+    - cron: "37 4 * * *"   # daily at 04:37 UTC, after the 04:07 credential cleanup
   workflow_dispatch:
     inputs:
       confirm:
@@ -93,8 +99,9 @@ jobs:
         env:
           FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
           FIREBASE_PROJECT_ID: canamed-69785
-          # DRY-RUN unless a manual dispatch ticks `confirm`.
-          ANON_CONFIRM: ${{ github.event.inputs.confirm == 'true' && '1' || '0' }}
+          # LIVE on schedule; a manual dispatch is a dry run unless `confirm` is
+          # ticked. Disarming this breaks section 8 of the notice — see the header.
+          ANON_CONFIRM: ${{ (github.event_name == 'schedule' || github.event.inputs.confirm == 'true') && '1' || '0' }}
           ANON_RETENTION_DAYS: ${{ github.event.inputs.retention_days || '90' }}
           ANON_SWEEP_ORPHANS: ${{ github.event.inputs.sweep_orphans == 'true' && '1' || '0' }}
         run: node scripts/cleanup-anonymous-accounts.js
