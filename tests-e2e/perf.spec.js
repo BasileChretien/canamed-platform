@@ -708,13 +708,15 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     the name may break; i18n.js +11: one key. index.html is not counted).
 //     Measured, same method as the test (LF-normalised, gzip level 9, the 15
 //     counted assets): 323.99 -> 324.11 KB.
-//     ⚠️ That baseline is NOT the 324.55 the entry above records, and the
-//     difference was not explained: computed from the commit itself the
-//     previous change comes to 323.99, and CI's own perf job on it printed
-//     script.js at 191.1 KB (the entry says 191.34). So the margin is either
-//     ~1.9 KB (these numbers) or ~1.3 KB (that entry's, plus this change).
-//     Plan on the smaller one; read the next figure from the CI log's
-//     critical_assets list rather than from either entry.
+//     ⚠️ That baseline is NOT the 324.55 the entry above records. The entry
+//     above was measured at gzip LEVEL 6; this test, and therefore CI,
+//     compress at level 9 (the gzipSync call below). Recomputed for the same
+//     commit: level 6 gives 324.55 with script.js at 191.34 — that entry's
+//     figures exactly — and level 9 gives 323.99 with script.js at 191.10,
+//     which is what CI's perf job printed. So the margin under the cap, as
+//     this test measures it, is ~1.9 KB after this change, not ~1.3.
+//     A figure for this ledger has to come from level 9: read it off the
+//     critical_assets list in the perf job's log, or use the same call.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

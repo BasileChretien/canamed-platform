@@ -3349,31 +3349,64 @@ now exists; that is not the same as the duty being discharged.
    `tests-e2e/account-dialog.spec.js`. The waiting-screen control was not
    affected.
    ✅ **"Weeks later" had a condition this paragraph never stated — removed
-   2026-10-07.** The account dialog opened only from the page
-   header, which the front page hides until a session code has been entered.
-   So the history route served someone who was in a session at the time —
-   their own, if not yet purged, or another one — and nobody else; a
-   participant whose session had expired and who had no other code was back to
-   the human contact. Sessions are purged 30 days after closing and 90 after
-   creation, so that was the ordinary case, not an edge. The front page's
-   "Signed in as …" row now carries an **Account** link that opens the same
-   dialog with no session code, and the withdrawal row in it works for a
-   session that is no longer in the database: `withdrawals/<code>/<uid>` is
-   writable by its owner whether or not `sessions/<code>` still exists.
-   `Verify:` `tests-e2e/emulator/account-delete.spec.js`, "a signed-in
-   participant withdraws from the front page, for a session that has been
-   purged" — real account, real rules, no session code entered, and the
-   session absent from the database; it reads the withdrawal record back.
-   ⚠️ **Three conditions remain, and they are real.** (a) The participant has
-   to be signed in to the SAME account: the row is not shown to an anonymous
+   2026-10-07.** The account dialog opened only from the page header, which
+   the front page hides until a session code has been entered. So the history
+   route served someone who was in a session at the time — their own, if not
+   yet purged, or another one — and nobody else; a participant whose session
+   had expired and who had no other code was back to the human contact.
+   Sessions are purged 30 days after closing and 90 after creation, so that
+   was the ordinary case, not an edge. The front page's "Signed in as …" row
+   now carries an **Account** link that opens the same dialog with no session
+   code.
+   ⚠️ **For a session that has already been purged, the row RECORDS a request
+   and a job now WATCHES it. Nothing else happens by itself — do not read this
+   as "the withdrawal is carried out".** What is true, and what shows it:
+   - *The record is written.* `withdrawals/<code>/<uid>` is writable by its
+     owner whether or not `sessions/<code>` still exists, and the page then
+     says the deletion request is recorded.
+   - *The monitor counts it* — since the same change, and only since then.
+     `scripts/data-rights-monitor.js` used to read `withdrawals/<code>` only
+     for the sessions it found in the database, so this request was never
+     open, due or overdue and the daily job stayed green for ever. (Found by
+     the independent review of the change that added the link, before it
+     merged; the first draft of this paragraph said the row "works" for such a
+     session, on the strength of a test that only read the record back.) The
+     monitor now reads the whole `withdrawals` tree, flags a request in its log
+     at 21 days, fails at 30, and says how many open requests name a session
+     that is not in the database.
+   `Verify:` `node --test tests/data-rights.test.js`, which RUNS the monitor
+   against a stand-in database and fails if the per-session read is put back;
+   and `tests-e2e/emulator/account-delete.spec.js`, "a withdrawal made from
+   the front page for a purged session is recorded, and the erasure monitor's
+   queue sees it" — real account, real rules, no session code entered, the
+   session absent from the database.
+   **What is NOT true, and is open:**
+   - **Nothing in the tooling can carry such a request out, or close it.**
+     `scripts/erase-participant.js` walks the sessions in the database; for a
+     purged one it reports nothing to erase and writes no suppression record.
+     So the monitor, once red for such a request, stays red until someone acts
+     by hand; and the nightly snapshots that still hold that session (up to
+     90) have no record telling a restore to leave the participant out — the
+     one thing the suppression list exists for.
+   - **The record has no end of life.** `withdrawals/<code>` is deleted only in
+     the update that deletes its session, so a record written afterwards is
+     kept indefinitely: a uid, a session code and a date.
+   - **It cannot be told from noise.** Any signed-in visitor, an anonymous one
+     included, may write a withdrawal record under ANY code for their own uid.
+     "Not in the database" therefore covers a purged session and a code that
+     never existed alike, and the monitor counts both.
+   - **Related, and older than this change (by reading, not reproduced): a
+     request made after a session has closed can be deleted unanswered.** The
+     purge removes `withdrawals/<code>` together with the session, 30 days
+     after it closes, and the monitor's limit is also 30 days — so such a
+     request is always younger than the limit when the purge deletes it, and
+     never turns the job red.
+   ⚠️ **Three conditions on the route itself.** (a) The participant has to be
+   signed in to the SAME account: the row is not shown to an anonymous
    visitor, and the history is keyed by the account. (b) Deleting the account
    removes this list — which the deletion dialog says before it proceeds — so
-   someone who deletes first has no row left to withdraw from. (c) After a
-   purge the record is an instruction about copies that outlive the session
-   (the research dataset, backups), not about the live session, which is
-   already gone; acting on it for those copies is the operator's step, as the
-   next note says. And none of it is true in production until that change is
-   deployed.
+   someone who deletes first has no row left to withdraw from. (c) None of it
+   is true in production until that change is deployed.
    ⚠️ **What it does NOT do: delete.** The control records an erasure request;
    the deletion is still `scripts/erase-participant.js`, run by an operator.
    Art. 17 remains satisfiable-by-operator, not self-service — deleting a

@@ -35,6 +35,7 @@
 
 // @ts-check
 const { test, expect, useEmulator, PROJECT, dbReadAsOwner } = require("./fixtures.js");
+const { erasureQueue } = require("../../scripts/lib/data-rights.js");
 
 const AUTH_API = "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1";
 
@@ -309,8 +310,20 @@ test("account deletion removes the profile, the authored scenarios and their pub
  * `withdrawals/<code>/<uid>` accepts the write when `sessions/<code>` no longer
  * exists. (Withdrawal on a session that is closed but still present, and the
  * denial for another participant's uid, are in rules-smoke.spec.js.)
+ *
+ * WHAT THIS PROVES, AND WHAT IT DOES NOT. A record that lands is not a request
+ * that is acted on. The first version of this test stopped at "the record is
+ * there and the page says Withdrawn" — and the job that watches the erasure
+ * queue could not see such a record at all, because it read `withdrawals/`
+ * only for sessions still in the database (found in review, 2026-10-07). So
+ * the test now also hands the database it produced to the monitor's own queue
+ * function and requires the request to be in it.
+ *
+ * It still does NOT show the request being carried out: for a purged session
+ * nothing in the tooling can close it, and the record has no end of life (DPA
+ * Annex VI, G12). The title says what is proven and no more.
  */
-test("a signed-in participant withdraws from the front page, for a session that has been purged", async ({ page }) => {
+test("a withdrawal made from the front page for a purged session is recorded, and the erasure monitor's queue sees it", async ({ page }) => {
   const stamp = Date.now().toString(36) + Math.floor(Math.random() * 1e4);
   const CODE = "EMU-GONE";
 
@@ -354,4 +367,26 @@ test("a signed-in participant withdraws from the front page, for a session that 
   const hint = page.locator("#account-action-hint");
   await expect(hint).toHaveText(/Withdrawn/);
   await expect(hint).not.toHaveClass(/(^|\s)err(\s|$)/);
+
+  /* And the job that is supposed to prompt a human can see it. This is the
+     monitor's own queue function, fed what the monitor reads: the whole
+     `withdrawals` tree and the sessions that exist. Before the fix the record
+     above was in no branch the monitor visited. */
+  const queue = erasureQueue({
+    withdrawals: await dbReadAsOwner("withdrawals"),
+    erasureRecords: [],
+    liveLocationKeys: Object.keys((await dbReadAsOwner("sessions")) || {}),
+    now: Date.now(),
+  });
+  const mine = queue.pending.filter(p => p.locationKey === CODE && p.uid === uid);
+  expect(mine.length, "the request must be in the monitor's queue").toBe(1);
+  expect(mine[0].sessionInDatabase, "and reported as having no session").toBe(false);
+  expect(mine[0].overdue, "it was made seconds ago").toBe(false);
+  /* The clock is the monitor's too: the same record, read a month on, is late. */
+  const later = erasureQueue({
+    withdrawals: await dbReadAsOwner("withdrawals"), erasureRecords: [],
+    liveLocationKeys: [], now: Date.now() + 31 * 86400000,
+  });
+  expect(later.overdue.some(p => p.locationKey === CODE && p.uid === uid),
+    "left alone for a month, it must turn the monitor red").toBe(true);
 });
