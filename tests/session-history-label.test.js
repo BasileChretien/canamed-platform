@@ -146,6 +146,21 @@ test("one character more and the second name gives way to a count", () => {
   assert.strictEqual(sectionsLabel([a, b], NAME_MAX), a + " + 1 more");
 });
 
+test("a joined name that fits is stored whole, even when a count after it would not fit", () => {
+  /* The loop keeps a name only if the "+ N more" that might follow it still
+     fits. With a short LAST name that refused the name before it — although
+     nothing is left to count once the last one is in. So a join of 80 or
+     under, which the rule accepts and which was stored whole before this
+     change, came back shortened. Found by the independent review of #441. */
+  const a = "a".repeat(75);
+  assert.strictEqual(sectionsLabel([a, "BB"], NAME_MAX), a + " + BB");            // 80
+  const b = "a".repeat(72);
+  assert.strictEqual(sectionsLabel([b, "Quiz"], NAME_MAX), b + " + Quiz");        // 79
+  const c = ["a".repeat(30), "b".repeat(41), "CCC"];
+  assert.strictEqual(c.join(" + ").length, NAME_MAX);
+  assert.strictEqual(sectionsLabel(c, NAME_MAX), c.join(" + "));
+});
+
 test("as many whole names as fit are kept, in pick order, then the rest are counted", () => {
   const names = ["Alpha", "Bravo", "Charlie", "Delta"];
   assert.strictEqual(sectionsLabel(names, 80), "Alpha + Bravo + Charlie + Delta");
@@ -318,6 +333,30 @@ test("without the section library the names are still stored, and still fit", ()
   const six = [1, 2, 3, 4, 5, 6].map(n => enName("mayumi-" + n + "-pbl"));
   assert.ok(fit(six).length <= NAME_MAX);
   assert.ok(fit(six).startsWith(six[0]), "and it still starts with the first section");
+});
+
+/* The list of names handed to `fit` for scenarioName, lifted out of the source
+   and RUN. With no pick — every single-scenario session, and any session whose
+   pick does not resolve — the name is the scenario's own. Nothing ran that
+   branch: replacing it with an empty object blanked the stored name of all
+   such sessions and passed every test (independent review of #441). */
+function liftScenarioNames(pick, scenarioName) {
+  const m = bodyOf("pushSessionToHistory").match(/scenarioName:\s*fit\(([\s\S]*?)\),\s*\n\s*joinedAt/);
+  assert.ok(m, "pushSessionToHistory must write scenarioName: fit(<names>) just before joinedAt");
+  const tc = (v, lang) => (v && typeof v === "object" ? v[lang] : v);
+  // eslint-disable-next-line no-new-func
+  return new Function("pickedSections", "tc", "window", "return (" + m[1] + ");")(
+    () => pick, tc, { CURRENT_SCENARIO_NAME: scenarioName });
+}
+
+test("a session with no pick is named after its scenario, as it was before", () => {
+  assert.deepStrictEqual(liftScenarioNames(null, "Chronic Pain & the clinical case"),
+    ["Chronic Pain & the clinical case"]);
+  assert.deepStrictEqual(liftScenarioNames(null, { en: "Sore throat", fr: "Mal de gorge" }), ["Sore throat"]);
+  /* ...and with a pick, after its sections, in order, in English. */
+  assert.deepStrictEqual(
+    liftScenarioNames([{ name: { en: "Alpha", fr: "Alfa" } }, { name: "Bravo" }], "ignored"),
+    ["Alpha", "Bravo"]);
 });
 
 test("the fallback is clamped to the same limit as the rule", () => {

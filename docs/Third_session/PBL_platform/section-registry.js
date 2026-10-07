@@ -532,6 +532,11 @@
   function sectionsLabel(names, max) {
     const list = (names || []).map(n => String(n == null ? "" : n).trim()).filter(Boolean);
     if (!list.length) return "";
+    /* What fits whole is returned whole. The loop below would refuse the name
+       BEFORE a short last one, because a count would not fit after it — when
+       nothing is left to count. */
+    const whole = list.join(" + ");
+    if (whole.length <= max) return whole;
     const more = n => (n ? " + " + n + " more" : "");
     let out = "", used = 0;
     while (used < list.length) {
