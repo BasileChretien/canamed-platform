@@ -606,9 +606,16 @@ test("the only value ever read whole is a session's creator uid", async () => {
 
 // ── the workflow and the runner ─────────────────────────────────────────────
 
-const WORKFLOW = fs.readFileSync(
-  path.join(ROOT, ".github", "workflows", "cleanup-anonymous-accounts.yml"), "utf8");
-const RUNNER = fs.readFileSync(path.join(ROOT, "scripts", "cleanup-anonymous-accounts.js"), "utf8");
+/* Read as LF, whatever the checkout. With core.autocrlf=true the working tree
+   is CRLF, and `.` does not match `\r` — so a pattern that walks lines with
+   `.*\n` finds nothing on Windows while passing in CI. That is how the
+   confirm-default check below went red on a workflow that was correct. Same
+   reason as the gzip site in tests-e2e/perf.spec.js. */
+const readLF = (...parts) =>
+  fs.readFileSync(path.join(ROOT, ...parts), "utf8").replace(/\r\n/g, "\n");
+
+const WORKFLOW = readLF(".github", "workflows", "cleanup-anonymous-accounts.yml");
+const RUNNER = readLF("scripts", "cleanup-anonymous-accounts.js");
 const liveCrons = (yml) =>
   yml.split("\n").filter((l) => /^\s*-\s*cron:/.test(l) && !/^\s*#/.test(l)).length;
 
@@ -622,8 +629,7 @@ test("the workflow is NOT scheduled while the privacy notice does not describe i
      ties the cron and the armed ANON_CONFIRM to the notice's wording. */
   assert.strictEqual(liveCrons(WORKFLOW), 0,
     "cleanup-anonymous-accounts.yml gained a live cron. See the comment above.");
-  const privacy = fs.readFileSync(
-    path.join(ROOT, "docs", "Third_session", "PBL_platform", "privacy.html"), "utf8");
+  const privacy = readLF("docs", "Third_session", "PBL_platform", "privacy.html");
   assert.ok(!/anonymous(ly)? (sign|account|identifier)/i.test(privacy),
     "privacy.html now mentions the anonymous identifier — this test is the " +
     "placeholder that change was meant to replace with a real lockstep.");
