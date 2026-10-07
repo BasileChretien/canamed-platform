@@ -3446,9 +3446,10 @@ now exists; that is not the same as the duty being discharged.
      them too: the withdrawal records of each session it purges, every night
      those of sessions already purged, and the erasure ledger whenever one of
      them holds an erasure request. That is personal data reaching a recipient
-     the notice names, described there as less than it is. Not corrected here: the notice is twelve surfaces in
-     eight languages with its own version, and a revision of it (PIS v12) is
-     open elsewhere.
+     the notice names, described there as less than it is. Not corrected here:
+     the disclosure is being added to the notice revision already open
+     (PIS v12), rather than issued as a further version — each new version
+     asks every returning participant for consent again.
    - **Marker lifetime — FIVE YEARS, chosen in code and not yet confirmed by
      the Controller.** The purge marker described below
      (`purgedSessions/<code>`) is deleted once it is older than

@@ -2305,6 +2305,10 @@ test("rules: a withdrawal can only name a session that was created or was purged
      fields, and a write to one child is judged against the whole record. */
   denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, null));
   denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, 1));
+  /* The allow for those two: the same child, written with a date the rule
+     accepts — so they were refused for the value, not because one field of the
+     record cannot be written on its own. */
+  expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, Date.now())).toBe("ALLOWED");
   const stored = await dbReadAsOwner(`withdrawals/${LIVE}/${uid}/at`);
   expect(Math.abs(Date.now() - stored), "the stored date is the last ALLOWED one, not a refused one")
     .toBeLessThan(10 * 60000);
