@@ -606,9 +606,16 @@ test("the only value ever read whole is a session's creator uid", async () => {
 
 // ── the workflow and the runner ─────────────────────────────────────────────
 
-const WORKFLOW = fs.readFileSync(
-  path.join(ROOT, ".github", "workflows", "cleanup-anonymous-accounts.yml"), "utf8");
-const RUNNER = fs.readFileSync(path.join(ROOT, "scripts", "cleanup-anonymous-accounts.js"), "utf8");
+/* Every file below is read as LF, whatever the checkout. With core.autocrlf=true
+   they are CRLF on disk, and a JS regex `.` does not match `\r` — so a pattern
+   that walks lines with `.*\n` can never consume one, and the confirm-default
+   check below found nothing on a Windows checkout while passing in CI (LF).
+   Normalising ONCE, at the read, means no regex in this file has to know. */
+const readText = (...parts) =>
+  fs.readFileSync(path.join(ROOT, ...parts), "utf8").replace(/\r\n/g, "\n");
+
+const WORKFLOW = readText(".github", "workflows", "cleanup-anonymous-accounts.yml");
+const RUNNER = readText("scripts", "cleanup-anonymous-accounts.js");
 const liveCrons = (yml) =>
   yml.split("\n").filter((l) => /^\s*-\s*cron:/.test(l) && !/^\s*#/.test(l)).length;
 
@@ -622,8 +629,7 @@ test("the workflow is NOT scheduled while the privacy notice does not describe i
      ties the cron and the armed ANON_CONFIRM to the notice's wording. */
   assert.strictEqual(liveCrons(WORKFLOW), 0,
     "cleanup-anonymous-accounts.yml gained a live cron. See the comment above.");
-  const privacy = fs.readFileSync(
-    path.join(ROOT, "docs", "Third_session", "PBL_platform", "privacy.html"), "utf8");
+  const privacy = readText("docs", "Third_session", "PBL_platform", "privacy.html");
   assert.ok(!/anonymous(ly)? (sign|account|identifier)/i.test(privacy),
     "privacy.html now mentions the anonymous identifier — this test is the " +
     "placeholder that change was meant to replace with a real lockstep.");
