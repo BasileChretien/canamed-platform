@@ -209,6 +209,31 @@ red probe means reading every failing workflow, not just the one that mailed.
   GCS, arming it would block deletion forever and turn a missing-archive
   problem into a standing retention breach. Deletion is the legal duty; the
   backup is disaster recovery.
+  ⚠️ **SUPERSEDED — the gate has been ARMED since 2026-09-02**, once backups
+  resumed on Scaleway (`CLEANUP_REQUIRE_BACKUP` comes from a repo variable and
+  defaults to `"1"`). Re-verified 2026-10-07 from the previous night's run log:
+  `Backup gate: OK — last successful backup 0.0d ago`.
+  **What a BLOCKED gate stops was wrong until 2026-10-07.** The script's
+  comment said "the gate stops SESSION purges only"; the code called
+  `process.exit(3)` before BOTH passes, so a stale backup would also have
+  stopped the hfPatient metrics pruning — which no backup covers. Latent only:
+  every scheduled run since arming reported `OK`. The pass order now lives in
+  `scripts/lib/cleanup-passes.js` (`runCleanupPasses`): blocked → skip the
+  session pass, still prune metrics, still exit 3 (3 says the purge was
+  refused, not that nothing else failed — a blocked run with metrics errors
+  also exits 3; read the Summary line).
+  **Why no test caught it:** the ordering lived in a `main()` nothing could
+  load, so it had text checks only, and one of them REQUIRED `process.exit(3)`
+  within 600 chars of `if (gate.block)` — it pinned the bug's shape, was green
+  on the defect and would have gone red on the fix. Its sibling ("the gate runs
+  BEFORE any deletion") compared two `indexOf()` positions and would have
+  passed VACUOUSLY on the fixed script (`-1 <` anything). The real script is
+  now RUN in a child process with firebase-admin swapped for an in-memory
+  database (`tests/fixtures/fake-firebase-admin-preload.js`); assert on the
+  complete write list, not on the text — a respelled early return
+  (`const { block } = gate; if (block) return;`) sails through every text
+  check and fails there.
+  `Verify:` `node --test tests/cleanup-passes.test.js`.
 
 ### ✅ THE LLM PATIENT IS LIVE AGAIN (2026-09-01) — Scaleway fr-par + Llama-3.3-70B
 
@@ -325,6 +350,10 @@ you get a silently half-restored system:
    FIRST — a stale `.env` 404s every chat call and degrades to the stub);
 2. set `PROBE_EXPECT_FUNCTIONS=1` in `synthetic-uptime.yml`;
 3. uncomment both GCS schedules **and** flip `CLEANUP_REQUIRE_BACKUP` to `"1"`.
+   ⚠️ **Step 3 is ALREADY DONE and no longer depends on Blaze** (checked
+   2026-10-07): both schedules have been live since 2026-09-01, writing to
+   Scaleway rather than GCS (#363), and the gate has been armed since
+   2026-09-02. Restoring Blaze is now steps 1–2 only; do not "re-enable" either.
 
 `Verify:` `node scripts/synthetic-uptime-check.js` prints `[SKIP] hfPatient`
 while on Spark; `PROBE_EXPECT_FUNCTIONS=1 node scripts/synthetic-uptime-check.js`

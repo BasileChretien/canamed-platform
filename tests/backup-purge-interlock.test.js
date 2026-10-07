@@ -191,21 +191,28 @@ test("the marker is written only AFTER a successful upload", () => {
 
 test("the purge job fails CLOSED if the marker read throws", () => {
   const src = read("scripts/cleanup-stale-sessions.js").split("\r\n").join("\n");
-  const block = src.slice(src.indexOf("let marker = null;"), src.indexOf("if (gate.block)"));
+  const from = src.indexOf("let marker = null;");
+  const to = src.indexOf("const gate = backupGateReport(");
+  /* Both anchors must be FOUND. indexOf() returns -1 for a missing one, and
+   * slice(from, -1) is then nearly the whole file — which contains a
+   * `catch (e)` somewhere, so the assertions below would pass on anything. */
+  assert.ok(from > 0 && to > from, "could not locate the marker read ahead of the gate");
+  const block = src.slice(from, to);
   assert.ok(/catch\s*\(e\)/.test(block), "the marker read is not wrapped in try/catch");
   assert.ok(!/marker\s*=\s*\{/.test(block),
     "a failed read must leave marker null (treated as no backup), never synthesise one");
 });
 
-test("a blocked purge exits 3 — distinguishable from 1 (errors) and 2 (fatal)", () => {
-  const src = read("scripts/cleanup-stale-sessions.js").split("\r\n").join("\n");
-  const gateBlock = src.slice(src.indexOf("if (gate.block)"), src.indexOf("if (gate.block)") + 600);
-  assert.ok(/process\.exit\(3\)/.test(gateBlock),
-    "refused-on-purpose must not share an exit code with broke");
-});
-
-test("the gate runs BEFORE any deletion", () => {
-  const src = read("scripts/cleanup-stale-sessions.js").split("\r\n").join("\n");
-  assert.ok(src.indexOf("if (gate.block)") < src.indexOf('verdict === "PURGE" && CONFIRM'),
-    "the interlock must be evaluated before the purge loop, or it guards nothing");
-});
+/* MOVED 2026-10-07 to tests/cleanup-passes.test.js — "a blocked purge exits 3"
+ * and "the gate runs BEFORE any deletion".
+ *
+ * Both were text checks anchored on `if (gate.block)` in main(), and the first
+ * required `process.exit(3)` within 600 characters of it. That is a faithful
+ * description of the DEFECT: the gate exited on the spot, ahead of the session
+ * loop and ahead of the metrics pass, so a stale backup stopped the metrics
+ * pruning the interlock was documented to leave alone. Both tests were green
+ * on that, and the first would have gone red on the fix.
+ *
+ * The properties they were reaching for still hold and are now RUN rather than
+ * grepped: a blocked gate skips the session pass whole, the metrics pass still
+ * runs, and the exit code is 3 — distinct from 1 (errors) and 2 (fatal). */

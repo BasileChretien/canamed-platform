@@ -148,8 +148,13 @@ const LIB = fs.readFileSync(path.join(ROOT, "scripts", "lib", "metrics-retention
 test("wiring: the cleanup script actually prunes the metrics tree", () => {
   assert.match(SCRIPT, /require\("\.\/lib\/metrics-retention"\)/,
     "the script must use the retention rules");
-  assert.match(SCRIPT, /await pruneMetrics\(db\)/,
-    "declaring the helper is not enough — main() must call it");
+  /* main() does not call it directly any more: it hands it to
+     runCleanupPasses(), which runs it on EVERY path, a blocked backup gate
+     included. This line only checks the hand-off is spelled; that the metrics
+     tree is really pruned is established by running the script itself, in
+     tests/cleanup-passes.test.js. */
+  assert.match(SCRIPT, /pruneMetrics: \(\) => pruneMetrics\(db\)/,
+    "declaring the helper is not enough — main() must hand it to runCleanupPasses()");
   assert.match(SCRIPT, /pruneHfPatientMetrics\(db, \{ cutoffMs: metricsCutoff, confirm: CONFIRM \}\)/,
     "the script must pass its own cutoff and confirm flag, not defaults");
   for (const node of ["events", "usage", "sessionUsage", "dailyUid"]) {
