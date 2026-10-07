@@ -227,3 +227,117 @@ test("A: the profile-setup form shown to a second account holds none of the firs
     { name: "bob", university: untouched, role: "student", year: 1, english: "B2" });
   expect(errors).toEqual([]);
 });
+
+/* ======================= B. the setup form outliving the account ==========
+ *
+ * After "Sign out" or "Delete account" during profile setup, the setup form
+ * stayed on screen for the now-anonymous visitor, and submitting it wrote a
+ * profile under the ANONYMOUS uid — data the product gives nobody a way to see
+ * or delete.
+ *
+ * "Nothing was written" needs a save path that works: the last step of the A
+ * test just above is that positive control — the same form, submitted by a
+ * signed-in account, does write.
+ *
+ * "Delete account" runs the real code (the lazy data-rights.js, behind the
+ * real button and the real confirmation). LocalDB has neither a key-range query
+ * nor a root ref, which that code uses, so letLocalDbDelete() adds the two —
+ * the range filter is ignored, and the code's own ownerUid test does the
+ * selecting. What only real rules and a real account can show about deletion
+ * is tests-e2e/emulator/account-delete.spec.js.
+ */
+
+const CODE = "abc-123";
+
+async function letLocalDbDelete(page) {
+  await page.evaluate(() => {
+    const proto = Object.getPrototypeOf(db.ref("x"));
+    proto.orderByKey = proto.startAt = proto.endAt = function () { return this; };
+    const ref = db.ref.bind(db);
+    db.ref = (p) => ref(p === undefined ? "" : p);
+  });
+}
+
+/* The front page back on "enter a session", with nothing of an account left. */
+async function expectPlainFrontPage(page) {
+  await expect(page.locator("#splash-view-profile-setup")).toBeHidden();
+  await expect(page.locator("#splash-view-enter")).toBeVisible();
+  await expect(page.locator("#splash-code")).toBeVisible();
+  await expect(page.locator("#splash-signed-in")).toBeHidden();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+}
+
+/* The save path reached anyway — a submit already on its way when the account
+   went. The form is no longer on screen, so it is filled and submitted from
+   script, through the form's own submit listener. Returns what is stored:
+   the uids that have anything under users/ (LocalDB keeps an emptied parent as
+   {}, where the real database prunes it — hence keys, not the node). */
+async function submitProfileSetupAnyway(page) {
+  return page.evaluate(async () => {
+    const set = (id, v) => { /** @type {HTMLInputElement} */ (document.getElementById(id)).value = v; };
+    populateProfileSelects("splash-prof-uni");
+    set("splash-prof-name", "Alice A");
+    set("splash-prof-uni", "Nagoya");
+    document.getElementById("splash-profile-setup-form")
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    // LocalDB settles within a microtask; this is several turns of slack.
+    for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 20));
+    return {
+      anonymous: !!(currentUser && currentUser.isAnonymous),
+      users: Object.keys((await db.ref("users").once("value")).val() || {}),
+      hint: document.getElementById("splash-profile-setup-hint").textContent
+    };
+  });
+}
+
+test("B: after Sign out during profile setup the form is gone, and no profile is saved for the anonymous visitor", async ({ page }) => {
+  const errors = collectErrors(page);
+  await frontPage(page);
+  await signIn(page, ALICE);                 // a new account: straight to profile setup
+  await expect(page.locator("#splash-view-profile-setup")).toBeVisible();
+  await expect(page.locator("#splash-prof-name")).toHaveValue("alice");
+
+  await page.locator("#splash-signed-in-out").click();
+
+  await expectPlainFrontPage(page);
+  await expect(page.locator("#splash-prof-name"),
+    "the form left behind must not keep the name it was prefilled with").toHaveValue("");
+
+  const after = await submitProfileSetupAnyway(page);
+  expect(after.anonymous, "premise: the visitor is anonymous again").toBe(true);
+  expect(after.users, "nothing may be stored under users/ — least of all under the anonymous uid")
+    .toEqual([]);
+  expect(after.hint, "and the refusal must say why").toMatch(/not signed in/i);
+  await expectPlainFrontPage(page);
+  expect(errors).toEqual([]);
+});
+
+test("B: after Delete account during profile setup the form is gone, and no profile is saved for the anonymous visitor", async ({ page }) => {
+  const errors = collectErrors(page);
+  const confirms = [];
+  page.on("dialog", (d) => { confirms.push(d.message()); d.accept().catch(() => {}); });
+  await frontPage(page);
+  await letLocalDbDelete(page);
+  // Something of hers to delete, so that the deletion can be seen to have run.
+  await seed(page, "users/u_alice/history/" + CODE, { code: CODE, joinedAt: 1 });
+  await signIn(page, ALICE);
+  await expect(page.locator("#splash-view-profile-setup")).toBeVisible();
+
+  // The "Account" link is on the profile-setup view too (#431).
+  await page.locator("#splash-signed-in-account").click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await page.locator("#account-delete-btn").scrollIntoViewIfNeeded();
+  await page.locator("#account-delete-btn").click();
+
+  await expectPlainFrontPage(page);
+  expect(confirms.length, "premise: the real deletion asked, once").toBe(1);
+  expect(confirms[0]).toContain("Delete your account?");
+  expect(await stored(page, "users/u_alice"), "premise: her data was deleted").toBeNull();
+
+  const after = await submitProfileSetupAnyway(page);
+  expect(after.anonymous, "premise: the visitor is anonymous again").toBe(true);
+  expect(after.users, "the deleted account's form must not create a profile for anyone").toEqual([]);
+  expect(after.hint).toMatch(/not signed in/i);
+  await expectPlainFrontPage(page);
+  expect(errors).toEqual([]);
+});

@@ -489,3 +489,156 @@ test("A: a dialog left open is closed when the account behind it changes", async
   await w.vanish();
   assert.strictEqual(w.el("account-dialog").open, false);
 });
+
+/* ======================= B. the setup form outliving the account ==========
+ *
+ * THE PROFILE-SETUP FORM OUTLIVED THE ACCOUNT. After "Sign out" or "Delete
+ * account" during setup the form stayed on screen for the now-anonymous
+ * visitor, and submitting it wrote their name and university to
+ * users/<anonymous uid>/profile — which the product gives nobody a way to see
+ * or delete (the account chip and the dialog are hidden for an anonymous user).
+ */
+
+test("B: signing out during profile setup returns the front page to 'enter a session'", async () => {
+  const w = makeWorld();
+  await w.signIn(ALICE);
+  assert.deepStrictEqual(w.views(), ["profile-setup"], "premise");
+  assert.strictEqual(w.el("splash-signed-in").hidden, false, "premise: the signed-in row is showing");
+
+  await w.signOut();
+
+  assert.ok(w.sandbox.currentUser && w.sandbox.currentUser.isAnonymous,
+    "premise: the visitor is signed back in anonymously, as every visitor is");
+  assert.deepStrictEqual(w.views(), ["enter"],
+    "an anonymous visitor must not be left on 'Set up your profile'");
+  assert.strictEqual(w.el("splash-signed-in").hidden, true);
+  assert.strictEqual(w.setupForm().name, "",
+    "and the form left behind must not keep the name it was prefilled with");
+});
+
+for (const backend of [true, false]) {
+  test("B: the same when the account disappears without a sign-out from this page" +
+       (backend ? "" : " (no auth backend)"), async () => {
+    /* What "Delete account" ends in — the SDK reports no user, then the
+       anonymous one — and equally a revoked token or a sign-out in another tab.
+       Without a backend there is no anonymous user to follow. */
+    const w = makeWorld({ backend });
+    await w.signIn(ALICE);
+    assert.deepStrictEqual(w.views(), ["profile-setup"], "premise");
+    await w.vanish();
+    assert.strictEqual(!!w.sandbox.currentUser, backend);
+    assert.deepStrictEqual(w.views(), ["enter"]);
+    assert.strictEqual(w.el("splash-signed-in").hidden, true);
+  });
+}
+
+test("B: a view other than profile setup is left where it is when the account changes", async () => {
+  /* Going back to "enter" is for the setup form only. The first auth event of
+     every page load is a change of account too (nobody -> the anonymous user),
+     and it must not pull a facilitator out of the create form. */
+  const w = makeWorld();
+  w.sandbox.splashShowView("create");
+  await w.vanish();
+  assert.ok(w.sandbox.currentUser.isAnonymous, "premise: an anonymous user arrived");
+  assert.deepStrictEqual(w.views(), ["create"]);
+});
+
+test("B: a profile is never saved for an anonymous visitor, from either form", async () => {
+  const w = makeWorld();
+  await w.signIn(ALICE);
+  await w.signOut();
+  const anonUid = w.sandbox.currentUser.uid;
+  assert.ok(w.sandbox.currentUser.isAnonymous, "premise");
+  w.db.writes.length = 0;
+
+  // The save path reached anyway: a submit that was already on its way.
+  w.fill("splash-prof", { name: "Alice A", university: "Nagoya", year: "5", english: "C1" });
+  w.sandbox.profileSetupSubmit();
+  await w.settle();
+  w.fill("account", { name: "Alice A", university: "Nagoya", year: "5", english: "C1" });
+  w.sandbox.accountSaveBtn();
+  await w.settle();
+
+  assert.strictEqual(w.db.get("users/" + anonUid), null,
+    "nothing may be stored under the anonymous uid — nobody could ever see or delete it");
+  assert.deepStrictEqual(w.db.writes, [], "no write may even be attempted");
+  for (const id of ["splash-profile-setup-hint", "account-action-hint"]) {
+    assert.match(w.el(id).textContent, /not signed in/i, "#" + id + " must say why nothing was saved");
+    assert.strictEqual(w.el(id).className, "splash-hint err");
+  }
+
+  await assert.rejects(Promise.resolve(w.sandbox.saveProfile({ name: "Alice A", university: "Nagoya" })),
+    "saveProfile() itself must refuse, whoever calls it");
+  assert.deepStrictEqual(w.db.writes, []);
+});
+
+test("B: nor when nobody is signed in at all", async () => {
+  const w = makeWorld({ backend: false });
+  w.fill("splash-prof", { name: "Alice A", university: "Nagoya", year: "5", english: "C1" });
+  w.sandbox.profileSetupSubmit();
+  await w.settle();
+  assert.deepStrictEqual(w.db.writes, []);
+  assert.match(w.el("splash-profile-setup-hint").textContent, /not signed in/i);
+});
+
+test("B: a signed-in account still saves its profile from both forms (positive control)", async () => {
+  /* Without this, the two tests above would pass on a save path that had
+     simply stopped working. */
+  const w = makeWorld();
+  await w.signIn(BOB);
+  w.fill("splash-prof", { name: "Bob", university: "Caen", year: "3", english: "B1" });
+  w.sandbox.profileSetupSubmit();
+  await w.settle();
+  assert.deepStrictEqual(w.stored("uidBob"), { name: "Bob", university: "Caen", role: "student", year: 3, english: "B1" });
+  assert.deepStrictEqual(w.views(), ["enter"], "and profile setup hands over to the front page");
+  assert.strictEqual(w.el("splash-profile-setup-hint").textContent, "");
+
+  w.sandbox.openAccountDialog();
+  assert.deepStrictEqual(w.dialog(),
+    { email: "bob@example.test", name: "Bob", university: "Caen", year: "3", english: "B1", role: "student" });
+  w.el("account-name").value = "Robert";
+  w.sandbox.accountSaveBtn();
+  await w.settle();
+  assert.strictEqual(w.stored("uidBob").name, "Robert");
+  assert.strictEqual(w.el("account-action-hint").textContent, "Profile saved.");
+});
+
+for (const hasProfile of [false, true]) {
+  test("B: a profile read that comes back after the account has gone is dropped" +
+       (hasProfile ? " (it had a profile)" : " (it had none)"), async () => {
+    /* The read is asynchronous and the account can go while it is in flight.
+       Applied late, an empty result put 'Set up your profile' in front of the
+       anonymous visitor, and a full one left the old account's profile as the
+       current one. */
+    const w = makeWorld();
+    if (hasProfile) w.db.seed("users/uidAlice/profile", ALICE_PROFILE);
+    w.db.hold("users/uidAlice/profile");
+    w.auth.currentUser = ALICE;
+    w.sandbox.handleAuthStateChange(ALICE);
+    await w.settle();
+
+    await w.vanish();
+    assert.ok(w.sandbox.currentUser.isAnonymous, "premise: the anonymous user is current");
+    w.db.release("users/uidAlice/profile");
+    await w.settle();
+
+    assert.strictEqual(w.sandbox.currentProfile, null, "the old account's profile must not become current");
+    assert.deepStrictEqual(w.views(), ["enter"]);
+    assert.strictEqual(w.el("splash-signed-in").hidden, true);
+    assert.strictEqual(w.el("user-chip").classList.contains("hidden"), true);
+  });
+}
+
+test("B: a profile read that comes back for the account still signed in is applied (positive control)", async () => {
+  const w = makeWorld();
+  w.db.seed("users/uidAlice/profile", ALICE_PROFILE);
+  w.db.hold("users/uidAlice/profile");
+  w.auth.currentUser = ALICE;
+  w.sandbox.handleAuthStateChange(ALICE);
+  await w.settle();
+  assert.strictEqual(w.sandbox.currentProfile, null, "premise: the read is still pending");
+  w.db.release("users/uidAlice/profile");
+  await w.settle();
+  assert.strictEqual(w.sandbox.currentProfile.name, "Alice");
+  assert.strictEqual(w.el("user-chip").classList.contains("hidden"), false);
+});

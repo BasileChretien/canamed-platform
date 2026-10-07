@@ -12292,6 +12292,7 @@ function handleAuthStateChange(user) {
       return;
     }
     loadProfile().then(profile => {
+      if (currentUser !== user) return;
       currentProfile = profile;
       paintUserChip();
       // Refresh the create-session picker so this user's authored scenarios
@@ -12341,13 +12342,15 @@ function handleAuthStateChange(user) {
 }
 
 /* The account changed (signed out, deleted, someone else): nothing of the
-   previous one stays on screen. */
+   previous one stays on screen, and profile setup gives way to "enter". */
 function resetAccountUI() {
   closeAccountDialog();
   [["name", ""], ["uni", ""], ["year", "1"], ["english", "B2"]].forEach(f => {
     const n = el("splash-prof-" + f[0]);
     if (n) n.value = f[1];
   });
+  const v = el("splash-view-profile-setup");
+  if (v && !v.hidden) splashShowView("enter");
 }
 
 function loadProfile() {
@@ -12357,7 +12360,7 @@ function loadProfile() {
 }
 
 function saveProfile(updates) {
-  if (!currentUser || !db) return Promise.reject(new Error("Not signed in"));
+  if (!currentUser || currentUser.isAnonymous || !db) return Promise.reject(new Error("Not signed in"));
   const now = Date.now();
   const merged = Object.assign({}, currentProfile || {}, updates, { updatedAt: now });
   if (!merged.createdAt) merged.createdAt = now;
