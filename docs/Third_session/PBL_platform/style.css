@@ -4123,13 +4123,12 @@ body.session-ended-shown { overflow: hidden; }
   margin-left: 4px;
 }
 /* Contribution tally relocated 2026-05-18 to the chart header (was
-   inside the removed Findings panel). Tighter top spacing + lighter
-   surface so it sits naturally inside the consultation-note header
-   without competing with the title. */
+   inside the removed Findings panel). Tighter top spacing + a themed
+   surface: a white wash was a grey slab on the dark chart. */
 .contrib-tally-header {
   margin: 8px 0 0;
   padding: 6px 8px;
-  background: rgba(255, 255, 255, 0.45);
+  background: var(--card);
   border-radius: var(--r-sm);
 }
 
