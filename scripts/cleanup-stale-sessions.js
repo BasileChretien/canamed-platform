@@ -6,6 +6,9 @@
  * collected. The privacy policy commits us to:
  *   - identified live + archive data    ≤ 30 days after session close
  *   - abandoned sessions (never closed) ≤ 90 days after creation
+ * Both dates are written by the CLIENT. One that lies in the future is not
+ * "within retention until then": it cannot be true, and the session is due at
+ * once (2026-10-07 — see scripts/lib/session-retention.js for what was measured).
  * (Pseudonymised research data is exported to outputs/ before this runs
  * and lives elsewhere — see scripts/02_script_analysis_session2.R.)
  *
@@ -73,6 +76,7 @@ const {
   safeLabel
 } = require("./lib/session-trees");
 const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
+const { sessionRetentionVerdict, FUTURE_DATE_TOLERANCE_MS } = require("./lib/session-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
 const { readBackupMarker, backupGateReport } = require("./lib/backup-marker");
 const { runCleanupPasses } = require("./lib/cleanup-passes");
@@ -166,15 +170,8 @@ const REQUIRE_BACKUP = process.env.CLEANUP_REQUIRE_BACKUP === "1";
 const BACKUP_MAX_AGE_DAYS = retentionDays("CLEANUP_BACKUP_MAX_AGE_DAYS", 2);
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-const closedCutoff = Date.now() - CLOSED_DAYS * MS_PER_DAY;
-const openCutoff = Date.now() - OPEN_DAYS * MS_PER_DAY;
 const metricsCutoff = Date.now() - METRICS_DAYS * MS_PER_DAY;
 const markerCutoff = Date.now() - MARKER_DAYS * MS_PER_DAY;
-
-function fmtAge(ms) {
-  const d = Math.round((Date.now() - ms) / MS_PER_DAY);
-  return `${d}d ago`;
-}
 
 /* Prune the hfPatient metrics tree. The rules and the deletion orchestration
    live in scripts/lib/metrics-retention.js so they can be driven against a fake
@@ -335,6 +332,10 @@ async function main() {
 /* The session pass. runCleanupPasses() skips it WHOLE when the backup gate
    blocks, so it must stay the only place a session is deleted from. */
 async function purgeSessions(db, locations) {
+  /* One clock for the whole pass, so two sessions with the same dates cannot
+     get different verdicts because the loop took a while to reach the second. */
+  const now = Date.now();
+  let futureDated = 0;
   let kept = 0, purged = 0, errors = 0;
   let requestsKept = 0;
 
@@ -362,29 +363,19 @@ async function purgeSessions(db, locations) {
       const createdAt = createdSnap.val();
       const closedAt = closedSnap.val();
 
-      // Sessions written before /created existed have no createdAt — treat
-      // them as ancient and let the open-retention path purge them.
-      let verdict = "KEEP";
-      let reason = "";
-      if (typeof closedAt === "number") {
-        if (closedAt < closedCutoff) {
-          verdict = "PURGE";
-          reason = `closed ${fmtAge(closedAt)} (> ${CLOSED_DAYS}d)`;
-        } else {
-          reason = `closed ${fmtAge(closedAt)} (within retention)`;
-        }
-      } else if (typeof createdAt === "number") {
-        if (createdAt < openCutoff) {
-          verdict = "PURGE";
-          reason = `abandoned, created ${fmtAge(createdAt)} (> ${OPEN_DAYS}d)`;
-        } else {
-          reason = `open, created ${fmtAge(createdAt)} (within retention)`;
-        }
-      } else {
-        // No timestamps at all → very old or malformed → purge defensively
-        verdict = "PURGE";
-        reason = "no timestamps — likely pre-schema or corrupted";
-      }
+      /* The decision is NOT made here. Both dates are whatever a client wrote,
+         and until 2026-10-07 this block compared them with a cutoff and never
+         asked whether they could be true — so a session dated in the future
+         was "within retention" until that date, and its creator could keep it
+         for as long as they liked. lib/session-retention.js decides, and
+         treats a date later than now as due. Its reason carries ages only;
+         the session code is added, or not, on the line below. */
+      const decision = sessionRetentionVerdict({
+        createdAt, closedAt, now, closedDays: CLOSED_DAYS, openDays: OPEN_DAYS
+      });
+      const verdict = decision.purge ? "PURGE" : "KEEP";
+      const reason = decision.reason;
+      if (decision.futureDated) futureDated++;
 
       const tag = (verdict === "PURGE")
         ? (CONFIRM ? "PURGE   " : "DRY-RUN ")
@@ -502,6 +493,19 @@ async function purgeSessions(db, locations) {
       // which includes the session code. Use the error code only.
       console.error(`ERROR    ${label}  ${QUIET ? (e && e.code ? e.code : "error") : (e && e.message)}`);
     }
+  }
+  /* A COUNT, never which. With CLEANUP_QUIET=1 the per-session lines are not
+     printed at all, so this is the only trace the scheduled job leaves that it
+     purged something for an impossible date rather than for its age — and the
+     only thing a dry run can show an operator before the first live one. Not
+     an error: the session is dealt with, and a red run every night that
+     somebody creates one would be an alert anyone could switch on. */
+  if (futureDated > 0) {
+    console.log("");
+    console.log(`Dated in the future: ${futureDated} session(s) carried a created or closed date ` +
+      `more than ${FUTURE_DATE_TOLERANCE_MS / (60 * 60 * 1000)}h ahead of this run. No session can ` +
+      `have one, so each was treated as due and ${CONFIRM ? "purged" : "would be purged"} ` +
+      "(counted in the summary below).");
   }
 
   if (requestsKept > 0) {
