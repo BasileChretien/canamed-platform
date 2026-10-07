@@ -85,9 +85,12 @@
         && r.consent.version.length <= 40
         && typeof r.consent.workshop === "boolean"
         && typeof r.consent.research === "boolean"
-        && typeof r.consent.at === "number")
-        ? { workshop: r.consent.workshop, research: r.consent.research,
-            version: r.consent.version.slice(0, 40), at: r.consent.at }
+        && typeof r.consent.at === "number"
+        // Box C is optional, but a boolean when present (as in the database rule).
+        && (r.consent.transcript === undefined || typeof r.consent.transcript === "boolean"))
+        ? Object.assign({ workshop: r.consent.workshop, research: r.consent.research,
+            version: r.consent.version.slice(0, 40), at: r.consent.at },
+            r.consent.transcript === undefined ? null : { transcript: r.consent.transcript })
         : null
     };
     return (out.sessionNum && out.name) ? out : null;
