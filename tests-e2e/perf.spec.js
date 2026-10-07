@@ -789,6 +789,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     ⚠️ MARGIN 249 B. THE BUDGET IS SPENT. The next change to an eager file
 //     has to bring a reclaim with it; the one queued behind this (a new
 //     account shown at once, without a reload) does, in comments.
+//   2026-10-08 (fourth entry): CAP UNCHANGED (326). A new account is shown as
+//     signed in at once, without a reload: after a link that keeps the uid —
+//     which the SDK does not report — the page calls its own handler. The
+//     fix costs about +120 B of script.js; the same change takes about 865 B
+//     out of the comments of the sign-in code it touches, each rule said
+//     once (comments only: with comments stripped the file is identical).
+//     Same method, against main at v187: first-party 325.76 -> 325.03 KB,
+//     -748 B. MARGIN ~0.97 KB.
+//     This is the reclaim the entries above call owed, in its cheapest form:
+//     it buys room and makes nothing lazy. Moving the account UI out of the
+//     eager file is still the structural answer, and still not done.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
