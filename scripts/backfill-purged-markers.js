@@ -21,19 +21,23 @@
  *   - a session purged before the OLDEST snapshot you give it gets no marker,
  *     and its participants are refused from then on — for good, unless a
  *     later run is given a snapshot that still holds it;
- *   - the snapshots are kept 90 days, so a session purged more than 90 days
- *     before the run can never be marked.
+ *   - the snapshots are kept 90 days at most, so a session purged more than
+ *     90 days before the run can never be marked — and the archive may hold
+ *     less than that (see below).
  * The dry run prints the oldest snapshot's date. Give it every snapshot the
  * archive still holds. Nothing turns the requirement off again short of
  * deleting that node by hand.
  *
  * WHERE THE EVIDENCE COMES FROM. The nightly snapshots. A session a snapshot
  * holds, and that is not in the database any more, was purged. The snapshots
- * reach back 90 days, which is also exactly as long as a suppression record
- * for that session can matter (it exists so a restore leaves the participant
- * out). A session purged longer ago than that gets no marker: no copy this
- * platform could restore still holds it, and a request about it is for the
- * human contact.
+ * reach back AS FAR AS THE ARCHIVE HOLDS — 90 days at most (its lifecycle
+ * rule), and less while the archive is younger than that: it moved to its
+ * present bucket on 2026-09-01, and nothing older can be read. The dry run
+ * prints the oldest date it was given; do not assume 90 days. That is also
+ * exactly as long as a suppression record for such a session can matter (it
+ * exists so a restore leaves the participant out). A session purged before
+ * the oldest snapshot gets no marker: no copy this platform could restore
+ * still holds it, and a request about it is for the human contact.
  *
  * WHAT COUNTS AS A SESSION IN A SNAPSHOT. Only a node with a `created/at` or a
  * `closed/at` — the purge's own criterion (session-trees.js,
@@ -82,6 +86,16 @@
  *
  * It prints counts. `--list` also prints the session codes — do not use it
  * anywhere a log is kept: a code is not something to publish.
+ *
+ * EXIT CODES
+ *   0  done, or a dry run, or nothing to do
+ *   2  refused before anything was written: no --file; a file it cannot vouch
+ *      for (not JSON, not the backup's payload, another database, no usable
+ *      date, a key no backup could have written, a `sessionCount` that does
+ *      not match what the file holds); or a switch that exists and is not a
+ *      time
+ *   1  a read or the write failed. Nothing was written, or — if it was the
+ *      write — nothing was applied: it is one update
  */
 
 "use strict";
@@ -141,14 +155,15 @@ function isLocationKey(key) {
  * many it left unmarked and why.
  *
  * @returns {{seen: Object<string, Array<{identity: object, takenAt: number}>>,
- *            named: Set<string>, malformed: number, oldest: number, newest: number}}
+ *            named: Set<string>, reserved: number, oldest: number, newest: number}}
+ *   `reserved`: how many times the bare key `orgs` was met and skipped.
  *   `oldest` / `newest`: when the first and the last of the snapshots were
  *   taken. A session purged before the oldest is in none of them.
  */
 function readSnapshots(files, now) {
   const seen = {};
   const named = new Set();
-  let malformed = 0;
+  let reserved = 0;
   let oldest = Infinity, newest = -Infinity;
   for (const file of files) {
     let payload;
@@ -176,10 +191,33 @@ function readSnapshots(files, now) {
         "dated by the snapshot that shows the session; without a date in the " +
         "past there is nothing to date it by.");
     }
+    /* IS THIS ONE OF THE BACKUP'S FILES, WHOLE? The backup writes one key per
+       session and says how many (`sessionCount`, since its first version). A
+       file that disagrees with itself was cut short or edited; one with a key
+       that is not a session location was not written by the backup at all.
+       Either way nothing is built on it — not a marker, and above all not the
+       switch: this used to skip such keys and carry on, so a file made of
+       nothing else "marked nothing", turned the strict rule on, and exited 0. */
+    const keys = Object.keys(sessions);
+    if (typeof payload.sessionCount !== "number" || payload.sessionCount !== keys.length) {
+      const said = typeof payload.sessionCount === "number"
+        ? String(payload.sessionCount) : "missing, or not a number";
+      throw new Error(`${file} does not add up: its \`sessionCount\` is ${said} and it ` +
+        `holds ${keys.length} session key(s). The backup writes the two equal; this ` +
+        "file was cut short, edited, or is not a backup.");
+    }
+    /* The one key that is skipped rather than refused: a bare `orgs`, the
+       organisation subtree's own name. Nothing reserved it before 2026-10-07,
+       so a backup taken while such a node existed holds it. */
+    const strangers = keys.filter((key) => key !== "orgs" && !isLocationKey(key)).length;
+    if (strangers) {
+      throw new Error(`${file} holds ${strangers} key(s) that are not a session location. ` +
+        "The backup writes none; this is not one of its files.");
+    }
     oldest = Math.min(oldest, takenAt);
     newest = Math.max(newest, takenAt);
-    for (const key of Object.keys(sessions)) {
-      if (!isLocationKey(key)) { malformed++; continue; }
+    for (const key of keys) {
+      if (key === "orgs") { reserved++; continue; }
       named.add(key);
       const identity = sessionIdentity(sessions[key]);
       if (!identity) continue;                       // never a session: the purge's test
@@ -187,7 +225,7 @@ function readSnapshots(files, now) {
       seen[key].push({ identity, takenAt });
     }
   }
-  return { seen, named, malformed, oldest, newest };
+  return { seen, named, reserved, oldest, newest };
 }
 
 /**
@@ -244,6 +282,24 @@ async function main() {
      it would never turn the rule on. */
   const switchSnap = await db.ref(PURGED_MARKERS_BACKFILLED_PATH).get();
   const alreadyOn = switchSnap.exists();
+  /* ON, BUT NOT A TIME. Only this script writes the node, and it writes a
+     number; anything else was put there by hand. The rules and the erasure
+     tool ask only whether it exists, so the strict rule IS in force — but
+     this script will not carry on as if it knew since when, and will not put
+     a date of its own over it. (It used to die here on "Invalid time value".) */
+  const switchValue = alreadyOn ? switchSnap.val() : null;
+  if (alreadyOn && !(typeof switchValue === "number" && Number.isFinite(switchValue))) {
+    console.error(`FATAL: ${PURGED_MARKERS_BACKFILLED_PATH} exists but is not a time: it holds ` +
+      (switchValue !== null && typeof switchValue === "object" ? "an object" : "a " + typeof switchValue) +
+      ", where this script writes a number.");
+    console.error("The strict withdrawal rule is ON all the same — the rules and the " +
+      "erasure tool ask only whether that node exists. To repair it, set it (Admin " +
+      "SDK or the console) to the time the rule was turned on, in epoch " +
+      "milliseconds; or delete it to turn the rule off, and run this again to " +
+      "turn it on properly.");
+    console.error("Nothing was written.");
+    return 2;
+  }
 
   const updates = {};
   const toMark = [];
@@ -279,8 +335,8 @@ async function main() {
   if (noTimestamp) {
     console.log(`Nodes with no timestamp, never a session: ${noTimestamp} (not marked)`);
   }
-  if (snapshots.malformed) {
-    console.log(`Keys that are not a session location:     ${snapshots.malformed} (skipped)`);
+  if (snapshots.reserved) {
+    console.log(`The reserved key \`orgs\`, never a session:  ${snapshots.reserved} (skipped)`);
   }
   if (args.list) for (const key of toMark) console.log(`    ${key}`);
   const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -293,7 +349,7 @@ async function main() {
   if (turnsOn) updates[PURGED_MARKERS_BACKFILLED_PATH] = Date.now();
 
   if (alreadyOn) {
-    console.log(`Strict withdrawal rule:       already ON, since ${new Date(Number(switchSnap.val())).toISOString()} (left as it is)`);
+    console.log(`Strict withdrawal rule:       already ON, since ${new Date(switchValue).toISOString()} (left as it is)`);
   } else {
     console.log(`Strict withdrawal rule:       ${CONFIRM ? "ON, as of this run" : "OFF — this run, confirmed, turns it ON"}`);
     console.log("  ON means: a withdrawal or erasure request is accepted only for a " +

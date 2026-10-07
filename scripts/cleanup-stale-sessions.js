@@ -116,8 +116,9 @@ const OPEN_DAYS = retentionDays("CLEANUP_RETENTION_OPEN_DAYS", 90);
 const METRICS_DAYS = retentionDays("CLEANUP_RETENTION_METRICS_DAYS", 30);
 /* How long a purge marker (purgedSessions/<code>) is kept once nothing is left
    under it. FIVE YEARS, and the reasoning is the marker's job, not a habit:
-   the rules accept a withdrawal for a purged session only while its marker
-   exists, and a withdrawal can still have an object for as long as the
+   once the marker backfill has been run, the rules accept a withdrawal for a
+   purged session only while its marker exists (before that they accept one
+   for any code), and a withdrawal can still have an object for as long as the
    research dataset and the certificate registry may hold the participant —
    both up to five years in the participant notice. A shorter window would
    turn the account dialog's "Withdraw" on an old session into an error. The

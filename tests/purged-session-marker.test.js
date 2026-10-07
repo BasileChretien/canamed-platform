@@ -182,10 +182,12 @@ test("the purge prints neither the code nor the marker's path — its logs are p
 
 // ------------------------------------------------- sessions purged before it
 
-/* The rule turns away a withdrawal for a session with no marker — and every
-   session purged before the purge wrote markers has none. Those participants
-   would be refused in the product for a session they really took part in. The
-   nightly snapshots still list such a session for up to 90 days, which is also
+/* With the strict rule on, a withdrawal for a session with no marker is turned
+   away — and every session purged before the purge wrote markers has none.
+   Those participants would be refused in the product for a session they really
+   took part in. So the strict rule is OFF until the markers have been rebuilt:
+   the nightly snapshots still list such a session for as long as the archive
+   holds it (90 days at most), which is also
    exactly as long as a suppression record for it can matter, so the markers are
    rebuilt from them: scripts/backfill-purged-markers.js, run once by hand. */
 
@@ -306,6 +308,28 @@ test("a confirmed backfill turns the strict rule ON, in the same write as the ma
   assert.strictEqual(noop.code, 0, noop.out);
   assert.deepStrictEqual(noop.writes, [], "a second identical run wrote something");
   assert.deepStrictEqual(noop.tree, live.tree);
+
+  /* A switch somebody set by hand to something that is not a time. The rule
+     and the erasure tool treat ANY value as on; this script printed the date
+     it holds and died on "Invalid time value" (finding 4). It says what is
+     wrong and how to put it right, and writes nothing — it will not guess a
+     date for when the refusals began. */
+  for (const odd of ["yes", true, { at: 1 }]) {
+    const r = backfill({ ops: { purgedMarkersBackfilledAt: odd } }, [snap], CONFIRM);
+    assert.strictEqual(r.code, 2, JSON.stringify(odd) + "\n" + r.out);
+    assert.deepStrictEqual(r.writes, [], JSON.stringify(odd));
+    assert.doesNotMatch(r.out, /Invalid time value/);
+    assert.match(r.out, /not a time/i);
+    assert.match(r.out, /epoch milliseconds/i, "it must say what to put there");
+  }
+
+  // No file, or `--file` with nothing after it: refused before anything is read.
+  for (const args of [[], ["--file"], ["--list"]]) {
+    const r = runOpsScript("backfill-purged-markers.js", { tree: {}, now: NOW, env: CONFIRM, args });
+    assert.strictEqual(r.code, 2, JSON.stringify(args) + "\n" + r.out);
+    assert.deepStrictEqual(r.writes, [], JSON.stringify(args));
+    assert.match(r.out, /--file/);
+  }
 
   // A run that is refused, or cannot read, turns nothing on.
   const refused = backfill({}, [snap, { some: "export" }], CONFIRM);
@@ -587,14 +611,66 @@ test("the backfill refuses a file it cannot vouch for, and writes nothing", () =
   assert.notStrictEqual(none.code, 0, "it ran with no snapshot at all");
 });
 
-test("the backfill skips a key that is not a session location, and says how many", () => {
-  const r = backfill({}, [snapshot({
-    "GONE-1": REAL, "a/b": REAL, "orgs/uni-x": REAL, "orgs/uni-x/GONE-2/extra": REAL, "bad.key": REAL, "": REAL,
-    orgs: {},                                    // the organisation subtree's own name
-  })], { BACKFILL_CONFIRM: "1" });
+test("the backfill refuses a file that is not what the backup writes: a key no backup could hold, or a count that is off", () => {
+  /* A confirmed run writes markers that last five years AND turns the strict
+     rule on. Neither may rest on a file nobody can vouch for. This script used
+     to skip a key it could not read as a session location and carry on — so a
+     file made of nothing but such keys "marked nothing", wrote the switch
+     alone and exited 0 (review of the switch, finding 3). The backup writes
+     one key per session, each a session location, and says how many
+     (`sessionCount`, since the first version of the backup); a file that
+     differs is not one of its files, or was cut short or edited. */
+  const CONFIRM = { BACKFILL_CONFIRM: "1" };
+  for (const [label, sessions] of [
+    ["a path where a key should be", { "GONE-1": REAL, "a/b": REAL }],
+    ["an organisation with no session code", { "GONE-1": REAL, "orgs/uni-x": REAL }],
+    ["a segment too many", { "GONE-1": REAL, "orgs/uni-x/GONE-2/extra": REAL }],
+    ["a character no database key can hold", { "GONE-1": REAL, "bad.key": REAL }],
+    ["an empty key", { "GONE-1": REAL, "": REAL }],
+    ["nothing but such keys", { "a/b": REAL, "c/d/e/f": REAL }],
+  ]) {
+    const r = backfill({}, [snapshot(sessions)], CONFIRM);
+    assert.strictEqual(r.code, 2, label + ": not refused\n" + r.out);
+    assert.deepStrictEqual(r.writes, [], label + ": something was written — the switch, at least");
+    assert.match(r.out, /not a session location/i, label);
+    // …and a good file given alongside does not rescue the run.
+    const mixed = backfill({}, [snapshot({ "GONE-9": REAL }), snapshot(sessions)], CONFIRM);
+    assert.notStrictEqual(mixed.code, 0, label);
+    assert.deepStrictEqual(mixed.writes, [], label);
+  }
+
+  /* The count. A file that says it holds more sessions than it does was cut
+     short; one that does not say, or says it in another type, is not the
+     backup's. */
+  const counted = (count) => {
+    const s = snapshot({ "GONE-1": REAL });
+    if (count === undefined) delete s.sessionCount; else s.sessionCount = count;
+    return s;
+  };
+  for (const [label, file] of [
+    ["says two, holds one", counted(2)],
+    ["says none, holds one", counted(0)],
+    ["does not say", counted(undefined)],
+    ["says it as text", counted("1")],
+  ]) {
+    const r = backfill({}, [file], CONFIRM);
+    assert.strictEqual(r.code, 2, label + ": not refused\n" + r.out);
+    assert.deepStrictEqual(r.writes, [], label);
+    assert.match(r.out, /sessionCount/, label + ": it must say what did not add up");
+  }
+  // The allow: the same file, with the count the backup would have written.
+  assert.strictEqual(backfill({}, [counted(1)], CONFIRM).code, 0);
+
+  /* THE ONE KEY THAT IS SKIPPED, not refused: a bare `orgs`. It is the
+     organisation subtree's own name; until 2026-10-07 nothing reserved it, so
+     a backup taken while such a node existed holds it — and counts it. */
+  /* With a `created` on it, as a "session" a visitor made under that code
+     would have: skipped all the same, never marked — its marker's path would
+     be the root of every organisation's markers. */
+  const r = backfill({}, [snapshot({ "GONE-1": REAL, orgs: { created: { by: "x", at: 1 }, members: { u: true } } })], CONFIRM);
   assert.strictEqual(r.code, 0, r.out);
   assert.deepStrictEqual(r.tree.purgedSessions, { "GONE-1": Date.parse(TAKEN) });
-  assert.match(r.out, /not a session location:\s+6\b/);
+  assert.match(r.out, /reserved[^\n]*:\s+1\b/i);
 });
 
 test("the backfill prints session codes only when asked", () => {

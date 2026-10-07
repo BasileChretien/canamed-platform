@@ -209,22 +209,27 @@ async function run(db, opts) {
       err(`${untraced} of them name a session that is not in the database and has no ` +
         "purge marker: nothing shows it ever existed, and the tool writes no " +
         "record for those. If it was purged before the purge wrote markers " +
-        "(2026-10-07), rebuild them from the nightly snapshots with " +
-        "scripts/backfill-purged-markers.js; otherwise remove the request with " +
-        "erase-participant.js --dismiss. See DPA Annex VI, G12.");
+        "(2026-10-07), its marker is rebuilt from the nightly snapshots by " +
+        "scripts/backfill-purged-markers.js. Only once that has been run can a " +
+        "request that still has no marker be removed, with " +
+        "erase-participant.js --dismiss: until then the tool refuses. See DPA " +
+        "Annex VI, G12.");
     }
     /* Only where the code carries NO PURGE MARKER — which is all this job can
        know. Under a marker the tool refuses --dismiss, and this must not send
        anyone to try. "No marker" is not "never purged": a session purged
        before the purge wrote markers has none until the one-off backfill has
-       run, and something else may sit under its code. That step belongs to
-       the deploy (OPERATOR_POLICY §4.1) and is not repeated in every failure
-       message: a caveat printed for ever about a step done once is noise. */
+       run, and something else may sit under its code — which is why the tool
+       refuses --dismiss until then. This job does not read the switch (one
+       more read on a hosted runner, for a line of advice), so the sentence
+       below is worded to be true whether or not the backfill has run. */
     if (overdue.some((p) => p.sessionInDatabase && !p.sessionPurged)) {
       err("");
       err("If the tool answers \"Nothing to erase\" for a session that IS in the " +
         "database, the person has nothing left in it (already erased and asked " +
-        "again, or never took part): close that request with --dismiss.");
+        "again, or never took part): close that request with --dismiss. The " +
+        "tool refuses --dismiss until scripts/backfill-purged-markers.js has " +
+        "been run once.");
     }
     return 1;
   }

@@ -173,6 +173,11 @@ test("no client can read or set the switch", () => {
      write is the emulator suite's to show.) */
   assert.strictEqual(rules[".read"], false);
   assert.strictEqual(rules[".write"], false);
+  /* …and no wildcard at the root. A `$anything` entry there would match
+     `ops`, and whatever it granted would be granted on the switch: the two
+     checks around this one would both still pass. */
+  assert.deepStrictEqual(Object.keys(rules).filter((key) => key.startsWith("$")), [],
+    "a wildcard at the root of the rules matches `ops` — and every other node that has no entry");
   assert.strictEqual(rules.ops, undefined,
     "an `ops` entry appeared in the rules. If it must exist, it must deny every " +
     "client read and write, and this test must say so explicitly.");

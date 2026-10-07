@@ -151,7 +151,8 @@ function sessionLocationsFromKeys(sessionCodes, orgSessionCodes) {
  * This goes the OTHER way from everything above: it starts from the records
  * that exist, not from the sessions that do. A participant may withdraw after
  * their session has been purged — the rule on `withdrawals/<code>/<uid>`
- * accepts it when the purge left a marker — and a reader that only visits
+ * accepts it: for any code until the marker backfill has been run, and after
+ * that when the purge left a marker — and a reader that only visits
  * `withdrawalsPath` for each live session never sees that record at all. That
  * is how an erasure request could be accepted, acknowledged on screen, and
  * then read by no job.
@@ -340,10 +341,12 @@ function locationForKey(key) {
  * session code and a date — no participant, no content — and it is the only
  * thing left in the database that shows a session EXISTED. Three things lean
  * on that:
- *   - the rule on `withdrawals/<code>/<uid>` accepts a record only for a
- *     session whose `created` record exists, or that has a marker, so a
- *     request can no longer be made under a code where no session was ever
- *     created (the purge writes a marker only for a session that had a
+ *   - ONCE THE MARKER BACKFILL HAS BEEN RUN (PURGED_MARKERS_BACKFILLED_PATH
+ *     below; until then the rule accepts a record for any code, as it did
+ *     before), the rule on `withdrawals/<code>/<uid>` accepts a record only
+ *     for a session whose `created` record exists, or that has a marker, so
+ *     a request can then no longer be made under a code where no session was
+ *     ever created (the purge writes a marker only for a session that had a
  *     timestamp — a node with none is debris anyone could have written);
  *   - the erasure tool writes a suppression record for a session that is gone
  *     only under a marker — `erasures/` is never deleted, so it must not fill

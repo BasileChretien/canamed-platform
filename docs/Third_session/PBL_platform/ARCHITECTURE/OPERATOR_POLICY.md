@@ -343,9 +343,11 @@ That makes confirming a decision about participants, and it is yours:
   none of the files and gets no marker. From then on its participants are
   refused — "Could not record your withdrawal — please try again, or contact
   the facilitator" — and trying again cannot work.
-- Snapshots are kept 90 days, so a session purged more than 90 days before the
-  run can never be marked. Every day you wait, one more day of such sessions
-  passes out of reach.
+- The script reaches back only as far as the archive holds: 90 days at most,
+  and less while the archive is younger — it moved to its present bucket on
+  2026-09-01, so do not count on 90 days; the dry run prints the oldest date
+  it was given. A session purged before that can never be marked. Every day
+  you wait, one more day of such sessions passes out of reach.
 
 So: download **every** snapshot the archive still holds
 (`backups/canamed-backup-YYYY-MM-DD.json` in the Scaleway bucket), and read the
@@ -361,6 +363,11 @@ node scripts/backfill-purged-markers.js --file <a.json> --file <b.json>
 ```bash
 BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <a.json> --file <b.json>
 ```
+
+It refuses a file that is not one of the backup's (exit code 2, nothing
+written): not JSON, another database, no date, a key that is not a session
+location, or a `sessionCount` that does not match what the file holds. Exit
+code 1 is a failed read or write; nothing was applied.
 
 Then run the first command again: it must print `to mark: 0` and
 `Strict withdrawal rule: already ON`. Running it later with newer snapshots

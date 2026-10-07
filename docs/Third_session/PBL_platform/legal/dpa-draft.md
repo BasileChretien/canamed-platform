@@ -3378,10 +3378,13 @@ now exists; that is not the same as the duty being discharged.
    and a job now WATCHES it. Nothing else happens by itself — do not read this
    as "the withdrawal is carried out".** What is true, and what shows it:
    - *The record is written.* `withdrawals/<code>/<uid>` is writable by its
-     owner when `sessions/<code>` no longer exists, **provided the purge left
-     its marker for that session** (see "Closed since" below — until
-     2026-10-07 the rule did not look at the session at all), and the page
-     then says the deletion request is recorded.
+     owner when `sessions/<code>` no longer exists, and the page then says the
+     deletion request is recorded. **For any code**, while the marker
+     backfill has not been run — production's state after a merge, in which
+     the rule looks at the uid and at nothing about the session, as it always
+     did; that is the state the test below runs in, with no marker. **Once
+     the backfill has been run**, only where the purge left its marker for
+     that session, or the backfill rebuilt one (see "Closed since" below).
    - *The monitor counts it* — since the same change, and only since then.
      `scripts/data-rights-monitor.js` used to read `withdrawals/<code>` only
      for the sessions it found in the database, so this request was never
@@ -3400,6 +3403,51 @@ now exists; that is not the same as the duty being discharged.
    queue sees it" — real account, real rules, no session code entered, the
    session absent from the database.
    **What is NOT true, and is open:**
+   - **THE SESSION-OR-MARKER RULE IS OFF, and stays off until an operator
+     runs the marker backfill. Until then no statement in this item that a
+     withdrawal needs a session or a purge marker — that one is refused, or
+     "can no longer be made under a code where no session was ever created"
+     — is true in production, wherever in the item it stands.** The rule
+     that requires a session or a purge marker
+     applies only once a switch exists in the database
+     (`ops/purgedMarkersBackfilledAt`), and the one thing that writes it is a
+     confirmed run of `scripts/backfill-purged-markers.js`, in the same update
+     as the markers. With the switch absent a withdrawal is accepted for any
+     code, exactly as before this change — so merging and deploying the change
+     takes nothing away from any participant, and the spoofable state it was
+     written to close is still open. *Why it was built this way:* sessions
+     purged before the purge wrote markers have none. Had the rule applied
+     from the day it shipped, their participants would have been refused a
+     withdrawal that was accepted the day before, until the backfill was run —
+     and it can only be run by hand, by someone holding the archive's and the
+     database's credentials.
+   - **What turning it on costs, which is the operator's decision when they
+     confirm the backfill — it is not recorded here as taken.** The backfill
+     can only rebuild a marker from a snapshot, and it reaches back only as
+     far as the archive holds: 90 days at most (the archive's lifecycle
+     rule), and less while the archive is younger than that — it moved to its
+     present storage on 2026-09-01 and nothing older can be read, so a run in
+     October 2026 reaches about five weeks back, not ninety days. (Not
+     verified against the archive itself; the backfill's dry run prints the
+     oldest snapshot it was given.) A session purged before the oldest
+     snapshot the run is given gets no marker; once the switch is on,
+     its participants' "Withdraw" answers "Could not record your withdrawal —
+     please try again, or contact the facilitator", every time. "Try again" is
+     wrong for them: it cannot succeed. This sits badly beside the five-year
+     marker above, which is justified by a withdrawal still having an object
+     for five years. The alternatives are a change to the product's wording
+     for that case (a client change, and a shell version), or leaving the
+     switch off, which leaves the spoofable state open. The backfill's dry run
+     prints the oldest snapshot it was given and says this in so many words;
+     confirming it is the sign-off. Each day's delay moves one more day of
+     long-purged sessions out of reach.
+   - **While the switch is off, no request can be dismissed.**
+     `erase-participant.js --dismiss` refuses to run until the backfill has:
+     before then "no purge marker" is true of a purged session and of a code
+     that never was one alike. A request for a session purged before the
+     purge wrote markers can therefore be neither answered nor dismissed until
+     the backfill has run; the monitor goes on counting it. Sessions purged
+     from now on are marked by the purge itself and can be answered at once.
    - **"You are excluded from the research dataset" is made true, for a purged
      session, by a person and by nothing else.** That is what the product says
      when the withdrawal is recorded. The nightly export reads only sessions
@@ -3451,33 +3499,45 @@ now exists; that is not the same as the duty being discharged.
      under the tree of whichever address the page was opened at. A participant
      of a session held under an organisation address (`/o/<slug>/`) who opens
      the account dialog from the plain front page writes to the default tree.
-     Before the rule change that record was accepted and filed under a key no
-     session has — so it kept them out of no export and matched no erasure.
-     Now the write is refused, which at least fails where the participant can
-     see it. No impact today: the one organisation registered maps to the
+     That record is accepted and filed under a key no session has — so it
+     keeps them out of no export and matches no erasure. That is still what
+     happens after a merge. Once the marker backfill has been run and the
+     session-or-marker rule is on, the write is refused instead, which at
+     least fails where the participant can see it. No impact today: the one
+     organisation registered maps to the
      default tree. It becomes real with a second organisation.
-   - **The participant notice does not list what the daily jobs read of these
-     records — found 2026-10-07, open.** `privacy.html` section 6 (PIS v11,
-     EN/FR/JA) says the jobs that run every day read "a list of session
+   - **The participant notice lists what the daily jobs read of these records
+     since PIS v12 — and is short of this change by two things.** Until PIS
+     v12, `privacy.html` section 6 said the daily jobs read "a list of session
      identifiers and, for each session, the two dates that decide when it is
-     deleted; one also reads the certificate records". The data-rights
-     monitor has read withdrawal records and the whole `erasures` tree every
-     day since it was added (2026-09-03): the account identifier, the session
-     code and the date of people who have asked for erasure or been erased, on
-     a GitHub-hosted runner in the United States. The purge job now reads
-     them too: the withdrawal records of each session it purges, every night
-     those of sessions already purged, and the erasure ledger whenever one of
-     them holds an erasure request. That is personal data reaching a recipient
-     the notice names, described there as less than it is. Not corrected here:
-     the disclosure is being added to the notice revision already open
-     (PIS v12), rather than issued as a further version — each new version
-     asks every returning participant for consent again.
+     deleted; one also reads the certificate records", while the data-rights
+     monitor had read withdrawal records and the whole `erasures` tree every
+     day since it was added (2026-09-03), on a GitHub-hosted runner in the
+     United States. PIS v12 says so: the requests "are read too, with the
+     record of those already carried out: for each, the session's identifier,
+     the person's technical identifiers, a date and what was asked, and for a
+     request already carried out the operator's note of the reason". With the
+     present change that list is no longer complete: (a) a record of a request
+     carried out for a purged session also holds two yes/no facts — that the
+     session had already been deleted, and that the operator stated the
+     research copy had been checked — and a second date, a copy of the
+     request's own; (b) the jobs also read the purge markers, a session code
+     and the date of its deletion, kept five years, which section 8 does not
+     mention. Neither names a person beyond what the sentence already covers.
+     The purge job reads these records too since this change (the withdrawal
+     records of each session it purges, every night those of sessions already
+     purged, and the erasure ledger whenever one of them holds an erasure
+     request); the notice's sentence does not say which jobs, so that is
+     covered. Not corrected in this change's own commits: the notice is
+     edited once, by whoever holds its version.
    - **Marker lifetime — FIVE YEARS, chosen in code and not yet confirmed by
      the Controller.** The purge marker described below
      (`purgedSessions/<code>`) is deleted once it is older than
      `CLEANUP_RETENTION_PURGED_MARKER_DAYS` (default 1825) **and** no
-     withdrawal record is left under it. The reasoning for five years: the
-     rules accept a withdrawal for a purged session only while its marker
+     withdrawal record is left under it. The reasoning for five years: once
+     the marker backfill has been run and the session-or-marker rule is on
+     (until then the rules accept a withdrawal for any code, marker or none),
+     they accept a withdrawal for a purged session only while its marker
      exists, and such a withdrawal can still have an object for as long as the
      research dataset and the certificate registry may hold the participant —
      both up to five years in the participant notice. A shorter window is
@@ -3487,44 +3547,6 @@ now exists; that is not the same as the duty being discharged.
      which would need a change to the product's wording first. The marker
      holds a session code and a date and names nobody; it is still a
      retention period, and it is the Controller's to settle.
-   - **THE SESSION-OR-MARKER RULE IS OFF, and stays off until an operator
-     runs the marker backfill. Until then nothing below about "a record can
-     no longer be made under a code where no session was ever created" is
-     true in production.** The rule that requires a session or a purge marker
-     applies only once a switch exists in the database
-     (`ops/purgedMarkersBackfilledAt`), and the one thing that writes it is a
-     confirmed run of `scripts/backfill-purged-markers.js`, in the same update
-     as the markers. With the switch absent a withdrawal is accepted for any
-     code, exactly as before this change — so merging and deploying the change
-     takes nothing away from any participant, and the spoofable state it was
-     written to close is still open. *Why it was built this way:* sessions
-     purged before the purge wrote markers have none. Had the rule applied
-     from the day it shipped, their participants would have been refused a
-     withdrawal that was accepted the day before, until the backfill was run —
-     and it can only be run by hand, by someone holding the archive's and the
-     database's credentials.
-   - **What turning it on costs, which is the operator's decision when they
-     confirm the backfill — it is not recorded here as taken.** The backfill
-     can only rebuild a marker from a snapshot, and the snapshots are kept 90
-     days. A session purged more than 90 days before the run, or before the
-     oldest snapshot the run is given, gets no marker; once the switch is on,
-     its participants' "Withdraw" answers "Could not record your withdrawal —
-     please try again, or contact the facilitator", every time. "Try again" is
-     wrong for them: it cannot succeed. This sits badly beside the five-year
-     marker above, which is justified by a withdrawal still having an object
-     for five years. The alternatives are a change to the product's wording
-     for that case (a client change, and a shell version), or leaving the
-     switch off, which leaves the spoofable state open. The backfill's dry run
-     prints the oldest snapshot it was given and says this in so many words;
-     confirming it is the sign-off. Each day's delay moves one more day of
-     long-purged sessions out of reach.
-   - **While the switch is off, no request can be dismissed.**
-     `erase-participant.js --dismiss` refuses to run until the backfill has:
-     before then "no purge marker" is true of a purged session and of a code
-     that never was one alike. A request for a session purged before the
-     purge wrote markers can therefore be neither answered nor dismissed until
-     the backfill has run; the monitor goes on counting it. Sessions purged
-     from now on are marked by the purge itself and can be answered at once.
    - **A device whose clock is more than five seconds fast is still refused
      its withdrawal.** Five seconds is the tolerance every timestamp rule in
      the file has, and better than the none this rule had; it is not a
@@ -3879,16 +3901,16 @@ now exists; that is not the same as the duty being discharged.
      that was created, live or purged, can still record a request under their
      own uid without having taken part — and anyone can create one (above).
      The code is the capability throughout this platform. Such a request can
-     now always be closed: answered, or dismissed where the person has nothing
-     in the session. (ii) **Sessions purged before the purge wrote markers have none.**
+     be closed: answered, or — once the marker backfill has been run, never
+     before — dismissed where the person has nothing in the session. (ii) **Sessions purged before the purge wrote markers have none.**
      Their markers are rebuilt from the nightly snapshots by
      `scripts/backfill-purged-markers.js`, run by hand, dry-run by default;
      the same confirmed run turns the rule on (first open point above), so a
      participant returning to such a session is refused only if the run could
-     not mark it. It reaches back as far
-     as the snapshots do (90 days) and no further — see "Sessions purged more
-     than 90 days before the backfill" under the open points, which wants a
-     decision. It marks only what the purge itself would have marked: a node
+     not mark it. It reaches back as far as the archive holds (90 days at
+     most; the dry run prints the oldest date) and no further — see "What
+     turning it on costs" under the open points, which is a decision. It
+     marks only what the purge itself would have marked: a node
      that had a `created` or `closed` timestamp in some snapshot. (Until the
      review of this change it marked every key a snapshot held, and a
      visitor's membership row under a made-up code is in the snapshot like

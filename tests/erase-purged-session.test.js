@@ -703,12 +703,32 @@ test("--dismiss is refused until the purge markers have been backfilled", () => 
     assert.doesNotMatch(after.out, /--dismiss is refused until/i, session);
   }
 
-  // The switch cannot be read: nothing is assumed, nothing is written.
+  /* The same wording when the run DID something first — a second place it is
+     printed. `--uid` alone: the person's work in a live session is erased, a
+     purged session's request is answered, and the request under the code
+     nothing accounts for is reported. */
+  for (const [tree, wording] of [[notYet, /--dismiss is refused until/i], [backfilled, /--dismiss --reason/]]) {
+    const busy = JSON.parse(JSON.stringify(tree));
+    busy.sessions["LIVE-1"].clientMapping.cA = "uidA";
+    busy.sessions["LIVE-1"].pool.cA = { name: "Asker" };
+    const r = erase(busy, ["--uid", "uidA", ATTEST], LIVE);
+    assert.strictEqual(r.code, 3, r.out);
+    assert.match(r.out, /ERASED/, "positive control: this is the run that acts, then reports");
+    assert.strictEqual(at(r.tree, "sessions/LIVE-1/pool/cA"), null);
+    assert.match(r.out, wording);
+    if (tree === backfilled) assert.doesNotMatch(r.out, /--dismiss is refused until/i);
+  }
+
+  /* The switch cannot be read: nothing is assumed, nothing is written — and
+     that is the run FAILING (exit 1, FATAL), not the run refusing a dismissal
+     (exit 2): an operator must not read "could not look" as "looked, and no". */
   const blind = runOpsScript("erase-participant.js", {
     tree: backfilled, now: NOW, env: LIVE, throwOn: "ops/purgedMarkersBackfilledAt",
     args: ["--uid", "uidA", "--session", "NEVER-WAS", "--dismiss", "--reason", "x"],
   });
-  assert.notStrictEqual(blind.code, 0, "an unreadable switch was taken for an answer");
+  assert.strictEqual(blind.code, 1, "an unreadable switch was taken for an answer\n" + blind.out);
+  assert.match(blind.out, /FATAL/);
+  assert.doesNotMatch(blind.out, /REFUSED|DISMISSED/);
   assert.deepStrictEqual(blind.writes, []);
 });
 

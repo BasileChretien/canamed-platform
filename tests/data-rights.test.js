@@ -480,12 +480,24 @@ test("the monitor says which open requests name a session that is not in the dat
     "only the OVERDUE untraced request is in the failure message; the 5-day-old one is not late");
   assert.match(r.text, /backfill-purged-markers\.js/);
   assert.match(r.text, /--dismiss/);
+  /* For a request with no marker, removal comes AFTER the backfill, never
+     instead of it: before it has run the tool refuses, and "no marker" does
+     not yet mean "never a session". */
+  assert.match(r.text, /Only once that has been run[^]*--dismiss/);
+  assert.doesNotMatch(r.text, /otherwise remove the request/);
 
   // Each caveat appears only when it applies.
   const allLive = await monitor({ sessions, withdrawals: { "LIVE-1": { uidA: request(40) } } });
   assert.strictEqual(allLive.code, 1);
-  assert.doesNotMatch(allLive.text, /research-copy-checked|purge marker|backfill/,
+  assert.doesNotMatch(allLive.text, /research-copy-checked|purge marker|rebuild/,
     "the purged-session caveats are noise when every late request has its session");
+  /* ONE mention of the backfill does belong here, and it is not a caveat about
+     purged sessions: `--dismiss`, which this message recommends, refuses to
+     run until the marker backfill has been run once. The message used to send
+     the operator to a command that would refuse (review of the switch,
+     finding 2). It says so in terms that are true whether or not it has run —
+     this job does not read the switch. */
+  assert.match(allLive.text, /--dismiss[^]*refuses[^]*backfill-purged-markers\.js[^]*once/);
   /* What it must always say: a request is about ONE session, and the tool run
      with --uid alone erases the person everywhere and deletes their account
      record. And how a request the tool finds nothing for is closed. */
@@ -609,10 +621,12 @@ test("erasureQueue marks which open requests have no session, without changing t
 test("the queue tells a PURGED session from one nothing shows ever existed", () => {
   /* "Not in the database" used to cover both, and the monitor could not tell
      a participant's request from a record written for a made-up code. The
-     purge now leaves a marker (purgedSessions/<code>), and the rules accept a
-     withdrawal only for a session that exists or has one — so a record with
-     neither was written before that rule, or its session was purged before
-     the purge wrote markers. Those are the ones a human has to look at. */
+     purge now leaves a marker (purgedSessions/<code>), and — once the marker
+     backfill has been run; until then they accept one for any code — the
+     rules accept a withdrawal only for a session that exists or has one. So a
+     record with neither was written while that requirement was off, or its
+     session was purged before the purge wrote markers and has not been
+     backfilled. Those are the ones a human has to look at. */
   const q = erasureQueue({
     withdrawals: {
       "LIVE-1": { a: { erasure: true, at: ago(3) } },

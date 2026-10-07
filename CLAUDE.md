@@ -1059,8 +1059,9 @@ BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json
   and `GOOGLE_APPLICATION_CREDENTIALS_JSON` (default credentials alone stop
   it: the session listing wants a credential object).
 - **Confirming it is a decision about participants, and nobody has taken it
-  yet.** A session purged before the oldest snapshot given — and any session
-  purged more than 90 days before the run — gets no marker, and from then on
+  yet.** A session purged before the oldest snapshot given gets no marker —
+  and the archive holds 90 days at most, less while it is younger (it moved
+  to Scaleway on 2026-09-01; the dry run prints the oldest date) — and from then on
   its participants are refused for good ("please try again", which cannot
   work). The dry run says so and names the oldest snapshot. Do not record
   that as signed off until an operator has confirmed a run.
@@ -1069,7 +1070,18 @@ BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json
   `erase-participant.js --dismiss` refuses (it reads the switch), and a
   request for a session purged before the markers existed can be neither
   answered nor dismissed.
-- Idempotent: it never overwrites a marker or the switch's date.
+- Idempotent: it never overwrites a marker or the switch's date. It refuses
+  (exit 2, nothing written) a file that is not the backup's — a key that is
+  not a session location, or a `sessionCount` that does not match — and a
+  switch that exists but is not a number.
+- **Every sentence that states the session-or-marker rule must say it waits
+  for the backfill.** When the switch was added, four sentences in the legal
+  drafts and five comments went on stating the rule as in force; three of the
+  four sat ABOVE the paragraph that said otherwise, which scoped itself to
+  "nothing below". `tests/withdrawal-switch-docs.test.js` now fails on such a
+  statement in `legal/dpa-draft.md` or `legal/record-of-processing.md`. It
+  knows a handful of phrasings, not the meaning: write new ones with the
+  switch in them.
 
 `Verify:` not checkable from the repo. An operator's dry run printing
 `Strict withdrawal rule: already ON` is the evidence that it was run; a fresh
@@ -1168,12 +1180,14 @@ the marker's lifetime is five years by a constant
 are excluded from the research dataset" is made true for a purged session by
 the operator's `--research-copy-checked` and by nothing the tool can verify; a
 certificate published for a purged session cannot be found from a uid;
-`privacy.html` §6 does not list what the daily jobs read of withdrawal and
-erasure records (true of the monitor since 2026-09-03); for a session still in
+`privacy.html` §6 lists what the daily jobs read of withdrawal and erasure
+records since PIS v12 (#429), but not the two yes/no fields a record for a
+purged session now holds, nor the five-year purge marker; for a session still in
 the database the tool deletes the whole `users/<uid>` even with `--session`;
-**a session purged more than 90 days before the backfill runs can never get a
-marker, so its participants are refused in the product for good and told to
-"try again"** — a trade-off made in code that wants Basile's explicit sign-off;
+**a session purged before the oldest snapshot the backfill is given can never
+get a marker, so once the strict rule is on its participants are refused in
+the product for good and told to "try again"** — a decision that is taken
+when an operator confirms the backfill, and that nobody has taken yet;
 a device clock more than 5 s fast is still refused; and **a session whose
 `created/at` or `closed/at` was dated in the future was never purged** — found
 by running the purge, and corrected by a SEPARATE change (#438:
