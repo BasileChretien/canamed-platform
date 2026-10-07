@@ -42,8 +42,17 @@ const { resolveIdentity, planSessionErasure, applyPlan } = require("./erasure");
  * @param {string} args.at ISO timestamp, passed in (this module has no clock,
  *   so a caller cannot get a different plan by running it at a different time)
  * @param {string} [args.reason]
+ * @param {boolean} [args.sessionPurged] the session was no longer in the
+ *   database when this was written. Nothing was deleted from the live tree —
+ *   the purge had already done that for everyone — and the record carries the
+ *   uid alone: clientIds are resolved inside a session, and there was none to
+ *   resolve them in. That is enough: applySuppression() re-resolves them
+ *   against each snapshot it is applied to.
+ * @param {boolean} [args.researchCopyChecked] with `sessionPurged`: the
+ *   operator stated that the participant is not in the research copy. The
+ *   record cannot show that it is true, only that it was said.
  */
-function buildRecord({ locationKey, identity, at, reason }) {
+function buildRecord({ locationKey, identity, at, reason, sessionPurged, researchCopyChecked }) {
   if (!locationKey) throw new Error("suppression record needs a locationKey");
   if (!at) throw new Error("suppression record needs an explicit `at`");
   const ids = identity || {};
@@ -52,7 +61,13 @@ function buildRecord({ locationKey, identity, at, reason }) {
       "suppression record needs at least one identifier — a record that " +
       "identifies nobody would silently suppress nothing on restore");
   }
-  return {
+  if (sessionPurged && !ids.uid) {
+    throw new Error(
+      "a suppression record for a purged session needs the uid — there is no " +
+      "session to resolve a clientId against, and the request it answers is " +
+      "keyed by uid");
+  }
+  const record = {
     locationKey,
     uid: ids.uid || null,
     clientIds: [...(ids.clientIds || [])].sort(),
@@ -60,6 +75,13 @@ function buildRecord({ locationKey, identity, at, reason }) {
     at,
     reason: reason || "erasure request",
   };
+  /* Added only when true, so an ordinary record keeps exactly the shape it
+     has always had. */
+  if (sessionPurged) {
+    record.sessionPurged = true;
+    if (researchCopyChecked) record.researchCopyChecked = true;
+  }
+  return record;
 }
 
 /**

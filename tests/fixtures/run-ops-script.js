@@ -49,8 +49,14 @@ function runOpsScript(script, opts) {
     }, opts.throwOn ? { FAKE_RTDB_THROW_ON: opts.throwOn } : {}, opts.env || {});
     const r = spawnSync(process.execPath,
       ["-r", PRELOAD, path.join(ROOT, "scripts", script), ...(opts.args || [])],
-      { env, encoding: "utf8", timeout: 60000 });
-    if (r.error) throw r.error;
+      { env, encoding: "utf8", timeout: 30000 });
+    /* A script that returns from main() without process.exit() hangs on the
+       preload's keep-alive, as it would on a real connection, and ends here. */
+    if (r.error) {
+      throw new Error(`scripts/${script} did not finish (${r.error.code || r.error.message}). ` +
+        "If it timed out, a path through it never calls process.exit().\n" +
+        (r.stdout || "") + (r.stderr || ""));
+    }
     return {
       code: r.status,
       out: (r.stdout || "") + (r.stderr || ""),

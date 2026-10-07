@@ -30,7 +30,9 @@
  * accept a withdrawal only for a session that exists or carries a marker, so a
  * record with neither predates that rule, or names a session purged before the
  * purge wrote markers — it cannot say which. scripts/erase-participant.js
- * cannot act on a session that is gone; that is open in DPA Annex VI, G12.
+ * answers a request for a purged session (with the operator's word on the
+ * research copy) and writes nothing for one with no marker; the failure
+ * message below says which is which. DPA Annex VI, G12.
  *
  * ENV
  *   DATA_RIGHTS_DEADLINE_DAYS  default 30 (Art. 12(3))
@@ -159,17 +161,26 @@ async function run(db, opts) {
     err("Run scripts/erase-participant.js for each. Read the open " +
       "requests from `withdrawals/` in the database — deliberately not printed " +
       "here, because these logs are public.");
-    const gone = overdue.filter((p) => !p.sessionInDatabase).length;
-    if (gone) {
-      /* Said here because the line above would otherwise send the operator to
-         a tool that answers "nothing to erase" and exits 0. */
+    /* Said here because "run the tool" alone would send the operator to a run
+       that refuses, or to one that reports nothing to erase. */
+    const purged = overdue.filter((p) => p.sessionPurged).length;
+    if (purged) {
       err("");
-      err(`Session not in the database for ${gone} of them. ` +
-        "erase-participant.js walks live sessions only: it will find nothing " +
-        "for those and write no suppression record, so nothing in the tooling " +
-        "closes them yet. They concern the copies that outlive a session " +
-        "(archive snapshots, exports), or a code that never existed — the " +
-        "record is writable for any code. See DPA Annex VI, G12.");
+      err(`${purged} of them name a session that has been purged. The tool answers ` +
+        "those too, but only with --uid, and it will not write without " +
+        "--research-copy-checked: for a purged session nothing but you takes " +
+        "the participant out of the research copy. Run it without " +
+        "ERASE_CONFIRM first and read what it cannot reach.");
+    }
+    const untraced = overdue.filter((p) => !p.sessionInDatabase && !p.sessionPurged).length;
+    if (untraced) {
+      err("");
+      err(`${untraced} of them name a session that is not in the database and has no ` +
+        "purge marker: nothing shows it ever existed, and the tool writes no " +
+        "record for those. If it was purged before the purge wrote markers " +
+        "(2026-10-07), rebuild them from the nightly snapshots with " +
+        "scripts/backfill-purged-markers.js; otherwise remove the request with " +
+        "erase-participant.js --dismiss. See DPA Annex VI, G12.");
     }
     return 1;
   }

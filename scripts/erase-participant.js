@@ -32,18 +32,59 @@
  * legacy turn is not a bug to be hidden, it is a fact the requester may need
  * to be told.
  *
+ * A SESSION THAT HAS ALREADY BEEN PURGED (2026-10-07). Sessions go 30 days
+ * after closing and 90 after creation, so a request that arrives later names a
+ * session this tool cannot walk. It used to answer "Nothing to erase", exit 0
+ * and write nothing — which left the request open for ever (the monitor closes
+ * one only on an erasure record) and left up to 90 nightly snapshots with
+ * nothing telling a restore to leave the participant out. Now, for a session
+ * the purge left a MARKER for (`purgedSessions/<code>`), it writes the
+ * suppression record — the uid alone is enough, the restore re-resolves the
+ * rest against each snapshot — and removes that session's row from the
+ * participant's history. It needs `--uid`, and it will not write without
+ * `--research-copy-checked`: see WHAT IT STILL CANNOT REACH.
+ *
+ * It writes no record for a session that has NO marker. `erasures/` is never
+ * deleted, so it must not fill with records for sessions nothing shows ever
+ * existed. Such a request is reported, the run exits 3, and the operator
+ * either rebuilds the markers (scripts/backfill-purged-markers.js) or removes
+ * the request with `--dismiss`.
+ *
  * WHAT IT STILL CANNOT REACH:
  *   the nightly archive — snapshots are not rewritten. A suppression record is
  *                written instead so a restore cannot bring the participant
  *                back, and the snapshots expire on their own cycle. This is the
  *                "put beyond use" position the notice describes at PIS v10.
  *                See scripts/lib/suppression.js for why not (a).
+ *   the research copy — the pseudonymised exports already written and the
+ *                research dataset built from them are separate copies, outside
+ *                this database. For a live session the withdrawal record keeps
+ *                the participant out of FUTURE exports; for a purged one there
+ *                are none to come, so whether they are in the research copy is
+ *                a fact only a person can establish. `--research-copy-checked`
+ *                is the operator saying they have. The tool cannot verify it.
+ *   a certificate, once the session is purged — `credentials/<certId>` is
+ *                public for up to five years, and the only link from a uid to
+ *                a certificate id (`certIds/<code>`, `clientMapping`) went with
+ *                the session. If the participant supplies the id, delete that
+ *                record by hand.
  *
  * USAGE
  *   node scripts/erase-participant.js --uid <uid>
  *   node scripts/erase-participant.js --client-id <cid> --session <locationKey>
  *   node scripts/erase-participant.js --stable-id <sid>
  *   ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid>
+ *
+ *   # a session that has been purged — always --uid; the dry run names the flag
+ *   ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> \
+ *       --session <locationKey> --research-copy-checked --reason "Art. 17"
+ *
+ *   # a request that names a session nothing shows existed
+ *   ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> \
+ *       --session <locationKey> --dismiss --reason "<why>"
+ *
+ * EXIT  0 done (or dry run) · 1 failed · 2 refused, nothing written ·
+ *       3 a request was found that this tool could not act on
  */
 
 "use strict";
@@ -51,26 +92,52 @@
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
-const { readSessionLocations } = require("./lib/session-trees");
+const {
+  readSessionLocations, withdrawalLocations, purgedMarkers, locationForKey,
+} = require("./lib/session-trees");
 const { resolveIdentity, planSessionErasure } = require("./lib/erasure");
 const { buildRecord } = require("./lib/suppression");
+const { answeredKeys, flattenErasures, requestKey } = require("./lib/data-rights");
+const { isOpenRequest } = require("./lib/withdrawal-retention");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
 const CONFIRM = process.env.ERASE_CONFIRM === "1";
 
+const EXIT_OK = 0;
+const EXIT_REFUSED = 2;
+const EXIT_NOT_ACTED_ON = 3;
+const DAY_MS = 86400000;
+
+const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
 function parseArgs(argv) {
-  const out = { uid: null, clientId: null, stableId: null, session: null, reason: null };
+  const out = {
+    uid: null, clientId: null, stableId: null, session: null, reason: null,
+    researchCopyChecked: false, dismiss: false,
+  };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    const next = () => argv[++i];
+    const next = () => argv[++i] || null;
     if (a === "--uid") out.uid = next();
     else if (a === "--client-id") out.clientId = next();
     else if (a === "--stable-id") out.stableId = next();
     else if (a === "--session") out.session = next();
     else if (a === "--reason") out.reason = next();
+    else if (a === "--research-copy-checked") out.researchCopyChecked = true;
+    else if (a === "--dismiss") out.dismiss = true;
   }
   return out;
+}
+
+/* Every identifier here ends up as a segment of a database path. A "/" inside
+   one would address a DIFFERENT, deeper node — `--uid abc/profile` deletes
+   `users/abc/profile` — and the Admin SDK would do it without complaint. */
+const isKey = (v) => typeof v === "string" && v !== "" && !/[/.#$\[\]]/.test(v);
+function isSessionKey(v) {
+  if (typeof v !== "string") return false;
+  const parts = v.split("/");
+  return (parts.length === 1 || (parts.length === 3 && parts[0] === "orgs")) && parts.every(isKey);
 }
 
 function initAdmin() {
@@ -80,28 +147,13 @@ function initAdmin() {
   else initializeApp({ databaseURL: DB_URL });
 }
 
-async function main() {
-  const args = parseArgs(process.argv.slice(2));
-  if (!args.uid && !args.clientId && !args.stableId) {
-    console.error(
-      "FATAL: give at least one of --uid / --client-id / --stable-id.\n" +
-      "Refusing to run without an identifier: a run that matches nobody would " +
-      "report a clean erasure and do nothing, which is the worst possible " +
-      "outcome for a request someone is relying on.");
-    process.exit(2);
-  }
-
-  initAdmin();
-  const db = getDatabase();
-
-  console.log(`Database: ${DB_URL}`);
-  console.log(`Mode:     ${CONFIRM ? "LIVE — will delete" : "DRY RUN (set ERASE_CONFIRM=1 to write)"}`);
-  console.log("");
-
-  const locations = await readSessionLocations(db);
+/**
+ * The sessions that are IN the database: what to delete from each, and from
+ * the identity-keyed nodes beside them. Null when the participant is in none.
+ */
+async function planLive(db, locations, args) {
   const updates = {};
   const report = [];
-  let totalPaths = 0;
   const allAmbiguous = [];
   let identityForRecord = null;
   const suppressed = [];
@@ -115,19 +167,12 @@ async function main() {
     if (!plan.deletes.length && !plan.ambiguous.length) continue;
 
     for (const rel of plan.deletes) updates[`${loc.path}/${rel}`] = null;
-    totalPaths += plan.deletes.length;
     allAmbiguous.push(...plan.ambiguous.map((a) => ({ ...a, session: loc.key })));
     report.push({ session: loc.key, identity, count: plan.deletes.length });
     if (!identityForRecord && identity.uid) identityForRecord = identity;
     suppressed.push({ locationKey: loc.key, identity });
   }
-
-  if (!report.length) {
-    console.log("No matching participant found in any session. Nothing to erase.");
-    console.log("If that is unexpected, check the identifier — this tool never " +
-                "matches on a display name.");
-    process.exit(0);
-  }
+  if (!report.length) return null;
 
   /* Identity-keyed nodes outside the session subtrees. */
   const uid = (identityForRecord && identityForRecord.uid) || args.uid || null;
@@ -181,27 +226,84 @@ async function main() {
     }
   }
 
+  return { updates, report, allAmbiguous, suppressed, outside, chatTurns, legacyTurns };
+}
+
+/**
+ * The sessions that are NOT in the database any more.
+ *
+ * Starts from the request queue (`withdrawals`), not from the sessions: that
+ * is the only place a purged session is still named beside this uid. A session
+ * given with --session is added even with no record in the queue — a request
+ * can reach the operator by e-mail — but only if the purge left a marker for
+ * it. Anything already answered is left out; so is a session that is in the
+ * database, which planLive() owns.
+ *
+ * A failed read throws. "Could not read the queue" must never come out as
+ * "no requests".
+ *
+ * @returns {Promise<{closable: object[], noMarker: object[], needsUid: boolean}>}
+ */
+async function planPurged(db, locations, args) {
+  const live = new Set(locations.map((l) => l.key));
+  if (!args.uid) {
+    return { closable: [], noMarker: [], needsUid: !!args.session && !live.has(args.session) };
+  }
+
+  const [wSnap, mSnap, eSnap] = await Promise.all([
+    db.ref("withdrawals").get(), db.ref("purgedSessions").get(), db.ref("erasures").get(),
+  ]);
+  const byLocation = withdrawalLocations(wSnap.exists() ? wSnap.val() : {});
+  const markers = purgedMarkers(mSnap.exists() ? mSnap.val() : {});
+  const answered = answeredKeys(flattenErasures(eSnap.exists() ? eSnap.val() : {}));
+  const marked = (key) => Object.prototype.hasOwnProperty.call(markers, key);
+
+  const keys = new Set();
+  for (const key of Object.keys(byLocation)) {
+    if (isOpenRequest(byLocation[key][args.uid], key, args.uid, answered)) keys.add(key);
+  }
+  if (args.session && marked(args.session) && !answered.has(requestKey(args.session, args.uid))) {
+    keys.add(args.session);
+  }
+
+  const closable = [];
+  const noMarker = [];
+  for (const key of [...keys].sort()) {
+    if (args.session && key !== args.session) continue;
+    if (live.has(key)) continue;
+    const record = byLocation[key] ? byLocation[key][args.uid] : null;
+    const requestAt = isObj(record) && typeof record.at === "number" ? record.at : null;
+    if (marked(key)) closable.push({ locationKey: key, purgedAt: markers[key], requestAt, inQueue: isObj(record) });
+    else noMarker.push({ locationKey: key, requestAt });
+  }
+  return { closable, noMarker, needsUid: false };
+}
+
+const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+const age = (ms) => (ms === null ? "undated" : `${Math.floor((Date.now() - ms) / DAY_MS)}d ago`);
+
+function printLivePlan(live) {
   console.log("PLAN");
-  for (const r of report) {
+  for (const r of live.report) {
     console.log(`  ${r.session}: ${r.count} path(s) — uid=${r.identity.uid || "-"} ` +
                 `cids=[${r.identity.clientIds.join(",")}] sids=[${r.identity.stableIds.join(",")}]`);
   }
-  console.log(`  outside sessions: ${outside.length} path(s) (rosters, certIds, users)`);
-  console.log(`  roomChat: ${chatTurns} turn(s) (+ their author rows)`);
-  console.log(`  TOTAL: ${Object.keys(updates).length} path(s)`);
+  console.log(`  outside sessions: ${live.outside.length} path(s) (rosters, certIds, users)`);
+  console.log(`  roomChat: ${live.chatTurns} turn(s) (+ their author rows)`);
+  console.log(`  TOTAL: ${Object.keys(live.updates).length} path(s)`);
   console.log("");
 
-  if (allAmbiguous.length) {
-    console.log(`AMBIGUOUS — ${allAmbiguous.length} entry(ies) NOT deleted:`);
-    for (const a of allAmbiguous) console.log(`  ${a.session}/${a.path}  (${a.reason})`);
+  if (live.allAmbiguous.length) {
+    console.log(`AMBIGUOUS — ${live.allAmbiguous.length} entry(ies) NOT deleted:`);
+    for (const a of live.allAmbiguous) console.log(`  ${a.session}/${a.path}  (${a.reason})`);
     console.log("  These are attributed by display name with no id beside them. " +
                 "Deleting them could destroy a namesake's work, so they are left " +
                 "for a human to decide.");
     console.log("");
   }
 
-  if (legacyTurns) {
-    console.log(`UNERASABLE — ${legacyTurns} chat turn(s) predate the author index:`);
+  if (live.legacyTurns) {
+    console.log(`UNERASABLE — ${live.legacyTurns} chat turn(s) predate the author index:`);
     console.log("  Written before 2026-09-03, when roomChat turns carried no author " +
                 "at all. They cannot be attributed to anyone, so they cannot be " +
                 "erased individually — deleting them would delete other people's " +
@@ -210,16 +312,187 @@ async function main() {
                 "their chat is fully gone.");
     console.log("");
   }
+}
 
-  if (!CONFIRM) {
-    console.log("DRY RUN — nothing was written. Re-run with ERASE_CONFIRM=1 to apply.");
-    process.exit(0);
+function printPurgedPlan(closable) {
+  console.log(`PURGED SESSIONS — ${closable.length} request(s) for a session that is ` +
+              "no longer in the database:");
+  for (const g of closable) {
+    console.log(`  ${g.locationKey}: purged ${day(g.purgedAt)}; ` +
+      (g.inQueue ? `requested ${age(g.requestAt)}` : "no request in the queue — recorded on your word"));
+  }
+  console.log("  For each: one suppression record (identifiers only), so that a " +
+              "restore from the nightly snapshots leaves this participant out, " +
+              "and that session's row is removed from their history. Nothing is " +
+              "deleted from the session itself — the purge already removed it, " +
+              "for everyone.");
+  console.log("");
+  console.log("NOT REACHED BY THIS TOOL — yours to do, and to tell the requester:");
+  console.log("  - the research dataset, and the pseudonymised exports already " +
+              "written. The nightly export reads only sessions that are in the " +
+              "database, so nothing will ever take this participant out of a " +
+              "copy made before the purge. --research-copy-checked is you " +
+              "stating that you have removed them from it, or established that " +
+              "they were never in it. This tool cannot check.");
+  console.log("  - their certificate, if one was published. The record is public " +
+              "for up to five years and cannot be found from a uid once the " +
+              "session is gone. If they give you the certificate id, delete " +
+              "credentials/<that id> by hand.");
+  console.log("  - the nightly snapshots are not rewritten. They expire within 90 " +
+              "days; until then the suppression record is what keeps a restore " +
+              "from bringing the participant back. Never delete it.");
+  console.log("");
+}
+
+function printNotActedOn(gone) {
+  if (gone.needsUid) {
+    console.log("NOTE: that session is not in the database. A session that has " +
+                "been purged can only be addressed with --uid: clientIds and " +
+                "stableIds are resolved inside a session, and it is gone.");
+    console.log("");
+  }
+  if (!gone.noMarker.length) return;
+  console.log(`NOT ACTED ON — ${gone.noMarker.length} open request(s) name a session that ` +
+              "is not in the database and has no purge marker:");
+  for (const g of gone.noMarker) console.log(`  ${g.locationKey}: requested ${age(g.requestAt)}`);
+  console.log("  Nothing shows that session ever existed, so no suppression record " +
+              "is written for it: `erasures/` is never deleted and must not fill " +
+              "with records for sessions that never were. Two ways out —");
+  console.log("  - it WAS a session, purged before the purge wrote markers " +
+              "(2026-10-07): rebuild the markers from the nightly snapshots with " +
+              "scripts/backfill-purged-markers.js, then run this again;");
+  console.log("  - nothing in the snapshots or your own records shows it: remove " +
+              "the request with --uid … --session … --dismiss --reason \"…\".");
+  console.log("");
+}
+
+/** Remove ONE request that nothing ties to a real session. Not an erasure. */
+async function dismiss(db, locations, args) {
+  const refuse = (why) => {
+    console.error("REFUSED: " + why);
+    console.error("Nothing was written.");
+    return EXIT_REFUSED;
+  };
+  if (!args.uid || !args.session) {
+    return refuse("--dismiss needs --uid and --session: it removes one request, named exactly.");
+  }
+  if (!args.reason) {
+    return refuse("--dismiss needs --reason. You are setting aside something recorded " +
+                  "as a person's request; say why.");
+  }
+  if (locations.some((l) => l.key === args.session)) {
+    return refuse("that session is in the database, so a request about it is real. " +
+                  "Run the erasure (without --dismiss).");
+  }
+  const loc = locationForKey(args.session);
+  if ((await db.ref(loc.purgedMarkerPath).get()).exists()) {
+    return refuse("the purge left a marker for that session: it existed. Answer the " +
+                  "request (--research-copy-checked) rather than dismissing it.");
+  }
+  const path = `${loc.withdrawalsPath}/${args.uid}`;
+  if (!(await db.ref(path).get()).exists()) {
+    return refuse("there is no withdrawal record for that uid under that session.");
   }
 
-  const at = new Date().toISOString();
-  const records = suppressed.map((s) =>
-    buildRecord({ locationKey: s.locationKey, identity: s.identity, at,
-                  reason: args.reason || "erasure request" }));
+  console.log(`DISMISS  the request recorded under ${args.session} — reason: ${args.reason}`);
+  console.log("  The session is not in the database and has no purge marker. The " +
+              "record is deleted; NO suppression record is written, because " +
+              "nothing is being erased. This leaves no trace in the database: " +
+              "note the decision, and the reason, in your own register.");
+  console.log("");
+  if (!CONFIRM) {
+    console.log("DRY RUN — nothing was written. Re-run with ERASE_CONFIRM=1 to apply.");
+    return EXIT_OK;
+  }
+  await db.ref(path).remove();
+  console.log("DISMISSED. 1 record deleted.");
+  return EXIT_OK;
+}
+
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (!args.uid && !args.clientId && !args.stableId) {
+    console.error(
+      "FATAL: give at least one of --uid / --client-id / --stable-id.\n" +
+      "Refusing to run without an identifier: a run that matches nobody would " +
+      "report a clean erasure and do nothing, which is the worst possible " +
+      "outcome for a request someone is relying on.");
+    return EXIT_REFUSED;
+  }
+  for (const [flag, value] of [["--uid", args.uid], ["--client-id", args.clientId], ["--stable-id", args.stableId]]) {
+    if (value !== null && !isKey(value)) {
+      console.error(`FATAL: ${flag} is not a database key (it contains one of / . # $ [ ]). ` +
+                    "It would address a different node from the one you mean.");
+      return EXIT_REFUSED;
+    }
+  }
+  if (args.session !== null && !isSessionKey(args.session)) {
+    console.error("FATAL: --session takes a location key: <code>, or orgs/<slug>/<code>.");
+    return EXIT_REFUSED;
+  }
+
+  initAdmin();
+  const db = getDatabase();
+
+  console.log(`Database: ${DB_URL}`);
+  console.log(`Mode:     ${CONFIRM ? "LIVE — will delete" : "DRY RUN (set ERASE_CONFIRM=1 to write)"}`);
+  console.log("");
+
+  const locations = await readSessionLocations(db);
+  if (args.dismiss) return dismiss(db, locations, args);
+
+  const live = await planLive(db, locations, args);
+  const gone = await planPurged(db, locations, args);
+  const leftOpen = gone.noMarker.length ? EXIT_NOT_ACTED_ON : EXIT_OK;
+
+  if (!live && !gone.closable.length) {
+    console.log("No matching participant found in any session. Nothing to erase.");
+    console.log("If that is unexpected, check the identifier — this tool never " +
+                "matches on a display name.");
+    console.log("");
+    printNotActedOn(gone);
+    return leftOpen;
+  }
+
+  if (live) printLivePlan(live);
+  if (gone.closable.length) printPurgedPlan(gone.closable);
+  printNotActedOn(gone);
+
+  if (!CONFIRM) {
+    console.log("DRY RUN — nothing was written. Re-run with ERASE_CONFIRM=1" +
+                (gone.closable.length ? " and --research-copy-checked" : "") + " to apply.");
+    return leftOpen;
+  }
+  if (gone.closable.length && !args.researchCopyChecked) {
+    /* Before ANY write, the live half included: one run is one answer, and a
+       refused run that had already deleted from a live session would be an
+       erasure nobody confirmed. */
+    console.error("REFUSED: this run would answer a request for a session that has " +
+                  "been purged, and --research-copy-checked was not given. The " +
+                  "participant was told they are excluded from the research " +
+                  "dataset; for a purged session only you can make that true. " +
+                  "See NOT REACHED above.");
+    console.error("Nothing was written.");
+    return EXIT_REFUSED;
+  }
+
+  const at = new Date(Date.now()).toISOString();
+  const reason = args.reason || "erasure request";
+  const updates = Object.assign({}, live ? live.updates : {});
+  const records = (live ? live.suppressed : []).map((s) =>
+    buildRecord({ locationKey: s.locationKey, identity: s.identity, at, reason }));
+  for (const g of gone.closable) {
+    records.push(buildRecord({
+      locationKey: g.locationKey, identity: { uid: args.uid }, at, reason,
+      sessionPurged: true, researchCopyChecked: true,
+    }));
+    /* The history is keyed by the bare code in both trees. Skipped when the
+       live half is already deleting users/<uid> whole: a multi-path update may
+       not name a node and one of its descendants. */
+    if (!Object.prototype.hasOwnProperty.call(updates, `users/${args.uid}`)) {
+      updates[`users/${args.uid}/history/${locationForKey(g.locationKey).code}`] = null;
+    }
+  }
 
   /* The suppression record is written FIRST and in the same multi-path update
      as the deletions. If it were written afterwards and the process died in
@@ -235,8 +508,17 @@ async function main() {
   console.log(`Suppression record: erasures/${recRef.key} (${records.length} session(s)).`);
   console.log("The nightly snapshots are NOT rewritten; scripts/restore-sessions.js " +
               "applies this record so a restore cannot bring the participant back.");
+  if (gone.closable.length) {
+    console.log("The request(s) for purged sessions now count as done in the " +
+                "data-rights monitor; the nightly job removes the withdrawal " +
+                "record(s) on its next run.");
+  }
+  return leftOpen;
 }
 
+/* Explicit exit on every path: firebase-admin keeps the event loop alive, so
+   a main() that only returned would leave the process hanging after a
+   successful erasure — which it did, until 2026-10-07. */
 main()
-  .then(() => { process.exitCode = 0; })
-  .catch((e) => { console.error("FATAL: " + (e && e.message)); process.exitCode = 1; });
+  .then((code) => process.exit(code))
+  .catch((e) => { console.error("FATAL: " + (e && e.message)); process.exit(1); });

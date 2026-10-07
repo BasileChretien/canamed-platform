@@ -3384,13 +3384,25 @@ now exists; that is not the same as the duty being discharged.
    queue sees it" — real account, real rules, no session code entered, the
    session absent from the database.
    **What is NOT true, and is open:**
-   - **Nothing in the tooling can carry such a request out, or close it.**
-     `scripts/erase-participant.js` walks the sessions in the database; for a
-     purged one it reports nothing to erase and writes no suppression record.
-     So the monitor, once red for such a request, stays red until someone acts
-     by hand; and the nightly snapshots that still hold that session (up to
-     90) have no record telling a restore to leave the participant out — the
-     one thing the suppression list exists for.
+   - **"You are excluded from the research dataset" is made true, for a purged
+     session, by a person and by nothing else.** That is what the product says
+     when the withdrawal is recorded. The nightly export reads only sessions
+     that are in the database, so a withdrawal recorded after the purge changes
+     no export, past or future: if the participant had consented, they are in
+     every copy made before the purge, and stay there until the operator
+     removes them. The erasure tool now refuses to answer such a request
+     without `--research-copy-checked` — the operator's statement that they
+     have done so, or established the participant was never in it. **The tool
+     cannot verify that statement**, and the record it writes shows only that
+     it was made. Whether that is an adequate control is the Controller's
+     question, not the tool's.
+   - **A certificate published for a purged session cannot be found from the
+     participant's identifier.** `credentials/<certId>` is public for up to
+     five years. The only link from a uid to a certificate id was
+     `certIds/<code>` and the session's `clientMapping`, and both go with the
+     session. For a session still in the database the tool deletes the
+     certificate; for a purged one it cannot, says so, and the record can be
+     deleted by hand only if the participant supplies the id.
    - **The participant notice does not list what the daily jobs read of these
      records — found 2026-10-07, open.** `privacy.html` section 6 (PIS v11,
      EN/FR/JA) says the jobs that run every day read "a list of session
@@ -3426,6 +3438,46 @@ now exists; that is not the same as the duty being discharged.
      until the markers are backfilled (then it is swept like any other) or an
      operator removes it. The monitor reports how many there are.
    **Closed since, in code — none of it true in production until deployed:**
+   - **The erasure tool can carry out, and close, a request for a purged
+     session** (2026-10-07). *What was wrong:* `scripts/erase-participant.js`
+     walked the sessions in the database. For a purged one it printed "Nothing
+     to erase", exited 0 and wrote no suppression record — run against an
+     in-memory database, in live mode, that is exactly what it did. So the
+     monitor, once red for such a request, could never go green (it closes a
+     request only on an erasure record for the same session and uid), and the
+     nightly snapshots that still held the session, up to 90, had no record
+     telling a restore to leave the participant out — the one thing the
+     suppression list exists for.
+     *What changed:* for a session the purge left a marker for, the tool
+     writes the suppression record — the session and the uid, marked
+     `sessionPurged` — and removes that session's row from the participant's
+     history (`users/<uid>/history/<code>`; not the rest of the account, which
+     the request did not concern). The uid alone is sufficient: on restore the
+     record is re-resolved against each snapshot, which still holds the
+     participant's other identifiers. It finds such requests from the request
+     queue itself, so `--uid` with no `--session` answers every open one the
+     person has; `--session` also records a request that arrived by another
+     route. It requires `--uid`, and `--research-copy-checked` (see the open
+     points above), and refuses the whole run without the second — including
+     any live-session half of it.
+     *What it will not do:* write a record for a session that has **no**
+     marker. `erasures/` is never deleted, so it must not fill with records
+     for sessions nothing shows ever existed. It reports such a request and
+     exits 3; the operator rebuilds the markers from the snapshots, or removes
+     the request with `--dismiss` — a deletion of the withdrawal record alone,
+     with a mandatory reason, refused for any session that is in the database
+     or carries a marker. ⚠️ A dismissal leaves **no trace in the database**;
+     the reason is printed and the operator's own register is the record of it.
+     *Found on the way:* the tool never ended after a successful erasure of a
+     live session. It set an exit code and returned, and the database
+     connection holds the process open; the check meant to catch that reads
+     the source and says of itself that it cannot see the final path. The test
+     that now runs the tool to completion timed out against the old one.
+     `Verify:` `node --test tests/erase-purged-session.test.js` — it runs the
+     tool, then the monitor's queue, the restore's suppression step against a
+     snapshot that still holds the session (with the control: without the
+     record the participant comes back), and the nightly sweep. Eleven of its
+     fourteen cases fail against the tool as it stood.
    - **A withdrawal record now has an end of life** (2026-10-07). *What was
      wrong:* `withdrawals/<code>` was deleted only in the update that deletes
      its session, so a record written afterwards — which the rules allow, and

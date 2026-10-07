@@ -144,8 +144,11 @@ billing account before flipping to Blaze.
 
 ## 4. Erasure requests (GDPR Art. 17 / Art. 7(3), APPI Art. 35(5))
 
-A participant asking to be erased is an **operator action** today — there is no
-in-product withdrawal button, which is itself an open item (Annex VI **G12**).
+Erasing a participant is an **operator action**. The product has a withdrawal
+button (the waiting screen, and each row of the account's session history), but
+it only **records** the request — under `withdrawals/` — and the daily monitor
+in §6 watches the clock. Nothing is deleted until you run the tool below
+(Annex VI **G12**).
 
 ```bash
 # 1. ALWAYS look first. Dry run is the default; nothing is written.
@@ -182,6 +185,61 @@ the live platform is cleared immediately; backup copies are put beyond use and
 expire within 90 days; and if their room used the simulated-patient chat, that
 conversation cannot be separated out.
 
+### 4.1 When the session has already been purged
+
+Sessions are purged 30 days after closing and 90 after creation, so a request
+that arrives later names a session the tool cannot walk. The purge leaves a
+**marker** for each session it removes (`purgedSessions/<code>`), and the
+request itself is kept until it is answered.
+
+```bash
+# Dry run. --uid is required: a purged session cannot be addressed any other way.
+node scripts/erase-participant.js --uid <uid>
+```
+
+The report lists the purged sessions the person has an open request for, and
+what the tool **cannot reach**. Read that list; it is your work:
+
+- **The research copy.** The nightly export reads only sessions that are in
+  the database. If the participant had consented, they are in the exports made
+  before the purge and in anything built from them, and nothing automatic will
+  take them out. Remove them, or establish that they were never in it.
+- **Their certificate**, if one was published. It is public for up to five
+  years and cannot be found from a uid once the session is gone. Ask the
+  participant for the certificate id and delete `credentials/<id>` by hand.
+
+```bash
+# Only after that. The flag is your statement that the research copy is dealt with.
+ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> \
+    --research-copy-checked --reason "Art. 17 request"
+```
+
+This writes the suppression record (so a restore leaves them out of the
+snapshots that still hold the session) and removes that session's row from
+their history. The tool refuses to write without the flag. It cannot check what
+the flag asserts — the record shows only that you said so.
+
+**If the report says "no purge marker"** (exit code 3), nothing shows the
+session ever existed, and the tool writes nothing for it:
+
+- It *was* a session, purged before the purge wrote markers (2026-10-07):
+  download the nightly snapshots and rebuild the markers, then run the tool
+  again.
+
+  ```bash
+  node scripts/backfill-purged-markers.js --file <snapshot.json> [--file …]
+  BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json>
+  ```
+
+- Nothing in the snapshots or your own records shows it: remove the request.
+  This is not an erasure and leaves **no trace in the database** — write the
+  decision and the reason in your own register.
+
+  ```bash
+  ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> \
+      --session <code> --dismiss --reason "<why>"
+  ```
+
 ## 5. Rectification requests (GDPR Art. 16, APPI Art. 34)
 
 ```bash
@@ -213,6 +271,13 @@ It warns in the log from day 21, so there is time to act before a breach. Its
 output carries counts and ages only — **never a uid or a session code**, because
 these logs are world-readable. Read the open requests from `withdrawals/` in the
 database.
+
+A request **survives the purge of its session** and stays in this monitor until
+it is answered; there is no date on which it lapses. The failure message says
+how many of the late requests name a purged session (§4.1) and how many name a
+session with no purge marker (§4.1, last part). Once a request is answered, the
+nightly cleanup removes the withdrawal record; the record under `erasures/`
+stays, and must.
 
 ## 7. Document version
 

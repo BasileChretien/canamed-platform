@@ -334,9 +334,12 @@ test("account deletion removes the profile, the authored scenarios and their pub
  * the test now also hands the database it produced to the monitor's own queue
  * function and requires the request to be in it.
  *
- * It still does NOT show the request being carried out: for a purged session
- * nothing in the tooling can close it, and the record has no end of life (DPA
- * Annex VI, G12). The title says what is proven and no more.
+ * It still does NOT show the request being carried out. That is an operator's
+ * act — scripts/erase-participant.js, which for a purged session writes the
+ * suppression record and wants the operator's word on the research copy — and
+ * it is covered where it can be run for real: tests/erase-purged-session.test.js
+ * and tests/withdrawal-retention.test.js. The title says what is proven here
+ * and no more.
  */
 test("a withdrawal made from the front page for a purged session is recorded, and the erasure monitor's queue sees it", async ({ page }) => {
   const stamp = Date.now().toString(36) + Math.floor(Math.random() * 1e4);

@@ -80,8 +80,19 @@ const db = {
       key: segs(where).pop() || null,
       async once() { return snapshot(where); },
       async get() { return snapshot(where); },
-      /* A multi-path update: every key is a path below this ref. */
+      /* A multi-path update: every key is a path below this ref. The real
+         database REJECTS one in which a path is an ancestor of another, and
+         applies none of it — so does this, or a script that deletes a node and
+         one of its children in the same update would pass here and fail there. */
       async update(obj) {
+        const paths = Object.keys(obj).map((key) => segs(where ? where + "/" + key : key).join("/"));
+        for (const a of paths) {
+          for (const b of paths) {
+            if (a !== b && b.startsWith(a + "/")) {
+              throw new Error(`fake update refused: path "${a}" is an ancestor of "${b}"`);
+            }
+          }
+        }
         for (const key of Object.keys(obj)) put(where ? where + "/" + key : key, obj[key]);
         prune(tree);
       },
@@ -116,5 +127,14 @@ globalThis.fetch = async (url) => {
     : node;
   return { ok: true, status: 200, json: async () => body };
 };
+
+/* A real Realtime Database connection keeps the event loop alive for ever —
+   which is why every script that opens one must call process.exit()
+   (tests/ops-scripts-terminate.test.js, which can only check that by reading).
+   Without this timer a main() that merely RETURNED would end the child by
+   itself and look healthy; with it, that script hangs here exactly as it would
+   against the real database, and the caller's timeout turns the hang into a
+   failure. */
+setInterval(() => {}, 2 ** 30);
 
 process.on("exit", () => { fs.writeFileSync(FILE, JSON.stringify(tree)); });

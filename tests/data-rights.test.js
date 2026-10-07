@@ -261,9 +261,10 @@ test("the monitor exits 1 on an overdue request and 0 otherwise", async () => {
 test("a request whose session is NO LONGER IN THE DATABASE is still counted — open, then overdue", async () => {
   /* The case the front-page "Account" route makes ordinary: someone comes back
      after their session was purged (30 days after closing, 90 after creation)
-     and withdraws from the row in their history. The rules accept the write —
-     `withdrawals/<code>/<uid>` does not look at the session — and the page says
-     the deletion request is recorded.
+     and withdraws from the row in their history. The rules accept the write
+     for a session the purge left a marker for (and, when this test was
+     written, for any code at all), and the page says the deletion request is
+     recorded.
 
      The monitor read `withdrawals/<code>` only for sessions it found under
      `sessions/` and `orgs/`. So this request was never open, never due and
@@ -361,25 +362,42 @@ test("a failed listing of live sessions stops the monitor", async () => {
 });
 
 test("the monitor says which open requests name a session that is not in the database", async () => {
-  /* The operator needs to know, because the tool the failure message points at
-     cannot act on those: erase-participant.js walks live sessions only. And a
-     withdrawal record is writable by any signed-in visitor for ANY code, so
-     "not in the database" covers a purged session and one that never existed
-     alike — the count is what lets a human tell a request from noise. */
+  /* The operator needs to know, because the three kinds are answered three
+     ways. A session in the database: run the tool. A session the purge removed:
+     the tool answers it too, but only by uid and only with the operator's word
+     on the research copy. A session nothing shows ever existed: the tool writes
+     nothing, and the way out is the marker backfill or a dismissal. A failure
+     message that just says "run the tool" sends the operator to a run that
+     refuses, or one that reports nothing to erase. */
+  const sessions = { "LIVE-1": { created: { at: ago(50) } } };
   const r = await monitor({
-    sessions: { "LIVE-1": { created: { at: ago(50) } } },
-    withdrawals: { "LIVE-1": { uidA: request(40) }, "GONE-1": { uidB: request(40) }, "GONE-2": { uidC: request(5) } },
+    sessions,
+    purgedSessions: { "PURGED-1": ago(35) },
+    withdrawals: {
+      "LIVE-1": { uidA: request(40) }, "PURGED-1": { uidB: request(40) },
+      "NO-TRACE": { uidC: request(40) }, "GONE-2": { uidD: request(5) },
+    },
   });
-  assert.match(r.text, /session not in the database:\s+2\b/i);
+  assert.strictEqual(r.code, 1);
+  assert.match(r.text, /session not in the database:\s+3\b/i);
   assert.match(r.text, /erase-participant\.js/);
-  assert.match(r.text, /live sessions only/i,
-    "the failure message must not send the operator to a tool that will report nothing to erase");
+  assert.match(r.text, /1 of them name a session that has been purged/i);
+  assert.match(r.text, /--research-copy-checked/);
+  assert.match(r.text, /1 of them name a session that is not in the database and has no purge marker/i,
+    "only the OVERDUE untraced request is in the failure message; the 5-day-old one is not late");
+  assert.match(r.text, /backfill-purged-markers\.js/);
+  assert.match(r.text, /--dismiss/);
 
-  const allLive = await monitor({
-    sessions: { "LIVE-1": {} }, withdrawals: { "LIVE-1": { uidA: request(40) } },
+  // Each caveat appears only when it applies.
+  const allLive = await monitor({ sessions, withdrawals: { "LIVE-1": { uidA: request(40) } } });
+  assert.strictEqual(allLive.code, 1);
+  assert.doesNotMatch(allLive.text, /research-copy-checked|purge marker|--dismiss/,
+    "the caveats are noise when every late request has its session");
+  const purgedOnly = await monitor({
+    sessions, purgedSessions: { "PURGED-1": ago(35) }, withdrawals: { "PURGED-1": { uidB: request(40) } },
   });
-  assert.doesNotMatch(allLive.text, /live sessions only/i,
-    "the caveat is noise when every open request has its session");
+  assert.match(purgedOnly.text, /--research-copy-checked/);
+  assert.doesNotMatch(purgedOnly.text, /--dismiss|backfill/);
 });
 
 test("the monitor prints no uid and no session code — its logs are public", async () => {

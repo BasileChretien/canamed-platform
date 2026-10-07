@@ -121,19 +121,22 @@ function sessionLocationsFromKeys(sessionCodes, orgSessionCodes) {
  *
  * This goes the OTHER way from everything above: it starts from the records
  * that exist, not from the sessions that do. A participant may withdraw after
- * their session has been purged — the rule on `withdrawals/<code>/<uid>` does
- * not look at the session — and a reader that only visits `withdrawalsPath` for
- * each live session never sees that record at all. That is how an erasure
- * request could be accepted, acknowledged on screen, and then read by no job.
+ * their session has been purged — the rule on `withdrawals/<code>/<uid>`
+ * accepts it when the purge left a marker — and a reader that only visits
+ * `withdrawalsPath` for each live session never sees that record at all. That
+ * is how an erasure request could be accepted, acknowledged on screen, and
+ * then read by no job.
  *
  * Keys come from locationFor(), so they are the keys `erasures/` records carry
  * and cannot drift from the purge's own.
  *
- * ⚠️ A key here is NOT evidence that a session ever existed. Any signed-in
- * visitor — an anonymous one included — may write `withdrawals/<any code>/
- * <their own uid>`. Callers that need "is this session still in the database"
- * compare against sessionLocations(); nothing can tell a purged session from
- * one that never was.
+ * ⚠️ A key here is NOT by itself evidence that a session ever existed. Until
+ * 2026-10-07 the rule looked only at the uid, so any signed-in visitor — an
+ * anonymous one included — could write `withdrawals/<any code>/<their own
+ * uid>`, and records from then may still be here. Since then a record needs a
+ * session in the database or a purge marker. Callers that need "is this
+ * session still in the database" compare against sessionLocations(); callers
+ * that need "was it ever one" compare against purgedMarkers().
  *
  * `orgs` directly under `withdrawals` is always the org subtree, never a
  * session code: the rules give that literal key no per-uid write.
