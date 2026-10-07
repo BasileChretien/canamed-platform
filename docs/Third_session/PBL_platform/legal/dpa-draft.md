@@ -903,13 +903,13 @@ arising from the termination itself, without prejudice to accrued rights.
 | G4 no APPI Art. 28 basis for the LLM leg | BLOCKING | [OWNER] | [DATE] | |
 | G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
 | G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
-| G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; a sweep was built on 2026-10-07 and is **not yet scheduled**. Disclosure and the Art. 15 route are untouched |
-| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed twice on 2026-10-07, still open.** (1) The G13 job removes an ANONYMOUS account's `users/` node; it deliberately leaves scenarios and moderation reports in place. (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
+| G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; they are swept daily since PIS v12 and disclosed in the notice (sections 4 and 8). The Art. 15 route is untouched, and the older usage log is still not in the notice |
+| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed twice on 2026-10-07, still open.** (1) The G13 job removes an ANONYMOUS account's `users/` node; on schedule it deliberately leaves scenarios and moderation reports in place (an operator-dispatched orphan sweep can remove `scenarios/<uid>` for a uid that has no account at all). (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |
 | G10 no per-session configuration | BLOCKING | [OWNER] | [DATE] | |
 | G11 retention jobs unmonitored | HIGH | [OWNER] | [DATE] | |
 | G12 withdrawal does not produce erasure | BLOCKING | [OWNER] | [DATE] | |
-| G13 anonymous sign-in account: undisclosed, never deleted | HIGH — **MECHANISM BUILT 2026-10-07, NOT SCHEDULED, NOT ARMED** | [OWNER] | [DATE] | `scripts/cleanup-anonymous-accounts.js` removes an anonymous account idle ≥ 90 days that no live session names, with its `users/` node. It runs only on manual dispatch and is a dry run unless confirmed. **Until it is scheduled, retention is still indefinite and the notice still omits the identifier** — the cron, the armed confirm and the notice must land in one change. This item closes then, not now |
+| G13 anonymous sign-in account: undisclosed, never deleted | **RETENTION + DISCLOSURE: SCHEDULED AND ARMED WITH PIS v12 (2026-10) — close on the first completed live run. LAWFUL BASIS: OPEN** | [OWNER] | [DATE] | `scripts/cleanup-anonymous-accounts.js` removes an anonymous account idle ≥ 90 days that no live session names, with its `users/` node. It runs nightly and deletes on schedule; the notice describes it since PIS v12, and `tests/anonymous-identifier-notice.test.js` fails if the schedule, the armed switch or the wording moves alone. Dry run against production 2026-10-07: 338 accounts, 185 idle past the window, nothing deleted. **The lawful basis for an identifier created before consent is still undecided** — that limb does not close with the others |
 | Annex IV — EEA → Hugging Face mechanism | BLOCKING | [OWNER] | [DATE] | |
 | Annex IV — Google / GitHub DPA evidence | BLOCKING | [OWNER] | [DATE] | |
 
@@ -1697,7 +1697,7 @@ widely than participants are told.
 | Display name, university/affiliation, study year, self-rated English | `sessions/<code>/pool/<clientId>` | Every session member | Free-text, each capped at 40 characters |
 | Consent record | `.../pool/<clientId>/consent` | Every session member | Booleans for workshop and research consent, plus a notice-version string |
 | Identity-to-account bindings | `clientMapping`, `stableIdMapping`, `members`, `rooms/*/uidMembers` | Every session member | Maps a browser identity to a Firebase auth UID. For a participant who never signs in, that UID is the **anonymous sign-in account** in the next row |
-| **Anonymous sign-in account** | **Firebase Authentication (Google)** — not the database | No one via the client. The operator, through the Firebase Console and the Identity Toolkit API | `signInAnonymously()` creates one for **every visitor, on page load, before any consent surface is reached**: a UID and three timestamps (created, last sign-in, last token refresh). No name, no e-mail. The credential is persisted in the browser so the UID is stable between visits. Every `auth != null` rule in the database depends on it. **Not in the notice, and not deleted by anything until 2026-10** — see Annex VI, G13 |
+| **Anonymous sign-in account** | **Firebase Authentication (Google)** — not the database | No one via the client. The operator, through the Firebase Console and the Identity Toolkit API | `signInAnonymously()` creates one for **every visitor, on page load, before any consent surface is reached**: a UID and three timestamps (created, last sign-in, last token refresh). No name, no e-mail. The credential is persisted in the browser so the UID is stable between visits. Every `auth != null` rule in the database depends on it. In the notice since PIS v12, and deleted after 90 days without use (about 120 at most) by the nightly job. **Neither was true before 2026-10** — see Annex VI, G13 |
 | Free-text clinical answers and replies | `rooms/<room>/answers`, `answerReplies` | Every session member (not only the room) | Carries the author's display name and university |
 | Diagnostic hypotheses, prompt replies, revealed items, scores | `rooms/<room>/moduleA/*`, `moduleB/*` | Every session member | Free text capped at 200 characters |
 | **Free-text conversation with the simulated patient** | `roomChat/<code>/<room>/chat/<turnId>` — org sessions: `roomChat/orgs/<slug>/<code>/<room>/chat/<turnId>`. **Outside the session subtree since 2026-07-24 (PR #235)**; it was `rooms/<room>/moduleA/chat/<turnId>` before that | **Room members only, and genuinely so** — its own `.read`, granted per room plus the facilitator. Before the move the room-scoped rule restricted *writing* only, because `.read` cascades from `sessions/$sessionId` | Up to 600 characters per turn; **the highest-risk field** because it is unconstrained student writing |
@@ -1712,8 +1712,8 @@ widely than participants are told.
 | Account profile and session history | `users/<uid>/*` | Self only | Intended only for participants who create an optional account. **That was not true until 2026-08-25:** `pushSessionToHistory()` guarded on `!currentUser`, which is truthy for an anonymous user, so **every anonymous joiner** got `users/<anon-uid>/history/<code>` — session code, workshop name, scenario name, join time. Fixed in #348 for new writes; the records already written are removed by the G13 job |
 | Authored and shared scenarios | `scenarios/<ownerUid>`, `sharedScenarios/<shareId>` | Owner; shared ones readable by **any signed-in user** | Shared scenarios carry the author's display name (capped 80 chars) — confirm the facilitator consent flow discloses that. The rules also accept an **anonymous** owner (`auth.uid == $ownerUid`); the client does not offer it |
 | Abuse reports and moderation records | `reports/*`, `moderation/*` | Admin-gated | Retains the reporting user's UID — which may be an anonymous one (the rule is `$reporterUid == auth.uid`, and the client checks only that someone is signed in) |
-| **Chat rate-limit counters** | `rateLimits/uid/<uid>/<bucket>`, `rateLimits/session/<code>/<bucket>` | The UID itself; for the session tree, members holding a room claim | Auth UID or session code, an hour or UTC-day bucket, and a count. Written by the self-hosted proxy with the caller's own token since 2026-08-31. A usage timeline per identifier. **Never swept until 2026-10**, although the proxy's own source said a job did — see Annex VI, G7 |
-| **LLM usage log** | `metrics/hfPatient/*` | **No one via the client** — the path has no rule, so it is unreadable from any browser and reachable only via the Admin SDK | Per turn: auth UID, timestamp, language, message count, reply length, latency, HTTP status, inference provider, token counts, session code. Not in the notice; no job deletes it |
+| **Chat rate-limit counters** | `rateLimits/uid/<uid>/<bucket>`, `rateLimits/session/<code>/<bucket>` | The UID itself; for the session tree, members holding a room claim | Auth UID or session code, an hour or UTC-day bucket, and a count. Written by the self-hosted proxy with the caller's own token since 2026-08-31. A usage timeline per identifier. Swept daily once past the proxy's TTL, and in the notice since PIS v12. **Never swept before 2026-10**, although the proxy's own source said a job did — see Annex VI, G7 |
+| **LLM usage log** | `metrics/hfPatient/*` | **No one via the client** — the path has no rule, so it is unreadable from any browser and reachable only via the Admin SDK | Per turn: auth UID, timestamp, language, message count, reply length, latency, HTTP status, inference provider, token counts, session code. Not in the notice. Pruned at 30 days since 2026-08-12, and not written since 2026-08-27 when the function behind it went offline — see Annex VI, G7 |
 | Org-scoped mirror of all of the above | `orgs/<slug>/sessions/<id>/**` | As above within the org | Retention, backup, pseudonymisation and erasure all walk this tree (since Phase-4e gap 2); rule parity closed 2026-09-04. Still prohibited under clause 3.8, now on the narrower ground stated there |
 
 ### Data stored in the participant's own browser
@@ -2065,7 +2065,7 @@ produce output — as Hugging Face and its downstream providers do — falls
 | 2 | Google (reCAPTCHA v3 / App Check) — **INACTIVE since 2026-08-21** | Bot resistance | **Nothing.** Consent-gated and never loaded, so it receives no data. Previously: participant IP address and browser signals, on the application page | n/a while inactive; Google, not region-pinned, if re-enabled [TO VERIFY] | [TO VERIFY] |
 | 3 | **Hugging Face** — [EXACT LEGAL ENTITY AND ADDRESS TO CONFIRM] | Inference Providers router for the simulated-patient character | The scenario system prompt plus **participant free-text chat turns** (up to 16 messages / 12,000 characters per call) | Outside the EU [TO VERIFY exact location] | **Art. 28 foreign provision** — it processes the content to generate output, so the cloud exception does not apply |
 | 4 | **The inference provider behind Hugging Face** — **OVHcloud AI Endpoints** (OVH SAS) | Actual model execution | Same as #3 | **Pinned to `ovhcloud`, served from Gravelines, FRANCE — DEPLOYED 2026-08-21.** The running function now sends an explicit provider, so the recipient no longer varies per request. Note the deploy also had to correct `functions/.env`, which is git-ignored and was still naming the previous models: `.env` overrides the code defaults, so deploying without that fix would have paired the old models with the new provider, 404ing every call | **Art. 28 foreign provision.** The recipient becomes nameable when the pin is deployed, which is what Art. 28(2) requires and what this row previously could not supply. **Still not authorised under clause 6.1** — and the reason is no longer the deploy, which happened on 2026-08-21. Pinning names the recipient; it does not by itself produce the contract or the transfer record, and those remain outstanding. The runtime evidence is outstanding too: confirm from `metrics/hfPatient/events` (`provider` field, taken from the `x-inference-provider` response header) that a live turn records `ovhcloud` |
-| 5 | **GitHub, Inc.** — 88 Colin P. Kelly Jr. Street, San Francisco, California 94107, USA *(entity and address verified 2026-09-01 from GitHub's published Data Protection Agreement)* | Runs the scheduled retention, credential-expiry and cost-monitoring jobs. The backup and pseudonymised-export jobs also run here, but their schedules are commented out since 2026-08-31 (no GCS on the Spark plan), so they fire only on manual dispatch | **A DAILY read of the entire identified `/sessions` tree onto the runner, including free-text chat.** ⚠️ **Corrected 2026-09-01 — this row previously attributed that to the nightly BACKUP, which would have implied the transfer stopped when the backup was disabled. It did not.** ✅ **NO SCHEDULED JOB READS SESSION BODIES ANY MORE (completed 2026-09-01).** Both offenders were narrowed the same day. `firebase-cost-monitor.js` was the harder case and is worth recording, because its read was not gratuitous: serialised size cannot be obtained without transferring the data — RTDB exposes no size API — so weighing the tree genuinely required reading all of it. What made it unjustifiable was the RATIO. The number produced was 32.3 KB against a 1 GB cap: **0.003%**, four orders of magnitude from the 80% threshold it guarded, on a tree whose growth retention already bounds at 90 days. A daily transfer of every participant name, answer and chat turn to a US runner bought one number that could not plausibly move. The measurement is now opt-in (`COST_MONITOR_MEASURE_SIZE=1`) and a content-free tripwire on session COUNT (`COST_MONITOR_MAX_SESSIONS`, default 5000 ≈ 40 MB at the measured ~8 KB/session) carries the alarm. The same change also fixed a scope bug: the monitor read `sessions` only, so org-scoped sessions were absent from its count and from its open-session alarm; it now uses the shared two-tree enumerator. ⚠️ **What still crosses to the US runner is not nothing**: session identifiers (the join CODE, which this repo treats as semi-sensitive — `CLEANUP_QUIET=1` exists so it never reaches a world-readable log), two lifecycle dates per session, and the `credentials` records. Row #5 therefore stays a disclosed recipient and a live transfer; only its CONTENT changed. `cleanup-stale-sessions.js` **no longer reads any session body** either: it enumerates via `readSessionLocationsShallow`, which lists keys over the RTDB REST API with `?shallow=true`, and then reads only `created/at` and `closed/at` per session — which is all it ever used. Its own per-session read had carried the comment *"Fetch only the lifecycle markers, not the whole session tree"* the entire time; the enumerator one line above it silently undid that. `CLEANUP_DEEP_ENUM=1` restores the old behaviour for an operator, and nothing selects it automatically. `cleanup-expired-credentials.js` reads `/credentials`. The real-name → pseudonym **linkage table is no longer generated nightly** — that is `pseudonymise-export.js`, now dispatch-only. Job logs are configured to contain no PII | **US.** GitHub, Inc. is US-established; the runners are Azure machines whose region GitHub does not publish and which cannot be selected for standard hosted runners [verified against GitHub's runner documentation 2026-09-01] | **Candidate cloud exception is doubtful** — the runner materially handles the data, not merely stores it [TO VERIFY with Japanese counsel]. ✅ **TRANSFER MECHANISM RESOLVED 2026-09-01 — Art. 45 ADEQUACY, not SCCs.** GitHub, Inc. is an **active participant in the EU–U.S. Data Privacy Framework**, verified in the U.S. Department of Commerce register: EU–U.S. DPF *Active*, UK Extension *Active*, Swiss–U.S. *Active*, all for **Non-HR Data**; original certification 2017-01-26, **next certification due 2027-08-03**. Its published scope names *"GitHub Free and Subscription Users Data"* among the covered categories, which is the point that was in doubt. Transfers to a DPF-certified organisation rest on the Commission's adequacy decision of 10 July 2023, so **no SCCs and no DPA are needed for the transfer leg**. ⚠️ Adequacy is only as durable as the certification: if it lapses or the decision is annulled, this row loses its basis with no code change to signal it — `tests/github-dpf-currency.test.js` fails as the recertification date approaches. ⚠️ **APPI is NOT solved by this.** DPF is an EU instrument; Japan's PPC has not designated the United States, so for Japanese participants this stays an Art. 28 cross-border transfer needing its own basis. ❌ **SEPARATELY, THE ART. 28(3) PROCESSOR CONTRACT IS STILL MISSING, and adequacy does not supply it** — the two obligations are independent and were previously conflated in this row. Established 2026-09-01: GitHub's DPA is scoped to *"Online Services"*, defined as *"any service or software that GitHub provides You **under a written and executed agreement**"*, with *"GitHub Customer Agreement"* meaning *"Your agreement(s) for the Online Services"*. A free personal account is governed by the **GitHub Terms of Service**, which carries no Art. 28 language and defers data-protection terms to a Customer Agreement or Enterprise addendum for those who hold one. GitHub's own General Privacy Statement puts GitHub as **Controller** for users accessing the service directly and as Processor only where *"a school or employer supplies your GitHub account"*, governed by a DPA. And the former **"GitHub Data Protection Agreement for Non-Enterprise Customers" has been RETIRED** — its URL now redirects to the privacy-policies index and the older addendum 404s; the surviving DPA lives under `customer-terms/`, i.e. it is a customer-contract document, not a site policy. ✅ **CONCLUDED 2026-09-02 FROM PRIMARY SOURCES — no enquiry needed, and the answer is NO.** The operator declined to write to GitHub, so this was settled by reading the instruments themselves. The conclusion is that **GitHub's DPA does not apply to a free personal account, and cannot be made to apply by any self-serve purchase.** Four independent supports, each quotable:
+| 5 | **GitHub, Inc.** — 88 Colin P. Kelly Jr. Street, San Francisco, California 94107, USA *(entity and address verified 2026-09-01 from GitHub's published Data Protection Agreement)* | Runs the scheduled retention, credential-expiry and cost-monitoring jobs. The backup and pseudonymised-export jobs also run here, on a daily schedule (commented out on 2026-08-31, restored on 2026-09-01 by #363, writing to Scaleway since) | **A DAILY read of the entire identified `/sessions` tree onto the runner, including free-text chat.** ⚠️ **Corrected 2026-09-01 — this row previously attributed that to the nightly BACKUP, which would have implied the transfer stopped when the backup was disabled. It did not.** ~~✅ **NO SCHEDULED JOB READS SESSION BODIES ANY MORE (completed 2026-09-01).**~~ ⚠️ **Struck 2026-10-07. It was true for about two and a half hours on 2026-09-01, on no night, and has been false since, for two separate reasons.** (1) The backup and the research export are NOT dispatch-only: #363 put both back on a daily cron on 2026-09-01, on GitHub-hosted runners, and each reads the whole identified tree ON THE RUNNER before uploading to Scaleway — the export also builds the real-name → pseudonym linkage table there. They did the same before 2026-08-27 when they wrote to Google storage. So session bodies cross every day, by design, and still do. On 2026-08-27 to 08-30 the two jobs still ran on schedule and failed at the upload; the one log read (backup, 2026-08-29) shows the read and the on-runner file happened first. They read `sessions` and `orgs` (and the export, each session's `withdrawals` entry) — not `roomChat`, `users` or the other top-level trees. PIS v12 sections 6 and 7 now say so; until v12 section 7 said session content did not cross. (2) A third job, the data-subject request monitor, ran from 2026-09-04 to 2026-10-07 with the deep reader and copied `sessions` and `orgs` whole to a runner each day (34 runs; corrected in #431 — see R9). It also reads the `withdrawals` and `erasures` ledgers whole, which is not in the list of what crosses below: a session identifier, the person's technical identifiers, a date, what was asked, and on an erasure record the operator's note of the reason. Both offenders of 2026-09-01 were narrowed the same day. `firebase-cost-monitor.js` was the harder case and is worth recording, because its read was not gratuitous: serialised size cannot be obtained without transferring the data — RTDB exposes no size API — so weighing the tree genuinely required reading all of it. What made it unjustifiable was the RATIO. The number produced was 32.3 KB against a 1 GB cap: **0.003%**, four orders of magnitude from the 80% threshold it guarded, on a tree whose growth retention already bounds at 90 days. A daily transfer of every participant name, answer and chat turn to a US runner bought one number that could not plausibly move. The measurement is now opt-in (`COST_MONITOR_MEASURE_SIZE=1`) and a content-free tripwire on session COUNT (`COST_MONITOR_MAX_SESSIONS`, default 5000 ≈ 40 MB at the measured ~8 KB/session) carries the alarm. The same change also fixed a scope bug: the monitor read `sessions` only, so org-scoped sessions were absent from its count and from its open-session alarm; it now uses the shared two-tree enumerator. ⚠️ **What still crosses to the US runner is not nothing**: session identifiers (the join CODE, which this repo treats as semi-sensitive — `CLEANUP_QUIET=1` exists so it never reaches a world-readable log), two lifecycle dates per session, and the `credentials` records. **Widened 2026-10 (Annex VI, G13):** the anonymous-account retention job additionally brings, for EVERY Auth account, its UID, three timestamps and the names of its sign-in providers — no e-mail address and no display name, enforced by a partial-response mask the job verifies — together with the member and creator UIDs of each live session, the UIDs on the two operator allowlists (`facilitatorGate/allow`, `moderators`), the keys of `users/` and `scenarios/` and of each quiet anonymous account's `users/` node (never their contents), and the keys of the rate-limit tree. Row #5 therefore stays a disclosed recipient and a live transfer; only its CONTENT changed. `cleanup-stale-sessions.js` **no longer reads any session body** either: it enumerates via `readSessionLocationsShallow`, which lists keys over the RTDB REST API with `?shallow=true`, and then reads only `created/at` and `closed/at` per session — which is all it ever used. Its own per-session read had carried the comment *"Fetch only the lifecycle markers, not the whole session tree"* the entire time; the enumerator one line above it silently undid that. `CLEANUP_DEEP_ENUM=1` restores the old behaviour for an operator, and nothing selects it automatically. `cleanup-expired-credentials.js` reads `/credentials`. The real-name → pseudonym **linkage table IS generated on the runner each day** by `pseudonymise-export.js`, scheduled again since 2026-09-01 (this row said "no longer generated nightly … now dispatch-only" until 2026-10-07). Job logs are configured to contain no PII | **US.** GitHub, Inc. is US-established; the runners are Azure machines whose region GitHub does not publish and which cannot be selected for standard hosted runners [verified against GitHub's runner documentation 2026-09-01] | **Candidate cloud exception is doubtful** — the runner materially handles the data, not merely stores it [TO VERIFY with Japanese counsel]. ✅ **TRANSFER MECHANISM RESOLVED 2026-09-01 — Art. 45 ADEQUACY, not SCCs.** GitHub, Inc. is an **active participant in the EU–U.S. Data Privacy Framework**, verified in the U.S. Department of Commerce register: EU–U.S. DPF *Active*, UK Extension *Active*, Swiss–U.S. *Active*, all for **Non-HR Data**; original certification 2017-01-26, **next certification due 2027-08-03**. Its published scope names *"GitHub Free and Subscription Users Data"* among the covered categories, which is the point that was in doubt. Transfers to a DPF-certified organisation rest on the Commission's adequacy decision of 10 July 2023, so **no SCCs and no DPA are needed for the transfer leg**. ⚠️ Adequacy is only as durable as the certification: if it lapses or the decision is annulled, this row loses its basis with no code change to signal it — `tests/github-dpf-currency.test.js` fails as the recertification date approaches. ⚠️ **APPI is NOT solved by this.** DPF is an EU instrument; Japan's PPC has not designated the United States, so for Japanese participants this stays an Art. 28 cross-border transfer needing its own basis. ❌ **SEPARATELY, THE ART. 28(3) PROCESSOR CONTRACT IS STILL MISSING, and adequacy does not supply it** — the two obligations are independent and were previously conflated in this row. Established 2026-09-01: GitHub's DPA is scoped to *"Online Services"*, defined as *"any service or software that GitHub provides You **under a written and executed agreement**"*, with *"GitHub Customer Agreement"* meaning *"Your agreement(s) for the Online Services"*. A free personal account is governed by the **GitHub Terms of Service**, which carries no Art. 28 language and defers data-protection terms to a Customer Agreement or Enterprise addendum for those who hold one. GitHub's own General Privacy Statement puts GitHub as **Controller** for users accessing the service directly and as Processor only where *"a school or employer supplies your GitHub account"*, governed by a DPA. And the former **"GitHub Data Protection Agreement for Non-Enterprise Customers" has been RETIRED** — its URL now redirects to the privacy-policies index and the older addendum 404s; the surviving DPA lives under `customer-terms/`, i.e. it is a customer-contract document, not a site policy. ✅ **CONCLUDED 2026-09-02 FROM PRIMARY SOURCES — no enquiry needed, and the answer is NO.** The operator declined to write to GitHub, so this was settled by reading the instruments themselves. The conclusion is that **GitHub's DPA does not apply to a free personal account, and cannot be made to apply by any self-serve purchase.** Four independent supports, each quotable:
 
 1. **The DPA says so structurally.** Its opening line (October 2025 version): *"This GitHub Data Protection Agreement **forms part of the GitHub Customer Agreement** between Customer ("You") and GitHub, Inc. covering **Your legal entity's** use of the Online Services."* A personal account is not a legal entity's use, and no Customer Agreement exists.
 2. **Its definitions close the door.** §1.I: *"'Online Services' means any service or software that GitHub provides You **under a written and executed agreement**."* §1.G: *"'GitHub Customer Agreement' or 'Agreement' means Your agreement(s) for the Online Services."* §2.A then applies the DPA to "all Online Services" — a set defined by that agreement, which we do not have.
@@ -2479,6 +2479,19 @@ standing disclosure and is **not** deleted at signature (clause 5.5).
 
 **L1 — BLOCKING (the naming half was fixed 2026-09-03; the version-string half
 was not). The live privacy notice names the wrong controller.**
+
+> ⚠️ **A tenth version surface, found 2026-10-07, and it was the one that
+> mattered.** `CONSENT_NOTICE_VERSION` in `script.js` is stored next to every
+> consent record, and the resume path compares it to decide whether to ask
+> again. It stayed at `PIS-v3-2026-07` while the notice went from v3 to v11.
+> Two consequences for the records already collected: **every consent record
+> written between July and October 2026 names PIS v3**, whichever version the
+> participant was actually shown; and **a participant resuming a session in
+> that period was not asked again**, although section 16 of the notice promised
+> re-consent after each material change. It is `PIS-v12-2026-10` from PIS v12,
+> and `tests/pis-version-lockstep.test.js` now fails if the two drift apart.
+> The existing records cannot be corrected; they should be read as "v3 or
+> later" when the consent trail is relied on.
 
 > **What changed.** The join screen no longer asserts that Caen and Nagoya are
 > the controllers of every session. A facilitator names their own institution
@@ -2974,16 +2987,17 @@ is deliberate rather than incidental.
 > Each hour and each day in which a participant used the chat stayed on record
 > under their UID from 2026-08-31 onward.
 > `scripts/lib/rate-limit-retention.js` now sweeps a bucket once it is past the
-> TTL the proxy itself asks for (two windows: 2 hours, 2 days). **It runs as part
-> of the G13 job and is therefore NOT SCHEDULED either.**
-> The disclosure and Art. 15 limbs of this item are untouched: neither tree is
-> in the notice, and neither can be surfaced through an in-product request.
+> TTL the proxy itself asks for (two windows: 2 hours, 2 days). It runs as part
+> of the G13 job, nightly since PIS v12.
+> The counters are in the notice since PIS v12 (sections 4 and 8). The Art. 15
+> limb is untouched — neither tree can be surfaced through an in-product
+> request — and the older usage log is still not in the notice.
 
 **G8 — MEDIUM. Account profiles, admin secrets, recovery records, authored
 scenarios, abuse reports and moderation records** have no automated deletion.
 *(Narrowed 2026-10-07 for anonymous accounts, and only for `users/<uid>`,
 which the G13 job removes along with the account. That job deliberately leaves
-`scenarios/<uid>` and moderation reports in place — see G13 for why. This
+`scenarios/<uid>` and moderation reports in place — see G13 for why — except that an operator-dispatched orphan sweep removes `scenarios/<uid>` for a uid that has no account at all. This
 paragraph went on to say that for a signed-in account nothing had changed, and
 that the client's own `accountDelete()` "removes `users/<uid>` but not
 `scenarios/<uid>`, which is then unreadable by anyone and kept for ever". That
@@ -3035,9 +3049,11 @@ same day.)*
 > - **The per-account rate-limit counters** — `rateLimits/uid/<uid>/<bucket>`,
 >   increment-only for a client. These do have a sweep —
 >   `scripts/lib/rate-limit-retention.js` drops a bucket once it is past its
->   TTL (2 hours / 2 days) — but it runs as part of the G13 job and is therefore
->   **not scheduled** (see the note at G7). Once it is, they expire within two
->   days whatever happens to the account; today they stay.
+>   TTL (2 hours / 2 days) — and it runs as the first phase of the G13 job,
+>   which is **scheduled nightly since PIS v12** (see the note at G7). They
+>   therefore expire within about three days whatever happens to the account.
+>   (Until that job was scheduled this entry read "not scheduled … today they
+>   stay", which was true of #426 as merged and stopped being true with v12.)
 >
 > **What it does NOT remove, by design** — everything inside a session or keyed
 > by one: the pool entry (with the name typed at join), answers, votes, chat
@@ -3937,19 +3953,21 @@ now exists; that is not the same as the duty being discharged.
    namesake's work while honouring someone else's request would be a worse
    defect than the one being fixed. They are reported as AMBIGUOUS for a human.
 
-**G13 — HIGH (new, 2026-10-07). MECHANISM BUILT, NOT SCHEDULED, NOT ARMED. Every
-visitor is given an account before consenting to anything, and nothing ever
-deleted one.** `ensureSignedIn()` calls `signInAnonymously()` on page load, so a
+**G13 — (new, 2026-10-07). RETENTION AND DISCLOSURE: SCHEDULED AND ARMED WITH
+PIS v12. LAWFUL BASIS: OPEN. Every visitor is given an account before consenting
+to anything, and nothing ever deleted one.** `ensureSignedIn()` calls `signInAnonymously()` on page load, so a
 Firebase Auth account — a UID, three timestamps, and a credential persisted in
 the browser — exists for every visitor whether or not they go on to enter a
 session code. It is the identifier behind every `auth != null` rule, and it is
 stable between visits.
 
-Three things were wrong, and only the third has a mechanism:
+Three things were wrong. The first and the third are addressed by PIS v12 and
+the scheduled job; the second is not:
 
 1. **It is not in the notice.** Section 4 of `privacy.html` describes what
    Google supplies "if you sign in", which reads as though Google Auth begins
-   there. It begins on page load.
+   there. It begins on page load. *Addressed in PIS v12: sections 4, 6–8, 16
+   and 17, in all three languages.*
 2. **It has no stated lawful basis.** Section 3 rests the whole notice on
    consent, and this identifier is created before any consent is sought.
    **[CONTROLLER / DPO TO DECIDE: the basis for the identifier itself — it is
@@ -3960,7 +3978,8 @@ Three things were wrong, and only the third has a mechanism:
 3. **It was kept for ever.** Auto-deletion of anonymous users is an Identity
    Platform feature this project does not have. Checked in the Console on
    2026-08-25: the oldest anonymous accounts were 101 days old, never returned
-   to, and still there (issue #347).
+   to, and still there (issue #347). *Addressed: the mechanism below runs
+   nightly since PIS v12.*
 
 *The mechanism.* `scripts/cleanup-anonymous-accounts.js` removes an anonymous
 account that has gone 90 days without use, together with its `users/<uid>`
@@ -4004,19 +4023,76 @@ their contents); and the keys of the rate-limit tree — UID or session code, an
 the time buckets. That is a new category crossing to the United States and must be added
 to the transfer description in the same change that schedules the job.
 
-*What is NOT established.* The job has never run against production. Whether the
-service account may list accounts, and whether Google honours the
-partial-response mask, can only be shown by a dispatched dry run. And recovery is
+*What a dry run against production established (2026-10-07, run 37576812113,
+nothing deleted).* 338 accounts were listed — 336 anonymous, 2 signed-in — so
+the service account may list accounts. No unrequested field came back on the
+canary, on any page or on the re-check, so Google honours the partial-response
+mask. Every anonymous account carried a readable last-refresh date. 185 were
+idle past the window, and 119 database paths would have gone. **It found no
+`users/` node without an account**, so nothing the pre-#348 bug wrote is beyond
+the scheduled job's reach today.
+
+*What the published period depends on, stated because none of it is in the
+notice.* An independent fact-check of PIS v12 against the code (2026-10-07)
+found no false statement about a person's data, and these dependencies:
+
+- **Nothing monitors that the job runs.** This is G11, unchanged, and it now
+  carries a published period: a disabled workflow (GitHub disables `schedule:`
+  on a repository inactive for 60 days), a revoked secret or a lost permission
+  leaves section 8 of the notice false with no signal. A failed run does mail
+  the repository owner; a run that never starts does not. A live run prints an
+  `Auth:` line; a dry run does not — that is the only check, and it is manual.
+- **"About 30 days later at most" inherits the session purge's own
+  dependencies.** While the backup interlock blocks session purges, sessions
+  stay live and their members stay protected; and `closed/at` is written from
+  the facilitator's device clock, which the rules do not bound, so a clock set
+  ahead keeps a session — and its members' identifiers — for as long as the
+  skew.
+- **The account half refuses outright if the listing contains no signed-in
+  account** (there are two today). That is deliberate: without one, a response
+  that dropped the provider field would be indistinguishable from a project
+  with no facilitators. But it means that if both ever go, every nightly run
+  exits 3 and no anonymous account is removed until an operator intervenes. The
+  counter sweep is a separate phase that runs first and is not affected.
+- **The counter sweep has five minutes, for its reads and its writes together**
+  (plus the timeout of whatever read or update is under way when they end). Any
+  participant can mint counter identifiers, and any number of bucket names
+  under their own identifier, so either could otherwise make the job outlast
+  its timeout and delete nothing at all. When the time runs out, what was read
+  is swept as far as time allows, identifiers with few stale buckets first, the
+  rest is counted and the run exits 1; the next night starts at a different
+  place in the list. Under such a flood the
+  "about three days" in the notice does not hold for the counters not yet
+  reached, and the only signal is that failed run (G11).
+- **An orphan created LATER is only counted on schedule.** If an account is
+  removed some other way (the Console), the `users/` node left behind is
+  reported nightly and deleted only by a manual dispatch with `sweep_orphans`.
+- **Five kinds of anonymous account are kept past 90 days by design**: one on
+  an operator allowlist; one with a `profile` or `scenarios` node (which the
+  owner can write, so a participant can exempt their own account); one with no
+  readable last-use date; one whose uid is not well-formed; one whose
+  `users/<uid>` node cannot be read. The notice
+  states the first two by name and the rest as one class ("when it cannot be
+  established when it was last used, or what is stored under it: in doubt,
+  nothing is deleted"). Its first v12 draft said "kept longer **only** if" the
+  first two held, which an independent review found false for the others; a
+  test now fails if a new class of kept account appears without the notice
+  being read again. The dry run found none of them.
+
+*What is NOT established.* Recovery is
 proven for a participant's **next page load** only (the SDK clears a stored
 account whose reload fails, and the platform signs in afresh); a browser tab
 left open across the deletion cannot be exercised on the emulator, which answers
 a deleted account's token refresh differently from Google's documented
 behaviour.
 
-**This item closes when the job is scheduled AND armed AND the notice describes
-it** — one change, because a schedule without the notice is an undisclosed
-nightly transfer, and the notice without the schedule states a period nothing
-enforces.
+**The job was scheduled and armed in the same change that issued PIS v12**,
+because a schedule without the notice is an undisclosed nightly transfer, and
+the notice without the schedule states a period nothing enforces.
+`tests/anonymous-identifier-notice.test.js` now fails if either moves alone.
+**The retention and disclosure limbs close on the first completed live run. The
+lawful-basis limb stays open until the controller decides it** — publishing the
+identifier in the notice made the missing basis more visible, not less.
 
 [CONTROLLER — DATE THE JOB WAS SCHEDULED: ____ ]
 
@@ -4171,9 +4247,47 @@ two apart — conflating them is the error this analysis began with.
 that can be checked rather than an assurance:
 - The platform is **pre-pilot**: four sessions existed on the date of this entry.
 - What the jobs read has been minimised to **session identifiers and two
-  lifecycle dates per session**, plus the `credentials` records. **No session
-  bodies have reached a runner since PIS v7** (2026-09-01/02) — before that, two
+  lifecycle dates per session**, plus the `credentials` records. ~~No session
+  bodies have reached a runner since PIS v7 (2026-09-01/02)~~ — before that, two
   jobs copied the whole identified tree daily.
+- ⚠️ **The struck sentence was never true, and this acceptance was given on
+  it.** First, by design: the backup and the research export went back on a
+  nightly cron on 2026-09-01 (#363), on GitHub-hosted runners, and each reads
+  the whole identified tree on the runner before it uploads to Scaleway (the
+  export builds the name → pseudonym linkage table there too). Bodies have
+  therefore crossed every night since, and still do. The notice disclosed where
+  the copies are KEPT and, in section 7, denied that content crossed; PIS v12
+  corrects that. Second, by mistake: the data-rights monitor was merged with a
+  daily cron on 2026-09-03, first ran on 2026-09-04, and enumerated sessions
+  with the deep reader, so it copied `sessions` and `orgs` whole — names,
+  answers, votes and everything else kept inside a session; not the free-text
+  chat of any session created since 2026-07-23, which lives in the top-level
+  `roomChat/` tree and was not read (a session created before that date kept
+  its chat inside `sessions/` until it was purged; whether one still existed
+  in September was not checked) — to a
+  runner on each of its 34 runs, the last on 2026-10-07 (#431 then replaced the
+  read with a keys-only listing). It used only the withdrawal paths. Nobody saw it because the "daily jobs" the notice
+  test checked were a hand-written list the monitor was never added to; the
+  rule is now derived (`tests/ops-transfer-notice.test.js`: any scheduled job
+  that reads session bodies must be one of the two disclosed full copies). PIS
+  v12 section 6 admits the month, and lists what was missing besides: the
+  monitor reads the withdrawal and erasure ledgers (a session identifier, the
+  person's technical identifiers, a date, what was asked, and on an erasure
+  record the operator's note of the reason — free text on `main` today, so an
+  operator could put a name there; #437 restricts it to five fixed strings). **[OPERATOR: the
+  acceptance below was given on "no session bodies since 2026-09-01". Re-read
+  it against the facts: bodies cross every night for the two full-copy jobs,
+  and crossed daily for a month for a third job that did not need them. Say
+  whether it stands.]**
+- ⚠️ **That limb WIDENED in 2026-10, and this acceptance has not been given
+  again on the wider facts.** The anonymous-account retention job (G13) adds,
+  nightly: every Auth account's UID with three timestamps and the names of its
+  sign-in providers, the member and creator UIDs of each live session, the UIDs
+  on the two operator allowlists, which UIDs have a `users/` or `scenarios/`
+  record, and the keys of the rate-limit tree. Still no session body, no name and no e-mail
+  address — but identifiers of every account holder now cross, not only session
+  codes. **[OPERATOR TO RE-AFFIRM OR WITHDRAW THE ACCEPTANCE ON THE WIDER
+  CONTENT.]**
 - Job logs carry no PII by configuration (`CLEANUP_QUIET=1`), so the world-
   readable Actions logs of a public repository do not expose session codes.
 - The processing is ordinary infrastructure execution, not analysis: GitHub is
