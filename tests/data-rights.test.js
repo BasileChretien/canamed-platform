@@ -20,7 +20,9 @@ const {
   pendingErasures, erasureQueue, planRectification, RECTIFIABLE, ROSTER_FIELDS, DEADLINE_DAYS,
 } = require("../scripts/lib/data-rights");
 const { resolveIdentity } = require("../scripts/lib/erasure");
-const { sessionLocations, withdrawalLocations } = require("../scripts/lib/session-trees");
+const {
+  sessionLocations, withdrawalLocations, readSessionLocationsShallow,
+} = require("../scripts/lib/session-trees");
 
 const DAY = 86400000;
 const NOW = 1780000000000;
@@ -212,14 +214,29 @@ function fakeDb(tree) {
   };
 }
 
+/* What RTDB's REST `?shallow=true` returns for a path: its child KEYS, each
+   mapped to `true`, and nothing below them — or null for an empty path. */
+function shallowOf(tree, shallowReads) {
+  return async (p) => {
+    shallowReads.push(p);
+    const node = p.split("/").reduce(
+      (n, key) => (n !== null && typeof n === "object" && key in n ? n[key] : null), tree);
+    if (node === null || typeof node !== "object") return null;
+    return Object.fromEntries(Object.keys(node).map((k) => [k, true]));
+  };
+}
+
 async function monitor(tree, opts) {
   const lines = [];
   const db = fakeDb(tree);
+  const shallowReads = [];
   const code = await runMonitor(db, Object.assign({
     now: NOW, deadlineDays: 30, warnDays: 21,
+    /* The REAL keys-only enumerator, over a stand-in for the REST call. */
+    liveLocations: () => readSessionLocationsShallow({ fetchShallow: shallowOf(tree, shallowReads) }),
     out: (l) => lines.push(String(l)), err: (l) => lines.push(String(l)),
   }, opts));
-  return { code, text: lines.join("\n"), reads: db.reads };
+  return { code, text: lines.join("\n"), reads: db.reads, shallowReads };
 }
 
 const request = (days) => ({ research: false, erasure: true, at: ago(days) });
@@ -288,6 +305,60 @@ test("a request whose session is NO LONGER IN THE DATABASE is still counted — 
   assert.match(closed.text, /Erasure requests done:\s+1\b/);
 });
 
+test("the monitor never reads a session body — it lists session KEYS and nothing under them", async () => {
+  /* It runs every day on a GitHub-hosted runner in the United States, and the
+     privacy notice says the daily jobs "do not read your session content"
+     (privacy.html, section 6). From the day it was added it called
+     readSessionLocations(), which reads `sessions` and `orgs` WHOLE — every
+     name, answer and chat-adjacent record — to use three things: a key, a path
+     and a count. The purge job had the same habit until it was given a
+     keys-only enumerator; the monitor was never moved to it.
+
+     So this watches what the monitor ASKS FOR. The stand-in database records
+     every deep read; the keys-only reads go through a separate stand-in. */
+  const tree = {
+    sessions: { "LIVE-1": { pool: { c1: { name: "A Real Name" } }, created: { at: ago(50) } } },
+    orgs: { "uni-x": { sessions: { "LIVE-2": { pool: { c2: { name: "Another Name" } } } } } },
+    withdrawals: {
+      "LIVE-1": { uidA: request(3) }, "GONE-1": { uidB: request(3) },
+      orgs: { "uni-x": { "LIVE-2": { uidC: request(3) } } },
+    },
+  };
+  const r = await monitor(tree);
+
+  assert.deepStrictEqual([...r.reads].sort(), ["erasures", "withdrawals"],
+    "the only trees read whole are the request queue and the erasure ledger");
+  assert.ok(!r.reads.some((p) => p === "sessions" || p === "orgs" ||
+                                  p.startsWith("sessions/") || p.startsWith("orgs/")),
+    "the monitor read session bodies");
+  assert.deepStrictEqual([...r.shallowReads].sort(), ["orgs", "orgs/uni-x/sessions", "sessions"],
+    "live sessions are listed by key, in both trees");
+
+  // ...and it still knows which sessions exist, from the keys alone.
+  assert.match(r.text, /Sessions in database:\s+2\b/);
+  assert.match(r.text, /Erasure requests open:\s+3\b/);
+  assert.match(r.text, /session not in the database:\s+1\b/i);
+});
+
+test("the monitor refuses to run without a way to list live sessions", async () => {
+  /* No quiet fallback to the deep read: that is the read being removed, and a
+     fallback nobody selected would bring it back unseen. */
+  const db = fakeDb({ sessions: {} });
+  await assert.rejects(
+    () => runMonitor(db, { now: NOW, deadlineDays: 30, warnDays: 21, out() {}, err() {} }),
+    /liveLocations/);
+  assert.deepStrictEqual(db.reads, [], "it must stop before reading anything");
+});
+
+test("a failed listing of live sessions stops the monitor", async () => {
+  /* An empty list would label every open request "session not in the
+     database" — wrong, and it would look like a finding. */
+  await assert.rejects(
+    () => monitor({ sessions: {}, withdrawals: { "LIVE-1": { u: request(3) } } },
+      { liveLocations: async () => { throw new Error("shallow read of 'sessions' failed: HTTP 401"); } }),
+    /HTTP 401/);
+});
+
 test("the monitor says which open requests name a session that is not in the database", async () => {
   /* The operator needs to know, because the tool the failure message points at
      cannot act on those: erase-participant.js walks live sessions only. And a
@@ -348,7 +419,8 @@ test("an unreadable withdrawals tree stops the monitor instead of reading as 'no
     ? { get: async () => { throw new Error("permission denied"); } }
     : ref(p));
   await assert.rejects(
-    () => runMonitor(db, { now: NOW, deadlineDays: 30, warnDays: 21, out() {}, err() {} }),
+    () => runMonitor(db, { now: NOW, deadlineDays: 30, warnDays: 21, out() {}, err() {},
+                           liveLocations: async () => [] }),
     /permission denied/,
     "a failed read must not degrade to an empty queue and a green run");
 });

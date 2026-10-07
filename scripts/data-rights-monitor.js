@@ -17,6 +17,11 @@
  * has lost real failures to alert fatigue more than once; a monitor that cries
  * every morning would be worse than none.
  *
+ * WHAT IT READS. The `withdrawals` and `erasures` trees, whole — identifiers
+ * and dates — and the KEYS of `sessions` and `orgs/<slug>/sessions`. No session
+ * body: it runs daily on a hosted runner outside the EEA, and the privacy
+ * notice says the daily jobs do not read session content.
+ *
  * WHAT IT CANNOT TELL YOU. It counts a request whether or not its session is
  * still in the database, and says how many are in the second group — but for
  * those it cannot distinguish a session that was purged from a code that never
@@ -36,7 +41,7 @@
 const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
-const { readSessionLocations } = require("./lib/session-trees");
+const { readSessionLocationsShallow } = require("./lib/session-trees");
 const { erasureQueue, DEADLINE_DAYS } = require("./lib/data-rights");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -56,10 +61,11 @@ function positiveDays(name, fallback) {
 }
 
 function initAdmin() {
-  if (getApps().length) return;
+  if (getApps().length) return getApps()[0];
   const raw = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON;
-  if (raw) initializeApp({ credential: cert(JSON.parse(raw)), databaseURL: DB_URL });
-  else initializeApp({ databaseURL: DB_URL });
+  return raw
+    ? initializeApp({ credential: cert(JSON.parse(raw)), databaseURL: DB_URL })
+    : initializeApp({ databaseURL: DB_URL });
 }
 
 function flattenErasures(node) {
@@ -82,6 +88,9 @@ function flattenErasures(node) {
  * @param {number} opts.now epoch ms
  * @param {number} opts.deadlineDays
  * @param {number} opts.warnDays
+ * @param {function} opts.liveLocations async () => the sessions in the
+ *   database, as session-trees locations. REQUIRED, and must list KEYS ONLY:
+ *   see the note where it is called.
  * @param {function} [opts.out] defaults to console.log
  * @param {function} [opts.err] defaults to console.error
  * @returns {Promise<number>} 0 = nothing late, 1 = a request is past the limit
@@ -91,6 +100,10 @@ async function run(db, opts) {
   const WARN = opts.warnDays;
   const out = opts.out || console.log;
   const err = opts.err || console.error;
+  if (typeof opts.liveLocations !== "function") {
+    throw new Error("run() needs opts.liveLocations — there is deliberately no " +
+      "default: the obvious one reads every session body.");
+  }
 
   /* THE WHOLE `withdrawals` TREE, not one branch per live session. Until
      2026-10-07 this visited `withdrawals/<code>` only for the sessions it found
@@ -99,7 +112,13 @@ async function run(db, opts) {
      never open, due or overdue: the participant was told it was recorded, and
      this job stayed green for ever. A failed read throws; it must never read
      as "no requests". */
-  const locations = await readSessionLocations(db);
+  /* WHICH SESSIONS EXIST — KEYS ONLY. This job runs daily on a hosted runner
+     outside the EEA, and the privacy notice says the daily jobs do not read
+     session content. Until 2026-10-07 this line called the deep enumerator,
+     which reads `sessions` and `orgs` whole in order to use a key, a path and
+     a count. The two trees read whole below hold requests and erasure records:
+     identifiers and dates, no session content. */
+  const locations = await opts.liveLocations();
   const withdrawalsSnap = await db.ref("withdrawals").get();
   const erasuresSnap = await db.ref("erasures").get();
 
@@ -166,8 +185,11 @@ async function run(db, opts) {
 async function main() {
   const deadlineDays = positiveDays("DATA_RIGHTS_DEADLINE_DAYS", DEADLINE_DAYS);
   const warnDays = positiveDays("DATA_RIGHTS_WARN_DAYS", 21);
-  initAdmin();
-  return run(getDatabase(), { now: Date.now(), deadlineDays, warnDays });
+  const app = initAdmin();
+  return run(getDatabase(), {
+    now: Date.now(), deadlineDays, warnDays,
+    liveLocations: () => readSessionLocationsShallow({ app, databaseURL: DB_URL }),
+  });
 }
 
 if (require.main === module) {
