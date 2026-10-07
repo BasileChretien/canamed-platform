@@ -3483,6 +3483,34 @@ now exists; that is not the same as the duty being discharged.
      the file has, and better than the none this rule had; it is not a
      measured bound on real devices. The root is that the date on a request is
      the device's and not the server's, which only a client change can alter.
+   - **"An unanswered erasure request is never deleted by a job" has a window
+     of seconds in which it is not true — found by the review of this change,
+     by reading, not reproduced.** The nightly sweep reads the records of every
+     purged session, decides, and only then issues its deletions in one update.
+     A participant who turns a record the sweep has already read — a bare
+     withdrawal, or a request already answered — into a new erasure request
+     before that update lands has the new request deleted with the old record,
+     having been told it was recorded. The window is the time the sweep takes,
+     which grows with the number of markers; it is open once a night, for
+     purged sessions only. Closing it means deleting each record on condition
+     that it is unchanged, which the sweep does not do.
+   - **Markers can be made to accumulate by a visitor — found by the review,
+     not fixed.** While session creation is open (the facilitator gate is
+     off), a signed-in visitor can create a session with a `created` date far
+     in the past; the purge removes it as abandoned and leaves a marker for
+     five years, and re-creating the code renews it. The sweep makes one read
+     per marker every night, in sequence, inside a ten-minute job, and issues
+     its deletions only after the last read: enough markers, and the job is
+     stopped before it sweeps anything. Nothing bounds the number today. The
+     marker's lifetime (above) and the facilitator gate are the two settings
+     that decide how much this matters.
+   - **A session coded `__proto__` is invisible to the scheduled jobs — found
+     by the review, by reading.** The jobs read these trees through the Admin
+     SDK, which builds the value it returns by assignment, so a child with
+     that name does not appear among its keys; a direct read of the one path,
+     which is what `--dismiss` makes, does see it. The rules put no shape on a
+     session code beyond refusing `orgs`. No harm has been shown; it is an
+     inconsistency between what two readers see.
    - **A record with neither a session nor a marker is never swept.** The
      sweep below acts only under a marker. A record written before the rule
      required one, for a session purged before the purge wrote markers, stays
@@ -3610,7 +3638,9 @@ now exists; that is not the same as the duty being discharged.
      goes (the export reads only sessions that are in the database, so it
      protects nothing), and **an unanswered erasure request is never deleted
      by a job** — it ends when an operator answers it, and the lasting trace
-     is then the record under `erasures/`, which is never deleted.
+     is then the record under `erasures/`, which is never deleted. (One
+     exception, a window of seconds a night: see the open point above that
+     quotes this sentence.)
      *Positive evidence only:* the sweep visits a branch only where a purge
      marker shows the session was purged, and skips a session that is in the
      database again. It never acts because a session merely failed to appear
@@ -3807,7 +3837,8 @@ now exists; that is not the same as the duty being discharged.
      were first exercised by the pull request's own emulator job, where they
      passed. The one-field case ("an old withdrawal cannot be turned into a
      request that is already overdue") was written after the review and has
-     likewise been run only by that job, never locally.
+     likewise been run only by that job, never locally; it passed there, with
+     the rest of the suite (72 of 72).
    ⚠️ **Three conditions on the route itself.** (a) The participant has to be
    signed in to the SAME account: the row is not shown to an anonymous
    visitor, and the history is keyed by the account. (b) Deleting the account

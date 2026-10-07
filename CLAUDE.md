@@ -1062,10 +1062,13 @@ shipped — the lessons are general:**
 threw on anything but an object, and RTDB renders a node keyed 0, 1, 2… as an
 array. A session code is chosen by whoever writes under it, so if a
 `?shallow=true` listing comes back that way, one visitor write stopped the
-purge, the monitor and the backfill. Whether it does was not established; both
-shapes are now read, and the emulator suite prints which one the EMULATOR
-returns ("a listing of integer keys"). That says nothing certain about
-production.
+purge, the monitor and the backfill. Both shapes are now read, and the
+emulator suite prints which one the EMULATOR returns ("a listing of integer
+keys"). **Measured on the emulator, 2026-10-07: a shallow listing of integer
+keys is an OBJECT** (one key, three keys, and with a gap), while the same node
+read whole is an array — so on the emulator the old reader would not have
+thrown. Production's REST API was not asked; the array branch stays as cover
+for it.
 
 ⚠️ **Still open, and not this change's to settle** (all in the DPA paragraph):
 the marker's lifetime is five years by a constant
