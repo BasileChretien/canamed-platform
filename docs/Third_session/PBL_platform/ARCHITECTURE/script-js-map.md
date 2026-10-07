@@ -345,7 +345,7 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 | paintUserChip() | 4678–4710 | Header render | Show signed-in user name or "Sign in" link |
 | accountSaveBtn() | 4803–4821 | Profile edit in modal | Update profile from modal form |
 | accountSignOut() | 4822–4829 | "Sign out" button | Firebase sign-out, clear global userId, reset UI |
-| accountDelete() | 4830–4872 | "Delete account" button | Delete profile + history from DB, sign out |
+| accountDelete() | 4830–4872 | "Delete account" button | On-click SHIM only (2026-10-07): loads the lazy `data-rights.js` and calls `deleteMyAccount()`, which removes profile + history, authored scenarios and their published copies in one multi-path update, then the Auth account |
 | wireAccountUI() | 4873+ | Entry | Attach all account dialog listeners |
 
 ## Related Codemaps

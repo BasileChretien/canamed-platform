@@ -152,9 +152,13 @@ For students who want their details remembered:
   profile. A header chip shows the user's name + initials; clicking it opens
   a **My account** dialog with editable profile, the list of sessions they
   have joined, *Sign out* and *Delete account &amp; profile data*.
-- Deleting the account removes `users/{uid}` (profile + history) and the
-  Firebase auth user. Contributions in past sessions stay in those sessions'
-  records but are no longer linked to the user's identity.
+- Deleting the account removes `users/{uid}` (profile + history), the user's
+  authored scenarios (`scenarios/{uid}`) with their published copies under
+  `sharedScenarios/`, and then the Firebase auth user. Contributions in past
+  sessions stay in those sessions' records and stay identifiable — the name
+  typed at join is still there — until the session is purged or an operator
+  erases them. Moderation reports the user filed are also kept (no client can
+  delete one). The account dialog is reachable only from inside a session.
 - The privacy notice on the splash explains the trade-off; the platform
   remains usable without an account.
 

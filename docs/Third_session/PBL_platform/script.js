@@ -12509,6 +12509,17 @@ function applyProfileToJoinForm() {
   if (e && currentProfile.english) e.value = currentProfile.english;
 }
 
+/* The account dialog's live subscription to users/<uid>/history.
+
+   Declared HERE, beside its only users, on purpose. It used to sit under a
+   comment block several hundred lines up and was deleted along with that block
+   in #264 (2026-07-31). Reading an undeclared name throws, so from then on
+   openAccountDialog() died in loadHistoryForDialog() BEFORE reaching
+   dialogShow(): the dialog — profile, sign-out, delete account, and the
+   per-session withdrawal row — could not be opened at all, with every check
+   green, because nothing ever executed it. */
+let _historyListenerRef = null;
+
 /* The account dialog (opened by clicking the header chip) */
 function openAccountDialog() {
   const dlg = el("account-dialog");
@@ -12612,47 +12623,30 @@ function accountSignOut() {
   }).catch(e => splashHintErr(el("account-action-hint"), authErrorMessage(e)));
 }
 
+/* "Delete account". The work lives in the LAZY data-rights.js, beside the other
+   data-rights code (deleteMyAccount, 2026-10-07) - it is reachable from one
+   click in the account dialog and has no business on the splash's critical
+   path. This is the on-click shim, the same shape as _wireDataRightsExport():
+   a loader without the method (an older cached shell) and a chunk that 404'd
+   or is offline both end in a message saying nothing was deleted, never in a
+   ReferenceError out of the click. */
 function accountDelete() {
-  const hint = el("account-action-hint");
   if (!currentUser || !auth) return;
-  const ok = confirm(
-    "Delete your account?\n\n" +
-    "This permanently removes your profile and history. Your contributions in " +
-    "past sessions stay in those sessions' records but are no longer linked " +
-    "to your identity.\n\nThis cannot be undone."
-  );
-  if (!ok) return;
-  const uid = currentUser.uid;
-  const userRef = db.ref("users/" + uid);
-  // Two-step deletion: remove the user-data subtree FIRST while we still
-  // have write permission, then delete the Firebase Auth user. If the Auth
-  // deletion fails (e.g. "requires-recent-login"), the data is gone but
-  // the user can sign back in and try again - which is the lesser harm.
-  // Doing it in the other order (Auth first) would leave orphan data we
-  // can no longer write to.
-  userRef.remove().then(() => {
-    return currentUser.delete().catch(e => {
-      // Auth deletion failed - put the user's data back if we can, so a
-      // retry is possible. Best-effort; not all paths are guaranteed.
-      console.warn("Auth delete failed after data delete:", e);
-      splashHintErr(hint, authErrorMessage(e) +
-        " Your profile data has been removed; please sign back in and try " +
-        "again to fully delete the Firebase account.");
-      throw e;
-    });
-  }).then(() => {
-    // Same stale-identifier problem as sign-out, and more acute: the account
-    // is gone, so its uid must not linger as this browser's stableId.
-    resetStableId();
-    closeAccountDialog();
-    // onAuthStateChanged fires with null next; paintUserChip clears the chip
-  }).catch(e => {
-    if (e && e.code) {
-      // already surfaced above; nothing more to do
-    } else {
-      splashHintErr(hint, authErrorMessage(e));
-    }
-  });
+  const fail = (e) => {
+    console.warn("Could not load the account-deletion code:", e);
+    splashHintErr(el("account-action-hint"), "Could not load this action, so " +
+      "nothing was deleted. Check your connection and try again.");
+  };
+  const run = () => {
+    const fn = window.deleteMyAccount;
+    if (typeof fn !== "function") { fail(new Error("deleteMyAccount missing")); return; }
+    fn();
+  };
+  if (typeof window.deleteMyAccount === "function") { run(); return; }
+  const loader = window.CanamedLoader;
+  (loader && loader.ensureDataRights ? loader.ensureDataRights()
+    : Promise.reject(new Error("loader has no ensureDataRights")))
+    .then(run, fail);
 }
 
 /* wire the splash-view-account / splash-view-profile-setup / account-dialog
