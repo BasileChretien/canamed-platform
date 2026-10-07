@@ -1426,7 +1426,8 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
 
 ## Known security follow-ups (code, tracked)
 - **A session's recovery code is purged with it (2026-10-07) — ⛔ the backlog
-  sweep has NOT been run, and a weakness in the reset rule is OPEN.**
+  sweep has only been DRY-RUN (34 records to delete), and since 2026-10-07 a
+  password reset needs a password to reset.**
   `createSession()` writes `recovery/sessions/<code>` (org:
   `recovery/orgs/<slug>/sessions/<id>` — the ROSTER's shape, not adminSecrets')
   and from 2026-05-25 until the fix of 2026-10-07 nothing deleted it: the purge
@@ -1474,50 +1475,85 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
     reader encoded them again — `My%2520Code` for the key `My Code`, a null,
     and "no members to protect" in a job that deletes nightly. Encoding twice
     is a different node, not a no-op; each caller encodes once.
-    **Not run yet.** `Verify:`
+    **DRY-RUN ONLY so far.** Run 37665330573 (2026-10-07, on main at b8133a0):
+    6 sessions, 40 recovery records, 6 with a session, **34 with none** (all in
+    the default tree), no empty tree. Nothing was deleted; the confirmed run
+    is the operator's, and until it happens those 34 records each still block
+    their session code. `Verify:`
     `gh run list --workflow sweep-orphaned-recovery.yml` lists the runs; for the
     confirmed one, `gh run view <id> --log | grep -E "Mode: +LIVE|Summary:"`
     prints `Mode:        LIVE — deletions WILL happen` and
     `Summary: <n> deleted, 0 left.` A dry run after it ends in
     `Summary: nothing to sweep.`
-  - **⚠️ OPEN — the reset does not require a password to exist** (measured
-    2026-10-07 with a throwaway emulator probe that is NOT in the repository;
-    the committed spec stops at the reset write, so the hash writes and the
-    restored-session case below rest on that probe and on the rule text).
-    `_superadminReset` asks only for a matching `recovery/…/code`
-    and a session that is not closed, and the hash rules' reset branch has no
-    `data.exists()`. So on a session with NO hash: (1) whoever holds its
-    recovery code sets the FIRST hash, whatever `creatorUid` says — this is how
-    a stale code took over a half-created session; (2) if it has no recovery
-    node either, ANY signed-in user writes one and then does the same (that
-    rule asks for no node and no hash — and, while `facilitatorGate` is
-    enforced, a writer on its allowlist). State (2) is exactly a session restored
-    by `restore-sessions.js`: the archive is the session body only, with
-    `adminPasswordHash` stripped, no `adminSecrets` and no `recovery`. A
-    restored CLOSED session is safe (the reset is refused once `closed`
-    exists); an OPEN one can be claimed by anyone who knows its code. Under an
-    enforced `facilitatorGate` the stale-code path also yields an admin hash and
-    proof at a code with no session (`created` stays gated, so the stock client
-    still treats it as non-existent).
-    **Proposed, not done here** — a rules change on the reset path, in TWO
-    halves, and the first alone is not enough:
-    (a) require `adminPasswordHash.exists()` in `_superadminReset`'s write. A
-    reset needs something to reset. It stops the immediate takeover in (1), (2)
-    and the gate case and leaves legitimate recovery alone.
-    (b) It does NOT close (2) by itself: a stranger can still PLANT a recovery
-    code on a hashless session and wait — once the creator keys the session,
-    the planted code opens the reset. So either the recovery write is bound to
-    the creator as well (`!creatorUid.exists() || creatorUid == auth.uid`, as
-    the hash's first write already is), or a restore writes a fresh recovery
-    node for every session it brings back.
-    Both halves are reasoned from the rules — (a) twice, here and in the
-    independent review of #443, which is where (b) comes from — and NEITHER
-    has been run on the emulator. Until they land, do not restore open sessions
-    without re-keying them; and a restored session's old recovery code is dead
-    in any case, because the node is not in the archive.
-    ⚠️ This change removes one accidental mitigation: a session purged BY
-    MISTAKE and then restored used to come back beside its old recovery node,
-    which blocked (2). It no longer does.
+  - **✅ CLOSED 2026-10-07 — a reset needs a password, and a recovery code is
+    its creator's to write. Two predicates, both trees; three things stay
+    open and are listed below.** Until then `_superadminReset` asked only for a
+    matching `recovery/…/code` and a session that was not closed, and the
+    recovery node could be written by any signed-in user wherever there was no
+    node and no password (plus the allowlist, while `facilitatorGate` is
+    enforced). The hash rules' reset branch has no `data.exists()`, so a reset
+    could also set a FIRST hash — round the creator binding on that rule.
+    **Measured on the emulator before the change, identically in both trees**
+    (`tests-e2e/emulator/reset-needs-a-password.spec.js`; its tables carry the
+    BEFORE column, and it is that run, not a recollection):
+    - *no password, somebody else's old recovery record* — the half-created
+      session a code collision leaves: the holder of the old code opened the
+      reset and set the first hash; the creator's own first-hash write was
+      then refused.
+    - *no password, no recovery record, a `creatorUid`* — exactly a session
+      restored by `restore-sessions.js` (the archive is the session body only:
+      marker stripped, no `adminSecrets`, no `recovery`): a stranger wrote a
+      code of their own, opened the reset, set the first hash. Refused only
+      where the session was closed.
+    - *a recovery record with no session at all, under an enforced
+      `facilitatorGate`*: a user off the allowlist opened the reset and set a
+      hash there (`created` stayed gated).
+    **(a)** `_superadminReset`'s write requires the session's
+    `adminPasswordHash` to exist — a reset needs something to reset.
+    **(b)** the recovery write requires `!creatorUid.exists() || creatorUid ==
+    auth.uid`, the binding the hash rules' first write already had.
+    **(a) ALONE IS NOT ENOUGH — measured, not argued.** With the rules carrying
+    (a) and not (b), the stranger still PLANTED a code on the restored session
+    (allowed), was refused the reset while there was no password, and reset it
+    as soon as the creator had set one. (b) is what stops the plant. (b) came
+    out of the independent review of #443; my first proposal was (a) alone.
+    **No client change.** Both reset call sites read the marker and issue a
+    reset only when it exists; `createSession()` writes the recovery code in
+    the same batch as `creatorUid`, so it lands before it (none yet) or after
+    it (the writer's own). `tests/reset-needs-a-password.test.js` pins both,
+    and the exact shape of the rules, and that the org rules are the default
+    ones re-prefixed.
+    **⚠️ STILL OPEN — each is pinned as OPEN in the spec, not implied closed:**
+    - **No `creatorUid`** (a hand-made node, or a session older than the
+      field): the hash rule opens its first password to anyone, so (b) adds
+      nothing there.
+    - **A stale recovery record still resets the session at its code** once
+      that session has a password. No rule can tell a stale record from a
+      fresh one; the purge and the sweep remove them — which is why the 34 the
+      dry run found matter.
+    - **A restored session has no password and no recovery record.** By the
+      rules only its creator can give it one again (measured) — the same
+      account, or for an anonymous creator the same browser. The stock client
+      does offer it: the "set or recover the password" panel on the admin join
+      works without a super-admin key, and with no marker it takes the
+      first-write branch (read from `joinSuperAdmin()`; the rule verdicts are
+      measured, that UI path was not driven). It writes NO recovery record, so
+      a session re-keyed that way has no recovery code. A facilitator who is
+      not that account —
+      another device, or someone who only knew the password — cannot, and
+      needs the operator and the Admin SDK. The recovery code they wrote down
+      works again only if its record is still in the database: the archive
+      does not hold it, and the purge deletes it with the session.
+      (This line used to say the old code "is dead in any case". Not so: a
+      session restored while its record still stands gets its old code back as
+      soon as it has a password.)
+    `Verify:` `node --test tests/reset-needs-a-password.test.js`; and on the
+    emulator, the three cases of `reset-needs-a-password.spec.js`
+    (`PORT=8771 npm run test:e2e:rules -- reset-needs-a-password`).
+    ⚠️ #443 had already removed one accidental mitigation of all this: a
+    session purged BY MISTAKE and then restored used to come back beside its
+    old recovery record, which blocked the stranger's write. (b) now blocks it
+    on purpose.
 - **Self-serve soft-launch gate `facilitatorGate` (Phase 4c, opt-in, INERT by
   default).** A top-level admin-only node (`.read:false`, `.write:false` — set
   only via the Console/admin-SDK) that can restrict who may create sessions.
@@ -1537,9 +1573,10 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
   they act on already-established sessions (whose recovery code was written by
   their allowlisted creator) and must keep working under enforcement.
-  (⚠️ "already-established" is the INTENT, not what the rules enforce — measured
-  2026-10-07: the reset also runs on a session with no password and on a code
-  with no session. See the recovery bullet above.) **Default
+  (Until 2026-10-07 "already-established" was the INTENT and not what the rules
+  enforced: the reset also ran on a session with no password and on a code with
+  no session. It now requires the session to have a password — see the
+  recovery bullet above.) **Default
   (node absent) → `enforce.val()` is null → creation unchanged** for every
   existing facilitator; nothing is gated until an operator flips it on. To
   soft-launch to a vetted allowlist: set `facilitatorGate/enforce = true` and
