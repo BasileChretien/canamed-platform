@@ -2027,7 +2027,19 @@ function withdrawResearchConsent(code, uid, opts) {
   const payload = { research: false, at: Date.now() };
   if (opts.alsoRequestErasure) payload.erasure = true;
   return db.ref(withdrawalPath(code, uid)).set(payload).then(() => {
-    /* Best effort, and its failure is expected on a closed session. */
+    // A rejoin of `code` reads these copies, whatever session this page is in.
+    const off = c => Object.assign({}, c, { research: false });
+    const low = r => Object.assign({}, r, { consent: off(r.consent) });
+    const mine = r => r && r.consent && r.sessionNum === code;
+    try {
+      const r = JSON.parse(localStorage.getItem(RESUME_KEY));
+      if (mine(sanitizeResume(r))) localStorage.setItem(RESUME_KEY, JSON.stringify(low(r)));
+    } catch (e) {}
+    if (mine(resumeData)) resumeData = low(resumeData);
+    /* Best effort, and its failure is expected on a closed session. Only for
+       the session this page is IN: sPath() addresses that one, not `code`. */
+    if (code !== sessionNum) return null;
+    if (myConsent) myConsent = off(myConsent);
     if (!clientId) return null;
     return db.ref(sPath("pool/" + clientId + "/consent/research")).set(false)
       .catch(() => null);
@@ -3325,8 +3337,8 @@ function readSession(hintId) {
 /* version stamp written next to every consent record. Bump whenever the
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
-   participant consented to. */
-const CONSENT_NOTICE_VERSION = "PIS-v3-2026-07";
+   participant consented to. A bump re-asks on resume (pis-version-lockstep). */
+const CONSENT_NOTICE_VERSION = "PIS-v12-2026-10";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */
 function joinParticipant() {
@@ -12370,8 +12382,8 @@ function saveProfile(updates) {
    record of which workshops a persistent anonymous uid attended, under the
    `users` tree — which no retention job touches — disclosed nowhere.
 
-   See issue #347. This stops NEW writes only; entries already written need an
-   operator sweep of history nodes belonging to uids that have no profile. */
+   See issue #347. This stops NEW writes only; the entries already written
+   are removed by scripts/cleanup-anonymous-accounts.js. */
 function pushSessionToHistory(code) {
   if (!currentUser || currentUser.isAnonymous || !db || !code) return;
   const path = "users/" + currentUser.uid + "/history/" + code;
@@ -12520,7 +12532,7 @@ function applyProfileToJoinForm() {
    green, because nothing ever executed it. */
 let _historyListenerRef = null;
 
-/* The account dialog (opened by clicking the header chip) */
+/* The account dialog (opened by the header chip, or the splash's "Account") */
 function openAccountDialog() {
   const dlg = el("account-dialog");
   if (!dlg || !currentUser) return;
@@ -12686,8 +12698,11 @@ function wireAccountUI() {
     r.addEventListener("change", () =>
       applyProfileRoleVisibility("account-role", "account-student-fields")));
 
-  // header chip + account dialog
+  // header chip + account dialog. body.locked hides the header, so the
+  // splash's signed-in row carries the opener for someone not in a session.
   if (el("user-chip")) el("user-chip").addEventListener("click", openAccountDialog);
+  if (el("splash-signed-in-account")) el("splash-signed-in-account")
+    .addEventListener("click", openAccountDialog);
   if (el("account-dialog-close")) el("account-dialog-close")
     .addEventListener("click", closeAccountDialog);
   if (el("account-save-btn")) el("account-save-btn").addEventListener("click", accountSaveBtn);

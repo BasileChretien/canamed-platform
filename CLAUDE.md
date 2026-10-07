@@ -209,6 +209,31 @@ red probe means reading every failing workflow, not just the one that mailed.
   GCS, arming it would block deletion forever and turn a missing-archive
   problem into a standing retention breach. Deletion is the legal duty; the
   backup is disaster recovery.
+  ⚠️ **SUPERSEDED — the gate has been ARMED since 2026-09-02**, once backups
+  resumed on Scaleway (`CLEANUP_REQUIRE_BACKUP` comes from a repo variable and
+  defaults to `"1"`). Re-verified 2026-10-07 from the previous night's run log:
+  `Backup gate: OK — last successful backup 0.0d ago`.
+  **What a BLOCKED gate stops was wrong until 2026-10-07.** The script's
+  comment said "the gate stops SESSION purges only"; the code called
+  `process.exit(3)` before BOTH passes, so a stale backup would also have
+  stopped the hfPatient metrics pruning — which no backup covers. Latent only:
+  every scheduled run since arming reported `OK`. The pass order now lives in
+  `scripts/lib/cleanup-passes.js` (`runCleanupPasses`): blocked → skip the
+  session pass, still prune metrics, still exit 3 (3 says the purge was
+  refused, not that nothing else failed — a blocked run with metrics errors
+  also exits 3; read the Summary line).
+  **Why no test caught it:** the ordering lived in a `main()` nothing could
+  load, so it had text checks only, and one of them REQUIRED `process.exit(3)`
+  within 600 chars of `if (gate.block)` — it pinned the bug's shape, was green
+  on the defect and would have gone red on the fix. Its sibling ("the gate runs
+  BEFORE any deletion") compared two `indexOf()` positions and would have
+  passed VACUOUSLY on the fixed script (`-1 <` anything). The real script is
+  now RUN in a child process with firebase-admin swapped for an in-memory
+  database (`tests/fixtures/fake-firebase-admin-preload.js`); assert on the
+  complete write list, not on the text — a respelled early return
+  (`const { block } = gate; if (block) return;`) sails through every text
+  check and fails there.
+  `Verify:` `node --test tests/cleanup-passes.test.js`.
 
 ### ✅ THE LLM PATIENT IS LIVE AGAIN (2026-09-01) — Scaleway fr-par + Llama-3.3-70B
 
@@ -325,6 +350,10 @@ you get a silently half-restored system:
    FIRST — a stale `.env` 404s every chat call and degrades to the stub);
 2. set `PROBE_EXPECT_FUNCTIONS=1` in `synthetic-uptime.yml`;
 3. uncomment both GCS schedules **and** flip `CLEANUP_REQUIRE_BACKUP` to `"1"`.
+   ⚠️ **Step 3 is ALREADY DONE and no longer depends on Blaze** (checked
+   2026-10-07): both schedules have been live since 2026-09-01, writing to
+   Scaleway rather than GCS (#363), and the gate has been armed since
+   2026-09-02. Restoring Blaze is now steps 1–2 only; do not "re-enable" either.
 
 `Verify:` `node scripts/synthetic-uptime-check.js` prints `[SKIP] hfPatient`
 while on Spark; `PROBE_EXPECT_FUNCTIONS=1 node scripts/synthetic-uptime-check.js`
@@ -340,15 +369,18 @@ start — an undeployable function enforces nothing — but it is uncheckable
 again until Blaze returns. The **RTDB** canary in item 1 is unaffected and
 still runs every tick.
 
-### Anonymous-account retention (issue #347) — ⛔ BUILT 2026-10-07, NOT SCHEDULED, NOT ARMED
+### Anonymous-account retention (issue #347) — SCHEDULED + ARMED with PIS v12 (2026-10); confirm a live run before quoting it
 
 `signInAnonymously()` gives every visitor an Auth account before any consent
 surface, and nothing ever removed one: retention was indefinite, by absence of
 any mechanism (auto-delete is an Identity Platform feature this project lacks).
-The job now exists — `.github/workflows/cleanup-anonymous-accounts.yml` →
-`scripts/cleanup-anonymous-accounts.js` — but it runs **only on manual dispatch,
-dry-run unless `confirm` is ticked**. Until it is scheduled, retention of the
-anonymous identifier is still indefinite; do not describe it otherwise.
+The job is `.github/workflows/cleanup-anonymous-accounts.yml` →
+`scripts/cleanup-anonymous-accounts.js`. It runs nightly at 04:37 UTC and
+**DELETES on schedule**; a manual dispatch is a dry run unless `confirm` is
+ticked. It was scheduled in the same change that issued PIS v12, after one dry
+run against production on 2026-10-07 (run 37576812113, nothing deleted): 338
+accounts — 336 anonymous, 2 signed-in — of which 185 idle past the window; the
+mask honoured; every anonymous account dated; 119 database paths would go.
 
 - **What it removes.** An anonymous account idle ≥ 90 days that no LIVE session
   names (member or creator) and no allowlist names (`facilitatorGate/allow`,
@@ -385,19 +417,56 @@ anonymous identifier is still indefinite; do not describe it otherwise.
   Orphans (a uid with records and no account) are counted and left alone unless
   `sweep_orphans` is ticked, behind a tripwire; record keys are read BEFORE the
   account listing so a new sign-up can never look like one.
-- **The counter sweep cannot stop the job.** Participants can write under their
-  own `rateLimits` node, so it is read per id, shallow, and a failure is
-  counted (exit 1) rather than thrown.
+- **Two phases, and neither can stop the other.** The counter sweep runs FIRST
+  and is written before the account listing is requested, because the notice
+  promises the counters gone in about three days and that must not hang on the
+  account half (which can refuse). Participants can write under their own
+  `rateLimits` node, so it is read per id, shallow, and a failure is counted
+  (exit 1) rather than thrown. Exit 3 therefore means "the ACCOUNT half
+  refused", not "nothing happened" — the log still carries a `Rate limits:` line.
+  **And the sweep has a time budget, for its reads AND its writes:** it is one
+  read per counter id and one delete path per stale bucket, and a participant
+  can mint both — ids, and any number of bucket NAMES under their own (a name
+  the sweep does not recognise counts as stale). Unbounded, either outlasts the
+  job's 15 minutes: the run is cancelled, every night, and a cancelled run
+  mails nobody. So the whole sweep gets 5 minutes (`SWEEP_BUDGET_MS`; reads may
+  use the first 60%): no read and no update starts after its share, ids with
+  few stale buckets are written first so that it is the flood that waits, what
+  was left is counted (`OUT OF TIME, N counter(s) not read` / `N stale
+  bucket(s) not deleted`, exit 1), and the next day starts elsewhere in the
+  list. The first version bounded the reads only; a review showed one id with
+  a million bucket names walking straight past it. What is NOT bounded the
+  same way: the account half reads two nodes per live session.
+- **The account half refuses if the listing has NO signed-in account** (two
+  exist today). Deliberate, but if both ever go, every nightly run exits 3 and
+  no anonymous account is removed until someone intervenes.
+- **`CONSENT_NOTICE_VERSION` (script.js) is the TENTH notice-version surface.**
+  It is stamped on every consent record and decides whether a resuming
+  participant is asked again. It sat at `PIS-v3-2026-07` from v3 to v11, so
+  consent records from July–October 2026 all say v3 and nobody resuming was
+  re-asked. `tests/pis-version-lockstep.test.js` now ties it to the notice —
+  bump it with every PIS version.
 - **No e-mail address reaches the runner.** The Admin SDK's `listUsers()`
   returns whole records, so the listing goes over REST with a `fields` mask
   and then VERIFIES it: one unrequested key aborts the run. The check can only
   detect a transfer, not undo it, so the listing starts with a ONE-account
   canary — an ignored mask exposes one record, not a thousand.
-- ⚠️ **SCHEDULING IT IS ONE CHANGE WITH THREE PARTS**: the cron, the armed
-  `ANON_CONFIRM`, and the privacy notice. A nightly run sends account
-  identifiers and session member uids to a US runner, which `privacy.html` §6–7
-  does not list, and §8 states no period for the identifier.
-  `tests/anonymous-retention-job.test.js` fails if a cron appears alone.
+- ⚠️ **THE CRON, THE ARMED `ANON_CONFIRM` AND THE NOTICE ARE ONE THING.** A
+  nightly run sends account identifiers and session member uids to a US runner;
+  `privacy.html` says so, and states the period, since PIS v12 (§4, §6–8, §16,
+  §17, EN/FR/JA). Comment out the cron or flip the schedule back to a dry run
+  and §8 promises a deletion nothing performs; change the window and it states
+  the wrong number. `tests/anonymous-identifier-notice.test.js` holds the three
+  together and fails on any one moving alone.
+- ⚠️ **STILL OPEN, and not code:** the lawful basis for an identifier created
+  before any consent (notice §3 rests on consent) — DPA Annex VI G13, for the
+  controller / DPO; how long an unactioned moderation report is kept; and the
+  operator's acceptance of the GitHub transfer (R9) was given for narrower
+  content than this job sends.
+- ⚠️ **NOTHING MONITORS THAT IT RUNS (DPA G11).** A failed run mails the repo
+  owner; a workflow that never starts — disabled, secret revoked — does not,
+  and §8 of the notice would then be false with no signal. The `Verify:` below
+  is the only check and it is manual.
 - **Two emulator divergences, both measured.** The Auth emulator ignores
   `fields` (so it serves as the positive control for the mask check), and it
   answers a deleted account's refresh with `INVALID_REFRESH_TOKEN` where Google
@@ -405,11 +474,12 @@ anonymous identifier is still indefinite; do not describe it otherwise.
   LOAD only (the SDK clears a stored user whose reload fails); a tab left open
   across the deletion is not reachable on the emulator.
 
-`Verify:` `grep -E '^\s*-\s*cron:' .github/workflows/cleanup-anonymous-accounts.yml`
-prints nothing while unscheduled (a plain `grep cron:` matches the commented
-line and misleads). The first real evidence is a dispatched dry run: it must
-print an `Accounts:` line, and it is the only test of whether the service
-account may list accounts and whether Google honours the mask.
+`Verify:` `gh run list --workflow=cleanup-anonymous-accounts.yml --limit 3`
+shows `schedule` runs succeeding, and the newest one's log has an `Auth:` line.
+That line is printed only by a LIVE run — a log that ends at `Paths: … would
+delete` was a dry run, and a schedule producing those means the job has been
+disarmed while the notice still promises deletion. Then
+`curl -s https://canamed-69785.web.app/privacy.html | grep -c "PIS v12"` > 0.
 
 ### Round-3 security follow-ups
 

@@ -247,8 +247,10 @@ function listOwnSharedScenarioIds(uid) {
        a report must not be retractable by its author - so no client can remove
        one. Nor can it remove the reports others filed against this user's
        scenarios, or a takedown tombstone, both keyed by `<uid>_<scenarioId>`.
-     - rateLimits/uid/<uid>: increment-only counters.
-   The last two need an operator (DPA Annex VI, G8). */
+     - rateLimits/uid/<uid>: increment-only counters. The retention job
+       (scripts/cleanup-anonymous-accounts.js) sweeps them within about three
+       days; the confirmation below says so.
+   The reports need an operator (DPA Annex VI, G8). */
 function accountDeletionPaths(uid, sharedIds) {
   return sharedIds.map(id => "sharedScenarios/" + id)
     .concat(["scenarios/" + uid, "users/" + uid]);
@@ -276,8 +278,10 @@ function deleteMyAccount() {
     "the session's records, still identifiable as yours, for the periods " +
     "given in the privacy notice;\n" +
     "- moderation records (reports you filed about shared scenarios, and " +
-    "any filed about yours) and chat usage counters.\n\n" +
-    "To have those erased, write to the contact in the privacy notice. To " +
+    "any filed about yours).\n\n" +
+    "Chat usage counters are deleted automatically within about three " +
+    "days. To have the rest erased, write to the contact in the privacy " +
+    "notice. To " +
     "withdraw research consent for a past session, do it from the list in " +
     "this dialog BEFORE deleting: that list is removed with the account.\n\n" +
     "This cannot be undone."
