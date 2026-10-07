@@ -778,6 +778,17 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     plainly because the 316 entry calls trimming prose to land a symptom of
 //     a budget with no room: that is where this budget is.
 //     ⚠️ ANOTHER SMALL EAGER ADDITION WITHOUT THE RECLAIM, which is still owed.
+//   2026-10-08 (third entry): CAP UNCHANGED (326). #440 stops the account
+//     dialog, the profile setup form, the sign-in form and the lobby's join
+//     form carrying one account's data over to the next: what is shown is
+//     reset on every change of uid, a read or a save acknowledgement that
+//     arrives for an account that has gone is dropped, and the session list
+//     is emptied before it is read. Same method, against main at v186:
+//     first-party 325.16 -> 325.76 KB, +610 B, all of it script.js. None of it
+//     can be lazy — it is the reset of the eager account UI itself.
+//     ⚠️ MARGIN 249 B. THE BUDGET IS SPENT. The next change to an eager file
+//     has to bring a reclaim with it; the one queued behind this (a new
+//     account shown at once, without a reload) does, in comments.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
