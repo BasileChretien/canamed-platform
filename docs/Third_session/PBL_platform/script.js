@@ -12341,10 +12341,11 @@ function handleAuthStateChange(user) {
   }
 }
 
-/* The account changed (signed out, deleted, someone else): nothing of the
-   previous one stays on screen, and profile setup gives way to "enter". */
+/* The account changed: nothing of the previous one stays on screen. */
 function resetAccountUI() {
   closeAccountDialog();
+  currentProfile = null;
+  paintUserChip(true);   // no opener until THIS account's profile is read
   [["name", ""], ["uni", ""], ["year", "1"], ["english", "B2"]].forEach(f => {
     const n = el("splash-prof-" + f[0]);
     if (n) n.value = f[1];
@@ -12418,14 +12419,14 @@ function populateProfileSelects(selectId) {
 
 /* The header user chip - shown when signed in, hidden otherwise. Two letters
    for initials; clicking opens the account dialog. */
-function paintUserChip() {
+function paintUserChip(hide) {
   const chip = el("user-chip");
   const splashRow = el("splash-signed-in");
   // Anonymous users are treated as "not signed in" UI-wise — the chip / row
   // belong to identified (Google) users only. Round-2 introduced an
   // always-on anonymous user under the hood for DB-rule purposes, but it
   // is intentionally invisible to the participant.
-  if (!currentUser || currentUser.isAnonymous) {
+  if (hide || !currentUser || currentUser.isAnonymous) {
     if (chip) chip.classList.add("hidden");
     if (splashRow) splashRow.hidden = true;
     return;
@@ -12530,8 +12531,7 @@ function openAccountDialog() {
   const dlg = el("account-dialog");
   if (!dlg || !currentUser) return;
   el("account-email").textContent = currentUser.email || "";
-  // Every field is set on every open: an account with no profile gets the
-  // defaults, never what a previous account left here.
+  // Every field, on every open: never what a previous account left here.
   const p = currentProfile || {};
   el("account-uni").value = "";
   populateProfileSelects("account-uni");
@@ -12808,8 +12808,7 @@ function wireBackToTop() {
 
 /* ===================== START ===================== */
 initEntry();
-// Not only from wireSplash(): auto-resume never shows the splash, and the
-// header chip and the account dialog need their listeners in a session too.
+// Auto-resume never reaches wireSplash(), and the header chip needs this too.
 wireAccountUI();
 initObserverChecklist();
 wireReferenceToolbars();

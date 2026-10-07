@@ -36,25 +36,55 @@ async function standInAuth(page) {
   await page.evaluate(async () => {
     dbInit();
     let anon = 0;
-    const later = (user) => Promise.resolve().then(() => { handleAuthStateChange(user); });
+    /* Like the SDK (12.17.1 keeps a lastNotifiedUid): the app's handler is told
+       only when the UID changes. */
+    let lastUid = null;
+    const report = (user) => { lastUid = user ? user.uid : null; handleAuthStateChange(user); };
+    const later = (user) => Promise.resolve().then(() => {
+      if ((user ? user.uid : null) !== lastUid) report(user);
+    });
+    const account = (who) => Object.assign({
+      displayName: null, isAnonymous: false,
+      delete() { auth.currentUser = null; return later(null); }
+    }, who);
+    /* The accounts the e-mail form can sign in to: address -> { user, password }. */
+    const accounts = {};
     /* `auth` is a script-scope `let` in script.js, so this assigns the app's own
        binding. */
     auth = {
       currentUser: null,
       signInAnonymously() {
-        const user = { uid: "u_anon" + (++anon), email: null, displayName: null, isAnonymous: true };
+        const user = {
+          uid: "u_anon" + (++anon), email: null, displayName: null, isAnonymous: true,
+          /* A sign-up upgrades the anonymous user IN PLACE: the uid stays, and
+             the SDK shipped here (12.17.1) reports to onAuthStateChanged only
+             when the uid changes — so the app's handler is not called. */
+          linkWithCredential(cred) {
+            user.isAnonymous = false;
+            user.email = cred.email;
+            return Promise.resolve({ user });
+          }
+        };
         auth.currentUser = user;
         return later(user).then(() => ({ user }));
       },
+      signInWithEmailAndPassword(email, password) {
+        const a = accounts[email];
+        if (!a || a.password !== password) {
+          return Promise.reject(Object.assign(new Error("refused"), { code: "auth/invalid-credential" }));
+        }
+        auth.currentUser = a.user;
+        return later(a.user).then(() => ({ user: a.user }));
+      },
       signOut() { auth.currentUser = null; return later(null); }
     };
+    /* LOCAL mode never calls the SDK; the sign-up path asks it for one thing. */
+    window.firebase = { auth: { EmailAuthProvider: { credential: (email, password) => ({ email, password }) } } };
+    window.__register = (who, password) => { accounts[who.email] = { user: account(who), password }; };
     window.__signIn = (who) => {
-      const user = Object.assign({
-        displayName: null, isAnonymous: false,
-        delete() { auth.currentUser = null; return later(null); }
-      }, who);
+      const user = account(who);
       auth.currentUser = user;
-      handleAuthStateChange(user);
+      report(user);
     };
     await ensureSignedIn();
   });
@@ -406,5 +436,87 @@ test("C: after a reload inside a session the header chip opens the dialog, and i
   await expect(chip).toBeHidden();
   // Still in the session: signing out of an account is not leaving a session.
   await expect(page.locator("#splash")).toBeHidden();
+  expect(errors).toEqual([]);
+});
+
+/* ======================= D. one account replacing another directly =========
+ *
+ * Found in review (PR #440, finding 1). Emptying the forms on a change of
+ * account was not enough: the profile the dialog reads, the header chip and
+ * the "Signed in as …" row were only replaced when the NEW account's profile
+ * read came back. Alice leaves herself signed in; Bob uses "Sign in with Google
+ * or email…" — nothing hides it while someone is signed in — and the SDK swaps
+ * them in one event, with no "nobody" in between. Until his read returned the
+ * page still said "Signed in as Alice · Account", the dialog opened on her
+ * profile under his e-mail address, and Save wrote it over his own.
+ *
+ * Every test above signs the first account out before the second signs in.
+ */
+
+const BOB_PROFILE = { name: "Bob", university: "Caen", year: 2, english: "B1", role: "student", createdAt: 5, updatedAt: 5 };
+
+/* A slow network: a read of `path` stays in flight until __releaseRead(). */
+async function holdRead(page, path) {
+  await page.evaluate((path) => {
+    const ref = db.ref.bind(db);
+    db.ref = (p) => {
+      const r = ref(p);
+      if (p === path) {
+        const once = r.once.bind(r);
+        r.once = () => new Promise((resolve) => {
+          window.__releaseRead = () => { db.ref = ref; once().then(resolve); };
+        });
+      }
+      return r;
+    };
+  }, path);
+}
+
+test("D: an account that replaces another directly sees nothing of it while its own profile is still being read", async ({ page }) => {
+  const errors = collectErrors(page);
+  await frontPage(page);
+  await seed(page, "users/u_alice/profile", ALICE_PROFILE);
+  await seed(page, "users/u_bob/profile", BOB_PROFILE);
+  await signIn(page, ALICE);
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("Alice");
+  await expect(page.locator("#splash-signed-in-account"), "premise: her Account link is on screen").toBeVisible();
+
+  await holdRead(page, "users/u_bob/profile");
+  await signIn(page, BOB);                    // no sign-out in between
+
+  expect(await page.evaluate(() => ({ uid: currentUser.uid, profile: currentProfile })),
+    "he is the current user, and her profile is no longer the current one").toEqual({ uid: "u_bob", profile: null });
+  await expect(page.locator("#splash-signed-in"), "the row must not go on saying 'Signed in as Alice'").toBeHidden();
+  await expect(page.locator("#splash-signed-in-account")).toBeHidden();
+  await expect(page.locator("#user-chip")).toHaveClass(/(^|\s)hidden(\s|$)/);
+  /* Nothing on screen opens the dialog now. Opened by any other route, it
+     still must not hold her values. */
+  const forced = await page.evaluate(() => {
+    openAccountDialog();
+    const v = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id)).value;
+    const seen = {
+      email: document.getElementById("account-email").textContent, name: v("account-name"),
+      university: v("account-uni"), year: v("account-year"), english: v("account-english")
+    };
+    closeAccountDialog();
+    return seen;
+  });
+  expect(forced.email, "premise: the dialog is his").toBe("bob@example.test");
+  expect([forced.name, forced.university, forced.year, forced.english].filter(
+    (x, i) => x === ["Alice", "Nagoya", "5", "C1"][i]), "none of her values in his dialog").toEqual([]);
+
+  // His read lands: the openers come back as his, and the dialog is his own.
+  await page.evaluate(() => { window.__releaseRead(); });
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("Bob");
+  await page.locator("#splash-signed-in-account").click();
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  expect(await dialogFields(page)).toEqual({
+    email: "bob@example.test", name: "Bob", university: "Caen", year: "2", english: "B1", role: "student"
+  });
+  await page.locator("#account-save-btn").click();
+  await expect(page.locator("#account-action-hint")).toHaveText("Profile saved.");
+  expect(withoutTimes(await stored(page, "users/u_bob/profile")), "Save keeps what was his").toEqual(
+    { name: "Bob", university: "Caen", year: 2, english: "B1", role: "student" });
+  expect(await stored(page, "users/u_alice/profile")).toEqual(ALICE_PROFILE);
   expect(errors).toEqual([]);
 });

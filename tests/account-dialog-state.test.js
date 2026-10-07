@@ -2,8 +2,9 @@
  *
  * What the account UI keeps between two accounts, and between two page loads.
  *
- * Each section below opens with the defect it covers. All of them became
- * reachable once the account dialog could be opened from the front page (#431).
+ * Each section below opens with the defect it covers. A to C became reachable
+ * once the account dialog could be opened from the front page (#431); D to G
+ * were found by the independent review of the PR that fixed those.
  *
  * HOW THESE TESTS RUN. They execute the real code: the whole account section of
  * script.js (handleAuthStateChange() down to wireAccountUI()) is cut out by its
@@ -96,6 +97,7 @@ function makeNode(id) {
       (listeners[type] || []).slice().forEach((fn) => fn({ target: node, preventDefault() {} }));
     },
     count(type) { return (listeners[type] || []).length; },
+    dispatchEvent(ev) { node.fire(ev.type); return true; },
     appendChild(c) { node.children.push(c); return c; },
     querySelector() { return null; },
     setAttribute() {}, removeAttribute() {}, hasAttribute() { return false; },
@@ -153,12 +155,14 @@ function makeRadios(values) {
 const clone = (v) => (v === undefined ? null : JSON.parse(JSON.stringify(v)));
 
 /* An in-memory database: ref(path).once/set/on/off. hold(path) keeps a read of
-   that path pending until release(path). Values cross the boundary as copies,
-   so what is stored is plain data in THIS realm. */
+   that path pending until release(path); holdAck(path) lets a write to that
+   path land but keeps its acknowledgement back until releaseAck(path). Values
+   cross the boundary as copies, so what is stored is plain data in THIS realm. */
 function makeDb() {
   const tree = {};
   const writes = [];
   const held = new Map();
+  const acks = new Map();
   const get = (p) => p.split("/").filter(Boolean).reduce((n, k) =>
     (n !== null && typeof n === "object" && Object.prototype.hasOwnProperty.call(n, k)) ? n[k] : null, tree);
   const set = (p, v) => {
@@ -173,13 +177,20 @@ function makeDb() {
     tree, writes, get: (p) => clone(get(p)), seed: (p, v) => set(p, clone(v)),
     hold(p) { held.set(p, []); },
     release(p) { const q = held.get(p) || []; held.delete(p); q.forEach((go) => go()); },
+    holdAck(p) { acks.set(p, []); },
+    releaseAck(p) { const q = acks.get(p) || []; acks.delete(p); q.forEach((go) => go()); },
     ref(p) {
       return {
         once() {
           if (held.has(p)) return new Promise((resolve) => { held.get(p).push(() => resolve(snap(p))); });
           return Promise.resolve(snap(p));
         },
-        set(v) { writes.push(p); set(p, clone(v)); return Promise.resolve(); },
+        set(v) {
+          writes.push(p);
+          set(p, clone(v));
+          if (acks.has(p)) return new Promise((resolve) => { acks.get(p).push(resolve); });
+          return Promise.resolve();
+        },
         on(ev, cb) { cb(snap(p)); },
         off() {}
       };
@@ -243,16 +254,43 @@ function makeWorld(opts) {
   };
 
   /* The auth backend. Like the SDK it tells its listener about a change AFTER
-     the call that caused it has returned, and it signs nobody in by itself:
-     the page's own ensureSignedIn() asks for the anonymous user. */
+     the call that caused it has returned; it tells it only when the UID
+     changes (12.17.1 keeps a lastNotifiedUid and compares); and it signs nobody
+     in by itself: the page's own ensureSignedIn() asks for the anonymous user. */
   let anon = 0;
-  const notify = (user) => Promise.resolve().then(() => { sandbox.handleAuthStateChange(user); });
+  let lastUid = null;
+  const deliver = (user) => { lastUid = user ? user.uid : null; sandbox.handleAuthStateChange(user); };
+  const notify = (user) => Promise.resolve().then(() => {
+    if ((user ? user.uid : null) !== lastUid) deliver(user);
+  });
+  const fail = (code) => Promise.reject(Object.assign(new Error(code), { code }));
   const auth = {
     currentUser: null,
+    /* The accounts that exist: e-mail address -> { user, password }. */
+    accounts: {},
     signInAnonymously() {
-      const user = { uid: "uidAnon" + (++anon), email: null, displayName: null, isAnonymous: true };
+      const user = {
+        uid: "uidAnon" + (++anon), email: null, displayName: null, isAnonymous: true,
+        /* Upgrading the anonymous user IN PLACE. The uid does not change, and
+           the SDK shipped here (12.17.1) tells onAuthStateChanged about a change
+           of uid only — so the page's handler is NOT called. */
+        linkWithCredential(cred) {
+          if (auth.accounts[cred.email]) return fail("auth/email-already-in-use");
+          user.isAnonymous = false;
+          user.email = cred.email;
+          auth.accounts[cred.email] = { user, password: cred.password };
+          return Promise.resolve({ user });
+        }
+      };
       auth.currentUser = user;
       return notify(user).then(() => ({ user }));
+    },
+    signInWithEmailAndPassword(email, password) {
+      const a = auth.accounts[email];
+      if (!a) return fail("auth/user-not-found");
+      if (a.password !== password) return fail("auth/wrong-password");
+      auth.currentUser = a.user;
+      return notify(a.user).then(() => ({ user: a.user }));
     },
     signOut() { auth.currentUser = null; return notify(null); }
   };
@@ -261,6 +299,8 @@ function makeWorld(opts) {
     console: { warn() {}, info() {}, error() {}, log() {} },
     window: {}, document, localStorage, el, db,
     setTimeout: () => 0,
+    Event: class { constructor(type) { this.type = type; } },
+    firebase: { auth: { EmailAuthProvider: { credential: (email, password) => ({ email, password }) } } },
     auth: o.backend ? auth : null,
     currentUser: null, currentProfile: null,
     authReady: null, _authReadyResolve: null, _anonSignInPromise: null,
@@ -274,7 +314,8 @@ function makeWorld(opts) {
     runWithdrawalFlow() {}, wireEmailAuthForm() {}, signInWithProvider() {}
   }, o.globals);
   vm.createContext(sandbox);
-  vm.runInContext(["ensureSignedIn", "splashShowView", "splashHintErr", "splashHintOk"]
+  vm.runInContext(["ensureSignedIn", "splashShowView", "splashHintErr", "splashHintOk",
+    "scorePassword", "signInWithEmail", "signUpWithEmail"]
     .map((fn) => extractFn(SCRIPT, fn)).join("\n") + "\n" + ACCOUNT_SECTION + "\n" + o.source, sandbox);
 
   const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };
@@ -286,7 +327,7 @@ function makeWorld(opts) {
     async signIn(user, profile) {
       if (profile) db.seed("users/" + user.uid + "/profile", profile);
       auth.currentUser = user;
-      sandbox.handleAuthStateChange(user);
+      deliver(user);
       await settle();
     },
     /* The page's own "Sign out". */
@@ -295,10 +336,41 @@ function makeWorld(opts) {
        signed out from another tab. */
     async vanish() {
       auth.currentUser = null;
-      sandbox.handleAuthStateChange(null);
+      deliver(null);
       await settle();
     },
+    /* One account replaces another in a single event, with no "nobody" in
+       between: what the SDK reports when somebody signs in while another
+       account is still signed in. */
+    async replaceWith(user) {
+      auth.currentUser = user;
+      deliver(user);
+      await settle();
+    },
+    /* The state every visitor starts in: the anonymous user. */
+    async visit() { sandbox.ensureSignedIn(); await settle(); },
     views: () => VIEWS.filter((v) => !el("splash-view-" + v).hidden),
+    /* Who the page says is signed in, and whether either opener of the account
+       dialog is on screen. */
+    signedIn: () => ({
+      row: !el("splash-signed-in").hidden, chip: !el("user-chip").classList.contains("hidden"),
+      name: el("splash-signed-in-name").textContent
+    }),
+    /* The lobby's "Join as a participant" form. */
+    joinForm: () => ({
+      name: el("name-input").value, university: el("uni-input").value,
+      year: el("year-input").value, english: el("english-input").value
+    }),
+    /* The sign-in / sign-up form on the front page. */
+    signInForm: () => ({
+      email: el("splash-email-input").value, password: el("splash-password-input").value,
+      confirm: el("splash-password-confirm").value
+    }),
+    typeSignIn(v) {
+      el("splash-email-input").value = v.email;
+      el("splash-password-input").value = v.password;
+      el("splash-password-confirm").value = v.confirm || "";
+    },
     dialog: () => ({
       email: el("account-email").textContent, name: el("account-name").value,
       university: el("account-uni").value, year: el("account-year").value,
@@ -613,9 +685,7 @@ for (const hasProfile of [false, true]) {
     const w = makeWorld();
     if (hasProfile) w.db.seed("users/uidAlice/profile", ALICE_PROFILE);
     w.db.hold("users/uidAlice/profile");
-    w.auth.currentUser = ALICE;
-    w.sandbox.handleAuthStateChange(ALICE);
-    await w.settle();
+    await w.signIn(ALICE);
 
     await w.vanish();
     assert.ok(w.sandbox.currentUser.isAnonymous, "premise: the anonymous user is current");
@@ -633,9 +703,7 @@ test("B: a profile read that comes back for the account still signed in is appli
   const w = makeWorld();
   w.db.seed("users/uidAlice/profile", ALICE_PROFILE);
   w.db.hold("users/uidAlice/profile");
-  w.auth.currentUser = ALICE;
-  w.sandbox.handleAuthStateChange(ALICE);
-  await w.settle();
+  await w.signIn(ALICE);
   assert.strictEqual(w.sandbox.currentProfile, null, "premise: the read is still pending");
   w.db.release("users/uidAlice/profile");
   await w.settle();
@@ -734,4 +802,77 @@ test("C: wiring the account UI again, from anywhere and in any order, adds nothi
     w.run("wireAccountUI(); wireSplash(); wireAccountUI(); wireSplash();");
     assert.deepStrictEqual(clicks(w), ONCE);
   }
+});
+
+/* ======================= D. one account replacing another directly =========
+ *
+ * FOUND IN REVIEW (PR #440, finding 1). Emptying the forms when the uid changes
+ * was not enough: `currentProfile`, the header chip and the front page's
+ * "Signed in as …" row were only replaced when the NEW account's profile read
+ * came back, and the dialog reads `currentProfile` on every open.
+ *
+ * Alice leaves herself signed in on a shared machine. Bob clicks "Sign in with
+ * Google or email…" — nothing hides it while someone is signed in — and signs
+ * in; the SDK swaps them in ONE event, with no "nobody" in between. Until his
+ * read returned (and for good if it hung) the page went on saying "Signed in as
+ * Alice · Account"; he clicked Account and got his e-mail address above her
+ * name, university, year and level, and Save wrote them over his own stored
+ * profile.
+ *
+ * Every other test here signs the first account out before the second signs
+ * in, which is why none of them saw it.
+ */
+
+const BOB_PROFILE = { name: "Bob", university: "Caen", year: 2, english: "B1", role: "student", createdAt: 5, updatedAt: 5 };
+const HERS = { name: "Alice", university: "Nagoya", year: "5", english: "C1" };
+
+test("D: an account that replaces another directly is shown nothing of it while its own profile is being read", async () => {
+  const w = makeWorld();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "Alice" }, "premise");
+  w.db.seed("users/uidBob/profile", BOB_PROFILE);
+  w.db.hold("users/uidBob/profile");           // a slow network: his read is in flight
+  await w.replaceWith(BOB);
+
+  assert.strictEqual(w.sandbox.currentUser.uid, "uidBob", "premise: he is the current user");
+  assert.strictEqual(w.sandbox.currentProfile, null, "her profile must not stay current for him");
+  assert.deepStrictEqual([w.signedIn().row, w.signedIn().chip], [false, false],
+    "neither opener may stay on screen saying 'Signed in as Alice' — nor come back before HIS profile is read");
+
+  /* Nothing on screen opens the dialog now. Opened by any other route it still
+     must not hold her values, and Save must not write them over his. */
+  w.sandbox.openAccountDialog();
+  const d = w.dialog();
+  assert.strictEqual(d.email, "bob@example.test", "premise: the dialog is his");
+  for (const k of Object.keys(HERS)) assert.notStrictEqual(d[k], HERS[k], "her " + k + " in his dialog");
+  w.sandbox.accountSaveBtn();
+  await w.settle();
+  assert.deepStrictEqual(w.db.get("users/uidBob/profile"), BOB_PROFILE,
+    "his stored profile must not be overwritten");
+  w.sandbox.closeAccountDialog();
+
+  w.db.release("users/uidBob/profile");
+  await w.settle();
+  assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "Bob" },
+    "once his own profile has been read the openers come back — as his");
+  w.sandbox.openAccountDialog();
+  assert.deepStrictEqual(w.dialog(),
+    { email: "bob@example.test", name: "Bob", university: "Caen", year: "2", english: "B1", role: "student" });
+  w.sandbox.accountSaveBtn();
+  await w.settle();
+  assert.deepStrictEqual(w.stored("uidBob"),
+    { name: "Bob", university: "Caen", year: 2, english: "B1", role: "student" },
+    "and Save keeps what was his");
+});
+
+test("D: an account with no profile that replaces another directly is asked for its own (positive control)", async () => {
+  /* Hiding the openers until the read lands must not hide them for good when
+     the read comes back empty. */
+  const w = makeWorld();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  await w.replaceWith(BOB);
+  assert.strictEqual(w.sandbox.currentProfile, null);
+  assert.deepStrictEqual(w.signedIn(), { row: true, chip: true, name: "bob@example.test" });
+  assert.deepStrictEqual(w.views(), ["profile-setup"]);
+  assert.strictEqual(w.setupForm().name, "bob");
 });
