@@ -44,17 +44,13 @@
 const { describe, it } = require("node:test");
 const assert = require("node:assert");
 const fs = require("node:fs");
-const os = require("node:os");
 const path = require("node:path");
-const net = require("node:net");
-const { spawn } = require("node:child_process");
 
-const emulatorPorts = require("../scripts/ops/emulator-ports.js");
+const { ROOT, isListening, isAlive, until, scenarios } =
+  require("./fixtures/real-run-harness.js");
 
-const ROOT = path.join(__dirname, "..");
 const RUNNER = path.join(ROOT, "scripts", "ops", "run-rules-e2e.js");
 const PRELOAD = path.join(__dirname, "fixtures", "fake-emulators-exec-preload.js");
-const LISTENER = path.join(__dirname, "fixtures", "port-listener.js");
 
 /* How long a scenario waits for the runner to SAY it has classified a listener
    before letting its child exit regardless. Normally that takes a poll (2 s)
@@ -66,139 +62,15 @@ const LISTENER = path.join(__dirname, "fixtures", "port-listener.js");
 const CLASSIFY_WAIT_MS = 60000;
 const SCENARIO_TIMEOUT_MS = 240000;
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/* Ports already given to a scenario. The scenarios run at once, and a port is
-   only reserved for as long as the probe below holds it: without this the OS
-   could hand the same number to two of them, and one scenario's "stranger"
-   would be sitting on the other's emulator port. */
-const handedOut = new Set();
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const s = net.createServer();
-    s.on("error", reject);
-    s.listen(0, "127.0.0.1", () => {
-      const port = s.address().port;
-      s.close(() => {
-        if (handedOut.has(port)) return resolve(freePort());
-        handedOut.add(port);
-        resolve(port);
-      });
-    });
-  });
-}
-
-function isListening(port) {
-  return new Promise((resolve) => {
-    const c = net.connect(port, "127.0.0.1");
-    c.on("connect", () => { c.destroy(); resolve(true); });
-    c.on("error", () => resolve(false));
-  });
-}
-
-function isAlive(pid) {
-  try { process.kill(pid, 0); return true; } catch (e) { return false; }
-}
-
-async function until(what, cond, ms) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    if (await cond()) return true;
-    await sleep(40);
-  }
-  throw new Error("timed out after " + ms + " ms waiting for " + what);
-}
-
-/* A listener the TEST starts — so, as far as the runner is concerned, one that
-   somebody else started: another session's live emulator. */
-async function startStranger(port, dir, name) {
-  const pidFile = path.join(dir, name + ".pid");
-  const proc = spawn(process.execPath, [LISTENER, String(port), pidFile],
-    { stdio: "ignore", windowsHide: true });
-  try {
-    await until(name + " to listen on :" + port, () => fs.existsSync(pidFile), 15000);
-  } catch (e) {
-    proc.kill();   // or it outlives the failure and holds this process open
-    throw e;
-  }
-  return { proc, pid: proc.pid, port };
-}
-
-function startRunner(env) {
-  const child = spawn(process.execPath, ["-r", PRELOAD, RUNNER], {
-    cwd: ROOT,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-    env: Object.assign({}, process.env, env)
-  });
-  let output = "";
-  child.stdout.on("data", (d) => { output += d; });
-  child.stderr.on("data", (d) => { output += d; });
-  const exited = new Promise((resolve) => child.on("close", (code) => resolve(code)));
-  return { child, exited, output: () => output };
-}
-
-/* One scenario's worth of ports and scratch space, and a cleanup that leaves
-   nothing behind whatever the outcome — including the listeners a regressed
-   sweep would have failed to free.
-
-   The cleanup obeys the rule this file is about. It never kills by a PID it
-   merely remembers: by then that process has usually exited, and on Windows
-   the number can already belong to someone else (found in review — the first
-   version did exactly that). Our own children are ended through their
-   ChildProcess handle, which is a no-op once they have gone. The orphan is
-   nobody's child here, so it is ended only while it is still the process
-   listening on the port this scenario was given. */
-async function scenario(fn) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rules-e2e-sweep-"));
-  const ports = {
-    db: await freePort(), auth: await freePort(),
-    web: await freePort(), hub: await freePort()
-  };
-  const children = [];
-  let orphanPort = null;
-  const ctx = {
-    dir, ports,
-    env: (extra) => Object.assign({
-      SIM_DB_PORT: String(ports.db),
-      SIM_AUTH_PORT: String(ports.auth),
-      SIM_HUB_PORT: String(ports.hub),
-      PORT: String(ports.web),
-      FAKE_EXEC_DIR: dir
-    }, extra),
-    stranger: async (port, name) => {
-      const s = await startStranger(port, dir, name);
-      children.push(s.proc);
-      return s;
-    },
-    runner: (env) => {
-      if (env.FAKE_EXEC_ORPHAN_PORT) orphanPort = parseInt(env.FAKE_EXEC_ORPHAN_PORT, 10);
-      const r = startRunner(ctx.env(env));
-      children.push(r.child);
-      return r;
-    },
-    release: () => fs.writeFileSync(path.join(dir, "release"), "", "utf8"),
-    orphanPid: () => parseInt(fs.readFileSync(path.join(dir, "orphan.pid"), "utf8"), 10)
-  };
-  try {
-    await fn(ctx);
-  } finally {
-    try { ctx.release(); } catch (e) { /* the directory may already be gone */ }
-    for (const child of children) child.kill();
-    try {
-      const orphan = String(ctx.orphanPid());
-      if (orphanPort !== null && emulatorPorts.listeningPids(orphanPort).includes(orphan)) {
-        process.kill(parseInt(orphan, 10));
-      }
-    } catch (e) { /* no orphan in this scenario, or it has gone — the goal */ }
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-}
+/* One scenario's ports, scratch space and cleanup: fixtures/real-run-harness.js,
+   where the helpers this file used to carry now live (two more files run a
+   real entry point the same way). */
+const scenario = scenarios(RUNNER, PRELOAD);
 
 describe("the survivor sweep, run for real", { concurrency: true }, () => {
   it("does not kill a listener that took the port after the preflight — another run's live emulator",
     { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
-      const run = ctx.runner({ FAKE_EXEC_MODE: "port-taken" });
+      const run = ctx.run({ FAKE_EXEC_MODE: "port-taken" });
       await until("the stand-in emulators:exec to start",
         () => fs.existsSync(path.join(ctx.dir, "started")), 30000);
 
@@ -250,7 +122,7 @@ describe("the survivor sweep, run for real", { concurrency: true }, () => {
          loaded run in three). */
       await until("this process to be clearly older than the run",
         () => process.uptime() > 1.5, 10000);
-      const run = ctx.runner({ FAKE_EXEC_MODE: "port-taken" });
+      const run = ctx.run({ FAKE_EXEC_MODE: "port-taken" });
       await until("the stand-in emulators:exec to start",
         () => fs.existsSync(path.join(ctx.dir, "started")), 30000);
       const theirs = await ctx.stranger(ctx.ports.db, "their-emulator");
@@ -281,13 +153,13 @@ describe("the survivor sweep, run for real", { concurrency: true }, () => {
     { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
       /* emulators:exec starts a listener on the DB port and will exit 0 without
          stopping it: the Java grandchild that survives on Windows. */
-      const run = ctx.runner({
+      const run = ctx.run({
         FAKE_EXEC_MODE: "orphan",
         FAKE_EXEC_ORPHAN_PORT: String(ctx.ports.db)
       });
       await until("the stand-in emulators:exec to start its listener",
         () => fs.existsSync(path.join(ctx.dir, "started")), 30000);
-      const orphan = ctx.orphanPid();
+      const orphan = await ctx.orphanPid();
       assert.ok(isAlive(orphan) && await isListening(ctx.ports.db),
         "fixture: the run's own listener must be up before the child exits");
       const theirs = await ctx.stranger(ctx.ports.auth, "stranger");
@@ -323,7 +195,7 @@ describe("the survivor sweep, run for real", { concurrency: true }, () => {
   it("refuses to start when a listener is already there, and kills nothing",
     { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
       const theirs = await ctx.stranger(ctx.ports.db, "already-there");
-      const run = ctx.runner({ FAKE_EXEC_MODE: "port-taken" });
+      const run = ctx.run({ FAKE_EXEC_MODE: "port-taken" });
       const code = await run.exited;
       const out = run.output();
 

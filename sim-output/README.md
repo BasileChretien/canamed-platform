@@ -31,6 +31,9 @@ npm run sim:emulator
 
 # bigger cohort:
 SIM_STUDENTS=24 SIM_ROOM_COUNT=6 npm run sim:emulator
+
+# when something else holds 8765 (AnkiConnect does, on some machines):
+PORT=8771 npm run sim:emulator
 ```
 
 Knobs (env vars, override per run):

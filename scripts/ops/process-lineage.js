@@ -349,8 +349,17 @@ function track(rootPid, opts) {
     const out = { mine: [], notMine: [], unproven: [], gone: [], why: [] };
     /* A survivor already known not to be ours needs no second look — and in
        the lost race for the ports that is every survivor, so the report is
-       not held up by another snapshot. */
-    const table = rows.some((r) => !notOurs.has(String(r.pid))) ? read() : null;
+       not held up by another snapshot.
+
+       A read that FAILS here is tried once more. observe() gets another look
+       on the next poll; the sweep is the last look there is, and without the
+       table a listener already SHOWN to be ours cannot be re-identified — it
+       falls to "unproven" and our own leftover stays on the port, which is
+       the defect the sweep exists for. A second read cannot widen what is
+       killed: if it fails too the answer is still "nothing is ours", and if
+       it succeeds it is the table a first success would have been. One retry,
+       not a loop — a snapshot that cannot be had costs its whole timeout. */
+    const table = rows.some((r) => !notOurs.has(String(r.pid))) ? (read() || read()) : null;
     const why = new Set();
     for (const row of rows) {
       const pid = String(row.pid);

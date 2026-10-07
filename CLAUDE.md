@@ -56,16 +56,22 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
     so a run that lost the race went on to run the sim against the other
     session's emulator. It now ends the run the moment its own emulator exits
     before teardown (that is what losing the race looks like from there), and
-    refuses to start the sim if, once the ports answer, a listener on them is
-    shown not to be its own.
+    refuses to start the sim unless, once the ports answer, EVERY listener on
+    them has been shown to be its own. (Corrected 2026-10-08: it used to refuse
+    only on a listener shown NOT to be its own, so one with no verdict — an
+    unreadable process table — was let through, and the sim was started
+    against it.)
     Still by tree, not verified one by one: the runner's Ctrl-C path and the
-    sim's teardown `taskkill /F /T` their OWN live children — for the sim that
-    now includes the sim process itself, when a run is cut short.
+    sim launcher's teardown `taskkill /F /T` their own emulator CLI. Nothing
+    else since 2026-10-08: the sim process and the static server are ended
+    through their handles.
     **The text check that guarded this was green on the defect**
     (`onlyPids: ownedPids` reads the same whichever set it is handed). The
     real runner is now RUN, in a child process, against a real stranger on
     throwaway ports — with an ALLOW leg, so "kills nothing" cannot pass.
     `Verify:` `node --test tests/emulator-sweep-lineage.test.js tests/process-lineage.test.js`.
+    The runner's signal handler and the sim launcher are run the same way:
+    `node --test tests/emulator-runner-signal.test.js tests/sim-launcher-run.test.js`.
 - `npx playwright test` — E2E suite (`tests-e2e/`), runs in LOCAL mode
   (hermetic, no real Firebase). Projects: chromium/firefox/webkit + perf +
   a11y + mobile-iphone/ipad/android.

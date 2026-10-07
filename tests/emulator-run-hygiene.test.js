@@ -155,7 +155,15 @@ test("the emulator runs against the PINNED firebase CLI, not whatever npx finds"
 test("the runner sweeps survivors on every exit path", () => {
   /* `sweep(` — it takes an argument since 2026-10-07 (did the child fail of
      its own accord?), which the report needs and the kill decision does not. */
-  assert.match(RUNNER, /child\.on\("exit"[\s\S]{0,120}?sweep\(/,
+  /* The child's "exit" handler sweeps TWICE over, on two paths: an interrupted
+     run ends there (see the signal test below), and so does a normal one. Cut
+     the handler out and ask for both, rather than "a sweep( within 120
+     characters" — which the first of them satisfied on its own once it was
+     added, whatever became of the second. */
+  const exitAt = RUNNER.indexOf('child.on("exit"');
+  assert.ok(exitAt > 0, "locator stale: the child's exit handler was not found");
+  const onExit = RUNNER.slice(exitAt, RUNNER.indexOf('child.on("error"', exitAt));
+  assert.match(onExit, /sweep\(status !== 0 && !signal\);/,
     "a normal exit must sweep");
   assert.match(RUNNER, /child\.on\("error"[\s\S]{0,120}?sweep\(/,
     "a failure to start must sweep");
@@ -244,15 +252,45 @@ test("sim-with-emulator sweeps by port after its tree-kill", () => {
     "taskkill /T only reaches the tree we own; the RTDB emulator survived it — " +
     "but the backstop sweep must still prove ownership before killing");
   /* The tree-kill moved into stopChild() (the "exit" handler needs it too). */
-  const killAt = body.indexOf("stopChild(p)");
-  assert.ok(killAt > 0, "locator stale: cleanup() no longer stops its children");
+  const killAt = body.indexOf("stopChild(firebaseProc, { tree: true });");
+  assert.ok(killAt > 0, "locator stale: cleanup() no longer tree-kills its emulator CLI");
   assert.ok(killAt < body.indexOf("emulatorPorts.survey("),
     "the port sweep is a BACKSTOP — the tree-kill must still run first");
-  assert.match(SIM, /function stopChild\(p\) \{[\s\S]{0,900}?spawnSync\("taskkill", \["\/F", "\/T", "\/PID"/,
-    "and stopping a child must still be a synchronous TREE kill on Windows");
+  assert.match(SIM,
+    /function stopChild\(p, opts\) \{[\s\S]{0,300}?if \(opts && opts\.tree && process\.platform === "win32"\) \{\r?\n\s*spawnSync\("taskkill", \["\/F", "\/T", "\/PID"/,
+    "and stopping the emulator CLI must still be a synchronous TREE kill on " +
+    "Windows: the handle there is a shell, with the emulators beneath it");
   assert.match(SIM, /p\.exitCode !== null \|\| stopped\.has\(p\)\) return;/,
     "a child that has ended, or was already stopped, must not be killed again " +
     "by its remembered PID");
+});
+
+test("the sim launcher tree-kills its emulator CLI, and nothing else", () => {
+  /* `taskkill /T` rebuilds the tree from ParentProcessId with no creation-time
+     check, so it also takes any process that still names a recycled PID in
+     that tree as its parent — the reading the lineage work refuses. PR #439
+     removed it from the ownership-scoped sweep and, in the same commits, ADDED
+     it for the sim (stopChild() tree-killed whatever it was handed). The sim
+     is one node process whose browsers exit with it, and the static server
+     has no children: both are ended through their handles. What that does to
+     a child of the sim is run for real in tests/sim-launcher-run.test.js —
+     on Windows, the only place the difference exists; this names the shape on
+     every platform. */
+  const SIM = read("scripts", "sim", "sim-with-emulator.js");
+  assert.strictEqual((SIM.match(/\{ tree: true \}/g) || []).length, 1,
+    "exactly one child may be stopped with its tree");
+  assert.match(SIM, /stopChild\(firebaseProc, \{ tree: true \}\);/,
+    "and it is the emulator CLI");
+  assert.strictEqual((SIM.match(/spawnSync\("taskkill"/g) || []).length, 1,
+    "locator stale: the launcher no longer has exactly one taskkill call");
+  assert.match(SIM, /\} else \{\r?\n\s*p\.kill\(\);/,
+    "every other child is ended through its handle");
+  const cleanupAt = SIM.indexOf("function cleanup()");
+  const cleanup = SIM.slice(cleanupAt, SIM.indexOf('process.on("SIGINT"', cleanupAt));
+  assert.match(cleanup,
+    /stopChild\(simProc\);[^\n]*\r?\n\s*stopChild\(firebaseProc, \{ tree: true \}\);\r?\n\s*stopChild\(serveProc\);/,
+    "cleanup() stops the sim first (it is what writes), then the emulator, " +
+    "then the server");
 });
 
 /* ── the review round: fail closed, kill once, prove ownership ────── */
@@ -384,9 +422,14 @@ test("the sim ends the run when its own emulator exits before teardown", () => {
      `firebaseProc.exitCode` right after a synchronous lookup, where a child
      that had just died still reads as running (found in review). The "exit"
      event is the only reliable signal, and it must not depend on the process
-     table being readable. Text checks only: this launcher needs Java, the
-     firebase CLI and port 8765, so it is not run by the unit suite. It was
-     run by hand against the real CLI — see the PR. */
+     table being readable.
+
+     These are text checks, and were the ONLY cover this handler had until
+     2026-10-08 (the launcher wanted Java, the firebase CLI and port 8765). A
+     review then found four changes to it that they did not notice. The
+     launcher is now run for real in tests/sim-launcher-run.test.js, which is
+     where what it DOES is established; what stays here names the shape, so
+     that losing it is reported at once and by name. */
   const SIM = read("scripts", "sim", "sim-with-emulator.js");
   const at = SIM.indexOf('firebaseProc.on("exit"');
   assert.ok(at > 0, "locator stale: the emulator's exit handler was not found");
@@ -416,9 +459,18 @@ test("the sim ends the run when its own emulator exits before teardown", () => {
   const cleanup = SIM.slice(cleanupAt, SIM.indexOf('process.on("SIGINT"', cleanupAt));
   assert.match(cleanup, /^function cleanup\(\) \{\r?\n\s*tearingDown = true;/,
     "cleanup() must mark the teardown BEFORE it kills the emulator");
-  assert.match(cleanup, /for \(const p of \[simProc, firebaseProc, serveProc\]\)/,
+  assert.match(cleanup, /\r?\n\s*stopChild\(simProc\);/,
     "a run cut short must take the sim down too, or it keeps writing to whoever " +
     "holds the ports");
+
+  /* The readiness check: the sim is held until the listeners are shown to be
+     ours. "Not shown to be someone else's" was the old test, and it let a
+     listener with no verdict through. */
+  assert.match(SIM, /unplaced = rows\.filter\(r => lineage\.verdict\(r\.pid\) !== "ours"\);/,
+    "anything short of a shown \"ours\" must hold the sim back");
+  assert.doesNotMatch(SIM, /The sim is not being run against that listener/,
+    "the unconditional claim about the sim must not come back: it was made on " +
+    "paths where the sim had been running");
   assert.doesNotMatch(SIM, /firebaseProc\.exitCode !== null\) \{/,
     "the stale-read form of the guard must not come back");
 });
@@ -457,21 +509,81 @@ test("every message that offers to clear a port says first that it may be a live
   }
 });
 
-test("a signal to the runner forwards to the child and waits before sweeping", () => {
+test("a signal to the runner forwards to the child, and sweeps only after it", () => {
   /* Sweeping straight away would force-kill the emulator ports while
-     emulators:exec was still running against them. */
+     emulators:exec was still running against them.
+
+     ⚠ THIS TEST USED TO PIN THE DEFECT. It required the wait verbatim —
+       while (child.exitCode === null && child.signalCode === null && Date.now() < deadline)
+     — under the message "the wait must be bounded". That loop slept
+     synchronously, and exitCode is set by the event loop it was blocking: the
+     condition could never change, so it was a fixed 10 s on every Ctrl-C. The
+     assertion was green on that and red on any repair, so it is gone.
+
+     What the handler DOES — returns the shell when the child exits, gives up
+     at the bound, sweeps only afterwards, takes a second signal in its stride —
+     is run for real in tests/emulator-runner-signal.test.js; a regex cannot
+     tell a wait from a sleep, which is how the old one passed. What is left
+     here is the shape that makes those properties possible, so that losing it
+     is named at once and on every platform (two of those scenarios need a
+     POSIX signal and are skipped on Windows). */
   const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
   assert.match(RUNNER2, /function stop\(signal, exitCode\)/);
-  assert.match(RUNNER2, /taskkill[\s\S]{0,80}?String\(child\.pid\)/,
-    "the child TREE must be signalled on Windows");
-  assert.match(RUNNER2, /while \(child\.exitCode === null && child\.signalCode === null && Date\.now\(\) < deadline\)/,
-    "the wait must be bounded — a wedged child must not hang the shell");
   const stopAt = RUNNER2.indexOf("function stop(");
   const body = RUNNER2.slice(stopAt, RUNNER2.indexOf("process.on(\"SIGINT\"", stopAt));
+  assert.match(body, /taskkill[\s\S]{0,80}?String\(child\.pid\)/,
+    "the child TREE must be signalled on Windows");
+  assert.match(body, /child\.kill\(signal\);/, "and the signal forwarded everywhere else");
+
+  /* On Windows the ownership poll stops once the tree is killed: it has no
+     lineage left to show, and each look is a synchronous netstat between this
+     handler and the child's "exit". What that buys is time on a loaded
+     machine, which no test here measures (a correct runner was seen taking
+     17 s from signal to exit in the full suite) — so this only keeps the line
+     from being lost unnoticed. */
+  assert.match(body,
+    /spawnSync\("taskkill"[^\n]*\r?\n[\s\S]{0,600}?clearTimeout\(ownershipPoll\);\r?\n\s*\} else \{\r?\n\s*child\.kill\(signal\);/,
+    "after the Windows tree-kill the ownership poll must be stopped — and only " +
+    "there: elsewhere the child is still alive, and still worth watching");
+
+  /* Bounded: a timer, of a named length, is what ends the wait for a child
+     that never exits. */
+  const timerAt = body.indexOf("setTimeout(");
+  assert.ok(timerAt > 0, "locator stale: stop() no longer bounds its wait with a timer");
+  assert.match(body, /\}, STOP_WAIT_MS\);\r?\n\}\s*$/,
+    "the bound must be the last thing stop() arranges — a wedged child must " +
+    "not hang the shell");
+  /* A wait, not a sleep: stop() has to RETURN for the child's exit to be seen
+     at all, so nothing in it may block. */
+  assert.doesNotMatch(body, /\bwhile\s*\(|\bfor\s*\(|Atomics\.wait/,
+    "stop() must not loop or sleep synchronously: the child's exit is reported " +
+    "by the event loop, which a blocked handler never lets turn");
+  /* Nor run ANYTHING synchronously but the one call that ends the child. The
+     first form of this ban named `spawnSync(process.execPath` only — the
+     exact shape of the old sleep — and a ten-second `spawnSync(process.argv[0],
+     …)` put just before the wait got past it, and past both scenarios that
+     run on Windows (they time the wait as the runner reports it, which starts
+     AFTER that point; found in review). The POSIX scenarios assert wall-clock
+     and would catch it; this is what stands in for that on Windows. */
+  assert.deepStrictEqual(body.match(/\b(?:spawnSync|execSync|execFileSync)\s*\(/g), ["spawnSync("],
+    "stop() may make exactly one synchronous child call");
+  assert.match(body, /spawnSync\("taskkill", \["\/F", "\/T", "\/PID", String\(child\.pid\)\]/,
+    "and it is the tree-kill of the child, on Windows");
+  /* After the wait: the only sweep in stop() is the one inside the timer. */
   const sweepAt = body.indexOf("sweep(");
-  assert.ok(sweepAt > 0, "locator stale: stop() no longer calls sweep(");
-  assert.ok(body.indexOf("deadline") < sweepAt,
-    "the wait must come BEFORE the sweep");
+  assert.ok(sweepAt > timerAt,
+    "stop() must not sweep before its wait is over (the sweep must come after " +
+    "the child has exited, or after the bound)");
+  assert.strictEqual(body.indexOf("sweep(", sweepAt + 1), -1,
+    "locator stale: stop() now sweeps in more than one place");
+
+  /* The other end of the wait: the child's own exit ends an interrupted run. */
+  assert.match(RUNNER2,
+    /child\.on\("exit", \(code, signal\) => \{\r?\n\s*if \(interrupted\) \{[\s\S]{0,600}?sweep\(false\);\r?\n\s*process\.exit\(interrupted\.exitCode\);/,
+    "an interrupted run must end — swept, with the signal's exit code — from " +
+    "the child's exit event");
+  assert.match(body, /^function stop\(signal, exitCode\) \{\r?\n\s*if \(interrupted\) \{[\s\S]{0,200}?return;\r?\n\s*\}\r?\n\s*interrupted = \{ signal, exitCode, at: Date\.now\(\) \};/,
+    "a second signal must change nothing: the first is being handled");
 });
 
 test("forwarded playwright arguments survive the shell emulators:exec runs", () => {
