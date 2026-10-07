@@ -2225,6 +2225,104 @@ test("rules: `orgs` cannot be used as a session code", async ({ page }) => {
   expect(await tryWrite(page, `orgs/${slug}/sessions/${OTHER}/members/${uid}`, member())).toBe("ALLOWED");
 });
 
+/* THE SWITCH on the withdrawal rule: `ops/purgedMarkersBackfilledAt`, written
+ * by scripts/backfill-purged-markers.js on a confirmed run and by nothing
+ * else. Absent, a withdrawal needs nothing but the writer's own uid — what the
+ * rule asked before 2026-10-07; present, it needs a session or a purge marker.
+ *
+ * ⚠️ IT IS GLOBAL, AND THIS SUITE SHARES ONE DATABASE ACROSS EVERY SPEC. A test
+ * that leaves it set turns the strict rule on for every test after it —
+ * including account-delete.spec.js's "a withdrawal made from the front page
+ * for a purged session", which is production's state until an operator has run
+ * the backfill. So: only the two blocks below touch it, each puts it back in a
+ * hook or a `finally`, and the file clears it once more when it ends. */
+const BACKFILL_SWITCH = "ops/purgedMarkersBackfilledAt";
+test.afterAll(async () => { await adminPut(BACKFILL_SWITCH, null); });
+
+test("rules: until the marker backfill has run a withdrawal needs no session, and no client can flip the switch", async ({ page }) => {
+  /* Sessions purged before the purge wrote markers have none. A rule that
+   * required one from the day it shipped would have refused their
+   * participants' withdrawals — which were accepted the day before — until an
+   * operator ran the backfill, and for a session purged more than 90 days
+   * earlier, for good. So the requirement waits for the switch.
+   *
+   * Every denial here has an ALLOW of the SAME payload at the SAME path by
+   * the same account: the one thing that differs between them is the switch,
+   * or the marker, or the session's `created`. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  const slug = "ws-" + stamp.toLowerCase();
+  const denied = (r) => expect(String(r)).toMatch(/permission[_ ]denied/i);
+  const request = () => ({ research: false, erasure: true, at: Date.now() });
+  const trees = [
+    { label: "default",
+      record: (c) => `withdrawals/${c}/${uid}`,
+      session: (c) => `sessions/${c}`,
+      marker: (c) => `purgedSessions/${c}` },
+    { label: "orgs",
+      record: (c) => `withdrawals/orgs/${slug}/${c}/${uid}`,
+      session: (c) => `orgs/${slug}/sessions/${c}`,
+      marker: (c) => `purgedSessions/orgs/${slug}/${c}` },
+  ];
+  const NOTHING = "WX" + stamp, MARKED = "WM" + stamp, LIVE = "WV" + stamp, LATER = "WZ" + stamp;
+
+  await adminPut(BACKFILL_SWITCH, null);            // this test owns the switch from here
+  try {
+    // ---- OFF: as before this change --------------------------------------
+    expect(await dbReadAsOwner(BACKFILL_SWITCH)).toBeNull();
+    for (const t of trees) {
+      expect(await dbReadAsOwner(t.session(NOTHING)), t.label).toBeNull();
+      expect(await dbReadAsOwner(t.marker(NOTHING)), t.label).toBeNull();
+      expect(await tryWrite(page, t.record(NOTHING), request()),
+        `${t.label}: with the switch off, a code with no session and no marker is accepted`).toBe("ALLOWED");
+      expect(await dbReadAsOwner(`${t.record(NOTHING)}/erasure`)).toBe(true);
+      /* What is NOT behind the switch: the date window, and whose record it is. */
+      denied(await tryWrite(page, t.record(NOTHING), { research: false, erasure: true, at: 1 }));
+      denied(await tryWrite(page, t.record(NOTHING).replace(uid, "someone-else"), request()));
+    }
+
+    // ---- no client can read it, set it or remove it ------------------------
+    denied(await tryWrite(page, BACKFILL_SWITCH, Date.now()));
+    expect(await dbReadAsOwner(BACKFILL_SWITCH), "a client turned the strict rule on").toBeNull();
+    expect((await tryRead(page, BACKFILL_SWITCH)).ok, "a client could read the switch").toBe(false);
+    /* The allow for that write: the same value at the same path, by the one
+       identity that may put it there — what the backfill does with the Admin SDK. */
+    await adminPut(BACKFILL_SWITCH, Date.now());
+    expect(typeof (await dbReadAsOwner(BACKFILL_SWITCH))).toBe("number");
+    denied(await tryWrite(page, BACKFILL_SWITCH, null));
+    expect(typeof (await dbReadAsOwner(BACKFILL_SWITCH)), "a client turned the strict rule off").toBe("number");
+
+    // ---- ON: the same payload at the same path is now refused… -------------
+    for (const t of trees) {
+      denied(await tryWrite(page, t.record(NOTHING), request()));
+      // …and accepted for a code the purge left a marker for,
+      await adminPut(t.marker(MARKED), Date.now() - 40 * 86400000);
+      expect(await dbReadAsOwner(t.session(MARKED)), t.label).toBeNull();
+      expect(await tryWrite(page, t.record(MARKED), request()),
+        `${t.label}: switch on, purge marker`).toBe("ALLOWED");
+      // …and for a session that is in the database.
+      await adminPut(`${t.session(LIVE)}/created`, { at: Date.now(), by: "t" });
+      expect(await tryWrite(page, t.record(LIVE), request()),
+        `${t.label}: switch on, session created`).toBe("ALLOWED");
+    }
+
+    // ---- OFF again: it is the switch, and nothing else, that refused -------
+    await adminPut(BACKFILL_SWITCH, null);
+    for (const t of trees) {
+      expect(await tryWrite(page, t.record(NOTHING), request()),
+        `${t.label}: the write refused a moment ago, with the switch removed`).toBe("ALLOWED");
+      expect(await tryWrite(page, t.record(LATER), request())).toBe("ALLOWED");
+    }
+  } finally {
+    await adminPut(BACKFILL_SWITCH, null);
+  }
+});
+
+test.describe("with the marker backfill done (the strict withdrawal rule on)", () => {
+test.beforeAll(async () => { await adminPut(BACKFILL_SWITCH, Date.now()); });
+test.afterAll(async () => { await adminPut(BACKFILL_SWITCH, null); });
+
 test("rules: a withdrawal can only name a session that was created or was purged, and cannot be back-dated", async ({ page }) => {
   /* DPA Annex VI G12. Until 2026-10-07 the write looked at the uid and nothing
    * else: any signed-in visitor — this page is an ANONYMOUS one — could record
@@ -2232,7 +2330,9 @@ test("rules: a withdrawal can only name a session that was created or was purged
    * liked, and the daily data-rights monitor counted it. One write with `at: 1`
    * turned that job red on its next run.
    *
-   * The rule now wants the session in the database, or the marker the nightly
+   * ONCE THE MARKER BACKFILL HAS RUN — the `describe` around this test puts
+   * the switch on; the test above shows the rule with it off — the rule wants
+   * the session in the database, or the marker the nightly
    * purge leaves when it removes one (`purgedSessions/<code>`, Admin-written).
    * Every denial below is paired with an ALLOW of the SAME payload, so a denial
    * cannot be the node being unwritable, the payload being malformed, or the
@@ -2338,6 +2438,7 @@ test("rules: a withdrawal can only name a session that was created or was purged
   denied(await tryWrite(page, `withdrawals/${ORG_ONLY}/${uid}`, request()));
   expect(await tryWrite(page, orgRecord(ORG_ONLY), request())).toBe("ALLOWED");
 });
+});   // end: with the marker backfill done
 
 test("rules: an old withdrawal cannot be turned into a request that is already overdue", async ({ page }) => {
   /* Review finding B2 on #437. The window on `at` (a day back, five seconds

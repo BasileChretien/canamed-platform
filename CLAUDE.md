@@ -946,7 +946,7 @@ estimate; the two together are why Monitor stays.
 
    </details>
 
-### Erasure requests that outlive their session (2026-10-07) — ⚠️ ONE OPERATOR STEP, BEFORE THE RULES DEPLOY
+### Erasure requests that outlive their session (2026-10-07) — ⚠️ THE STRICT RULE IS OFF UNTIL AN OPERATOR RUNS THE BACKFILL
 
 A participant records withdrawal plus an erasure request at
 `withdrawals/<code>/<uid>` (org: `withdrawals/orgs/<slug>/<code>/<uid>`). Four
@@ -958,8 +958,17 @@ read that before describing any of this as done.
   (Admin-only node; a code and a date) — only for a session that had a
   `created` or `closed` timestamp. It is the only thing in the database that
   tells a purged session from a code that never was one.
-- **The rule accepts a withdrawal only if the session's `created` record
-  exists, or the code has a marker**, in both trees, and `at` must be within
+- **ONCE THE BACKFILL HAS RUN, the rule accepts a withdrawal only if the
+  session's `created` record exists, or the code has a marker**, in both
+  trees. That requirement sits behind a switch,
+  `ops/purgedMarkersBackfilledAt` (`PURGED_MARKERS_BACKFILLED_PATH` in
+  `scripts/lib/session-trees.js`), which a confirmed run of
+  `scripts/backfill-purged-markers.js` writes in the same update as the
+  markers and nothing else writes. **Absent — production's state after the
+  merge — a withdrawal is accepted for any code, as before, and the spoofable
+  monitor is still spoofable.** `ops/` has no entry in the rules, so no client
+  can read or set it; a rule that opened any of `ops/` would hand over the
+  switch. Whatever the switch says, `at` must be within
   24 h behind / 5 s ahead of the server clock — a window that sits on the
   RECORD (`$uid` `.validate`), so a write to one field is judged against it
   too. Before, any signed-in visitor could file a request for any code, and
@@ -993,17 +1002,37 @@ read that before describing any of this as done.
   could be a name. Older records are not rewritten; the monitor prints how
   many carry typed text. Do not add a free-text field to that ledger.
 
-⚠️ **ACTION REQUIRED, not done, cannot be done in code:** sessions purged before
-this change have no marker, so their participants are refused in the product
-until the markers are rebuilt from the nightly snapshots:
+⚠️ **ACTION REQUIRED, not done, cannot be done in code — and until it is done
+the rule above is OFF.** Sessions purged before this change have no marker;
+they are rebuilt from the nightly snapshots, and the same confirmed run turns
+the strict rule on:
 
 ```bash
 node scripts/backfill-purged-markers.js --file <snapshot.json> [--file …]
 BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json>
 ```
 
-Run it **before, or in the same hour as, the deploy that carries the rule.**
-It needs the snapshots downloaded from Scaleway and Admin credentials.
+- **Local only, by hand; there is no workflow, on purpose** — the snapshots
+  are identified data and must not reach a hosted runner. It needs every
+  `backups/canamed-backup-YYYY-MM-DD.json` the Scaleway bucket still holds,
+  and `GOOGLE_APPLICATION_CREDENTIALS_JSON` (default credentials alone stop
+  it: the session listing wants a credential object).
+- **Confirming it is a decision about participants, and nobody has taken it
+  yet.** A session purged before the oldest snapshot given — and any session
+  purged more than 90 days before the run — gets no marker, and from then on
+  its participants are refused for good ("please try again", which cannot
+  work). The dry run says so and names the oldest snapshot. Do not record
+  that as signed off until an operator has confirmed a run.
+- **Nothing breaks while it has not been run**, which is why this change
+  could merge without it. What does not work until then:
+  `erase-participant.js --dismiss` refuses (it reads the switch), and a
+  request for a session purged before the markers existed can be neither
+  answered nor dismissed.
+- Idempotent: it never overwrites a marker or the switch's date.
+
+`Verify:` not checkable from the repo. An operator's dry run printing
+`Strict withdrawal rule: already ON` is the evidence that it was run; a fresh
+database (and the emulator suite's default state) has it off.
 
 **What the independent review of this change found, each of which would have
 shipped — the lessons are general:**
@@ -1137,8 +1166,16 @@ tests/withdrawal-retention.test.js tests/erase-purged-session.test.js
 tests/reserved-session-key.test.js tests/withdrawal.test.js
 tests/data-rights.test.js tests/cleanup-passes.test.js`, and on the emulator
 `npm run test:e2e:rules -- -g "session"`. Whether the backfill has been run is
-NOT checkable from the repo: an operator's dry run printing `to mark: 0` is the
-evidence.
+NOT checkable from the repo: an operator's dry run printing `to mark: 0` and
+`Strict withdrawal rule: already ON` is the evidence.
+
+**In the emulator suite the switch is GLOBAL state**, and every spec shares one
+database. A test that leaves `ops/purgedMarkersBackfilledAt` set turns the
+strict rule on for every test after it — including the account-dialog case
+that withdraws from a purged session with no marker, which is production's
+state. Only two blocks in `rules-smoke.spec.js` touch it; each puts it back in
+a hook or a `finally`. A new test that needs the strict rule goes inside the
+`describe` that sets it.
 
 ## Scenario characters (facilitator-authored scenarios)
 

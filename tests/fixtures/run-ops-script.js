@@ -26,11 +26,14 @@ const PRELOAD = path.join(__dirname, "fake-rtdb-preload.js");
  * @param {object} [opts.env]  extra environment for the script
  * @param {string[]} [opts.args]
  * @param {string} [opts.throwOn] a path whose read fails
- * @returns {{code: number, out: string, tree: object}}
+ * @returns {{code: number, out: string, tree: object, writes: Array<{op: string, paths: string[]}>}}
+ *   `writes` is every write CALL the script made, in order — one entry per
+ *   update()/set()/remove(), with the paths it named.
  */
 function runOpsScript(script, opts) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "canamed-ops-"));
   const file = path.join(dir, "db.json");
+  const log = path.join(dir, "writes.jsonl");
   try {
     fs.writeFileSync(file, JSON.stringify(opts.tree || {}));
     /* The parent's CLEANUP_* / ERASE_* / DATA_RIGHTS_* settings must not leak
@@ -45,6 +48,7 @@ function runOpsScript(script, opts) {
     Object.assign(env, {
       FAKE_RTDB_FILE: file,
       FAKE_RTDB_NOW: String(opts.now),
+      FAKE_RTDB_WRITE_LOG: log,
       FIREBASE_DATABASE_URL: "https://fake-rtdb.example.test"
     }, opts.throwOn ? { FAKE_RTDB_THROW_ON: opts.throwOn } : {}, opts.env || {});
     const r = spawnSync(process.execPath,
@@ -60,7 +64,10 @@ function runOpsScript(script, opts) {
     return {
       code: r.status,
       out: (r.stdout || "") + (r.stderr || ""),
-      tree: JSON.parse(fs.readFileSync(file, "utf8"))
+      tree: JSON.parse(fs.readFileSync(file, "utf8")),
+      writes: fs.existsSync(log)
+        ? fs.readFileSync(log, "utf8").split(String.fromCharCode(10)).filter(Boolean).map((line) => JSON.parse(line))
+        : []
     };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

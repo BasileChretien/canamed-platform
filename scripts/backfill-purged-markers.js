@@ -2,13 +2,30 @@
 /* Give sessions that were purged BEFORE the purge wrote markers the marker
  * they would have had. Run by hand, once; not scheduled.
  *
- * WHY. Since 2026-10-07 the rule on `withdrawals/<code>/<uid>` accepts a record
- * only for a session that is in the database or that carries a purge marker
+ * WHY. The rule on `withdrawals/<code>/<uid>` can require that the record name
+ * a session that is in the database or that carries a purge marker
  * (`purgedSessions/<code>`, written by scripts/cleanup-stale-sessions.js in
- * the update that deletes the session). Every session purged before that date
- * has no marker, so a participant returning to withdraw from one — the route
- * the account dialog's history row exists for — would be refused, for a
- * session they really took part in.
+ * the update that deletes the session). Every session purged before the purge
+ * wrote markers (2026-10-07) has none, so a participant returning to withdraw
+ * from one — the route the account dialog's history row exists for — would be
+ * refused, for a session they really took part in.
+ *
+ * ⚠️ THIS SCRIPT IS ALSO THE SWITCH. That requirement is OFF until this script
+ * has been run with BACKFILL_CONFIRM=1: the rule applies it only once
+ * `ops/purgedMarkersBackfilledAt` exists, and a confirmed run writes that node
+ * in the same update as the markers (session-trees.js,
+ * `PURGED_MARKERS_BACKFILLED_PATH`). Until then a withdrawal is accepted for
+ * any code, as it was before, and `erase-participant.js --dismiss` refuses to
+ * run. So confirming a run is a decision about participants, not only about
+ * markers, and it is the operator's:
+ *   - a session purged before the OLDEST snapshot you give it gets no marker,
+ *     and its participants are refused from then on — for good, unless a
+ *     later run is given a snapshot that still holds it;
+ *   - the snapshots are kept 90 days, so a session purged more than 90 days
+ *     before the run can never be marked.
+ * The dry run prints the oldest snapshot's date. Give it every snapshot the
+ * archive still holds. Nothing turns the requirement off again short of
+ * deleting that node by hand.
  *
  * WHERE THE EVIDENCE COMES FROM. The nightly snapshots. A session a snapshot
  * holds, and that is not in the database any more, was purged. The snapshots
@@ -42,15 +59,19 @@
  * there only if it is THAT session (session-trees.js, `isSameSession`). If it
  * cannot read them, it stops and writes nothing.
  *
- * ⚠️ RUN IT BEFORE THE RULE IS DEPLOYED, or in the same hour. Between the
- * deploy and this run, withdrawals for already-purged sessions are refused.
+ * WHEN. Any time after the rules that read the switch are deployed; nothing
+ * breaks while it has not been run. Sooner is better only because the
+ * snapshots age out: each day of waiting is a day's worth of long-purged
+ * sessions that can no longer be marked.
  *
  * WHAT IT WRITES. `purgedSessions/<code>` (or `purgedSessions/orgs/<slug>/
  * <code>`) = the date of the LAST snapshot holding the session that is gone,
  * epoch ms. That is when it was last known to exist — at most a night before
  * it was purged — and deliberately not "now". It never overwrites a marker,
  * never marks a session that is itself still in the database, and never
- * touches what is under a code.
+ * touches what is under a code. And, once, `ops/purgedMarkersBackfilledAt` =
+ * the time of the run (see above): written on the first confirmed run, with
+ * the markers or alone if there is nothing to mark, and never rewritten.
  *
  * DRY RUN BY DEFAULT — set BACKFILL_CONFIRM=1 to write.
  *
@@ -71,7 +92,7 @@ const { getDatabase } = require("firebase-admin/database");
 
 const {
   readSessionLocationsShallow, locationForKey, purgedMarkers,
-  sessionIdentity, isSameSession,
+  sessionIdentity, isSameSession, PURGED_MARKERS_BACKFILLED_PATH,
 } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -120,12 +141,15 @@ function isLocationKey(key) {
  * many it left unmarked and why.
  *
  * @returns {{seen: Object<string, Array<{identity: object, takenAt: number}>>,
- *            named: Set<string>, malformed: number}}
+ *            named: Set<string>, malformed: number, oldest: number, newest: number}}
+ *   `oldest` / `newest`: when the first and the last of the snapshots were
+ *   taken. A session purged before the oldest is in none of them.
  */
 function readSnapshots(files, now) {
   const seen = {};
   const named = new Set();
   let malformed = 0;
+  let oldest = Infinity, newest = -Infinity;
   for (const file of files) {
     let payload;
     try {
@@ -152,6 +176,8 @@ function readSnapshots(files, now) {
         "dated by the snapshot that shows the session; without a date in the " +
         "past there is nothing to date it by.");
     }
+    oldest = Math.min(oldest, takenAt);
+    newest = Math.max(newest, takenAt);
     for (const key of Object.keys(sessions)) {
       if (!isLocationKey(key)) { malformed++; continue; }
       named.add(key);
@@ -161,7 +187,7 @@ function readSnapshots(files, now) {
       seen[key].push({ identity, takenAt });
     }
   }
-  return { seen, named, malformed };
+  return { seen, named, malformed, oldest, newest };
 }
 
 /**
@@ -213,6 +239,11 @@ async function main() {
     (await readSessionLocationsShallow({ app, databaseURL: DB_URL })).map((loc) => loc.key));
   const markersSnap = await db.ref("purgedSessions").get();
   const marked = purgedMarkers(markersSnap.exists() ? markersSnap.val() : {});
+  /* THE SWITCH. A failed read throws: taken for "off", this run would write a
+     new date over the one that says when the refusals began; taken for "on",
+     it would never turn the rule on. */
+  const switchSnap = await db.ref(PURGED_MARKERS_BACKFILLED_PATH).get();
+  const alreadyOn = switchSnap.exists();
 
   const updates = {};
   const toMark = [];
@@ -252,9 +283,32 @@ async function main() {
     console.log(`Keys that are not a session location:     ${snapshots.malformed} (skipped)`);
   }
   if (args.list) for (const key of toMark) console.log(`    ${key}`);
+  const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+  console.log(`Snapshots span:               ${day(snapshots.oldest)} … ${day(snapshots.newest)}`);
   console.log("");
 
-  if (!toMark.length) {
+  /* The switch goes in the SAME update as the markers, and only if it is not
+     already there: its date is when the refusals began. */
+  const turnsOn = !alreadyOn;
+  if (turnsOn) updates[PURGED_MARKERS_BACKFILLED_PATH] = Date.now();
+
+  if (alreadyOn) {
+    console.log(`Strict withdrawal rule:       already ON, since ${new Date(Number(switchSnap.val())).toISOString()} (left as it is)`);
+  } else {
+    console.log(`Strict withdrawal rule:       ${CONFIRM ? "ON, as of this run" : "OFF — this run, confirmed, turns it ON"}`);
+    console.log("  ON means: a withdrawal or erasure request is accepted only for a " +
+                "session that is in the database or carries a purge marker. A " +
+                `session purged before ${day(snapshots.oldest)}, the oldest snapshot given ` +
+                "here, is in none of these files and gets no marker: its " +
+                "participants are refused from then on, with \"Could not record " +
+                "your withdrawal\", unless a later run is given a snapshot that " +
+                "holds it. Give this every snapshot the archive still has. " +
+                "Confirming is your decision that this is acceptable; nothing " +
+                "but deleting " + PURGED_MARKERS_BACKFILLED_PATH + " by hand turns it off again.");
+  }
+  console.log("");
+
+  if (!toMark.length && !turnsOn) {
     console.log("Nothing to mark.");
     return 0;
   }
@@ -263,7 +317,9 @@ async function main() {
     return 0;
   }
   await db.ref().update(updates);
-  console.log(`MARKED ${toMark.length} purged session(s).`);
+  if (toMark.length) console.log(`MARKED ${toMark.length} purged session(s).`);
+  else console.log("Nothing to mark.");
+  if (turnsOn) console.log("The strict withdrawal rule is ON.");
   return 0;
 }
 

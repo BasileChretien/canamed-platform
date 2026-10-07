@@ -26,6 +26,7 @@ const path = require("node:path");
 
 const {
   sessionLocations, sessionLocationsFromKeys, locationForKey, purgedMarkers,
+  PURGED_MARKERS_BACKFILLED_PATH,
 } = require("../scripts/lib/session-trees");
 const { applySuppression } = require("../scripts/lib/suppression");
 const { flattenErasures } = require("../scripts/lib/data-rights");
@@ -122,6 +123,9 @@ test("a node with no timestamps is purged WITHOUT a marker: it was never a sessi
       "REAL-3": { closed: { at: ago(31) } },                  // legacy: no created
     },
     withdrawals: { "JUNK-1": { uidVisitor: { research: false, erasure: true, at: ago(1) } } },
+    /* The marker backfill has run — the erasure tool dismisses nothing before
+       it has (tests/erase-purged-session.test.js). The purge does not read it. */
+    ops: { purgedMarkersBackfilledAt: ago(10) },
   });
   assert.strictEqual(r.code, 0, r.out);
   for (const code of ["JUNK-1", "REAL-1", "REAL-2", "REAL-3"]) {
@@ -243,6 +247,75 @@ test("the backfill marks sessions a snapshot holds and the database no longer do
   // Nothing else in the database moved.
   assert.deepStrictEqual(live.tree.sessions, tree.sessions);
   assert.deepStrictEqual(live.tree.orgs, tree.orgs);
+});
+
+test("a confirmed backfill turns the strict rule ON, in the same write as the markers — and nothing else does", () => {
+  /* The rule on `withdrawals/…` asks for a session or a marker only once
+     `ops/purgedMarkersBackfilledAt` exists (tests/withdrawal.test.js). This
+     script is the one thing that writes it. ONE update, markers and switch
+     together: were the switch written first, every participant of a purged
+     session would be refused for as long as the second write took — or for
+     ever, if it failed. `writes` is every write call the script made. */
+  const FLAG = PURGED_MARKERS_BACKFILLED_PATH;
+  const CONFIRM = { BACKFILL_CONFIRM: "1" };
+  const snap = snapshot({ "GONE-1": REAL, "orgs/uni-x/GONE-2": REAL });
+
+  const dry = backfill({}, [snap]);
+  assert.strictEqual(dry.code, 0, dry.out);
+  assert.deepStrictEqual(dry.writes, [], "a dry run made a write");
+  assert.strictEqual(at(dry.tree, FLAG), null);
+  /* The dry run is where the operator decides, so it must say what confirming
+     does to participants — not only how many markers it writes. */
+  assert.match(dry.out, /Strict withdrawal rule:\s+OFF/);
+  assert.match(dry.out, /turns? (it|the strict rule) ON/i);
+  assert.match(dry.out, /refused/i);
+  assert.match(dry.out, /2026-09-20/, "it must name the oldest snapshot it was given: sessions purged before it get no marker");
+
+  const live = backfill({}, [snap], CONFIRM);
+  assert.strictEqual(live.code, 0, live.out);
+  assert.deepStrictEqual(live.writes, [
+    { op: "update", paths: [FLAG, "purgedSessions/GONE-1", "purgedSessions/orgs/uni-x/GONE-2"].sort() },
+  ], "the switch and the markers must go in ONE update");
+  assert.strictEqual(at(live.tree, FLAG), NOW, "the switch records when it was turned on");
+  assert.match(live.out, /Strict withdrawal rule:\s+ON/);
+
+  /* A database with nothing to mark can still turn the rule on: a confirmed
+     run with no markers to write writes the switch alone. */
+  const still = { sessions: { "HERE-1": { created: { at: ago(3) } } } };
+  const clean = backfill(still, [snapshot({ "HERE-1": still.sessions["HERE-1"] })], CONFIRM);
+  assert.strictEqual(clean.code, 0, clean.out);
+  assert.deepStrictEqual(clean.writes, [{ op: "update", paths: [FLAG] }]);
+  assert.strictEqual(at(clean.tree, FLAG), NOW);
+  assert.strictEqual(at(clean.tree, "purgedSessions"), null);
+  // …and its dry run says so, and writes nothing.
+  const cleanDry = backfill(still, [snapshot({ "HERE-1": still.sessions["HERE-1"] })]);
+  assert.deepStrictEqual(cleanDry.writes, []);
+  assert.match(cleanDry.out, /Strict withdrawal rule:\s+OFF/);
+
+  /* Already on: the date it was turned on is never rewritten — it is when the
+     refusals began — and a later run with more snapshots only adds markers. */
+  const on = { ops: { purgedMarkersBackfilledAt: 1234, lastBackup: { at: 5 } } };
+  const again = backfill(on, [snap], CONFIRM);
+  assert.strictEqual(again.code, 0, again.out);
+  assert.deepStrictEqual(again.writes, [
+    { op: "update", paths: ["purgedSessions/GONE-1", "purgedSessions/orgs/uni-x/GONE-2"] },
+  ]);
+  assert.deepStrictEqual(again.tree.ops, on.ops, "the switch's date, or its neighbour under ops/, was touched");
+  assert.match(again.out, /Strict withdrawal rule:\s+already ON/);
+  const noop = backfill(live.tree, [snap], CONFIRM);
+  assert.strictEqual(noop.code, 0, noop.out);
+  assert.deepStrictEqual(noop.writes, [], "a second identical run wrote something");
+  assert.deepStrictEqual(noop.tree, live.tree);
+
+  // A run that is refused, or cannot read, turns nothing on.
+  const refused = backfill({}, [snap, { some: "export" }], CONFIRM);
+  assert.notStrictEqual(refused.code, 0);
+  assert.deepStrictEqual(refused.writes, []);
+  for (const throwOn of ["purgedSessions", FLAG, "sessions"]) {
+    const blind = backfill({}, [snap], Object.assign({ FAKE_RTDB_THROW_ON: throwOn }, CONFIRM));
+    assert.notStrictEqual(blind.code, 0, throwOn + ": a failed read was taken for an answer");
+    assert.deepStrictEqual(blind.writes, [], throwOn);
+  }
 });
 
 test("a session the snapshots hold was purged unless THAT session is in the database — a key under its code is not it", () => {

@@ -308,9 +308,10 @@ which of these it is:
   not that the session was never purged. A session purged before the purge
   wrote markers (2026-10-07) has none until the backfill above has been run,
   and what sits under its code today may be a visitor's row or another
-  session. **Do not dismiss anything under this heading until the backfill has
-  been run once**; after it, a session the snapshots hold that is not the one
-  in the database has its marker, and this heading means what it says.
+  session. So **`--dismiss` refuses to run at all until the backfill has been
+  run once** (it reads the switch the backfill sets, below); after it, a
+  session the snapshots hold that is not the one in the database has its
+  marker, and this heading means what it says.
 
 `--dismiss` also removes that session's row from the person's history, and is
 refused for a session that carries a purge marker: that session existed, so the
@@ -325,6 +326,47 @@ database again" when they see this; it changes nothing you do. (Until the
 review of 2026-10-07 the tool treated such a code as a live session, found
 nothing of the person's in it, and offered `--dismiss` — which closed a real
 request unanswered.)
+
+#### The backfill is also the switch — read this before confirming one
+
+Until the backfill has been run with `BACKFILL_CONFIRM=1`, the rule that makes
+a withdrawal name a real session is **off**: a withdrawal or erasure request is
+accepted for any code, as it always was, and nothing in this section's
+"exit code 3" list can be dismissed. A confirmed run writes the markers and, in
+the same update, `ops/purgedMarkersBackfilledAt`, which turns the rule **on**.
+Nothing else writes that node, no client can read or change it, and nothing
+turns the rule off again short of deleting it by hand.
+
+That makes confirming a decision about participants, and it is yours:
+
+- A session purged **before the oldest snapshot you give the script** is in
+  none of the files and gets no marker. From then on its participants are
+  refused — "Could not record your withdrawal — please try again, or contact
+  the facilitator" — and trying again cannot work.
+- Snapshots are kept 90 days, so a session purged more than 90 days before the
+  run can never be marked. Every day you wait, one more day of such sessions
+  passes out of reach.
+
+So: download **every** snapshot the archive still holds
+(`backups/canamed-backup-YYYY-MM-DD.json` in the Scaleway bucket), and read the
+dry run. It prints the dates the snapshots span, how many sessions it will
+mark, and what turning the rule on means.
+
+```bash
+# Needs the service-account JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON —
+# default credentials alone are refused (the session listing wants a key).
+node scripts/backfill-purged-markers.js --file <a.json> --file <b.json>
+```
+
+```bash
+BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <a.json> --file <b.json>
+```
+
+Then run the first command again: it must print `to mark: 0` and
+`Strict withdrawal rule: already ON`. Running it later with newer snapshots
+only adds markers. The snapshot files are identified personal data: delete
+them from your machine when you are done. There is no workflow for this on
+purpose — the snapshots must not be downloaded onto a hosted runner.
 
 **The backfill marks only what was a session**: a node that had a `created` or
 a `closed` timestamp in some snapshot, the same test the purge applies. A

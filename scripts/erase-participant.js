@@ -98,6 +98,7 @@ const { getDatabase } = require("firebase-admin/database");
 
 const {
   readSessionLocations, withdrawalLocations, purgedMarkers, locationForKey,
+  PURGED_MARKERS_BACKFILLED_PATH,
 } = require("./lib/session-trees");
 const { resolveIdentity, planSessionErasure } = require("./lib/erasure");
 const { buildRecord, canonicalReason, describeReasons } = require("./lib/suppression");
@@ -399,7 +400,13 @@ function printPurgedPlan(closable) {
   console.log("");
 }
 
-function printNotActedOn(gone, liveNothing) {
+function printNotActedOn(gone, liveNothing, backfilled) {
+  /* While the marker backfill has not run, --dismiss refuses (see dismiss()).
+     Say so here, or this sends the operator to a command that will not run. */
+  const notYet = "  --dismiss is refused until the purge markers have been " +
+                 "backfilled: run scripts/backfill-purged-markers.js once (dry " +
+                 "run first, then BACKFILL_CONFIRM=1), then this again. Until then " +
+                 "\"no purge marker\" does not mean the session was never purged.";
   if (gone.needsUid) {
     console.log("NOT ACTED ON — that session is not in the database. A session that " +
                 "has been purged can only be addressed with --uid: clientIds and " +
@@ -410,10 +417,17 @@ function printNotActedOn(gone, liveNothing) {
     console.log(`NOT ACTED ON — ${liveNothing.length} open request(s) name a session that IS ` +
                 "in the database, in which this person has nothing to erase:");
     for (const key of liveNothing) console.log(`  ${key}`);
-    console.log("  Already erased and asked again, or never took part. The request " +
-                "stays open, and the monitor keeps counting it, until it is closed " +
-                "with --uid … --session … --dismiss --reason \"…\" (which checks " +
-                "again that nothing of theirs is there).");
+    if (backfilled) {
+      console.log("  Already erased and asked again, or never took part. The request " +
+                  "stays open, and the monitor keeps counting it, until it is closed " +
+                  "with --uid … --session … --dismiss --reason \"…\" (which checks " +
+                  "again that nothing of theirs is there).");
+    } else {
+      console.log("  Already erased and asked again, never took part — or the session " +
+                  "they took part in was purged and something else is under its " +
+                  "code now. The request stays open, and the monitor keeps counting it.");
+      console.log(notYet);
+    }
     console.log("");
   }
   if (!gone.noMarker.length) return;
@@ -426,13 +440,18 @@ function printNotActedOn(gone, liveNothing) {
   console.log("  - it WAS a session, purged before the purge wrote markers " +
               "(2026-10-07): rebuild the markers from the nightly snapshots with " +
               "scripts/backfill-purged-markers.js, then run this again;");
-  console.log("  - nothing in the snapshots or your own records shows it: remove " +
-              "the request with --uid … --session … --dismiss --reason \"…\".");
+  if (backfilled) {
+    console.log("  - nothing in the snapshots or your own records shows it: remove " +
+                "the request with --uid … --session … --dismiss --reason \"…\".");
+  } else {
+    console.log("  - nothing shows it: it can be removed once the backfill has run.");
+    console.log(notYet);
+  }
   console.log("");
 }
 
 /** Remove ONE request that nothing ties to a real session. Not an erasure. */
-async function dismiss(db, locations, args) {
+async function dismiss(db, locations, args, backfilled) {
   const refuse = (why) => {
     console.error("REFUSED: " + why);
     console.error("Nothing was written.");
@@ -456,6 +475,22 @@ async function dismiss(db, locations, args) {
                   "snapshots may still hold it. Answer the request " +
                   "(--research-copy-checked) rather than dismissing it — whatever " +
                   "is in the database under that code now.");
+  }
+  /* NOT BEFORE THE BACKFILL. Everything below reads "no purge marker" as "no
+     session was purged under this code" — true only once the markers of
+     sessions purged before the purge wrote them have been rebuilt. Until
+     then a dismissal here can be the deletion of a real, unanswered request
+     for a session the snapshots still hold. This was a sentence in the
+     operator procedure; it is a check because the mistake is silent. */
+  if (!backfilled) {
+    return refuse("the purge markers have not been backfilled yet, so --dismiss is " +
+                  "refused. Until scripts/backfill-purged-markers.js has been run " +
+                  "once with BACKFILL_CONFIRM=1, a session purged before the purge " +
+                  "wrote markers has none, and this tool cannot tell it from a code " +
+                  "that never was a session — whatever is in the database under " +
+                  "that code today. Run the backfill, then this again: a request " +
+                  "for a session the snapshots hold will then be answered, not " +
+                  "dismissed.");
   }
   const liveLoc = locations.find((l) => l.key === args.session);
   let why;
@@ -563,7 +598,13 @@ async function main() {
   console.log("");
 
   const locations = await readSessionLocations(db);
-  if (args.dismiss) return dismiss(db, locations, args);
+  /* HAS THE MARKER BACKFILL RUN? Until it has, a session purged before the
+     purge wrote markers has none, and "no purge marker" says nothing about
+     whether a code was ever a session. That decides whether a request may be
+     DISMISSED, and what this run tells the operator to do next. A failed read
+     throws: nothing is assumed either way. */
+  const backfilled = (await db.ref(PURGED_MARKERS_BACKFILLED_PATH).get()).exists();
+  if (args.dismiss) return dismiss(db, locations, args, backfilled);
 
   const live = await planLive(db, locations, args);
   const gone = await planPurged(db, locations, args);
@@ -579,7 +620,7 @@ async function main() {
     console.log("If that is unexpected, check the identifier — this tool never " +
                 "matches on a display name.");
     console.log("");
-    printNotActedOn(gone, liveNothing);
+    printNotActedOn(gone, liveNothing, backfilled);
     return leftOpen;
   }
 
@@ -597,7 +638,7 @@ async function main() {
   }
   if (live) printLivePlan(live);
   if (gone.closable.length) printPurgedPlan(gone.closable);
-  printNotActedOn(gone, liveNothing);
+  printNotActedOn(gone, liveNothing, backfilled);
 
   if (!CONFIRM) {
     console.log("DRY RUN — nothing was written. Re-run with ERASE_CONFIRM=1" +

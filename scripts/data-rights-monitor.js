@@ -26,10 +26,12 @@
  * WHAT IT CAN AND CANNOT TELL YOU. It counts a request whether or not its
  * session is still in the database, and says how many are in the second group.
  * Within that group it separates a session the purge removed (it left a marker
- * under `purgedSessions`) from one that nothing shows ever existed. The rules
- * accept a withdrawal only for a session that exists or carries a marker, so a
- * record with neither predates that rule, or names a session purged before the
- * purge wrote markers — it cannot say which. scripts/erase-participant.js
+ * under `purgedSessions`) from one that nothing shows ever existed. Once the
+ * marker backfill has been run, the rules accept a withdrawal only for a
+ * session that exists or carries a marker; until then they accept one for any
+ * code. So a record with neither was written while that requirement was off,
+ * or names a session purged before the purge wrote markers and not yet
+ * backfilled — it cannot say which. scripts/erase-participant.js
  * answers a request for a purged session (with the operator's word on the
  * research copy) and writes nothing for one with no marker; the failure
  * message below says which is which. DPA Annex VI, G12.

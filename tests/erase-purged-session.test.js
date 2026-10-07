@@ -54,8 +54,12 @@ const sessionAsArchived = () => ({
   } } } },
 });
 
-/* The database today: the session is gone, its marker and the request are not. */
+/* The database today: the session is gone, its marker and the request are not.
+   The marker backfill has been run (`ops/purgedMarkersBackfilledAt`), which is
+   what lets a request be dismissed at all — see "--dismiss is refused until
+   the purge markers have been backfilled". */
 const purgedTree = () => ({
+  ops: { purgedMarkersBackfilledAt: ago(30) },
   sessions: { "LIVE-1": { created: { at: ago(2) }, clientMapping: { cx: "uidZ" }, pool: { cx: { name: "Z" } } } },
   purgedSessions: { "GONE-1": ago(40) },
   withdrawals: { "GONE-1": { uidA: request(45), uidB: { research: false, at: ago(45) } } },
@@ -595,9 +599,12 @@ test("the ledger's writer refuses a reason outside the list, whoever calls it", 
 // ------------------------------------------------------------------ dismiss
 
 test("--dismiss removes a request that nothing ties to a real session, and only that", () => {
-  /* The rules no longer accept such a record, so these are leftovers: written
-     before the rule, for a code that never existed or a session purged before
-     the purge wrote markers. The monitor counts them for ever otherwise. */
+  /* With the strict rule on — it is, here: `purgedTree()` has the backfill's
+     switch — the rules no longer accept such a record, so these are leftovers:
+     written while it was off, for a code that never existed. (A session
+     purged before the purge wrote markers has its marker by now; that is what
+     the backfill is for, and why nothing is dismissed before it has run.)
+     The monitor counts them for ever otherwise. */
   const tree = purgedTree();
   tree.withdrawals["NEVER-WAS"] = { uidA: request(50), uidB: request(50) };
   tree.users.uidA.history["NEVER-WAS"] = { code: "NEVER-WAS", joinedAt: ago(60) };
@@ -641,6 +648,68 @@ test("--dismiss closes a request under a LIVE session when the person left nothi
   assert.strictEqual(at(r.tree, "withdrawals/LIVE-1"), null);
   assert.deepStrictEqual(r.tree.sessions, tree.sessions);
   assert.strictEqual(at(r.tree, "erasures"), null);
+});
+
+test("--dismiss is refused until the purge markers have been backfilled", () => {
+  /* A session purged before the purge wrote markers has none until
+     scripts/backfill-purged-markers.js has run — and until then "no purge
+     marker" is true of a session that was purged and of a code that never was
+     one alike, with or without something under the code today. Dismissing on
+     that reading deleted a real, unanswered request (review round 2, F2). The
+     warning not to was prose in the operator procedure; it is now a check on
+     the switch the backfill sets. */
+  const backfilled = purgedTree();
+  backfilled.withdrawals["NEVER-WAS"] = { uidA: request(50) };
+  backfilled.withdrawals["LIVE-1"] = { uidA: request(35) };
+  const notYet = JSON.parse(JSON.stringify(backfilled));
+  delete notYet.ops;
+
+  for (const [label, session] of [
+    ["no session and no marker", "NEVER-WAS"],
+    ["a code that is in the database, where the person has nothing", "LIVE-1"],
+  ]) {
+    const args = ["--uid", "uidA", "--session", session, "--dismiss", "--reason", "x"];
+    const refused = erase(notYet, args, LIVE);
+    assert.strictEqual(refused.code, 2, label + ": not refused\n" + refused.out);
+    assert.match(refused.out, /REFUSED/, label);
+    assert.match(refused.out, /backfill-purged-markers\.js/, label + ": it must say what has to be run first");
+    assert.deepStrictEqual(refused.writes, [], label + ": something was written");
+    assert.deepStrictEqual(refused.tree, notYet, label);
+    /* The allow: the same command on the same database, with the one thing
+       that differs — the backfill has run. */
+    const allowed = erase(backfilled, args, LIVE);
+    assert.strictEqual(allowed.code, 0, label + ": refused although the backfill has run\n" + allowed.out);
+    assert.strictEqual(at(allowed.tree, `withdrawals/${session}/uidA`), null, label);
+  }
+
+  /* Under a marker the reason for refusing is the marker, switch or no switch:
+     the request is to be answered. */
+  for (const tree of [backfilled, notYet]) {
+    const r = erase(tree, ["--uid", "uidA", "--session", "GONE-1", "--dismiss", "--reason", "x"], LIVE);
+    assert.strictEqual(r.code, 2, r.out);
+    assert.match(r.out, /the purge left a marker/);
+  }
+
+  /* The ordinary run must not send anyone to a command that will refuse.
+     Without the switch it points at the backfill; with it, at --dismiss. */
+  for (const session of ["NEVER-WAS", "LIVE-1"]) {
+    const before = erase(notYet, ["--uid", "uidA", "--session", session], LIVE);
+    assert.strictEqual(before.code, 3, before.out);
+    assert.match(before.out, /backfill-purged-markers\.js/, session);
+    assert.match(before.out, /--dismiss is refused until/i, session);
+    const after = erase(backfilled, ["--uid", "uidA", "--session", session], LIVE);
+    assert.strictEqual(after.code, 3, after.out);
+    assert.match(after.out, /--dismiss --reason/, session);
+    assert.doesNotMatch(after.out, /--dismiss is refused until/i, session);
+  }
+
+  // The switch cannot be read: nothing is assumed, nothing is written.
+  const blind = runOpsScript("erase-participant.js", {
+    tree: backfilled, now: NOW, env: LIVE, throwOn: "ops/purgedMarkersBackfilledAt",
+    args: ["--uid", "uidA", "--session", "NEVER-WAS", "--dismiss", "--reason", "x"],
+  });
+  assert.notStrictEqual(blind.code, 0, "an unreadable switch was taken for an answer");
+  assert.deepStrictEqual(blind.writes, []);
 });
 
 test("--dismiss refuses anything that could be a real request", () => {

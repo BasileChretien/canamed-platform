@@ -211,6 +211,26 @@ function asKeyed(v) {
 }
 
 /**
+ * THE SWITCH that turns on "a withdrawal must name a session that exists or
+ * was purged": epoch ms of the confirmed marker backfill that set it.
+ *
+ * The rule on `withdrawals/…` wants the session's `created` record or a purge
+ * marker ONLY once this node exists. Sessions purged before the purge wrote
+ * markers have none; requiring one from the day the rule shipped would have
+ * refused their participants' withdrawals until an operator ran
+ * scripts/backfill-purged-markers.js — and for a session purged more than 90
+ * days earlier, for good, with nobody having decided that. So the backfill
+ * writes this node in the same update as the markers, and until then the rule
+ * asks only what it asked before: that the record be the writer's own.
+ *
+ * Written by the backfill and by nothing else. `ops/` has no entry in
+ * database.rules.json, so no client can read or write it; a rule that opened
+ * any of `ops/` would hand this switch to whoever found it
+ * (tests/withdrawal.test.js holds the two together).
+ */
+const PURGED_MARKERS_BACKFILLED_PATH = "ops/purgedMarkersBackfilledAt";
+
+/**
  * WAS THIS EVER A SESSION? Only if it had a `created/at` or a `closed/at`.
  *
  * Something under `sessions/<code>` is not evidence of a session: any signed-in
@@ -515,6 +535,7 @@ module.exports = {
   sessionLocations,
   sessionLocationsFromKeys,
   withdrawalLocations,
+  PURGED_MARKERS_BACKFILLED_PATH,
   hadSessionTimestamp,
   bodyWasSession,
   sessionIdentity,

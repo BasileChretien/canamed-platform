@@ -20,6 +20,10 @@
  *   FAKE_RTDB_NOW       epoch ms that Date.now() returns
  *   FAKE_RTDB_THROW_ON  optional path whose read fails: a rejected Admin read,
  *                       or an HTTP 401 for a keys-only listing over REST
+ *   FAKE_RTDB_WRITE_LOG optional file: one JSON line per WRITE CALL the script
+ *                       makes ({ op, paths }), so a test can tell one
+ *                       multi-path update from two writes that leave the same
+ *                       tree behind — the difference between "atomic" and not
  */
 
 const Module = require("node:module");
@@ -29,6 +33,10 @@ const FILE = process.env.FAKE_RTDB_FILE;
 if (!FILE) throw new Error("fake-rtdb-preload: FAKE_RTDB_FILE is not set");
 const tree = JSON.parse(fs.readFileSync(FILE, "utf8"));
 const throwOn = process.env.FAKE_RTDB_THROW_ON || "";
+const writeLog = process.env.FAKE_RTDB_WRITE_LOG || "";
+const logWrite = (op, paths) => {
+  if (writeLog) fs.appendFileSync(writeLog, JSON.stringify({ op, paths }) + String.fromCharCode(10));
+};
 
 if (process.env.FAKE_RTDB_NOW) {
   const fixed = Number(process.env.FAKE_RTDB_NOW);
@@ -110,11 +118,12 @@ const db = {
             }
           }
         }
+        logWrite("update", paths.slice().sort());
         for (const key of Object.keys(obj)) put(where ? where + "/" + key : key, obj[key]);
         prune(tree);
       },
-      async set(value) { put(where, value); prune(tree); },
-      async remove() { put(where, null); prune(tree); },
+      async set(value) { logWrite("set", [where]); put(where, value); prune(tree); },
+      async remove() { logWrite("remove", [where]); put(where, null); prune(tree); },
       push() { return db.ref(where + "/" + pushKey(where)); }
     };
   }

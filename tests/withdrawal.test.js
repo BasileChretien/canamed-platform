@@ -91,6 +91,12 @@ const MARKER_AT = {
   default: "root.child('purgedSessions').child($sessionId)",
   orgs: "root.child('purgedSessions').child('orgs').child($orgSlug).child($sessionId)",
 };
+/* The switch: the same node in both trees, written by the marker backfill and
+   by nothing else. The rule's text is derived from the constant the backfill
+   writes to, so the two cannot name different nodes. */
+const { PURGED_MARKERS_BACKFILLED_PATH } = require("../scripts/lib/session-trees");
+const BACKFILLED = "root" + String(PURGED_MARKERS_BACKFILLED_PATH).split("/")
+  .map((seg) => `.child('${seg}')`).join("");
 
 test("both trees carry the same leaf, each addressing its own tree", () => {
   /* Compared as a re-prefix, not as text: the default leaf, with its session
@@ -122,7 +128,7 @@ test("a withdrawal can only name a session that was CREATED, or was purged", () 
   for (const [label, get] of LEAVES) {
     const w = get()[".write"];
     assert.strictEqual(w,
-      `auth != null && auth.uid == $uid && (${SESSION_AT[label]}.exists() || ${MARKER_AT[label]}.exists())`,
+      `auth != null && auth.uid == $uid && (!${BACKFILLED}.exists() || ${SESSION_AT[label]}.exists() || ${MARKER_AT[label]}.exists())`,
       `${label}: the write is not bound to its own session or its own marker`);
   }
   /* A mis-copied prefix here fails OPEN in one direction — an org record
@@ -130,6 +136,50 @@ test("a withdrawal can only name a session that was CREATED, or was purged", () 
   const org = LEAVES[1][1]()[".write"];
   assert.ok(!org.includes(SESSION_AT.default) && !org.includes(MARKER_AT.default + ".exists()"),
     "the org rule addresses the default tree");
+});
+
+test("the session-or-marker requirement is OFF until the marker backfill has run", () => {
+  /* Sessions purged before the purge wrote markers have none. Had the rule
+     required one from the day it shipped, a participant returning to withdraw
+     from such a session — the route the account dialog's history row exists
+     for, and one that worked the day before — would have been refused until an
+     operator ran the backfill, and for a session purged more than 90 days
+     earlier, for good. So the requirement waits for a switch:
+     `ops/purgedMarkersBackfilledAt`, which the backfill writes in the same
+     update as the markers. Absent, the rule asks what it asked before this
+     change: that the record be the writer's own. */
+  assert.strictEqual(PURGED_MARKERS_BACKFILLED_PATH, "ops/purgedMarkersBackfilledAt");
+  for (const [label, get] of LEAVES) {
+    const w = get()[".write"];
+    assert.ok(w.startsWith(`auth != null && auth.uid == $uid && (!${BACKFILLED}.exists() || `),
+      `${label}: with the switch absent the write must need nothing but the writer's own uid`);
+    // The switch is ONE node, the same for both trees — not a per-tree one a
+    // mis-copied prefix could leave permanently off for organisations.
+    assert.strictEqual(w.split(BACKFILLED).length - 1, 1, label);
+  }
+  /* What stays ON whatever the switch says: the date window and the record's
+     shape. They are `.validate` rules and do not mention it. */
+  for (const [label, get] of LEAVES) {
+    assert.ok(!JSON.stringify([get()[".validate"], get().at, get().research, get().erasure])
+      .includes("purgedMarkersBackfilledAt"), label + ": a validate rule was put behind the switch");
+  }
+});
+
+test("no client can read or set the switch", () => {
+  /* It is a standing change to what every participant may write. `ops/` has
+     no entry in the rules, so the root's `.read: false` / `.write: false`
+     apply to all of it; an entry that opened any part of it would hand the
+     switch to whoever found it. (What the rules really do with a client's
+     write is the emulator suite's to show.) */
+  assert.strictEqual(rules[".read"], false);
+  assert.strictEqual(rules[".write"], false);
+  assert.strictEqual(rules.ops, undefined,
+    "an `ops` entry appeared in the rules. If it must exist, it must deny every " +
+    "client read and write, and this test must say so explicitly.");
+  // Nothing else in the rules may grant a write there by another route.
+  const text = JSON.stringify(rules);
+  assert.strictEqual(text.split("purgedMarkersBackfilledAt").length - 1, 2,
+    "the switch is read by exactly the two withdrawal rules, and written by none");
 });
 
 test("the request's date is the server's, to within a day", () => {
