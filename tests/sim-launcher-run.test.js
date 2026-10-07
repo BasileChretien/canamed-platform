@@ -97,6 +97,19 @@ function assertSimNeverStarted(ctx, out) {
     "answers there.\nLauncher output:\n" + out);
 }
 
+/* For the scenarios that need the sim RUNNING: wait for it to be writing (and
+   for `also`, a file it leaves when it is fully set up) — or for the launcher
+   to have ended instead, which is then the finding, made at once rather than
+   after waiting out a sim that is never coming. */
+async function simRunning(ctx, run, also) {
+  await until("the sim to be running",
+    () => run.endedAt() !== null || (ctx.exists("sim-beats") && (!also || ctx.exists(also))),
+    REACH_MS);
+  assert.strictEqual(run.endedAt(), null,
+    "the launcher ended without ever running the sim against its OWN emulator\n" +
+    run.output());
+}
+
 /* When the stand-in sim last wrote: the last COMPLETE line of its log. It is
    killed mid-run here, so the line it was writing at that instant may be cut
    short — and that one is not a time. */
@@ -121,7 +134,7 @@ describe("the sim launcher, run for real", { concurrency: true }, () => {
     { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
       const run = ctx.run({ FAKE_EXEC_MODE: "serve" });
       const cli = await cliStarted(ctx);
-      await until("the sim to start", () => ctx.exists("sim.pid"), REACH_MS);
+      await simRunning(ctx, run);
       const sim = await ctx.pid("sim.pid");
       assert.ok(await isListening(ctx.ports.web),
         "the platform server must be on the port PORT names — not on 8765, which " +
@@ -290,8 +303,7 @@ describe("the sim launcher, run for real", { concurrency: true }, () => {
         FAKE_SIM_BYSTANDER_PORT: String(ctx.ports.spare)
       });
       await cliStarted(ctx);
-      await until("the sim to be running",
-        () => ctx.exists("sim-beats") && ctx.exists("bystander.pid"), REACH_MS);
+      await simRunning(ctx, run, "bystander.pid");
       const sim = await ctx.pid("sim.pid");
 
       ctx.release();                      // this run's emulator crashes
@@ -341,7 +353,7 @@ describe("the sim launcher, run for real", { concurrency: true }, () => {
 
       const run = ctx.run({ FAKE_EXEC_MODE: "serve", FAKE_HOLD_READ_AFTER_CLI_EXIT: "1" });
       await cliStarted(ctx);
-      await until("the sim to be running", () => ctx.exists("sim-beats"), REACH_MS);
+      await simRunning(ctx, run);
 
       ctx.release();                      // this run's emulator goes
       await until("the launcher to learn its emulator has gone",

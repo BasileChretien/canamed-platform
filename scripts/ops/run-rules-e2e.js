@@ -394,23 +394,34 @@ function sweep(failed) {
    killed. The bound is already running, and the exit code stays the first
    signal's. */
 const STOP_WAIT_MS = 10000;
-let interrupted = null;   // { signal, exitCode }, from the first signal on
+let interrupted = null;   // { signal, exitCode, at, toldAt }, from the first signal on
 function stop(signal, exitCode) {
   if (interrupted) {
     console.warn("rules-e2e: " + signal + " — already stopping (" +
       interrupted.signal + "); waiting for the suite to exit.");
     return;
   }
-  interrupted = { signal, exitCode };
+  interrupted = { signal, exitCode, at: Date.now() };
   console.log("rules-e2e: " + signal + " — stopping the suite, then sweeping once " +
     "it has exited (" + STOP_WAIT_MS / 1000 + " s at most).");
   try {
     if (process.platform === "win32") {
       spawnSync("taskkill", ["/F", "/T", "/PID", String(child.pid)], { stdio: "ignore" });
+      /* The tree under the child is dead, so there is no lineage left for the
+         ownership poll to show — and each look it takes is a synchronous
+         netstat, standing between this handler and the child's "exit". (Not
+         so elsewhere: a child told to stop may take seconds over it, and a
+         listener it has not been seen with yet can still be recognised.) */
+      clearTimeout(ownershipPoll);
     } else {
       child.kill(signal);
     }
   } catch (e) { /* already gone */ }
+  /* Telling the child is not instant on Windows: taskkill asks WMI for the
+     tree, and took 16 s once with a dozen process-table reads competing for
+     it. That is the machine. The wait proper starts here, and the two are
+     reported apart. */
+  interrupted.toldAt = Date.now();
   setTimeout(() => {
     console.warn("rules-e2e: the suite did not exit within " + STOP_WAIT_MS / 1000 +
       " s of " + signal + " — sweeping without waiting for it any longer.");
@@ -424,7 +435,13 @@ process.on("SIGTERM", () => stop("SIGTERM", 143));
 child.on("exit", (code, signal) => {
   if (interrupted) {
     /* The wait stop() began ends here: the child is gone, so the sweep can no
-       longer race it. */
+       longer race it. Both lengths are said, because they are what a reader
+       of a slow Ctrl-C wants to know — was it the wait, or the machine. (No
+       toldAt yet: the child's exit was seen before stop() had finished.) */
+    const toldAt = interrupted.toldAt || Date.now();
+    console.log("rules-e2e: the suite was gone " + (Date.now() - toldAt) +
+      " ms after it was stopped (" + interrupted.signal + "; stopping it took " +
+      (toldAt - interrupted.at) + " ms) — sweeping.");
     sweep(false);
     process.exit(interrupted.exitCode);
   }

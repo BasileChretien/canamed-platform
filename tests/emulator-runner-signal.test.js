@@ -60,13 +60,31 @@ const SCENARIO_TIMEOUT_MS = 240000;
 const CLASSIFY_WAIT_MS = 60000;
 /* The runner's own bound on the wait (STOP_WAIT_MS there). */
 const BOUND_MS = 10000;
-/* "It did not wait out the bound." The old handler could not return in less
-   than the full 10 s, ever; the repaired one takes one kill and one look at
-   the ports — 0.3 s on Linux, 1.6 s on Windows, idle. Anything under the bound
-   tells the two apart, so the threshold sits close to it: a loaded Windows
-   machine makes each of those steps slow, and a tighter one would only buy
-   false failures. */
+/* "It did not wait out the bound." The old handler could not get past its wait
+   in less than the full 10 s, ever; the repaired one is past it as soon as the
+   child has gone. Anything under the bound tells the two apart, so the
+   threshold sits close to it.
+
+   WHAT IS TIMED is the wait, as the runner itself reports it ("the suite was
+   gone N ms after it was stopped") — from the child having been told, to its
+   exit being seen. NOT the wall-clock from the signal to the runner's exit.
+   That also holds the telling and the look at the ports afterwards, and on
+   Windows both go through tools that slow to a crawl on a busy machine: with
+   the whole unit suite running — a dozen real-process scenarios reading the
+   process table at once — `taskkill` alone took 16 s, and a correct runner
+   17 s from signal to exit (seen twice in a dozen runs; the first version of
+   this test failed on it). The wall-clock is quoted in the failure message,
+   where it helps tell a slow wait from a slow machine. */
 const PROMPT_MS = 8000;
+
+/* The wait the runner reported, in ms — or null if it never said its child
+   had gone (it gave up at the bound, or its handler never returned to the
+   event loop at all, as the old one did not). */
+function waitReported(out, signal) {
+  const said = new RegExp("the suite was gone (\\d+) ms after it was stopped \\(" +
+    signal + "; stopping it took \\d+ ms\\) — sweeping").exec(out);
+  return said ? parseInt(said[1], 10) : null;
+}
 
 const POSIX_ONLY = IS_WIN
   ? "needs a child that receives the signal and outlives it; on Windows the " +
@@ -104,10 +122,14 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
         await run.exited;
         const out = run.output();
 
-        assert.ok(took < PROMPT_MS,
-          "the runner took " + took + " ms to exit after " + signal + ", with a child " +
-          "that dies of the signal at once. The wait must end when the child " +
-          "exits; a wait that only ends at its " + BOUND_MS + " ms bound is a fixed sleep.\n" +
+        const waited = waitReported(out, signal);
+        assert.ok(waited !== null && waited < PROMPT_MS,
+          "the runner " + (waited === null
+            ? "never saw its child exit"
+            : "waited " + waited + " ms for its child") + " after " + signal +
+          ", with a child that dies of the signal at once (" + took + " ms from the " +
+          "signal to the runner's exit). The wait must end when the child exits; " +
+          "one that only ends at its " + BOUND_MS + " ms bound is a fixed sleep.\n" +
           "Runner output:\n" + out);
         assert.strictEqual(code, exitCode,
           "an interrupted run exits 128 + the signal's number\n" + out);
@@ -128,7 +150,7 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
       /* Bounded here too: a runner with no bound waits for as long as its
          child lives, and this child never exits by itself. */
       await until("the runner to give up on its child",
-        () => run.endedAt() !== null, BOUND_MS + 20000);
+        () => run.endedAt() !== null, BOUND_MS + 45000);
       const { code } = await run.gone;
       const took = run.endedAt() - sentAt;
       const outlived = isAlive(cli);
@@ -144,8 +166,8 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
       assert.ok(took >= BOUND_MS - 500,
         "the runner gave up on a live child after only " + took + " ms: the sweep " +
         "would then run while emulators:exec is still using the ports\n" + out);
-      assert.ok(took < BOUND_MS + 15000,
-        "the runner took " + took + " ms to give up on a wedged child\n" + out);
+      assert.strictEqual(waitReported(out, "SIGINT"), null,
+        "it never saw this child exit, so it must not say that it did\n" + out);
       assert.match(out, /did not exit within 10 s of SIGINT/,
         "and it must say that it gave up waiting, not exit as if all were well\n" + out);
       assert.strictEqual(code, 130);
@@ -172,10 +194,16 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
       const sentAt = send(ctx, run, "SIGINT");
       await sleep(400);
       send(ctx, run, "SIGTERM");          // an impatient second signal, mid-wait
-      const code = await run.exited;
+      const { code } = await run.gone;
       const took = run.endedAt() - sentAt;
+      /* A child the signal never reached is still alive, holding the runner's
+         output open: let it go before reading that output. */
+      ctx.release();
+      await run.exited;
       const out = run.output();
 
+      assert.ok(ctx.exists("listener-at-exit"),
+        "the child never acted on the signal: it was not forwarded\n" + out);
       assert.strictEqual(ctx.read("listener-at-exit"), "listening",
         "the sweep freed this run's listener while its own child was still " +
         "shutting down — a signal to the runner must not race the child, and " +
@@ -193,7 +221,10 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
       assert.match(out, /left 1 listener\(s\) behind; freed them/);
       assert.ok(took >= 1400,
         "the run ended " + took + " ms after the signal, before its child had exited");
-      assert.ok(took < PROMPT_MS,
-        "the run ended " + took + " ms after the signal; its child was gone after 1500\n" + out);
+      const waited = waitReported(out, "SIGINT");
+      assert.ok(waited !== null && waited >= 1400 && waited < PROMPT_MS,
+        "the runner reported a wait of " + waited + " ms for a child that takes " +
+        "1500 to go: it must wait that long, and no longer (" + took + " ms from " +
+        "the signal to the runner's exit)\n" + out);
     }));
 });

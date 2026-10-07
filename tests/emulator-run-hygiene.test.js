@@ -535,6 +535,17 @@ test("a signal to the runner forwards to the child, and sweeps only after it", (
     "the child TREE must be signalled on Windows");
   assert.match(body, /child\.kill\(signal\);/, "and the signal forwarded everywhere else");
 
+  /* On Windows the ownership poll stops once the tree is killed: it has no
+     lineage left to show, and each look is a synchronous netstat between this
+     handler and the child's "exit". What that buys is time on a loaded
+     machine, which no test here measures (a correct runner was seen taking
+     17 s from signal to exit in the full suite) — so this only keeps the line
+     from being lost unnoticed. */
+  assert.match(body,
+    /spawnSync\("taskkill"[^\n]*\r?\n[\s\S]{0,600}?clearTimeout\(ownershipPoll\);\r?\n\s*\} else \{\r?\n\s*child\.kill\(signal\);/,
+    "after the Windows tree-kill the ownership poll must be stopped — and only " +
+    "there: elsewhere the child is still alive, and still worth watching");
+
   /* Bounded: a timer, of a named length, is what ends the wait for a child
      that never exits. */
   const timerAt = body.indexOf("setTimeout(");
@@ -557,10 +568,10 @@ test("a signal to the runner forwards to the child, and sweeps only after it", (
 
   /* The other end of the wait: the child's own exit ends an interrupted run. */
   assert.match(RUNNER2,
-    /child\.on\("exit", \(code, signal\) => \{\r?\n\s*if \(interrupted\) \{[\s\S]{0,200}?sweep\(false\);\r?\n\s*process\.exit\(interrupted\.exitCode\);/,
+    /child\.on\("exit", \(code, signal\) => \{\r?\n\s*if \(interrupted\) \{[\s\S]{0,600}?sweep\(false\);\r?\n\s*process\.exit\(interrupted\.exitCode\);/,
     "an interrupted run must end — swept, with the signal's exit code — from " +
     "the child's exit event");
-  assert.match(body, /^function stop\(signal, exitCode\) \{\r?\n\s*if \(interrupted\) \{[\s\S]{0,200}?return;\r?\n\s*\}\r?\n\s*interrupted = \{ signal, exitCode \};/,
+  assert.match(body, /^function stop\(signal, exitCode\) \{\r?\n\s*if \(interrupted\) \{[\s\S]{0,200}?return;\r?\n\s*\}\r?\n\s*interrupted = \{ signal, exitCode, at: Date\.now\(\) \};/,
     "a second signal must change nothing: the first is being handled");
 });
 
