@@ -1,4 +1,10 @@
-/* data-rights.js — the GDPR Art. 15 participant self-export (lazy chunk)
+/* data-rights.js — the GDPR Art. 15 participant self-export, and account
+ * deletion (lazy chunk)
+ *
+ * Two entry points, each behind ONE explicit click and a shim in script.js:
+ *   downloadMyData()   #gdpr-export-btn      via _wireDataRightsExport()
+ *   deleteMyAccount()  #account-delete-btn   via accountDelete()   (2026-10-07)
+ * The deletion block is at the END of this file and carries its own header.
  *
  * SPLIT OUT OF script.js 2026-09-08 to repay the reclaim the perf-budget header
  * (tests-e2e/perf.spec.js) had named since 2026-09-03 and again on 2026-09-07,
@@ -179,5 +185,158 @@ function downloadMyData() {
     console.error("Self-export failed", e);
     alert(tFallback("data-rights.err.export-failed",
       "Could not export your data — please try again, or contact the facilitator."));
+  });
+}
+
+/* ---- Account deletion ------------------------------------------------------
+ *
+ * ADDED 2026-10-07. The handler used to live in script.js (accountDelete) and
+ * removed `users/<uid>` and then the sign-in account - nothing else. That left
+ * `scenarios/<uid>`, which is readable and writable by that uid ONLY, so once
+ * the account was gone nobody could ever read or delete it again; and every
+ * copy the user had published under `sharedScenarios/`, still on offer to other
+ * facilitators under the author's display name with no owner left to withdraw
+ * it. script.js keeps only the on-click shim.
+ *
+ * Reads script.js top-level bindings by bare name, like the export above:
+ * db, auth, currentUser, el, splashHintOk, splashHintErr, authErrorMessage,
+ * resetStableId, closeAccountDialog.
+ */
+
+/* The published copies of this user's scenarios. Both writers - saveScenario()
+   in script.js and the authoring tool - key them `<uid>_<scenarioId>`, so a KEY
+   RANGE finds them. It is preferred to walking scenarios/<uid> because it also
+   finds a published copy whose private original is already gone
+   (deleteScenario()'s shared delete is best-effort).
+
+   The ownerUid test is load-bearing, not tidiness: the rules let any signed-in
+   user CREATE an entry under any key, so a stranger can park one inside this
+   range. The owner cannot delete it, and the removal below is one update the
+   rules accept or refuse WHOLE - unfiltered, one such entry would make this
+   account undeletable.
+
+   Two limits, both recorded in DPA Annex VI G8: the range is READ whole, a
+   stranger's entries included; and an entry this user published under a key of
+   any other form - which the shipped client never writes - is not found. */
+function listOwnSharedScenarioIds(uid) {
+  return db.ref("sharedScenarios").orderByKey()
+    .startAt(uid + "_").endAt(uid + "_\uf8ff").once("value")
+    .then(snap => {
+      const ids = [];
+      // A block body: forEach() stops at the first truthy return, and push()
+      // returns the new length.
+      snap.forEach(child => {
+        if ((child.val() || {}).ownerUid === uid) ids.push(child.key);
+      });
+      return ids;
+    });
+}
+
+/* Every database path that deleting an account removes: what is keyed by the
+   account ALONE and writable by its owner. `sharedIds` come from
+   listOwnSharedScenarioIds().
+
+   NOT here, and the confirmation says so:
+     - anything inside a session (pool entry, answers, votes, chat), or keyed
+       by one (roster row, certificate, withdrawal record). Those belong to the
+       session's record and follow ITS retention and erasure path. Some of them
+       the owner COULD still delete while the session is open (the roster row,
+       the pool entry); they are left by design, not because the rules forbid
+       it. A withdrawal record must never go: deleting it un-withdraws consent.
+     - reports/scenarios/<shareId>/<uid>. Write-once and unreadable by design -
+       a report must not be retractable by its author - so no client can remove
+       one. Nor can it remove the reports others filed against this user's
+       scenarios, or a takedown tombstone, both keyed by `<uid>_<scenarioId>`.
+     - rateLimits/uid/<uid>: increment-only counters.
+   The last two need an operator (DPA Annex VI, G8). */
+function accountDeletionPaths(uid, sharedIds) {
+  return sharedIds.map(id => "sharedScenarios/" + id)
+    .concat(["scenarios/" + uid, "users/" + uid]);
+}
+
+/* One deletion at a time. Without it a second click starts a second run whose
+   Auth delete fails on the account the first run just removed - and the user
+   is told "only the sign-in account is left" about an account that is gone. */
+let _accountDeleteInFlight = false;
+
+function deleteMyAccount() {
+  const hint = el("account-action-hint");
+  if (!currentUser || !auth || _accountDeleteInFlight) return;
+  const ok = confirm(
+    "Delete your account?\n\n" +
+    "This permanently removes:\n" +
+    "- your profile and your list of joined sessions;\n" +
+    "- every scenario you authored, including any you published to the " +
+    "shared library, which other facilitators will no longer be able to " +
+    "pick.\n\n" +
+    "It does NOT remove:\n" +
+    "- sessions you created, or what you contributed inside any session: " +
+    "the name you joined under, your answers, votes and chat messages, and " +
+    "any roster entry (your name and email) or certificate. These stay in " +
+    "the session's records, still identifiable as yours, for the periods " +
+    "given in the privacy notice;\n" +
+    "- moderation records (reports you filed about shared scenarios, and " +
+    "any filed about yours) and chat usage counters.\n\n" +
+    "To have those erased, write to the contact in the privacy notice. To " +
+    "withdraw research consent for a past session, do it from the list in " +
+    "this dialog BEFORE deleting: that list is removed with the account.\n\n" +
+    "This cannot be undone."
+  );
+  if (!ok) return;
+  // Captured: `currentUser` is reassigned by every auth-state change.
+  const user = currentUser;
+  const uid = user.uid;
+  _accountDeleteInFlight = true;
+  splashHintOk(hint, "Deleting your account\u2026");
+  // Two-step deletion: remove the account's data FIRST while we still have
+  // write permission, then delete the Firebase Auth user. If the Auth deletion
+  // fails (e.g. "requires-recent-login"), the data is gone but the user can
+  // sign back in and try again - which is the lesser harm. Doing it in the
+  // other order (Auth first) would leave orphan data nobody can write to:
+  // scenarios/<uid> is readable and writable by that uid ONLY, so it would be
+  // kept for ever, and the published copies would stay on offer under the
+  // author's name with no owner left to withdraw them.
+  let stage = "data";
+  // Started inside the chain so that a SYNCHRONOUS throw from the query lands
+  // in the catch below, with a message, instead of escaping the click.
+  Promise.resolve().then(() => listOwnSharedScenarioIds(uid)).then(sharedIds => {
+    const removals = {};
+    accountDeletionPaths(uid, sharedIds).forEach(p => { removals[p] = null; });
+    // ONE multi-path update, not a remove() per path: the rules are checked
+    // per path but the write lands whole or not at all, so a refusal cannot
+    // leave the account half-deleted - and "nothing was removed" below is true.
+    return db.ref().update(removals);
+  }).then(() => {
+    stage = "auth";
+    return user.delete();
+  }).then(() => {
+    stage = "done";
+    _accountDeleteInFlight = false;
+    splashHintOk(hint, "");
+    // Same stale-identifier problem as sign-out, and more acute: the account
+    // is gone, so its uid must not linger as this browser's stableId.
+    resetStableId();
+    closeAccountDialog();
+    // onAuthStateChanged fires with null next; paintUserChip clears the chip
+  }).catch(e => {
+    _accountDeleteInFlight = false;
+    if (stage === "data") {
+      // Nothing was written, so the Auth account is deliberately left alone:
+      // deleting it now would orphan exactly the data this failed to remove.
+      console.warn("Account data delete failed; account left intact:", e);
+      splashHintErr(hint, "Could not delete your account data, so nothing was " +
+        "removed and your account is unchanged. Check your connection and " +
+        "try again.");
+    } else if (stage === "auth") {
+      console.warn("Auth delete failed after data delete:", e);
+      splashHintErr(hint, authErrorMessage(e) +
+        " Your profile, history and scenarios have already been removed; only " +
+        "the sign-in account is left. Sign back in and delete it again to " +
+        "finish.");
+    } else {
+      // The account IS deleted; only the tidying-up after it threw. Saying
+      // "could not delete" here would be false.
+      console.warn("Account deleted; tidying up afterwards failed:", e);
+    }
   });
 }

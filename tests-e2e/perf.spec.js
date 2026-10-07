@@ -687,6 +687,19 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     declaration, loader/sw/LAZY_CHUNKS registrations, guarded click site)
 //     and tests-e2e/data-rights-lazy.spec.js (absent on the splash, the real
 //     join flow's click still downloads the real export, 4 viewports).
+//   2026-10-07: CAP UNCHANGED (326). Account deletion was fixed to remove the
+//     user's scenarios and published copies too. Written first into the eager
+//     accountDelete() it measured +1.7 KB gz on script.js — and main was at
+//     324.5, NOT the 322.6 the entry above records: ~1.9 KB of that 3.4 KB
+//     margin had already been spent by v171-v176 with no entry here. So the
+//     first draft landed at ~326.2, i.e. over. The handler was moved instead
+//     into the LAZY data-rights.js (deleteMyAccount, behind the one
+//     #account-delete-btn click, same shim shape as the export), which took
+//     the OLD eager handler out with it. Measured (LF-normalised, the CI
+//     figure): script.js 191.29 -> 191.34 KB gz, first-party 324.50 -> 324.55;
+//     the +54 bytes are a re-added declaration and its comment. data-rights.js
+//     is 6.3 KB gz, lazy. ⚠️ THE MARGIN IS ~1.45 KB, not 3.4: the next eager
+//     addition of any size needs a reclaim first.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

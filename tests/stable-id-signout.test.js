@@ -120,8 +120,13 @@ test("accountSignOut resets the stableId after the sign-out resolves", () => {
     "the reset must happen in the success path, after signOut() resolves");
 });
 
-test("accountDelete also resets the stableId", () => {
-  const fn = extractFn(SCRIPT, "accountDelete");
+test("account deletion also resets the stableId", () => {
+  /* The handler moved to the lazy data-rights.js on 2026-10-07 (script.js keeps
+     accountDelete() as an on-click shim). tests/account-delete.test.js EXECUTES
+     it and asserts the reset runs only after the account is really gone; this
+     stays as the cheap tripwire it always was, pointed at the right file. */
+  const CHUNK = fs.readFileSync(path.join(P, "data-rights.js"), "utf8");
+  const fn = extractFn(CHUNK, "deleteMyAccount");
   assert.match(fn, /resetStableId\(\)/,
     "a deleted account's uid must not linger as this browser's stableId");
 });
