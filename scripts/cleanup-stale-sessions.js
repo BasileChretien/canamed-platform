@@ -235,11 +235,11 @@ async function main() {
 /* The session pass. runCleanupPasses() skips it WHOLE when the backup gate
    blocks, so it must stay the only place a session is deleted from. */
 async function purgeSessions(db, locations) {
-  let kept = 0, purged = 0, errors = 0;
-  let futureDated = 0;
   /* One clock for the whole pass, so two sessions with the same dates cannot
      get different verdicts because the loop took a while to reach the second. */
   const now = Date.now();
+  let futureDated = 0;
+  let kept = 0, purged = 0, errors = 0;
   for (const loc of locations) {
     const label = safeLabel(loc, QUIET);
     try {
@@ -350,14 +350,13 @@ async function purgeSessions(db, locations) {
       console.error(`ERROR    ${label}  ${QUIET ? (e && e.code ? e.code : "error") : (e && e.message)}`);
     }
   }
-
+  /* A COUNT, never which. With CLEANUP_QUIET=1 the per-session lines are not
+     printed at all, so this is the only trace the scheduled job leaves that it
+     purged something for an impossible date rather than for its age — and the
+     only thing a dry run can show an operator before the first live one. Not
+     an error: the session is dealt with, and a red run every night that
+     somebody creates one would be an alert anyone could switch on. */
   if (futureDated > 0) {
-    /* A COUNT, never which. With CLEANUP_QUIET=1 the per-session lines are not
-       printed at all, so this is the only trace the scheduled job leaves that
-       it purged something for an impossible date rather than for its age — and
-       the only thing a dry run can show an operator before the first live one.
-       Not an error: the session is dealt with, and a red run every night that
-       somebody creates one would be an alert anyone could switch on. */
     console.log("");
     console.log(`Dated in the future: ${futureDated} session(s) carried a created or closed date ` +
       `more than ${FUTURE_DATE_TOLERANCE_MS / (60 * 60 * 1000)}h ahead of this run. No session can ` +
