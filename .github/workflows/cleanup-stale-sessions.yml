@@ -155,9 +155,14 @@ jobs:
           # PUBLIC repo: logs are world-readable — never print raw session codes.
           CLEANUP_QUIET: "1"
           # ── BACKUP INTERLOCK ────────────────────────────────────────────
-          # "1" makes this job REFUSE to purge (exit 3) unless backup-sessions
-          # recorded a recent success at ops/lastBackup.
+          # "1" makes this job REFUSE to purge SESSIONS (exit 3) unless
+          # backup-sessions recorded a recent success at ops/lastBackup. The
+          # hfPatient metrics are still pruned on a blocked run: no backup
+          # covers them, so there is nothing for the gate to protect (see
+          # scripts/lib/cleanup-passes.js).
           #
+          # ↓ HISTORY (2026-08-31 → 09-02), superseded by "ARMED" further down.
+          #   Kept because the reasoning is what decides when to disarm again.
           # It is "0" TODAY ON PURPOSE, and the reasoning matters more than the
           # value. backup-sessions is disabled because GCS needs a billing
           # account and the Blaze trial ended 2026-08-27, so no marker will
