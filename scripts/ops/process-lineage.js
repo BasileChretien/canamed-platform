@@ -271,7 +271,10 @@ function predatesSpawn(table, pid, spawnedAtMs, opts) {
  *   observe(pids)    — call while the child is alive, with the PIDs currently
  *                      listening on the run's ports. Takes a snapshot only
  *                      when one of them has no verdict yet.
- *   verdict(pid)     — "ours" | "not-ours" | null (never examined).
+ *   verdict(pid)     — "ours" | "not-ours" | null. null is NO verdict: never
+ *                      examined, or examined and nothing could be shown. Only
+ *                      observe() says "ours"; "not-ours" can also come from
+ *                      the sweep's age rule (partition).
  *   partition(rows)  — call from the sweep, AFTER the child has exited, with
  *                      the surviving [{ port, pid, … }] rows:
  *                        mine      shown to descend from the child, and still

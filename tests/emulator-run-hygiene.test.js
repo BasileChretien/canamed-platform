@@ -243,8 +243,16 @@ test("sim-with-emulator sweeps by port after its tree-kill", () => {
   assert.match(body, /emulatorPorts\.free\(\[DB_PORT, AUTH_PORT\], \{ onlyPids: ownedPids \}\)/,
     "taskkill /T only reaches the tree we own; the RTDB emulator survived it — " +
     "but the backstop sweep must still prove ownership before killing");
-  assert.match(body, /taskkill/,
+  /* The tree-kill moved into stopChild() (the "exit" handler needs it too). */
+  const killAt = body.indexOf("stopChild(p)");
+  assert.ok(killAt > 0, "locator stale: cleanup() no longer stops its children");
+  assert.ok(killAt < body.indexOf("emulatorPorts.survey("),
     "the port sweep is a BACKSTOP — the tree-kill must still run first");
+  assert.match(SIM, /function stopChild\(p\) \{[\s\S]{0,900}?spawnSync\("taskkill", \["\/F", "\/T", "\/PID"/,
+    "and stopping a child must still be a synchronous TREE kill on Windows");
+  assert.match(SIM, /p\.exitCode !== null \|\| stopped\.has\(p\)\) return;/,
+    "a child that has ended, or was already stopped, must not be killed again " +
+    "by its remembered PID");
 });
 
 /* ── the review round: fail closed, kill once, prove ownership ────── */
@@ -397,6 +405,12 @@ test("the sim ends the run when its own emulator exits before teardown", () => {
     "and with the ports free it must still end the run, not carry on");
   assert.ok(handler.indexOf("if (tearingDown) return;") < handler.indexOf("refuseForeign("),
     "the teardown check must come first");
+  const stopAt = handler.indexOf("stopChild(simProc);");
+  assert.ok(stopAt > 0, "the handler must stop the sim itself");
+  assert.ok(stopAt < handler.indexOf("lineage.partition("),
+    "and BEFORE it works out whose the ports are: that reads the process table " +
+    "(seconds, and it can fail), and until the sim is stopped it may be writing " +
+    "into another session's database (review round 3)");
 
   const cleanupAt = SIM.indexOf("function cleanup()");
   const cleanup = SIM.slice(cleanupAt, SIM.indexOf('process.on("SIGINT"', cleanupAt));

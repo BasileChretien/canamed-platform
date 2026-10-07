@@ -131,25 +131,31 @@ function refuseForeign(rows, how) {
   process.exit(1);
 }
 
+/* Stop one of OUR children, with its tree — once. A child that has ended, or
+   that we have already stopped, has no tree left to kill, and its PID may be
+   someone else's by now: `stopped` is what keeps a second call (cleanup() runs
+   again from the "exit" handler) from handing a dead number to taskkill. */
+const stopped = new Set();
+function stopChild(p) {
+  if (!p || p.killed || p.exitCode !== null || stopped.has(p)) return;
+  stopped.add(p);
+  try {
+    if (process.platform === "win32") {
+      // SIGTERM doesn't reliably kill Java grandchildren on Windows;
+      // taskkill /T cascades through the process tree. Synchronous, so a
+      // survey afterwards sees what SURVIVED it rather than what it is still
+      // killing (and so it runs at all from the "exit" handler).
+      spawnSync("taskkill", ["/F", "/T", "/PID", String(p.pid)],
+        { stdio: "ignore" });
+    } else {
+      p.kill("SIGTERM");
+    }
+  } catch (_) {}
+}
+
 function cleanup() {
   tearingDown = true;
-  for (const p of [simProc, firebaseProc, serveProc]) {
-    /* exitCode: a child that has already ended has no tree left to kill, and
-       its PID may be someone else's by now. */
-    if (!p || p.killed || p.exitCode !== null) continue;
-    try {
-      if (process.platform === "win32") {
-        // SIGTERM doesn't reliably kill Java grandchildren on Windows;
-        // taskkill /T cascades through the process tree. Synchronous, so the
-        // survey below sees what SURVIVED it rather than what it is still
-        // killing (and so it runs at all from the "exit" handler).
-        spawnSync("taskkill", ["/F", "/T", "/PID", String(p.pid)],
-          { stdio: "ignore" });
-      } else {
-        p.kill("SIGTERM");
-      }
-    } catch (_) {}
-  }
+  for (const p of [simProc, firebaseProc, serveProc]) stopChild(p);
   /* Tree-kill only reaches the tree we own, and it did not reliably reap the
      RTDB emulator: observed 2026-08-05 leaving a java.exe listening on :9000
      after a clean exit, three runs for three. A leftover listener makes the
@@ -309,8 +315,13 @@ function check(cmd, args, label) {
        losing the race for the ports looks like from here: the CLI finds :9000
        taken and exits. This must END the run, at whatever point it happens:
        waitForPort() below is satisfied by ANY listener, so without this the
-       sim would go on against whoever holds the ports. It does not depend on
-       reading the process table, which may be slow or unavailable. */
+       sim would go on against whoever holds the ports.
+
+       Stop the sim FIRST. If the ports are another session's, every moment it
+       runs is a write into their database, and working out whose they are
+       (next) reads the process table, which takes seconds and can fail.
+       Neither stopping the sim nor ending the run depends on that read. */
+    stopChild(simProc);
     /* WHO holds the ports now decides what is said, not whether the run ends.
        Only a listener SHOWN not to be ours is called another run's: one left
        behind by our own emulator crashing looks the same from the port, and
