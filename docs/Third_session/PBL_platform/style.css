@@ -3689,7 +3689,17 @@ body.session-ended-shown { overflow: hidden; }
   padding: 14px 16px 16px;
   margin: 0 0 14px;
   background: var(--card);
+  /* A fieldset's UA default is min-inline-size: min-content, so it will not
+     shrink below its widest descendant — here the University <select>, as wide
+     as its longest option. On a phone that pushed the profile form out of the
+     dialog, which then scrolled sideways. */
+  min-width: 0;
 }
+/* WebKit counts a <select>'s longest option toward its ancestors' scroll width
+   even once the box is sized to fit, and no sizing on the select changes that.
+   Paint containment does; without it the dialog still scrolls sideways in
+   Safari below ~347px. */
+.account-fieldset select { contain: paint; }
 .account-fieldset legend {
   padding: 0 6px;
   font-weight: 700;
@@ -3743,11 +3753,17 @@ body.session-ended-shown { overflow: hidden; }
   max-height: 240px;
   overflow-y: auto;
 }
+/* Session code, date + scenario name, withdraw button. The row wraps instead of
+   shrinking, and the date + scenario name asks for little and takes what the
+   other two leave: under default flex shrinking a long scenario name squeezed
+   them, breaking the code at its hyphen and the button label over several
+   lines, at every width. */
 .account-history-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--s-1) var(--s-3);
   padding: 8px 10px;
   border-bottom: 1px solid var(--line);
 }
@@ -3759,7 +3775,22 @@ body.session-ended-shown { overflow: hidden; }
   color: var(--primary);
   font-weight: 800;
 }
-.account-history-meta { color: var(--muted); font-size: 0.84rem; }
+.account-history-meta {
+  /* A floor, not zero: with enlarged text the code and the button leave very
+     little, and at 0 this became a 62px column eleven lines tall. Once less
+     than this is left the button wraps to the next line instead. */
+  flex: 1 1 12ch;
+  /* A scenario name is authored text, up to 80 characters of anything. */
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+/* A phone is too narrow for all three side by side: the date + scenario name
+   goes last, on its own line at full width. The button shares the first line
+   with the code where its label fits and drops below it where it does not. */
+@media (max-width: 720px) {
+  .account-history-meta { order: 1; flex-basis: 100%; }
+}
 
 /* --- splash-foot extra link --- */
 .splash-foot-or { color: var(--muted); }
