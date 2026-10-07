@@ -541,8 +541,10 @@ test("D: an account that replaces another directly sees nothing of it while its 
   await expect(page.locator("#splash-signed-in-account")).toBeHidden();
   await expect(page.locator("#user-chip")).toHaveClass(/(^|\s)hidden(\s|$)/);
   /* Nothing on screen opens the dialog now. Opened by any other route, it
-     still must not hold her values. */
-  const forced = await page.evaluate(() => {
+     still must not hold her values. (That route fetches the dialog's code
+     first: it is the lazy account-ui.js.) */
+  const forced = await page.evaluate(async () => {
+    await window.CanamedLoader.ensureAccountUI();
     openAccountDialog();
     const v = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id)).value;
     const seen = {

@@ -1,9 +1,9 @@
 /* data-rights.js — the GDPR Art. 15 participant self-export, and account
  * deletion (lazy chunk)
  *
- * Two entry points, each behind ONE explicit click and a shim in script.js:
- *   downloadMyData()   #gdpr-export-btn      via _wireDataRightsExport()
- *   deleteMyAccount()  #account-delete-btn   via accountDelete()   (2026-10-07)
+ * Two entry points, each behind ONE explicit click and a shim:
+ *   downloadMyData()   #gdpr-export-btn      via _wireDataRightsExport(), script.js
+ *   deleteMyAccount()  #account-delete-btn   via accountDelete(), account-ui.js
  * The deletion block is at the END of this file and carries its own header.
  *
  * SPLIT OUT OF script.js 2026-09-08 to repay the reclaim the perf-budget header
@@ -196,11 +196,13 @@ function downloadMyData() {
  * the account was gone nobody could ever read or delete it again; and every
  * copy the user had published under `sharedScenarios/`, still on offer to other
  * facilitators under the author's display name with no owner left to withdraw
- * it. script.js keeps only the on-click shim.
+ * it. Only the on-click shim, accountDelete(), is outside this file: in the
+ * lazy account-ui.js, with the rest of the account dialog.
  *
  * Reads script.js top-level bindings by bare name, like the export above:
- * db, auth, currentUser, el, splashHintOk, splashHintErr, authErrorMessage,
- * resetStableId, closeAccountDialog.
+ * db, auth, currentUser, el, splashHintOk, splashHintErr, resetStableId,
+ * closeAccountDialog. And authErrorMessage(), which is in account-ui.js: that
+ * file is in whenever this runs, because accountDelete() is the one caller.
  */
 
 /* The published copies of this user's scenarios. Both writers - saveScenario()

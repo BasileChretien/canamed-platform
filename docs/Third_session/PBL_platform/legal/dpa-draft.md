@@ -3091,8 +3091,9 @@ same day.)*
 > refuse whole, and only then the sign-in account: `users/<uid>`,
 > `scenarios/<uid>`, and every `sharedScenarios/` entry under the key prefix
 > `<uid>_` whose `ownerUid` is that user. The handler is `deleteMyAccount()` in
-> the lazily loaded `data-rights.js`; `accountDelete()` in `script.js` is now
-> only the shim that loads it on the click.
+> the lazily loaded `data-rights.js`; `accountDelete()` — in `account-ui.js`,
+> with the rest of the account dialog — is only the shim that loads it on the
+> click.
 >
 > **Withdrawing the published copies is not a new choice made here.** Both
 > existing per-scenario delete paths already remove the shared copy together

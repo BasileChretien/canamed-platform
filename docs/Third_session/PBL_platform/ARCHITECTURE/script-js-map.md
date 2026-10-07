@@ -333,20 +333,27 @@ The main state machine of the CaNaMED platform. Contains 4,900+ lines of UI life
 
 | Function | Lines | Calls | Purpose |
 |----------|-------|-------|---------|
-| authErrorMessage() | 4467–4486 | Firebase errors | Translate Firebase auth error codes to user-friendly messages |
+| authErrorMessage() | lazy `account-ui.js` | Firebase errors; from `script.js` only through `showAuthError()` | Translate Firebase auth error codes to user-friendly messages |
 | subscribeClosedListener() | 3814–3822 | Entry | Listen for session closed event; show wrap-up if it happens |
 
 ## Account & Profile Dialog
 
+The sign-in view, the account dialog and the profile-setup save are the lazy
+`account-ui.js`, fetched on first use. Every way into it from `script.js` goes
+through `accountUI()`; what runs at load, at join or on a change of account
+stays in `script.js`.
+
 | Function | Lines | Calls | Purpose |
 |----------|-------|-------|---------|
-| openAccountDialog() | 4745–4760 | Header chip click (in a session); "Account" in the splash's signed-in row (outside one) | Show account modal (profile, history + per-session withdrawal, sign-out, delete) |
-| closeAccountDialog() | 4761–4768 | Dialog close button | Hide modal |
-| paintUserChip() | 4678–4710 | Header render | Show signed-in user name or "Sign in" link |
-| accountSaveBtn() | 4803–4821 | Profile edit in modal | Update profile from modal form |
-| accountSignOut() | 4822–4829 | "Sign out" button | Firebase sign-out, clear global userId, reset UI |
-| accountDelete() | 4830–4872 | "Delete account" button | On-click SHIM only (2026-10-07): loads the lazy `data-rights.js` and calls `deleteMyAccount()`, which removes profile + history, authored scenarios and their published copies in one multi-path update, then the Auth account |
-| wireAccountUI() | 4873+ | Entry | Attach all account dialog listeners |
+| accountUI() | `script.js` | `showAccountView()`, `openAccount()`, `submitProfileSetup()`, `showAuthError()` | Run a callback once `account-ui.js` is in (at once if it is); say so if it cannot be fetched |
+| openAccountDialog() | lazy `account-ui.js` | `openAccount()`: header chip click (in a session); "Account" in the splash's signed-in row (outside one) | Show account modal (profile, history + per-session withdrawal, sign-out, delete) |
+| closeAccountDialog() | `script.js` | Dialog close button; `resetAccountUI()` on every change of account | Hide modal, drop its history subscription, empty its list |
+| paintUserChip() | `script.js` | Header render | Show signed-in user name or "Sign in" link |
+| accountSaveBtn() | lazy `account-ui.js` | Profile edit in modal | Update profile from modal form |
+| accountSignOut() | `script.js` | "Sign out" button (dialog, and the splash's signed-in row) | Firebase sign-out, clear global userId, reset UI |
+| accountDelete() | lazy `account-ui.js` | "Delete account" button | On-click SHIM only: loads the lazy `data-rights.js` and calls `deleteMyAccount()`, which removes profile + history, authored scenarios and their published copies in one multi-path update, then the Auth account |
+| wireAccountUI() | `script.js` | Entry | Attach the listeners of what can be clicked before `account-ui.js` is in |
+| wireAccountChunk() | lazy `account-ui.js` | Evaluation of the chunk | Attach the listeners of the sign-in view and the account dialog |
 
 ## Related Codemaps
 

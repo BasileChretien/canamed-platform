@@ -61,13 +61,16 @@ async function openDialog(page, email) {
 
 async function openDialogOnThisPage(page, email = "local@example.test") {
   await page.waitForFunction(() =>
-    typeof openAccountDialog === "function" && typeof dbInit === "function");
+    typeof dbInit === "function" && !!(window.CanamedLoader && window.CanamedLoader.ensureAccountUI));
   await page.evaluate(async ([code, email]) => {
     dbInit();
     /* `currentUser` is a script-scope `let`, so this assigns the app's own
        binding. */
     currentUser = { uid: "u_local", email, isAnonymous: false };
     await db.ref("users/u_local/history/" + code).set({ code, joinedAt: Date.now() });
+    /* openAccountDialog() is in the lazy account-ui.js: fetched first, the way
+       the page's own openers do it. */
+    await window.CanamedLoader.ensureAccountUI();
     openAccountDialog();
   }, [CODE, email]);
 }

@@ -70,7 +70,7 @@
 
   function $(id) { return document.getElementById(id); }
 
-  // Password policy — mirrors the main app (script.js signUpWithEmail): at
+  // Password policy — mirrors the main app (account-ui.js signUpWithEmail): at
   // least 8 chars and at least 3 of {lower, upper, digit, symbol}. Both paths
   // share the same Firebase Auth backend, so this one must not be weaker.
   function passwordPolicyError(pw) {

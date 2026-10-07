@@ -68,6 +68,7 @@ const SHELL_ASSETS = [
   "/section-picker.js",
   "/takehome.js",
   "/data-rights.js",
+  "/account-ui.js",
   "/script-admin.js",
   "/branched.css",
   "/admin.css",

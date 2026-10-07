@@ -930,6 +930,10 @@ test.describe("Perf budget — splash", () => {
       // data-rights.js (2026-09-08): the GDPR Art. 15 self-export, behind ONE
       // click on the waiting screen — the reclaim the header entries name.
       "data-rights.js",
+      // account-ui.js: the sign-in view and the account dialog, loaded on first
+      // use. Never prefetched (tests-e2e/account-ui-lazy.spec.js pins that it is
+      // not requested on the front page); listed so it stays out if it ever is.
+      "account-ui.js",
       /* Module A appropriateness triage (2026-08-19): the feature is gated
          behind ?triage=1 and default-off, so shipping it eagerly cost every
          splash ~5 KB gz for a path almost no session takes — which is what

@@ -17,6 +17,7 @@
  *   - script-admin.js             (the facilitator dashboard engine, on admin login)
  *   - tour.js                     (loaded after splash is interactive, idle window)
  *   - scenario-author.js          (loaded when scenario-author form opens)
+ *   - account-ui.js               (the sign-in view + account dialog, on first use)
  *
  * Previously planned but dropped (R2-01 — SIMULATION_ROUND2.md), and the
  * half of it that has since been DONE:
@@ -222,6 +223,13 @@
      #gdpr-export-btn click on the waiting screen. Same shape as takehome.js:
      loaded ON CLICK from _wireDataRightsExport(), never on the splash. */
   function ensureDataRights() { return loadScript(v("data-rights.js")); }
+  /* account-ui.js — the sign-in view, the account dialog and the profile-setup
+     save, behind accountUI() in script.js. A fetch that FAILED is forgotten, so
+     the next click asks again instead of being handed the same rejection. */
+  function ensureAccountUI() {
+    var src = v("account-ui.js");
+    return loadScript(src).catch(function (e) { inflight.delete(src); throw e; });
+  }
   /* modA-triage.js + .css — the ?triage=1 slice, LAZY because the feature is
      default-off and cost ~5 KB gz on every splash. Resolves only when BOTH are
      in (ensureRoomStyles shape). No-ops when the flag is off. */
@@ -462,6 +470,7 @@
     ensureStudentPdf,
     ensureTakeHome,
     ensureDataRights,
+    ensureAccountUI,
     ensureModATriage,
     triageFlagOn,
     ensureAdminApp,
