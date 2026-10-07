@@ -340,6 +340,53 @@ start — an undeployable function enforces nothing — but it is uncheckable
 again until Blaze returns. The **RTDB** canary in item 1 is unaffected and
 still runs every tick.
 
+### Anonymous-account retention (issue #347) — ⛔ BUILT 2026-10-07, NOT SCHEDULED, NOT ARMED
+
+`signInAnonymously()` gives every visitor an Auth account before any consent
+surface, and nothing ever removed one: retention was indefinite, by absence of
+any mechanism (auto-delete is an Identity Platform feature this project lacks).
+The job now exists — `.github/workflows/cleanup-anonymous-accounts.yml` →
+`scripts/cleanup-anonymous-accounts.js` — but it runs **only on manual dispatch,
+dry-run unless `confirm` is ticked**. Until it is scheduled, retention of the
+anonymous identifier is still indefinite; do not describe it otherwise.
+
+- **What it removes.** An anonymous account idle ≥ 90 days that no LIVE session
+  names (member or creator) and no allowlist names (`facilitatorGate/allow`,
+  `moderators`), together with `users/<uid>`, `scenarios/<uid>`,
+  `rateLimits/uid/<uid>` and its `reports/scenarios/*/<uid>`. Records go first,
+  the account second; a failed write means no account is deleted that run.
+  The live-session check is what makes "90 days" honest: a session closed on
+  day 89 lives 30 more, so the real bound is ~120 days after last use.
+- **Two older gaps closed in the same pass.** (a) `users/<uid>/history` written
+  for every anonymous joiner before #348 is removed for accounts that still
+  exist. (b) The proxy's rate-limit counters (`rateLimits/{uid,session}/…`) are
+  swept once past the TTL the proxy asks for — **nothing swept them before**,
+  although `proxy/src/stores.js` said `cleanup-stale-sessions.js` did.
+- **Positive identification only.** An account is deleted because its own Auth
+  record shows no sign-in provider — never because a uid is missing from the
+  listing, which is also what a truncated listing looks like. Orphans are
+  counted and left alone unless `sweep_orphans` is ticked, behind a tripwire.
+- **No e-mail address reaches the runner.** The Admin SDK's `listUsers()`
+  returns whole records, so the listing goes over REST with a `fields` mask
+  and then VERIFIES it: one unrequested key aborts the run.
+- ⚠️ **SCHEDULING IT IS ONE CHANGE WITH THREE PARTS**: the cron, the armed
+  `ANON_CONFIRM`, and the privacy notice. A nightly run sends account
+  identifiers and session member uids to a US runner, which `privacy.html` §6–7
+  does not list, and §8 states no period for the identifier.
+  `tests/anonymous-retention-job.test.js` fails if a cron appears alone.
+- **Two emulator divergences, both measured.** The Auth emulator ignores
+  `fields` (so it serves as the positive control for the mask check), and it
+  answers a deleted account's refresh with `INVALID_REFRESH_TOKEN` where Google
+  documents `USER_NOT_FOUND`. Recovery is therefore proven for the NEXT PAGE
+  LOAD only (the SDK clears a stored user whose reload fails); a tab left open
+  across the deletion is not reachable on the emulator.
+
+`Verify:` `grep -E '^\s*-\s*cron:' .github/workflows/cleanup-anonymous-accounts.yml`
+prints nothing while unscheduled (a plain `grep cron:` matches the commented
+line and misleads). The first real evidence is a dispatched dry run: it must
+print an `Accounts:` line, and it is the only test of whether the service
+account may list accounts and whether Google honours the mask.
+
 ### Round-3 security follow-ups
 
 These are the Round-3 security follow-ups that require the Firebase / GCP

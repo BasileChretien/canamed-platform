@@ -190,6 +190,19 @@ async function readSessionLocationsShallow(opts) {
  * accepts, so the credential never lands in a URL that something might log.
  */
 function makeRestShallowReader(opts) {
+  return makeRestGetter(opts, "?shallow=true", "shallow read");
+}
+
+/**
+ * The same reader WITHOUT `shallow` — for a node whose value is itself small
+ * and wanted (one uid, one map of counters). Never point it at a session
+ * subtree: that is the deep read `readSessionLocationsShallow` exists to avoid.
+ */
+function makeRestValueReader(opts) {
+  return makeRestGetter(opts, "", "read");
+}
+
+function makeRestGetter(opts, query, what) {
   const base = String(opts.databaseURL || "").replace(/\/+$/, "");
   if (!/^https:\/\//.test(base)) {
     throw new Error("readSessionLocationsShallow needs an https databaseURL, got: " + base);
@@ -203,16 +216,22 @@ function makeRestShallowReader(opts) {
     );
   }
 
-  return async function fetchShallow(path) {
+  return async function restGet(path) {
     const { access_token: token } = await cred.getAccessToken();
-    const res = await fetch(base + "/" + path + ".json?shallow=true", {
+    const res = await fetch(base + "/" + path + ".json" + query, {
       headers: { Authorization: "Bearer " + token }
     });
     if (!res.ok) {
       /* Never degrade to "no sessions" — see shallowKeysOf. The status alone
        * is logged; a REST error body can echo the path, which carries the
-       * session code, and these logs are world-readable. */
-      throw new Error("shallow read of '" + path + "' failed: HTTP " + res.status);
+       * session code, and these logs are world-readable.
+       *
+       * `code` is for callers whose PATHS are sensitive too: a read of
+       * `sessions/<code>/members` puts the join code in this message, so such
+       * a caller logs `e.code` and never `e.message`. */
+      const err = new Error(what + " of '" + path + "' failed: HTTP " + res.status);
+      err.code = "HTTP_" + res.status;
+      throw err;
     }
     return res.json();
   };
@@ -233,6 +252,8 @@ module.exports = {
   sessionLocationsFromKeys,
   readSessionLocations,
   readSessionLocationsShallow,
+  makeRestShallowReader,
+  makeRestValueReader,
   shallowKeysOf,
   safeLabel
 };

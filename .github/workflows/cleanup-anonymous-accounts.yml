@@ -1,0 +1,100 @@
+# Retention for anonymous Firebase Auth accounts and the records keyed by them
+# (GDPR Art. 5(1)(e) / APPI Art. 21). Issue #347.
+#
+# Every visitor is signed in anonymously before any consent surface is reached,
+# and nothing ever removed those accounts: the oldest were 101 days old when
+# anyone looked, never returned to and still present. Auto-deletion of anonymous
+# users is an Identity Platform feature this project does not have, so retention
+# was indefinite by absence of any mechanism. This job is the mechanism.
+#
+# It also removes the session history a since-fixed bug wrote under every
+# anonymous joiner (#348), and sweeps the LLM proxy's rate-limit counters, which
+# nothing swept despite a code comment saying otherwise.
+#
+# ⚠️ NOT SCHEDULED, ON PURPOSE. Read this before adding a cron.
+#
+#   A scheduled run is a NIGHTLY TRANSFER: account identifiers, their dates and
+#   the member uids of every live session reach a GitHub runner in the United
+#   States. The privacy notice lists what the scheduled jobs read (privacy.html
+#   sections 6 and 7) and does not list that, and it states no retention period
+#   for the anonymous identifier at all. So the cron, the armed ANON_CONFIRM and
+#   the notice that describes both have to land in ONE change — a schedule added
+#   here alone makes the published notice wrong the same night.
+#
+#   Until then this runs only when someone dispatches it, and deletes only when
+#   that person ticks `confirm`. The first dispatch should be a dry run: it has
+#   never met production, and it is the test of two things nothing local can
+#   show — that the service account may list accounts, and that Google honours
+#   the partial-response mask (the job refuses to continue if an e-mail address
+#   comes back; see scripts/lib/auth-accounts.js).
+#
+# There is no verbose mode. The script prints counts only, because this
+# repository's Actions logs are world-readable and a uid is the identifier this
+# job exists to stop keeping.
+
+name: Cleanup anonymous accounts
+
+on:
+  # schedule:
+  #   - cron: "37 4 * * *"   # after the 04:07 credential cleanup — see the header
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Actually delete (otherwise just dry-run)"
+        type: boolean
+        required: true
+        default: false
+      retention_days:
+        description: "Days without use before an anonymous account is removed (7-90)"
+        type: string
+        required: true
+        default: "90"
+      sweep_orphans:
+        description: "Also delete records whose uid has no account at all"
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: cleanup-anonymous-accounts
+  cancel-in-progress: false  # never kill a run mid-delete
+
+jobs:
+  cleanup:
+    name: Remove idle anonymous accounts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          # Keyed on the ROOT lock only — the repo also has
+          # docs/Third_session/PBL_platform/functions/package-lock.json
+          # (functions-ci.yml), which must not evict this cache.
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # npm ci, not a floating install — see the long note in
+      # cleanup-stale-sessions.yml.
+      - name: Install from the committed lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Write service-account credentials to a temp file
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Run anonymous-account retention
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+          FIREBASE_PROJECT_ID: canamed-69785
+          # DRY-RUN unless a manual dispatch ticks `confirm`.
+          ANON_CONFIRM: ${{ github.event.inputs.confirm == 'true' && '1' || '0' }}
+          ANON_RETENTION_DAYS: ${{ github.event.inputs.retention_days || '90' }}
+          ANON_SWEEP_ORPHANS: ${{ github.event.inputs.sweep_orphans == 'true' && '1' || '0' }}
+        run: node scripts/cleanup-anonymous-accounts.js
