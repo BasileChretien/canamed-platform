@@ -30,6 +30,7 @@
   "a11y.skip-to-main": "Saltar al contenido principal",
   "splash.tagline": "Una plataforma colaborativa para alianzas de educación médica entre universidades.",
   "splash.signed-in-as": "Sesión iniciada como",
+  "splash.account": "Cuenta",
   "splash.sign-out": "Cerrar sesión",
   "splash.lang-label": "Idioma",
   "privacy.title": "CaNaMED — Política de privacidad",

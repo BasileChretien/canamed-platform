@@ -91,6 +91,30 @@ test.describe("Splash fits the viewport", () => {
     });
   }
 
+  for (const width of NARROW) {
+    test(`no horizontal overflow at ${width}px — signed in, with an unbreakable name`, async ({ page }) => {
+      /* The signed-in row is hidden for everyone in LOCAL mode (no auth), so
+         the sweep above never sees it. It holds the profile name — or, before a
+         profile exists, the e-mail address, which has no break opportunity —
+         next to two links ("Account", "Sign out"). Stand a user in and paint
+         it, as the auth-state handler does. */
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/");
+      await page.waitForFunction(() => typeof paintUserChip === "function");
+      await page.evaluate(() => {
+        currentUser = {
+          uid: "u_local", isAnonymous: false,
+          email: "firstname.middlename.familyname.u4@student.mail.example-university.test"
+        };
+        paintUserChip();
+      });
+      await expect(page.locator("#splash-signed-in")).toBeVisible();
+      await expect(page.locator("#splash-signed-in-account")).toBeVisible();
+      await expect(page.locator("#splash-signed-in-out")).toBeVisible();
+      await expectNoOverflow(page, `signed-in entry view @${width}`);
+    });
+  }
+
   test("the stacked splash grid track cannot exceed the viewport", async ({ page }) => {
     // Guards the root cause directly: if someone reverts `minmax(0, 1fr)` to a
     // bare `1fr`, the single track grows to the card's min-content and this

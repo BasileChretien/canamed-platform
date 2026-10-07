@@ -3845,6 +3845,7 @@ body.session-ended-shown { overflow: hidden; }
 /* --- in-splash signed-in indicator (chip is hidden behind body.locked) --- */
 .splash-signed-in {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 8px;
@@ -3856,7 +3857,11 @@ body.session-ended-shown { overflow: hidden; }
   border-radius: var(--r-pill);
 }
 .splash-signed-in[hidden] { display: none; }
-.splash-signed-in strong { color: var(--ink); font-weight: 700; }
+/* the name may be an e-mail address, which has no break opportunity */
+.splash-signed-in strong {
+  color: var(--ink); font-weight: 700;
+  min-width: 0; overflow-wrap: anywhere;
+}
 
 /* --- saved-session banner: visible escape hatch when localStorage resume
    data is present. User-reported regression (2026-05-18): "once connected

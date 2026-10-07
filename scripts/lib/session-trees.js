@@ -111,6 +111,54 @@ function sessionLocationsFromKeys(sessionCodes, orgSessionCodes) {
 }
 
 /**
+ * The `withdrawals` tree, regrouped by the location key each branch belongs to:
+ *
+ *   withdrawals/<code>/<uid>               ->  "<code>"
+ *   withdrawals/orgs/<slug>/<code>/<uid>   ->  "orgs/<slug>/<code>"
+ *
+ * This goes the OTHER way from everything above: it starts from the records
+ * that exist, not from the sessions that do. A participant may withdraw after
+ * their session has been purged — the rule on `withdrawals/<code>/<uid>` does
+ * not look at the session — and a reader that only visits `withdrawalsPath` for
+ * each live session never sees that record at all. That is how an erasure
+ * request could be accepted, acknowledged on screen, and then read by no job.
+ *
+ * Keys come from locationFor(), so they are the keys `erasures/` records carry
+ * and cannot drift from the purge's own.
+ *
+ * ⚠️ A key here is NOT evidence that a session ever existed. Any signed-in
+ * visitor — an anonymous one included — may write `withdrawals/<any code>/
+ * <their own uid>`. Callers that need "is this session still in the database"
+ * compare against sessionLocations(); nothing can tell a purged session from
+ * one that never was.
+ *
+ * `orgs` directly under `withdrawals` is always the org subtree, never a
+ * session code: the rules give that literal key no per-uid write.
+ *
+ * @param {object} withdrawalsVal value of `withdrawals` (may be null/undefined)
+ * @returns {Object<string, object>} locationKey -> { uid: record }
+ */
+function withdrawalLocations(withdrawalsVal) {
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const out = {};
+  if (!isObj(withdrawalsVal)) return out;
+
+  for (const code of Object.keys(withdrawalsVal)) {
+    if (code === "orgs") continue;
+    if (isObj(withdrawalsVal[code])) out[locationFor(null, code).key] = withdrawalsVal[code];
+  }
+
+  const orgs = isObj(withdrawalsVal.orgs) ? withdrawalsVal.orgs : {};
+  for (const slug of Object.keys(orgs)) {
+    if (!isObj(orgs[slug])) continue;
+    for (const code of Object.keys(orgs[slug])) {
+      if (isObj(orgs[slug][code])) out[locationFor(slug, code).key] = orgs[slug][code];
+    }
+  }
+  return out;
+}
+
+/**
  * Read both trees and return their locations. Kept separate from the pure
  * function above so tests never need firebase-admin.
  * @param {object} db a firebase-admin database() handle
@@ -250,6 +298,7 @@ function safeLabel(loc, quiet) {
 module.exports = {
   sessionLocations,
   sessionLocationsFromKeys,
+  withdrawalLocations,
   readSessionLocations,
   readSessionLocationsShallow,
   makeRestShallowReader,
