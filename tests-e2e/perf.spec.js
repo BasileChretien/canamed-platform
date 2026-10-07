@@ -700,6 +700,27 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     the +54 bytes are a re-added declaration and its comment. data-rights.js
 //     is 6.3 KB gz, lazy. ⚠️ THE MARGIN IS ~1.45 KB, not 3.4: the next eager
 //     addition of any size needs a reclaim first.
+//   2026-10-07 (history entries): CAP UNCHANGED (326). ⚠️ AN EAGER ADDITION
+//     WITHOUT A RECLAIM, against the line above — recorded plainly, not
+//     absorbed. pushSessionToHistory() now fits the two names it stores to the
+//     80 characters the rule on users/$uid/history/$code allows (a longer one
+//     refused the whole entry, so a session picked from several sections never
+//     reached the signed-in participant's history). The label logic
+//     (sectionsLabel, ~1.04 KB gz with its comment) went into the LAZY
+//     section-registry.js, which every route to a lobby already awaits; eager
+//     keeps the call site, the boolean result and one telemetry record.
+//     Measured from the files, LF-normalised, gzip LEVEL 9 (what the test
+//     below computes), over the 15 eager assets: script.js 191.10 -> 191.34 KB
+//     gz, first-party 323.99 -> 324.23 (+0.24). section-registry.js 9.12 ->
+//     10.16, lazy. WHY NO RECLAIM: the change was scoped to that one function
+//     while other sessions held the rest of script.js; the +0.24 is ~0.13 of
+//     code and ~0.11 of comment (three lines pointing at the lazy file, where
+//     the explanation lives). A reclaim is still owed.
+//     THE FIGURES IN THE ENTRY ABOVE ARE AT THE DEFAULT GZIP LEVEL: main
+//     measured 324.55 at the default level and 323.99 at level 9 on the same
+//     commit (07cd0cf), a ~0.56 KB gap. Against the cap the test
+//     enforces, the margin after this entry is ~1.77 KB (it reads ~1.2 at the
+//     default level).
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

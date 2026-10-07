@@ -12375,12 +12375,22 @@ function saveProfile(updates) {
 function pushSessionToHistory(code) {
   if (!currentUser || currentUser.isAnonymous || !db || !code) return;
   const path = "users/" + currentUser.uid + "/history/" + code;
-  db.ref(path).set({
+  /* Both names are fitted to the 80 characters the rule allows: one over its
+     limit refuses the WHOLE entry (the why is at sectionsLabel(), in the lazy
+     section-registry.js). Without that chunk the entry is stored unnamed. */
+  const fit = names => (typeof sectionsLabel === "function") ? sectionsLabel(names, 80) : "";
+  return db.ref(path).set({
     code: code,
-    workshopName: (CFG && CFG.workshopName) || "",
-    scenarioName: tc(window.CURRENT_SCENARIO_NAME, "en") || "",
+    workshopName: fit([CFG.workshopName]),
+    scenarioName: fit((pickedSections() || [{ name: window.CURRENT_SCENARIO_NAME }])
+      .map(s => tc(s.name, "en"))),
     joinedAt: Date.now()
-  }).catch(e => console.warn("Could not write session history", e));
+  }).then(() => true, e => {
+    console.warn("Could not write session history", e);
+    // For tests and the error log, not the participant: what failed, never whose.
+    try { CanamedTelemetry.record("history-write-failed", { code: String(e && e.code) }); } catch (_) {}
+    return false;
+  });
 }
 
 /* populate any university <select> from COHORTS (signed-in profile setup +
