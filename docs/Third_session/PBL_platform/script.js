@@ -12256,6 +12256,7 @@ function ensureSignedIn() {
 
 /* Auth state changes: signed-in / signed-out / after sign-up */
 function handleAuthStateChange(user) {
+  if ((currentUser && currentUser.uid) !== (user && user.uid)) resetAccountUI();
   currentUser = user || null;
   // R2-24/25: bind stableId to auth.uid the moment we have a non-anonymous
   // user. Persistent across tabs/devices, lets research (longitudinal
@@ -12337,6 +12338,16 @@ function handleAuthStateChange(user) {
     currentProfile = null;
     paintUserChip();
   }
+}
+
+/* The account changed (signed out, deleted, someone else): nothing of the
+   previous one stays on screen. */
+function resetAccountUI() {
+  closeAccountDialog();
+  [["name", ""], ["uni", ""], ["year", "1"], ["english", "B2"]].forEach(f => {
+    const n = el("splash-prof-" + f[0]);
+    if (n) n.value = f[1];
+  });
 }
 
 function loadProfile() {
@@ -12516,14 +12527,16 @@ function openAccountDialog() {
   const dlg = el("account-dialog");
   if (!dlg || !currentUser) return;
   el("account-email").textContent = currentUser.email || "";
+  // Every field is set on every open: an account with no profile gets the
+  // defaults, never what a previous account left here.
+  const p = currentProfile || {};
+  el("account-uni").value = "";
   populateProfileSelects("account-uni");
-  if (currentProfile) {
-    el("account-name").value = currentProfile.name || "";
-    if (currentProfile.university) el("account-uni").value = currentProfile.university;
-    if (currentProfile.year) el("account-year").value = String(currentProfile.year);
-    if (currentProfile.english) el("account-english").value = currentProfile.english;
-  }
-  setRoleRadio("account-role", (currentProfile && currentProfile.role) || "student");
+  el("account-name").value = p.name || "";
+  if (p.university) el("account-uni").value = p.university;
+  el("account-year").value = String(p.year || 1);
+  el("account-english").value = p.english || "B2";
+  setRoleRadio("account-role", p.role || "student");
   applyProfileRoleVisibility("account-role", "account-student-fields");
   splashHintOk(el("account-action-hint"), "");
   loadHistoryForDialog();
