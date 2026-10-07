@@ -161,7 +161,7 @@ test("dry run: counts everything, writes NOTHING, deletes no account", async () 
     orphanPaths: 0, skippedKeys: 0, readErrors: 0
   });
   assert.deepStrictEqual(r.rateLimits,
-    { staleUid: 2, staleSession: 1, kept: 1, unparsed: 0, readErrors: 0 });
+    { staleUid: 2, staleSession: 1, kept: 1, unparsed: 0, readErrors: 0, unread: 0 });
   assert.strictEqual(r.sessions, 3);
 });
 
@@ -591,9 +591,85 @@ test("(review) hostile key names are swept like any other, not lost", async () =
   assert.strictEqual(r.rateLimits.unparsed, 1);
 });
 
+// ── the counter sweep's time budget ─────────────────────────────────────────
+
+/* A world whose per-uid counters are `n` stale ids, and a harness in which
+   every database read costs 10 ms on a clock the test owns. */
+function floodedHarness(n) {
+  const w = world();
+  const ids = Array.from({ length: n }, (_, i) => "flood" + String(i).padStart(3, "0"));
+  w.shallow["rateLimits/uid"] = Object.fromEntries(ids.map((id) => [id, true]));
+  for (const id of ids) w.shallow["rateLimits/uid/" + id] = { [OLD_HOUR]: true };
+  w.shallow["rateLimits/session"] = {};
+  const h = harness(w);
+  let t = 0;
+  const realShallow = h.deps.fetchShallow;
+  h.deps.clock = () => t;
+  h.deps.fetchShallow = async (p) => { t += 10; return realShallow(p); };
+  const counterReads = () => h.log
+    .filter((l) => l.op === "shallow" && l.path.startsWith("rateLimits/uid/flood"))
+    .map((l) => l.path.slice("rateLimits/uid/".length));
+  return { h, ids, counterReads };
+}
+
+test("the counter sweep has a time budget: it writes what it read and says what it left", async () => {
+  /* One read per counter id, every read before any write, under a 15-minute
+     job — and the ids are a participant's to mint (a counter is written with
+     the caller's own token). Without a budget, a few thousand of them make the
+     sweep outlast the job: the run is cancelled with nothing written, the
+     account half never starts, and a cancelled run tells nobody. Every night. */
+  const { h, ids, counterReads } = floodedHarness(40);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 125 });
+  const read = counterReads().length;
+  assert.ok(read > 0 && read < ids.length,
+    "expected the sweep to stop part-way; it read " + read + " of " + ids.length);
+  assert.strictEqual(r.rateLimits.unread, ids.length - read,
+    "what the sweep did not get to must be counted, not dropped");
+  assert.strictEqual(h.writtenPaths().filter((p) => p.startsWith("rateLimits/")).length, read,
+    "every counter that WAS read must still be swept");
+  assert.deepStrictEqual(h.deletedUids(), ["idleAnon"],
+    "running out of time on the counters must not stop the account half");
+  assert.strictEqual(exitCodeFor(r), 1, "a sweep that left counters unread is not a clean run");
+});
+
+test("with time to spare the budget changes nothing", async () => {
+  const { h, ids, counterReads } = floodedHarness(40);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 60_000 });
+  assert.strictEqual(counterReads().length, ids.length);
+  assert.strictEqual(r.rateLimits.unread, 0);
+  assert.strictEqual(exitCodeFor(r), 0);
+});
+
+test("a sweep short of time starts somewhere else each day, so no counter is starved", async () => {
+  /* Stopping early is only safe if tomorrow does not stop at the same place.
+     Stale counters at the front are deleted and make room; FRESH ones are not,
+     and an attacker can keep a block of them fresh — so the sweep must not
+     always begin with the same ids. */
+  const seen = new Set();
+  for (let day = 0; day < 30; day++) {
+    const { h, counterReads } = floodedHarness(12);
+    await h.run({ nowMs: NOW + day * DAY_MS, sweepBudgetMs: 45 });
+    const today = counterReads();
+    assert.ok(today.length >= 2 && today.length < 12, "day " + day + " read " + today.length);
+    for (const id of today) seen.add(id);
+  }
+  assert.strictEqual(seen.size, 12,
+    "after 30 days some counters had never been read: " + (12 - seen.size) + " of 12");
+});
+
+test("a broken clock cannot switch the sweep off", async () => {
+  /* The budget is a guard against running too long. A clock that returns
+     nonsense must cost the guard, not the sweep. */
+  const { h, ids, counterReads } = floodedHarness(6);
+  h.deps.clock = () => NaN;
+  const r = await h.run({ confirm: true, sweepBudgetMs: 125 });
+  assert.strictEqual(counterReads().length, ids.length);
+  assert.strictEqual(r.rateLimits.unread, 0);
+});
+
 // ── what reaches the log ────────────────────────────────────────────────────
 
-const secretsOf = (w) => w.accounts.map((a) => a.uid).concat(["CODE1", "My Code", "ORG9", "partner"]);
+const secretsOf =(w) => w.accounts.map((a) => a.uid).concat(["CODE1", "My Code", "ORG9", "partner"]);
 
 test("the report carries COUNTS only — no uid, no session code", async () => {
   const w = world();

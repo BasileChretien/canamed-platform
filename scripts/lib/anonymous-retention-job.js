@@ -47,9 +47,14 @@
 const { readSessionLocationsShallow, shallowKeysOf } = require("./session-trees");
 const {
   classifyAccounts, listingSanity, sparing, historyCandidates, recheck, planDeletion,
-  orphanTripwire, assertSafePaths, dropDescendants, chunk, QUIET_MS
+  orphanTripwire, assertSafePaths, dropDescendants, chunk, QUIET_MS, DAY_MS
 } = require("./anonymous-retention");
 const { planRateLimitSweep, SCOPES } = require("./rate-limit-retention");
+
+/* How long the counter sweep may spend reading before it writes what it has
+   and lets the account half run. The workflow gives the whole job 15 minutes;
+   one read can overshoot this by its own timeout (READ_TIMEOUT_MS). */
+const SWEEP_BUDGET_MS = 5 * 60 * 1000;
 
 /* Paths per multi-path update. Each update is atomic; the size is a bound on
    one request, not a correctness requirement. */
@@ -184,38 +189,72 @@ async function recheckCandidates(lookupAccounts, cls, history, opts) {
   };
 }
 
+/** Where today's sweep starts in a list of `n` counters. Spread over the list
+ *  by the day number, so two consecutive days do not begin at the same place
+ *  whatever `n` is. Only matters when the sweep runs out of time. */
+function sweepStart(nowMs, n) {
+  if (!(n > 0)) return 0;
+  const day = Math.floor(nowMs / DAY_MS);
+  return Number.isFinite(day) ? (Math.imul(day, 2654435761) >>> 0) % n : 0;
+}
+
 /**
  * Plan the rate-limit sweep from KEYS alone, one small read per counter.
  * Never throws: see the note at the top about why this must not block.
+ *
+ * And never runs long. It is one read per counter id, all of them before any
+ * write, and the ids are a participant's to mint — a counter is written with
+ * the caller's own token. Unbounded, a few thousand of them outlast the job's
+ * timeout: the run is cancelled having written nothing, the account half never
+ * starts, and a cancelled run mails nobody. So the reading stops at a deadline,
+ * what was read is swept, what was not is COUNTED (`unread`, which fails the
+ * run), and the next day starts somewhere else in the list: stale counters at
+ * the front are deleted and make room, but fresh ones are not, and a block of
+ * them kept fresh must not hide the rest for ever.
+ *
+ * @param {object} [budget] { ms, clock } — both optional; a clock that returns
+ *   nonsense costs the guard, never the sweep.
  */
-async function planRateLimits(read, nowMs) {
+async function planRateLimits(read, nowMs, budget) {
+  const clock = (budget && typeof budget.clock === "function") ? budget.clock : Date.now;
+  const ms = (budget && budget.ms > 0) ? budget.ms : SWEEP_BUDGET_MS;
+  const deadline = clock() + ms;
   const tree = Object.create(null);
+  const work = [];
   let readErrors = 0;
   for (const scope of SCOPES) {
     tree[scope] = Object.create(null);
-    let ids;
     try {
       const label = "rateLimits/" + scope;
-      ids = shallowKeysOf(await read.shallow(label, label), label);
+      for (const id of shallowKeysOf(await read.shallow(label, label), label)) work.push([scope, id]);
     } catch {
       readErrors++;
-      continue;
-    }
-    for (const id of ids) {
-      try {
-        const buckets = await read.shallow("rateLimits/" + scope + "/" + id, "a rate-limit counter");
-        if (buckets !== null && buckets !== undefined) tree[scope][id] = buckets;
-      } catch {
-        readErrors++;
-      }
     }
   }
+  const start = sweepStart(nowMs, work.length);
+  const got = new Array(work.length);
+  let unread = 0;
+  for (let i = 0; i < work.length; i++) {
+    if (clock() >= deadline) { unread = work.length - i; break; }
+    const at = (start + i) % work.length;
+    const [scope, id] = work[at];
+    try {
+      got[at] = await read.shallow("rateLimits/" + scope + "/" + id, "a rate-limit counter");
+    } catch {
+      readErrors++;
+    }
+  }
+  /* In listing order, whatever order they were read in: the plan must not
+     depend on where the sweep happened to start. */
+  work.forEach(([scope, id], at) => {
+    if (got[at] !== null && got[at] !== undefined) tree[scope][id] = got[at];
+  });
   const sweep = planRateLimitSweep(tree, nowMs);
   return {
     paths: sweep.paths.map((p) => "rateLimits/" + p),
     counts: {
       staleUid: sweep.stale.uid, staleSession: sweep.stale.session,
-      kept: sweep.kept, unparsed: sweep.unparsed, readErrors
+      kept: sweep.kept, unparsed: sweep.unparsed, readErrors, unread
     }
   };
 }
@@ -325,7 +364,8 @@ function addWrites(a, b) {
  * @param {function} deps.fetchShallow   (path) => Promise<keys|null>
  * @param {function} deps.readValue      (path) => Promise<value>
  * @param {function} deps.updateRoot     (multiPathUpdate) => Promise<void>
- * @param {object} opts { nowMs, windowMs, confirm, sweepOrphans }
+ * @param {function} [deps.clock]        () => ms, for the sweep's time budget
+ * @param {object} opts { nowMs, windowMs, confirm, sweepOrphans, sweepBudgetMs? }
  * @returns {Promise<object>} a report of COUNTS — no uid, no session code
  */
 async function runAnonymousRetention(deps, opts) {
@@ -333,7 +373,8 @@ async function runAnonymousRetention(deps, opts) {
 
   /* PHASE 1 — the counters. Planned, checked and written before anything is
      asked of Firebase Auth. */
-  const limits = await planRateLimits(read, opts.nowMs);
+  const limits = await planRateLimits(read, opts.nowMs,
+    { ms: opts.sweepBudgetMs, clock: deps.clock });
   const limitPaths = dropDescendants(limits.paths);
   assertSafePaths(limitPaths);
   const swept = opts.confirm ? await writeDeletions(deps.updateRoot, limitPaths) : noWrites();
@@ -373,5 +414,5 @@ async function runAnonymousRetention(deps, opts) {
 
 module.exports = {
   runAnonymousRetention, collectProtectedUids, collectKeysets, findContradictions,
-  planRateLimits, Refusal, withTimeout, UPDATE_CHUNK, READ_TIMEOUT_MS, encodePath
+  planRateLimits, Refusal, withTimeout, UPDATE_CHUNK, READ_TIMEOUT_MS, SWEEP_BUDGET_MS, encodePath
 };

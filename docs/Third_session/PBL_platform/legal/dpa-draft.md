@@ -3474,6 +3474,13 @@ found no false statement about a person's data, and these dependencies:
   with no facilitators. But it means that if both ever go, every nightly run
   exits 3 and no anonymous account is removed until an operator intervenes. The
   counter sweep is a separate phase that runs first and is not affected.
+- **The counter sweep reads for five minutes at most.** Counter identifiers can
+  be minted by any participant, so a large number of them could otherwise make
+  the job outlast its timeout and delete nothing at all. When the time runs
+  out, what was read is swept, the rest is counted and the run exits 1; the
+  next night starts at a different place in the list. Under such a flood the
+  "about three days" in the notice does not hold for the counters not yet
+  reached, and the only signal is that failed run (G11).
 - **An orphan created LATER is only counted on schedule.** If an account is
   removed some other way (the Console), the `users/` node left behind is
   reported nightly and deleted only by a manual dispatch with `sweep_orphans`.

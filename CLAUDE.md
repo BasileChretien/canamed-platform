@@ -395,6 +395,14 @@ mask honoured; every anonymous account dated; 119 database paths would go.
   `rateLimits` node, so it is read per id, shallow, and a failure is counted
   (exit 1) rather than thrown. Exit 3 therefore means "the ACCOUNT half
   refused", not "nothing happened" — the log still carries a `Rate limits:` line.
+  **And the sweep cannot stop the account half by running long:** it is one
+  read per counter id, all before any write, and the ids are a participant's to
+  mint — a few thousand would outlast the job's 15 minutes, cancelling the run
+  with nothing written, every night, and a cancelled run mails nobody. So the
+  reading has a 5-minute budget (`SWEEP_BUDGET_MS`): what was read is swept,
+  what was not is counted (`OUT OF TIME, N counter(s) not read`, exit 1), and
+  the next day starts elsewhere in the list so a block of counters kept fresh
+  cannot hide the rest.
 - **The account half refuses if the listing has NO signed-in account** (two
   exist today). Deliberate, but if both ever go, every nightly run exits 3 and
   no anonymous account is removed until someone intervenes.

@@ -16,8 +16,9 @@
 /**
  * 0 only when everything asked for was done. Anything short of that is 1:
  * a database write that failed, an account that could not be deleted, accounts
- * left in place because their records could not be removed first, or a read
- * that had to be skipped (which means something was not looked at).
+ * left in place because their records could not be removed first, a read
+ * that had to be skipped (which means something was not looked at), or
+ * counters the sweep ran out of time before reading.
  */
 function exitCodeFor(report) {
   const failed =
@@ -25,7 +26,8 @@ function exitCodeFor(report) {
     report.auth.failed > 0 ||
     report.auth.skipped ||
     report.records.readErrors > 0 ||
-    report.rateLimits.readErrors > 0;
+    report.rateLimits.readErrors > 0 ||
+    report.rateLimits.unread > 0;
   return failed ? 1 : 0;
 }
 
@@ -36,7 +38,8 @@ function formatRateLimits(l) {
   return `Rate limits: ${l.staleUid} per-uid + ${l.staleSession} per-session bucket(s) past ` +
     `their window, ${l.kept} current` +
     (l.unparsed ? `, ${l.unparsed} in no known format` : "") +
-    (l.readErrors ? ` — ${l.readErrors} READ(S) FAILED, those counters were not swept` : "");
+    (l.readErrors ? ` — ${l.readErrors} READ(S) FAILED, those counters were not swept` : "") +
+    (l.unread ? ` — OUT OF TIME, ${l.unread} counter(s) not read; the next run starts elsewhere` : "");
 }
 
 /**
