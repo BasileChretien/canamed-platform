@@ -94,6 +94,60 @@ test.describe("Stage bar redundancy + observer button removal", () => {
     });
     expect(ratio).toBeGreaterThan(4.5);
   });
+
+  test("the chart's contribution tally shows who is taking part, on the chart", async ({ page }) => {
+    /* The tally sits in the chart's <header>. style.css styled the page
+       masthead through bare `header` rules, so that header was painted as a
+       second masthead: a navy band with a tricolour rule across the paper
+       chart, and the masthead's white ink inherited by the names — white on
+       the chips' white, in the light theme. Each chip showed its dot and no
+       name. The masthead rules are now `body > header`. */
+    await surfaceApp(page);
+    await showStage(page, "stage-1");
+    await page.waitForFunction(() => typeof renderContrib === "function");
+    await page.evaluate(() => {
+      // `presence` is a script-scope `let`: this assigns the app's own binding.
+      presence = { c1: { name: "Aiko" }, c2: { name: "Léa" } };
+      renderContrib();
+    });
+    const chips = page.locator(".consultation-note-head .contrib-chip");
+    await expect(chips).toHaveCount(2);
+    await expect(chips.first()).toBeVisible();
+
+    for (const theme of ["light", "dark", "high-contrast"]) {
+      const m = await page.evaluate((t) => {
+        document.documentElement.setAttribute("data-theme", t);
+        const lum = (rgb) => { const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); };
+        const parse = (s) => (s.match(/\d+(\.\d+)?/g) || [0, 0, 0]).map(Number);
+        const head = getComputedStyle(document.querySelector(".consultation-note-head"));
+        return {
+          masthead: getComputedStyle(document.querySelector("body > header")).backgroundImage,
+          image: head.backgroundImage, rule: head.borderBottomWidth, shadow: head.boxShadow,
+          chips: [...document.querySelectorAll(".consultation-note-head .contrib-chip")].map((chip) => {
+            // A chip paints its own opaque fill, so that is what its name is on.
+            const s = getComputedStyle(chip);
+            const fg = lum(parse(s.color)), bg = lum(parse(s.backgroundColor));
+            return {
+              ink: s.color, fill: s.backgroundColor, opaque: parse(s.backgroundColor).length === 3,
+              ratio: (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05)
+            };
+          })
+        };
+      }, theme);
+      const at = `${theme} theme`;
+      // The control: the masthead itself is still styled, so "none" below is
+      // about the chart's header and not about a stylesheet that did not load.
+      expect(m.masthead, `${at}: the page masthead keeps its gradient`).toContain("gradient");
+      expect(m.image, `${at}: the chart's header must not paint the masthead's background`).toBe("none");
+      expect(m.rule, `${at}: nor carry the masthead's rule under it`).toBe("0px");
+      expect(m.shadow, `${at}: nor its shadow`).toBe("none");
+      expect(m.chips).toHaveLength(2);
+      for (const c of m.chips) {
+        expect(c.opaque, `${at}: a chip paints its own fill (${c.fill})`).toBe(true);
+        expect(c.ratio, `${at}: a participant's name (${c.ink} on ${c.fill})`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
 });
 
 test.describe("Module B right-column collapse", () => {
