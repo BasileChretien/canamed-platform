@@ -33,11 +33,11 @@
  * still that same process when the sweep runs (process-lineage.js does the
  * showing). Any other listener on those ports is reported, with the command to
  * clear it by hand, and left alone. It is a survivor sweep, not a kill switch:
- * on the normal path it runs from the child's own "exit" event. On a signal to
- * this runner, stop() forwards it to the child and then waits a FIXED 10 s
- * before sweeping — the loop there is synchronous, so it cannot actually see
- * the child go, and on POSIX a child slower than that to shut down is swept
- * while still exiting. (Known, older than the lineage work, not fixed here.)
+ * it runs from the child's own "exit" event, on the normal path and on a
+ * signal alike. On a signal to this runner, stop() forwards it to the child and
+ * the run ends when the child has exited — or after 10 s, if it has not: the
+ * bound is real, and on POSIX a child slower than that to shut down is swept
+ * while still exiting.
  *
  * That rule is the repair of a FOURTH defect, which the sweep itself brought in:
  *
@@ -374,9 +374,35 @@ function sweep(failed) {
 
 /* A signal to the RUNNER must not race the child. Sweeping immediately would
    force-kill the emulator ports while emulators:exec is still running against
-   them. Forward the signal, wait (bounded — a wedged child must not hang the
-   shell forever), then sweep. */
+   them. So: forward the signal, WAIT FOR THE CHILD TO EXIT, then sweep.
+
+   The wait is the child's own "exit" event — the handler below is where an
+   interrupted run ends — bounded by a timer, because a wedged child must not
+   hang the shell forever. Both need the event loop, so stop() RETURNS; it
+   must never block.
+
+   Until 2026-10-08 it did. It looped on `child.exitCode === null` around a
+   synchronous sleep, and exitCode is set by the same turn of the event loop
+   that would have emitted "exit": the condition could not change, so the loop
+   always ran to its deadline. Every Ctrl-C cost the full 10 s, child gone or
+   not.
+
+   A second signal while the first is being handled changes nothing. The child
+   has been told once — telling it again gains nothing, and on Windows it would
+   be a second walk of ParentProcessId over a tree the first has already
+   killed. The bound is already running, and the exit code stays the first
+   signal's. */
+const STOP_WAIT_MS = 10000;
+let interrupted = null;   // { signal, exitCode }, from the first signal on
 function stop(signal, exitCode) {
+  if (interrupted) {
+    console.warn("rules-e2e: " + signal + " — already stopping (" +
+      interrupted.signal + "); waiting for the suite to exit.");
+    return;
+  }
+  interrupted = { signal, exitCode };
+  console.log("rules-e2e: " + signal + " — stopping the suite, then sweeping once " +
+    "it has exited (" + STOP_WAIT_MS / 1000 + " s at most).");
   try {
     if (process.platform === "win32") {
       spawnSync("taskkill", ["/F", "/T", "/PID", String(child.pid)], { stdio: "ignore" });
@@ -384,17 +410,23 @@ function stop(signal, exitCode) {
       child.kill(signal);
     }
   } catch (e) { /* already gone */ }
-  const deadline = Date.now() + 10000;
-  while (child.exitCode === null && child.signalCode === null && Date.now() < deadline) {
-    spawnSync(process.execPath, ["-e", "setTimeout(()=>{},150)"], { stdio: "ignore" });
-  }
-  sweep(false);   // interrupted, not failed: nothing can be read into the exit
-  process.exit(exitCode);
+  setTimeout(() => {
+    console.warn("rules-e2e: the suite did not exit within " + STOP_WAIT_MS / 1000 +
+      " s of " + signal + " — sweeping without waiting for it any longer.");
+    sweep(false);   // interrupted, not failed: nothing can be read into the exit
+    process.exit(exitCode);
+  }, STOP_WAIT_MS);
 }
 process.on("SIGINT", () => stop("SIGINT", 130));
 process.on("SIGTERM", () => stop("SIGTERM", 143));
 
 child.on("exit", (code, signal) => {
+  if (interrupted) {
+    /* The wait stop() began ends here: the child is gone, so the sweep can no
+       longer race it. */
+    sweep(false);
+    process.exit(interrupted.exitCode);
+  }
   const status = code === null ? 1 : code;
   sweep(status !== 0 && !signal);
   console.log("rules-e2e: suite exited with " +

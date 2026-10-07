@@ -20,12 +20,33 @@
  *     checkout, which a unit test has no business doing.
  * Everything the runner does about ports and processes — netstat/lsof, the
  * process table, taskkill/kill — is left untouched; that is what is under test.
+ *
+ * ONE THING IS ADDED, on Windows only: a way to reach the runner's SIGINT /
+ * SIGTERM handler (tests/emulator-runner-signal.test.js). A signal cannot be
+ * sent to a Node process there — ChildProcess.kill() is TerminateProcess, so
+ * the process dies and no handler runs. What Node does when a console Ctrl-C
+ * arrives is emit the event on `process`; so, when the test writes the file
+ * `signal-SIGINT` (or -SIGTERM) into FAKE_EXEC_DIR, that is what happens here.
+ * It reaches the same handler by the same call; it does not test delivery,
+ * and on POSIX the test sends a real signal instead.
  */
 
 const childProcess = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 const FAKE_CLI = path.join(__dirname, "fake-emulators-exec.js");
+
+if (process.platform === "win32" && process.env.FAKE_EXEC_DIR) {
+  const asked = (signal) => path.join(process.env.FAKE_EXEC_DIR, "signal-" + signal);
+  setInterval(() => {
+    for (const signal of ["SIGINT", "SIGTERM"]) {
+      if (!fs.existsSync(asked(signal))) continue;
+      fs.unlinkSync(asked(signal));
+      process.emit(signal, signal);
+    }
+  }, 25).unref();
+}
 
 const realSpawn = childProcess.spawn;
 childProcess.spawn = function (cmd, args, opts) {
