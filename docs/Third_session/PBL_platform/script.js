@@ -12346,6 +12346,11 @@ function resetAccountUI() {
   closeAccountDialog();
   currentProfile = null;
   paintUserChip(true);   // no opener until THIS account's profile is read
+  Object.keys(_joinFill).forEach(id => {
+    const n = el(id), f = _joinFill[id];
+    if (n && n.value === f[1]) n.value = f[0];
+    delete _joinFill[id];
+  });
   [["name", ""], ["uni", ""], ["year", "1"], ["english", "B2"]].forEach(f => {
     const n = el("splash-prof-" + f[0]);
     if (n) n.value = f[1];
@@ -12499,20 +12504,22 @@ function profileSetupSubmit() {
   }).catch(e => splashHintErr(hint, "Could not save: " + (e.message || "")));
 }
 
+/* What the account put in the lobby's join form: id -> [value before, value put]. */
+const _joinFill = {};
 /* When a user with a profile lands on the lobby, pre-fill their join form */
 function applyProfileToJoinForm() {
-  if (!currentProfile) return;
+  const p = currentProfile;
+  if (!p) return;
+  const put = (id, v) => {
+    const n = el(id), f = _joinFill[id];
+    _joinFill[id] = [f && n.value === f[1] ? f[0] : n.value, n.value = v];
+  };
   const n = el("name-input");
-  if (n && !n.value) n.value = currentProfile.name || "";
+  if (n && !n.value) put("name-input", p.name || "");
   const u = el("uni-input");
-  if (u && currentProfile.university &&
-      [...u.options].some(o => o.value === currentProfile.university)) {
-    u.value = currentProfile.university;
-  }
-  const y = el("year-input");
-  if (y && currentProfile.year) y.value = String(currentProfile.year);
-  const e = el("english-input");
-  if (e && currentProfile.english) e.value = currentProfile.english;
+  if (u && p.university && [...u.options].some(o => o.value === p.university)) put("uni-input", p.university);
+  if (el("year-input") && p.year) put("year-input", String(p.year));
+  if (el("english-input") && p.english) put("english-input", p.english);
 }
 
 /* The account dialog's live subscription to users/<uid>/history.

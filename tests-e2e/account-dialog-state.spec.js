@@ -520,3 +520,42 @@ test("D: an account that replaces another directly sees nothing of it while its 
   expect(await stored(page, "users/u_alice/profile")).toEqual(ALICE_PROFILE);
   expect(errors).toEqual([]);
 });
+
+/* ======================= E. the lobby's join form ==========================
+ *
+ * Found in review (finding 2), and older than this spec. A loaded or saved
+ * profile also fills the lobby's "Join as a participant" form, and nothing took
+ * it out again when the account went: Alice signs in and out, the next student
+ * types a session code in the same tab and is offered her name, year and level.
+ *
+ * What is NOT taken out — a name the participant typed, choices they made
+ * before signing in or after — is in the unit tests, section E.
+ */
+
+const joinFields = (page) => page.evaluate(() => {
+  const v = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id)).value;
+  return { name: v("name-input"), university: v("uni-input"), year: v("year-input"), english: v("english-input") };
+});
+
+test("E: after an account signs out, the next student's join form holds nothing of it", async ({ page }) => {
+  const errors = collectErrors(page);
+  await frontPage(page);
+  await seed(page, "users/u_alice/profile", ALICE_PROFILE);
+  await seed(page, "sessions/" + CODE + "/created", { at: Date.now(), by: "E2E" });
+  await signIn(page, ALICE);
+  await expect(page.locator("#splash-signed-in-name")).toHaveText("Alice");
+  expect(await joinFields(page), "premise: her profile is in the join form behind the front page")
+    .toEqual({ name: "Alice", university: "Nagoya", year: "5", english: "C1" });
+
+  await page.locator("#splash-signed-in-out").click();
+  await expect(page.locator("#splash-signed-in")).toBeHidden();
+
+  // The next student, same tab, no reload: a session code, then the lobby.
+  await page.locator("#splash-code").fill(CODE);
+  await page.locator("#splash-enter").click();
+  await expect(page.locator("#splash")).toBeHidden({ timeout: 10_000 });
+  await expect(page.locator("#name-input")).toBeVisible({ timeout: 10_000 });
+  expect(await joinFields(page), "the form they are shown must be nobody's")
+    .toEqual({ name: "", university: "", year: "1", english: "B2" });
+  expect(errors).toEqual([]);
+});

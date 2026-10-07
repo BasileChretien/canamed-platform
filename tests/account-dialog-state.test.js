@@ -876,3 +876,92 @@ test("D: an account with no profile that replaces another directly is asked for 
   assert.deepStrictEqual(w.views(), ["profile-setup"]);
   assert.strictEqual(w.setupForm().name, "bob");
 });
+
+/* ======================= E. the lobby's join form ==========================
+ *
+ * FOUND IN REVIEW (finding 2), and older than this file. applyProfileToJoinForm()
+ * fills the lobby's "Join as a participant" form whenever a profile is loaded
+ * or saved, and nothing took it out again when the account went. Alice signs in
+ * and out; the next student types a session code in the same tab and is
+ * offered "Alice", Year 5, C1.
+ *
+ * What is given back is what the ACCOUNT put there, and nothing else: a field
+ * the participant typed or chose before signing in goes back to that, one they
+ * changed afterwards is left as they changed it, and a name that was already in
+ * the form — typed, or restored from `canamed_name` — was never the account's.
+ */
+
+const NOBODY = { name: "", university: "", year: "1", english: "B2" };
+
+test("E: the lobby's join form holds nothing of an account that has signed out", async () => {
+  const w = makeWorld();
+  assert.deepStrictEqual(w.joinForm(), NOBODY, "premise: the form as index.html ships it");
+  await w.signIn(ALICE, ALICE_PROFILE);
+  assert.deepStrictEqual(w.joinForm(), { name: "Alice", university: "Nagoya", year: "5", english: "C1" },
+    "premise: a loaded profile fills the join form");
+  await w.signOut();
+  assert.deepStrictEqual(w.joinForm(), NOBODY, "the next student must not be offered her details");
+});
+
+test("E: nor of an account that another one replaced directly", async () => {
+  const w = makeWorld();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.db.seed("users/uidBob/profile", BOB_PROFILE);
+  w.db.hold("users/uidBob/profile");
+  await w.replaceWith(BOB);
+  assert.deepStrictEqual(w.joinForm(), NOBODY, "while his profile is being read: nothing of hers");
+  w.db.release("users/uidBob/profile");
+  await w.settle();
+  assert.deepStrictEqual(w.joinForm(), { name: "Bob", university: "Caen", year: "2", english: "B1" });
+});
+
+test("E: what the participant had typed and chosen before signing in comes back", async () => {
+  const w = makeWorld();
+  await w.visit();
+  w.el("name-input").value = "Zoe";
+  w.el("uni-input").value = "Caen";
+  w.el("year-input").value = "3";
+  w.el("english-input").value = "B1";
+  await w.signIn(ALICE, ALICE_PROFILE);
+  assert.deepStrictEqual(w.joinForm(), { name: "Zoe", university: "Nagoya", year: "5", english: "C1" },
+    "premise: the account overwrites the three lists and leaves a name that is already there");
+  await w.signOut();
+  assert.deepStrictEqual(w.joinForm(), { name: "Zoe", university: "Caen", year: "3", english: "B1" },
+    "her choices go; the participant's own come back, not the defaults");
+});
+
+test("E: what the participant changed after the account filled the form is kept", async () => {
+  const w = makeWorld();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.el("name-input").value = "Ali";
+  w.el("year-input").value = "4";
+  await w.signOut();
+  assert.deepStrictEqual(w.joinForm(), { name: "Ali", university: "", year: "4", english: "B2" },
+    "only the fields still holding what the account put there are given back");
+});
+
+test("E: a name that was already in the form is not the account's to remove", async () => {
+  /* The guard on the other side: initLobby() restores the name a participant
+     joined under from `canamed_name`. If it happens to be the name in the
+     profile too, it is still theirs — the account never wrote it. */
+  const w = makeWorld();
+  await w.visit();
+  w.el("name-input").value = "Alice";
+  await w.signIn(ALICE, ALICE_PROFILE);
+  await w.signOut();
+  assert.strictEqual(w.joinForm().name, "Alice");
+});
+
+test("E: a profile saved again while signed in still gives the form back as it was before the account", async () => {
+  /* The form is filled on load AND on every save. Undoing only the last fill
+     would restore the account's own earlier values. */
+  const w = makeWorld();
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.sandbox.openAccountDialog();
+  w.el("account-year").value = "6";
+  w.sandbox.accountSaveBtn();
+  await w.settle();
+  assert.strictEqual(w.joinForm().year, "6", "premise: a saved profile is applied to the join form again");
+  await w.signOut();
+  assert.deepStrictEqual(w.joinForm(), NOBODY);
+});
