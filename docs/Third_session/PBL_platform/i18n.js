@@ -100,6 +100,7 @@
       // splash — shared chrome
       "splash.tagline": "A collaborative platform for medical-education partnerships between universities.",
       "splash.signed-in-as": "Signed in as",
+      "splash.account": "Account",
       "splash.sign-out": "Sign out",
       "splash.lang-label": "Your language",
       "splash.saved-session-as": "Resuming as",
@@ -1031,7 +1032,7 @@
   // v10s cover DISJOINT locale changes: a browser holding main's v10 would
   // never refetch and would miss the picker's strings entirely. The union
   // therefore needs a number neither side has used.
-  const LOCALE_VERSION = "v26";  // L7: the consent surface renders in the participant's language again
+  const LOCALE_VERSION = "v27";  // splash.account: the signed-in row opens the account dialog
   const _localeLoads = {}; // lang -> Promise<table>; de-dupes concurrent loads
 
   function dispatchLangChange(lang) {

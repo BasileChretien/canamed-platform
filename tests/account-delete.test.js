@@ -585,3 +585,67 @@ test("opening and closing the account dialog runs without a ReferenceError", () 
     ["users/" + UID + "/history", "off:users/" + UID + "/history"],
     "closing must drop the history subscription");
 });
+
+/* ---- the account dialog could not be REACHED outside a session ----------- */
+
+/* The source range of the element whose opening tag `openRe` matches, found by
+   counting same-name tags from there. */
+function elementRange(html, openRe) {
+  const m = openRe.exec(html);
+  assert.ok(m, "no element matches " + openRe);
+  const tag = /<(\w+)/.exec(m[0])[1];
+  const tags = new RegExp("<(/?)" + tag + "\\b", "g");
+  tags.lastIndex = m.index;
+  let depth = 0, t;
+  while ((t = tags.exec(html))) {
+    depth += t[1] ? -1 : 1;
+    if (depth === 0) return [m.index, t.index];
+  }
+  throw new Error("unclosed <" + tag + ">");
+}
+
+test("the account dialog has an opener that the locked front page does not hide", () => {
+  /* Once the dialog could open again, it still could not be opened by anyone
+     who was not in a session: its one opener was the chip in the page header,
+     and `body.locked > header` is `display: none !important` until a session
+     code is accepted. Someone coming back to withdraw or delete — whose own
+     code may have been purged — had no route to either. Nothing failed,
+     because the control existed and worked wherever a test looked at it.
+
+     So this does not look for one id. It reads what a locked page hides from
+     the rule itself, reads what opens the dialog from wireAccountUI(), and
+     requires an opener in the row a signed-in visitor is actually shown. The
+     browser half — that the row is visible and the click opens the dialog on
+     every viewport — is tests-e2e/account-dialog.spec.js. */
+  const CSS = fs.readFileSync(path.join(P, "style.css"), "utf8");
+  const rule = /((?:body\.locked > [#\w-]+\s*,?\s*)+)\{\s*display:\s*none\s*!important;?\s*\}/.exec(CSS);
+  assert.ok(rule, "could not find the rule that hides the page while it is locked");
+  const hidden = [...rule[1].matchAll(/body\.locked > ([#\w-]+)/g)].map(m => m[1]);
+  assert.ok(hidden.includes("header"), "premise: a locked page hides its header");
+
+  // `>` in the rule means a direct child of <body>, which this file indents by two.
+  const hiddenRanges = hidden.map(sel => elementRange(HTML, sel[0] === "#"
+    ? new RegExp("<\\w+[^>]*\\bid=\"" + sel.slice(1) + "\"[^>]*>")
+    : new RegExp("\\n  <" + sel + "\\b[^>]*>")));
+  const within = (id, ranges) => {
+    const at = HTML.indexOf('id="' + id + '"');
+    assert.notStrictEqual(at, -1, "#" + id + " is not in index.html");
+    return ranges.some(([from, to]) => at > from && at < to);
+  };
+
+  const openers = [...extractFn(SCRIPT, "wireAccountUI")
+    .matchAll(/el\("([\w-]+)"\)\s*\.addEventListener\("click",\s*openAccountDialog\)/g)]
+    .map(m => m[1]);
+  assert.ok(openers.includes("user-chip") && within("user-chip", hiddenRanges),
+    "premise: the header chip opens the dialog, and a locked page hides it");
+
+  /* The row paintUserChip() reveals for a signed-in visitor, on the splash. */
+  const row = [elementRange(HTML, /<div[^>]*\bid="splash-signed-in"[^>]*>/)];
+  assert.ok(!within("splash-signed-in", hiddenRanges),
+    "premise: the signed-in row is not inside anything a locked page hides");
+  const reachable = openers.filter(id => within(id, row));
+  assert.ok(reachable.length > 0,
+    "nothing in the splash's signed-in row opens the account dialog — a signed-in " +
+    "user with no session code cannot reach Delete account or Withdraw consent. " +
+    "Openers found: " + JSON.stringify(openers));
+});
