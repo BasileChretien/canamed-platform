@@ -3325,9 +3325,7 @@ function readSession(hintId) {
 /* version stamp written next to every consent record. Bump whenever the
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
-   participant consented to. The resume path compares it too, so a bump is
-   what re-asks a returning participant. It sat at v3 while the notice went
-   to v11; tests/pis-version-lockstep.test.js now ties the two together. */
+   participant consented to. A bump re-asks on resume (pis-version-lockstep). */
 const CONSENT_NOTICE_VERSION = "PIS-v12-2026-10";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */
@@ -12372,10 +12370,8 @@ function saveProfile(updates) {
    record of which workshops a persistent anonymous uid attended, under the
    `users` tree — which no retention job touches — disclosed nowhere.
 
-   See issue #347. This stops NEW writes only. The entries already written are
-   removed by scripts/cleanup-anonymous-accounts.js — the first job to reach
-   `users` at all: once an anonymous account has been quiet for a day, and
-   with the account itself when it has gone 90 days unused. */
+   See issue #347. This stops NEW writes only; the entries already written
+   are removed by scripts/cleanup-anonymous-accounts.js. */
 function pushSessionToHistory(code) {
   if (!currentUser || currentUser.isAnonymous || !db || !code) return;
   const path = "users/" + currentUser.uid + "/history/" + code;
