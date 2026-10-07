@@ -3321,7 +3321,117 @@ planner drives both so they cannot diverge:
   the rules and forgotten in the planner fails the suite instead of silently
   surviving every future erasure.
 
-⚠️ **THIS ITEM STAYS OPEN, on three things the tool cannot do.** The capability
+⚠️ **THIRD LIMB, added 2026-10-07: the published limit itself could be set aside
+— a session dated in the future was never purged. Corrected in the code the
+same day, in the purge and in the rules; neither is in force until it ships
+(see "When it takes effect" below).** The nightly job decides from two dates,
+`closed/at` (30 days) and `created/at` (90 days). The client writes both, and the
+rules required of each only that it be a number. A session created — or closed —
+with a date years ahead was therefore "within retention" until that date: run
+against an in-memory database, the real job kept a session created ten years
+ahead, and kept it again when run five years later; the same for a session 200
+days old whose close date was ten years ahead, and for one in the organisation
+tree. `created` is written by whoever creates the session (any signed-in visitor
+while `facilitatorGate/enforce` is off) and `closed` by its admin, so the 30- and
+90-day limits the notice publishes could be set aside for a session by its own
+creator, and every participant's data in it kept for as long as the creator
+chose. This pack did not record it. The project's own review notes had: they
+listed `created.at` as "lack[ing] an upper timestamp bound" and set it aside as
+an admin-only write of low value. It is not admin-only, and nobody had asked
+what reads the date.
+
+- **Purge — the change that closes it.** `scripts/lib/session-retention.js`
+  treats a date more than 24 hours ahead of the run as one no session can have,
+  and the session as due. A rule protects sessions created after it ships and
+  does nothing for one already in the database; this does. The scheduled job's
+  log states how many sessions were purged for this reason and never which.
+- **Rules.** Both dates must lie within twelve hours of the server clock, on
+  either side, in both trees. Twelve hours rather than seconds, because the
+  client sends the device's own clock: a facilitator's laptop set to the right
+  wall time in the wrong time zone — seven or eight hours for one carried
+  between France and Japan — must still be able to create and close a session.
+  A narrower window would gain nothing, since the purge already takes a date
+  up to a day ahead at face value; twelve hours behind is enough to stop a
+  clock that is days slow from back-dating a close into an early purge. Both
+  nodes were already write-once, which is what stops a date being refreshed.
+  *(The window first proposed was five seconds ahead and two hours behind. An
+  independent review blocked it before merge: it refused, for no retention
+  gain, three things a facilitator with a wrong clock can do today — see
+  "What a refused date does" below.)*
+
+**When it takes effect.** The purge change, on the first scheduled run after
+the change is merged. The rules, only when the database rules are deployed —
+and that deploy step is best-effort, so a successful deployment does not show
+that it ran; the run's log does.
+
+⚠️ **What remains true, and is not fixed by this:**
+- **Up to twelve hours can be gained on a session created once the rules are
+  in force, and up to one day on a session written before.** The purge's
+  tolerance is a day so that a session created shortly before the nightly run
+  by a device whose clock is fast, or set to the wrong time zone, is not
+  deleted as "impossible".
+- **Sessions already carrying such a date are deleted by the first live run,
+  at once, and only partly recoverably.** The live database was not queried
+  while this was written. A dry run of the purge on the change's own branch,
+  before merge, counts them without deleting anything; that count is recorded
+  on the pull request (#438), not here. If any exist: the purge runs only when
+  an archive no more than two days old exists, but that archive holds the
+  session tree and nothing else — the chat, its author index, the roster, the
+  certificate-id map, the withdrawal records and the admin secret are deleted
+  by the same purge and are in no archive. And a restore does not hold: a
+  restored session keeps its impossible date and is purged again at the next
+  run. So a session run properly and closed from a device whose date was days
+  ahead would lose its 30 days, and its chat for good.
+- **What a refused date does.** A facilitator whose device clock is more than
+  twelve hours wrong is refused, and the product handles that refusal badly.
+  The client sends its own clock, not the server's.
+  - *Creating.* Only the dated write is refused; the others in the same batch
+    land. What is left is a partial session with no date, which the purge
+    removes at its next run as a session with no timestamps. Its recovery code
+    is removed by nothing — a gap older than this change, raised separately.
+  - *Closing.* From "Sessions you created" the page says to check the
+    connection. From the dashboard, the archive is downloaded first — again on
+    every retry — and the alert then says the database rules need to be
+    deployed, which is wrong for this cause and nothing a facilitator can act
+    on. Either way the session stays **open**: participants are not shown that
+    it ended, it is purged 90 days after creation rather than 30 days after
+    the close that was attempted, and it never reaches the research export,
+    which takes closed sessions only.
+  - *Who can meet it.* Not only a device that could never have entered a
+    session. Entering one already requires the device clock to be no more
+    than five seconds ahead of the server's and two minutes behind it, but
+    membership is recorded per account and persists, and starting and
+    advancing a session carry no date. A facilitator
+    who is already a member can therefore run a whole session from a device
+    with a wrong clock and be refused only at the close; and a device that
+    cannot enter a session can still create one for another device to run, or
+    close one from its own list. An earlier wording of this paragraph said no
+    device that could run a session was newly refused. That was wrong.
+
+  The remedy is for the client to send the server's time for these two writes,
+  as it already does for a password reset. That is a change to the client, was
+  not made here, and would not reach a browser still running a stored copy of
+  the client — which is why the window was widened rather than left to it.
+- **Other client-written dates still have no upper bound** (`summary/at`,
+  `pool/…/consent/at`, `users/<uid>/history/…/joinedAt` among them). None of
+  them decides a deletion today; a retention job that came to read one would
+  repeat this defect.
+
+`Verify:` `node --test tests/session-retention.test.js`, which runs the real
+purge in a child process against the same database on two dates five years
+apart, and holds the purge's tolerance above the rules' allowance and the
+rules' window wide enough for a device in the wrong time zone; and
+`tests-e2e/emulator/session-date-bounds.spec.js`, where each refused date is
+followed by the same write with an honest one, a device eight hours off in
+either direction creates and closes a session, and so does the real client.
+Both test the repository, not the deployment. For that: the deployment run's
+log contains `released successfully` only when the rules were released (the
+workflow's own messages appear in every run's log, whatever happened); and
+the first scheduled purge run after it prints the count — whose absence means
+"none" only if the same log's backup gate line says OK, because a blocked gate
+skips the session pass, dry run included.
+
+⚠️ **THIS ITEM STAYS OPEN, on three things the erasure tool cannot do.** The capability
 now exists; that is not the same as the duty being discharged.
 
 1. ✅ **`roomChat` IS now erasable per participant — schema fix 2026-09-03.**
