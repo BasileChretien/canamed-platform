@@ -559,3 +559,71 @@ test("E: after an account signs out, the next student's join form holds nothing 
     .toEqual({ name: "", university: "", year: "1", english: "B2" });
   expect(errors).toEqual([]);
 });
+
+/* ======================= F. the sign-in form ===============================
+ *
+ * Found in review (finding 3), and older than this spec. The e-mail sign-in
+ * form was only ever read: a successful sign-in emptied nothing and neither did
+ * sign-out, so the previous person's address AND PASSWORD stayed in the three
+ * inputs for as long as the tab lived. The next person opens "Sign in", finds
+ * them, and "Sign in" enters her account.
+ */
+
+const PASSWORD = "Correct-Horse-9";
+const NOTHING = { email: "", password: "", confirm: "" };
+const signInFields = (page) => page.evaluate(() => {
+  const v = (id) => /** @type {HTMLInputElement} */ (document.getElementById(id)).value;
+  return { email: v("splash-email-input"), password: v("splash-password-input"), confirm: v("splash-password-confirm") };
+});
+
+test("F: the sign-in form keeps nobody's e-mail address or password", async ({ page }) => {
+  const errors = collectErrors(page);
+  await frontPage(page);
+  await page.evaluate(({ who, password }) => { window.__register(who, password); }, { who: ALICE, password: PASSWORD });
+  await seed(page, "users/u_alice/profile", ALICE_PROFILE);
+
+  // 1. Alice signs in through the form itself.
+  await page.locator("#splash-go-account").click();
+  await expect(page.locator("#splash-view-account")).toBeVisible();
+  await page.locator("#splash-email-input").fill(ALICE.email);
+  await page.locator("#splash-password-input").fill(PASSWORD);
+  await page.locator("#splash-email-submit").click();
+  await expect(page.locator("#splash-signed-in-name"), "premise: the sign-in worked").toHaveText("Alice");
+  expect(await signInFields(page), "after a successful sign-in").toEqual(NOTHING);
+
+  /* 1b. She signs in AGAIN while still signed in. Same uid, so the SDK reports
+         nothing and only the sign-in's own success can empty the form. */
+  await page.locator("#splash-go-account").click();
+  await page.locator("#splash-email-input").fill(ALICE.email);
+  await page.locator("#splash-password-input").fill(PASSWORD);
+  await page.locator("#splash-email-submit").click();
+  await expect.poll(() => signInFields(page), { message: "after signing in again as the same account" })
+    .toEqual(NOTHING);
+  await expect(page.locator("#splash-account-hint"), "premise: it succeeded, with no error shown").toHaveText("");
+
+  /* 2. The sign-in view stays reachable while she is signed in, so the form
+        can hold a half-typed address and password when her account goes. */
+  await expect(page.locator("#splash-view-account"), "premise: still on the sign-in view").toBeVisible();
+  await page.locator("#splash-email-input").fill("bob@example.test");
+  await page.locator("#splash-password-input").fill("Half-typed-1");
+  await page.locator("#splash-signed-in-out").click();
+  await expect(page.locator("#splash-signed-in")).toBeHidden();
+  expect(await signInFields(page), "after sign-out").toEqual(NOTHING);
+
+  /* 3. A sign-up upgrades the anonymous visitor in place and the SDK reports
+        no change, so nothing that runs "when the account changes" runs here. */
+  await expect(page.locator("#splash-view-account"), "premise: still on the sign-in view").toBeVisible();
+  await page.locator("#splash-email-mode-signup").click();
+  const meter = page.locator("#splash-pwd-strength-label");
+  const idle = await meter.textContent();
+  await page.locator("#splash-email-input").fill("new@example.test");
+  await page.locator("#splash-password-input").fill(PASSWORD);
+  await page.locator("#splash-password-confirm").fill(PASSWORD);
+  await expect(meter, "premise: the meter rates what was typed").not.toHaveText(idle);
+  await page.locator("#splash-email-submit").click();
+  await expect.poll(() => page.evaluate(() => auth.currentUser.isAnonymous === false && auth.currentUser.email),
+    { message: "premise: the sign-up succeeded" }).toBe("new@example.test");
+  await expect.poll(() => signInFields(page), { message: "after a sign-up" }).toEqual(NOTHING);
+  await expect(meter, "and the meter must not go on rating the previous person's password").toHaveText(idle);
+  expect(errors).toEqual([]);
+});

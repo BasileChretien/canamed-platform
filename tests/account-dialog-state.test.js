@@ -965,3 +965,103 @@ test("E: a profile saved again while signed in still gives the form back as it w
   await w.signOut();
   assert.deepStrictEqual(w.joinForm(), NOBODY);
 });
+
+/* ======================= F. the sign-in form ===============================
+ *
+ * FOUND IN REVIEW (finding 3), and older than this file. The front page's
+ * e-mail sign-in form was only ever READ: a successful sign-in emptied nothing,
+ * and neither did sign-out. So the previous person's e-mail address AND
+ * PASSWORD stayed in the three inputs for as long as the tab lived — the next
+ * person opens "Sign in", finds them, and "Sign in" enters her account.
+ *
+ * A sign-up needs its own test: it upgrades the anonymous user in place, the
+ * uid does not change, and the SDK then reports nothing at all — so emptying
+ * the form "when the account changes" never runs for it.
+ */
+
+const EMPTY = { email: "", password: "", confirm: "" };
+const PASSWORD = "Correct-Horse-9";
+
+test("F: a successful sign-in leaves no e-mail address or password in the form", async () => {
+  const w = makeWorld();
+  w.auth.accounts["alice@example.test"] = { user: ALICE, password: PASSWORD };
+  w.db.seed("users/uidAlice/profile", ALICE_PROFILE);
+  await w.visit();
+  w.typeSignIn({ email: "alice@example.test", password: PASSWORD });
+  w.sandbox.signInWithEmail("alice@example.test", PASSWORD);
+  await w.settle();
+  assert.strictEqual(w.sandbox.currentUser.uid, "uidAlice", "premise: she is signed in");
+  assert.deepStrictEqual(w.signInForm(), EMPTY);
+});
+
+test("F: nor does signing in again to the account that is already signed in, which reports no change", async () => {
+  /* The same uid again: the SDK tells the page nothing, so nothing that runs
+     "when the account changes" runs. The sign-in's own success has to empty
+     the form. */
+  const w = makeWorld();
+  w.auth.accounts["alice@example.test"] = { user: ALICE, password: PASSWORD };
+  await w.signIn(ALICE, ALICE_PROFILE);
+  w.typeSignIn({ email: "alice@example.test", password: PASSWORD });
+  w.el("splash-account-hint").textContent = "stale";
+  w.sandbox.signInWithEmail("alice@example.test", PASSWORD);
+  await w.settle();
+  assert.strictEqual(w.el("splash-account-hint").textContent, "", "premise: the sign-in succeeded");
+  assert.strictEqual(w.sandbox.currentUser, ALICE, "premise: and no auth event replaced the user");
+  assert.deepStrictEqual(w.signInForm(), EMPTY);
+});
+
+test("F: nor does a sign-up, which upgrades the anonymous visitor in place and reports no change", async () => {
+  const w = makeWorld();
+  await w.visit();
+  const visitor = w.sandbox.currentUser;
+  let inputEvents = 0;
+  w.el("splash-password-input").addEventListener("input", () => { inputEvents++; });
+  w.typeSignIn({ email: "new@example.test", password: PASSWORD, confirm: PASSWORD });
+  w.sandbox.signUpWithEmail("new@example.test", PASSWORD);
+  await w.settle();
+
+  assert.strictEqual(w.auth.currentUser, visitor, "premise: the same user object, upgraded in place");
+  assert.strictEqual(visitor.isAnonymous, false, "premise: the sign-up succeeded");
+  assert.strictEqual(w.el("splash-account-hint").textContent, "", "premise: and reported no error");
+  assert.deepStrictEqual(w.signInForm(), EMPTY);
+  /* The strength meter is driven by the field's `input` event, which a value
+     set from script does not fire. Without one it goes on showing how strong
+     the previous person's password was. */
+  assert.ok(inputEvents > 0, "emptying the password field must tell its listeners");
+});
+
+test("F: a sign-in that FAILS keeps what was typed, so that it can be corrected", async () => {
+  // The guard on the other side: emptying is for a sign-in that worked.
+  const w = makeWorld();
+  w.auth.accounts["alice@example.test"] = { user: ALICE, password: PASSWORD };
+  await w.visit();
+  w.typeSignIn({ email: "alice@example.test", password: "a-typo" });
+  w.sandbox.signInWithEmail("alice@example.test", "a-typo");
+  await w.settle();
+  assert.ok(w.sandbox.currentUser.isAnonymous, "premise: nobody was signed in");
+  assert.strictEqual(w.el("splash-account-hint").className, "splash-hint err", "premise: the failure is shown");
+  assert.deepStrictEqual(w.signInForm(), { email: "alice@example.test", password: "a-typo", confirm: "" });
+});
+
+for (const how of ["signOut", "vanish", "replaceWith"]) {
+  test("F: whatever is in the form is emptied when the account goes or changes (" + how + ")", async () => {
+    /* The sign-in view stays reachable while somebody is signed in, so the form
+       can hold a half-typed address and password when the account goes. */
+    const w = makeWorld();
+    await w.signIn(ALICE, ALICE_PROFILE);
+    w.typeSignIn({ email: "bob@example.test", password: PASSWORD, confirm: PASSWORD });
+    if (how === "replaceWith") await w.replaceWith(BOB); else await w[how]();
+    assert.deepStrictEqual(w.signInForm(), EMPTY);
+  });
+}
+
+test("F: the first auth event of a page load leaves the form alone", async () => {
+  /* Nobody -> the anonymous visitor is a change of uid too, but no account has
+     gone: what is in the form then was put there by the browser (a password
+     manager fills it as the page loads), not by a previous person in this tab. */
+  const w = makeWorld();
+  w.typeSignIn({ email: "saved@example.test", password: "from-the-browser" });
+  await w.visit();
+  assert.ok(w.sandbox.currentUser.isAnonymous, "premise: the first event has arrived");
+  assert.deepStrictEqual(w.signInForm(), { email: "saved@example.test", password: "from-the-browser", confirm: "" });
+});

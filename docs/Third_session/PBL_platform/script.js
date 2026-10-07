@@ -12174,7 +12174,7 @@ function signInWithEmail(email, password) {
   }
   splashHintOk(hint, "Signing you in…");
   auth.signInWithEmailAndPassword(email, password)
-    .then(() => splashHintOk(hint, ""))
+    .then(() => { clearSignInForm(); splashHintOk(hint, ""); })
     .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
@@ -12216,7 +12216,7 @@ function signUpWithEmail(email, password) {
           }
           throw e;
         });
-  link.then(() => splashHintOk(hint, ""))
+  link.then(() => { clearSignInForm(); splashHintOk(hint, ""); })
       .catch(e => splashHintErr(hint, authErrorMessage(e)));
 }
 
@@ -12346,6 +12346,7 @@ function resetAccountUI() {
   closeAccountDialog();
   currentProfile = null;
   paintUserChip(true);   // no opener until THIS account's profile is read
+  if (currentUser) clearSignInForm();
   Object.keys(_joinFill).forEach(id => {
     const n = el(id), f = _joinFill[id];
     if (n && n.value === f[1]) n.value = f[0];
@@ -12357,6 +12358,14 @@ function resetAccountUI() {
   });
   const v = el("splash-view-profile-setup");
   if (v && !v.hidden) splashShowView("enter");
+}
+
+/* The sign-in form must not keep an address and password once used. */
+function clearSignInForm() {
+  ["email-input", "password-input", "password-confirm"].forEach(id => {
+    const n = el("splash-" + id);
+    if (n) { n.value = ""; n.dispatchEvent(new Event("input")); }
+  });
 }
 
 function loadProfile() {
