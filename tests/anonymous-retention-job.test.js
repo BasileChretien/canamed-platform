@@ -24,7 +24,9 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 const { runAnonymousRetention, UPDATE_CHUNK } = require("../scripts/lib/anonymous-retention-job");
-const { exitCodeFor, formatReport } = require("../scripts/lib/anonymous-retention-report");
+const {
+  exitCodeFor, formatReport, formatSweepOnly
+} = require("../scripts/lib/anonymous-retention-report");
 const { DEFAULT_RETENTION_DAYS, DAY_MS } = require("../scripts/lib/anonymous-retention");
 const { HOUR_MS } = require("../scripts/lib/rate-limit-retention");
 const { dayKey } = require("../docs/Third_session/PBL_platform/functions/lib/hf-helpers");
@@ -159,7 +161,7 @@ test("dry run: counts everything, writes NOTHING, deletes no account", async () 
     orphanPaths: 0, skippedKeys: 0, readErrors: 0
   });
   assert.deepStrictEqual(r.rateLimits,
-    { staleUid: 2, staleSession: 1, kept: 1, unparsed: 0, readErrors: 0 });
+    { staleUid: 2, staleSession: 1, kept: 1, unparsed: 0, readErrors: 0, unread: 0, unwritten: 0 });
   assert.strictEqual(r.sessions, 3);
 });
 
@@ -178,9 +180,8 @@ test("live: deletes exactly the planned paths, then exactly the idle account", a
   const h = harness(world());
   const r = await h.run({ confirm: true });
 
-  assert.strictEqual(h.updates().length, 1);
   assert.deepStrictEqual(h.writtenPaths(), EXPECTED_PATHS);
-  for (const v of Object.values(h.updates()[0])) assert.strictEqual(v, null);
+  for (const u of h.updates()) for (const v of Object.values(u)) assert.strictEqual(v, null);
 
   assert.deepStrictEqual(h.deletedUids(), ["idleAnon"]);
   assert.deepStrictEqual(r.written, { paths: EXPECTED_PATHS.length, failedUpdates: 0, errorCodes: [] });
@@ -198,16 +199,24 @@ test("live: the ORDER — record keys, then the listing, then the re-check, reco
      it — and an orphan sweep would delete a brand-new user's data. */
   const usersKeys = h.log.findIndex((l) => l.op === "shallow" && l.path === "users");
   assert.ok(usersKeys !== -1 && usersKeys < first("list"), "record keys must be read before the listing");
-  /* The re-check has to be the last thing before the writes: it is only worth
-     anything if nothing slow happens after it. */
+  /* The counters are a phase of their own and go FIRST: before the listing is
+     even asked for, so that nothing the account half does can hold them up. */
+  const isCounters = (l) => l.op === "update" &&
+    Object.keys(l.update).every((p) => p.startsWith("rateLimits/"));
+  const isRecords = (l) => l.op === "update" &&
+    Object.keys(l.update).some((p) => p.startsWith("users/"));
+  const counters = h.log.findIndex(isCounters), records = h.log.findIndex(isRecords);
+  assert.ok(counters !== -1 && counters < first("list"),
+    "the counter sweep must be written before the account listing is requested");
+  /* The re-check has to be the last thing before the account's records go: it
+     is only worth anything if nothing slow happens after it. */
   assert.ok(first("lookup") > first("list"));
-  assert.ok(first("lookup") < first("update"));
+  assert.ok(records !== -1 && first("lookup") < records);
   assert.ok(Math.max(last("shallow"), last("value")) < first("lookup"),
-    "a database read happens AFTER the re-check — the counter sweep is one " +
-    "request per counter, and every one of them widens the gap the re-check closes");
+    "a database read happens AFTER the re-check, widening the gap it exists to close");
   /* If the account went first and the write then failed, the records would sit
      under a uid no listing returns — unreachable by every later run. */
-  assert.ok(last("update") < first("deleteAccounts"));
+  assert.ok(records < first("deleteAccounts"));
 });
 
 test("live: a SIGNED-IN account and its records are never touched", async () => {
@@ -335,7 +344,7 @@ test("(review) an account that no longer exists at the re-check is not acted on"
 test("(review) a re-check that FAILS stops the run with nothing written", async () => {
   const h = harness(world(), { lookupThrows: "account re-check failed: HTTP 503" });
   await assert.rejects(h.run({ confirm: true }), /HTTP 503/);
-  assert.deepStrictEqual(h.updates(), []);
+  assert.deepStrictEqual(h.writtenPaths().filter((p) => !p.startsWith("rateLimits/")), []);
   assert.deepStrictEqual(h.deletedUids(), []);
 });
 
@@ -346,7 +355,7 @@ test("live: a failed database write means NO account is deleted", async () => {
   const r = await h.run({ confirm: true });
   assert.deepStrictEqual(h.deletedUids(), [], "an account must not outlive its records' deletion failing");
   assert.strictEqual(r.auth.skipped, true);
-  assert.strictEqual(r.written.failedUpdates, 1);
+  assert.strictEqual(r.written.failedUpdates, 2, "the counter update and the record update");
   assert.deepStrictEqual(r.written.errorCodes, ["PERMISSION_DENIED"]);
   assert.strictEqual(r.written.paths, 0);
   assert.strictEqual(exitCodeFor(r), 1);
@@ -416,10 +425,15 @@ test("(review) live: ONE failed chunk among several still means no account is de
 
 // ── refusals: nothing may be written first ──────────────────────────────────
 
+/* The counter sweep is a phase of its own that runs first and needs nothing
+   from the account half, so a refusal there may come AFTER the counters were
+   written. What must never have happened is anything to an account or to a
+   user record. */
 const neverActed = (h) => {
-  assert.deepStrictEqual(h.updates(), []);
+  assert.deepStrictEqual(h.writtenPaths().filter((p) => !p.startsWith("rateLimits/")), []);
   assert.deepStrictEqual(h.deletedUids(), []);
 };
+const COUNTER_PATHS = EXPECTED_PATHS.filter((p) => p.startsWith("rateLimits/"));
 
 test("an EMPTY account listing is refused", async () => {
   /* Every visitor gets an account, so "no accounts" is a broken listing — and
@@ -486,6 +500,55 @@ test("orphans: a plausible number is removed when asked", async () => {
   assert.ok(!h.deletedUids().includes("ghost"), "an orphan has no account to delete");
 });
 
+// ── (review) neither half may be able to stop the other ─────────────────────
+
+test("(review) the counters are swept even when the account half REFUSES", async () => {
+  /* The notice promises the counters gone within about three days. If that hung
+     on the account half, every refused listing — and there are three ways to
+     refuse one — would quietly break a published period. */
+  const w = world();
+  w.accounts = w.accounts.map((a) => Object.assign({}, a, { providers: [] }));
+  const h = harness(w);
+  const err = await h.run({ confirm: true }).then(() => null, (e) => e);
+  assert.ok(err && err.refusal === true);
+  assert.deepStrictEqual(h.writtenPaths(), COUNTER_PATHS);
+  /* ...and whoever reports the refusal can say what was done. Counts only. */
+  assert.strictEqual(err.rateLimits.staleUid, 2);
+  assert.strictEqual(err.rateLimits.staleSession, 1);
+  assert.strictEqual(err.rateLimits.written.paths, COUNTER_PATHS.length);
+  const printed = formatSweepOnly(err.rateLimits, true).join("\n");
+  assert.match(printed, /Rate limits: 2 per-uid \+ 1 per-session/);
+  assert.match(printed, /3 counter path\(s\) removed/);
+  for (const s of secretsOf(w)) assert.ok(!printed.includes(s), "leaked " + JSON.stringify(s));
+});
+
+test("(review) the counters are swept even when the account LISTING fails outright", async () => {
+  const h = harness(world(), { listThrows: "account listing failed: HTTP 403" });
+  await assert.rejects(h.run({ confirm: true }), /HTTP 403/);
+  assert.deepStrictEqual(h.writtenPaths(), COUNTER_PATHS);
+});
+
+test("(review) a dry run sweeps nothing even when the account half refuses", async () => {
+  const h = harness(world({ accounts: [] }));
+  const err = await h.run().then(() => null, (e) => e);
+  assert.ok(err && err.refusal === true);
+  assert.deepStrictEqual(h.updates(), []);
+  assert.strictEqual(err.rateLimits.written.paths, 0);
+  assert.match(formatSweepOnly(err.rateLimits, false).join("\n"), /dry run: nothing written/);
+});
+
+test("(review) a failed COUNTER write does not stop the account being removed", async () => {
+  /* The rule is that an account goes only after ITS records. The counters are
+     not its records: they expire on their own clock whoever owns them. */
+  const h = harness(world(), { failUpdate: 0 });          // the first update is the counters
+  const r = await h.run({ confirm: true });
+  assert.deepStrictEqual(h.deletedUids(), ["idleAnon"]);
+  assert.strictEqual(r.auth.skipped, false);
+  assert.strictEqual(r.written.failedUpdates, 1);
+  assert.strictEqual(r.written.paths, 2, "the two user-record paths still went");
+  assert.strictEqual(exitCodeFor(r), 1, "but the run must not report a clean sweep");
+});
+
 // ── (review) the counter sweep must not be able to stop the job ─────────────
 
 test("(review) a rate-limit tree that cannot be read does NOT stop the account being removed", async () => {
@@ -528,9 +591,147 @@ test("(review) hostile key names are swept like any other, not lost", async () =
   assert.strictEqual(r.rateLimits.unparsed, 1);
 });
 
+// ── the counter sweep's time budget ─────────────────────────────────────────
+
+/* A world whose per-uid counters are `n` stale ids, and a harness in which
+   every database read costs 10 ms on a clock the test owns. */
+function floodedHarness(n) {
+  const w = world();
+  const ids = Array.from({ length: n }, (_, i) => "flood" + String(i).padStart(3, "0"));
+  w.shallow["rateLimits/uid"] = Object.fromEntries(ids.map((id) => [id, true]));
+  for (const id of ids) w.shallow["rateLimits/uid/" + id] = { [OLD_HOUR]: true };
+  w.shallow["rateLimits/session"] = {};
+  const h = harness(w);
+  let t = 0;
+  const realShallow = h.deps.fetchShallow;
+  h.deps.clock = () => t;
+  h.deps.fetchShallow = async (p) => { t += 10; return realShallow(p); };
+  const counterReads = () => h.log
+    .filter((l) => l.op === "shallow" && l.path.startsWith("rateLimits/uid/flood"))
+    .map((l) => l.path.slice("rateLimits/uid/".length));
+  return { h, ids, counterReads };
+}
+
+test("the counter sweep has a time budget: it writes what it read and says what it left", async () => {
+  /* One read per counter id, every read before any write, under a 15-minute
+     job — and the ids are a participant's to mint (a counter is written with
+     the caller's own token). Without a budget, a few thousand of them make the
+     sweep outlast the job: the run is cancelled with nothing written, the
+     account half never starts, and a cancelled run tells nobody. Every night. */
+  const { h, ids, counterReads } = floodedHarness(40);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 125 });
+  const read = counterReads().length;
+  assert.ok(read > 0 && read < ids.length,
+    "expected the sweep to stop part-way; it read " + read + " of " + ids.length);
+  assert.strictEqual(r.rateLimits.unread, ids.length - read,
+    "what the sweep did not get to must be counted, not dropped");
+  assert.strictEqual(h.writtenPaths().filter((p) => p.startsWith("rateLimits/")).length, read,
+    "every counter that WAS read must still be swept");
+  assert.deepStrictEqual(h.deletedUids(), ["idleAnon"],
+    "running out of time on the counters must not stop the account half");
+  assert.strictEqual(exitCodeFor(r), 1, "a sweep that left counters unread is not a clean run");
+});
+
+test("with time to spare the budget changes nothing", async () => {
+  const { h, ids, counterReads } = floodedHarness(40);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 60_000 });
+  assert.strictEqual(counterReads().length, ids.length);
+  assert.strictEqual(r.rateLimits.unread, 0);
+  assert.strictEqual(exitCodeFor(r), 0);
+});
+
+test("a sweep short of time starts somewhere else each day, so no counter is starved", async () => {
+  /* Stopping early is only safe if tomorrow does not stop at the same place.
+     Stale counters at the front are deleted and make room; FRESH ones are not,
+     and an attacker can keep a block of them fresh — so the sweep must not
+     always begin with the same ids. */
+  const seen = new Set();
+  for (let day = 0; day < 30; day++) {
+    const { h, counterReads } = floodedHarness(12);
+    await h.run({ nowMs: NOW + day * DAY_MS, sweepBudgetMs: 75 });
+    const today = counterReads();
+    assert.ok(today.length >= 2 && today.length < 12, "day " + day + " read " + today.length);
+    for (const id of today) seen.add(id);
+  }
+  assert.strictEqual(seen.size, 12,
+    "after 30 days some counters had never been read: " + (12 - seen.size) + " of 12");
+});
+
+test("a broken clock cannot switch the sweep off", async () => {
+  /* The budget is a guard against running too long. A clock that returns
+     nonsense must cost the guard, not the sweep. */
+  const { h, ids, counterReads } = floodedHarness(6);
+  h.deps.clock = () => NaN;
+  const r = await h.run({ confirm: true, sweepBudgetMs: 125 });
+  assert.strictEqual(counterReads().length, ids.length);
+  assert.strictEqual(r.rateLimits.unread, 0);
+});
+
+/* The budget above counted counter IDS. A second review pointed out what that
+   leaves: the rules let a participant write any bucket NAME under their own
+   uid, the sweep treats a name it does not recognise as stale, and every one
+   becomes a path to delete — 400 per update, one update after another. One id
+   with a million junk names is one fast read and thousands of writes, all in
+   front of the account half. So the budget has to cover the writes too.
+
+   A world with one flooded uid (`junk` unrecognisable bucket names) next to
+   the usual counters, and a harness in which every WRITE costs 100 ms. */
+function writeFloodHarness(junk) {
+  const w = world();
+  const buckets = {};
+  for (let i = 0; i < junk; i++) buckets["zz" + i] = true;
+  w.shallow["rateLimits/uid"] = Object.assign({ flooder: true }, w.shallow["rateLimits/uid"]);
+  w.shallow["rateLimits/uid/flooder"] = buckets;
+  const h = harness(w);
+  let t = 0;
+  const realUpdate = h.deps.updateRoot;
+  h.deps.clock = () => t;
+  h.deps.updateRoot = async (u) => { t += 100; return realUpdate(u); };
+  const counterWrites = () => h.writtenPaths().filter((p) => p.startsWith("rateLimits/"));
+  return { h, counterWrites };
+}
+
+test("the budget covers the WRITES too: a flood of bucket names cannot hold the job", async () => {
+  const junk = UPDATE_CHUNK * 5;
+  const { h, counterWrites } = writeFloodHarness(junk);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 250 });
+  const stale = junk + COUNTER_PATHS.length;
+  const written = counterWrites().length;
+  assert.ok(written > 0 && written < stale,
+    "expected the sweep to stop writing part-way; it wrote " + written + " of " + stale);
+  assert.strictEqual(r.rateLimits.unwritten, stale - written,
+    "what the sweep did not get to delete must be counted, not dropped");
+  assert.deepStrictEqual(h.deletedUids(), ["idleAnon"],
+    "running out of time on the counter writes must not stop the account half");
+  assert.strictEqual(exitCodeFor(r), 1, "a sweep that left stale buckets behind is not a clean run");
+  assert.match(formatReport(r, { confirm: true, days: 90, sweepOrphans: false }).join("\n"),
+    /OUT OF TIME, \d+ stale bucket\(s\) not deleted/);
+});
+
+test("ordinary counters are swept before a flooded one, however short the time", async () => {
+  /* Stopping the writes early is only acceptable if the flood is what waits.
+     The counters the notice promises gone in about three days belong to
+     everyone else, and there are few of them per id. */
+  const { h, counterWrites } = writeFloodHarness(UPDATE_CHUNK * 5);
+  const r = await h.run({ confirm: true, sweepBudgetMs: 50 });   // time for one update
+  const written = counterWrites();
+  for (const p of COUNTER_PATHS) {
+    assert.ok(written.includes(p), "an ordinary stale counter was left behind a flood: " + p);
+  }
+  assert.ok(r.rateLimits.unwritten > 0);
+  assert.ok(written.length <= UPDATE_CHUNK, "more than one update went out in time for one");
+});
+
+test("a dry run leaves nothing unwritten to report, whatever the size", async () => {
+  const { h } = writeFloodHarness(UPDATE_CHUNK * 5);
+  const r = await h.run({ confirm: false, sweepBudgetMs: 50 });
+  assert.strictEqual(r.rateLimits.unwritten, 0);
+  assert.deepStrictEqual(h.writtenPaths(), []);
+});
+
 // ── what reaches the log ────────────────────────────────────────────────────
 
-const secretsOf = (w) => w.accounts.map((a) => a.uid).concat(["CODE1", "My Code", "ORG9", "partner"]);
+const secretsOf = (w) =>w.accounts.map((a) => a.uid).concat(["CODE1", "My Code", "ORG9", "partner"]);
 
 test("the report carries COUNTS only — no uid, no session code", async () => {
   const w = world();
@@ -619,32 +820,56 @@ const RUNNER = readLF("scripts", "cleanup-anonymous-accounts.js");
 const liveCrons = (yml) =>
   yml.split("\n").filter((l) => /^\s*-\s*cron:/.test(l) && !/^\s*#/.test(l)).length;
 
-test("the workflow is NOT scheduled while the privacy notice does not describe it", () => {
-  /* A scheduled run sends account identifiers and session member uids to a
-     GitHub runner in the United States every night. privacy.html sections 6-7
-     list what the scheduled jobs read, and section 8 states the retention
-     periods; neither mentions this job. Adding a cron here alone makes the
-     published notice wrong the same night.
-     WHEN YOU SCHEDULE IT: replace this test, in the same change, with one that
-     ties the cron and the armed ANON_CONFIRM to the notice's wording. */
-  assert.strictEqual(liveCrons(WORKFLOW), 0,
-    "cleanup-anonymous-accounts.yml gained a live cron. See the comment above.");
-  const privacy = fs.readFileSync(
-    path.join(ROOT, "docs", "Third_session", "PBL_platform", "privacy.html"), "utf8");
-  assert.ok(!/anonymous(ly)? (sign|account|identifier)/i.test(privacy),
-    "privacy.html now mentions the anonymous identifier — this test is the " +
-    "placeholder that change was meant to replace with a real lockstep.");
+test("the workflow is scheduled, and what ties that to the notice lives next door", () => {
+  /* Until the notice described this job, a test here asserted the workflow had
+     NO cron: a scheduled run sends account identifiers to a US runner every
+     night, and a notice that did not say so would have been wrong the same
+     night. The cron, the armed switch and PIS v12 then landed in one change,
+     and tests/anonymous-identifier-notice.test.js now holds the three
+     together. This only pins that the hand-over happened. */
+  assert.strictEqual(liveCrons(WORKFLOW), 1);
+  assert.ok(fs.existsSync(path.join(ROOT, "tests", "anonymous-identifier-notice.test.js")),
+    "the notice lockstep is gone, and with it the only thing stopping this " +
+    "schedule from outliving the disclosure it depends on");
 });
 
-test("the workflow deletes only on an explicit manual confirm", () => {
-  assert.match(WORKFLOW, /ANON_CONFIRM: \$\{\{ github\.event\.inputs\.confirm == 'true' && '1' \|\| '0' \}\}/);
-  const confirmInput = /confirm:\s*\n(?:\s+.*\n)*?\s+default: (\w+)/.exec(WORKFLOW);
-  assert.ok(confirmInput && confirmInput[1] === "false", "the confirm input must default to false");
-  assert.match(WORKFLOW, /ANON_SWEEP_ORPHANS: \$\{\{ github\.event\.inputs\.sweep_orphans == 'true' && '1' \|\| '0' \}\}/);
+/* LIVE lines only, and exactly one of them: a pattern run over the whole file
+   is satisfied by a commented-out line, and one that walks "any line" to the
+   next `default:` slides out of the input it was asked about. Both let a wrong
+   workflow through; see the same two readers in
+   tests/anonymous-identifier-notice.test.js for how each was found. */
+const LIVE = WORKFLOW.split("\n").filter((l) => !/^\s*#/.test(l));
+function liveEnv(name) {
+  const re = new RegExp("^\\s+" + name + ":\\s*(.+?)\\s*$");
+  const hits = LIVE.map((l) => re.exec(l)).filter(Boolean).map((m) => m[1]);
+  assert.strictEqual(hits.length, 1, name + " must be set on exactly one live line");
+  return hits[0];
+}
+function inputDefault(name) {
+  const at = LIVE.findIndex((l) => new RegExp("^\\s+" + name + ":\\s*$").test(l));
+  assert.ok(at >= 0, "no `" + name + "` input in the workflow");
+  const depth = (l) => l.match(/^\s*/)[0].length;
+  for (let i = at + 1; i < LIVE.length; i++) {
+    if (!LIVE[i].trim()) continue;
+    if (depth(LIVE[i]) <= depth(LIVE[at])) break;
+    const m = /^\s+default:\s*(.*?)\s*$/.exec(LIVE[i]);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+test("the orphan sweep is never on by schedule — only by an explicit manual tick", () => {
+  /* Deleting on schedule is the published policy. Deleting records whose uid
+     has no account is an operator decision, behind a tripwire. */
+  assert.strictEqual(liveEnv("ANON_SWEEP_ORPHANS"),
+    "${{ github.event.inputs.sweep_orphans == 'true' && '1' || '0' }}");
+  assert.strictEqual(inputDefault("sweep_orphans"), "false",
+    "the sweep_orphans input must default to false");
 });
 
 test("the workflow's default window is the one the rules default to", () => {
-  const m = /ANON_RETENTION_DAYS: \$\{\{ github\.event\.inputs\.retention_days \|\| '(\d+)' \}\}/.exec(WORKFLOW);
+  const m = /^\$\{\{ github\.event\.inputs\.retention_days \|\| '(\d+)' \}\}$/
+    .exec(liveEnv("ANON_RETENTION_DAYS"));
   assert.ok(m, "ANON_RETENTION_DAYS is no longer wired to the dispatch input");
   assert.strictEqual(Number(m[1]), DEFAULT_RETENTION_DAYS);
 });

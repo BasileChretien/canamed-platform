@@ -16,8 +16,9 @@
 /**
  * 0 only when everything asked for was done. Anything short of that is 1:
  * a database write that failed, an account that could not be deleted, accounts
- * left in place because their records could not be removed first, or a read
- * that had to be skipped (which means something was not looked at).
+ * left in place because their records could not be removed first, a read
+ * that had to be skipped (which means something was not looked at), or
+ * counters the sweep ran out of time before reading or before deleting.
  */
 function exitCodeFor(report) {
   const failed =
@@ -25,8 +26,38 @@ function exitCodeFor(report) {
     report.auth.failed > 0 ||
     report.auth.skipped ||
     report.records.readErrors > 0 ||
-    report.rateLimits.readErrors > 0;
+    report.rateLimits.readErrors > 0 ||
+    report.rateLimits.unread > 0 ||
+    report.rateLimits.unwritten > 0;
   return failed ? 1 : 0;
+}
+
+/** The counter sweep, in one line. Also printed on its own when the account
+ *  half refuses or fails: the sweep has run by then, and a log that said only
+ *  "REFUSED" would hide that it had. */
+function formatRateLimits(l) {
+  return `Rate limits: ${l.staleUid} per-uid + ${l.staleSession} per-session bucket(s) past ` +
+    `their window, ${l.kept} current` +
+    (l.unparsed ? `, ${l.unparsed} in no known format` : "") +
+    (l.readErrors ? ` — ${l.readErrors} READ(S) FAILED, those counters were not swept` : "") +
+    (l.unread ? ` — OUT OF TIME, ${l.unread} counter(s) not read; the next run starts elsewhere` : "") +
+    (l.unwritten ? ` — OUT OF TIME, ${l.unwritten} stale bucket(s) not deleted; the next run continues` : "");
+}
+
+/**
+ * What to print when the account half threw after the counters were swept.
+ * @param {object} l       `error.rateLimits` as attached by the job
+ * @param {boolean} confirm
+ * @returns {string[]}
+ */
+function formatSweepOnly(l, confirm) {
+  const w = l.written || { paths: 0, failedUpdates: 0, errorCodes: [] };
+  const out = [formatRateLimits(l)];
+  out.push(confirm
+    ? `Written:     ${w.paths} counter path(s) removed` +
+      (w.failedUpdates ? `, ${w.failedUpdates} update(s) FAILED [${w.errorCodes.join(", ")}]` : "")
+    : "             (dry run: nothing written)");
+  return out;
 }
 
 /**
@@ -57,11 +88,8 @@ function formatReport(report, opts) {
   if (r.readErrors) {
     out.push(`Unreadable:  ${r.readErrors} users/ node(s) could not be read; their accounts were spared`);
   }
-  out.push(`Rate limits: ${l.staleUid} per-uid + ${l.staleSession} per-session bucket(s) past ` +
-    `their window, ${l.kept} current` +
-    (l.unparsed ? `, ${l.unparsed} in no known format` : "") +
-    (l.readErrors ? ` — ${l.readErrors} READ(S) FAILED, those counters were not swept` : ""));
-  out.push(`Paths:       ${report.paths} database path(s) — ${opts.confirm ? "deleted" : "would delete"}`);
+  out.push(formatRateLimits(l));
+  out.push(`Paths:       ${report.paths} database path(s) — ${opts.confirm ? "to delete" : "would delete"}`);
   if (!opts.confirm) {
     if (report.paths + a.expired > 0) out.push("(Set ANON_CONFIRM=1 to actually delete.)");
     return out;
@@ -82,4 +110,4 @@ function formatReport(report, opts) {
   return out;
 }
 
-module.exports = { exitCodeFor, formatReport };
+module.exports = { exitCodeFor, formatReport, formatSweepOnly };

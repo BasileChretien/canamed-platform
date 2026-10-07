@@ -24,6 +24,16 @@
  * squatter reports it — with the PID, the image name and the exact command to
  * clear it — and stops.
  *
+ * NOT EVERY LISTENER IS A LEFTOVER. The ports are fixed and shared by every
+ * checkout on the machine, and several sessions work here at once, so the
+ * listener a run finds may be ANOTHER SESSION'S EMULATOR, MID-SUITE. This
+ * module cannot tell the two apart — a port number says nothing about who
+ * started what — which has two consequences:
+ *   - `free` kills by port and is for an operator who KNOWS the listener is
+ *     stale. Every message that offers it says so first (LIVE_RUN_CAVEAT).
+ *   - an AUTOMATIC sweep must never go by port. It passes `onlyPids`, built
+ *     from what its own child was shown to have spawned (process-lineage.js).
+ *
  * Usage:
  *   node scripts/ops/emulator-ports.js check          # exit 1 if any is held
  *   node scripts/ops/emulator-ports.js free           # kill the listeners
@@ -97,15 +107,19 @@ function imageName(pid) {
   }
 }
 
-/* [{ port, pid, image }] for every listener across `ports`. */
-function survey(ports) {
+/* [{ port, pid }] for every listener across `ports` — survey() without the
+   image names, for a caller that polls: tasklist costs more than netstat. */
+function listeners(ports) {
   const rows = [];
   for (const port of ports) {
-    for (const pid of listeningPids(port)) {
-      rows.push({ port: parseInt(port, 10), pid, image: imageName(pid) });
-    }
+    for (const pid of listeningPids(port)) rows.push({ port: parseInt(port, 10), pid });
   }
   return rows;
+}
+
+/* [{ port, pid, image }] for every listener across `ports`. */
+function survey(ports) {
+  return listeners(ports).map((row) => Object.assign(row, { image: imageName(row.pid) }));
 }
 
 /* Terminate the listeners on `ports`. Returns the rows it acted on.
@@ -121,8 +135,19 @@ function survey(ports) {
  * established. AUTOMATIC callers must pass it (see run-rules-e2e.js): a
  * preflight proves the port state at one instant, and between then and the
  * sweep an unrelated process could bind the port, so an unrestricted sweep
- * would kill a stranger by port number alone. The explicit `emulator:free`
- * verb passes nothing — there the operator is the authority. */
+ * would kill a stranger by port number alone. "Established" means LINEAGE —
+ * the process was shown to descend from the child the caller spawned
+ * (process-lineage.js) — and NOT "seen on the port during the run": the ports
+ * are shared by every checkout on the machine, and what a run sees there can
+ * be another run's live emulator. The explicit `emulator:free` verb passes
+ * nothing — there the operator is the authority.
+ *
+ * With onlyPids the Windows kill is NOT a tree kill. `taskkill /T` walks
+ * ParentProcessId, which Windows never rewrites: an unrelated orphan whose
+ * dead parent's PID has since been handed to the listener would be taken as
+ * its child and killed with it — the very reading process-lineage.js refuses.
+ * The caller verified THESE processes, so these are what is killed; each
+ * listener is its own row, so nothing that holds a port is missed. */
 function free(ports, opts) {
   const onlyPids = opts && opts.onlyPids
     ? new Set([...opts.onlyPids].map(String))
@@ -147,7 +172,8 @@ function free(ports, opts) {
     let error = null;
     try {
       if (IS_WIN) {
-        execFileSync("taskkill", ["/F", "/T", "/PID", pid], { stdio: "ignore" });
+        execFileSync("taskkill", onlyPids ? ["/F", "/PID", pid] : ["/F", "/T", "/PID", pid],
+          { stdio: "ignore" });
       } else {
         process.kill(parseInt(pid, 10), "SIGKILL");
       }
@@ -176,7 +202,32 @@ const DEFAULT_PORTS = [
   parseInt(process.env.SIM_AUTH_PORT || "9099", 10)
 ];
 
-module.exports = { listeningPids, imageName, survey, free, describe, clearCommand, DEFAULT_PORTS };
+/* firebase-tools' emulator HUB. Never a port a run needs — the CLI moves its
+   own hub to 4401 when 4400 is taken ("emulator hub unable to start on port
+   4400, starting on 4401 instead") — and never a kill target. It is EVIDENCE:
+   a listener there means another emulator is alive on this machine. */
+const HUB_PORT = parseInt(process.env.SIM_HUB_PORT || "4400", 10);
+
+/* What every "a port is held" message must say BEFORE it says how to clear one.
+ *
+ * Those messages used to go straight to the command (`emulator:free`,
+ * `taskkill …`) and call the listener stale. Several sessions work in this
+ * repository at once, each in its own worktree, and they share these ports: a
+ * session that follows that advice against another session's run in progress
+ * kills it mid-suite, and the other session then does the same in return
+ * (observed 2026-10-07). Nothing here can tell a live emulator from a leftover
+ * by its port, so the message has to say that the reader must. */
+const LIVE_RUN_CAVEAT =
+  "IS ANOTHER SESSION RUNNING AN EMULATOR SUITE RIGHT NOW (`npm run\n" +
+  "test:e2e:rules`, `npm run sim:emulator`, in ANY checkout or worktree)? Then\n" +
+  "that listener is its LIVE EMULATOR, not a leftover. Wait for that run to end:\n" +
+  "the ports are fixed, so two sessions cannot run an emulator suite at once,\n" +
+  "and clearing the ports kills the other run mid-suite. Do not retry in a loop.";
+
+module.exports = {
+  listeningPids, imageName, listeners, survey, free, describe, clearCommand,
+  DEFAULT_PORTS, HUB_PORT, LIVE_RUN_CAVEAT
+};
 
 /* ── CLI ──────────────────────────────────────────────────────────── */
 if (require.main === module) {
@@ -202,9 +253,11 @@ if (require.main === module) {
     console.error(
       "emulator-ports: FATAL — the emulator ports are already in use:\n" +
       describe(held) + "\n\n" +
-      "A stale listener makes the next run's readiness probe succeed against\n" +
+      LIVE_RUN_CAVEAT + "\n\n" +
+      "A STALE listener makes the next run's readiness probe succeed against\n" +
       "the WRONG emulator, so the suite either validates nothing or times out\n" +
-      "in a way that reads as an environment fault. Clear it and re-run:\n\n" +
+      "in a way that reads as an environment fault. Only when you know it is\n" +
+      "stale — a leftover from a run that has ended — clear it and re-run:\n\n" +
       "  node scripts/ops/emulator-ports.js free\n" +
       "or, directly:\n  " + clearCommand(held) + "\n\n" +
       "If this is an emulator you started on purpose (`npm run emulator`),\n" +

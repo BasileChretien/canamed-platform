@@ -741,6 +741,25 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     click on the header chip". It has two openers now, the chip and this
 //     link, and both call openAccountDialog() — so a lazily linked sheet has
 //     to be awaited THERE, not in a click handler.
+//   2026-10-07 (fourth entry): CAP UNCHANGED (326). PIS v12 (#429) moves the
+//     consent stamp in script.js from PIS-v3 to PIS-v12 and the version label
+//     in i18n.js with it. Same method (LF, gzip level 9, the 15 counted
+//     assets), against main at v183: first-party 324.90 -> 324.93 KB, +30 B
+//     (script.js, i18n.js, and a version string). The first draft was +156 B,
+//     nearly all of it two comments in script.js; they were cut to one line
+//     each. Not a feature and not avoidable: the stamp has to name the notice.
+//     Main itself went 324.61 -> 324.90 with #436 (the consent records kept
+//     across a reload), which left no entry here. MARGIN ~1.07 KB; the
+//     reclaim the entries above call owed is still owed.
+//   2026-10-08: CAP UNCHANGED (326). #441 fits the two names a signed-in
+//     participant's history entry stores to the rule's 80 characters, at the
+//     write site in script.js; the fitting itself is in the lazy
+//     section-registry.js and costs nothing here. Same method, against main
+//     at v184: first-party 324.93 -> 325.13 KB, +206 B, all of it script.js.
+//     Not avoidable without moving pushSessionToHistory() out of the eager
+//     file: the entry was being refused whole. MARGIN ~0.87 KB, and that is
+//     the third small eager addition in a row with no reclaim (#436, #429,
+//     this one) — the next change to an eager file should bring one.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {

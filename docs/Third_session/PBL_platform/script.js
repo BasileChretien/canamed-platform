@@ -3337,8 +3337,8 @@ function readSession(hintId) {
 /* version stamp written next to every consent record. Bump whenever the
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
-   participant consented to. */
-const CONSENT_NOTICE_VERSION = "PIS-v3-2026-07";
+   participant consented to. A bump re-asks on resume (pis-version-lockstep). */
+const CONSENT_NOTICE_VERSION = "PIS-v12-2026-10";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */
 function joinParticipant() {
@@ -12415,17 +12415,26 @@ function saveProfile(updates) {
    record of which workshops a persistent anonymous uid attended, under the
    `users` tree — which no retention job touches — disclosed nowhere.
 
-   See issue #347. This stops NEW writes only; entries already written need an
-   operator sweep of history nodes belonging to uids that have no profile. */
+   See issue #347. This stops NEW writes only; the entries already written
+   are removed by scripts/cleanup-anonymous-accounts.js. */
 function pushSessionToHistory(code) {
   if (!currentUser || currentUser.isAnonymous || !db || !code) return;
   const path = "users/" + currentUser.uid + "/history/" + code;
-  db.ref(path).set({
+  /* Names are fitted to the rule's 80 characters: one over refuses the WHOLE entry (the why is at
+     sectionsLabel(), lazy section-registry.js). A failed write is recorded: what failed, never whose. */
+  const fit = names => (typeof sectionsLabel === "function")
+    ? sectionsLabel(names, 80) : names.join(" + ").slice(0, 80);
+  return db.ref(path).set({
     code: code,
-    workshopName: (CFG && CFG.workshopName) || "",
-    scenarioName: tc(window.CURRENT_SCENARIO_NAME, "en") || "",
+    workshopName: fit([CFG.workshopName]),
+    scenarioName: fit((pickedSections() || [{ name: window.CURRENT_SCENARIO_NAME }])
+      .map(s => tc(s.name, "en"))),
     joinedAt: Date.now()
-  }).catch(e => console.warn("Could not write session history", e));
+  }).then(() => true, e => {
+    console.warn("Could not write session history", e);
+    try { CanamedTelemetry.record("history-write-failed", { code: String(e && e.code) }); } catch (_) {}
+    return false;
+  });
 }
 
 /* populate any university <select> from COHORTS (signed-in profile setup +
