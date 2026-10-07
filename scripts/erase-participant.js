@@ -77,7 +77,11 @@
  *
  *   # a session that has been purged — always --uid; the dry run names the flag
  *   ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> \
- *       --session <locationKey> --research-copy-checked --reason "Art. 17"
+ *       --session <locationKey> --research-copy-checked --reason art17
+ *
+ *   # --reason is one of: erasure-request (default), art17, art7-3, appi35,
+ *   # controller. It is stored in a ledger that is never deleted, so it is
+ *   # never free text. (For --dismiss it is free text: nothing is stored.)
  *
  *   # a request that names a session nothing shows existed
  *   ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> \
@@ -96,7 +100,7 @@ const {
   readSessionLocations, withdrawalLocations, purgedMarkers, locationForKey,
 } = require("./lib/session-trees");
 const { resolveIdentity, planSessionErasure } = require("./lib/erasure");
-const { buildRecord } = require("./lib/suppression");
+const { buildRecord, canonicalReason, describeReasons } = require("./lib/suppression");
 const { answeredIndex, flattenErasures, requestKey } = require("./lib/data-rights");
 const { isOpenRequest } = require("./lib/withdrawal-retention");
 
@@ -499,6 +503,18 @@ async function main() {
     console.error("FATAL: --session takes a location key: <code>, or orgs/<slug>/<code>.");
     return EXIT_REFUSED;
   }
+  /* The reason is WRITTEN INTO THE LEDGER, which is never deleted and which
+     scheduled jobs read on a hosted runner. So it is one of a fixed list, never
+     what the operator happens to type — which could be a name. Refused before
+     anything is read, in a dry run too, and without echoing the text back.
+     (--dismiss stores nothing: its reason is printed and stays free text.) */
+  if (!args.dismiss && canonicalReason(args.reason) === null) {
+    console.error("FATAL: --reason takes one of a fixed list: " + describeReasons() + ".");
+    console.error("It goes into a record that is kept for ever, so it cannot be free " +
+                  "text. Keep any note about the request in your own register. " +
+                  "Nothing was read or written.");
+    return EXIT_REFUSED;
+  }
 
   initAdmin();
   const db = getDatabase();
@@ -563,7 +579,7 @@ async function main() {
   }
 
   const at = new Date(Date.now()).toISOString();
-  const reason = args.reason || "erasure request";
+  const reason = canonicalReason(args.reason);
   const updates = Object.assign({}, live ? live.updates : {});
   const records = (live ? live.suppressed : []).map((s) =>
     buildRecord({ locationKey: s.locationKey, identity: s.identity, at, reason }));

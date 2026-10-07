@@ -183,6 +183,23 @@ own 90-day cycle — and the record is the only thing stopping a restore from
 bringing the participant back. It must outlive the last snapshot that contains
 them, which is up to 90 days after the erasure.
 
+⚠️ **`--reason` is one of a fixed list, never a note.** It is written into that
+record, which is kept for ever and read every day by the scheduled jobs. Give a
+code or the text it stands for; anything else is refused before the tool reads
+or writes:
+
+| code | stored as |
+| --- | --- |
+| `erasure-request` (the default) | erasure request |
+| `art17` | Art. 17 request |
+| `art7-3` | Art. 7(3) withdrawal |
+| `appi35` | APPI Art. 35(5) request |
+| `controller` | controller instruction |
+
+Who asked, how, and anything else about the request belong in your own
+register, not on the command line. (The reason given with `--dismiss`, §4.1, is
+only printed and may say what you like.)
+
 `scripts/restore-sessions.js` applies the list before writing, and refuses to
 run if it cannot read it. Restore is likewise dry-run by default
 (`RESTORE_CONFIRM=1` to write).

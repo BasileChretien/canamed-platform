@@ -22,7 +22,7 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { applySuppression, buildRecord } = require("../scripts/lib/suppression");
+const { applySuppression, buildRecord, describeReasons } = require("../scripts/lib/suppression");
 const { flattenErasures, erasureQueue } = require("../scripts/lib/data-rights");
 const { purgedMarkers } = require("../scripts/lib/session-trees");
 const { runOpsScript, at } = require("./fixtures/run-ops-script");
@@ -77,7 +77,7 @@ const ATTEST = "--research-copy-checked";
 
 test("a request for a purged session is carried out: the record is written, and everything that reads it agrees", () => {
   const before = purgedTree();
-  const r = erase(before, ["--uid", "uidA", "--session", "GONE-1", "--reason", "Art. 17", ATTEST], LIVE);
+  const r = erase(before, ["--uid", "uidA", "--session", "GONE-1", "--reason", "art17", ATTEST], LIVE);
   assert.strictEqual(r.code, 0, r.out);
 
   // 1. The suppression record: this person, this session, identifiers only.
@@ -85,7 +85,7 @@ test("a request for a purged session is carried out: the record is written, and 
   assert.strictEqual(recs.length, 1, "exactly one record must be written:\n" + r.out);
   assert.deepStrictEqual(recs[0], {
     locationKey: "GONE-1", uid: "uidA",
-    at: new Date(NOW).toISOString(), reason: "Art. 17",
+    at: new Date(NOW).toISOString(), reason: "Art. 17 request",
     sessionPurged: true, researchCopyChecked: true,
   }, "RTDB stores no empty arrays, so a uid-only record has no clientIds / stableIds");
 
@@ -398,8 +398,9 @@ const liveTree = () => ({
 
 test("a session that is in the database is erased as before, needs no attestation, and the run ends", () => {
   const before = liveTree();
-  const r = erase(before, ["--uid", "uidA", "--reason", "Art. 17"], LIVE);
+  const r = erase(before, ["--uid", "uidA", "--reason", "Art. 17 request"], LIVE);
   assert.strictEqual(r.code, 0, r.out);
+  assert.strictEqual(records(r.tree)[0].reason, "Art. 17 request");
   assert.deepStrictEqual(at(r.tree, "sessions/LIVE-1/pool"), { c3: before.sessions["LIVE-1"].pool.c3 });
   assert.deepStrictEqual(at(r.tree, "sessions/LIVE-1/members"), { uidB: true });
   assert.deepStrictEqual(Object.keys(at(r.tree, "rosters/sessions/LIVE-1")), ["uidB"]);
@@ -432,6 +433,70 @@ test("the old guards still hold: no identifier, and a participant nobody matches
   assert.strictEqual(nobody.code, 0, nobody.out);
   assert.deepStrictEqual(nobody.tree, before);
   assert.match(nobody.out, /Nothing to erase/);
+});
+
+// ------------------------------------------------------------- the reason
+
+test("the reason written into the ledger comes from a fixed list — it is never free text", () => {
+  /* `erasures/` is never deleted, and two jobs read it every day on a hosted
+     runner; the participant notice says what they read is the session's
+     identifier, the person's technical identifiers, a date and what was asked.
+     A field the operator can type anything into — a name, an e-mail address, a
+     note about the person — makes that sentence untrue the first time someone
+     does. So the tool takes a short code, or the exact text a code stands for,
+     and refuses everything else before it reads or writes anything. */
+  for (const [given, stored] of [
+    [null, "erasure request"],                       // no --reason at all
+    ["erasure-request", "erasure request"],
+    ["art17", "Art. 17 request"],
+    ["Art. 17 request", "Art. 17 request"],          // what the procedure has always shown
+    ["ART17", "Art. 17 request"],
+    ["art7-3", "Art. 7(3) withdrawal"],
+    ["appi35", "APPI Art. 35(5) request"],
+    ["controller", "controller instruction"],
+  ]) {
+    const args = ["--uid", "uidA", "--session", "GONE-1", ATTEST].concat(given === null ? [] : ["--reason", given]);
+    const r = erase(purgedTree(), args, LIVE);
+    assert.strictEqual(r.code, 0, JSON.stringify(given) + ":\n" + r.out);
+    assert.strictEqual(records(r.tree)[0].reason, stored, "given " + JSON.stringify(given));
+  }
+
+  const tree = purgedTree();
+  for (const given of ["Jane Doe asked by phone", "Art. 17", "art17 - see e-mail of 3 Oct", "jane@example.test", " "]) {
+    const live = erase(tree, ["--uid", "uidA", "--session", "GONE-1", ATTEST, "--reason", given], LIVE);
+    assert.strictEqual(live.code, 2, JSON.stringify(given) + " was accepted:\n" + live.out);
+    assert.deepStrictEqual(live.tree, tree, JSON.stringify(given) + " wrote something");
+    assert.match(live.out, /art17/, "the refusal must list what is accepted");
+    /* ("Art. 17" is part of a listed reason, so it appears in the list the
+       refusal prints; that is not an echo.) */
+    if (given.trim() !== "" && !describeReasons().includes(given.trim())) {
+      assert.ok(!live.out.includes(given.trim()),
+        "the refusal echoed the text back — it is being refused because it may be about a person");
+    }
+    // A dry run refuses it too: the mistake should surface before ERASE_CONFIRM.
+    assert.strictEqual(erase(tree, ["--uid", "uidA", "--reason", given]).code, 2);
+  }
+});
+
+test("for --dismiss the reason stays free text: it is printed, never stored", () => {
+  const tree = purgedTree();
+  tree.withdrawals["NEVER-WAS"] = { uidA: request(50) };
+  const r = erase(tree,
+    ["--uid", "uidA", "--session", "NEVER-WAS", "--dismiss", "--reason", "no snapshot holds this code"], LIVE);
+  assert.strictEqual(r.code, 0, r.out);
+  assert.match(r.out, /no snapshot holds this code/);
+  assert.doesNotMatch(JSON.stringify(r.tree), /no snapshot holds this code/,
+    "a dismissal's reason reached the database");
+});
+
+test("the ledger's writer refuses a reason outside the list, whoever calls it", () => {
+  const base = { locationKey: "L", identity: { uid: "u" }, at: "2026-10-07T00:00:00.000Z" };
+  assert.strictEqual(buildRecord(base).reason, "erasure request");
+  assert.strictEqual(buildRecord(Object.assign({ reason: "art17" }, base)).reason, "Art. 17 request");
+  assert.strictEqual(buildRecord(Object.assign({ reason: "Art. 17 request" }, base)).reason, "Art. 17 request");
+  for (const reason of ["anything else", "Art. 17", 7, {}, "  "]) {
+    assert.throws(() => buildRecord(Object.assign({ reason }, base)), /fixed list/, JSON.stringify(reason));
+  }
 });
 
 // ------------------------------------------------------------------ dismiss

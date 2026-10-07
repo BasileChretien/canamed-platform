@@ -979,6 +979,11 @@ read that before describing any of this as done.
   It writes nothing for a session with no marker (exit 3); `--dismiss` removes
   such a request, or one under a live session the person left nothing in.
   Procedure: `ARCHITECTURE/OPERATOR_POLICY.md` §4.1.
+- **`--reason` is a closed list** (`ERASURE_REASONS` in `scripts/lib/suppression.js`):
+  it is written into `erasures/`, which is never deleted and which two daily
+  jobs read in full, so it must never be something an operator typed — that
+  could be a name. Older records are not rewritten; the monitor prints how
+  many carry typed text. Do not add a free-text field to that ledger.
 
 ⚠️ **ACTION REQUIRED, not done, cannot be done in code:** sessions purged before
 this change have no marker, so their participants are refused in the product

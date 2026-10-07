@@ -33,6 +33,53 @@
 
 const { resolveIdentity, planSessionErasure, applyPlan } = require("./erasure");
 
+/* WHY A RECORD WAS WRITTEN — a closed list, code -> the text that is stored.
+ *
+ * The header says a record holds identifiers only. `reason` was the exception
+ * nobody had looked at: the tool stored whatever followed --reason, and an
+ * operator answering a request by e-mail could as easily type "J. Dupont
+ * asked on the phone" as "Art. 17 request". The ledger is never deleted or
+ * rewritten, and two scheduled jobs read all of it every day on a hosted
+ * runner; the participant notice describes what they read as the session's
+ * identifier, the person's technical identifiers, a date and what was asked.
+ * A free-text field cannot be promised to be only that. A fixed list can.
+ *
+ * To add a reason, add it here: it is then accepted by the tool, written by
+ * buildRecord(), and recognised by the monitor's count of older free text. */
+const ERASURE_REASONS = Object.freeze({
+  "erasure-request": "erasure request",
+  "art17": "Art. 17 request",
+  "art7-3": "Art. 7(3) withdrawal",
+  "appi35": "APPI Art. 35(5) request",
+  "controller": "controller instruction",
+});
+const DEFAULT_REASON = ERASURE_REASONS["erasure-request"];
+
+/**
+ * The stored text for a reason given as a code ("art17") or as that text
+ * itself ("Art. 17 request"), case-insensitively. Nothing given -> the default.
+ * Anything else -> null: the caller refuses, it does not guess.
+ */
+function canonicalReason(given) {
+  if (given === undefined || given === null) return DEFAULT_REASON;
+  if (typeof given !== "string") return null;
+  const wanted = given.trim().toLowerCase();
+  for (const code of Object.keys(ERASURE_REASONS)) {
+    if (wanted === code || wanted === ERASURE_REASONS[code].toLowerCase()) return ERASURE_REASONS[code];
+  }
+  return null;
+}
+
+/** Is this stored text one of the listed reasons? (For counting what is not.) */
+function isListedReason(text) {
+  return Object.values(ERASURE_REASONS).includes(text);
+}
+
+/** "code (text), code (text), …" — for a refusal that has to say what is accepted. */
+function describeReasons() {
+  return Object.keys(ERASURE_REASONS).map((code) => `${code} ("${ERASURE_REASONS[code]}")`).join(", ");
+}
+
 /**
  * Build a suppression record. Identifiers only — see the header.
  *
@@ -41,7 +88,8 @@ const { resolveIdentity, planSessionErasure, applyPlan } = require("./erasure");
  * @param {object} args.identity from resolveIdentity()
  * @param {string} args.at ISO timestamp, passed in (this module has no clock,
  *   so a caller cannot get a different plan by running it at a different time)
- * @param {string} [args.reason]
+ * @param {string} [args.reason] a code or text from ERASURE_REASONS; anything
+ *   else throws
  * @param {boolean} [args.sessionPurged] the session was no longer in the
  *   database when this was written. Nothing was deleted from the live tree —
  *   the purge had already done that for everyone — and the record carries the
@@ -67,13 +115,19 @@ function buildRecord({ locationKey, identity, at, reason, sessionPurged, researc
       "session to resolve a clientId against, and the request it answers is " +
       "keyed by uid");
   }
+  const why = canonicalReason(reason);
+  if (why === null) {
+    throw new Error("a suppression record's reason comes from a fixed list — " +
+      describeReasons() + " — and never from free text: the ledger is kept " +
+      "for ever and read by scheduled jobs");
+  }
   const record = {
     locationKey,
     uid: ids.uid || null,
     clientIds: [...(ids.clientIds || [])].sort(),
     stableIds: [...(ids.stableIds || [])].sort(),
     at,
-    reason: reason || "erasure request",
+    reason: why,
   };
   /* Added only when true, so an ordinary record keeps exactly the shape it
      has always had. */
@@ -152,4 +206,7 @@ function applySuppression(payload, records) {
   return { payload: out, applied, skipped };
 }
 
-module.exports = { buildRecord, applySuppression };
+module.exports = {
+  buildRecord, applySuppression,
+  ERASURE_REASONS, canonicalReason, isListedReason, describeReasons,
+};

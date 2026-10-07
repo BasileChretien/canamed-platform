@@ -3531,6 +3531,18 @@ now exists; that is not the same as the duty being discharged.
      connection holds the process open; the check meant to catch that reads
      the source and says of itself that it cannot see the final path. The test
      that now runs the tool to completion timed out against the old one.
+     *The reason on a record is one of a fixed list* (erasure request; Art. 17
+     request; Art. 7(3) withdrawal; APPI Art. 35(5) request; controller
+     instruction). The tool used to store whatever the operator typed after
+     `--reason`, in a ledger that is never deleted and that two scheduled jobs
+     read in full every day — so a note such as a name could have been written
+     into the one record the suppression design says holds identifiers only.
+     It is now refused before anything is read or written. ⚠️ **Records already
+     in the ledger are not rewritten** (nothing ever writes to `erasures/` but
+     the tool, appending), **and how many of them carry typed text has not
+     been checked**: that needs the production database, which this change did
+     not touch. The daily monitor now prints that number — a count, never the
+     text — so the answer is in its first run after deployment.
      *Found by running the real restore:* `scripts/restore-sessions.js` rebuilt
      an organisation session's path by splitting its key, took the literal
      `orgs` for the organisation, and restored to `orgs/orgs/sessions/…`, which

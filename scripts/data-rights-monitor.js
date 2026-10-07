@@ -48,6 +48,7 @@ const { getDatabase } = require("firebase-admin/database");
 
 const { readSessionLocationsShallow, purgedMarkers } = require("./lib/session-trees");
 const { erasureQueue, flattenErasures, DEADLINE_DAYS } = require("./lib/data-rights");
+const { isListedReason } = require("./lib/suppression");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -121,9 +122,10 @@ async function run(db, opts) {
      session would be reported as a record that nothing accounts for. */
   const markersSnap = await db.ref("purgedSessions").get();
 
+  const erasureRecords = flattenErasures(erasuresSnap.exists() ? erasuresSnap.val() : {});
   const { pending, overdue, handled, sessionGone, noMarker } = erasureQueue({
     withdrawals: withdrawalsSnap.exists() ? withdrawalsSnap.val() : {},
-    erasureRecords: flattenErasures(erasuresSnap.exists() ? erasuresSnap.val() : {}),
+    erasureRecords,
     liveLocationKeys: locations.map((loc) => loc.key),
     purgedLocationKeys: Object.keys(purgedMarkers(markersSnap.exists() ? markersSnap.val() : {})),
     now: opts.now,
@@ -140,6 +142,18 @@ async function run(db, opts) {
     out(`    of which with no purge marker: ${noMarker.length}`);
   }
   out(`Deadline:                ${DEADLINE} days (Art. 12(3)); warn at ${WARN}`);
+
+  /* Records whose `reason` is text somebody typed. Until 2026-10-07 the
+     erasure tool stored whatever followed --reason; it now takes a fixed list,
+     but the ledger is never rewritten, so anything typed before then is still
+     in it — and still read here, daily. Counted, never printed: what makes it
+     worth counting is that it may be about a person. */
+  const freeText = erasureRecords.filter(
+    (rec) => rec && typeof rec.reason === "string" && !isListedReason(rec.reason)).length;
+  if (freeText) {
+    out(`Erasure records with a reason outside the fixed list: ${freeText} ` +
+      "(typed before the list was fixed; kept as written)");
+  }
 
   /* ⚠️ NO uid, NO session code in the output. These logs are world-readable on
      a public repository — the same reason cleanup-stale-sessions runs with

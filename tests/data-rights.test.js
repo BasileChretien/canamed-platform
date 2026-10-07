@@ -665,6 +665,37 @@ test("no script is stored with a raw control byte in it", () => {
     "build the character (String.fromCharCode) instead of typing it");
 });
 
+test("the monitor counts ledger records whose reason is not from the fixed list, and prints none of them", async () => {
+  /* Until 2026-10-07 the erasure tool stored whatever the operator typed after
+     --reason. The ledger is never deleted or rewritten, so any such text is
+     still there and is still read by this job every day. Nobody can say from
+     the repository how many there are; the job that reads them can, as a
+     number. */
+  const sessions = { "LIVE-1": { created: { at: ago(50) } } };
+  const r = await monitor({
+    sessions,
+    erasures: {
+      e1: { at: ANSWERED_AT, records: [
+        { locationKey: "A", uid: "u1", reason: "erasure request" },
+        { locationKey: "B", uid: "u2", reason: "Art. 17 request" },
+        { locationKey: "C", uid: "u3", reason: "SecretName asked by phone" },
+      ] },
+      e2: { at: ANSWERED_AT, records: [
+        { locationKey: "D", uid: "u4", reason: "see mail from secret@example.test" },
+        { locationKey: "E", uid: "u5" },                       // no reason at all: nothing typed
+      ] },
+    },
+  });
+  assert.strictEqual(r.code, 0, "old free text is not a missed deadline");
+  assert.match(r.text, /reason outside the fixed list:\s+2\b/i);
+  assert.doesNotMatch(r.text, /SecretName|secret@example/, "the monitor printed the text it was counting");
+
+  const clean = await monitor({
+    sessions, erasures: { e1: { at: ANSWERED_AT, records: [{ locationKey: "A", uid: "u1", reason: "Art. 17 request" }] } },
+  });
+  assert.doesNotMatch(clean.text, /fixed list/i, "nothing to report, so nothing printed");
+});
+
 test("when the monitor cannot read, its last line names an error code and no path", () => {
   /* It printed e.message. A failed listing quotes the path it was listing —
      "shallow read of 'orgs/<slug>/sessions' failed" — and an Admin read error
