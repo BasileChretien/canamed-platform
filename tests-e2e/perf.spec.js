@@ -700,6 +700,29 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     the +54 bytes are a re-added declaration and its comment. data-rights.js
 //     is 6.3 KB gz, lazy. ⚠️ THE MARGIN IS ~1.45 KB, not 3.4: the next eager
 //     addition of any size needs a reclaim first.
+//   2026-10-07 (second entry): CAP UNCHANGED (326). The My-account dialog's
+//     phone layout was fixed in style.css (the profile fieldset stuck out of
+//     the dialog, which scrolled sideways; a history row broke its session code
+//     and its withdraw button across lines). Measured the way this spec
+//     measures, LF-normalised at gzip LEVEL 9: style.css 45.75 -> 46.33 KB gz,
+//     first-party 323.99 -> 324.58.
+//     ⚠️ THAT IS AN EAGER ADDITION WITHOUT THE RECLAIM the entry above says
+//     must come first. Recorded plainly: +0.58 KB, and THE MARGIN IS NOW
+//     ~1.4 KB. The owner accepted it as it is the same day (a visible fix,
+//     against a reclaim that is its own PR); the rule is not relaxed, the
+//     reclaim is still owed before any further eager addition.
+//     The reclaim it points at is measured: the whole "My-account dialog"
+//     block of style.css is 4.7 KB raw and accounts for 1.1 KB gz of the eager
+//     bundle, for a dialog that opens from ONE click on the signed-in header
+//     chip. A lazily <link>ed sheet awaited before dialogShow() (the
+//     admin.css / room.css shape) would take the block, and this fix with it,
+//     off the splash.
+//     ⚠️ THE ENTRY ABOVE'S ABSOLUTE FIGURES ARE AT GZIP LEVEL 6 (zlib's
+//     default), as this entry's first draft was until review caught it; the
+//     deltas are right. At level 9 that entry reads script.js 191.05 ->
+//     191.10 and first-party 323.94 -> 323.99, so the margin it calls ~1.45 KB
+//     was 2.0. Measure with { level: 9 }, or read critical_kb_gz off the perf
+//     job, or this ledger drifts away from the check it documents.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
