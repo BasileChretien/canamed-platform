@@ -169,6 +169,56 @@ test("sanitizeResume strips a partially-malformed consent block", () => {
   assert.equal(r.consent, null);
 });
 
+/* The third consent box (`transcript`, PIS v3) used to be dropped here: the
+   block was rebuilt as { workshop, research, version, at }, so a participant
+   who had ticked it was recorded as transcript:false the moment they reloaded.
+   The round trip through the running code is in tests/consent-records.test.js
+   and tests-e2e/consent-records.spec.js; these pin the function itself. */
+const consentWith = (extra) => lib.sanitizeResume({
+  sessionNum: "abc", name: "A",
+  consent: Object.assign(
+    { workshop: true, research: false, version: "PIS-v3-2026-07", at: 1234 }, extra)
+}).consent;
+
+test("sanitizeResume keeps a boolean transcript consent, true or false", () => {
+  assert.deepEqual(consentWith({ transcript: true }), {
+    workshop: true, research: false, transcript: true,
+    version: "PIS-v3-2026-07", at: 1234
+  });
+  /* false is a recorded REFUSAL, not an absent answer — it has to survive as
+     false rather than be dropped along with the legacy "no field" case. */
+  assert.strictEqual(consentWith({ transcript: false }).transcript, false);
+});
+
+test("sanitizeResume does not invent a transcript answer for a consent that has none", () => {
+  /* A consent stored before the third box existed. It must still resume, and
+     the missing answer must stay missing — never become true. */
+  const c = consentWith({});
+  assert.notStrictEqual(c, null, "a pre-box-C consent no longer resumes");
+  assert.strictEqual("transcript" in c, false);
+  assert.deepEqual(c, {
+    workshop: true, research: false, version: "PIS-v3-2026-07", at: 1234
+  });
+});
+
+test("sanitizeResume lets no non-boolean transcript through", () => {
+  /* localStorage is attacker-writable. Same answer as for a malformed
+     workshop/research: the whole block is refused, so the participant is asked
+     again rather than rejoined on a consent record built from garbage. This is
+     also what the database rule does (transcript absent, or a boolean). */
+  for (const bad of ["true", "yes", 1, 0, null, {}, [], [true]]) {
+    assert.strictEqual(consentWith({ transcript: bad }), null,
+      "a consent whose transcript is " + JSON.stringify(bad) + " was accepted");
+  }
+});
+
+test("sanitizeResume still carries nothing else out of the stored consent", () => {
+  /* Keeping `transcript` must not turn into "copy the object": every other
+     key in localStorage stays behind. */
+  const c = consentWith({ transcript: true, verification: true, admin: true });
+  assert.deepEqual(Object.keys(c).sort(), ["at", "research", "transcript", "version", "workshop"]);
+});
+
 // =============================================================
 // entriesSorted
 // =============================================================
