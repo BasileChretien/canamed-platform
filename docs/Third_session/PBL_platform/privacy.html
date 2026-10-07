@@ -208,16 +208,17 @@
       same from 2026-09-04 to 2026-10-07, although it needed only the requests;
       it has been corrected. These jobs report only counts and dates &mdash; no personal
       data is written into their logs. Two
-      further jobs that copy the database in full, a backup and the
+      further jobs that copy the session database in full, a backup and the
       pseudonymised research export, are running again as of
       2026-09-01. They write to <strong>Scaleway</strong> object storage in
       <strong>Paris</strong>, the same processor that relays the AI chat; the
       copies stay inside the EEA and are readable only by the platform
-      administrator. To make them, each of these two jobs reads the whole
-      database on the same GitHub machines as the other jobs, once a night,
-      and the content is on that machine for as long as the job runs. They had been switched off since 2026-08-27, when the
+      administrator. To make them, each of these two jobs reads the whole live
+      session database on the same GitHub machines as the other jobs, once a day,
+      and the content is on that machine for as long as the job runs. From 2026-08-27, when the
       platform left Google's paid plan and the storage they used stopped
-      accepting writes.</p>
+      accepting writes, they still ran each day but could store no copy; they
+      were switched off on 2026-08-31.</p>
 
     <h2>7. International transfers</h2>
     <p>The database is hosted in <strong>Belgium
@@ -236,9 +237,9 @@
     <p>Those maintenance jobs are still a transfer <strong>outside the
       EEA</strong>. For all but two of them, what crosses is session identifiers, two dates per
       session and the certificate records, rather than your session content.
-      The two that copy the database in full (section 6) are the exception:
+      The two that copy the session database in full (section 6) are the exception:
       they read all of it on a GitHub machine, so your session content does
-      cross, once a night for each, while the job runs.
+      cross, once a day for each, while the job runs.
       The technical identifiers described in section 4 cross with them,
       together with their dates and the time slots of their usage counters.
       So do the requests to withdraw consent or to have data erased, and the
@@ -359,10 +360,10 @@
       consent or to have data erased, which earlier versions did not mention,
       and that one of them copied the whole live session database to a GitHub
       machine every day from 2026-09-04 to 2026-10-07 without needing to.
-      Sections 6 and 7 also say, for the first time, that the nightly backup
-      and the research export read the whole database on a GitHub machine, so
-      that session content crosses the border while they run; earlier versions
-      said it did not.
+      Sections 6 and 7 also say, for the first time, that the backup
+      and the research export read the whole live session database on a GitHub
+      machine once a day, so that session content crosses the border while they
+      run; earlier versions said it did not.
       Material changes are issued under a new version with re-consent on next join.
       <strong>Material changes since PIS v10, carried forward:</strong>
       section 1 no longer states that Université de Caen Normandie and Nagoya
@@ -408,6 +409,8 @@
       United States is session identifiers, two dates per session and the
       certificate records (sections 6 and 7). Like the v6 change below, this
       <strong>reduces</strong> what leaves the EEA.
+      Corrected in v12, above: the backup and the research export do read
+      session content.
       Material changes are issued under a new version with re-consent on next join.
       <strong>Material changes since PIS v5, carried forward:</strong>
       the job that deletes old sessions no longer reads your session data at
@@ -614,18 +617,20 @@
       troisième tâche, qui surveille les demandes d'effacement restées sans
       réponse, a fait de même du 04/09/2026 au 07/10/2026, alors qu'elle n'avait
       besoin que des demandes ; elle a été corrigée. Ces tâches ne consignent que des décomptes et des dates
-      &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base intégralement,
+      &mdash; aucune donnée personnelle n'est écrite dans leurs journaux. Deux autres tâches qui copient la base de session intégralement,
       une sauvegarde et l'export de recherche pseudonymisé, sont de nouveau actives
       depuis le 01/09/2026. Elles écrivent sur le stockage objet de
       <strong>Scaleway</strong> à <strong>Paris</strong>, le même sous-traitant
       que celui qui relaie la conversation avec le patient simulé ; les copies
       restent dans l'EEE et ne sont accessibles qu'à l'administrateur de la
       plateforme. Pour les produire, chacune de ces deux tâches lit
-      l'intégralité de la base sur les mêmes machines GitHub que les autres
-      tâches, une fois par nuit, et le contenu se trouve sur cette machine
-      pendant toute la durée de la tâche. Elles étaient désactivées depuis le 27/08/2026, date à laquelle
+      l'intégralité de la base de session en cours sur les mêmes machines GitHub que les autres
+      tâches, une fois par jour, et le contenu se trouve sur cette machine
+      pendant toute la durée de la tâche. À partir du 27/08/2026, date à laquelle
       la plateforme a quitté l'offre payante de Google et le stockage qu'elles
-      utilisaient a cessé d'accepter les écritures.</p>
+      utilisaient a cessé d'accepter les écritures, elles s'exécutaient encore
+      chaque jour mais ne pouvaient plus enregistrer de copie ; elles ont été
+      désactivées le 31/08/2026.</p>
 
     <h2>7. Transferts internationaux</h2>
     <p>La base est hébergée en <strong>Belgique (région Google
@@ -647,9 +652,9 @@
       <strong>hors EEE</strong>. Pour toutes sauf deux, ce qui franchit la frontière, ce sont des
       identifiants de séance, deux dates par séance et les enregistrements de
       certificats, et non le contenu de vos séances. Les deux tâches qui
-      copient la base intégralement (section 6) font exception : elles la
+      copient la base de session intégralement (section 6) font exception : elles la
       lisent en entier sur une machine GitHub, de sorte que le contenu de vos
-      séances franchit bien la frontière, une fois par nuit pour chacune,
+      séances franchit bien la frontière, une fois par jour pour chacune,
       pendant la durée de la tâche. Les identifiants
       techniques décrits en section 4 la franchissent également, avec leurs
       dates et les créneaux horaires de leurs compteurs d'utilisation. Il en va
@@ -791,8 +796,8 @@
       chaque jour l'intégralité de la base de session en cours sur une machine
       GitHub, du 04/09/2026 au 07/10/2026, sans en avoir besoin.
       Les sections 6 et 7 indiquent aussi, pour la première fois, que la
-      sauvegarde nocturne et l'export de recherche lisent l'intégralité de la
-      base sur une machine GitHub, de sorte que le contenu des séances franchit
+      sauvegarde et l'export de recherche lisent chaque jour l'intégralité de la
+      base de session en cours sur une machine GitHub, de sorte que le contenu des séances franchit
       la frontière pendant leur exécution ; les versions précédentes
       affirmaient le contraire.
       Les modifications substantielles font l'objet d'une nouvelle version avec re-consentement à la prochaine participation.
@@ -846,6 +851,8 @@
       identifiants de séance, deux dates par séance et les enregistrements de
       certificats (sections 6 et 7). Comme la modification v6 ci-dessous, celle-ci
       <strong>réduit</strong> ce qui sort de l'EEE.
+      Corrigé en v12, ci-dessus : la sauvegarde et l'export de recherche lisent
+      bien le contenu des séances.
       Toute modification substantielle donne lieu à un nouveau numéro de version
       avec re-consentement à la prochaine inscription.
       <strong>Modifications substantielles depuis la version PIS v5, reprises :</strong>
@@ -979,7 +986,7 @@
       このチャットに入力した内容はプラットフォームの外に送信されます。まず<strong>Scaleway SAS</strong>（フランス・パリ）に送られ、同社は要求を中継するだけで何も保存しません。次に<strong>Hugging Face</strong>がモデル提供者へ振り分け、最後に<strong>OVHcloud</strong>（フランス・グラヴリーヌ）がモデルを実行して返答を生成します。これら3社はいずれも当方の委託先または再委託先です。Scalewayはさらに、ログイン用トークンとセッション名・ルーム名を受け取りますが、これはあなたが当該ルームの参加者であることの確認のみに用いられ、
       その先へは渡されません。Hugging FaceとOVHcloudが受け取るのは、会話の内容とシナリオの指示だけです。実際の診察で尋ねる内容のみを入力してください。</p>
 
-    <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>（GitHub, Inc.、米国）上で実行されます。<strong>この段落の最後で述べる、データベース全体を複製する2つの処理を除き、毎日実行される処理は、セッションの内容を読み込みません。</strong>
+    <p>本プラットフォームの定期メンテナンス処理は<strong>GitHub Actions</strong>（GitHub, Inc.、米国）上で実行されます。<strong>この段落の最後で述べる、セッションデータベース全体を複製する2つの処理を除き、毎日実行される処理は、セッションの内容を読み込みません。</strong>
       読み込むのは、
       セッション識別子の一覧と、各セッションの削除時期を決定する2つの日付です。
       1つの処理は証明書レコードも読み込みます。
@@ -997,9 +1004,9 @@
       氏名やメールアドレスは受け取りません。
       サインインして作成したアカウントの場合も、
       受け取るのは識別子と日付、サインイン方法の名称だけです。
-      2026年9月1日までは、このうち2つの処理が<strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定のためです）。いずれも本来その内容を必要としておらず、現在は複製していません。対応されていない削除のご請求を監視する3つ目の処理も、2026年9月4日から2026年10月7日まで同じように複製していました。この処理に必要だったのはご請求の記録だけで、現在は修正済みです。これらの処理が記録するのは件数と日付だけで、実行ログに個人データが書き込まれることはありません。データベース全体を複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は、2026年9月1日に再開しました。保存先は<strong>Scaleway</strong>の<strong>パリ</strong>のオブジェクトストレージで、
+      2026年9月1日までは、このうち2つの処理が<strong>稼働中のセッションデータベース全体</strong>を毎日GitHubのマシンへ複製していました（1つは削除対象の判定のため、もう1つはデータベースの容量測定のためです）。いずれも本来その内容を必要としておらず、現在は複製していません。対応されていない削除のご請求を監視する3つ目の処理も、2026年9月4日から2026年10月7日まで同じように複製していました。この処理に必要だったのはご請求の記録だけで、現在は修正済みです。これらの処理が記録するのは件数と日付だけで、実行ログに個人データが書き込まれることはありません。セッションデータベース全体を複製する残る2つの処理（バックアップと擬似匿名化された研究用エクスポート）は、2026年9月1日に再開しました。保存先は<strong>Scaleway</strong>の<strong>パリ</strong>のオブジェクトストレージで、
       模擬患者チャットを中継しているのと同じ委託先です。複製はEEA域内に留まり、
-      アクセスできるのはプラットフォーム管理者のみです。この2つの処理は、複製を作るために、ほかの処理と同じGitHubのマシン上でデータベース全体を毎晩1回ずつ読み込みます。処理が終わるまでのあいだ、その内容はそのマシン上にあります。これらの処理は2026年8月27日以降停止していました。本プラットフォームがGoogleの有料プランを離れ、それまで使用していたストレージが書き込みを受け付けなくなったためです。</p>
+      アクセスできるのはプラットフォーム管理者のみです。この2つの処理は、複製を作るために、ほかの処理と同じGitHubのマシン上で稼働中のセッションデータベース全体を1日1回ずつ読み込みます。処理が終わるまでのあいだ、その内容はそのマシン上にあります。2026年8月27日に本プラットフォームがGoogleの有料プランを離れ、それまで使用していたストレージが書き込みを受け付けなくなりました。これらの処理はその後も毎日実行されていましたが、複製を保存できず、2026年8月31日に停止しました。</p>
 
     <h2>7. 越境移転</h2>
     <p>データベースは<strong>ベルギー（Google <code>europe-west1</code>リージョン）</strong>にホストされています。日本の参加者にとってはAPPI第28条に基づく越境移転であり、2019年のEU・日本相互十分性認定（PPC）により保護されます。</p>
@@ -1010,8 +1017,8 @@
 
     <p>これらのメンテナンス処理は現在も<strong>EEA域外</strong>への移転にあたります。
       ただし2つの処理を除けば、国境を越えるのは、セッション識別子、各セッションの2つの日付、および証明書レコードであり、セッションの内容ではありません。
-      例外は、データベース全体を複製する2つの処理です（第6条）。
-      この2つはGitHubのマシン上でデータベース全体を読み込むため、処理が動いているあいだ、セッションの内容も毎晩国境を越えます。
+      例外は、セッションデータベース全体を複製する2つの処理です（第6条）。
+      この2つはGitHubのマシン上でその全体を読み込むため、処理が動いているあいだ、セッションの内容も毎日国境を越えます。
       第4条に記載した技術的識別子も、
       その日付および利用回数カウンターの時間帯とともに国境を越えます。
       同意の撤回やデータ削除のご請求と、対応済みのご請求の記録も国境を越えます。
@@ -1099,7 +1106,7 @@
       従来のバージョンには、この記載がありませんでした。
       そのうち1つの処理は、2026年9月4日から2026年10月7日まで、
       必要がないのに稼働中のセッションデータベース全体を毎日GitHubのマシンへ複製していました。
-      第6条と第7条には、毎晩のバックアップと研究用エクスポートがGitHubのマシン上でデータベース全体を読み込むことも、今回はじめて記載しました。
+      第6条と第7条には、バックアップと研究用エクスポートがGitHubのマシン上で稼働中のセッションデータベース全体を毎日読み込むことも、今回はじめて記載しました。
       これらの処理が動いているあいだは、セッションの内容も国境を越えます。
       従来のバージョンには、越えないと記載していました。
       重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
@@ -1118,6 +1125,7 @@
       <strong>PIS v6からの重要な変更（継続掲載）：</strong>定期メンテナンス処理は、
       セッションの内容を一切読み込まなくなりました。最後まで読み込んでいたのはストレージ監視の処理で、容量を測定するためだけに毎日データベース全体を読み込んでいましたが、現在はセッション数を監視する方式に変更しています。
       引き続き米国へ渡るのは、セッション識別子、各セッションの2つの日付、および証明書レコードです（第6条・第7条）。下記のv6の変更と同様、本変更はEEA域外へ出るデータを<strong>減らす</strong>ものです。
+      この記載は、バックアップと研究用エクスポートについては誤りでした。v12（上記）で訂正しています。
       重要な変更は新バージョンで発行し、次回参加登録時に再同意を求めます。
       <strong>PIS v5からの重要な変更（継続掲載）：</strong>古いセッションを削除する処理は、
       あなたのセッションデータを一切読み込まなくなりました。現在読み込むのはセッション識別子の一覧と各セッションの2つの日付のみであり、データベース全体を毎日米国のマシンへ複製する処理はなくなりました（ストレージ監視の処理では引き続き複製が行われます。第6条）。この変更はEEA域外へ出るデータを<strong>増やすのではなく減らす</strong>ものですが、第6条の記載が「2つ」から「1つ」に変わるため記載しています。
