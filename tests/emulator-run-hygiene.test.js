@@ -153,9 +153,11 @@ test("the emulator runs against the PINNED firebase CLI, not whatever npx finds"
 });
 
 test("the runner sweeps survivors on every exit path", () => {
-  assert.match(RUNNER, /child\.on\("exit"[\s\S]{0,80}?sweep\(\)/,
+  /* `sweep(` — it takes an argument since 2026-10-07 (did the child fail of
+     its own accord?), which the report needs and the kill decision does not. */
+  assert.match(RUNNER, /child\.on\("exit"[\s\S]{0,120}?sweep\(/,
     "a normal exit must sweep");
-  assert.match(RUNNER, /child\.on\("error"[\s\S]{0,120}?sweep\(\)/,
+  assert.match(RUNNER, /child\.on\("error"[\s\S]{0,120}?sweep\(/,
     "a failure to start must sweep");
   assert.match(RUNNER, /process\.on\("SIGINT", \(\) => stop\("SIGINT", 130\)\)/,
     "Ctrl-C must reach stop() — an interrupted run is the commonest way to " +
@@ -241,8 +243,16 @@ test("sim-with-emulator sweeps by port after its tree-kill", () => {
   assert.match(body, /emulatorPorts\.free\(\[DB_PORT, AUTH_PORT\], \{ onlyPids: ownedPids \}\)/,
     "taskkill /T only reaches the tree we own; the RTDB emulator survived it — " +
     "but the backstop sweep must still prove ownership before killing");
-  assert.match(body, /taskkill/,
+  /* The tree-kill moved into stopChild() (the "exit" handler needs it too). */
+  const killAt = body.indexOf("stopChild(p)");
+  assert.ok(killAt > 0, "locator stale: cleanup() no longer stops its children");
+  assert.ok(killAt < body.indexOf("emulatorPorts.survey("),
     "the port sweep is a BACKSTOP — the tree-kill must still run first");
+  assert.match(SIM, /function stopChild\(p\) \{[\s\S]{0,900}?spawnSync\("taskkill", \["\/F", "\/T", "\/PID"/,
+    "and stopping a child must still be a synchronous TREE kill on Windows");
+  assert.match(SIM, /p\.exitCode !== null \|\| stopped\.has\(p\)\) return;/,
+    "a child that has ended, or was already stopped, must not be killed again " +
+    "by its remembered PID");
 });
 
 /* ── the review round: fail closed, kill once, prove ownership ────── */
@@ -319,6 +329,15 @@ test("free() honours an ownership restriction and skips unproven listeners", asy
 });
 
 test("automatic sweeps are ownership-scoped; only `emulator:free` is unrestricted", () => {
+  /* ⚠ THIS TEST WAS GREEN ON THE DEFECT, and the three assertions it had then
+     still are. `onlyPids: ownedPids` reads the same whether `ownedPids` holds
+     what the run STARTED or what it merely SAW on the ports — and until
+     2026-10-07 it held the latter, so one session's sweep killed another
+     session's live emulator while this test passed. What decides the matter is
+     where the set comes FROM, and only a run with a real stranger on the port
+     shows that: tests/emulator-sweep-lineage.test.js. The checks added below
+     name the old shape so that it cannot come back unnoticed in the sim
+     launcher, which that file does not run. */
   const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
   const SIM = read("scripts", "sim", "sim-with-emulator.js");
   const cli = read("scripts", "ops", "emulator-ports.js");
@@ -327,9 +346,115 @@ test("automatic sweeps are ownership-scoped; only `emulator:free` is unrestricte
       name + " must restrict its automatic sweep to PIDs it established");
     assert.match(src, /were NOT started by this run, so/,
       name + " must REPORT a stranger on the port, not kill it");
+
+    assert.doesNotMatch(src, /ownedPids\.add\(/,
+      name + " adds PIDs to its owned set one by one — the old shape, where " +
+      "every PID seen listening on the port during the run went in. Seeing a " +
+      "process on a shared port is not having started it.");
+    assert.match(src, /const ownedPids = new Set\((?:sorted\.)?mine\.map\(/,
+      name + ": the owned set must be built from the lineage tracker's `mine`");
+    assert.match(src, /processLineage\.track\(\w+\.pid, \{ spawnedAt \}\)/,
+      name + " must follow the lineage of the child IT spawned");
+    assert.match(src, /lineage\.partition\(survivors\)/,
+      name + " must sort survivors by lineage before freeing any");
   }
   assert.match(cli, /const killed = free\(ports\);/,
     "the explicit `free` verb stays unrestricted — there the operator decides");
+});
+
+test("an ownership-scoped kill is NOT a tree kill; only the operator's verb is", () => {
+  /* `taskkill /T` walks ParentProcessId, which Windows never rewrites: an
+     unrelated orphan whose dead parent's PID has since gone to the listener
+     would be read as its child and killed with it. The caller verified the
+     listeners it names — not whatever claims them as a parent. (Found in
+     review; an independent count on a quiet machine had 2 of 883 processes
+     in exactly that state.) */
+  const cli = read("scripts", "ops", "emulator-ports.js");
+  assert.match(cli,
+    /execFileSync\("taskkill", onlyPids \? \["\/F", "\/PID", pid\] : \["\/F", "\/T", "\/PID", pid\]/,
+    "free() must drop /T when it is handed onlyPids, and keep it otherwise");
+  assert.strictEqual((cli.match(/execFileSync\("taskkill"/g) || []).length, 1,
+    "locator stale: free() no longer has exactly one taskkill call");
+});
+
+test("the sim ends the run when its own emulator exits before teardown", () => {
+  /* waitForPort() is satisfied by ANY listener. If our CLI lost the race for
+     :9000 and exited, the listener answering is another session's emulator —
+     and the sim would run against it. The first version of this guard read
+     `firebaseProc.exitCode` right after a synchronous lookup, where a child
+     that had just died still reads as running (found in review). The "exit"
+     event is the only reliable signal, and it must not depend on the process
+     table being readable. Text checks only: this launcher needs Java, the
+     firebase CLI and port 8765, so it is not run by the unit suite. It was
+     run by hand against the real CLI — see the PR. */
+  const SIM = read("scripts", "sim", "sim-with-emulator.js");
+  const at = SIM.indexOf('firebaseProc.on("exit"');
+  assert.ok(at > 0, "locator stale: the emulator's exit handler was not found");
+  /* The handler closes at the first "});" at its own indentation; "\n" alone
+     in the needle, so a CRLF checkout matches too. */
+  const end = SIM.indexOf("\n  });", at);
+  assert.ok(end > at, "locator stale: the end of the exit handler was not found");
+  const handler = SIM.slice(at, end + "\n  });".length);
+  assert.match(handler, /if \(tearingDown\) return;/,
+    "an exit during our own teardown is expected and must not abort anything");
+  assert.match(handler, /refuseForeign\(sorted\.notMine,/,
+    "an exit at any other time, with the ports held by something SHOWN not to " +
+    "be ours, must refuse and name it — and only then call it another run's: " +
+    "our own emulator crashing leaves a listener too");
+  assert.match(handler, /process\.exit\(1\);\s*\}\);\s*$/,
+    "and with the ports free it must still end the run, not carry on");
+  assert.ok(handler.indexOf("if (tearingDown) return;") < handler.indexOf("refuseForeign("),
+    "the teardown check must come first");
+  const stopAt = handler.indexOf("stopChild(simProc);");
+  assert.ok(stopAt > 0, "the handler must stop the sim itself");
+  assert.ok(stopAt < handler.indexOf("lineage.partition("),
+    "and BEFORE it works out whose the ports are: that reads the process table " +
+    "(seconds, and it can fail), and until the sim is stopped it may be writing " +
+    "into another session's database (review round 3)");
+
+  const cleanupAt = SIM.indexOf("function cleanup()");
+  const cleanup = SIM.slice(cleanupAt, SIM.indexOf('process.on("SIGINT"', cleanupAt));
+  assert.match(cleanup, /^function cleanup\(\) \{\r?\n\s*tearingDown = true;/,
+    "cleanup() must mark the teardown BEFORE it kills the emulator");
+  assert.match(cleanup, /for \(const p of \[simProc, firebaseProc, serveProc\]\)/,
+    "a run cut short must take the sim down too, or it keeps writing to whoever " +
+    "holds the ports");
+  assert.doesNotMatch(SIM, /firebaseProc\.exitCode !== null\) \{/,
+    "the stale-read form of the guard must not come back");
+});
+
+test("every message that offers to clear a port says first that it may be a live run", () => {
+  /* The other half of the 2026-10-07 incident. A refused preflight used to go
+     straight from "the port is held" to `emulator:free` and call the listener
+     stale; a session that follows that against another session's run in
+     progress kills it. The caveat is one shared constant so the four places
+     cannot drift apart. */
+  const RUNNER2 = read("scripts", "ops", "run-rules-e2e.js");
+  const SIM = read("scripts", "sim", "sim-with-emulator.js");
+  const cli = read("scripts", "ops", "emulator-ports.js");
+  assert.match(ports.LIVE_RUN_CAVEAT, /LIVE EMULATOR/);
+  assert.match(ports.LIVE_RUN_CAVEAT, /two sessions cannot run an emulator suite at once/);
+
+  /* Each REFUSAL message, cut out from where it starts: the caveat also
+     appears in the sweeps' reports, and an occurrence there must not stand in
+     for one that went missing here. */
+  const refusals = [
+    ["run-rules-e2e", RUNNER2, "a port this run needs is already in use", "ports.LIVE_RUN_CAVEAT"],
+    ["sim-with-emulator", SIM, "FATAL: the emulator ports are already in use", "emulatorPorts.LIVE_RUN_CAVEAT"],
+    ["emulator-ports check", cli, "emulator-ports: FATAL", "LIVE_RUN_CAVEAT"]
+  ];
+  for (const [name, src, opening, caveat] of refusals) {
+    const from = src.indexOf(opening);
+    assert.ok(from > 0, "locator stale: " + name + "'s refusal message was not found");
+    const message = src.slice(from, from + 1600);
+    const caveatAt = message.indexOf(caveat);
+    const clearAt = message.search(/emulator-ports\.js free|npm run emulator:free/);
+    assert.ok(caveatAt > 0, name + "'s refusal never states the live-run caveat");
+    assert.ok(clearAt > 0, "locator stale: " + name + " no longer names the clear command");
+    assert.ok(caveatAt < clearAt,
+      name + " offers the clear command BEFORE saying the listener may be " +
+      "another session's emulator, mid-suite");
+  }
 });
 
 test("a signal to the runner forwards to the child and waits before sweeping", () => {
@@ -343,7 +468,9 @@ test("a signal to the runner forwards to the child and waits before sweeping", (
     "the wait must be bounded — a wedged child must not hang the shell");
   const stopAt = RUNNER2.indexOf("function stop(");
   const body = RUNNER2.slice(stopAt, RUNNER2.indexOf("process.on(\"SIGINT\"", stopAt));
-  assert.ok(body.indexOf("deadline") < body.indexOf("sweep()"),
+  const sweepAt = body.indexOf("sweep(");
+  assert.ok(sweepAt > 0, "locator stale: stop() no longer calls sweep(");
+  assert.ok(body.indexOf("deadline") < sweepAt,
     "the wait must come BEFORE the sweep");
 });
 
