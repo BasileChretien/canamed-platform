@@ -239,8 +239,8 @@ test("the tool as it stood is what this replaces: no record, exit 0", () => {
 /* A purge marker says a session with this code was purged; the snapshots
    still hold it. If something sits under `sessions/<code>` again, that does
    not un-purge it — and anyone can put something there: a signed-in visitor
-   may write their own membership row under ANY code, and a `created` record
-   dated in the future is never purged. The tool used to skip every key that
+   may write their own membership row under ANY code, or create a session
+   under a code that is free again. The tool used to skip every key that
    is in the database, so for such a code it said "Nothing to erase … NOT
    ACTED ON" and pointed at --dismiss; --dismiss looked for the marker only
    when the session was absent, so it deleted the request with no suppression

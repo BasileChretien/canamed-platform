@@ -293,7 +293,7 @@ async function planPurged(db, locations, args) {
      means a session with this code was purged and the snapshots still hold
      it; a node under `sessions/<code>` now does not undo that, and anyone can
      put one there — their own membership row is writable under any code, and
-     a `created` dated in the future is never purged. This used to skip every
+     a session can be created under a code that is free. This used to skip every
      key that is in the database, which turned "answer this request" into
      "nothing to erase, dismiss it" for a purged session the moment a stranger
      wrote one row under its code.

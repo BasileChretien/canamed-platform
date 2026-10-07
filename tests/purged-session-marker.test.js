@@ -362,9 +362,18 @@ test("after the backfill, a request for such a session is answered and cannot be
   const tool = (tree, args) => runOpsScript("erase-participant.js", {
     tree, now: NOW, args, env: { ERASE_CONFIRM: "1" } });
 
-  for (const [label, occupier] of [
-    ["a stranger's membership row", { members: { uidStranger: { at: ago(0.01) } } }],
-    ["a `created` dated in the future", { created: { by: "x", at: NOW + 3650 * DAY } }],
+  /* What each occupier is to the NIGHTLY JOB, which decides what the tool may
+     promise afterwards:
+       "junk"    not a session — the purge removes it that night;
+       "session" a session within its retention — the purge keeps it;
+       null      depends on what the purge makes of a date in the future. It
+                 kept such a session for ever when this was written; a
+                 separate change purges it. This test must hold either way,
+                 so for that occupier it asserts only what both leave true. */
+  for (const [label, occupier, toThePurge] of [
+    ["a stranger's membership row", { members: { uidStranger: { at: ago(0.01) } } }, "junk"],
+    ["a new session somebody else created", { created: { by: "Other", at: ago(5) }, creatorUid: "uidOther" }, "session"],
+    ["a `created` dated in the future", { created: { by: "x", at: NOW + 3650 * DAY } }, null],
   ]) {
     const b = backfill(before(occupier), [snap], { BACKFILL_CONFIRM: "1" });
     assert.strictEqual(typeof at(b.tree, "purgedSessions/OLD-1"), "number", label + "\n" + b.out);
@@ -398,15 +407,22 @@ test("after the backfill, a request for such a session is answered and cannot be
     assert.strictEqual(night.code, 0, night.out);
     assert.strictEqual(typeof at(night.tree, "purgedSessions/OLD-1"), "number", label + ": the marker must outlive whatever was under the code");
     assert.strictEqual(flattenErasures(night.tree.erasures).length, 1, label);
-    if (occupier.created) {
-      // A `created` dated in the future is never purged, so the code stays in use…
+    if (toThePurge === "session") {
+      // A session within its retention stays, so the code stays in use…
       assert.deepStrictEqual(at(night.tree, "sessions/OLD-1"), occupier, label);
       assert.deepStrictEqual(at(night.tree, "withdrawals/OLD-1/uidA"), asked, label + ": …and the answered request stays with it");
-    } else {
+    } else if (toThePurge === "junk") {
       // A stranger's row is not a session: the purge removes it, and with
       // nothing under the code any more the answered request goes too.
       assert.strictEqual(at(night.tree, "sessions/OLD-1"), null, label);
       assert.strictEqual(at(night.tree, "withdrawals"), null, label);
+    } else {
+      // Either the session and the answered request are both still there, or
+      // both are gone. Never one without the other.
+      const sessionThere = at(night.tree, "sessions/OLD-1") !== null;
+      const requestThere = at(night.tree, "withdrawals/OLD-1/uidA") !== null;
+      assert.strictEqual(requestThere, sessionThere,
+        label + ": the answered request and what is under its code must go together");
     }
   }
 

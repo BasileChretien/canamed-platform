@@ -27,9 +27,8 @@
  * script must not then hand it one. (Until 2026-10-07 it marked every key it
  * found.) Nothing here makes a visitor's writes impossible: creating a session
  * is one write, open to any signed-in visitor while the facilitator gate is
- * off, with no bound on its date — and a session a visitor created is a
- * session, which the purge marks too. The criterion is the purge's, not a
- * boundary.
+ * off — and a session a visitor created is a session, which the purge marks
+ * too. The criterion is the purge's, not a boundary.
  *
  * WHAT COUNTS AS "STILL IN THE DATABASE". Not a key in the listing. The same
  * visitor write, or a new session under a code that became free, puts

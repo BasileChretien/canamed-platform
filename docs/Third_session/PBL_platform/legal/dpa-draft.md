@@ -3413,16 +3413,22 @@ now exists; that is not the same as the duty being discharged.
      should be as narrow is a decision about an Art. 17 tool that nobody has
      taken; the two now differ, and the tool's plan shows the path it will
      delete.
-   - **A session dated in the future is never purged — found 2026-10-07 by
-     running the purge, older than this change.** The purge compares
-     `created/at` and `closed/at` with its cutoffs, and the rules require of
-     both only that they be numbers. A session created (or closed) with a date
-     years ahead stays "within retention" until that date: run with such a
-     session, the purge kept it, and kept it again five years on. Whoever
-     creates a session writes `created`, so the 30- and 90-day limits this
-     platform publishes can be set aside for a session by its own creator. Not
-     fixed here: it is the session-creation rule, which every session passes
-     through.
+   - **A session dated in the future was never purged — found 2026-10-07 by
+     running the purge while this change was being built; older than this
+     change, and not corrected by it.** The purge compared `created/at` and
+     `closed/at` with its cutoffs, and the rules required of both only that
+     they be numbers, so a session created (or closed) with a date years ahead
+     stayed "within retention" until that date: run with such a session, the
+     purge kept it, and kept it again five years on. It is corrected by a
+     separate change — the purge's verdict in
+     `scripts/lib/session-retention.js` and a bound on both dates in the
+     rules — which has its own entry in this Annex (the "third limb" of this
+     item). **If that entry is not in the copy you are reading, the
+     correction has not been merged, and this is open.** Nothing in the
+     present change depends on which: where it speaks of a purged code being
+     "in use again" through a `created` with another date, that is true
+     either way — with the correction, such a node is removed by the next
+     purge instead of staying.
    - **The history row does not know which organisation's tree a session was
      in — found 2026-10-07 by reading the client, not reproduced.** A history
      entry is keyed by the bare session code, and the withdrawal is written
@@ -3496,9 +3502,12 @@ now exists; that is not the same as the duty being discharged.
      that it is unchanged, which the sweep does not do.
    - **Markers can be made to accumulate by a visitor — found by the review,
      not fixed.** While session creation is open (the facilitator gate is
-     off), a signed-in visitor can create a session with a `created` date far
-     in the past; the purge removes it as abandoned and leaves a marker for
-     five years, and re-creating the code renews it. The sweep makes one read
+     off), a signed-in visitor can create sessions the purge will later
+     remove, each leaving a marker for five years, and re-creating a code
+     renews its marker. How soon depends on the rules: while they put no
+     bound on a session's creation date, one dated far in the past is removed
+     the next night; once they bound it, after the ordinary 30 or 90 days. The
+     sweep makes one read
      per marker every night, in sequence, inside a ten-minute job, and issues
      its deletions only after the last read: enough markers, and the job is
      stopped before it sweeps anything. Nothing bounds the number today. The

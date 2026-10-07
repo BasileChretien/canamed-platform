@@ -968,8 +968,9 @@ read that before describing any of this as done.
   little fast was refused its withdrawal. A unit test fails if the text
   `.val() <= now` appears anywhere in the rules with no tolerance after it —
   that is ALL it checks. It does not see a timestamp with no upper bound at
-  all, and `created/at` and `closed/at` have none; an earlier wording here
-  claimed it covered "any timestamp rule".)
+  all — `created/at` and `closed/at` had none when this was written (#438
+  adds one); an earlier wording here claimed it covered "any timestamp
+  rule".)
 - **The purge keeps an erasure request nobody has answered**, with no time
   limit. It used to delete the whole branch with the session: measured on the
   real schedule (purge 03:17, monitor 04:11), a request made from about the
@@ -1104,8 +1105,12 @@ the database the tool deletes the whole `users/<uid>` even with `--session`;
 marker, so its participants are refused in the product for good and told to
 "try again"** — a trade-off made in code that wants Basile's explicit sign-off;
 a device clock more than 5 s fast is still refused; and **a session whose
-`created/at` or `closed/at` is dated in the future is never purged** — the
-rules bound neither, and the purge was run to confirm it.
+`created/at` or `closed/at` was dated in the future was never purged** — found
+by running the purge, and corrected by a SEPARATE change (#438:
+`scripts/lib/session-retention.js` plus a bound on both dates in the rules).
+If that file is not in this checkout, it is still open. Nothing here depends
+on which: the tests that put a future-dated `created` under a purged code
+assert only what holds either way.
 
 **Three traps met on the way:**
 1. **The ops scripts can be RUN in a test.** `tests/fixtures/run-ops-script.js`
