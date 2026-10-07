@@ -21,6 +21,11 @@
  *      history row broke its session code and its withdraw button across lines
  *      (style.css, "My-account dialog"). Both are pinned here, at explicit
  *      phone widths as well as at each project's own viewport.
+ *   4. Nor had anybody seen its title row, which is a <header>. style.css
+ *      styled the page masthead through bare `header` rules, so the row was
+ *      painted as a second masthead: the navy gradient, its tricolour rule,
+ *      white ink, and a close button in the muted grey meant for a light
+ *      surface. The masthead rules are now `body > header`.
  *
  * Hermetic LOCAL mode has no auth at all, so no user is ever signed in and the
  * header chip that opens the dialog stays hidden. The tests stand a user in —
@@ -200,6 +205,108 @@ test("the dialog fits every width, and a history row keeps its code and its butt
          720px) — never in a sliver between the code and the button. */
       expect(r.metaBelowCode, `${at}: where the date and scenario name of ${r.code} sit`).toBe(width <= 720);
     }
+  }
+});
+
+const THEMES = ["light", "dark", "high-contrast"];
+
+/** WCAG contrast of one of an element's own colours (`prop`) against what it
+    is drawn on: the nearest painted background at or above `from`. A
+    background IMAGE met on the way is reported in `ground`, with no ratio —
+    a gradient is not a colour to take a ratio against. Looking through it to
+    the background-color behind is how white text on a navy band comes out as
+    white on white, or grey on navy as grey on white. */
+async function inkOn(page, selector, prop = "color", from = "self") {
+  return page.evaluate(([sel, prop, from]) => {
+    const el = document.querySelector(sel);
+    const rgba = (s) => {
+      const n = (s.match(/[\d.]+/g) || []).map(Number);
+      return n.length < 4 ? [...n, 1] : n;
+    };
+    const lum = (c) => {
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+    };
+    const ink = getComputedStyle(el)[prop];
+    for (let n = from === "parent" ? el.parentElement : el; n; n = n.parentElement) {
+      const s = getComputedStyle(n);
+      if (s.backgroundImage !== "none") return { ink, ground: s.backgroundImage, ratio: null };
+      const c = rgba(s.backgroundColor);
+      if (c[3] === 0) continue;
+      // A translucent fill is no more a single colour than a gradient is.
+      if (c[3] < 1) return { ink, ground: s.backgroundColor, ratio: null };
+      const a = lum(rgba(ink)), b = lum(c);
+      return { ink, ground: s.backgroundColor, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+    }
+    return { ink, ground: "nothing painted", ratio: null };
+  }, [selector, prop, from]);
+}
+
+test("the title row is drawn on the dialog, not as a second masthead", async ({ page }) => {
+  await openDialog(page);
+  for (const theme of THEMES) {
+    await page.evaluate(t => document.documentElement.setAttribute("data-theme", t), theme);
+    const m = await page.evaluate(() => {
+      const css = (sel) => getComputedStyle(document.querySelector(sel));
+      const head = css(".account-dialog-head");
+      return {
+        masthead: css("body > header").backgroundImage,
+        image: head.backgroundImage, rule: head.borderBottomWidth, shadow: head.boxShadow,
+        dialog: css("#account-dialog").backgroundColor
+      };
+    });
+    const at = `${theme} theme`;
+    /* The control. The masthead keeps its gradient in every theme, so "the
+       title row has none" below is a statement about the row — not about a
+       stylesheet that failed to load, or a fix that unstyled the masthead. */
+    expect(m.masthead, `${at}: the page masthead keeps its gradient`).toContain("gradient");
+    expect(m.image, `${at}: the title row must not paint the masthead's background`).toBe("none");
+    expect(m.rule, `${at}: nor carry the masthead's rule under it`).toBe("0px");
+    expect(m.shadow, `${at}: nor its shadow`).toBe("none");
+
+    /* What a person reads there: the title and the close button, both on the
+       dialog's own surface. 4.5:1 for each — the "×" is the only way a pointer
+       user has to see where the dialog closes. */
+    for (const [what, sel] of [["title", "#account-dialog-title"], ["close button", "#account-dialog-close"]]) {
+      const c = await inkOn(page, sel);
+      expect(c.ground, `${at}: the ${what} must sit on the dialog's surface`).toBe(m.dialog);
+      expect(c.ratio, `${at}: the ${what} (${c.ink} on ${c.ground})`).toBeGreaterThanOrEqual(4.5);
+    }
+  }
+});
+
+test("the close button's focus ring shows on the dialog", async ({ page }) => {
+  /* The masthead turns the focus ring of whatever it holds white, to show on
+     navy. Inherited by the title row and left there once the row stops being
+     navy, that is a white ring on a white dialog — no ring at all. */
+  await openDialog(page);
+  const close = page.locator("#account-dialog-close");
+  /* Away and back with the keyboard: :focus-visible is certain only for a
+     focus that the keyboard moved. */
+  await close.focus();
+  await page.keyboard.press("Tab");
+  await expect(close).not.toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(close).toBeFocused();
+  expect(await close.evaluate(el => el.matches(":focus-visible")),
+    "the close button must be showing its focus ring").toBe(true);
+
+  for (const theme of THEMES) {
+    await page.evaluate(t => document.documentElement.setAttribute("data-theme", t), theme);
+    const ring = await close.evaluate(el => {
+      const s = getComputedStyle(el);
+      return { style: s.outlineStyle, width: parseFloat(s.outlineWidth) };
+    });
+    const at = `${theme} theme`;
+    expect(ring.style, `${at}: a ring is drawn`).not.toBe("none");
+    expect(ring.width, `${at}: a ring is drawn`).toBeGreaterThanOrEqual(2);
+    // The ring is drawn outside the button, so on what the button sits on.
+    const c = await inkOn(page, "#account-dialog-close", "outlineColor", "parent");
+    const surface = await page.evaluate(() =>
+      getComputedStyle(document.getElementById("account-dialog")).backgroundColor);
+    expect(c.ground, `${at}: the ring must be drawn on the dialog's surface`).toBe(surface);
+    // WCAG 1.4.11: 3:1 for the indicator of a control's state.
+    expect(c.ratio, `${at}: the ring (${c.ink} on ${c.ground})`).toBeGreaterThanOrEqual(3);
   }
 });
 
