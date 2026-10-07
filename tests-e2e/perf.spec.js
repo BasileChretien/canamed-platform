@@ -700,6 +700,22 @@ const TTI_LIMIT_MS = onCI ? 6000 : 3000;
 //     the +54 bytes are a re-added declaration and its comment. data-rights.js
 //     is 6.3 KB gz, lazy. ⚠️ THE MARGIN IS ~1.45 KB, not 3.4: the next eager
 //     addition of any size needs a reclaim first.
+//   2026-10-07 (second entry): CAP UNCHANGED (326). The My-account dialog's
+//     phone layout was fixed in style.css (the profile fieldset stuck out of
+//     the dialog, which scrolled sideways; a history row broke its session code
+//     and its withdraw button across lines). Measured LF-normalised: style.css
+//     45.94 -> 46.38 KB gz, first-party 324.55 -> 324.99.
+//     ⚠️ THAT IS AN EAGER ADDITION WITHOUT THE RECLAIM the entry above says
+//     must come first. Recorded plainly: +0.44 KB, and THE MARGIN IS NOW
+//     ~1.0 KB. The owner accepted it as it is the same day (a visible fix,
+//     against a reclaim that is its own PR); the rule is not relaxed, the
+//     reclaim is still owed before any further eager addition.
+//     The reclaim it points at is measured: the whole "My-account
+//     dialog" block of style.css is 4.4 KB raw and accounts for 1.0 KB gz of
+//     the eager bundle, for a dialog that opens from ONE click on the
+//     signed-in header chip. A lazily <link>ed sheet awaited before
+//     dialogShow() (the admin.css / room.css shape) would take the block, and
+//     this fix with it, off the splash.
 const FIRST_PARTY_BYTES_LIMIT_KB = 326;
 
 test.describe("Perf budget — splash", () => {
