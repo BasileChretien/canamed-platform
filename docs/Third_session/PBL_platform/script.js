@@ -2029,7 +2029,16 @@ function withdrawResearchConsent(code, uid, opts) {
   return db.ref(withdrawalPath(code, uid)).set(payload).then(() => {
     /* Best effort, and its failure is expected on a closed session. Only for
        the session this page is IN: sPath() addresses that one, not `code`. */
-    if (!clientId || code !== sessionNum) return null;
+    if (code !== sessionNum) return null;
+    // A reload rejoins from these two copies: lower them with the pool flag.
+    const off = c => Object.assign({}, c, { research: false });
+    if (myConsent) myConsent = off(myConsent);
+    try {
+      const r = JSON.parse(localStorage.getItem(RESUME_KEY));
+      if (r && r.consent && r.sessionNum === code) localStorage.setItem(RESUME_KEY,
+        JSON.stringify(Object.assign(r, { consent: off(r.consent) })));
+    } catch (e) {}
+    if (!clientId) return null;
     return db.ref(sPath("pool/" + clientId + "/consent/research")).set(false)
       .catch(() => null);
   });

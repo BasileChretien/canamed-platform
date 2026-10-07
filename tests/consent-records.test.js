@@ -1,7 +1,8 @@
 /* tests/consent-records.test.js
  *
- * Two ways a participant's recorded consent was being rewritten without the
- * participant doing anything that meant it.
+ * Three ways a participant's recorded consent was being rewritten without the
+ * participant doing anything that meant it. The third was found by the review
+ * of the fix for the first two, in the same flow.
  *
  * 1. A RELOAD CLEARED THE THIRD BOX.
  *    The lobby has three consent boxes; the third (`transcript`) records
@@ -14,7 +15,7 @@
  *    answer was not in the list, so the box came back unticked and the
  *    participant who had said yes was recorded as transcript:false.
  *
- *    The first half of this file runs that round trip on the code that does
+ *    The first part of this file runs that round trip on the code that does
  *    it: the statements joinParticipant() reads the boxes with and the record
  *    it builds, saveResume(), the module-level read-back, the real
  *    sanitizeResume() and autoResume() — each taken from the source, so the
@@ -33,12 +34,34 @@
  *    collapsed to sessions/pool/<clientId>/…, which only the database rules
  *    stopped.
  *
- *    The second half drives the real function against a database that records
+ *    The second part drives the real function against a database that records
  *    every write.
  *
+ * 3. A RELOAD AFTER A WITHDRAWAL RECORDED RESEARCH CONSENT AGAIN.
+ *    A withdrawal made inside the session set the pool entry's
+ *    consent/research to false and left two other copies of the answer at
+ *    true: the in-memory record (`myConsent`) and the saved join data. The
+ *    next reload ticked the research box from the saved copy, rejoined, and
+ *    wrote research:true over the pool entry, dated after the withdrawal.
+ *
+ *    That flag is not a courtesy. The server-side export applies the
+ *    withdrawals/ records over it, but the facilitator's in-browser research
+ *    CSV (admin-tools.js, _hasResearchConsent) reads consent.research in the
+ *    pool entry and nothing else, and the rules let nobody but the participant
+ *    read their withdrawals/ record. A withdrawn participant was back in that
+ *    file after one reload.
+ *
+ *    The third part puts the withdrawal and the reload in ONE tab state, so
+ *    the function and the resume path share the record they really share.
+ *
+ *    NOT COVERED, by the fix or by these tests: a second device signed in as
+ *    the same person. It keeps its own saved answer and writes it again on its
+ *    next reload. Closing that needs the rejoin to read the participant's own
+ *    withdrawals/ record first, which is a separate change.
+ *
  * What a sandbox cannot show is the browser: that the box really comes back
- * ticked, that the pool entry really is rewritten, that the dialog's button
- * really reaches this function. That is tests-e2e/consent-records.spec.js.
+ * ticked, that the pool entry really is rewritten, that the buttons really
+ * reach this function. That is tests-e2e/consent-records.spec.js.
  */
 
 "use strict";
@@ -99,13 +122,54 @@ function readBackSource() {
   return m[0];
 }
 
+/* What a rejoin saves back: _joinParticipantWireUp() keeps the room the saved
+   data named, and saves with it. */
+function resaveSource() {
+  const wire = extractFn(SCRIPT, "_joinParticipantWireUp");
+  const room = wire.match(/const resumeRoom = [^;]+;/);
+  assert.ok(room, "_joinParticipantWireUp() no longer derives resumeRoom");
+  assert.match(wire, /saveResume\(resumeRoom\);/);
+  return "{ " + room[0] + " saveResume(resumeRoom); }";
+}
+
+/* A database that records every write. `refuse` is a pattern of paths whose
+   write is rejected. */
+function recordingDb(refuse) {
+  const writes = [];
+  const db = {
+    ref: (p) => ({
+      set: (value) => {
+        writes.push({ path: p, value: plain(value) });
+        return (refuse && refuse.test(p))
+          ? Promise.reject(Object.assign(new Error("denied"), { code: "PERMISSION_DENIED" }))
+          : Promise.resolve();
+      }
+    })
+  };
+  return { db, writes };
+}
+
+/* withdrawResearchConsent() and the path helpers it addresses the database
+   with — the real ones. */
+const WITHDRAWAL_SOURCE =
+  ["_sessionPrefix", "oPath", "sPath", "withdrawalPath", "withdrawResearchConsent"]
+    .map((n) => extractFn(SCRIPT, n)).join("\n");
+
+const UID = "uidParticipant";
+const CLIENT = "c0ffee0000000001";
+
 /* One browser tab: its own boxes and page state, over a localStorage that
-   outlives it. `load()` is what a page load does up to the resumed join. */
-function openTab(storage) {
+   outlives it. `load()` is what a page load does up to the resumed join.
+     refuse:       a pattern of database paths whose write is rejected
+     brokenStore:  make every localStorage call throw (Safari private mode) */
+function openTab(storage, o) {
+  o = o || {};
   const nodes = Object.create(null);
+  const { db, writes } = recordingDb(o.refuse);
+  const broken = () => { throw new Error("storage is unavailable"); };
   const sandbox = {
     el: (id) => nodes[id] || (nodes[id] = { value: "", checked: false, disabled: false }),
-    localStorage: {
+    localStorage: o.brokenStore ? { getItem: broken, setItem: broken } : {
       getItem: (k) => (k in storage ? storage[k] : null),
       setItem: (k, v) => { storage[k] = String(v); }
     },
@@ -115,48 +179,68 @@ function openTab(storage) {
     RESUME_KEY: "canamed_resume",
     sessionNum: "abc-def", myName: "Aiko", myUniversity: "Nagoya",
     myYear: 3, myEnglish: "B2",
-    myConsent: null, resumeData: null,
+    /* myRoom stays null on purpose: after a resumed join and before the room
+       is entered, the page does not know its room yet although the saved data
+       does. A re-save built from page state would drop it. */
+    myConsent: null, myRoom: null, resumeData: null,
     joins: 0,
-    Date, JSON
+    db, clientId: CLIENT, window: {}, DEFAULT_ORG: "caen-nagoya", currentOrg: "caen-nagoya"
   };
   vm.createContext(sandbox);
   vm.runInContext(
     extractFn(SCRIPT, "saveResume") + "\n" +
     extractFn(SCRIPT, "autoResume") + "\n" +
-    "function joinParticipant() {\n" + joinConsentSource() + "\njoins++;\n}\n",
+    "function joinParticipant() {\n" + joinConsentSource() + "\njoins++;\n}\n" +
+    WITHDRAWAL_SOURCE + "\n",
     sandbox);
   return {
-    sandbox,
+    sandbox, writes,
     tick(boxes) {
       sandbox.el("consent-workshop").checked = boxes.a;
       sandbox.el("consent-research").checked = boxes.b;
       sandbox.el("consent-transcript").checked = boxes.c;
     },
     box: (id) => sandbox.el(id).checked,
-    /* The participant presses Join; the join saves the resume data. */
-    join() { vm.runInContext("joinParticipant(); saveResume(null);", sandbox); },
+    /* The participant presses Join; the join saves the resume data. Passing a
+       room is the later save enterRoom() makes once they are placed. */
+    join(room) {
+      sandbox.__room = room || null;
+      vm.runInContext("joinParticipant(); saveResume(__room);", sandbox);
+    },
     /* A page load: read the saved data back, then resume. */
     load() { vm.runInContext(readBackSource() + "autoResume();", sandbox); },
+    /* What a rejoin saves for the next load. */
+    resave() { vm.runInContext(resaveSource(), sandbox); },
+    /* The participant withdraws and confirms. */
+    withdraw: (code) => sandbox.withdrawResearchConsent(code, UID, { alsoRequestErasure: true }),
     /* What the pool entry is written with. */
     record: () => (sandbox.myConsent ? plain(sandbox.myConsent) : null)
   };
 }
 
-/* Join with the given boxes, then reload `times` times. Each reload is a new
-   tab state over the same localStorage, and saves again after it rejoins —
-   exactly as _joinParticipantWireUp() does. */
+/* The saved join data, as stored. */
+const saved = (storage) => JSON.parse(storage.canamed_resume);
+
+/* Reload `times` times. Each reload is a new tab state over the same
+   localStorage, and saves again after it rejoins — as _joinParticipantWireUp()
+   does. Returns the last tab. */
+function reload(storage, times) {
+  let tab = null;
+  for (let i = 0; i < (times || 1); i++) {
+    tab = openTab(storage);
+    tab.load();
+    if (tab.sandbox.joins) tab.resave();
+  }
+  return tab;
+}
+
+/* Join with the given boxes, then reload. */
 function joinThenReload(boxes, times) {
   const storage = {};
   const first = openTab(storage);
   first.tick(boxes);
   first.join();
-  let tab = first;
-  for (let i = 0; i < (times || 1); i++) {
-    tab = openTab(storage);
-    tab.load();
-    if (tab.sandbox.joins) vm.runInContext("saveResume(null);", tab.sandbox);
-  }
-  return { first, tab, storage };
+  return { first, tab: reload(storage, times), storage };
 }
 
 test("the pieces of the round trip are the ones the page runs", () => {
@@ -256,27 +340,17 @@ test("a saved transcript answer that is not a boolean is not acted on at all", (
      refuse:    a pattern of paths whose write is rejected */
 function withdrawalWorld(o) {
   o = Object.assign({ inSession: "", org: "caen-nagoya", refuse: null }, o || {});
-  const writes = [];
-  const db = {
-    ref: (p) => ({
-      set: (value) => {
-        writes.push({ path: p, value: plain(value) });
-        return (o.refuse && o.refuse.test(p))
-          ? Promise.reject(Object.assign(new Error("denied"), { code: "PERMISSION_DENIED" }))
-          : Promise.resolve();
-      }
-    })
-  };
+  const { db, writes } = recordingDb(o.refuse);
   const sandbox = {
     db, window: {}, DEFAULT_ORG: "caen-nagoya", currentOrg: o.org,
-    sessionNum: o.inSession, clientId: "c0ffee0000000001",
-    Date, Promise, Error
+    sessionNum: o.inSession, clientId: CLIENT,
+    /* A page that is in the session (or in none) and has not joined: no
+       consent in memory, nothing saved. Part 3 covers the joined page. */
+    myConsent: null, RESUME_KEY: "canamed_resume",
+    localStorage: { getItem: () => null, setItem: () => {} }
   };
   vm.createContext(sandbox);
-  vm.runInContext(
-    ["_sessionPrefix", "oPath", "sPath", "withdrawalPath", "withdrawResearchConsent"]
-      .map((n) => extractFn(SCRIPT, n)).join("\n"),
-    sandbox);
+  vm.runInContext(WITHDRAWAL_SOURCE, sandbox);
   return {
     writes,
     paths: () => writes.map((w) => w.path),
@@ -284,7 +358,6 @@ function withdrawalWorld(o) {
   };
 }
 
-const UID = "uidParticipant";
 const MIRROR = /\/pool\//;
 
 test("withdrawing from an earlier session leaves the open session's pool entry alone", async () => {
@@ -369,8 +442,12 @@ test("the withdrawal record itself is written exactly as before", async () => {
 
 test("a refused pool write does not fail the withdrawal", async () => {
   /* On a closed session the rules refuse every write under sessions/<code>,
-     and withdrawal is exercised precisely then. The withdrawals record is what
-     the research export reads; the pool write is a courtesy. */
+     and withdrawal is exercised precisely then. The withdrawal IS the
+     withdrawals/ record, so a refused pool write must not turn a recorded
+     withdrawal into an error. That is not because the pool flag is
+     unimportant — on an open session it is the only thing the facilitator's
+     research CSV reads (part 3) — but because on a closed one nothing can
+     write it. */
   const w = withdrawalWorld({ inSession: "aaa-111", refuse: MIRROR });
   await w.withdraw("aaa-111", UID);
   assert.strictEqual(w.paths().length, 2);
@@ -380,4 +457,241 @@ test("a refused withdrawal record IS a failure, and nothing is mirrored after it
   const w = withdrawalWorld({ inSession: "aaa-111", refuse: /^withdrawals\// });
   await assert.rejects(() => w.withdraw("aaa-111", UID), /denied/);
   assert.deepStrictEqual(w.paths(), ["withdrawals/aaa-111/" + UID]);
+});
+
+// =========================================== 3. a reload after a withdrawal
+
+const HERE = "abc-def";              // the session every openTab() is in
+const ALL = { a: true, b: true, c: true };
+const POOL_FLAG = "sessions/" + HERE + "/pool/" + CLIENT + "/consent/research";
+
+/* One participant: every box ticked, joined, and placed in a room. */
+function joinedTab(storage, o) {
+  const tab = openTab(storage, o);
+  tab.tick(ALL);
+  tab.join("Room 2");
+  return tab;
+}
+
+test("why the pool flag matters: the facilitator's research CSV reads it and nothing else", () => {
+  /* The premise of this part, held to the source. If the in-browser CSV ever
+     consults withdrawals/, the reasoning in the header needs revisiting — and
+     under today's rules it cannot: only the participant may read that node. */
+  const ADMIN = fs.readFileSync(path.join(P, "admin-tools.js"), "utf8");
+  assert.match(extractFn(ADMIN, "_hasResearchConsent"), /p\.consent\.research === true/);
+  assert.doesNotMatch(ADMIN, /withdrawals\/|withdrawalPath/);
+  const rules = JSON.parse(fs.readFileSync(path.join(P, "database.rules.json"), "utf8")).rules;
+  assert.strictEqual(rules.withdrawals.$sessionId.$uid[".read"],
+    "auth != null && auth.uid == $uid");
+});
+
+test("after a withdrawal made inside the session, a reload rejoins with research off", async () => {
+  const storage = {};
+  const tab = joinedTab(storage);
+  assert.strictEqual(tab.record().research, true, "the join did not record research consent");
+  assert.strictEqual(saved(storage).consent.research, true);
+
+  await tab.withdraw(HERE);
+  assert.deepStrictEqual(tab.writes.map((w) => w.path),
+    ["withdrawals/" + HERE + "/" + UID, POOL_FLAG]);
+
+  /* The page that withdrew: its own record is what the safety-net pool write
+     and every later save send. */
+  assert.strictEqual(tab.record().research, false,
+    "the page still holds research:true, and re-asserts it with its next pool write");
+  /* The saved join data: what the next page load ticks the boxes from. */
+  assert.strictEqual(saved(storage).consent.research, false,
+    "the saved join data still says research:true, so a reload ticks the box again");
+
+  const next = reload(storage);
+  assert.strictEqual(next.sandbox.joins, 1, "the reload did not resume the session");
+  assert.strictEqual(next.box("consent-research"), false,
+    "the research box came back ticked after a withdrawal");
+  assert.strictEqual(next.record().research, false,
+    "the reload recorded research consent again, after the participant withdrew it");
+
+  const later = reload(storage, 3);
+  assert.strictEqual(later.sandbox.joins, 1);
+  assert.strictEqual(later.record().research, false, "it came back on a later reload");
+  assert.strictEqual(saved(storage).consent.research, false);
+});
+
+test("a participant who did not withdraw still has research on after the same reloads", () => {
+  /* The control: the test above would pass if a reload simply never restored
+     the research answer. */
+  const storage = {};
+  joinedTab(storage);
+  const next = reload(storage);
+  assert.strictEqual(next.sandbox.joins, 1);
+  assert.strictEqual(next.box("consent-research"), true);
+  assert.strictEqual(next.record().research, true);
+  assert.strictEqual(reload(storage, 3).record().research, true);
+  assert.strictEqual(saved(storage).consent.research, true);
+});
+
+test("the withdrawal lowers the research answer and nothing else that is saved", async () => {
+  const storage = {};
+  const tab = joinedTab(storage);
+  const before = saved(storage);
+  const consentBefore = tab.record();
+
+  await tab.withdraw(HERE);
+
+  /* The room above all: the page's own `myRoom` is null here (as it is between
+     a resumed join and entering the room), so a re-save built from page state
+     would send the participant back to the waiting room on their next reload. */
+  assert.strictEqual(saved(storage).room, "Room 2", "the saved room was lost");
+  const expected = Object.assign({}, before,
+    { consent: Object.assign({}, before.consent, { research: false }) });
+  assert.deepStrictEqual(saved(storage), expected);
+  // `transcript` and `workshop` are separate answers and were not withdrawn.
+  assert.deepStrictEqual(tab.record(), Object.assign({}, consentBefore, { research: false }));
+  assert.strictEqual(tab.record().transcript, true);
+  assert.strictEqual(tab.record().workshop, true);
+
+  const next = reload(storage);
+  assert.deepStrictEqual(
+    [next.record().workshop, next.record().research, next.record().transcript],
+    [true, false, true]);
+  assert.strictEqual(saved(storage).room, "Room 2", "the reload did not keep the room either");
+});
+
+test("a withdrawal from ANOTHER session lowers nothing in this one", async () => {
+  /* Defect 2 again, for the two new copies: only a withdrawal from the session
+     the page is in may touch what this page holds and has saved. */
+  const storage = {};
+  const tab = joinedTab(storage);
+  const before = storage.canamed_resume;
+
+  await tab.withdraw("old-111");
+
+  assert.deepStrictEqual(tab.writes.map((w) => w.path), ["withdrawals/old-111/" + UID]);
+  assert.strictEqual(tab.record().research, true);
+  assert.strictEqual(storage.canamed_resume, before, "the saved join data was rewritten");
+  assert.strictEqual(reload(storage).record().research, true);
+});
+
+test("saved join data for a DIFFERENT session is left alone", async () => {
+  /* The browser's saved data may name another session than the one the page is
+     in (a deep link to B over a saved A). Withdrawing from B must not edit A's
+     saved answers. */
+  const storage = {
+    canamed_resume: JSON.stringify({
+      sessionNum: "other-999", name: "Aiko", university: "Nagoya", year: 3, english: "B2",
+      room: "Room 1",
+      consent: { workshop: true, research: true, transcript: true, version: NOTICE, at: 5 }
+    })
+  };
+  const before = storage.canamed_resume;
+  const tab = openTab(storage);
+  await tab.withdraw(HERE);
+  assert.strictEqual(storage.canamed_resume, before);
+});
+
+test("a withdrawal made before this page has joined still lowers what a reload would restore", async () => {
+  /* The page is in the session (code entered) but holds no consent of its own:
+     a facilitator's view, or the lobby. Join data saved by an earlier visit is
+     still what the next resume reads. It must be lowered in place — a re-save
+     from this page's empty state would wipe the name and the room with it. */
+  const storage = {};
+  joinedTab(storage);
+  const before = saved(storage);
+
+  const tab = openTab(storage);            // a fresh page: myConsent is null
+  assert.strictEqual(tab.record(), null);
+  await tab.withdraw(HERE);
+
+  assert.strictEqual(tab.record(), null, "a consent record was invented for a page that never joined");
+  assert.deepStrictEqual(saved(storage), Object.assign({}, before,
+    { consent: Object.assign({}, before.consent, { research: false }) }));
+  const next = reload(storage);
+  assert.strictEqual(next.sandbox.joins, 1);
+  assert.strictEqual(next.record().research, false);
+});
+
+test("with nothing saved and nothing joined, a withdrawal saves nothing", async () => {
+  const storage = {};
+  const tab = openTab(storage);
+  await tab.withdraw(HERE);
+  assert.deepStrictEqual(Object.keys(storage), [], "join data was created by a withdrawal");
+  assert.strictEqual(tab.record(), null);
+});
+
+test("a withdrawal confirmed before the join has saved anything is carried by the join's own save", async () => {
+  /* The waiting screen and its button appear as soon as Join is pressed; the
+     pool write and the save follow once sign-in settles. A fast withdrawal
+     lands in between: there is a consent in memory and nothing saved yet. */
+  const storage = {};
+  const tab = openTab(storage);
+  tab.tick(ALL);
+  vm.runInContext("joinParticipant();", tab.sandbox);       // joined, not yet saved
+  await tab.withdraw(HERE);
+  assert.strictEqual(tab.record().research, false);
+  assert.deepStrictEqual(Object.keys(storage), []);
+
+  tab.resave();                                             // the join's own save
+  assert.strictEqual(saved(storage).consent.research, false);
+  assert.strictEqual(reload(storage).record().research, false);
+});
+
+test("being placed in a room after withdrawing does not save research consent back", async () => {
+  /* Withdraw on the waiting screen; the facilitator then starts the session.
+     enterRoom() saves the join data again, from the page's own record — which
+     is why lowering the saved copy alone is not enough. */
+  assert.match(SCRIPT, /if \(!asAdmin\) saveResume\(roomName\);/,
+    "enterRoom() no longer saves the join data; this test models that save");
+  const storage = {};
+  const tab = openTab(storage);
+  tab.tick(ALL);
+  tab.join(null);                                           // waiting room, no room yet
+  await tab.withdraw(HERE);
+  assert.strictEqual(saved(storage).consent.research, false);
+
+  tab.sandbox.__room = "Room 3";
+  vm.runInContext("saveResume(__room);", tab.sandbox);      // enterRoom()'s save
+  assert.strictEqual(saved(storage).consent.research, false,
+    "entering the room saved research:true over the withdrawal");
+  assert.strictEqual(saved(storage).room, "Room 3");
+  assert.strictEqual(reload(storage).record().research, false);
+});
+
+test("a withdrawal that could not be recorded lowers nothing", async () => {
+  /* The participant is told it failed and asked to try again. Their consent
+     has not been withdrawn, so no copy of it may say that it has. */
+  const storage = {};
+  const tab = joinedTab(storage, { refuse: /^withdrawals\// });
+  const before = storage.canamed_resume;
+  await assert.rejects(() => tab.withdraw(HERE), /denied/);
+  assert.strictEqual(tab.record().research, true);
+  assert.strictEqual(storage.canamed_resume, before);
+});
+
+test("a refused pool write (closed session) still lowers what a reload would restore", async () => {
+  const storage = {};
+  const tab = joinedTab(storage, { refuse: /\/pool\// });
+  await tab.withdraw(HERE);
+  assert.strictEqual(tab.record().research, false);
+  assert.strictEqual(saved(storage).consent.research, false);
+});
+
+test("unreadable or unavailable saved data does not stop the withdrawal", async () => {
+  /* The withdrawal is recorded first and the pool flag must still be lowered
+     whatever state the browser's storage is in. */
+  for (const junk of ["{not json", "null", "42", "\"text\"", "[]", "{}", "{\"sessionNum\":\"abc-def\"}"]) {
+    const storage = { canamed_resume: junk };
+    const tab = openTab(storage);
+    await tab.withdraw(HERE);
+    assert.deepStrictEqual(tab.writes.map((w) => w.path),
+      ["withdrawals/" + HERE + "/" + UID, POOL_FLAG], "saved data: " + junk);
+    assert.strictEqual(storage.canamed_resume, junk, "saved data was rewritten: " + junk);
+  }
+
+  // localStorage throwing on every call (Safari private mode, storage disabled).
+  const tab = openTab({}, { brokenStore: true });
+  tab.tick(ALL);
+  vm.runInContext("joinParticipant();", tab.sandbox);
+  await tab.withdraw(HERE);
+  assert.deepStrictEqual(tab.writes.map((w) => w.path),
+    ["withdrawals/" + HERE + "/" + UID, POOL_FLAG]);
+  assert.strictEqual(tab.record().research, false, "the page's own record was not lowered");
 });
