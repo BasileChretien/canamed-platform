@@ -3570,6 +3570,24 @@ now exists; that is not the same as the duty being discharged.
      record carrying its date. A record with no such stamp — every one written
      before this change — still answers by the old comparison, since nothing
      else is known about it.
+     ⚠️ **The stamp then broke the tool, and the second review round caught
+     it.** The record's builder accepted only a whole, non-negative number.
+     The rule on a request's date asks for a number inside a window, not a
+     whole one — and before the window existed, any number up to the present.
+     One visitor write dated half a millisecond off produced a request the
+     tool died on: nothing written, `--dismiss` refused as well, and a run
+     for the person as a whole stopped before erasing their other sessions.
+     Before the stamp existed the same runs worked. The builder now takes any
+     number the database can hold; the stamp is compared for equality and
+     nothing else. Fixed in the tool and not in the rule, because the tool
+     must cope with records already written whatever the rule says.
+     ⚠️ **What matching by exact date leaves open.** Someone who rewrites their
+     own request with the *same* date as one already answered has it read as
+     answered, and the sweep deletes it; the rule lets them choose that date
+     for 24 hours. Only the requester can do it, and only to their own
+     request — the product always writes a new date. And a record written
+     with no request in the queue is stamped 0, so it would answer a request
+     dated exactly 0, which only a record from before the window could be.
      *What it will not do:* write a record for a session that has **no**
      marker. `erasures/` is never deleted, so it must not fill with records
      for sessions nothing shows ever existed. It reports such a request and
@@ -3821,7 +3839,26 @@ now exists; that is not the same as the duty being discharged.
      visitor's membership row under a made-up code is in the snapshot like
      everything else — so the backfill handed such a code the marker the purge
      had just refused it. The purge and the backfill now share one definition
-     of "this was a session".) (iii) Records already in the
+     of "this was a session".) ⚠️ **And it took "still in the database" from
+     the list of keys, which the second review round showed to be the first
+     round's defect again for every session purged before the deploy.** A
+     visitor's membership row, or a session created under a code that had
+     become free, put a key back under a purged session's code; the backfill
+     then gave that session no marker, the tool and the monitor treated a
+     request about it as one about a live session in which the person had
+     nothing, and `--dismiss` deleted it unanswered. The backfill now reads,
+     for each code that is both in a snapshot and in the database, what is
+     there today — two dates and the creating account, no session content —
+     and leaves a session unmarked only if it is the same session: a session
+     by the purge's test, with the same `created` date and, where the snapshot
+     recorded one, the same creating account, which the rules let nobody set
+     to an account other than their own. **The limit:** a snapshot session
+     with no creating account recorded is told apart by its date alone, which
+     someone who read it while the session existed could copy. And the tool's
+     word for a request under a code with no marker is now "no purge marker",
+     not "never purged": before the backfill has been run it cannot know
+     which, so **nothing under a live code is to be dismissed until it has
+     been run once** (operator procedure §4.1). (iii) Records already in the
      database that have neither a session nor a marker are still counted by the
      monitor, which now says how many there are; it cannot say whether one is a
      real request for a session purged long ago or something written for a

@@ -468,9 +468,12 @@ async function dismiss(db, locations, args) {
       return refuse("that session is in the database and this person has data in it, " +
                     "so the request is real. Run the erasure (without --dismiss).");
     }
-    why = "The session is in the database, was never purged, and this person has " +
-          "nothing in it: no entry, no roster row, no chat turn. There is " +
-          "nothing to erase.";
+    /* "No purge marker", not "never purged": a session purged before the
+       purge wrote markers has none until the backfill has run, and what is
+       under its code today may be something else. Only the marker is known. */
+    why = "The session is in the database, its code carries no purge marker, and " +
+          "this person has nothing in it: no entry, no roster row, no chat " +
+          "turn. There is nothing to erase.";
   } else {
     why = "The session is not in the database and has no purge marker.";
   }
@@ -671,9 +674,16 @@ async function main() {
   console.log("The nightly snapshots are NOT rewritten; scripts/restore-sessions.js " +
               "applies this record so a restore cannot bring the participant back.");
   if (gone.closable.length) {
+    /* The sweep skips a code that is in the database again (a record there may
+       be what keeps someone out of the export), so the answered request stays
+       until whatever is under the code has gone. Said, because "on its next
+       run" was printed for those too and was not true. */
+    const held = gone.closable.filter((g) => g.inDatabaseAgain).length;
     console.log("The request(s) for purged sessions now count as done in the " +
                 "data-rights monitor; the nightly job removes the withdrawal " +
-                "record(s) on its next run.");
+                "record(s) on its next run" +
+                (held ? `, except ${held} whose code is in the database again: ` +
+                  "that record stays, answered, until what is under the code is gone." : "."));
   }
   return leftOpen;
 }

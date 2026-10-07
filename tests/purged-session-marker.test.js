@@ -27,6 +27,8 @@ const path = require("node:path");
 const {
   sessionLocations, sessionLocationsFromKeys, locationForKey, purgedMarkers,
 } = require("../scripts/lib/session-trees");
+const { applySuppression } = require("../scripts/lib/suppression");
+const { flattenErasures } = require("../scripts/lib/data-rights");
 const { runOpsScript, at } = require("./fixtures/run-ops-script");
 
 const DAY = 86400000;
@@ -216,9 +218,13 @@ test("the backfill marks sessions a snapshot holds and the database no longer do
     orgs: { "uni-x": { sessions: { "ORG-HERE": { created: { at: ago(3) } } } } },
     purgedSessions: { "HAS-ONE": 1234 },
   };
+  /* The two sessions that are still there are in the snapshot AS THEMSELVES —
+     the same `created` the database holds. (They used to be `REAL`, a body
+     with another date: a fixture in which "still in the database" could only
+     mean "something has this key", which is the defect of the next test.) */
   const snap = snapshot({
-    "STILL-HERE": REAL, "GONE-1": REAL, "HAS-ONE": REAL,
-    "orgs/uni-x/ORG-HERE": REAL, "orgs/uni-x/ORG-GONE": REAL,
+    "STILL-HERE": tree.sessions["STILL-HERE"], "GONE-1": REAL, "HAS-ONE": REAL,
+    "orgs/uni-x/ORG-HERE": tree.orgs["uni-x"].sessions["ORG-HERE"], "orgs/uni-x/ORG-GONE": REAL,
   });
 
   const dry = backfill(tree, [snap]);
@@ -237,6 +243,182 @@ test("the backfill marks sessions a snapshot holds and the database no longer do
   // Nothing else in the database moved.
   assert.deepStrictEqual(live.tree.sessions, tree.sessions);
   assert.deepStrictEqual(live.tree.orgs, tree.orgs);
+});
+
+test("a session the snapshots hold was purged unless THAT session is in the database — a key under its code is not it", () => {
+  /* Review round 2, F2. The backfill took "still in the database" from the
+     key listing. Any signed-in visitor can put their own membership row under
+     any code, and can create a session under a code that is free again — so on
+     backfill day a session purged before markers existed could have SOMETHING
+     under its code, and got no marker. The tool and the monitor then called it
+     "a live session", the person had nothing in it, and `--dismiss` deleted
+     their unanswered request: round 1's B1, for every session purged before
+     the deploy.
+
+     What is in the database is the snapshot's session only if it IS that
+     session: a session by the purge's own test (a `created/at` or a
+     `closed/at`), with the same `created/at` — written once, never changed —
+     and, where the snapshot recorded one, the same `creatorUid`, which the
+     rules let nobody set to anything but their own account. */
+  const C = ago(140);
+  const archived = {
+    created: { by: "Facilitator", at: C }, closed: { by: "Facilitator", at: ago(100) },
+    creatorUid: "uidFacilitator",
+    clientMapping: { c1: "uidA" }, pool: { c1: { name: "Asker" } }, members: { uidA: true },
+  };
+  const TAKEN_AT = new Date(ago(71)).toISOString();
+  const gone = [
+    ["a stranger's membership row", { members: { uidStranger: { at: ago(0.01) } } }],
+    ["a `created` dated in the future", { created: { by: "x", at: NOW + 3650 * DAY } }],
+    ["a new session somebody else created", { created: { by: "Other", at: ago(5) }, creatorUid: "uidOther", members: { uidZ: true } }],
+    ["the old `created` copied by another account", { created: { by: "Facilitator", at: C }, creatorUid: "uidStranger" }],
+    ["the old `created` copied, with no creator at all", { created: { by: "Facilitator", at: C } }],
+    ["only a `closed`, on a session that had a `created`", { closed: { by: "x", at: ago(100) } }],
+  ];
+  /* A session old enough to have only a `closed` is told apart by that date. */
+  const legacy = { closed: { by: "F", at: ago(100) }, members: { uidA: true } };
+  const legacyGone = [
+    ["a legacy session, and another `closed` under its code", { closed: { by: "x", at: ago(3) } }],
+    ["a legacy session, and a stranger's row under its code", { members: { uidStranger: { at: ago(0.01) } } }],
+    ["a legacy session, and a new session under its code", { created: { by: "Other", at: ago(5) }, creatorUid: "uidOther" }],
+  ];
+  for (const tree of ["default", "orgs"]) {
+    const key = tree === "default" ? "OLD-1" : "orgs/uni-x/OLD-1";
+    const live = (body) => (tree === "default"
+      ? { sessions: { "OLD-1": body } }
+      : { orgs: { "uni-x": { sessions: { "OLD-1": body } } } });
+    for (const [label, occupier] of gone) {
+      const r = backfill(live(occupier), [snapshot({ [key]: archived }, TAKEN_AT)], { BACKFILL_CONFIRM: "1" });
+      assert.strictEqual(r.code, 0, r.out);
+      assert.deepStrictEqual(purgedMarkers(r.tree.purgedSessions), { [key]: Date.parse(TAKEN_AT) },
+        `${tree}, ${label}: the purged session got no marker\n${r.out}`);
+      assert.match(r.out, /in use again[^\n]*:\s+1\b/i, `${tree}, ${label}: it must say so`);
+      assert.match(r.out, /still in the database:\s+0\b/i, `${tree}, ${label}`);
+      // It marks; it does not touch what is under the code.
+      assert.deepStrictEqual(r.tree.sessions, live(occupier).sessions, label);
+      assert.deepStrictEqual(r.tree.orgs, live(occupier).orgs, label);
+    }
+    for (const [label, occupier] of legacyGone) {
+      const r = backfill(live(occupier), [snapshot({ [key]: legacy }, TAKEN_AT)], { BACKFILL_CONFIRM: "1" });
+      assert.strictEqual(r.code, 0, r.out);
+      assert.deepStrictEqual(purgedMarkers(r.tree.purgedSessions), { [key]: Date.parse(TAKEN_AT) },
+        `${tree}, ${label}: the purged session got no marker\n${r.out}`);
+    }
+
+    /* THE CONTROLS — the same session, still there, in the states a session
+       passes through. None of them is purged, so none is marked. */
+    const still = [
+      ["exactly as the snapshot shows it", archived, archived],
+      ["closed since the snapshot was taken",
+        { created: archived.created, creatorUid: "uidFacilitator" },
+        { created: archived.created, creatorUid: "uidFacilitator", closed: { by: "Facilitator", at: ago(1) } }],
+      ["a session from before creators were recorded", { created: { by: "F", at: C } }, { created: { by: "F", at: C }, creatorUid: "uidLater" }],
+      ["a legacy session that has only its `closed`", { closed: { by: "F", at: ago(20) } }, { closed: { by: "F", at: ago(20) } }],
+    ];
+    for (const [label, inSnapshot, inDatabase] of still) {
+      const r = backfill(live(inDatabase), [snapshot({ [key]: inSnapshot }, TAKEN_AT)], { BACKFILL_CONFIRM: "1" });
+      assert.strictEqual(r.code, 0, r.out);
+      assert.strictEqual(at(r.tree, "purgedSessions"), null,
+        `${tree}, ${label}: a session that is still there was marked as purged\n${r.out}`);
+      assert.match(r.out, /still in the database:\s+1\b/i, `${tree}, ${label}`);
+    }
+  }
+
+  /* Dated by the last snapshot that shows the session that is GONE — not by a
+     later one that shows whatever took its place. */
+  const successor = { created: { by: "Other", at: ago(30) }, creatorUid: "uidOther" };
+  const later = new Date(ago(10)).toISOString();
+  const two = backfill({ sessions: { "OLD-1": successor } },
+    [snapshot({ "OLD-1": archived }, TAKEN_AT), snapshot({ "OLD-1": successor }, later)], { BACKFILL_CONFIRM: "1" });
+  assert.deepStrictEqual(two.tree.purgedSessions, { "OLD-1": Date.parse(TAKEN_AT) }, two.out);
+
+  // The live side cannot be read: no marker is guessed, and the run fails.
+  for (const field of ["created/at", "closed/at", "creatorUid"]) {
+    const unreadable = backfill({ sessions: { "OLD-1": { members: { s: true } } } },
+      [snapshot({ "OLD-1": archived, "GONE-9": REAL }, TAKEN_AT)],
+      { BACKFILL_CONFIRM: "1", FAKE_RTDB_THROW_ON: "sessions/OLD-1/" + field });
+    assert.notStrictEqual(unreadable.code, 0, field + ": a failed read of the live session was taken for an answer");
+    assert.strictEqual(at(unreadable.tree, "purgedSessions"), null,
+      field + ": markers were written although the run could not see what is in the database");
+  }
+});
+
+test("after the backfill, a request for such a session is answered and cannot be dismissed", () => {
+  /* The chain the defect opened, run end to end on the reviewer's two cases:
+     backfill, then the monitor, then the tool, then `--dismiss`. */
+  const archived = {
+    created: { at: ago(140) }, closed: { at: ago(100) },
+    clientMapping: { c1: "uidA", c3: "uidB" },
+    pool: { c1: { name: "Asker" }, c3: { name: "Bystander" } },
+    members: { uidA: true, uidB: true },
+  };
+  const asked = { research: false, erasure: true, at: ago(45) };
+  const before = (occupier) => ({
+    sessions: { "LIVE-9": { created: { at: ago(2) } }, "OLD-1": occupier },
+    withdrawals: { "OLD-1": { uidA: asked } },
+    users: { uidA: { history: { "OLD-1": { code: "OLD-1", joinedAt: ago(140) } } } },
+  });
+  const snap = snapshot({ "OLD-1": archived }, new Date(ago(71)).toISOString());
+  const tool = (tree, args) => runOpsScript("erase-participant.js", {
+    tree, now: NOW, args, env: { ERASE_CONFIRM: "1" } });
+
+  for (const [label, occupier] of [
+    ["a stranger's membership row", { members: { uidStranger: { at: ago(0.01) } } }],
+    ["a `created` dated in the future", { created: { by: "x", at: NOW + 3650 * DAY } }],
+  ]) {
+    const b = backfill(before(occupier), [snap], { BACKFILL_CONFIRM: "1" });
+    assert.strictEqual(typeof at(b.tree, "purgedSessions/OLD-1"), "number", label + "\n" + b.out);
+
+    const monitor = runOpsScript("data-rights-monitor.js", { tree: b.tree, now: NOW });
+    assert.strictEqual(monitor.code, 1, label + ": the request is 45 days old and unanswered");
+    assert.match(monitor.out, /session purged; its code is in the database again/, label);
+    assert.doesNotMatch(monitor.out, /close that request with --dismiss/, label + ": the monitor must not send anyone to dismiss it");
+
+    const dismissed = tool(b.tree, ["--uid", "uidA", "--session", "OLD-1", "--dismiss", "--reason", "nothing to erase"]);
+    assert.notStrictEqual(dismissed.code, 0, label + ": --dismiss went through\n" + dismissed.out);
+    assert.match(dismissed.out, /REFUSED/, label);
+    assert.deepStrictEqual(at(dismissed.tree, "withdrawals/OLD-1/uidA"), asked, label + ": the request was deleted unanswered");
+    assert.strictEqual(at(dismissed.tree, "erasures"), null, label);
+
+    const answered = tool(b.tree, ["--uid", "uidA", "--session", "OLD-1", "--research-copy-checked"]);
+    assert.strictEqual(answered.code, 0, label + "\n" + answered.out);
+    const recs = flattenErasures(answered.tree.erasures);
+    assert.deepStrictEqual(recs.map((x) => [x.locationKey, x.uid, x.sessionPurged, x.requestAt]),
+      [["OLD-1", "uidA", true, asked.at]], label);
+    // The record is what a restore of that snapshot obeys.
+    const restored = applySuppression(snap, recs).payload.sessions["OLD-1"];
+    assert.deepStrictEqual(Object.keys(restored.pool), ["c3"], label + ": a restore would bring the person back");
+    assert.strictEqual(runOpsScript("data-rights-monitor.js", { tree: answered.tree, now: NOW }).code, 0, label);
+
+    /* What the tool says happens next, and what then does. The nightly job
+       does NOT clear an answered request away while something sits under the
+       code — and the tool used to promise "on its next run" regardless. */
+    assert.match(answered.out, /except 1 whose code is in the database again/, label);
+    const night = purge(answered.tree);
+    assert.strictEqual(night.code, 0, night.out);
+    assert.strictEqual(typeof at(night.tree, "purgedSessions/OLD-1"), "number", label + ": the marker must outlive whatever was under the code");
+    assert.strictEqual(flattenErasures(night.tree.erasures).length, 1, label);
+    if (occupier.created) {
+      // A `created` dated in the future is never purged, so the code stays in use…
+      assert.deepStrictEqual(at(night.tree, "sessions/OLD-1"), occupier, label);
+      assert.deepStrictEqual(at(night.tree, "withdrawals/OLD-1/uidA"), asked, label + ": …and the answered request stays with it");
+    } else {
+      // A stranger's row is not a session: the purge removes it, and with
+      // nothing under the code any more the answered request goes too.
+      assert.strictEqual(at(night.tree, "sessions/OLD-1"), null, label);
+      assert.strictEqual(at(night.tree, "withdrawals"), null, label);
+    }
+  }
+
+  // With nothing under the code, there is no exception to state.
+  const plain = backfill({
+    sessions: { "LIVE-9": { created: { at: ago(2) } } },
+    withdrawals: { "OLD-1": { uidA: asked } },
+  }, [snap], { BACKFILL_CONFIRM: "1" });
+  const plainAnswered = tool(plain.tree, ["--uid", "uidA", "--session", "OLD-1", "--research-copy-checked"]);
+  assert.strictEqual(plainAnswered.code, 0, plainAnswered.out);
+  assert.match(plainAnswered.out, /removes the withdrawal record\(s\) on its next run\./);
+  assert.doesNotMatch(plainAnswered.out, /except \d+ whose code/);
 });
 
 test("the backfill marks only what the purge would have marked: a session with a timestamp", () => {

@@ -670,6 +670,84 @@ test("--dismiss refuses anything that could be a real request", () => {
   }
 });
 
+// ------------------------------- a request date the rules accept, whatever it is
+
+test("a request whose date is not a whole number is answered like any other", () => {
+  /* The rule on `withdrawals/…/at` asks for a NUMBER inside a window. It does
+     not ask for a whole one, so any signed-in visitor can write
+     `at: Date.now() + 0.5` — and before the window existed the rule took any
+     number up to the present, a negative one included. The record's builder
+     refused a stamp that was not a non-negative integer, and the tool passes
+     the request's own date straight in: the run died on FATAL, wrote nothing,
+     `--dismiss` was refused too, and a `--uid`-only run aborted whole, so the
+     person's OTHER sessions were not erased either. One write produced a
+     request that could be neither answered nor dismissed. (Review round 2,
+     F1 — a regression from stamping records with the request's date.)
+
+     The stamp is compared for equality and nothing else, so any date the
+     database can hold is a valid one. This runs the TOOL, on requests the
+     rules accept, and then the readers of what it wrote. */
+  const nightly = (tree) => runOpsScript("cleanup-stale-sessions.js", {
+    tree, now: NOW + DAY,
+    env: { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0" },
+  });
+  const monitor = (tree) => runOpsScript("data-rights-monitor.js", { tree, now: NOW });
+
+  for (const odd of [ago(35) + 0.5, ago(35) + 0.001, -5, -0.75]) {
+    const label = "at=" + String(odd);
+    const asked = { research: false, erasure: true, at: odd };
+
+    // 1. A session that is in the database, with the person's work in it.
+    const live = liveTree();
+    live.withdrawals["LIVE-1"].uidA = asked;
+    assert.strictEqual(monitor(live).code, 1, label + ": positive control — the request is open and late");
+    const r1 = erase(live, ["--uid", "uidA", "--session", "LIVE-1"], LIVE);
+    assert.strictEqual(r1.code, 0, label + ": the live erasure did not run\n" + r1.out);
+    assert.doesNotMatch(r1.out, /FATAL/);
+    assert.deepStrictEqual(Object.keys(at(r1.tree, "sessions/LIVE-1/pool")), ["c3"], label);
+    assert.strictEqual(records(r1.tree).length, 1, label);
+    assert.strictEqual(records(r1.tree)[0].requestAt, odd, label + ": the record must carry the request's date as it is");
+    assert.strictEqual(monitor(r1.tree).code, 0, label + ": the monitor still counts the request as open");
+
+    // 2. A purged session.
+    const gone = purgedTree();
+    gone.withdrawals["GONE-1"].uidA = asked;
+    const r2 = erase(gone, ["--uid", "uidA", "--session", "GONE-1", ATTEST], LIVE);
+    assert.strictEqual(r2.code, 0, label + ": the purged-session request was not answered\n" + r2.out);
+    assert.deepStrictEqual(
+      records(r2.tree).map((x) => [x.locationKey, x.uid, x.sessionPurged, x.requestAt]),
+      [["GONE-1", "uidA", true, odd]], label);
+    assert.strictEqual(monitor(r2.tree).code, 0, label);
+    // …and the nightly sweep agrees it is answered, and clears it away.
+    const night = nightly(r2.tree);
+    assert.strictEqual(night.code, 0, night.out);
+    assert.strictEqual(at(night.tree, "withdrawals/GONE-1/uidA"), null, label + ": answered, and never swept");
+    assert.strictEqual(records(night.tree).length, 1, label);
+
+    // 3. `--uid` alone: this request under one session, real work in another.
+    const two = liveTree();
+    two.withdrawals["LIVE-1"].uidA = asked;
+    two.sessions["LIVE-2"] = { created: { at: ago(5) }, clientMapping: { c7: "uidA" }, pool: { c7: { name: "Asker" } } };
+    two.withdrawals["LIVE-2"] = { uidA: request(3) };
+    const r3 = erase(two, ["--uid", "uidA"], LIVE);
+    assert.strictEqual(r3.code, 0, label + ": one odd date stopped the whole run\n" + r3.out);
+    assert.strictEqual(at(r3.tree, "sessions/LIVE-2/pool"), null, label + ": the other session was not erased");
+    assert.deepStrictEqual(Object.keys(at(r3.tree, "sessions/LIVE-1/pool")), ["c3"], label);
+    assert.deepStrictEqual(
+      records(r3.tree).map((x) => [x.locationKey, x.requestAt]).sort(),
+      [["LIVE-1", odd], ["LIVE-2", ago(3)]], label);
+  }
+
+  /* An unanswered request with such a date is still an unanswered request:
+     the stamp of a DIFFERENT request does not close it. */
+  const second = purgedTree();
+  second.withdrawals["GONE-1"].uidA = { research: false, erasure: true, at: ago(35) + 0.5 };
+  second.erasures = { e1: { at: new Date(ago(34)).toISOString(), records: [
+    { locationKey: "GONE-1", uid: "uidA", at: new Date(ago(34)).toISOString(), requestAt: ago(35), sessionPurged: true },
+  ] } };
+  assert.strictEqual(monitor(second).code, 1, "a record stamped for another request closed this one");
+});
+
 // ------------------------------------------------------------- the record
 
 test("a suppression record for a purged session is uid-only and says so", () => {
@@ -691,7 +769,17 @@ test("a suppression record for a purged session is uid-only and says so", () => 
     ["at", "clientIds", "locationKey", "reason", "requestAt", "stableIds", "uid"]);
   assert.strictEqual(live.requestAt, 0);
   assert.strictEqual(buildRecord({ locationKey: "L", identity: { uid: "u" }, at: "t", requestAt: 1234 }).requestAt, 1234);
-  for (const bad of [-1, 1.5, "1234", NaN, Infinity]) {
+  /* ANY number the database can hold is a valid stamp: the rules ask a
+     request's `at` only to be a number, and the stamp is matched for equality.
+     The builder used to insist on a non-negative integer and the tool, handed
+     a request dated a half millisecond off, died on it (review round 2, F1). */
+  for (const odd of [1.5, -1, -0.25, 1759831200000.5]) {
+    assert.strictEqual(
+      buildRecord({ locationKey: "L", identity: { uid: "u" }, at: "t", requestAt: odd }).requestAt, odd);
+  }
+  // What it still refuses is what could not have come from a request's `at`,
+  // or could not be stored: those are a caller's mistake, not a visitor's.
+  for (const bad of ["1234", NaN, Infinity, -Infinity, true, {}]) {
     assert.throws(() => buildRecord({ locationKey: "L", identity: { uid: "u" }, at: "t", requestAt: bad }),
       /requestAt/, "requestAt=" + String(bad));
   }

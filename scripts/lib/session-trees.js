@@ -238,6 +238,60 @@ function bodyWasSession(body) {
 }
 
 /**
+ * What makes a session THAT session, taken from a body: null if it never was
+ * one. `created` and `creatorUid` are written once and the rules let nobody
+ * change or remove them, so for as long as a session lives they do not move;
+ * `creatorUid` can only ever be the account that wrote it.
+ */
+function sessionIdentity(body) {
+  if (!bodyWasSession(body)) return null;
+  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+  const num = (v) => (typeof v === "number" ? v : null);
+  return {
+    createdAt: isObj(body.created) ? num(body.created.at) : null,
+    closedAt: isObj(body.closed) ? num(body.closed.at) : null,
+    creatorUid: typeof body.creatorUid === "string" && body.creatorUid !== "" ? body.creatorUid : null,
+  };
+}
+
+/**
+ * IS WHAT THE DATABASE HOLDS UNDER A CODE THE SESSION A SNAPSHOT HOLDS?
+ *
+ * "Something has this key" is not that. Any signed-in visitor can put their
+ * own membership row under any code, and can create a session under a code
+ * that has become free — so a session that was purged can have something
+ * under its code again, the same day or years later. The marker backfill once
+ * read a key in the listing as "still in the database", gave such a session
+ * no marker, and the erasure tool then let a request about it be dismissed
+ * unanswered.
+ *
+ * It is the same session only if what is there
+ *   - is a session by the purge's own test (`hadSessionTimestamp`), AND
+ *   - has the same `created/at` (or, for a session old enough to have only a
+ *     `closed`, the same `closed/at`), AND
+ *   - where the snapshot recorded a `creatorUid`, has that same one.
+ *
+ * THE LIMIT. A snapshot session with NO `creatorUid` is told apart by a date
+ * alone, and a date can be copied by anyone who read it while the session was
+ * there. Every session the product creates has a `creatorUid`; the ones that
+ * do not are a `created` somebody wrote by hand.
+ *
+ * @param {object|null} archived sessionIdentity() of a snapshot's body
+ * @param {object|null} live     the same three values, read from the database
+ */
+function isSameSession(archived, live) {
+  if (!archived || !live) return false;
+  if (!hadSessionTimestamp(live.createdAt, live.closedAt)) return false;
+  if (archived.createdAt !== null) {
+    if (live.createdAt !== archived.createdAt) return false;
+  } else if (live.closedAt !== archived.closedAt) {
+    return false;
+  }
+  if (archived.creatorUid !== null && live.creatorUid !== archived.creatorUid) return false;
+  return true;
+}
+
+/**
  * The location a KEY names, whether or not that session is in the database.
  *
  * Needed by everything that starts from a record rather than from a session:
@@ -463,6 +517,8 @@ module.exports = {
   withdrawalLocations,
   hadSessionTimestamp,
   bodyWasSession,
+  sessionIdentity,
+  isSameSession,
   locationForKey,
   purgedMarkers,
   readSessionLocations,

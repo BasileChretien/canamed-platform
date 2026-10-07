@@ -11,31 +11,47 @@
  * session they really took part in.
  *
  * WHERE THE EVIDENCE COMES FROM. The nightly snapshots. A session a snapshot
- * holds and the database does not was purged. The snapshots reach back 90
- * days, which is also exactly as long as a suppression record for that session
- * can matter (it exists so a restore leaves the participant out). A session
- * purged longer ago than that gets no marker: no copy this platform could
- * restore still holds it, and a request about it is for the human contact.
+ * holds, and that is not in the database any more, was purged. The snapshots
+ * reach back 90 days, which is also exactly as long as a suppression record
+ * for that session can matter (it exists so a restore leaves the participant
+ * out). A session purged longer ago than that gets no marker: no copy this
+ * platform could restore still holds it, and a request about it is for the
+ * human contact.
  *
  * WHAT COUNTS AS A SESSION IN A SNAPSHOT. Only a node with a `created/at` or a
  * `closed/at` — the purge's own criterion (session-trees.js,
  * `bodyWasSession`). A snapshot is a copy of everything under `sessions/`,
- * and that includes what a participant can write: any signed-in visitor may
- * put their own membership row under a code nobody ever created. Such a node
- * is in the snapshot, the purge removes it WITHOUT leaving a marker, and this
- * script must not then hand it one. Until 2026-10-07 it marked every key it
- * found, and this paragraph said nothing a participant can write was involved.
- * That was false. What a participant cannot write is `created` (without
- * creating a session) or `closed`.
+ * and that includes what a visitor can write: any signed-in visitor may put
+ * their own membership row under a code nobody ever created. Such a node is
+ * in the snapshot, the purge removes it WITHOUT leaving a marker, and this
+ * script must not then hand it one. (Until 2026-10-07 it marked every key it
+ * found.) Nothing here makes a visitor's writes impossible: creating a session
+ * is one write, open to any signed-in visitor while the facilitator gate is
+ * off, with no bound on its date — and a session a visitor created is a
+ * session, which the purge marks too. The criterion is the purge's, not a
+ * boundary.
+ *
+ * WHAT COUNTS AS "STILL IN THE DATABASE". Not a key in the listing. The same
+ * visitor write, or a new session under a code that became free, puts
+ * something under a purged session's code — and a session that is purged, with
+ * something else under its code, must still get its marker: without one the
+ * erasure tool treats a request about it as one about a live session, finds
+ * nothing of the person's there, and lets it be dismissed. So for every code
+ * that is both in a snapshot and in the database this reads three values of
+ * what is there now — `created/at`, `closed/at`, `creatorUid`; two dates and an
+ * account identifier, no session content — and counts the session as still
+ * there only if it is THAT session (session-trees.js, `isSameSession`). If it
+ * cannot read them, it stops and writes nothing.
  *
  * ⚠️ RUN IT BEFORE THE RULE IS DEPLOYED, or in the same hour. Between the
  * deploy and this run, withdrawals for already-purged sessions are refused.
  *
  * WHAT IT WRITES. `purgedSessions/<code>` (or `purgedSessions/orgs/<slug>/
- * <code>`) = the date of the LAST snapshot holding the session, epoch ms. That
- * is when the session was last known to exist — at most a night before it was
- * purged — and deliberately not "now". It never overwrites a marker and never
- * marks a session that is in the database.
+ * <code>`) = the date of the LAST snapshot holding the session that is gone,
+ * epoch ms. That is when it was last known to exist — at most a night before
+ * it was purged — and deliberately not "now". It never overwrites a marker,
+ * never marks a session that is itself still in the database, and never
+ * touches what is under a code.
  *
  * DRY RUN BY DEFAULT — set BACKFILL_CONFIRM=1 to write.
  *
@@ -55,7 +71,8 @@ const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
 const {
-  readSessionLocationsShallow, locationForKey, purgedMarkers, bodyWasSession,
+  readSessionLocationsShallow, locationForKey, purgedMarkers,
+  sessionIdentity, isSameSession,
 } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -95,14 +112,19 @@ function isLocationKey(key) {
  * a "good" file when another one could not be vouched for: a half-read set
  * dates markers by the wrong snapshot.
  *
- * `lastSeen` holds a key only if some snapshot shows it AS A SESSION, dated by
- * the last snapshot that does. `named` is every well-formed key, session or
- * not, so the run can say how many it left unmarked and why.
+ * `seen` holds a key only if some snapshot shows it AS A SESSION, with one
+ * entry per snapshot that does: which session it was (its identity) and when
+ * that snapshot was taken. A code can have held more than one session over
+ * the snapshots' 90 days, and a marker is dated by the last snapshot showing
+ * a session that is gone — not by a later one showing what replaced it.
+ * `named` is every well-formed key, session or not, so the run can say how
+ * many it left unmarked and why.
  *
- * @returns {{lastSeen: Object<string, number>, named: Set<string>, malformed: number}}
+ * @returns {{seen: Object<string, Array<{identity: object, takenAt: number}>>,
+ *            named: Set<string>, malformed: number}}
  */
 function readSnapshots(files, now) {
-  const lastSeen = {};
+  const seen = {};
   const named = new Set();
   let malformed = 0;
   for (const file of files) {
@@ -134,11 +156,33 @@ function readSnapshots(files, now) {
     for (const key of Object.keys(sessions)) {
       if (!isLocationKey(key)) { malformed++; continue; }
       named.add(key);
-      if (!bodyWasSession(sessions[key])) continue;
-      if (!(key in lastSeen) || takenAt > lastSeen[key]) lastSeen[key] = takenAt;
+      const identity = sessionIdentity(sessions[key]);
+      if (!identity) continue;                       // never a session: the purge's test
+      if (!Object.prototype.hasOwnProperty.call(seen, key)) seen[key] = [];
+      seen[key].push({ identity, takenAt });
     }
   }
-  return { lastSeen, named, malformed };
+  return { seen, named, malformed };
+}
+
+/**
+ * The three values that say WHICH session is under a code in the database
+ * now. Two dates and an account identifier; no session content. A failed read
+ * throws — "could not look" must never be taken for "nothing there", which
+ * would mark a live session as purged, nor for "the same session", which
+ * would leave a purged one without its marker.
+ */
+async function liveIdentity(db, key) {
+  const base = locationForKey(key).path;
+  const read = async (rel) => {
+    const snap = await db.ref(`${base}/${rel}`).get();
+    return snap.exists() ? snap.val() : null;
+  };
+  return {
+    createdAt: await read("created/at"),
+    closedAt: await read("closed/at"),
+    creatorUid: await read("creatorUid"),
+  };
 }
 
 async function main() {
@@ -173,20 +217,32 @@ async function main() {
 
   const updates = {};
   const toMark = [];
-  let stillLive = 0, alreadyMarked = 0;
-  for (const key of Object.keys(snapshots.lastSeen).sort()) {
-    if (live.has(key)) { stillLive++; continue; }
+  let stillLive = 0, alreadyMarked = 0, inUseAgain = 0;
+  for (const key of Object.keys(snapshots.seen).sort()) {
     if (Object.prototype.hasOwnProperty.call(marked, key)) { alreadyMarked++; continue; }
-    updates[locationForKey(key).purgedMarkerPath] = snapshots.lastSeen[key];
+    /* GONE = the sessions the snapshots show under this code that are not what
+       the database holds there now. A key in the listing settles nothing: it
+       may be a visitor's row, or another session altogether. */
+    let gone = snapshots.seen[key];
+    if (live.has(key)) {
+      const now = await liveIdentity(db, key);
+      gone = gone.filter((s) => !isSameSession(s.identity, now));
+      if (!gone.length) { stillLive++; continue; }
+      inUseAgain++;
+    }
+    updates[locationForKey(key).purgedMarkerPath] = Math.max(...gone.map((s) => s.takenAt));
     toMark.push(key);
   }
 
   console.log(`Snapshot files read:          ${args.files.length}`);
-  const sessionCount = Object.keys(snapshots.lastSeen).length;
+  const sessionCount = Object.keys(snapshots.seen).length;
   console.log(`Sessions held in them:        ${sessionCount}`);
   console.log(`  still in the database:      ${stillLive}`);
   console.log(`  already marked:             ${alreadyMarked}`);
   console.log(`  to mark:                    ${toMark.length}`);
+  if (inUseAgain) {
+    console.log(`    of which the code is in use again, by something else: ${inUseAgain}`);
+  }
   /* Said, not swallowed: an operator who expected a marker for one of these
      should learn here that it was left out, and why. */
   const noTimestamp = snapshots.named.size - sessionCount;

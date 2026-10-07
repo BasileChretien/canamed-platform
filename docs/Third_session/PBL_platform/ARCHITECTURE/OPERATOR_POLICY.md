@@ -304,6 +304,14 @@ which of these it is:
   The same `--dismiss` command closes it; the tool checks again that nothing of
   theirs is in the session and refuses if anything is.
 
+  ⚠️ What the tool knows here is that the code carries **no purge marker** —
+  not that the session was never purged. A session purged before the purge
+  wrote markers (2026-10-07) has none until the backfill above has been run,
+  and what sits under its code today may be a visitor's row or another
+  session. **Do not dismiss anything under this heading until the backfill has
+  been run once**; after it, a session the snapshots hold that is not the one
+  in the database has its marker, and this heading means what it says.
+
 `--dismiss` also removes that session's row from the person's history, and is
 refused for a session that carries a purge marker: that session existed, so the
 request is answered, not dismissed.
@@ -322,6 +330,16 @@ request unanswered.)
 a `closed` timestamp in some snapshot, the same test the purge applies. A
 snapshot also holds whatever visitors wrote under made-up codes; the script
 counts those ("no timestamp, never a session") and leaves them unmarked.
+
+**"Still in the database" means that session, not that key.** For a code that
+is both in a snapshot and in the database, the script reads what is there now
+(`created/at`, `closed/at`, `creatorUid`) and leaves the session unmarked only
+if it is the same one. A visitor's row, a `created` with another date, or a
+new session by another account under the code all mean the snapshot's session
+is gone, and it is marked; the run reports how many ("the code is in use
+again, by something else"). The limit: a snapshot session with no
+`creatorUid` is told apart by its `created` date alone, which somebody who
+read it while the session existed could copy.
 
 ## 5. Rectification requests (GDPR Art. 16, APPI Art. 34)
 
@@ -359,10 +377,14 @@ A request **survives the purge of its session** and stays in this monitor until
 it is answered; there is no date on which it lapses. The failure message says
 how many of the late requests name a purged session (§4.1) and how many name a
 session with no purge marker (§4.1, exit code 3). A request counts as answered
-only by an erasure dated after it, so someone who asks again after being erased
-has a new request. Once a request for a purged session is answered, the nightly
-cleanup removes the withdrawal record; the record under `erasures/` stays, and
-must.
+only by the erasure record written for it: the record carries the request's own
+date (`requestAt`) and is matched on that, not on which is later — so someone
+who asks again after being erased has a new request. (A record written before
+2026-10-07 has no such stamp and answers any request dated at or before it.)
+Once a request for a purged session is answered, the nightly cleanup removes
+the withdrawal record — unless something is in the database under that
+session's code again, in which case the record stays, answered, until that is
+gone. The record under `erasures/` stays in every case, and must.
 
 If the monitor's own last line is `FATAL: the request queue could not be read`,
 that is the job failing (exit code 2), not a deadline: it prints an error code

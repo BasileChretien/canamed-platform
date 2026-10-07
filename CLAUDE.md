@@ -1057,6 +1057,27 @@ shipped — the lessons are general:**
    (`scripts/lib/session-trees.js`). Every backfill fixture had used an empty
    body, so the tests had the mistake built in — **a fixture simpler than the
    data it stands for can only confirm the simple case.**
+9. **…and the same definition has to be applied to BOTH sides of a
+   comparison** (review round 2). The backfill tested the snapshot's body and
+   took "still in the database" from the key listing — so item 7 was back for
+   every session purged before the deploy: a visitor's row under the code, no
+   marker, `--dismiss`. It now reads `created/at`, `closed/at` and
+   `creatorUid` of what is there and asks whether it is THAT session
+   (`isSameSession`). The fixture had the mistake built in again: the "still
+   here" session was in the snapshot with a different `created` than in the
+   database. **Before the backfill has run once, "no purge marker" does not
+   mean "never purged"** — the tool says the first, and nothing under a live
+   code should be dismissed until then.
+10. **A validation added to a writer is a new way for the reader's input to
+    kill it** (review round 2, a regression from item 5's fix).
+    `buildRecord()` demanded a whole, non-negative `requestAt`; the rule asks
+    a request's `at` only to be a number, so `at: Date.now() + 0.5` made a
+    request the tool died on — unanswerable, undismissable, and a `--uid` run
+    aborted before erasing the person's other sessions. **When a value is
+    copied from data somebody else may write, the copier must accept
+    everything the rules do** — and everything they did before they were
+    tightened. The unit test pinned the throw; what was missing was a test
+    that RUNS THE TOOL on a request the rules accept.
 
 **Listing sessions over REST: an array is a listing too.** `shallowKeysOf()`
 threw on anything but an object, and RTDB renders a node keyed 0, 1, 2… as an

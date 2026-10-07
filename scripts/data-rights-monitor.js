@@ -211,8 +211,13 @@ async function run(db, opts) {
         "scripts/backfill-purged-markers.js; otherwise remove the request with " +
         "erase-participant.js --dismiss. See DPA Annex VI, G12.");
     }
-    /* Only for a session that was never purged. Under a purge marker the tool
-       refuses --dismiss, and this must not send anyone to try. */
+    /* Only where the code carries NO PURGE MARKER — which is all this job can
+       know. Under a marker the tool refuses --dismiss, and this must not send
+       anyone to try. "No marker" is not "never purged": a session purged
+       before the purge wrote markers has none until the one-off backfill has
+       run, and something else may sit under its code. That step belongs to
+       the deploy (OPERATOR_POLICY §4.1) and is not repeated in every failure
+       message: a caveat printed for ever about a step done once is noise. */
     if (overdue.some((p) => p.sessionInDatabase && !p.sessionPurged)) {
       err("");
       err("If the tool answers \"Nothing to erase\" for a session that IS in the " +

@@ -112,11 +112,21 @@ function buildRecord({ locationKey, identity, at, reason, requestAt, sessionPurg
      called a second request answered whenever its device was slow enough,
      and the purge then deleted it. 0 = written with no request in the queue.
      ALWAYS present, so a record that is matched by this stamp can be told
-     from an older one that can only be compared by date. */
+     from an older one that can only be compared by date.
+
+     ANY FINITE NUMBER IS A VALID STAMP. It is whatever the request carries,
+     and the rules ask that only to be a number in a window — not a whole one,
+     and before the window existed, not a positive one. This used to demand a
+     non-negative integer; one visitor write of `at: Date.now() + 0.5` then
+     made a request the tool died on, and so could neither answer nor
+     dismiss. The stamp is matched for equality and nothing else, so its
+     shape does not matter. What is still refused is what a request's `at`
+     cannot be (the tool reads it only when it is a number) or what the
+     database cannot hold — a caller's mistake, not a visitor's. */
   const stamp = requestAt === undefined || requestAt === null ? 0 : requestAt;
-  if (!Number.isSafeInteger(stamp) || stamp < 0) {
+  if (typeof stamp !== "number" || !Number.isFinite(stamp)) {
     throw new Error("a suppression record's requestAt is the `at` of the request " +
-      "it answers (epoch ms), or 0 when there is none");
+      "it answers (a number, as stored), or 0 when there is none");
   }
   const ids = identity || {};
   if (!ids.uid && !(ids.clientIds || []).length && !(ids.stableIds || []).length) {
