@@ -904,7 +904,7 @@ arising from the termination itself, without prejudice to accrued rights.
 | G5 roster emails never deleted | ~~HIGH~~ **CLOSED 2026-08-21** | — | 2026-08-21 | The participant roster is now purged with its session by `cleanup-stale-sessions.js` (30/90d). It rides the SESSION clock, not the certificate clock, because verification hashes the name the verifier types and never reads the roster |
 | G6 certificate records never deleted | ~~HIGH~~ **MECHANISM BUILT 2026-08-21 — NOT YET ARMED** | [OWNER] | [DATE] | `scripts/cleanup-expired-credentials.js` reads `retentionUntil` (written on every record since launch, read by nothing until now) and deletes expired ones; undated records are never deleted, only reported. **Its scheduled run is DRY-RUN**: the population has never been pruned, so the first live run is the largest deletion this project would have performed. Arm it after reviewing dry-run reports; this item closes then, not now |
 | G7 LLM usage log undisclosed / unbounded / unreachable | HIGH — **TTL limb narrowed, see the note at G7** | [OWNER] | [DATE] | The `metrics/hfPatient` log has been pruned at 30 days since 2026-08-12 and its function has not run since 2026-08-27. Its successor, the proxy's `rateLimits` counters, had no TTL at all; a sweep was built on 2026-10-07 and is **not yet scheduled**. Disclosure and the Art. 15 route are untouched |
-| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | Narrowed by the G13 job for an ANONYMOUS account's `users/` node only. Scenarios and moderation reports are deliberately left in place, for everyone |
+| G8 account profiles, scenarios, moderation records | MEDIUM | [OWNER] | [DATE] | **Narrowed twice on 2026-10-07, still open.** (1) The G13 job removes an ANONYMOUS account's `users/` node; it deliberately leaves scenarios and moderation reports in place. (2) A SIGNED-IN user deleting their own account now also removes `scenarios/<uid>` and their published copies - before that it removed `users/<uid>` only. Moderation reports and every session record are still left, and nothing here is automated |
 | G9 `orgs/` tree outside every safeguard | BLOCKING | [OWNER] | [DATE] | |
 | G10 no per-session configuration | BLOCKING | [OWNER] | [DATE] | |
 | G11 retention jobs unmonitored | HIGH | [OWNER] | [DATE] | |
@@ -2981,13 +2981,118 @@ is deliberate rather than incidental.
 
 **G8 — MEDIUM. Account profiles, admin secrets, recovery records, authored
 scenarios, abuse reports and moderation records** have no automated deletion.
-*(Narrowed 2026-10-07 for anonymous accounts only, and only for `users/<uid>`,
-which the G13 job removes along with the account. It deliberately leaves
-`scenarios/<uid>` and moderation reports in place — see G13 for why — so those
-two limbs are unchanged for everyone. For a signed-in account nothing here has
-changed at all — and the client's own
-`accountDelete()` removes `users/<uid>` but not `scenarios/<uid>`, which is then
-unreadable by anyone and kept for ever.)*
+*(Narrowed 2026-10-07 for anonymous accounts, and only for `users/<uid>`,
+which the G13 job removes along with the account. That job deliberately leaves
+`scenarios/<uid>` and moderation reports in place — see G13 for why. This
+paragraph went on to say that for a signed-in account nothing had changed, and
+that the client's own `accountDelete()` "removes `users/<uid>` but not
+`scenarios/<uid>`, which is then unreadable by anyone and kept for ever". That
+was true when written and is the defect the note below records as fixed the
+same day.)*
+
+> ⚠️ **Narrowed again 2026-10-07, for a SIGNED-IN account that deletes ITSELF —
+> the item stays open.** Until then the client's own `accountDelete()` removed
+> `users/<uid>` and the sign-in account and nothing else. `scenarios/<uid>` is readable and
+> writable by that uid only, so it became unreadable by anyone and was kept for
+> ever; every published copy under `sharedScenarios/` stayed on offer under the
+> author's display name with no owner left to withdraw it. The confirmation
+> promised "permanently removes your profile and history".
+>
+> **What it removes now** — in one multi-path update, which the rules accept or
+> refuse whole, and only then the sign-in account: `users/<uid>`,
+> `scenarios/<uid>`, and every `sharedScenarios/` entry under the key prefix
+> `<uid>_` whose `ownerUid` is that user. The handler is `deleteMyAccount()` in
+> the lazily loaded `data-rights.js`; `accountDelete()` in `script.js` is now
+> only the shim that loads it on the click.
+>
+> **Withdrawing the published copies is not a new choice made here.** Both
+> existing per-scenario delete paths already remove the shared copy together
+> with the private one, and the facilitator notice says scenarios are "kept
+> until the author deletes them". The effect on OTHER facilitators is therefore
+> the one a single-scenario delete already has, and it is not nil: a session
+> normally pins its own copy of the scenario at creation
+> (`scenarioCustomJson`) and is untouched — **but** where that snapshot could
+> not be taken (the read timed out, or the body exceeded the size limit) the
+> session holds a live reference instead, and once the scenario is withdrawn
+> its participants are served the default case. That exposure predates this
+> change. What is new is that one click now withdraws every scenario the
+> author published, rather than one.
+>
+> **What it CANNOT remove** — the rules forbid it to every client, so each of
+> these is out of the user's own reach:
+> - **Reports the account filed** — `reports/scenarios/<shareId>/<uid>`: the
+>   reporter's uid, a timestamp and up to 500 characters of free text. The node
+>   is write-once and unreadable so that a report cannot be retracted by its
+>   author, and that same rule means no client can delete one. Nothing else
+>   deletes them either: the G13 job leaves them deliberately, and whether a
+>   report should outlive its reporter's account is the open
+>   **[CONTROLLER TO DECIDE]** recorded there. Until that is answered they are
+>   kept indefinitely, and an operator with the Admin SDK removes one on request.
+> - **Reports filed AGAINST the account's scenarios, and any takedown
+>   tombstone** — `reports/scenarios/<uid>_<scenarioId>/*` and
+>   `moderation/removed/<uid>_<scenarioId>`. The deleted account's uid survives
+>   in the key. No job.
+> - **The per-account rate-limit counters** — `rateLimits/uid/<uid>/<bucket>`,
+>   increment-only for a client. These do have a sweep —
+>   `scripts/lib/rate-limit-retention.js` drops a bucket once it is past its
+>   TTL (2 hours / 2 days) — but it runs as part of the G13 job and is therefore
+>   **not scheduled** (see the note at G7). Once it is, they expire within two
+>   days whatever happens to the account; today they stay.
+>
+> **What it does NOT remove, by design** — everything inside a session or keyed
+> by one: the pool entry (with the name typed at join), answers, votes, chat
+> turns, the roster row (name **and email**, written only for signed-in
+> participants who consented to research — i.e. for account holders), the
+> certificate, the withdrawal record. "By design" and not "cannot", because
+> the rules differ per node: while a session is still open its owner could
+> delete their own roster row and pool entry, whereas the certificate records,
+> the chat author rows and the uid mappings are write-once for everyone. None
+> of it is touched: these are the session's records and follow its retention
+> and the operator-run erasure path (G12). The withdrawal record in particular
+> must never be removed by an account deletion — that would un-withdraw
+> consent. The confirmation now lists these, and no longer claims they are "no
+> longer linked to your identity", which was never true.
+>
+> **What it would MISS:**
+> - **A shared entry published under a key that is not `<uid>_…`.** The rules do
+>   not constrain the key. The shipped client never writes any other form, so
+>   this takes a hand-made write — but the deletion selects by key range and
+>   would not find it.
+> - The key range is also **read whole**, entries a stranger has parked under
+>   the prefix included (the rules allow that, and only their owner can delete
+>   them). They are filtered out by `ownerUid`, so they cannot block the
+>   deletion or be deleted by it, but each can be up to 262,144 characters, so
+>   they can make it slow.
+>
+> **Three limits on the claim.** (1) The data goes first, deliberately, because
+> the reverse order is what orphans it. If the sign-in deletion then fails —
+> Firebase refuses it without a recent sign-in — the user is told what is
+> already gone and has to sign in and repeat it. (2) Nothing here is
+> *automated*: an account nobody deletes keeps everything in this item
+> indefinitely, which is why the severity is unchanged. (3) **The account
+> dialog can only be opened from inside a session.** The control that opens it
+> is in the page header, which the front page hides until a session code has
+> been entered. A signed-in user with no working session code cannot reach
+> "Delete account" at all — nor the retry in (1) — and has only the contact in
+> the notice. That is the product as built, not a regression, and it bounds
+> every self-service claim in this item.
+>
+> ⚠️ **This route was unreachable from 2026-07-31 until the same change.** The
+> account dialog — which hosts "Delete account" and the per-session withdrawal
+> button G12 relies on for signed-in participants — threw on opening: a
+> variable it reads lost its declaration in #264, and no test executed the
+> dialog. Fixed with it. Any statement that a signed-in participant "can delete
+> their account" or "can withdraw from their account history" was false in
+> production between those dates, and becomes true only once the deploy
+> carrying this fix is live.
+>
+> `Verify:` `node --test tests/account-delete.test.js` (executes the real
+> handler: the paths removed, data before account, nothing removed on a
+> refusal, the dialog opens) and `tests-e2e/emulator/account-delete.spec.js`
+> (the real button against the real rules; it shows the engine refusing a
+> mixed update WHOLE, which is what "nothing was removed" depends on — and it
+> asserts the reports are still there, so the residue above is a tested fact
+> rather than a remark).
 
 **G9 — ✅ CLOSED 2026-09-04. The entire `orgs/` tree is outside every
 safeguard.**
@@ -3218,6 +3323,25 @@ now exists; that is not the same as the duty being discharged.
    those records into the consent flag before its gate runs, and **fails closed**
    if the node cannot be read, so withdrawing has immediate effect on the
    research dataset rather than queuing a request.
+   ⚠️ **The second of those two controls did not work when this was written,
+   and "SHIPPED" overstated it (found 2026-10-07).** The account dialog could
+   not be opened at all from 2026-07-31 — before this control was added to it —
+   until the fix recorded under G8, so the session-history route was never
+   reachable in production. For that whole period a signed-in participant had
+   the same single route as an anonymous one: the waiting screen, during the
+   session. The control was covered only by a test that looked for its markup;
+   it is now opened in a real browser by
+   `tests-e2e/emulator/account-delete.spec.js` and, on every viewport, by
+   `tests-e2e/account-dialog.spec.js`. The waiting-screen control was not
+   affected.
+   ⚠️ **And "weeks later" has a condition this paragraph never stated.** The
+   account dialog opens only from the page header, which the front page hides
+   until a session code has been entered. So the history route serves someone
+   who is in a session at the time — their own, if it has not yet been purged,
+   or another one — and nobody else. A participant whose session has expired
+   and who has no other code is, again, back to the human contact. Deleting the
+   account also removes this list, which the deletion dialog now says before it
+   proceeds.
    ⚠️ **What it does NOT do: delete.** The control records an erasure request;
    the deletion is still `scripts/erase-participant.js`, run by an operator.
    Art. 17 remains satisfiable-by-operator, not self-service — deleting a
