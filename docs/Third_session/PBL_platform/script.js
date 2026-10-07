@@ -3337,8 +3337,8 @@ function readSession(hintId) {
 /* version stamp written next to every consent record. Bump whenever the
    privacy notice / Participant Information Sheet text changes materially
    so that researchers can identify which version of the notice each
-   participant consented to. */
-const CONSENT_NOTICE_VERSION = "PIS-v3-2026-07";
+   participant consented to. A bump re-asks on resume (pis-version-lockstep). */
+const CONSENT_NOTICE_VERSION = "PIS-v12-2026-10";
 
 /* ===================== PARTICIPANT: JOIN -> WAITING -> ROOM ===================== */
 function joinParticipant() {
@@ -12382,8 +12382,8 @@ function saveProfile(updates) {
    record of which workshops a persistent anonymous uid attended, under the
    `users` tree — which no retention job touches — disclosed nowhere.
 
-   See issue #347. This stops NEW writes only; entries already written need an
-   operator sweep of history nodes belonging to uids that have no profile. */
+   See issue #347. This stops NEW writes only; the entries already written
+   are removed by scripts/cleanup-anonymous-accounts.js. */
 function pushSessionToHistory(code) {
   if (!currentUser || currentUser.isAnonymous || !db || !code) return;
   const path = "users/" + currentUser.uid + "/history/" + code;

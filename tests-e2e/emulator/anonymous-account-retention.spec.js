@@ -219,12 +219,25 @@ test.describe("anonymous-account retention against the emulators (#347)", () => 
       expect(await page.evaluate(() => firebase.auth().currentUser.isAnonymous)).toBe(true);
 
       /* And the database has the NEW identity, not a stale token for the old
-         one: reading their own node is allowed, the old one's is not. */
+         one: reading their own node is allowed, the old one's is not.
+
+         POLLED, because "auth has the new user" and "the database connection
+         has sent that user's token" are two moments. The SDK hands the token
+         to the connection from a listener, after currentUser is already set,
+         and a read issued in between is judged as whoever the connection was
+         before — nobody — and refused. A single read here failed about once
+         in CI (PERMISSION_DENIED, green on retry, and failOnFlakyTests made
+         that a red job on an unrelated PR). The claim is that the new
+         identity REACHES the database, so that is what is waited for; the
+         old one must then be refused by a connection known to be signed in. */
       const readAs = (uid) => page.evaluate(async (u) => {
         try { await firebase.database().ref("users/" + u).once("value"); return "ALLOWED"; }
         catch (e) { return (e && e.code) || "DENIED"; }
       }, uid);
-      expect(await readAs(uidA2)).toBe("ALLOWED");
+      await expect.poll(() => readAs(uidA2), {
+        message: "the database never accepted the new anonymous identity",
+        timeout: 15_000
+      }).toBe("ALLOWED");
       expect(await readAs(uidA)).toBe("PERMISSION_DENIED");
     } finally {
       await dbWrite("PUT", "sessions/" + code, null);

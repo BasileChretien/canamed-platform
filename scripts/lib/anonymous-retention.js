@@ -185,7 +185,7 @@ function listingSanity(cls) {
       error: "no account in the listing has a sign-in provider. This project has " +
         "signed-in facilitators, so that means the provider field is missing " +
         "from the response — and without it every account looks anonymous. " +
-        "Nothing was deleted."
+        "No account or user record was deleted."
     };
   }
   if (cls.anonymous > 0 && cls.withRefresh === 0) {
@@ -193,7 +193,7 @@ function listingSanity(cls) {
       ok: false,
       error: "no anonymous account carries a last-refresh date. That date is the " +
         "only sign that a returning participant is still active, so without " +
-        "it idleness cannot be judged. Nothing was deleted."
+        "it idleness cannot be judged. No account or user record was deleted."
     };
   }
   if (cls.undated > Math.max(UNDATED_FLOOR, cls.anonymous / 2)) {
@@ -201,7 +201,7 @@ function listingSanity(cls) {
       ok: false,
       error: cls.undated + " of " + cls.anonymous + " anonymous accounts have no " +
         "readable last-use date. A few is noise; this many means the date " +
-        "format changed. Nothing was deleted."
+        "format changed. No account or user record was deleted."
     };
   }
   return { ok: true };
@@ -326,7 +326,7 @@ function orphanTripwire(orphanTotal, authTotal) {
     ok: false,
     error: orphanTotal + " record(s) have no matching account, against " + authTotal +
       " accounts listed (limit " + limit + "). That is more likely an incomplete " +
-      "account listing than abandoned data. Nothing was deleted."
+      "account listing than abandoned data. No account or user record was deleted."
   };
 }
 

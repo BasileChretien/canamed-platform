@@ -39,7 +39,9 @@
  * identifier this job exists to stop keeping.
  *
  * Exit codes: 0 done · 1 something was not done (see the output) ·
- *             2 misconfigured or broken · 3 refused on purpose (nothing deleted)
+ *             2 misconfigured or broken · 3 the ACCOUNT half refused on purpose
+ *             (no account or user record deleted; the counter sweep, which
+ *             does not depend on it, has still run and is reported)
  */
 
 const { initializeApp } = require("firebase-admin/app");
@@ -51,7 +53,7 @@ const {
   validateWindowDays, DEFAULT_RETENTION_DAYS, DAY_MS
 } = require("./lib/anonymous-retention");
 const { runAnonymousRetention, withTimeout } = require("./lib/anonymous-retention-job");
-const { exitCodeFor, formatReport } = require("./lib/anonymous-retention-report");
+const { exitCodeFor, formatReport, formatSweepOnly } = require("./lib/anonymous-retention-report");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -111,6 +113,12 @@ async function main() {
 }
 
 main().catch((e) => {
+  /* The counter sweep runs before the account half and does not depend on it,
+     so by the time that half refuses or fails the counters are already done.
+     Say so, or the log reads as though nothing happened. */
+  if (e && e.rateLimits) {
+    for (const line of formatSweepOnly(e.rateLimits, CONFIRM)) console.log(line);
+  }
   if (e && e.refusal) {
     console.error("REFUSED: " + e.message);
     process.exit(3);
