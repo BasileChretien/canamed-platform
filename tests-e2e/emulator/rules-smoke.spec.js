@@ -2186,6 +2186,373 @@ test("rules: withdrawal is possible AFTER the session closes, and only by its ow
   await ctx.close();
 });
 
+test("rules: `orgs` cannot be used as a session code", async ({ page }) => {
+  /* Outside `sessions/`, every per-session tree keeps organisation sessions
+   * under a literal `orgs` child — adminSecrets/orgs/<slug>/<code>, roomChat/
+   * orgs/…, certIds/orgs/…, withdrawals/orgs/… — so the paths of a default-tree
+   * session CODED `orgs` are the roots of every organisation's data, and the
+   * nightly purge deletes a session's paths. Nothing reserved the key: this
+   * page is an anonymous visitor, and until 2026-10-07 its one write below was
+   * accepted (tests/reserved-session-key.test.js runs the purge that followed).
+   *
+   * Each denial is the SAME payload that is allowed under an ordinary code. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  const OTHER = "RK" + stamp;
+  const slug = "rk-" + stamp.toLowerCase();
+  const denied = (r) => expect(String(r)).toMatch(/permission[_ ]denied/i);
+  const member = () => ({ at: Date.now() });
+
+  denied(await tryWrite(page, `sessions/orgs/members/${uid}`, member()));
+  expect(await dbReadAsOwner("sessions/orgs"), "the denied write must have left nothing").toBeNull();
+  expect(await tryWrite(page, `sessions/${OTHER}/members/${uid}`, member()),
+    "the same row under an ordinary code").toBe("ALLOWED");
+
+  // Another participant-writable child, so this is the session node's rule
+  // and not something particular to `members`.
+  denied(await tryWrite(page, `sessions/orgs/clientMapping/c${stamp}`, uid));
+  expect(await tryWrite(page, `sessions/${OTHER}/clientMapping/c${stamp}`, uid)).toBe("ALLOWED");
+
+  // Creating it outright is refused too — by the same rule, with the gate open.
+  denied(await tryWrite(page, "sessions/orgs/created", { by: "x", at: Date.now() }));
+  expect(await tryWrite(page, `sessions/${OTHER}/created`, { by: "x", at: Date.now() })).toBe("ALLOWED");
+  expect(await dbReadAsOwner("sessions/orgs")).toBeNull();
+
+  // The organisation tree refuses the key as well (it collides with nothing
+  // there; the two session subtrees are kept the same shape).
+  denied(await tryWrite(page, `orgs/${slug}/sessions/orgs/members/${uid}`, member()));
+  expect(await tryWrite(page, `orgs/${slug}/sessions/${OTHER}/members/${uid}`, member())).toBe("ALLOWED");
+});
+
+/* THE SWITCH on the withdrawal rule: `ops/purgedMarkersBackfilledAt`, written
+ * by scripts/backfill-purged-markers.js on a confirmed run and by nothing
+ * else. Absent, a withdrawal needs nothing but the writer's own uid — what the
+ * rule asked before 2026-10-07; present, it needs a session or a purge marker.
+ *
+ * ⚠️ IT IS GLOBAL, AND THIS SUITE SHARES ONE DATABASE ACROSS EVERY SPEC. A test
+ * that leaves it set turns the strict rule on for every test after it —
+ * including account-delete.spec.js's "a withdrawal made from the front page
+ * for a purged session", which is production's state until an operator has run
+ * the backfill. So: only the two blocks below touch it, each puts it back in a
+ * hook or a `finally`, and the file clears it once more when it ends. */
+const BACKFILL_SWITCH = "ops/purgedMarkersBackfilledAt";
+test.afterAll(async () => { await adminPut(BACKFILL_SWITCH, null); });
+
+test("rules: until the marker backfill has run a withdrawal needs no session, and no client can flip the switch", async ({ page }) => {
+  /* Sessions purged before the purge wrote markers have none. A rule that
+   * required one from the day it shipped would have refused their
+   * participants' withdrawals — which were accepted the day before — until an
+   * operator ran the backfill, and for a session purged more than 90 days
+   * earlier, for good. So the requirement waits for the switch.
+   *
+   * Every denial here has an ALLOW of the SAME payload at the SAME path by
+   * the same account: the one thing that differs between them is the switch,
+   * or the marker, or the session's `created`. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  const slug = "ws-" + stamp.toLowerCase();
+  const denied = (r) => expect(String(r)).toMatch(/permission[_ ]denied/i);
+  const request = () => ({ research: false, erasure: true, at: Date.now() });
+  const trees = [
+    { label: "default",
+      record: (c) => `withdrawals/${c}/${uid}`,
+      session: (c) => `sessions/${c}`,
+      marker: (c) => `purgedSessions/${c}` },
+    { label: "orgs",
+      record: (c) => `withdrawals/orgs/${slug}/${c}/${uid}`,
+      session: (c) => `orgs/${slug}/sessions/${c}`,
+      marker: (c) => `purgedSessions/orgs/${slug}/${c}` },
+  ];
+  const NOTHING = "WX" + stamp, MARKED = "WM" + stamp, LIVE = "WV" + stamp, LATER = "WZ" + stamp;
+
+  await adminPut(BACKFILL_SWITCH, null);            // this test owns the switch from here
+  try {
+    // ---- OFF: as before this change --------------------------------------
+    expect(await dbReadAsOwner(BACKFILL_SWITCH)).toBeNull();
+    for (const t of trees) {
+      expect(await dbReadAsOwner(t.session(NOTHING)), t.label).toBeNull();
+      expect(await dbReadAsOwner(t.marker(NOTHING)), t.label).toBeNull();
+      expect(await tryWrite(page, t.record(NOTHING), request()),
+        `${t.label}: with the switch off, a code with no session and no marker is accepted`).toBe("ALLOWED");
+      expect(await dbReadAsOwner(`${t.record(NOTHING)}/erasure`)).toBe(true);
+      /* What is NOT behind the switch: the date window, and whose record it is. */
+      denied(await tryWrite(page, t.record(NOTHING), { research: false, erasure: true, at: 1 }));
+      denied(await tryWrite(page, t.record(NOTHING).replace(uid, "someone-else"), request()));
+    }
+
+    // ---- no client can read it, set it or remove it ------------------------
+    denied(await tryWrite(page, BACKFILL_SWITCH, Date.now()));
+    expect(await dbReadAsOwner(BACKFILL_SWITCH), "a client turned the strict rule on").toBeNull();
+    expect((await tryRead(page, BACKFILL_SWITCH)).ok, "a client could read the switch").toBe(false);
+    /* The allow for that write: the same value at the same path, by the one
+       identity that may put it there — what the backfill does with the Admin SDK. */
+    await adminPut(BACKFILL_SWITCH, Date.now());
+    expect(typeof (await dbReadAsOwner(BACKFILL_SWITCH))).toBe("number");
+    denied(await tryWrite(page, BACKFILL_SWITCH, null));
+    expect(typeof (await dbReadAsOwner(BACKFILL_SWITCH)), "a client turned the strict rule off").toBe("number");
+
+    // ---- ON: the same payload at the same path is now refused… -------------
+    for (const t of trees) {
+      denied(await tryWrite(page, t.record(NOTHING), request()));
+      // …and accepted for a code the purge left a marker for,
+      await adminPut(t.marker(MARKED), Date.now() - 40 * 86400000);
+      expect(await dbReadAsOwner(t.session(MARKED)), t.label).toBeNull();
+      expect(await tryWrite(page, t.record(MARKED), request()),
+        `${t.label}: switch on, purge marker`).toBe("ALLOWED");
+      // …and for a session that is in the database.
+      await adminPut(`${t.session(LIVE)}/created`, { at: Date.now(), by: "t" });
+      expect(await tryWrite(page, t.record(LIVE), request()),
+        `${t.label}: switch on, session created`).toBe("ALLOWED");
+    }
+
+    // ---- OFF again: it is the switch, and nothing else, that refused -------
+    await adminPut(BACKFILL_SWITCH, null);
+    for (const t of trees) {
+      expect(await tryWrite(page, t.record(NOTHING), request()),
+        `${t.label}: the write refused a moment ago, with the switch removed`).toBe("ALLOWED");
+      expect(await tryWrite(page, t.record(LATER), request())).toBe("ALLOWED");
+    }
+  } finally {
+    await adminPut(BACKFILL_SWITCH, null);
+  }
+});
+
+test.describe("with the marker backfill done (the strict withdrawal rule on)", () => {
+test.beforeAll(async () => { await adminPut(BACKFILL_SWITCH, Date.now()); });
+test.afterAll(async () => { await adminPut(BACKFILL_SWITCH, null); });
+
+test("rules: a withdrawal can only name a session that was created or was purged, and cannot be back-dated", async ({ page }) => {
+  /* DPA Annex VI G12. Until 2026-10-07 the write looked at the uid and nothing
+   * else: any signed-in visitor — this page is an ANONYMOUS one — could record
+   * an erasure request for a code that never existed, with whatever date it
+   * liked, and the daily data-rights monitor counted it. One write with `at: 1`
+   * turned that job red on its next run.
+   *
+   * ONCE THE MARKER BACKFILL HAS RUN — the `describe` around this test puts
+   * the switch on; the test above shows the rule with it off — the rule wants
+   * the session in the database, or the marker the nightly
+   * purge leaves when it removes one (`purgedSessions/<code>`, Admin-written).
+   * Every denial below is paired with an ALLOW of the SAME payload, so a denial
+   * cannot be the node being unwritable, the payload being malformed, or the
+   * clock: the only thing that changes between the two is the fact under test. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  const LIVE = "WL" + stamp, PURGED = "WP" + stamp, NEVER = "WN" + stamp;
+  const slug = "wd-" + stamp.toLowerCase();
+  const denied = (r) => expect(String(r)).toMatch(/permission[_ ]denied/i);
+  const request = () => ({ research: false, erasure: true, at: Date.now() });
+
+  // ---- default tree ------------------------------------------------------
+  await adminPut(`sessions/${LIVE}/created`, { at: Date.now(), by: "t" });
+  await adminPut(`purgedSessions/${PURGED}`, Date.now() - 40 * 86400000);
+  expect(await dbReadAsOwner(`sessions/${PURGED}`), "the purged session must really be absent").toBeNull();
+  expect(await dbReadAsOwner(`sessions/${NEVER}`)).toBeNull();
+  expect(await dbReadAsOwner(`purgedSessions/${NEVER}`)).toBeNull();
+
+  denied(await tryWrite(page, `withdrawals/${NEVER}/${uid}`, request()));
+  expect(await dbReadAsOwner(`withdrawals/${NEVER}`), "the denied write must have left nothing").toBeNull();
+  expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, request()),
+    "the same payload, for a session that exists").toBe("ALLOWED");
+  expect(await tryWrite(page, `withdrawals/${PURGED}/${uid}`, request()),
+    "the same payload, for a session that was purged — the route the account dialog's history row is for")
+    .toBe("ALLOWED");
+  expect(await dbReadAsOwner(`withdrawals/${PURGED}/${uid}/erasure`)).toBe(true);
+
+  // The marker is the permission, so no client may touch it — or read it.
+  denied(await tryWrite(page, `purgedSessions/${NEVER}`, Date.now()));
+  expect(await dbReadAsOwner(`purgedSessions/${NEVER}`)).toBeNull();
+  denied(await tryWrite(page, `purgedSessions/${PURGED}`, null));
+  expect(typeof (await dbReadAsOwner(`purgedSessions/${PURGED}`)),
+    "a client deleted the marker").toBe("number");
+  const peek = await tryRead(page, `purgedSessions/${PURGED}`);
+  expect(peek.ok, "a client could read the list of purged sessions").toBe(false);
+
+  /* `users/<uid>/history/<code>` is NOT evidence, and must not become the
+     rule's evidence: it is writable by its owner. Shown rather than assumed —
+     the row is accepted, and the withdrawal it would "justify" is still denied. */
+  expect(await tryWrite(page, `users/${uid}/history/${NEVER}`, { code: NEVER, joinedAt: Date.now() }))
+    .toBe("ALLOWED");
+  denied(await tryWrite(page, `withdrawals/${NEVER}/${uid}`, request()));
+
+  /* Nor is "something exists under this code". The first version of the rule
+     tested the session node itself — and any signed-in visitor can write their
+     own membership row under ANY code, created or not. That write is accepted
+     here (so the next denial is not the node being unwritable), the node now
+     exists, and the withdrawal is still refused: the rule looks at `created`. */
+  expect(await tryWrite(page, `sessions/${NEVER}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  expect(await dbReadAsOwner(`sessions/${NEVER}`), "the code now has something under it").not.toBeNull();
+  expect(await dbReadAsOwner(`sessions/${NEVER}/created`)).toBeNull();
+  denied(await tryWrite(page, `withdrawals/${NEVER}/${uid}`, request()));
+  expect(await dbReadAsOwner(`withdrawals/${NEVER}`)).toBeNull();
+
+  // ---- the date ----------------------------------------------------------
+  const backdated = (ms) => ({ research: false, erasure: true, at: Date.now() - ms });
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, { research: false, erasure: true, at: 1 }));
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(2 * 86400000)));
+  expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(60000)),
+    "a device clock a minute slow must still be able to withdraw").toBe("ALLOWED");
+  /* ...and one a couple of seconds FAST. The rule said `<= now` with no
+     tolerance, alone among the timestamp rules, so this write was refused and
+     the participant was told the withdrawal could not be recorded. */
+  expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(-2000)),
+    "a device clock two seconds fast must still be able to withdraw").toBe("ALLOWED");
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(-3600000)));
+  /* The date cannot be removed on its own either: the record needs both
+     fields, and a write to one child is judged against the whole record. */
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, null));
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, 1));
+  /* The allow for those two: the same child, written with a date the rule
+     accepts — so they were refused for the value, not because one field of the
+     record cannot be written on its own. */
+  expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, Date.now())).toBe("ALLOWED");
+  const stored = await dbReadAsOwner(`withdrawals/${LIVE}/${uid}/at`);
+  expect(Math.abs(Date.now() - stored), "the stored date is the last ALLOWED one, not a refused one")
+    .toBeLessThan(10 * 60000);
+
+  // ---- org tree: the same four facts, and the trees do not vouch for each other
+  const orgRecord = (code) => `withdrawals/orgs/${slug}/${code}/${uid}`;
+  denied(await tryWrite(page, orgRecord(NEVER), request()));
+  // The membership row is no more a session here than in the default tree.
+  expect(await tryWrite(page, `orgs/${slug}/sessions/${NEVER}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  denied(await tryWrite(page, orgRecord(NEVER), request()));
+  /* The default tree HAS this session and this marker. If the org rule read
+     either, these would be allowed — a mis-copied prefix fails OPEN. */
+  denied(await tryWrite(page, orgRecord(LIVE), request()));
+  denied(await tryWrite(page, orgRecord(PURGED), request()));
+
+  await adminPut(`orgs/${slug}/sessions/${LIVE}/created`, { at: Date.now(), by: "t" });
+  await adminPut(`purgedSessions/orgs/${slug}/${PURGED}`, Date.now() - 40 * 86400000);
+  expect(await tryWrite(page, orgRecord(LIVE), request())).toBe("ALLOWED");
+  expect(await tryWrite(page, orgRecord(PURGED), request())).toBe("ALLOWED");
+  denied(await tryWrite(page, orgRecord(LIVE), { research: false, erasure: true, at: 1 }));
+  denied(await tryWrite(page, orgRecord(NEVER), request()));
+
+  /* ...and the other way round: an ORG marker opens nothing in the default tree. */
+  const ORG_ONLY = "WO" + stamp;
+  await adminPut(`purgedSessions/orgs/${slug}/${ORG_ONLY}`, Date.now());
+  denied(await tryWrite(page, `withdrawals/${ORG_ONLY}/${uid}`, request()));
+  expect(await tryWrite(page, orgRecord(ORG_ONLY), request())).toBe("ALLOWED");
+});
+});   // end: with the marker backfill done
+
+test("rules: an old withdrawal cannot be turned into a request that is already overdue", async ({ page }) => {
+  /* Review finding B2 on #437. The window on `at` (a day back, five seconds
+   * ahead) sat on the `at` child alone, and a `.validate` runs for the node
+   * written and its ancestors — never for a sibling. So `…/erasure = true`,
+   * written on its own, was judged without anyone looking at the date: a bare
+   * withdrawal from day 0, which the monitor ignores, became on day 40 an
+   * erasure request that was 40 days old the first time it could be seen. One
+   * write, and the monitor is red for a request that was never open.
+   *
+   * The window is now on the record. The old record is SEEDED by the owner —
+   * the rule rightly refuses a client that date, which is the whole point —
+   * and everything after it goes through the page and the real rules. Each
+   * denial is followed by an ALLOW of the same payload at the same child of a
+   * record that differs in one thing: its date. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  const OLD = "WB" + stamp, FRESH = "WF" + stamp;
+  const slug = "wb-" + stamp.toLowerCase();
+  const DAY = 86400000;
+  const denied = (r) => expect(String(r)).toMatch(/permission[_ ]denied/i);
+  const trees = [
+    { label: "default", session: (c) => `sessions/${c}`, record: (c) => `withdrawals/${c}/${uid}` },
+    { label: "orgs", session: (c) => `orgs/${slug}/sessions/${c}`, record: (c) => `withdrawals/orgs/${slug}/${c}/${uid}` },
+  ];
+
+  for (const t of trees) {
+    await adminPut(`${t.session(OLD)}/created`, { at: Date.now(), by: "t" });
+    await adminPut(`${t.session(FRESH)}/created`, { at: Date.now(), by: "t" });
+    const oldAt = Date.now() - 40 * DAY;
+    await adminPut(t.record(OLD), { research: false, at: oldAt });
+
+    // One field, on its own, on the old record.
+    denied(await tryWrite(page, `${t.record(OLD)}/erasure`, true));
+    expect(await dbReadAsOwner(t.record(OLD)), `${t.label}: the denied write must have changed nothing`)
+      .toEqual({ research: false, at: oldAt });
+
+    // The same field, the same value, on a record that carries today's date.
+    expect(await tryWrite(page, t.record(FRESH), { research: false, at: Date.now() }),
+      `${t.label}: a bare withdrawal, as the client writes it`).toBe("ALLOWED");
+    expect(await tryWrite(page, `${t.record(FRESH)}/erasure`, true),
+      `${t.label}: the same one-field write, on a record dated today`).toBe("ALLOWED");
+    expect(await dbReadAsOwner(`${t.record(FRESH)}/erasure`)).toBe(true);
+
+    // No other single field gets past the old date either.
+    denied(await tryWrite(page, `${t.record(OLD)}/research`, false));
+    expect(await tryWrite(page, `${t.record(FRESH)}/research`, false)).toBe("ALLOWED");
+
+    /* And the old record is not stuck. What the client really does — the whole
+       record, dated now — is accepted, and the request then starts its 30 days
+       today, which is when it was made. */
+    expect(await tryWrite(page, t.record(OLD), { research: false, erasure: true, at: Date.now() }),
+      `${t.label}: asking for erasure on an old withdrawal, the way the client does`).toBe("ALLOWED");
+    const after = await dbReadAsOwner(t.record(OLD));
+    expect(after.erasure).toBe(true);
+    expect(Math.abs(Date.now() - after.at), `${t.label}: the request is dated when it was made`)
+      .toBeLessThan(10 * 60000);
+  }
+});
+
+test("rules: a listing of integer keys is still a listing (what ?shallow=true returns)", async ({ page }) => {
+  /* The retention purge, the data-rights monitor and the marker backfill list
+   * sessions over REST with `?shallow=true`, and the reader threw on anything
+   * but an object. RTDB renders a node keyed 0, 1, 2… as an ARRAY over REST;
+   * whether a shallow listing does too was not established when #437 was
+   * reviewed. If it does, one write by any signed-in visitor — the membership
+   * row below — stopped all three jobs until somebody removed the node.
+   *
+   * This asserts what matters, and it holds for either shape: the reader the
+   * jobs use gets the keys. The shape itself is printed, because that is the
+   * open question — and note what it answers: what the EMULATOR does. The
+   * production REST API is not reachable from here. */
+  const { shallowKeysOf } = require("../../scripts/lib/session-trees");
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const slug = "sk-" + Date.now().toString(36).slice(-5);
+  const listing = async (path, shallow) => {
+    const res = await fetch(`${EMU_DB_REST}/${path}.json?ns=${EMU_NS}${shallow ? "&shallow=true" : ""}`,
+      { headers: { "Authorization": "Bearer owner" } });
+    if (!res.ok) throw new Error(`listing -> ${res.status}`);
+    return res.json();
+  };
+  const shape = (v) => (Array.isArray(v) ? "array" : v === null ? "null" : typeof v);
+
+  // The visitor's one write: their own membership row, under a code they chose.
+  const dense = `orgs/${slug}/sessions`;
+  expect(await tryWrite(page, `${dense}/0/members/${uid}`, { at: Date.now() })).toBe("ALLOWED");
+  const one = await listing(dense, true);
+  expect(shallowKeysOf(one, dense)).toEqual(["0"]);
+
+  await adminPut(`${dense}/1/created`, { at: Date.now(), by: "t" });
+  await adminPut(`${dense}/2/created`, { at: Date.now(), by: "t" });
+  const three = await listing(dense, true);
+  expect(shallowKeysOf(three, dense).sort()).toEqual(["0", "1", "2"]);
+
+  // With a gap: the shape an array would need a null for.
+  const gapped = `orgs/${slug}-g/sessions`;
+  await adminPut(`${gapped}/0/created`, { at: Date.now(), by: "t" });
+  await adminPut(`${gapped}/2/created`, { at: Date.now(), by: "t" });
+  const two = await listing(gapped, true);
+  expect(shallowKeysOf(two, gapped).sort()).toEqual(["0", "2"]);
+
+  /* The slug level is listed the same way, and a slug can be an integer too. */
+  const slugs = shallowKeysOf(await listing("orgs", true), "orgs");
+  expect(slugs).toContain(slug);
+
+  const deep = await listing(dense, false);
+  const line = `shallow listing of integer keys: one key -> ${shape(one)}, three keys -> ${shape(three)}, ` +
+    `gapped -> ${shape(two)}; the same node read whole -> ${shape(deep)}`;
+  test.info().annotations.push({ type: "emulator-shallow-shape", description: line });
+  console.log(line);
+});
+
 test("rules: the roomChat author index records who spoke and is unreadable by everyone", async ({ page, browser }) => {
   /* Annex VI G12's roomChat limb. Two properties, and they pull against each
    * other — which is why the index is a separate tree rather than a field on

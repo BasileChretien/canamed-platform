@@ -308,8 +308,16 @@ test("account deletion removes the profile, the authored scenarios and their pub
  *
  * It needs the emulator because the claim is about the RULES: that
  * `withdrawals/<code>/<uid>` accepts the write when `sessions/<code>` no longer
- * exists. (Withdrawal on a session that is closed but still present, and the
- * denial for another participant's uid, are in rules-smoke.spec.js.)
+ * exists. NO PURGE MARKER IS SEEDED HERE, on purpose: this is a session
+ * purged before the purge wrote markers, in a database where the marker
+ * backfill has not been run — production's state from the merge of the
+ * session-or-marker rule until an operator runs
+ * scripts/backfill-purged-markers.js. That rule is behind a switch the
+ * backfill sets, so this click is accepted exactly as it was before the rule
+ * existed. (The rule with the switch on and off, the denial for a code that
+ * never existed with its paired allows, withdrawal on a session that is
+ * closed but still present, and the denial for another participant's uid are
+ * in rules-smoke.spec.js.)
  *
  * WHAT THIS PROVES, AND WHAT IT DOES NOT. A record that lands is not a request
  * that is acted on. The first version of this test stopped at "the record is
@@ -319,9 +327,12 @@ test("account deletion removes the profile, the authored scenarios and their pub
  * the test now also hands the database it produced to the monitor's own queue
  * function and requires the request to be in it.
  *
- * It still does NOT show the request being carried out: for a purged session
- * nothing in the tooling can close it, and the record has no end of life (DPA
- * Annex VI, G12). The title says what is proven and no more.
+ * It still does NOT show the request being carried out. That is an operator's
+ * act — scripts/erase-participant.js, which for a purged session writes the
+ * suppression record and wants the operator's word on the research copy — and
+ * it is covered where it can be run for real: tests/erase-purged-session.test.js
+ * and tests/withdrawal-retention.test.js. The title says what is proven here
+ * and no more.
  */
 test("a withdrawal made from the front page for a purged session is recorded, and the erasure monitor's queue sees it", async ({ page }) => {
   const stamp = Date.now().toString(36) + Math.floor(Math.random() * 1e4);
@@ -341,10 +352,15 @@ test("a withdrawal made from the front page for a purged session is recorded, an
   expect(uid).not.toBe(anonUid);
   await expect(page.locator("#splash-view-profile-setup")).toBeVisible({ timeout: 20_000 });
 
-  // What a past session leaves on the account once the session itself is gone.
+  // What a past session leaves on the account once the session itself is
+  // gone. No purge marker and no backfill switch: see the header.
   expect(await tryWrite(page, `users/${uid}/history/${CODE}`, { code: CODE, joinedAt: Date.now() }))
     .toBe("ALLOWED");
   const record = `withdrawals/${CODE}/${uid}`;
+  expect(await dbReadAsOwner(`purgedSessions/${CODE}`),
+    "positive control: the purge left no marker for it").toBeNull();
+  expect(await dbReadAsOwner("ops/purgedMarkersBackfilledAt"),
+    "positive control: the marker backfill has not been run, so the strict rule is off").toBeNull();
   expect(await dbReadAsOwner(`sessions/${CODE}`),
     "positive control: the session is not in the database").toBeNull();
   expect(await dbReadAsOwner(record),

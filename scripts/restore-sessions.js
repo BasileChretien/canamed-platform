@@ -37,6 +37,7 @@ const { initializeApp, cert, getApps } = require("firebase-admin/app");
 const { getDatabase } = require("firebase-admin/database");
 
 const { applySuppression } = require("./lib/suppression");
+const { locationForKey } = require("./lib/session-trees");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
   || "https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app";
@@ -144,16 +145,15 @@ async function main() {
     process.exit(0);
   }
 
-  /* The location key IS the path minus the tree prefix; rebuild it the same way
-     session-trees does rather than parsing the key, so a restore cannot invent
-     a path shape the rest of the system does not use. */
+  /* The path comes from session-trees' own builder, so a restore cannot invent
+     a shape the rest of the system does not use. Until 2026-10-07 it was
+     rebuilt here by splitting the key — and an organisation key is
+     "orgs/<slug>/<code>", whose FIRST segment is the literal "orgs": every
+     organisation session was restored to orgs/orgs/sessions/<slug>/<code>,
+     which nothing reads. Nothing had ever restored one. */
   const updates = {};
   for (const k of keys) {
-    const isOrg = k.includes("/");
-    const path = isOrg
-      ? `orgs/${k.split("/")[0]}/sessions/${k.split("/").slice(1).join("/")}`
-      : `sessions/${k}`;
-    updates[path] = clean.sessions[k];
+    updates[locationForKey(k).path] = clean.sessions[k];
   }
   await db.ref().update(updates);
   console.log(`RESTORED ${keys.length} session(s), with ${removed} erased path(s) withheld.`);

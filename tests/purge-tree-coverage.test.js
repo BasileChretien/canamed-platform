@@ -119,7 +119,14 @@ const ACKNOWLEDGED = {
    NONE TODAY. An entry relaxes the check for that rule path from "this exact
    path is deleted" to "something under it is", so it must say what stays, why,
    and what deals with the survivors afterwards. */
-const DECIDED_PER_RECORD = {};
+const DECIDED_PER_RECORD = {
+  "withdrawals/$sessionId":
+    "An erasure request nobody has answered yet stays when its session is purged, " +
+    "so the data-rights monitor keeps counting it; every other record goes. A " +
+    "survivor is removed by sweepWithdrawals() once it has been answered " +
+    "(scripts/lib/withdrawal-retention.js).",
+  "withdrawals/orgs/$orgSlug/$sessionId": "As the default tree's."
+};
 
 /* Top-level trees in which the derivation finds no session key at any depth,
    each with what it is. A tree absent from here AND yielding nothing fails —
@@ -136,7 +143,11 @@ const NO_SESSION_KEY_IN_RULES = {
   sharedScenarios: "published scenarios, keyed by share id",
   moderators: "an admin-only allowlist of uids",
   reports: "moderation reports, keyed by share id and then by the reporter's uid",
-  moderation: "takedown tombstones, keyed by share id"
+  moderation: "takedown tombstones, keyed by share id",
+  purgedSessions: "PER-SESSION, and invisible to the derivation: admin-only, with no " +
+    "child rules. A session code and a date, WRITTEN by the purge in the same update " +
+    "that deletes the session, and expired by sweepWithdrawals() after " +
+    "CLEANUP_RETENTION_PURGED_MARKER_DAYS."
 };
 
 /* ── derivation ──────────────────────────────────────────────────────── */
