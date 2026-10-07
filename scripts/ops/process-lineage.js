@@ -1,0 +1,291 @@
+/* scripts/ops/process-lineage.js — which processes did THIS run start?
+ *
+ * WHY THIS EXISTS. The emulator-backed entry points (run-rules-e2e.js,
+ * sim/sim-with-emulator.js) free the emulator ports when they finish, because
+ * the RTDB emulator is a Java grandchild that outlives its parents on Windows.
+ * To decide what they might kill they used to record every PID they SAW
+ * listening on those ports while their own child was running, and called that
+ * ownership. It is not: the ports are fixed (9000/9099) and shared by every
+ * checkout on the machine, so what a run sees there can be another run's
+ * emulator. On 2026-10-07 two sessions ran the rules suite at overlapping
+ * times; each lost the race for :9000 to the other, "observed" the other's
+ * java.exe on it, and killed it in its own sweep — a live emulator, mid-suite,
+ * reported as "emulators:exec left 1 listener(s) behind; freed them".
+ *
+ * Ownership is LINEAGE. A process is this run's when it descends from the
+ * child this run spawned, and that is the only thing this module will say
+ * "ours" about.
+ *
+ * THE RULES, each of which is here because the obvious version is wrong:
+ *
+ *   - Lineage is established WHILE THE CHILD IS ALIVE, never afterwards. The
+ *     survivor the sweep is for is, by the time the sweep runs, an orphan: on
+ *     Windows its ParentProcessId names a process that no longer exists, and
+ *     on POSIX it has been re-parented to init. Walked at sweep time, the
+ *     chain is broken for the very process that most needs identifying. So
+ *     the callers poll during the run and the verdicts are remembered.
+ *   - A link is believed only when the whole chain is alive in ONE snapshot.
+ *     Windows never updates ParentProcessId, so it can name a PID that has
+ *     since been handed to an unrelated process. A "parent" younger than its
+ *     child is therefore not its parent, and the chain stops there.
+ *   - The root must be OUR child in that same snapshot (its parent is this
+ *     process). Once the child has gone its PID can be reused too.
+ *   - A remembered verdict names a process, not a number: it carries the
+ *     creation time, and the sweep re-reads it before killing. A PID that now
+ *     belongs to something else is not ours any more.
+ *   - Whatever cannot be shown is NOT ours. No table, no chain, an unreadable
+ *     creation time, a listener first seen after the child died — all of these
+ *     end in "unproven", which the callers report with the command to clear it
+ *     by hand and never kill. The failure this trades for is the old one, a
+ *     leftover emulator on the port, and the next run's preflight names that.
+ *
+ * `emulator-ports.js free` (the operator's explicit verb) does not use this:
+ * there the operator is the authority.
+ */
+"use strict";
+
+const { execFileSync } = require("child_process");
+
+const IS_WIN = process.platform === "win32";
+const BORN_UNKNOWN = "0";
+const SNAPSHOT_TIMEOUT_MS = 30000;
+/* Snapshots spent on one PID without an answer before it is left "unproven".
+   A snapshot is not cheap on Windows (see below); a PID that keeps eluding it
+   must not turn the poll into a busy loop for the length of the suite. */
+const MAX_LOOKUPS = 3;
+
+/* One line per process: "<pid> <ppid> <creation time>".
+ *
+ * Windows: Get-CimInstance, because `wmic` is no longer installed by default
+ * (absent on the machine this was written on). The creation time is printed
+ * as a FILETIME integer: locale-free, and comparable. System (PID 4) and the
+ * idle process have none, hence the 0.
+ *
+ * MEASURED, because the obvious optimisation is a pessimisation. For ~900
+ * processes this takes 1.5 s on an idle machine (0.6 s of it PowerShell
+ * starting) and 5–15 s on one at 97% CPU, which is what a machine running
+ * several sessions' suites looks like. Asking for just the PIDs of interest
+ * and walking up (`-Filter 'ProcessId = n'`, one hop at a time) is SLOWER:
+ * each keyed lookup costs about as much as the whole enumeration — 19 s for an
+ * 8-hop chain against 5 s for the full table, same machine, same minute. So
+ * the whole table is read, the three columns are named so the provider skips
+ * CommandLine and the rest, and the callers take as few snapshots as they can:
+ * one per new listener, and one at the sweep only when something needs it. */
+const WIN_QUERY =
+  "Get-CimInstance -Query 'SELECT ProcessId, ParentProcessId, CreationDate " +
+  "FROM Win32_Process' | ForEach-Object { $born = 0; " +
+  "if ($_.CreationDate) { $born = $_.CreationDate.ToFileTimeUtc() }; " +
+  "'{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, $born }";
+/* POSIX: one -o per column — `-o pid=,ppid=` reads as a column TITLE on BSD
+   ps (macOS). lstart is used as an identity only, never compared: POSIX
+   re-parents an orphan, so a ppid there never names a dead process and the
+   younger-parent check below has nothing to catch. */
+const POSIX_PS = ["-A", "-o", "pid=", "-o", "ppid=", "-o", "lstart="];
+
+/* Map of pid → { pid, ppid, born }, all strings. */
+function parseProcessTable(text) {
+  const table = new Map();
+  for (const line of String(text).split(/\r?\n/)) {
+    const m = /^\s*(\d+)\s+(\d+)\s+(\S.*?)\s*$/.exec(line);
+    if (m) table.set(m[1], { pid: m[1], ppid: m[2], born: m[3] });
+  }
+  return table;
+}
+
+/* A snapshot of every process on the machine. THROWS when it cannot be had —
+   the callers turn that into "unproven", and must never read it as "nothing
+   descends from us" or "everything does". */
+function processTable() {
+  let out;
+  try {
+    out = IS_WIN
+      ? execFileSync("powershell.exe",
+          ["-NoProfile", "-NonInteractive", "-Command", WIN_QUERY],
+          { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+            windowsHide: true, timeout: SNAPSHOT_TIMEOUT_MS })
+      : execFileSync("ps", POSIX_PS,
+          { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"],
+            timeout: SNAPSHOT_TIMEOUT_MS,
+            env: Object.assign({}, process.env, { LC_ALL: "C" }) });
+  } catch (e) {
+    const tool = IS_WIN ? "powershell.exe" : "ps";
+    const why = (e && e.code === "ENOENT")
+      ? tool + " is not on PATH"
+      : String((e && e.message) || e).split("\n")[0];
+    throw new Error("cannot read the process table (" + why + ")");
+  }
+  const table = parseProcessTable(out);
+  /* A table that does not list the process reading it is not a table. Without
+     this an empty or garbled answer would make every listener "not ours". */
+  if (!table.has(String(process.pid))) {
+    throw new Error("cannot read the process table (it does not list this " +
+      "process — the output was not what was asked for)");
+  }
+  return table;
+}
+
+/* True when `a` was created strictly before `b` — and false whenever that
+   cannot be said (an unknown or non-numeric creation time). */
+function olderThan(a, b) {
+  const numeric = /^[1-9]\d*$/;
+  return numeric.test(a.born) && numeric.test(b.born) &&
+    BigInt(a.born) < BigInt(b.born);
+}
+
+/* Does `pid` descend from `rootPid` (or is it the root), by an unbroken chain
+   of processes all present in `table`? */
+function descendsFrom(table, pid, rootPid) {
+  const root = String(rootPid);
+  const seen = new Set();
+  let cur = table.get(String(pid));
+  while (cur && !seen.has(cur.pid)) {          // PID 0 is its own parent on Windows
+    if (cur.pid === root) return true;
+    seen.add(cur.pid);
+    const parent = table.get(cur.ppid);
+    /* No parent: the chain is broken. A parent younger than its child: the
+       PID was reused, and that process never spawned this one. */
+    if (!parent || olderThan(cur, parent)) return false;
+    cur = parent;
+  }
+  return false;
+}
+
+/* Creation time as ms since the Unix epoch, or null. A FILETIME counts 100 ns
+   ticks from 1601; lstart ("Wed Oct  7 12:34:56 2026", C locale) is local time
+   to the second. */
+const FILETIME_TO_UNIX_MS = 11644473600000n;
+function bornMs(proc) {
+  if (/^[1-9]\d*$/.test(proc.born)) {
+    return Number(BigInt(proc.born) / 10000n - FILETIME_TO_UNIX_MS);
+  }
+  const t = Date.parse(proc.born);
+  return Number.isNaN(t) ? null : t;
+}
+
+/* lstart is whole seconds, and Date.now() and the kernel's clock are read at
+   different instants; a process is "older than the run" only by a margin
+   neither of those can produce. */
+const BORN_SLACK_MS = 2000;
+
+/* Can `pid` be shown NOT to come from a child spawned at `spawnedAtMs`?
+ *
+ * This is for the sweep, when the child is gone and descendsFrom() can no
+ * longer answer. It never makes anything kill-eligible — it only lets the
+ * report say "another run's" instead of "could not be shown".
+ *
+ * A process created before the child was spawned cannot descend from it. And
+ * where parent links are never rewritten (Windows: opts.followParents), the
+ * same holds for anything hanging, by an unbroken live chain, off such a
+ * process: had it descended from our child, the chain would have had to pass
+ * THROUGH the child before reaching anything older — and the child is dead, so
+ * the chain would have stopped there. On POSIX an orphan is re-parented to
+ * init, which is older than everything, so only the process itself is judged. */
+function predatesSpawn(table, pid, spawnedAtMs, opts) {
+  const followParents = opts && "followParents" in opts ? opts.followParents : IS_WIN;
+  const cutoff = spawnedAtMs - BORN_SLACK_MS;
+  const seen = new Set();
+  let cur = table.get(String(pid));
+  while (cur && !seen.has(cur.pid)) {
+    const t = bornMs(cur);
+    if (t !== null && t < cutoff) return true;
+    if (!followParents) return false;
+    seen.add(cur.pid);
+    const parent = table.get(cur.ppid);
+    if (!parent || olderThan(cur, parent)) return false;
+    cur = parent;
+  }
+  return false;
+}
+
+/* Follow one spawned child for the length of a run.
+ *
+ *   observe(pids)    — call while the child is alive, with the PIDs currently
+ *                      listening on the run's ports. Takes a snapshot only
+ *                      when one of them has no verdict yet.
+ *   verdict(pid)     — "ours" | "not-ours" | null (never examined).
+ *   partition(rows)  — call from the sweep, AFTER the child has exited, with
+ *                      the surviving [{ port, pid, … }] rows:
+ *                        mine      shown to descend from the child, and still
+ *                                  the same process — the only kill-eligible set
+ *                        notMine   shown NOT to: examined during the run and
+ *                                  found outside the child's tree, or older
+ *                                  than the child (predatesSpawn)
+ *                        unproven  alive, and nothing can be shown either way
+ *                        gone      no longer running by the time we looked
+ *   problem()        — why the last snapshot failed, or null.
+ *
+ * opts.spawnedAt — Date.now() taken just BEFORE the child was spawned.
+ * opts.snapshot / selfPid / followParents exist for the tests.
+ */
+function track(rootPid, opts) {
+  const root = String(rootPid);
+  const self = String((opts && opts.selfPid) || process.pid);
+  const snapshot = (opts && opts.snapshot) || processTable;
+  const spawnedAt = opts && typeof opts.spawnedAt === "number" ? opts.spawnedAt : null;
+  const ours = new Map();        // pid → born
+  const notOurs = new Map();     // pid → born
+  const lookups = new Map();     // pid → snapshots that gave no answer
+  let lastProblem = null;
+
+  function read() {
+    try {
+      const table = snapshot();
+      lastProblem = null;
+      return table;
+    } catch (e) {
+      lastProblem = String((e && e.message) || e);
+      return null;
+    }
+  }
+  const miss = (pid) => lookups.set(pid, (lookups.get(pid) || 0) + 1);
+
+  function observe(pids) {
+    const pending = [...new Set([...pids].map(String))].filter((pid) =>
+      !ours.has(pid) && !notOurs.has(pid) && (lookups.get(pid) || 0) < MAX_LOOKUPS);
+    if (!pending.length) return;
+    const table = read();
+    if (!table) { pending.forEach(miss); return; }
+    const child = table.get(root);
+    /* The child has gone (or its PID is someone else's now). Nothing can be
+       shown from here on, in either direction. */
+    if (!child || child.ppid !== self) return;
+    for (const pid of pending) {
+      const proc = table.get(pid);
+      if (!proc || proc.born === BORN_UNKNOWN) { miss(pid); continue; }
+      (descendsFrom(table, pid, root) ? ours : notOurs).set(pid, proc.born);
+    }
+  }
+
+  function verdict(pid) {
+    if (ours.has(String(pid))) return "ours";
+    if (notOurs.has(String(pid))) return "not-ours";
+    return null;
+  }
+
+  function partition(rows) {
+    const out = { mine: [], notMine: [], unproven: [], gone: [] };
+    /* A survivor already known not to be ours needs no second look — and in
+       the lost race for the ports that is every survivor, so the report is
+       not held up by another snapshot. */
+    const table = rows.some((r) => !notOurs.has(String(r.pid))) ? read() : null;
+    for (const row of rows) {
+      const pid = String(row.pid);
+      const proc = table && table.get(pid);
+      if (notOurs.has(pid)) out.notMine.push(row);
+      /* Listed a moment ago and absent from a table that was read: it died in
+         between (a tree-kill still landing). Not a survivor, so not a report. */
+      else if (table && !proc) out.gone.push(row);
+      else if (proc && ours.has(pid) && ours.get(pid) === proc.born) out.mine.push(row);
+      else if (proc && spawnedAt !== null && predatesSpawn(table, pid, spawnedAt, opts)) {
+        out.notMine.push(row);
+      } else out.unproven.push(row);
+    }
+    return out;
+  }
+
+  return { observe, verdict, partition, problem: () => lastProblem };
+}
+
+module.exports = {
+  parseProcessTable, processTable, descendsFrom, predatesSpawn, track, BORN_UNKNOWN
+};

@@ -25,13 +25,42 @@
  *      like a rules failure.
  *
  * So: check first (naming any squatter and refusing to guess), run, and free
- * the emulator ports whatever the outcome. The sweep is OWNERSHIP-SCOPED — it
- * kills only PIDs observed listening on the emulator ports while our own child
- * was running, because a preflight proves the port state at one instant and an
- * unrelated process could bind :9000 afterwards; anything else on those ports
- * is reported with a manual command, never killed. It also only ever runs
- * AFTER the child has exited (a signal to this runner forwards to the child
- * and waits first) — it is a survivor sweep, not a kill switch.
+ * what THIS RUN left on the emulator ports, whatever the outcome.
+ *
+ * THE SWEEP KILLS BY LINEAGE, NEVER BY PORT. It frees a listener only when
+ * that process was SHOWN — while our own child was still alive — to descend
+ * from the child this runner spawned (npx → node → java on Windows), and is
+ * still that same process when the sweep runs (process-lineage.js does the
+ * showing). Any other listener on those ports is reported, with the command to
+ * clear it by hand, and left alone. It also only ever runs AFTER the child has
+ * exited (a signal to this runner forwards to the child and waits first) — it
+ * is a survivor sweep, not a kill switch.
+ *
+ * That rule is the repair of a FOURTH defect, which the sweep itself brought in:
+ *
+ *   4. TWO RUNS AT ONCE (2026-10-07). This header used to call the sweep
+ *      "OWNERSHIP-SCOPED — it kills only PIDs observed listening on the
+ *      emulator ports while our own child was running". Observing a process on
+ *      a port is not having started it. Several sessions work in this
+ *      repository at once, each in its own worktree, all on the same two
+ *      ports: run A passed its preflight, run B's emulator bound :9000 before
+ *      A's `emulators:exec` got there, A's emulator failed to start — and A's
+ *      poll had meanwhile "observed" B's java.exe on :9000, so A's sweep killed
+ *      it and printed "emulators:exec left 1 listener(s) behind; freed them".
+ *      B then died mid-suite ("Database Emulator has exited with code: 1", or
+ *      every test timing out). Seen in both directions, two sessions each
+ *      retrying and each killing the other.
+ *
+ * THE RULES SUITE CANNOT BE RUN BY TWO SESSIONS AT ONCE. The ports are fixed:
+ * 9000/9099 are hard-coded in tests-e2e/emulator/fixtures.js, so the
+ * SIM_DB_PORT / SIM_AUTH_PORT read below move this runner's CHECKS, not the
+ * emulators. A second run is refused by the preflight. The preflight proves
+ * the port state at one instant, though, and nothing can close the seconds
+ * between it and our emulator binding; a run that loses that race fails to
+ * start ("Port 9000 is not open on 127.0.0.1, could not start Database
+ * Emulator", and "emulator hub unable to start on port 4400, starting on 4401
+ * instead" — the tell-tale that another hub is alive). It then says that
+ * another run holds the ports, exits non-zero, and KILLS NOTHING.
  *
  * Usage:  node scripts/ops/run-rules-e2e.js [extra playwright args...]
  *         PORT=8771 node scripts/ops/run-rules-e2e.js
@@ -44,12 +73,14 @@ const fs = require("fs");
 const os = require("os");
 
 const ports = require("./emulator-ports.js");
+const processLineage = require("./process-lineage.js");
 
 const ROOT = path.resolve(__dirname, "..", "..");
 const DB_PORT = parseInt(process.env.SIM_DB_PORT || "9000", 10);
 const AUTH_PORT = parseInt(process.env.SIM_AUTH_PORT || "9099", 10);
 const WEB_PORT = parseInt(process.env.PORT || "8765", 10);
 const EMU_PORTS = [DB_PORT, AUTH_PORT];
+const OWNERSHIP_POLL_MS = 2000;
 
 /* Resolve the firebase CLI.
  *
@@ -100,7 +131,8 @@ if (held.length) {
   fatal(
     "rules-e2e: FATAL — a port this run needs is already in use:\n" +
     ports.describe(held) + "\n\n" +
-    "Emulator ports (" + EMU_PORTS.join(", ") + "): a stale listener makes the\n" +
+    ports.LIVE_RUN_CAVEAT + "\n\n" +
+    "Emulator ports (" + EMU_PORTS.join(", ") + "): a STALE listener makes the\n" +
     "readiness probe succeed against the WRONG emulator, so the suite either\n" +
     "validates the previous run's rules or times out looking like an\n" +
     "environment fault.\n" +
@@ -109,7 +141,8 @@ if (held.length) {
     "forbids connecting to the emulator, and every test fails on that instead\n" +
     "of on a rule. (AnkiConnect owns 8765 on some machines: re-run with\n" +
     "PORT=8771.)\n\n" +
-    "Clear the emulator ports with:\n  node scripts/ops/emulator-ports.js free\n" +
+    "Only when you know the listener is stale — a leftover from a run that has\n" +
+    "ended — clear the emulator ports with:\n  node scripts/ops/emulator-ports.js free\n" +
     "or, directly:\n  " + ports.clearCommand(held));
 }
 
@@ -184,6 +217,7 @@ function dropTempScript() {
 console.log("rules-e2e: starting emulators (database + auth) and running the suite…");
 const fbCli = firebaseCli();
 console.log("rules-e2e: firebase CLI -> " + fbCli.label);
+const spawnedAt = Date.now();   // BEFORE the spawn: nothing of ours is older
 const child = spawn(fbCli.cmd, fbCli.pre.concat([
   "emulators:exec",
   "--only", "database,auth",
@@ -199,21 +233,77 @@ const child = spawn(fbCli.cmd, fbCli.pre.concat([
 
 /* ── 4. Establish OWNERSHIP while the run is live ─────────────────── */
 /* The preflight proves the port state at one instant. Between then and the
-   sweep an unrelated process could bind :9000, and a sweep that went by port
-   number alone would kill a stranger. So record every PID seen listening on
-   the emulator ports WHILE our child is running: those are the ones this run
-   caused. A survivor not in this set is reported, never killed. */
-const ownedPids = new Set();
-const ownershipPoll = setInterval(() => {
+   sweep another process can bind :9000 — in practice another session's run —
+   and a sweep that went by port number would kill it.
+
+   So ownership is LINEAGE: a listener is ours when it descends from `child`.
+   That has to be settled NOW, while the chain from the listener up to `child`
+   is alive: by the time the sweep runs, the survivor it is for is an orphan
+   whose parent no longer exists, and nothing could be shown about it. Each
+   new listener on the emulator ports is therefore looked up once
+   (process-lineage.js), and the verdict remembered for the sweep.
+
+   What the poll must NOT do is what it did until 2026-10-07: add every PID it
+   sees on the ports to an "owned" set. See defect 4 in the header. */
+const lineage = processLineage.track(child.pid, { spawnedAt });
+const announced = new Set();
+function observeListeners() {
+  let rows;
   try {
-    for (const row of ports.survey(EMU_PORTS)) ownedPids.add(String(row.pid));
-  } catch (e) { /* transient; the sweep reports what it cannot prove */ }
-}, 2000);
+    rows = ports.listeners(EMU_PORTS);
+  } catch (e) {
+    return;   // transient; the sweep reports what it cannot prove
+  }
+  lineage.observe(rows.map((r) => r.pid));
+  for (const row of rows) {
+    const verdict = lineage.verdict(row.pid);
+    const key = row.port + "/" + row.pid;
+    if (!verdict || announced.has(key)) continue;
+    announced.add(key);
+    const who = "PID " + row.pid + " (" + ports.imageName(row.pid) + ")";
+    if (verdict === "ours") {
+      console.log("rules-e2e: :" + row.port + " is this run's own emulator — " + who + ".");
+    } else {
+      /* Said the moment it is seen, so it sits next to the CLI's own "port
+         taken" in the log rather than only in the summary at the end. */
+      console.warn("rules-e2e: WARNING — :" + row.port + " is held by " + who +
+        ", which this run DID NOT START. Another run holds the emulator ports, " +
+        "so this run's own emulator cannot bind them. Nothing will be killed.");
+    }
+  }
+}
+const ownershipPoll = setInterval(observeListeners, OWNERSHIP_POLL_MS);
 ownershipPoll.unref();
 
 /* ── 5. Survivor sweep, whatever happened ─────────────────────────── */
+/* `failed` — our child exited non-zero of its own accord. Together with a
+   listener that is not ours, that is the lost race for the ports, and the
+   report says so in as many words instead of leaving a "port taken" from the
+   CLI to be read as an environment fault. */
+function reportAnotherRun(notMine, freedPids) {
+  let hub = [];
+  try {
+    hub = ports.survey([ports.HUB_PORT]).filter((r) => !freedPids.has(String(r.pid)));
+  } catch (e) { /* the hub is supporting evidence only */ }
+  console.error(
+    "rules-e2e: ANOTHER RUN HOLDS THE EMULATOR PORTS. This run did not start:\n" +
+    ports.describe(notMine) + "\n" +
+    (hub.length
+      ? ports.describe(hub) + "   <- the emulator hub: another emulator is alive\n"
+      : "") +
+    "\nThe ports were free at this run's preflight and were taken before its own\n" +
+    "emulator could bind them. That is what \"Port " + DB_PORT + " is not open … could\n" +
+    "not start Database Emulator\" above means, and \"emulator hub unable to start\n" +
+    "on port 4400, starting on 4401 instead\" is the same tell-tale.\n\n" +
+    "NOTHING WAS KILLED: that listener is another run's emulator, and killing it\n" +
+    "fails that run mid-suite. The rules suite cannot be run by two sessions at once.\n" +
+    "Wait for the other run to end, then run this again — do not retry in a loop.\n\n" +
+    "Only when you know no other run is in progress (the listener is a leftover):\n  " +
+    ports.clearCommand(notMine));
+}
+
 let swept = false;
-function sweep() {
+function sweep(failed) {
   if (swept) return;
   swept = true;
   dropTempScript();
@@ -227,17 +317,31 @@ function sweep() {
     return;
   }
   if (!survivors.length) return;
-  const strangers = survivors.filter((r) => !ownedPids.has(String(r.pid)));
-  const mine = survivors.filter((r) => ownedPids.has(String(r.pid)));
+  const { mine, notMine, unproven } = lineage.partition(survivors);
+  const ownedPids = new Set(mine.map((r) => String(r.pid)));
   if (mine.length) {
     const killed = ports.free(EMU_PORTS, { onlyPids: ownedPids });
     console.log("rules-e2e: emulators:exec left " + killed.length +
       " listener(s) behind; freed them:\n" + ports.describe(killed));
   }
-  if (strangers.length) {
+  if (notMine.length && failed) {
+    reportAnotherRun(notMine, ownedPids);
+  } else if (notMine.length) {
     console.warn("rules-e2e: these listeners were NOT started by this run, so " +
-      "they were left alone:\n" + ports.describe(strangers) +
-      "\nClear them yourself if they are stale:\n  " + ports.clearCommand(strangers));
+      "they were left alone:\n" + ports.describe(notMine) + "\n\n" +
+      ports.LIVE_RUN_CAVEAT + "\n\nOnly when you know they are stale:\n  " +
+      ports.clearCommand(notMine));
+  }
+  if (unproven.length) {
+    const why = lineage.problem();
+    console.warn("rules-e2e: these listeners could NOT BE SHOWN to have been " +
+      "started by this run, so they were left alone:\n" + ports.describe(unproven) +
+      "\n(" + (why
+        ? why
+        : "they appeared after this run's last look at the ports, or outlived " +
+          "the process that would have vouched for them") + ")\n\n" +
+      ports.LIVE_RUN_CAVEAT + "\n\nOnly when you know they are stale:\n  " +
+      ports.clearCommand(unproven));
   }
 }
 
@@ -257,20 +361,20 @@ function stop(signal, exitCode) {
   while (child.exitCode === null && child.signalCode === null && Date.now() < deadline) {
     spawnSync(process.execPath, ["-e", "setTimeout(()=>{},150)"], { stdio: "ignore" });
   }
-  sweep();
+  sweep(false);   // interrupted, not failed: nothing can be read into the exit
   process.exit(exitCode);
 }
 process.on("SIGINT", () => stop("SIGINT", 130));
 process.on("SIGTERM", () => stop("SIGTERM", 143));
 
 child.on("exit", (code, signal) => {
-  sweep();
   const status = code === null ? 1 : code;
+  sweep(status !== 0 && !signal);
   console.log("rules-e2e: suite exited with " +
     (signal ? "signal " + signal : "code " + status) + ".");
   process.exit(status);
 });
 child.on("error", (err) => {
-  sweep();
+  sweep(false);   // nothing was started, so nothing lost a race
   fatal("rules-e2e: could not start emulators:exec — " + (err && err.message || err));
 });
