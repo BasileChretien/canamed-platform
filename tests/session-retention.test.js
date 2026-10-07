@@ -95,6 +95,11 @@ test("the control: honest dates on both sides of each window are decided exactly
     [NOW - 100 * DAY, NOW - 31 * DAY, true, "closed 31d ago (> 30d)"],
     /* Closing restarts the clock: 200 days old, closed yesterday, kept. */
     [NOW - 200 * DAY, NOW - DAY, false, "closed 1d ago (within retention)"],
+    /* And `closed/at` decides even when `created/at` is the impossible one: an
+       honest close is a date that can be trusted, so the session is kept its
+       30 days and not flagged. */
+    [NOW + 10 * YEAR, NOW - DAY, false, "closed 1d ago (within retention)"],
+    [NOW + 10 * YEAR, NOW - 31 * DAY, true, "closed 31d ago (> 30d)"],
     [null, null, true, "no timestamps — likely pre-schema or corrupted"],
     [undefined, undefined, true, "no timestamps — likely pre-schema or corrupted"]
   ];
@@ -122,7 +127,7 @@ test("the windows are the ones passed in, on both dates", () => {
 
 test("a device clock that is merely FAST does not get a live session deleted", () => {
   /* The dates are Date.now() on the creator's device. A session made at 03:10
-     by a laptop ten minutes fast is "in the future" at the 03:17 run; one made
+     by a laptop ten minutes fast is "in the future" at a 03:17 run; one made
      by a laptop set to the right wall time in the wrong zone is hours ahead.
      Treating either as due would delete a session that is minutes old. */
   for (const ahead of [5000, 10 * 60 * 1000, 3 * HOUR, 14 * HOUR, FUTURE_DATE_TOLERANCE_MS]) {
@@ -429,8 +434,8 @@ test("rules: `created` and `closed` are bounded to the server clock, in both tre
 });
 
 test("rules: both are still WRITE-ONCE — without that, the bound buys nothing", () => {
-  /* A date within five seconds of now is only a retention clock if it cannot be
-     written again. Re-dating a session every 89 days would keep it for ever
+  /* A date held near now is only a retention clock if it cannot be written
+     again. Re-dating a session every 89 days would keep it for ever
      with every single write passing the bound. */
   for (const [where, node] of DATED) {
     assert.match(node[".write"], /!data\.exists\(\)/,
@@ -483,15 +488,45 @@ test("lockstep: a device that can JOIN a session can create and close one", () =
   }
 });
 
-test("lockstep: the purge never calls 'impossible' a date the rules accept", () => {
-  /* If the rules let a date be N ms ahead and the purge's tolerance were
-     smaller, a session created honestly a moment before the nightly run would
-     be deleted by it. */
+test("rules: the window admits a device set to the wrong time zone, on both sides", () => {
+  /* The client sends the DEVICE clock, so the window is a statement about which
+     facilitators can create and close a session at all. A laptop carried
+     between France and Japan and corrected by hand — the right wall time in
+     the wrong zone — is seven or eight hours off, in whichever direction it
+     travelled. The window first shipped at five seconds ahead and two hours
+     behind, which refused that laptop in three flows that worked before: create
+     here and run elsewhere, close from "Sessions you created", and the
+     end-of-class close by a facilitator who was already a member. The refusals
+     left a dateless partial session, or a real one that stayed open behind a
+     message about the connection. Both of those values fail here. */
+  const NINE_HOURS = 9 * HOUR;
+  for (const [where, node] of DATED) {
+    const w = atWindow(node[".validate"], where);
+    assert.ok(w.aheadMs >= NINE_HOURS,
+      `${where} refuses a clock more than ${w.aheadMs} ms FAST. A device eight hours ahead ` +
+      "must still be able to create and close a session.");
+    assert.ok(w.behindMs >= NINE_HOURS,
+      `${where} refuses a clock more than ${w.behindMs} ms SLOW. A device eight hours behind ` +
+      "must still be able to create and close a session.");
+    /* And the other side of the same bound: it is still a retention clock. A
+       date may not be back-dated by more than a day, which is what stops a
+       clock that is DAYS slow from closing a session straight into its purge. */
+    assert.ok(w.behindMs <= DAY, `${where} lets a date be ${w.behindMs} ms in the past`);
+  }
+});
+
+test("lockstep: the purge never calls 'impossible' a date the rules accept — with room to spare", () => {
+  /* If the rules let a date be N ms ahead and the purge's tolerance were no
+     larger, a session created honestly a moment before the nightly run could
+     be deleted by it. Strictly larger, and by a real margin: the rule is
+     evaluated on the database server's clock and the purge on a CI runner's,
+     and the two are not the same clock. */
   for (const [where, node] of DATED) {
     const { aheadMs } = atWindow(node[".validate"], where);
-    assert.ok(FUTURE_DATE_TOLERANCE_MS >= aheadMs,
-      `${where} accepts a date ${aheadMs} ms ahead, but the purge treats anything over ` +
-      `${FUTURE_DATE_TOLERANCE_MS} ms ahead as due`);
+    assert.ok(FUTURE_DATE_TOLERANCE_MS - aheadMs >= HOUR,
+      `${where} accepts a date ${aheadMs} ms ahead, and the purge treats anything over ` +
+      `${FUTURE_DATE_TOLERANCE_MS} ms ahead as due. The purge's tolerance must exceed the ` +
+      "rules' allowance by at least an hour.");
   }
 });
 

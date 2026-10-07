@@ -38,21 +38,29 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * ONE DAY, and it is sized for the honest case, not the dishonest one. These
  * dates are `Date.now()` on the device that created or closed the session. A
  * device clock that is merely fast produces a date a little ahead of the true
- * time, and a session created by one shortly before the 03:17 UTC run is then
+ * time, and a session created by one shortly before the nightly run is then
  * "in the future" when the job looks at it. Treating that as due would delete
- * a session that is minutes old. The rules now refuse more than five seconds
- * of that (the same allowance every other timestamp in the file gets), but
- * sessions written before they shipped carry whatever their device said — and
- * a clock set to the right wall time in the wrong time zone is off by whole
- * hours, up to fourteen. A day covers every such case.
+ * a session that is minutes old. And a clock set to the right wall time in the
+ * wrong time zone is off by whole hours — seven or eight for a laptop carried
+ * between France and Japan, up to fourteen anywhere. A day covers every such
+ * case.
+ *
+ * The rules bound both dates too, to twelve hours either side of the server
+ * clock: wide enough for that laptop, because the client sends its own clock
+ * and a refused date means a facilitator cannot create or close a session at
+ * all. Sessions written before the rules shipped carry whatever their device
+ * said, which is why the decision is made here and not left to the rules.
  *
  * What it costs: a date within the tolerance is taken at face value, so the
  * most anyone gains by dating a session ahead is one day on a 30- or 90-day
- * limit that a nightly job already enforces to the nearest day.
+ * limit that a daily job already enforces to the nearest day (twelve hours,
+ * once the rules are in force).
  *
- * It must never be SMALLER than the rules' own allowance, or a date the rules
- * accept would be one this job deletes on sight. tests/session-retention.test.js
- * reads the allowance out of database.rules.json and fails if that inverts. */
+ * It must stay LARGER than the rules' own allowance, with room to spare, or a
+ * date the rules accept could be one this job deletes on sight: the job's
+ * clock is a CI runner's, not the database server's.
+ * tests/session-retention.test.js reads the allowance out of
+ * database.rules.json and fails if the margin goes. */
 const FUTURE_DATE_TOLERANCE_MS = MS_PER_DAY;
 
 /* Whole days, never negative: a date a few hours ahead (inside the tolerance)

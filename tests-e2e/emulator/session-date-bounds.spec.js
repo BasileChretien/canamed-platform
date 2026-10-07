@@ -11,11 +11,15 @@
  * set aside for a session by its own creator. (tests/session-retention.test.js
  * runs the purge and has the measurements.)
  *
- * The rules now hold both dates to the server clock: no more than five seconds
- * ahead of it — what every other timestamp in the file allows, and what joining
- * a session already requires of the same device — and no more than two hours
- * behind. This spec is the only place that bound is EVALUATED; the unit suite
- * can only read the rule's text.
+ * The rules now hold both dates to within twelve hours of the server clock, on
+ * either side. Twelve hours and not seconds, because the client sends the
+ * DEVICE clock: a laptop carried between France and Japan and corrected by hand
+ * is seven or eight hours off, and a refused date means its owner cannot create
+ * or close a session at all. (The window first shipped at five seconds ahead
+ * and two hours behind; the "eight hours" test below fails on those values.)
+ * Twelve hours is still inside the day the purge allows before it calls a date
+ * impossible. This spec is the only place the bound is EVALUATED; the unit
+ * suite can only read the rule's text.
  *
  * ── A denial here is never left to stand alone ──────────────────────────
  * Every refused date is followed by the same write — same path, same signed-in
@@ -72,12 +76,12 @@ function expectDenied(result, why) {
 const REFUSED = [
   ["ten years ahead — the defect: this session would never have been purged",
     (now) => now + 10 * YEAR],
-  ["one minute ahead — past the five seconds any timestamp is allowed",
-    (now) => now + 60_000],
-  ["the epoch — a date that would have the session purged the next night",
+  ["thirteen hours ahead — just past the twelve a wrong time zone is allowed",
+    (now) => now + 13 * HOUR],
+  ["the epoch — a date that would have the session purged at the next run",
     () => 0],
-  ["three hours ago — past the two hours a slow clock or a queued write is allowed",
-    (now) => now - 3 * HOUR]
+  ["thirteen hours ago — just past the twelve a slow clock is allowed",
+    (now) => now - 13 * HOUR]
 ];
 
 const uniq = (prefix) => prefix + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
@@ -125,8 +129,13 @@ for (const [tree, baseOf] of [
        the node nor the date under it may be replaced — not even honestly. */
     expectDenied(await tryWrite(page, base + "/created", { by: "Facilitator", at: Date.now() }),
       "re-dating an existing session with a fresh, honest date");
+    /* The date alone, underneath the node — with an HONEST value. A future one
+       would be refused by the bound whether or not write-once held down here,
+       and so would show nothing about it. */
+    expectDenied(await tryWrite(page, base + "/created/at", Date.now()),
+      "writing an honest date alone, underneath the node");
     expectDenied(await tryWrite(page, base + "/created/at", Date.now() + 10 * YEAR),
-      "writing the date alone, underneath the node");
+      "writing a future date alone, underneath the node");
     expectDenied(await tryWrite(page, base + "/created", null), "deleting the node to write it again");
     expect((await dbReadAsOwner(base + "/created")).at, "the first date stands").toBe(honest);
   });
@@ -155,28 +164,35 @@ for (const [tree, baseOf] of [
        restart it again. */
     expectDenied(await tryWrite(page, base + "/closed", { by: "Facilitator", at: Date.now() }),
       "closing an already-closed session again, to move its date");
+    expectDenied(await tryWrite(page, base + "/closed/at", Date.now()),
+      "writing an honest close date alone, underneath the node");
     expectDenied(await tryWrite(page, base + "/closed/at", Date.now() + 10 * YEAR),
-      "writing the close date alone, underneath the node");
+      "writing a future close date alone, underneath the node");
     expect((await dbReadAsOwner(base + "/closed")).at, "the first close date stands").toBe(honest);
   });
 }
 
-test("rules: a device clock that is a little slow, or a little fast, can still create and close", async ({ page }) => {
+test("rules: a device eight hours off, in either direction, can still create and close", async ({ page }) => {
   /* The dates are Date.now() on the facilitator's device. The bound must sit
      outside what an honest device produces, on both sides — otherwise this
-     change is an outage for whoever's laptop has drifted. One hour behind also
-     covers a write queued through a dropped connection and sent on reconnect. */
+     change is an outage for whoever's laptop is wrong. Eight hours is the
+     France–Japan difference: a laptop set to the right wall time in the wrong
+     zone. BOTH halves of this test fail against the window as it first shipped
+     (five seconds ahead, two hours behind) — which is the point of it. */
   const uid = await signedInUid(page);
 
-  for (const [what, offset] of [["an hour slow", -HOUR], ["two seconds fast", 2000]]) {
+  for (const [what, offset] of [["eight hours slow", -8 * HOUR], ["eight hours fast", 8 * HOUR]]) {
     for (const baseOf of [(id) => "sessions/" + id, (id) => "orgs/e2e-org/sessions/" + id]) {
+      /* Soft, so one run reports every direction and node that is refused
+         rather than stopping at the first: the slow side and the fast side are
+         two different bounds. */
       const created = baseOf(uniq("dateb-skew-c-"));
-      expect(await tryWrite(page, created + "/created", { by: "Facilitator", at: Date.now() + offset }),
+      expect.soft(await tryWrite(page, created + "/created", { by: "Facilitator", at: Date.now() + offset }),
         `creating from a clock ${what} (${created})`).toBe("ALLOWED");
 
       const closed = baseOf(uniq("dateb-skew-x-"));
       await seedSession(page, closed, uid);
-      expect(await tryWrite(page, closed + "/closed", { by: "Facilitator", at: Date.now() + offset }),
+      expect.soft(await tryWrite(page, closed + "/closed", { by: "Facilitator", at: Date.now() + offset }),
         `closing from a clock ${what} (${closed})`).toBe("ALLOWED");
     }
   }

@@ -1825,41 +1825,64 @@ observed — LOCAL mode models no rules — so these are static findings:**
   that date. Measured by RUNNING the purge — kept with `created.at = now + 10
   years`, and kept again five years later. Nobody had asked what READS the
   date; a bound on a timestamp is worth exactly what depends on it.
-  - **Rules:** both `at`s are now `<= now + 5000 && >= now - 7200000`, both
-    trees. The upper bound equals `members/$uid/at`'s, which the same device
-    writes seconds later, so no device that could run a session is newly
-    refused; the lower one is deliberately slack (a past date only brings the
-    purge forward).
-  - **⚠️ THE COST, and it is a client defect waiting to be fixed.** The client
-    still sends `Date.now()`, so a device more than 5 s fast is now refused at
-    CREATION and at CLOSE, and the product handles neither well:
-    *create* — only the dated write is refused, the rest of the batch lands,
-    leaving a dateless partial session (purged the next night; its `recovery/`
-    node by nothing); *close* — "Sessions you created" says to check the
-    connection, the dashboard alert says to run `firebase deploy --only
-    database` (wrong for this cause), and the session STAYS OPEN, so it falls
-    to the 90-day path and participants never see it end. Such a device could
-    not have RUN a session before (same 5 s on `members`), but it could create
-    one for another device, or close one from its list. **If a facilitator
-    reports "can't create a session" or "can't close", check their clock
-    first.** The fix is `ServerValue.TIMESTAMP` for these two writes (the R3-D1
-    pattern already used for `_superadminReset`) — a client change, shell bump,
-    and LOCAL mode must not be handed the sentinel object.
+  - **Rules:** both `at`s are now `<= now + 43200000 && >= now - 43200000`
+    (twelve hours either side), both trees. **Twelve hours, not the 5 s every
+    other timestamp gets, and that is deliberate** — it first went up as
+    +5 s / −2 h and an independent review blocked it. The client sends
+    `Date.now()`, so the window decides which facilitators can create and close
+    a session AT ALL, and a laptop carried between France and Japan and
+    corrected by hand is 7–8 h off. A tight window bought nothing: the purge
+    takes any date up to 24 h ahead at face value anyway. Keep it strictly
+    BELOW the purge's tolerance (a test requires an hour's margin — the rule
+    runs on the database's clock, the purge on a CI runner's).
+  - **⚠️ WHAT A REFUSED DATE DOES, for whoever narrows the window again.** With
+    +5 s / −2 h, three flows that work on `main` failed for a skewed device:
+    create here and run elsewhere; "Sessions you created → Close"; and the
+    end-of-class close by a facilitator **who was already a member** —
+    membership is per uid and persistent, and `started`, `stage` and the proof
+    carry no date, so such a facilitator ran the whole session and was refused
+    only at the close. (An earlier version of this entry said "no device that
+    could run a session is newly refused". That was wrong for exactly that
+    case.) The product handles a refusal badly: *create* — only the dated
+    write is refused, the rest of the batch lands, leaving a dateless partial
+    session (purged at the next run; its `recovery/` node by nothing);
+    *close* — "Sessions you created" says to check the connection, the
+    dashboard alert says to run `firebase deploy --only database` after
+    downloading the archive again, and the session STAYS OPEN: participants
+    never see it end, it takes the 90-day path, and it never reaches the
+    research export, which takes closed sessions only. All of that now needs a
+    clock more than 12 h wrong. **If a facilitator reports "can't create a
+    session" or "can't close", check their clock first.** The real fix is
+    `ServerValue.TIMESTAMP` for these two writes (the R3-D1 pattern already
+    used for `_superadminReset`) — a client change, shell bump, LOCAL mode must
+    not be handed the sentinel object, and it does not help a browser still on
+    a cached shell, which is why the window was widened first.
   - **Purge (the half that closes it — a rule cannot reach a session already in
     the database):** `scripts/lib/session-retention.js` treats a date more than
     24 h ahead as impossible and the session as due. The tolerance is a day on
-    purpose: with a small one, a session created minutes before the 03:17 UTC
-    run by a laptop with a fast or wrong-zone clock would be deleted. The job
-    prints `Dated in the future: N session(s)` — a count, in QUIET mode too.
+    purpose: with a small one, a session created shortly before the run by a
+    laptop with a fast or wrong-zone clock would be deleted. The job prints
+    `Dated in the future: N session(s)` — a count, in QUIET mode too.
+    ⚠️ "03:17 UTC" is the CRON, not when it runs: the six scheduled runs before
+    2026-10-07 started between 09:10 and 10:28 UTC. After a morning merge the
+    first live purge can be within the hour.
   - `Verify:` `node --test tests/session-retention.test.js` (runs the real
-    script on two dates five years apart; holds the tolerance ≥ the rules'
-    allowance) and `tests-e2e/emulator/session-date-bounds.spec.js` (every
-    denial paired with an allow; the real client creates and closes). Those
-    test the REPO. For the live system: `gh run view <deploy run> --log | grep
-    -iE 'Database rules deployed|NOT deployed'`, and the first scheduled
-    `cleanup-stale-sessions` log after merge — a `Dated in the future: N`
-    line means sessions already carried such a date (nobody queried
-    production for them); its absence means none did.
+    script on two dates five years apart; holds the tolerance above the rules'
+    allowance and the window wide enough for a wrong time zone) and
+    `tests-e2e/emulator/session-date-bounds.spec.js` (every denial paired with
+    an allow; a device eight hours off creates and closes; so does the real
+    client). Those test the REPO. For the live system:
+    - rules: `gh run view <deploy run> --log | grep -F 'released successfully'`.
+      NOT `grep 'Database rules deployed|NOT deployed'`, which this entry first
+      gave: the workflow echoes its own script, so both strings are in the log
+      of EVERY run, success or failure. Tried on a real run.
+    - purge: the first scheduled `cleanup-stale-sessions` log after merge. A
+      `Dated in the future: N` line means sessions already carried such a date.
+      Its absence means none did ONLY if the `Backup gate:` line says OK — a
+      BLOCKED gate skips the session pass whole, dry run included, and the
+      line is then absent whatever the database holds. The count before merge
+      is on PR #438 (a dry run of the branch); the live database was not
+      otherwise queried.
   - **Still unbounded, and NOT read by any deletion job today:** `summary.at`,
     `pool/$cid/consent/at`, `users/$uid/history/$code/joinedAt`. Bound one
     before a retention job starts reading it, not after.
