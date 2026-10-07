@@ -40,7 +40,10 @@
  * `orgs/<slug>/sessions/<id>` (see scripts/lib/session-trees.js). Org-scoped
  * sessions were invisible to this job until 2026-07-23 and so were never
  * purged. Purging a session also removes its `adminSecrets/...` entry, which
- * lives outside the session subtree and nothing else cleans up.
+ * lives outside the session subtree and nothing else cleans up. The same goes
+ * for every other per-session tree outside the cascade (recovery code, chat,
+ * roster, …): tests/purge-tree-coverage.test.js derives that list from
+ * database.rules.json and fails when one is declared there and not purged here.
  *
  * Output:
  *   one line per session in the report — KEEP / PURGE / DRY-RUN (unless CLEANUP_QUIET).
@@ -305,6 +308,22 @@ async function purgeSessions(db, locations) {
         // session left adminSecrets/<code> (the real PBKDF2 hash + proof
         // writes) behind forever — nothing else purges it.
         purge[loc.adminSecretPath] = null;
+        // The recovery code (recovery/<session path>): the secret the reset
+        // rule compares against when a facilitator has forgotten the admin
+        // password. Written at creation OUTSIDE the session subtree, and from
+        // 2026-05-25, when it was introduced, to 2026-10-08 nothing deleted it
+        // — no script referenced the tree at all. Unlike the other leftovers
+        // it is not inert. The node is write-once, so a session that later
+        // draws the same code has its own recovery write refused and its
+        // creation stops half-way; and the old code goes on satisfying the
+        // reset rule at that session code, for whoever wrote it down. Both
+        // measured: tests-e2e/emulator/recovery-purge.spec.js. It goes in the
+        // same update as the hash it resets.
+        //
+        // NB records orphaned BEFORE this line existed are out of reach from
+        // here — their sessions are gone, and this loop walks sessions. That
+        // backlog is scripts/sweep-orphaned-recovery.js, a one-off.
+        purge[loc.recoveryPath] = null;
         // Same story for the Module A chat: it was moved out of the session
         // read-cascade into the top-level roomChat/ tree (RTDB .read cascades
         // and cannot be revoked deeper, so a room-scoped rule under the session

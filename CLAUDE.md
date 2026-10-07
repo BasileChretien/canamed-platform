@@ -1127,6 +1127,63 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   sanitised in `modA-llm-init.js` — the name is scenario-authored, i.e. untrusted.
 
 ## Known security follow-ups (code, tracked)
+- **A session's recovery code is purged with it (2026-10-08) — ⛔ the backlog
+  sweep has NOT been run, and a weakness in the reset rule is OPEN.**
+  `createSession()` writes `recovery/sessions/<code>` (org:
+  `recovery/orgs/<slug>/sessions/<id>` — the ROSTER's shape, not adminSecrets')
+  and from 2026-05-25 to 2026-10-08 nothing deleted it: the purge named six
+  out-of-cascade siblings and this was not one. It is now `recoveryPath` in
+  `locationFor()` and part of the purge's atomic update.
+  - **Why that list kept being one short.** adminSecrets, roomChat, certIds,
+    rosters, withdrawals and now recovery were each added after someone
+    noticed, and each time the test pinned the list AS IT THEN WAS.
+    `tests/purge-tree-coverage.test.js` DERIVES the per-session trees from
+    `database.rules.json`, runs the real purge, and fails on one declared there
+    and not deleted. Every wildcard name outside the session trees has to be
+    classified in that file — an unknown one fails, so a tree keyed by `$sid`
+    cannot slip past on spelling. Two nodes are acknowledged there with their
+    reasons: `rateLimits/session/$code` (the bucket's clock) and
+    `users/$uid/history/$code` (the account's).
+  - **What a leftover did — measured on the emulator, not inferred**
+    (`tests-e2e/emulator/recovery-purge.spec.js`). (a) The node is write-once,
+    so the real client drawing that code gets `permission_denied` on its
+    recovery write, shows "Could not create the session — check your connection
+    and try again", and leaves `created` + `creatorUid` and no hash behind.
+    (b) The old code still satisfied `_superadminReset` at that session code.
+    (a) is rare by chance — leftovers / 887 503 681 (31^6) per create.
+  - **⛔ The backlog.** Records left before the fix have no session to be found
+    through. `scripts/sweep-orphaned-recovery.js` (dispatch-only workflow
+    `sweep-orphaned-recovery.yml`; dry-run unless `confirm`; keys only; counts
+    only) removes every recovery record that has no session. It reads the
+    recovery lists BEFORE the session lists — the other order condemns a
+    session created mid-sweep — and refuses when the database lists no session
+    at all. **Not run yet.** `Verify:`
+    `gh run list --workflow sweep-orphaned-recovery.yml` shows a run whose log
+    says `Mode: LIVE`; a dry run after it ends in `Summary: nothing to sweep.`
+  - **⚠️ OPEN — the reset does not require a password to exist** (measured
+    2026-10-07). `_superadminReset` asks only for a matching `recovery/…/code`
+    and a session that is not closed, and the hash rules' reset branch has no
+    `data.exists()`. So on a session with NO hash: (1) whoever holds its
+    recovery code sets the FIRST hash, whatever `creatorUid` says — this is how
+    a stale code took over a half-created session; (2) if it has no recovery
+    node either, ANY signed-in user writes one (that rule needs only "no node,
+    no hash") and then does the same. State (2) is exactly a session restored
+    by `restore-sessions.js`: the archive is the session body only, with
+    `adminPasswordHash` stripped, no `adminSecrets` and no `recovery`. A
+    restored CLOSED session is safe (the reset is refused once `closed`
+    exists); an OPEN one can be claimed by anyone who knows its code. Under an
+    enforced `facilitatorGate` the stale-code path also yields an admin hash and
+    proof at a code with no session (`created` stays gated, so the stock client
+    still treats it as non-existent).
+    **Proposed, not done here** — it is a rules change on the reset path:
+    require `adminPasswordHash.exists()` in `_superadminReset`'s write. A reset
+    needs something to reset; reasoned from the rules (not yet tested), that
+    one predicate closes (1), (2) and the gate case, and a hashless session can
+    then be keyed only by its creator. Until then, do not restore open sessions
+    without re-keying them.
+    ⚠️ This change removes one accidental mitigation: a session purged BY
+    MISTAKE and then restored used to come back beside its old recovery node,
+    which blocked (2). It no longer does.
 - **Self-serve soft-launch gate `facilitatorGate` (Phase 4c, opt-in, INERT by
   default).** A top-level admin-only node (`.read:false`, `.write:false` — set
   only via the Console/admin-SDK) that can restrict who may create sessions.
@@ -1145,7 +1202,10 @@ Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/P
   it closes the recovery-bootstrap bypass. The `_superadminReset` write and the
   hash rules' `_superadminReset` **recovery branch** stay deliberately ungated —
   they act on already-established sessions (whose recovery code was written by
-  their allowlisted creator) and must keep working under enforcement. **Default
+  their allowlisted creator) and must keep working under enforcement.
+  (⚠️ "already-established" is the INTENT, not what the rules enforce — measured
+  2026-10-07: the reset also runs on a session with no password and on a code
+  with no session. See the recovery bullet above.) **Default
   (node absent) → `enforce.val()` is null → creation unchanged** for every
   existing facilitator; nothing is gated until an operator flips it on. To
   soft-launch to a vetted allowlist: set `facilitatorGate/enforce = true` and

@@ -394,13 +394,16 @@ test("REAL SCRIPT, fresh backup: the expired session IS purged, then the metrics
   assert.strictEqual(r.status, 0, r.log);
   assert.deepStrictEqual(r.writes, [
     { op: "update", path: "", keys: [
-      "adminSecrets/EXPIRED1", "certIds/EXPIRED1", "roomChat/EXPIRED1",
-      "roomChatAuthors/EXPIRED1", "rosters/sessions/EXPIRED1", "sessions/EXPIRED1",
-      "withdrawals/EXPIRED1"
+      "adminSecrets/EXPIRED1", "certIds/EXPIRED1", "recovery/sessions/EXPIRED1",
+      "roomChat/EXPIRED1", "roomChatAuthors/EXPIRED1", "rosters/sessions/EXPIRED1",
+      "sessions/EXPIRED1", "withdrawals/EXPIRED1"
     ] }
   ].concat(METRICS_WRITES),
-    "one atomic root update for the expired session and its six out-of-cascade " +
-    "siblings — the live session untouched — then the metrics." + r.log);
+    "one atomic root update for the expired session and its seven out-of-cascade " +
+    "siblings — the live session untouched — then the metrics. (Seven since " +
+    "2026-10-08: the recovery code was the one nothing deleted. Whether this list " +
+    "is COMPLETE is not decided here — tests/purge-tree-coverage.test.js derives " +
+    "it from database.rules.json.)" + r.log);
   assert.match(r.stdout, /Backup gate: OK — /);
   assert.match(r.stdout, /Summary: 1 kept, 1 purged, 0 errors\./);
   assert.ok(!/EXPIRED1|LIVE0001/.test(r.stdout + r.stderr),

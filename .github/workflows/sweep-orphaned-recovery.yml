@@ -1,0 +1,86 @@
+# One-off: delete recovery records whose session no longer exists
+# (GDPR Art. 5(1)(e) / APPI Art. 21).
+#
+# Creating a session writes a recovery code to `recovery/sessions/<code>` (or
+# `recovery/orgs/<slug>/sessions/<id>`), outside the session subtree. Until
+# 2026-10-08 the nightly purge deleted the session and left that node behind:
+# every recovery record written since 2026-05-25 was still in the database.
+# cleanup-stale-sessions deletes it with the session now — but that job walks
+# sessions, and these sessions are gone. This one starts from the records.
+#
+# A leftover record is a retained fact with no retention period, and it is not
+# inert: it is write-once, so its session code cannot be used again (a later
+# session that draws it fails half-way through creation), and its secret still
+# opens the password reset at that code. See scripts/sweep-orphaned-recovery.js.
+#
+# ⚠️ DISPATCH ONLY, ON PURPOSE. Nothing here runs by itself and there is no
+# cron to uncomment. Run it once as a DRY RUN and read the three counts; run it
+# again with `confirm` ticked. After that the nightly purge keeps the tree
+# clean, and this is only needed again if records appear with no session — any
+# signed-in visitor can write one at an unused code.
+#
+# WHAT REACHES THE RUNNER: the KEYS of `recovery/` and of the two session trees
+# — session codes, the identifier the nightly purge already lists, here
+# including the codes of sessions that are gone. Every read is `?shallow=true`:
+# no recovery code and no session body is transferred.
+#
+# There is no verbose mode. The script prints counts only, because this
+# repository's Actions logs are world-readable.
+
+name: Sweep orphaned recovery records
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Actually delete (otherwise just dry-run)"
+        type: boolean
+        required: true
+        default: false
+      allow_no_sessions:
+        description: "Proceed even if the database lists NO session at all"
+        type: boolean
+        required: true
+        default: false
+
+concurrency:
+  group: sweep-orphaned-recovery
+  cancel-in-progress: false  # never kill a run mid-delete
+
+jobs:
+  sweep:
+    name: Remove recovery records with no session
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          # Keyed on the ROOT lock only — the repo also has
+          # docs/Third_session/PBL_platform/functions/package-lock.json
+          # (functions-ci.yml), which must not evict this cache.
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # npm ci, not a floating install — see the long note in
+      # cleanup-stale-sessions.yml.
+      - name: Install from the committed lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Write service-account credentials to a temp file
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_CANAMED_69785 }}
+        run: |
+          echo "$SA_JSON" > "${RUNNER_TEMP}/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=${RUNNER_TEMP}/sa.json" >> "$GITHUB_ENV"
+
+      - name: Sweep orphaned recovery records
+        env:
+          FIREBASE_DATABASE_URL: https://canamed-69785-default-rtdb.europe-west1.firebasedatabase.app
+          # DRY-RUN unless a manual dispatch ticks `confirm`.
+          RECOVERY_SWEEP_CONFIRM: ${{ github.event.inputs.confirm == 'true' && '1' || '0' }}
+          RECOVERY_SWEEP_ALLOW_NO_SESSIONS: ${{ github.event.inputs.allow_no_sessions == 'true' && '1' || '0' }}
+        run: node scripts/sweep-orphaned-recovery.js

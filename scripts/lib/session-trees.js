@@ -23,7 +23,8 @@
  * @param {object} sessionsVal value of `sessions` (may be null/undefined)
  * @param {object} orgsVal     value of `orgs` (may be null/undefined)
  * @returns {Array<{key:string, code:string, orgSlug:string|null, path:string,
- *                  adminSecretPath:string, roomChatPath:string,
+ *                  adminSecretPath:string, recoveryPath:string,
+ *                  roomChatPath:string,
  *                  roomChatAuthorsPath:string,
  *                  certIdsPath:string, withdrawalsPath:string,
  *                  rosterPath:string, data:object}>}
@@ -44,6 +45,11 @@ function locationFor(orgSlug, code) {
       orgSlug: null,
       path: "sessions/" + code,
       adminSecretPath: "adminSecrets/" + code,
+      // recovery/ mirrors the session path, like rosters/ and UNLIKE
+      // adminSecrets/: the client writes "recovery/" + oPath(code), and oPath
+      // is _sessionPrefix(org) + code. tests/purge-tree-coverage.test.js
+      // derives both branches from database.rules.json.
+      recoveryPath: "recovery/sessions/" + code,
       roomChatPath: "roomChat/" + code,
       roomChatAuthorsPath: "roomChatAuthors/" + code,
       certIdsPath: "certIds/" + code,
@@ -60,6 +66,7 @@ function locationFor(orgSlug, code) {
     orgSlug: orgSlug,
     path: "orgs/" + orgSlug + "/sessions/" + code,
     adminSecretPath: "adminSecrets/orgs/" + orgSlug + "/" + code,
+    recoveryPath: "recovery/orgs/" + orgSlug + "/sessions/" + code,
     roomChatPath: "roomChat/orgs/" + orgSlug + "/" + code,
     roomChatAuthorsPath: "roomChatAuthors/orgs/" + orgSlug + "/" + code,
     certIdsPath: "certIds/orgs/" + orgSlug + "/" + code,
