@@ -115,6 +115,16 @@ test("a 'parent' younger than its child is a reused PID, not a parent", () => {
     "930 predates the process that now holds its parent's PID");
 });
 
+test("a link through a process with no readable creation time is not believed", () => {
+  /* The age check is what tells a parent from a reused PID. Where it cannot be
+     made, the link proves nothing — and "cannot be shown" must never round up
+     to "ours". (Found in review: the walk used to pass straight through.) */
+  const t = table(TWO_RUNS.map(([pid, ppid, born]) =>
+    pid === 210 ? [pid, ppid, lineage.BORN_UNKNOWN] : [pid, ppid, born]));
+  assert.ok(!lineage.descendsFrom(t, 220, ROOT));
+  assert.ok(lineage.descendsFrom(table(TWO_RUNS), 220, ROOT), "control: the same chain, readable");
+});
+
 test("the walk terminates on a self-parented PID", () => {
   // The idle process is its own parent on Windows.
   assert.ok(!lineage.descendsFrom(table([[0, 0, 0], [8, 0, 500]]), 8, ROOT));
@@ -148,7 +158,7 @@ test("nothing is concluded once the child has gone, or is no longer OUR child", 
   assert.strictEqual(reused.verdict(220), null);
 });
 
-test("a table that cannot be read yields no verdict, says why, and is not retried for ever", () => {
+test("a table that cannot be read yields no verdict, and is not retried for ever", () => {
   let calls = 0;
   const t = lineage.track(ROOT, {
     selfPid: SELF,
@@ -156,10 +166,31 @@ test("a table that cannot be read yields no verdict, says why, and is not retrie
   });
   for (let i = 0; i < 10; i++) t.observe([220]);
   assert.strictEqual(t.verdict(220), null);
-  assert.match(t.problem(), /cannot read the process table \(boom\)/);
   assert.ok(calls >= 1 && calls <= 3,
     "a snapshot is 1.5 s of PowerShell at best; a PID that cannot be resolved " +
     "must not cost one every poll for the length of the suite (took " + calls + ")");
+});
+
+test("the sweep says WHY a survivor is unproven, even after the table has recovered", () => {
+  /* The lookups for 220 all failed during the run and were given up on. At the
+     sweep the table reads fine — and the report used to conclude from that
+     that the listener "appeared after this run's last look", which is false,
+     and sends whoever reads it looking in the wrong place. */
+  let broken = true;
+  const t = lineage.track(ROOT, { selfPid: SELF, snapshot: () => {
+    if (broken) throw new Error("cannot read the process table (powershell.exe is not on PATH)");
+    return table(AFTER_EXIT);
+  } });
+  for (let i = 0; i < 5; i++) t.observe([220]);
+  broken = false;
+  const sorted = t.partition([row(9000, 220)]);
+  assert.deepStrictEqual(sorted.unproven, [row(9000, 220)]);
+  assert.deepStrictEqual(sorted.why,
+    ["cannot read the process table (powershell.exe is not on PATH)"]);
+
+  /* And a survivor nobody ever failed to look up carries no such reason. */
+  const quiet = tracker(AFTER_EXIT);
+  assert.deepStrictEqual(quiet.partition([row(9000, 220)]).why, []);
 });
 
 test("a snapshot is taken only when there is something new to decide", () => {
@@ -239,7 +270,38 @@ test("if the table cannot be read at the sweep, nothing is ours", () => {
   assert.deepStrictEqual(sorted.mine, [],
     "the verdict is remembered, but the process could not be re-identified");
   assert.deepStrictEqual(sorted.unproven, [row(9000, 220)]);
-  assert.match(t.problem(), /gone/);
+  assert.deepStrictEqual(sorted.why, ["cannot read the process table (gone)"]);
+});
+
+test("POSIX: a creation time that reads a second apart is still the same process", () => {
+  /* procps before 4.0 (Ubuntu 22.04, RHEL 8/9) derives lstart from "now minus
+     uptime", recomputed on every call, so the same process can read one second
+     later the next time `ps` runs. Compared as a string, our own leftover
+     would then look like a different process and be left on the port. A PID
+     is not reused within a second on any POSIX system. (Found in review.) */
+  let rows = [
+    [SELF, 1, "Wed Oct  7 09:00:00 2026"],
+    [ROOT, SELF, "Wed Oct  7 10:00:00 2026"],
+    [220, ROOT, "Wed Oct  7 10:00:05 2026"]
+  ];
+  const t = tracker(() => rows);
+  t.observe([220]);
+  assert.strictEqual(t.verdict(220), "ours");
+
+  rows = [[SELF, 1, "Wed Oct  7 09:00:00 2026"], [220, 1, "Wed Oct  7 10:00:06 2026"]];
+  assert.deepStrictEqual(t.partition([row(9000, 220)]).mine, [row(9000, 220)]);
+
+  /* Minutes apart is a different process, whatever its number. */
+  rows = [[SELF, 1, "Wed Oct  7 09:00:00 2026"], [220, 1, "Wed Oct  7 10:03:00 2026"]];
+  assert.deepStrictEqual(t.partition([row(9000, 220)]).mine, []);
+});
+
+test("Windows creation times are exact: one tick apart is a different process", () => {
+  let rows = TWO_RUNS;
+  const t = tracker(() => rows);
+  t.observe([220]);
+  rows = AFTER_EXIT.map(([pid, ppid, born]) => pid === 220 ? [220, ppid, born + 1] : [pid, ppid, born]);
+  assert.deepStrictEqual(t.partition([row(9000, 220)]).mine, []);
 });
 
 test("a listener that died before the sweep could look is not reported as a survivor", () => {
@@ -312,6 +374,24 @@ test("an orphan younger than the spawn stays unproven even when parents are foll
   const rows = [[SELF, 1, filetime(-60000)], [220, 210, filetime(+4000)]];
   const t = tracker(rows, { spawnedAt: T0_MS, followParents: true });
   assert.deepStrictEqual(t.partition([row(9000, 220)]).unproven, [row(9000, 220)]);
+});
+
+test("with the child still ALIVE, an unobserved listener of ours is not called another run's", () => {
+  /* The "hangs off something older" argument assumes the child is dead: the
+     chain of anything of ours then stops at the gap where the child was. If
+     the child is still there, the same walk goes child → runner — and the
+     runner IS older than its child — so our own listener would be reported as
+     another run's. The walk must stop when it reaches the child. (Found in
+     review; the callers kill the child first today, but nothing enforced it.) */
+  const rows = [
+    [SELF, 1, filetime(-60000)],
+    [ROOT, SELF, filetime(+10)],
+    [220, ROOT, filetime(+4000)]
+  ];
+  const t = tracker(rows, { spawnedAt: T0_MS, followParents: true });
+  const sorted = t.partition([row(9000, 220)]);
+  assert.deepStrictEqual(sorted.notMine, []);
+  assert.deepStrictEqual(sorted.unproven, [row(9000, 220)]);
 });
 
 test("POSIX creation times (lstart) are read for age as well", () => {

@@ -32,9 +32,12 @@
  * from the child this runner spawned (npx → node → java on Windows), and is
  * still that same process when the sweep runs (process-lineage.js does the
  * showing). Any other listener on those ports is reported, with the command to
- * clear it by hand, and left alone. It also only ever runs AFTER the child has
- * exited (a signal to this runner forwards to the child and waits first) — it
- * is a survivor sweep, not a kill switch.
+ * clear it by hand, and left alone. It is a survivor sweep, not a kill switch:
+ * on the normal path it runs from the child's own "exit" event. On a signal to
+ * this runner, stop() forwards it to the child and then waits a FIXED 10 s
+ * before sweeping — the loop there is synchronous, so it cannot actually see
+ * the child go, and on POSIX a child slower than that to shut down is swept
+ * while still exiting. (Known, older than the lineage work, not fixed here.)
  *
  * That rule is the repair of a FOURTH defect, which the sweep itself brought in:
  *
@@ -59,8 +62,14 @@
  * between it and our emulator binding; a run that loses that race fails to
  * start ("Port 9000 is not open on 127.0.0.1, could not start Database
  * Emulator", and "emulator hub unable to start on port 4400, starting on 4401
- * instead" — the tell-tale that another hub is alive). It then says that
- * another run holds the ports, exits non-zero, and KILLS NOTHING.
+ * instead" — the tell-tale that another hub is alive). It then exits non-zero
+ * and KILLS NOTHING, and says that ANOTHER RUN HOLDS THE EMULATOR PORTS
+ * whenever that can be shown: the listener was seen outside our child's tree
+ * while the child lived, or is older than our child, or (Windows) hangs off a
+ * process that is. Where none of those holds — on POSIX, a CLI that died
+ * before the first look at a listener younger than itself — the same listener
+ * is reported as one that "could NOT BE SHOWN" to be this run's, with the same
+ * warning that it may be another session's emulator.
  *
  * Usage:  node scripts/ops/run-rules-e2e.js [extra playwright args...]
  *         PORT=8771 node scripts/ops/run-rules-e2e.js
@@ -80,7 +89,15 @@ const DB_PORT = parseInt(process.env.SIM_DB_PORT || "9000", 10);
 const AUTH_PORT = parseInt(process.env.SIM_AUTH_PORT || "9099", 10);
 const WEB_PORT = parseInt(process.env.PORT || "8765", 10);
 const EMU_PORTS = [DB_PORT, AUTH_PORT];
+/* How often the emulator ports are looked at while the child runs. FAST until
+   each port's listener has a verdict: lineage can only be shown while the
+   child is alive, and a run that ends quickly (a filter matching no test, a
+   config error) must not end before its own emulator has been recognised —
+   that leftover would then be reported instead of freed. Bounded, because a
+   port that never gets a verdict must not keep netstat spinning all suite. */
+const OWNERSHIP_POLL_FAST_MS = 500;
 const OWNERSHIP_POLL_MS = 2000;
+const OWNERSHIP_FAST_FOR_MS = 60000;
 
 /* Resolve the firebase CLI.
  *
@@ -247,6 +264,7 @@ const child = spawn(fbCli.cmd, fbCli.pre.concat([
    sees on the ports to an "owned" set. See defect 4 in the header. */
 const lineage = processLineage.track(child.pid, { spawnedAt });
 const announced = new Set();
+const settledPorts = new Set();
 function observeListeners() {
   let rows;
   try {
@@ -260,6 +278,7 @@ function observeListeners() {
     const key = row.port + "/" + row.pid;
     if (!verdict || announced.has(key)) continue;
     announced.add(key);
+    settledPorts.add(row.port);
     const who = "PID " + row.pid + " (" + ports.imageName(row.pid) + ")";
     if (verdict === "ours") {
       console.log("rules-e2e: :" + row.port + " is this run's own emulator — " + who + ".");
@@ -272,7 +291,15 @@ function observeListeners() {
     }
   }
 }
-const ownershipPoll = setInterval(observeListeners, OWNERSHIP_POLL_MS);
+let ownershipPoll = null;
+function pollOwnership() {
+  observeListeners();
+  const fast = Date.now() - spawnedAt < OWNERSHIP_FAST_FOR_MS &&
+    !EMU_PORTS.every((p) => settledPorts.has(p));
+  ownershipPoll = setTimeout(pollOwnership, fast ? OWNERSHIP_POLL_FAST_MS : OWNERSHIP_POLL_MS);
+  ownershipPoll.unref();
+}
+ownershipPoll = setTimeout(pollOwnership, OWNERSHIP_POLL_FAST_MS);
 ownershipPoll.unref();
 
 /* ── 5. Survivor sweep, whatever happened ─────────────────────────── */
@@ -295,7 +322,8 @@ function reportAnotherRun(notMine, freedPids) {
     "emulator could bind them. That is what \"Port " + DB_PORT + " is not open … could\n" +
     "not start Database Emulator\" above means, and \"emulator hub unable to start\n" +
     "on port 4400, starting on 4401 instead\" is the same tell-tale.\n\n" +
-    "NOTHING WAS KILLED: that listener is another run's emulator, and killing it\n" +
+    (freedPids.size ? "NOTHING OF THEIRS WAS KILLED" : "NOTHING WAS KILLED") +
+    ": that listener is another run's emulator, and killing it\n" +
     "fails that run mid-suite. The rules suite cannot be run by two sessions at once.\n" +
     "Wait for the other run to end, then run this again — do not retry in a loop.\n\n" +
     "Only when you know no other run is in progress (the listener is a leftover):\n  " +
@@ -307,7 +335,7 @@ function sweep(failed) {
   if (swept) return;
   swept = true;
   dropTempScript();
-  clearInterval(ownershipPoll);
+  clearTimeout(ownershipPoll);
   let survivors;
   try {
     survivors = ports.survey(EMU_PORTS);
@@ -317,7 +345,7 @@ function sweep(failed) {
     return;
   }
   if (!survivors.length) return;
-  const { mine, notMine, unproven } = lineage.partition(survivors);
+  const { mine, notMine, unproven, why } = lineage.partition(survivors);
   const ownedPids = new Set(mine.map((r) => String(r.pid)));
   if (mine.length) {
     const killed = ports.free(EMU_PORTS, { onlyPids: ownedPids });
@@ -333,11 +361,10 @@ function sweep(failed) {
       ports.clearCommand(notMine));
   }
   if (unproven.length) {
-    const why = lineage.problem();
     console.warn("rules-e2e: these listeners could NOT BE SHOWN to have been " +
       "started by this run, so they were left alone:\n" + ports.describe(unproven) +
-      "\n(" + (why
-        ? why
+      "\n(" + (why.length
+        ? why.join("; ")
         : "they appeared after this run's last look at the ports, or outlived " +
           "the process that would have vouched for them") + ")\n\n" +
       ports.LIVE_RUN_CAVEAT + "\n\nOnly when you know they are stale:\n  " +

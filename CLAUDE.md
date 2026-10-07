@@ -27,8 +27,11 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
     machine shares. Check first that nothing listens on 4400 (the emulator
     hub), 9000 or 9099: `node scripts/ops/emulator-ports.js check 4400 9000 9099`.
     A second run is refused by the preflight; one that slips into the seconds
-    between the first run's preflight and its emulator binding fails with
-    **ANOTHER RUN HOLDS THE EMULATOR PORTS**, exits non-zero and kills nothing.
+    between the first run's preflight and its emulator binding fails to start,
+    exits non-zero and kills nothing. It says **ANOTHER RUN HOLDS THE EMULATOR
+    PORTS** whenever that can be shown (always on Windows; on POSIX when the
+    listener was seen during the run or is older than it), and otherwise that
+    the listener *could not be shown* to be its own — same warning either way.
     Wait for the other run to end. **Do not retry in a loop.**
   - **A held port is not necessarily a leftover.** It may be another session's
     emulator, mid-suite, and nothing can tell the two apart by port number.
@@ -38,7 +41,10 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
     frees a listener only when that process was shown, while the run was live,
     to descend from the child the runner spawned, and is still that process at
     the sweep (`scripts/ops/process-lineage.js`); anything else on the ports is
-    reported with the command to clear it by hand. The runner's header used to
+    reported with the command to clear it by hand. That includes the run's OWN
+    leftover when it could not be shown to be so — a run that ends before the
+    runner has looked, a process table that will not read: it is then left on
+    the port and named, and the next preflight names it again. The runner's header used to
     call the sweep "ownership-scoped", meaning it killed every PID it had SEEN
     on the ports while its child ran. Seeing is not owning: when two sessions
     overlapped, the one that lost the race for :9000 "observed" the other's
@@ -47,7 +53,11 @@ Hosting + Realtime Database + anonymous Auth + App Check (reCAPTCHA v3).
     other session, retrying, did the same in return. `sim:emulator` had the
     same defect, and worse: its readiness probe succeeds against ANY listener,
     so a run that lost the race went on to run the sim against the other
-    session's emulator. It now refuses.
+    session's emulator. It now ends the run the moment its own emulator exits
+    before teardown (that is what losing the race looks like from there), or
+    a listener on the ports is shown not to be its own.
+    Still by tree, not verified one by one: the runner's Ctrl-C path and the
+    sim's teardown `taskkill /F /T` their OWN live child, as before.
     **The text check that guarded this was green on the defect**
     (`onlyPids: ownedPids` reads the same whichever set it is handed). The
     real runner is now RUN, in a child process, against a real stranger on

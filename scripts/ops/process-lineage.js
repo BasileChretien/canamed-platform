@@ -27,7 +27,9 @@
  *   - A link is believed only when the whole chain is alive in ONE snapshot.
  *     Windows never updates ParentProcessId, so it can name a PID that has
  *     since been handed to an unrelated process. A "parent" younger than its
- *     child is therefore not its parent, and the chain stops there.
+ *     child is therefore not its parent, and the chain stops there — as it
+ *     does at any process whose creation time could not be read, since the
+ *     check cannot then be made.
  *   - The root must be OUR child in that same snapshot (its parent is this
  *     process). Once the child has gone its PID can be reused too.
  *   - A remembered verdict names a process, not a number: it carries the
@@ -58,8 +60,9 @@ const MAX_LOOKUPS = 3;
  *
  * Windows: Get-CimInstance, because `wmic` is no longer installed by default
  * (absent on the machine this was written on). The creation time is printed
- * as a FILETIME integer: locale-free, and comparable. System (PID 4) and the
- * idle process have none, hence the 0.
+ * as a FILETIME integer: locale-free, exact, and comparable. A process the
+ * provider reports none for prints 0 (BORN_UNKNOWN), and nothing is ever
+ * concluded through such a row.
  *
  * MEASURED, because the obvious optimisation is a pessimisation. For ~900
  * processes this takes 1.5 s on an idle machine (0.6 s of it PowerShell
@@ -77,7 +80,8 @@ const WIN_QUERY =
   "if ($_.CreationDate) { $born = $_.CreationDate.ToFileTimeUtc() }; " +
   "'{0} {1} {2}' -f $_.ProcessId, $_.ParentProcessId, $born }";
 /* POSIX: one -o per column — `-o pid=,ppid=` reads as a column TITLE on BSD
-   ps (macOS). lstart is used as an identity only, never compared: POSIX
+   ps (macOS). lstart identifies a process (sameBirth) and dates it against the
+   run (bornMs); it is NOT used to order a child against its parent: POSIX
    re-parents an orphan, so a ppid there never names a dead process and the
    younger-parent check below has nothing to catch. */
 const POSIX_PS = ["-A", "-o", "pid=", "-o", "ppid=", "-o", "lstart="];
@@ -132,6 +136,17 @@ function olderThan(a, b) {
     BigInt(a.born) < BigInt(b.born);
 }
 
+/* Is `parent` really the process that spawned `cur`?
+ *
+ * No parent: the chain is broken. A parent younger than its child: the PID was
+ * reused, and that process never spawned this one. A creation time that could
+ * not be read, at either end: the age check cannot be made, so the link proves
+ * nothing — and "cannot be shown" never rounds up to "ours". */
+function believableLink(cur, parent) {
+  return !!parent && cur.born !== BORN_UNKNOWN && parent.born !== BORN_UNKNOWN &&
+    !olderThan(cur, parent);
+}
+
 /* Does `pid` descend from `rootPid` (or is it the root), by an unbroken chain
    of processes all present in `table`? */
 function descendsFrom(table, pid, rootPid) {
@@ -142,12 +157,27 @@ function descendsFrom(table, pid, rootPid) {
     if (cur.pid === root) return true;
     seen.add(cur.pid);
     const parent = table.get(cur.ppid);
-    /* No parent: the chain is broken. A parent younger than its child: the
-       PID was reused, and that process never spawned this one. */
-    if (!parent || olderThan(cur, parent)) return false;
+    if (!believableLink(cur, parent)) return false;
     cur = parent;
   }
   return false;
+}
+
+/* Are two creation times, read at different moments, the same process's?
+ *
+ * A FILETIME is exact: one tick apart is another process. lstart is not —
+ * procps before 4.0 (Ubuntu 22.04, RHEL 8/9) derives it from "now minus
+ * uptime" on every call, so one process can read a second later the next time
+ * `ps` runs. Compared as text, our own leftover would then look like a
+ * stranger and be left on the port. A PID is not reused within a second on any
+ * POSIX system, so a second of tolerance costs nothing there. */
+const LSTART_JITTER_MS = 1000;
+function sameBirth(a, b) {
+  if (a === BORN_UNKNOWN || b === BORN_UNKNOWN) return false;
+  if (a === b) return true;
+  if (/^\d+$/.test(a) || /^\d+$/.test(b)) return false;
+  const ta = Date.parse(a), tb = Date.parse(b);
+  return !Number.isNaN(ta) && !Number.isNaN(tb) && Math.abs(ta - tb) <= LSTART_JITTER_MS;
 }
 
 /* Creation time as ms since the Unix epoch, or null. A FILETIME counts 100 ns
@@ -179,19 +209,26 @@ const BORN_SLACK_MS = 2000;
  * process: had it descended from our child, the chain would have had to pass
  * THROUGH the child before reaching anything older — and the child is dead, so
  * the chain would have stopped there. On POSIX an orphan is re-parented to
- * init, which is older than everything, so only the process itself is judged. */
+ * init, which is older than everything, so only the process itself is judged.
+ *
+ * "The child is dead" is an assumption about the caller, so it is not relied
+ * on: a walk that REACHES the child (opts.root) stops there and answers no.
+ * Otherwise it would carry on to the runner — which is older than its own
+ * child — and our own unobserved listener would be reported as another run's. */
 function predatesSpawn(table, pid, spawnedAtMs, opts) {
   const followParents = opts && "followParents" in opts ? opts.followParents : IS_WIN;
+  const root = opts && opts.root !== undefined ? String(opts.root) : null;
   const cutoff = spawnedAtMs - BORN_SLACK_MS;
   const seen = new Set();
   let cur = table.get(String(pid));
   while (cur && !seen.has(cur.pid)) {
+    if (cur.pid === root) return false;
     const t = bornMs(cur);
     if (t !== null && t < cutoff) return true;
     if (!followParents) return false;
     seen.add(cur.pid);
     const parent = table.get(cur.ppid);
-    if (!parent || olderThan(cur, parent)) return false;
+    if (!believableLink(cur, parent)) return false;
     cur = parent;
   }
   return false;
@@ -212,7 +249,8 @@ function predatesSpawn(table, pid, spawnedAtMs, opts) {
  *                                  than the child (predatesSpawn)
  *                        unproven  alive, and nothing can be shown either way
  *                        gone      no longer running by the time we looked
- *   problem()        — why the last snapshot failed, or null.
+ *                        why       the reasons, if any are known, that the
+ *                                  unproven ones could not be looked up
  *
  * opts.spawnedAt — Date.now() taken just BEFORE the child was spawned.
  * opts.snapshot / selfPid / followParents exist for the tests.
@@ -222,9 +260,12 @@ function track(rootPid, opts) {
   const self = String((opts && opts.selfPid) || process.pid);
   const snapshot = (opts && opts.snapshot) || processTable;
   const spawnedAt = opts && typeof opts.spawnedAt === "number" ? opts.spawnedAt : null;
+  const walk = { root };
+  if (opts && "followParents" in opts) walk.followParents = opts.followParents;
   const ours = new Map();        // pid → born
   const notOurs = new Map();     // pid → born
   const lookups = new Map();     // pid → snapshots that gave no answer
+  const failures = new Map();    // pid → why its last lookup could not be made
   let lastProblem = null;
 
   function read() {
@@ -244,15 +285,20 @@ function track(rootPid, opts) {
       !ours.has(pid) && !notOurs.has(pid) && (lookups.get(pid) || 0) < MAX_LOOKUPS);
     if (!pending.length) return;
     const table = read();
-    if (!table) { pending.forEach(miss); return; }
+    if (!table) {
+      for (const pid of pending) { miss(pid); failures.set(pid, lastProblem); }
+      return;
+    }
     const child = table.get(root);
     /* The child has gone (or its PID is someone else's now). Nothing can be
-       shown from here on, in either direction. */
-    if (!child || child.ppid !== self) return;
+       shown from here on, in either direction — and the lookup still counts,
+       or a caller polling twice a second would buy a snapshot each time. */
+    if (!child || child.ppid !== self) { pending.forEach(miss); return; }
     for (const pid of pending) {
       const proc = table.get(pid);
       if (!proc || proc.born === BORN_UNKNOWN) { miss(pid); continue; }
       (descendsFrom(table, pid, root) ? ours : notOurs).set(pid, proc.born);
+      failures.delete(pid);
     }
   }
 
@@ -263,11 +309,12 @@ function track(rootPid, opts) {
   }
 
   function partition(rows) {
-    const out = { mine: [], notMine: [], unproven: [], gone: [] };
+    const out = { mine: [], notMine: [], unproven: [], gone: [], why: [] };
     /* A survivor already known not to be ours needs no second look — and in
        the lost race for the ports that is every survivor, so the report is
        not held up by another snapshot. */
     const table = rows.some((r) => !notOurs.has(String(r.pid))) ? read() : null;
+    const why = new Set();
     for (const row of rows) {
       const pid = String(row.pid);
       const proc = table && table.get(pid);
@@ -275,15 +322,23 @@ function track(rootPid, opts) {
       /* Listed a moment ago and absent from a table that was read: it died in
          between (a tree-kill still landing). Not a survivor, so not a report. */
       else if (table && !proc) out.gone.push(row);
-      else if (proc && ours.has(pid) && ours.get(pid) === proc.born) out.mine.push(row);
-      else if (proc && spawnedAt !== null && predatesSpawn(table, pid, spawnedAt, opts)) {
+      else if (proc && ours.has(pid) && sameBirth(ours.get(pid), proc.born)) out.mine.push(row);
+      else if (proc && spawnedAt !== null && predatesSpawn(table, pid, spawnedAt, walk)) {
         out.notMine.push(row);
-      } else out.unproven.push(row);
+      } else {
+        out.unproven.push(row);
+        /* The table just read fine, so "it could not be read" is not this
+           read's news — but it may be why the lookups DURING the run all
+           failed, and that is the reason this listener has no verdict. */
+        if (!table) why.add(lastProblem);
+        else if (failures.has(pid)) why.add(failures.get(pid));
+      }
     }
+    out.why = [...why];
     return out;
   }
 
-  return { observe, verdict, partition, problem: () => lastProblem };
+  return { observe, verdict, partition };
 }
 
 module.exports = {

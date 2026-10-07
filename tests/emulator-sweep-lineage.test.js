@@ -49,6 +49,8 @@ const path = require("node:path");
 const net = require("node:net");
 const { spawn } = require("node:child_process");
 
+const emulatorPorts = require("../scripts/ops/emulator-ports.js");
+
 const ROOT = path.join(__dirname, "..");
 const RUNNER = path.join(ROOT, "scripts", "ops", "run-rules-e2e.js");
 const PRELOAD = path.join(__dirname, "fixtures", "fake-emulators-exec-preload.js");
@@ -66,13 +68,22 @@ const SCENARIO_TIMEOUT_MS = 240000;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/* Ports already given to a scenario. The scenarios run at once, and a port is
+   only reserved for as long as the probe below holds it: without this the OS
+   could hand the same number to two of them, and one scenario's "stranger"
+   would be sitting on the other's emulator port. */
+const handedOut = new Set();
 function freePort() {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
     s.on("error", reject);
     s.listen(0, "127.0.0.1", () => {
       const port = s.address().port;
-      s.close(() => resolve(port));
+      s.close(() => {
+        if (handedOut.has(port)) return resolve(freePort());
+        handedOut.add(port);
+        resolve(port);
+      });
     });
   });
 }
@@ -124,14 +135,23 @@ function startRunner(env) {
 
 /* One scenario's worth of ports and scratch space, and a cleanup that leaves
    nothing behind whatever the outcome — including the listeners a regressed
-   sweep would have failed to free. */
+   sweep would have failed to free.
+
+   The cleanup obeys the rule this file is about. It never kills by a PID it
+   merely remembers: by then that process has usually exited, and on Windows
+   the number can already belong to someone else (found in review — the first
+   version did exactly that). Our own children are ended through their
+   ChildProcess handle, which is a no-op once they have gone. The orphan is
+   nobody's child here, so it is ended only while it is still the process
+   listening on the port this scenario was given. */
 async function scenario(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rules-e2e-sweep-"));
   const ports = {
     db: await freePort(), auth: await freePort(),
     web: await freePort(), hub: await freePort()
   };
-  const started = [];
+  const children = [];
+  let orphanPort = null;
   const ctx = {
     dir, ports,
     env: (extra) => Object.assign({
@@ -143,12 +163,13 @@ async function scenario(fn) {
     }, extra),
     stranger: async (port, name) => {
       const s = await startStranger(port, dir, name);
-      started.push(s.pid);
+      children.push(s.proc);
       return s;
     },
     runner: (env) => {
+      if (env.FAKE_EXEC_ORPHAN_PORT) orphanPort = parseInt(env.FAKE_EXEC_ORPHAN_PORT, 10);
       const r = startRunner(ctx.env(env));
-      started.push(r.child.pid);
+      children.push(r.child);
       return r;
     },
     release: () => fs.writeFileSync(path.join(dir, "release"), "", "utf8"),
@@ -158,10 +179,13 @@ async function scenario(fn) {
     await fn(ctx);
   } finally {
     try { ctx.release(); } catch (e) { /* the directory may already be gone */ }
-    try { started.push(ctx.orphanPid()); } catch (e) { /* no orphan in this scenario */ }
-    for (const pid of started) {
-      try { process.kill(pid); } catch (e) { /* already gone, which is the goal */ }
-    }
+    for (const child of children) child.kill();
+    try {
+      const orphan = String(ctx.orphanPid());
+      if (orphanPort !== null && emulatorPorts.listeningPids(orphanPort).includes(orphan)) {
+        process.kill(parseInt(orphan, 10));
+      }
+    } catch (e) { /* no orphan in this scenario, or it has gone — the goal */ }
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }

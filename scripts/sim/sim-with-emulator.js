@@ -109,8 +109,30 @@ function observeListeners() {
     lineage.observe(emulatorPorts.listeners([DB_PORT, AUTH_PORT]).map(r => r.pid));
   } catch (_) { /* transient; the sweep reports what it cannot prove */ }
 }
+let simProc = null;
+/* Set by cleanup(). Until then our emulator has no business exiting, and if it
+   does, whatever answers on the ports afterwards is not it. */
+let tearingDown = false;
+
+/* The run cannot go on: what holds the emulator ports is not our emulator.
+   Says so, kills nothing, and exits — the "exit" handler then cleans up by
+   lineage, which leaves these listeners alone. */
+function refuseForeign(rows, how) {
+  console.error("FATAL: ANOTHER RUN HOLDS THE EMULATOR PORTS — " + how + ":\n" +
+    emulatorPorts.describe(rows) + "\n\n" +
+    "The ports were free at this run's preflight and were taken before its own\n" +
+    "emulator could bind them. The firebase CLI says so as \"Port " + DB_PORT + " is not\n" +
+    "open … could not start Database Emulator\"; \"emulator hub unable to start on\n" +
+    "port 4400, starting on 4401 instead\" is the tell-tale that another hub is\n" +
+    "alive. The sim is not being run against that listener.\n\n" +
+    "NOTHING WAS KILLED. Two sessions cannot run an emulator suite at once:\n" +
+    "wait for the other run to end, then run this again — do not retry in a loop.");
+  process.exit(1);
+}
+
 function cleanup() {
-  for (const p of [firebaseProc, serveProc]) {
+  tearingDown = true;
+  for (const p of [simProc, firebaseProc, serveProc]) {
     /* exitCode: a child that has already ended has no tree left to kill, and
        its PID may be someone else's by now. */
     if (!p || p.killed || p.exitCode !== null) continue;
@@ -141,7 +163,7 @@ function cleanup() {
     const survivors = emulatorPorts.survey([DB_PORT, AUTH_PORT]);
     const sorted = lineage
       ? lineage.partition(survivors)
-      : { mine: [], notMine: [], unproven: survivors };
+      : { mine: [], notMine: [], unproven: survivors, why: [] };
     const ownedPids = new Set(sorted.mine.map(r => String(r.pid)));
     if (sorted.mine.length) {
       const killed = emulatorPorts.free([DB_PORT, AUTH_PORT], { onlyPids: ownedPids });
@@ -160,7 +182,7 @@ function cleanup() {
       console.warn("Sim/emu: these listeners could NOT BE SHOWN to have been " +
         "started by this run, so they were left alone:\n" +
         emulatorPorts.describe(sorted.unproven) +
-        (lineage && lineage.problem() ? "\n(" + lineage.problem() + ")" : "") +
+        (sorted.why.length ? "\n(" + sorted.why.join("; ") + ")" : "") +
         "\n\n" + emulatorPorts.LIVE_RUN_CAVEAT +
         "\n\nOnly when you know they are stale:\n  " +
         emulatorPorts.clearCommand(sorted.unproven));
@@ -281,6 +303,25 @@ function check(cmd, args, label) {
     if (code !== null && code !== 0) {
       console.error("Sim/emu: firebase emulator exited with code " + code);
     }
+    if (tearingDown) return;
+    /* Our emulator has gone while the run still needs it — which is what
+       losing the race for the ports looks like from here: the CLI finds :9000
+       taken and exits. This must END the run, at whatever point it happens:
+       waitForPort() below is satisfied by ANY listener, so without this the
+       sim would go on against whoever holds the ports. It does not depend on
+       reading the process table, which may be slow or unavailable. */
+    let others = [];
+    try {
+      others = emulatorPorts.survey([DB_PORT, AUTH_PORT])
+        .filter(r => lineage.verdict(r.pid) !== "ours");
+    } catch (_) { /* reported as the plain exit below */ }
+    if (others.length) {
+      refuseForeign(others,
+        "this run's own emulator has exited, so what holds the ports is not it");
+    }
+    console.error("FATAL: this run's emulator exited before the sim was done " +
+      "(see the firebase CLI's output above).");
+    process.exit(1);
   });
   // Wait for BOTH the DB + Auth emulator ports to come up. The DB
   // emulator spends ~10s downloading + warming up on first run, so the
@@ -295,24 +336,14 @@ function check(cmd, args, label) {
      the old cleanup then killed their emulator on the way out. So look at who
      is listening before going any further. */
   observeListeners();
-  const listening = emulatorPorts.survey([DB_PORT, AUTH_PORT]);
-  const foreign = listening.filter(r => lineage.verdict(r.pid) === "not-ours");
-  if (foreign.length || firebaseProc.exitCode !== null) {
-    console.error("FATAL: ANOTHER RUN HOLDS THE EMULATOR PORTS — " +
-      (foreign.length
-        ? "this run did not start:\n" + emulatorPorts.describe(foreign)
-        : "this run's own emulator has already exited, so what answers on\n" +
-          "the ports is not it:\n" + emulatorPorts.describe(listening)) + "\n\n" +
-      "The ports were free at this run's preflight and were taken before its own\n" +
-      "emulator could bind them. The firebase CLI says so as \"Port " + DB_PORT + " is not\n" +
-      "open … could not start Database Emulator\"; \"emulator hub unable to start on\n" +
-      "port 4400, starting on 4401 instead\" is the tell-tale that another hub is\n" +
-      "alive. What answered the readiness probe is therefore NOT this run's\n" +
-      "emulator, and the sim has not been run against it.\n\n" +
-      "NOTHING WAS KILLED. Two sessions cannot run an emulator suite at once:\n" +
-      "wait for the other run to end, then run this again — do not retry in a loop.");
-    process.exit(1);   // the "exit" handler cleans up, by lineage
-  }
+  /* Everything since the probe answered has been synchronous (the lookup above
+     can take seconds), and a child that died in the meantime still reads as
+     running until the event loop turns. Let it turn: if our CLI has exited,
+     its "exit" handler above ends the run here, before the sim starts. */
+  await new Promise(r => setTimeout(r, 250));
+  const foreign = emulatorPorts.survey([DB_PORT, AUTH_PORT])
+    .filter(r => lineage.verdict(r.pid) === "not-ours");
+  if (foreign.length) refuseForeign(foreign, "this run did not start");
   const ownershipPoll = setInterval(observeListeners, 5000);
   ownershipPoll.unref();
   console.log("Sim/emu: emulator is up — RTDB on :" + DB_PORT +
@@ -327,11 +358,14 @@ function check(cmd, args, label) {
     SIM_DB_PORT: String(DB_PORT),
     SIM_AUTH_PORT: String(AUTH_PORT)
   });
-  const sim = spawn(process.execPath, [SIM_SCRIPT], {
+  /* Module-level, so that a run cut short (our emulator gone, see the "exit"
+     handler above) takes the sim down with it instead of leaving it writing
+     to whoever holds the ports. */
+  simProc = spawn(process.execPath, [SIM_SCRIPT], {
     stdio: ["ignore", "inherit", "inherit"], env: simEnv
   });
   await new Promise(resolve => {
-    sim.on("exit", code => {
+    simProc.on("exit", code => {
       console.log("Sim/emu: sim exited with code " + code);
       resolve(code);
     });

@@ -39,6 +39,10 @@ function waitFor(file, then) {
     if (fs.existsSync(path.join(DIR, file))) {
       clearInterval(tick);
       then();
+    } else if (!fs.existsSync(DIR)) {
+      /* The test has cleaned up and gone; nobody will ever write the file. */
+      clearInterval(tick);
+      process.exit(4);
     } else if (Date.now() - started > GIVE_UP_MS) {
       clearInterval(tick);
       console.error("fake-emulators-exec: gave up waiting for " + file);

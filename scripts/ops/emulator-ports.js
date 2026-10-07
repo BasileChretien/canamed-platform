@@ -140,7 +140,14 @@ function survey(ports) {
  * (process-lineage.js) — and NOT "seen on the port during the run": the ports
  * are shared by every checkout on the machine, and what a run sees there can
  * be another run's live emulator. The explicit `emulator:free` verb passes
- * nothing — there the operator is the authority. */
+ * nothing — there the operator is the authority.
+ *
+ * With onlyPids the Windows kill is NOT a tree kill. `taskkill /T` walks
+ * ParentProcessId, which Windows never rewrites: an unrelated orphan whose
+ * dead parent's PID has since been handed to the listener would be taken as
+ * its child and killed with it — the very reading process-lineage.js refuses.
+ * The caller verified THESE processes, so these are what is killed; each
+ * listener is its own row, so nothing that holds a port is missed. */
 function free(ports, opts) {
   const onlyPids = opts && opts.onlyPids
     ? new Set([...opts.onlyPids].map(String))
@@ -165,7 +172,8 @@ function free(ports, opts) {
     let error = null;
     try {
       if (IS_WIN) {
-        execFileSync("taskkill", ["/F", "/T", "/PID", pid], { stdio: "ignore" });
+        execFileSync("taskkill", onlyPids ? ["/F", "/PID", pid] : ["/F", "/T", "/PID", pid],
+          { stdio: "ignore" });
       } else {
         process.kill(parseInt(pid, 10), "SIGKILL");
       }
