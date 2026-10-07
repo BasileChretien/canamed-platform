@@ -104,6 +104,44 @@ test("the purge leaves a marker for each session it removes, in both trees, and 
     "a marker exists for a session that was not purged");
 });
 
+test("a node with no timestamps is purged WITHOUT a marker: it was never a session", () => {
+  /* The purge removes a session-shaped node that has neither `created/at` nor
+     `closed/at` defensively ("pre-schema or corrupted"). Any signed-in visitor
+     can make one: `sessions/<any code>/members/<own uid>` is writable without
+     the session ever having been created. If the purge left a marker for it,
+     the purge itself would be issuing the proof that a made-up code "existed"
+     — and the erasure tool, which refuses to dismiss a request under a marker,
+     could then only close it with a permanent suppression record. */
+  const r = purge({
+    sessions: {
+      "JUNK-1": { members: { uidVisitor: { at: ago(1) } } },
+      "REAL-1": closed(31),
+      "REAL-2": { created: { at: ago(91) } },                 // abandoned: no closed/at
+      "REAL-3": { closed: { at: ago(31) } },                  // legacy: no created
+    },
+    withdrawals: { "JUNK-1": { uidVisitor: { research: false, erasure: true, at: ago(1) } } },
+  });
+  assert.strictEqual(r.code, 0, r.out);
+  for (const code of ["JUNK-1", "REAL-1", "REAL-2", "REAL-3"]) {
+    assert.strictEqual(at(r.tree, "sessions/" + code), null, code + " was not purged");
+  }
+  assert.deepStrictEqual(Object.keys(at(r.tree, "purgedSessions")).sort(), ["REAL-1", "REAL-2", "REAL-3"],
+    "a marker is evidence that a session existed; a node with no timestamp is not one");
+
+  /* The request under it is not deleted — a job never deletes an unanswered
+     request — but it is now one of the records nothing accounts for, which the
+     monitor counts apart and the erasure tool will dismiss. */
+  assert.notStrictEqual(at(r.tree, "withdrawals/JUNK-1/uidVisitor"), null);
+  const dismissed = runOpsScript("erase-participant.js", {
+    tree: r.tree, now: NOW + DAY,
+    args: ["--uid", "uidVisitor", "--session", "JUNK-1", "--dismiss", "--reason", "no such session"],
+    env: { ERASE_CONFIRM: "1" },
+  });
+  assert.strictEqual(dismissed.code, 0, dismissed.out);
+  assert.strictEqual(at(dismissed.tree, "withdrawals"), null);
+  assert.strictEqual(at(dismissed.tree, "erasures"), null);
+});
+
 test("a dry run writes no marker", () => {
   /* A marker for a session that is still there would let the sweep treat its
      withdrawal records as belonging to a purged session. */
@@ -163,8 +201,10 @@ function backfill(tree, snapshots, env, extraArgs) {
 }
 
 const TAKEN = "2026-09-20T02:47:11.000Z";
+/* What the script under test is pointed at (tests/fixtures/run-ops-script.js). */
+const THIS_DB = "https://fake-rtdb.example.test";
 const snapshot = (sessions, takenAt) => ({
-  backupTakenAt: takenAt || TAKEN, databaseUrl: "x", sessionCount: Object.keys(sessions).length, sessions,
+  backupTakenAt: takenAt || TAKEN, databaseUrl: THIS_DB, sessionCount: Object.keys(sessions).length, sessions,
 });
 
 test("the backfill marks sessions a snapshot holds and the database no longer does", () => {
@@ -217,8 +257,14 @@ test("the backfill refuses a file it cannot vouch for, and writes nothing", () =
   const good = snapshot({ "GONE-1": {} });
   const cases = [
     ["not a backup payload", { some: "export" }],
-    ["no date", { sessions: { "GONE-1": {} } }],
-    ["an unreadable date", { backupTakenAt: "last tuesday", sessions: { "GONE-1": {} } }],
+    ["no date", { databaseUrl: THIS_DB, sessions: { "GONE-1": {} } }],
+    ["an unreadable date", { backupTakenAt: "last tuesday", databaseUrl: THIS_DB, sessions: { "GONE-1": {} } }],
+    /* A snapshot of ANOTHER database — the emulator, a test project — names
+       sessions that were never in this one. Markers minted from it would let
+       requests be recorded here for sessions this database never held. */
+    ["a snapshot of another database",
+      Object.assign(snapshot({ "GONE-1": {} }), { databaseUrl: "https://other.example.test" })],
+    ["a snapshot that does not say which database it is of", { backupTakenAt: TAKEN, sessions: { "GONE-1": {} } }],
     ["a date in the future", snapshot({ "GONE-1": {} }, new Date(NOW + DAY).toISOString())],
     ["not JSON", "{ nope"],
   ];
@@ -235,10 +281,11 @@ test("the backfill refuses a file it cannot vouch for, and writes nothing", () =
 test("the backfill skips a key that is not a session location, and says how many", () => {
   const r = backfill({}, [snapshot({
     "GONE-1": {}, "a/b": {}, "orgs/uni-x": {}, "orgs/uni-x/GONE-2/extra": {}, "bad.key": {}, "": {},
+    orgs: {},                                    // the organisation subtree's own name
   })], { BACKFILL_CONFIRM: "1" });
   assert.strictEqual(r.code, 0, r.out);
   assert.deepStrictEqual(r.tree.purgedSessions, { "GONE-1": Date.parse(TAKEN) });
-  assert.match(r.out, /not a session location:\s+5\b/);
+  assert.match(r.out, /not a session location:\s+6\b/);
 });
 
 test("the backfill prints session codes only when asked", () => {

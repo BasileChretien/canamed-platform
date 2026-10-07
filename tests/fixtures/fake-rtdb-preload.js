@@ -18,7 +18,8 @@
  *
  *   FAKE_RTDB_FILE      JSON file holding the whole database (read, then rewritten)
  *   FAKE_RTDB_NOW       epoch ms that Date.now() returns
- *   FAKE_RTDB_THROW_ON  optional path whose read rejects
+ *   FAKE_RTDB_THROW_ON  optional path whose read fails: a rejected Admin read,
+ *                       or an HTTP 401 for a keys-only listing over REST
  */
 
 const Module = require("node:module");
@@ -66,13 +67,29 @@ function prune(node) {
 
 function snapshot(p) {
   if (throwOn && p === throwOn) {
-    throw Object.assign(new Error("fake read failure"), { code: "PERMISSION_DENIED" });
+    /* The message QUOTES THE PATH, as real firebase-admin errors can — so a
+       script that prints e.message into a public log shows up in a test as the
+       session code or uid it would have leaked. */
+    throw Object.assign(new Error("fake read failure at /" + p), { code: "PERMISSION_DENIED" });
   }
   const v = at(p);
   return { exists: () => v !== null, val: () => (v === null ? null : JSON.parse(JSON.stringify(v))) };
 }
 
-let pushed = 0;
+/* push() keys must be new each time, ACROSS runs: the tree outlives the
+   process, and a counter restarting at 1 would make a second run overwrite the
+   first run's `erasures/` entry — so a test chaining two runs would see one
+   record where the real database holds two. Like the real thing, a key sorts
+   after every key already under that node. */
+function pushKey(where) {
+  const node = at(where);
+  const taken = isObj(node) ? Object.keys(node) : [];
+  let n = taken.length + 1;
+  let key;
+  do { key = "-fakePush" + String(n++).padStart(4, "0"); } while (taken.includes(key));
+  return key;
+}
+
 const db = {
   ref(p) {
     const where = segs(p).join("/");
@@ -98,7 +115,7 @@ const db = {
       },
       async set(value) { put(where, value); prune(tree); },
       async remove() { put(where, null); prune(tree); },
-      push() { return db.ref(where + "/-fakePush" + String(++pushed).padStart(4, "0")); }
+      push() { return db.ref(where + "/" + pushKey(where)); }
     };
   }
 };
@@ -121,6 +138,7 @@ Module._load = function (request) {
    the KEYS of a node and never its values. Answer the same way. */
 globalThis.fetch = async (url) => {
   const p = String(url).replace(/^https:\/\/[^/]+\//, "").replace(/\.json(\?.*)?$/, "");
+  if (throwOn && p === throwOn) return { ok: false, status: 401, json: async () => ({ error: "Unauthorized" }) };
   const node = at(p);
   const body = /[?&]shallow=true/.test(String(url))
     ? (isObj(node) ? Object.fromEntries(Object.keys(node).map((k) => [k, true])) : null)

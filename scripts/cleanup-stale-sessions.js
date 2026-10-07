@@ -75,8 +75,9 @@ const { pruneHfPatientMetrics } = require("./lib/metrics-retention");
 const { parseRetentionDays } = require("./lib/retention-window");
 const { readBackupMarker, backupGateReport } = require("./lib/backup-marker");
 const { runCleanupPasses } = require("./lib/cleanup-passes");
-const { answeredKeys, flattenErasures } = require("./lib/data-rights");
+const { answeredIndex, flattenErasures } = require("./lib/data-rights");
 const {
+  holdsErasureRequest,
   planPurgedSessionWithdrawals,
   sweepPurgedSessionRecords
 } = require("./lib/withdrawal-retention");
@@ -190,19 +191,20 @@ async function pruneMetrics(db) {
 
 /* Which erasure requests have been answered — the `erasures` ledger. Shared by
    the session pass and the withdrawal sweep, read at most ONCE per run, and
-   only when one of them actually holds a request to decide on: a dry run of
-   the session pass, or a night with nothing due and no purged session holding
-   a request, reads no identifier at all. If it cannot be read, nothing can be
-   shown to be answered — every request is then kept, the purge itself still
-   happens, and the pass that asked reports one error: an unreadable ledger is
-   also a restore that would refuse to run. */
+   only when one of them actually holds an erasure request to decide on: a
+   session being purged with one under it, or a purged session still carrying
+   one (which, for a request that is being kept, is every night until it is
+   answered). If it cannot be read, nothing can be shown to be answered —
+   every request is then kept, the purge itself still happens, and the pass
+   that asked reports one error: an unreadable ledger is also a restore that
+   would refuse to run. */
 let ledger;                           // undefined = not read yet; null = unreadable
 let ledgerErrors = 0;
 async function answeredRequests(db) {
   if (ledger !== undefined) return ledger;
   try {
     const snap = await db.ref("erasures").once("value");
-    ledger = answeredKeys(flattenErasures(snap.val()));
+    ledger = answeredIndex(flattenErasures(snap.val()));
   } catch (e) {
     ledger = null;
     ledgerErrors = 1;
@@ -334,6 +336,19 @@ async function purgeSessions(db, locations) {
   let kept = 0, purged = 0, errors = 0;
   let requestsKept = 0;
 
+  /* Something under `sessions/orgs`. That key is the organisation subtree's
+     name in every tree outside `sessions/`, so the enumerator builds no
+     location for it (lib/session-trees.js) and nothing here will touch it or
+     its would-be siblings. It is not a session; the rules refuse to create it;
+     so its presence is somebody trying, or data from before the rule. Either
+     way it wants a person, which is why the run is marked failed. */
+  if (locations.reservedSkipped) {
+    errors++;
+    console.error("ERROR    a node sits under the reserved key `orgs` in sessions/. It is " +
+      "not a session and was NOT purged; none of the organisation trees were touched. " +
+      "Look at it, then remove sessions/orgs by hand.");
+  }
+
   for (const loc of locations) {
     const label = safeLabel(loc, QUIET);
     try {
@@ -429,9 +444,9 @@ async function purgeSessions(db, locations) {
         // session is not purged tonight (the update is all-or-nothing) rather
         // than purged blind. NB `erasures/` itself is never deleted from — it
         // must OUTLIVE the snapshots it suppresses.
-        const withdrawalsSnap = await db.ref(loc.withdrawalsPath).once("value");
+        const byUid = (await db.ref(loc.withdrawalsPath).once("value")).val();
         const records = planPurgedSessionWithdrawals(
-          withdrawalsSnap.val(), loc.key, await answeredRequests(db));
+          byUid, loc.key, holdsErasureRequest(byUid) ? await answeredRequests(db) : new Map());
         for (const uid of records.deleteUids) purge[`${loc.withdrawalsPath}/${uid}`] = null;
         // Certificate-id map (certIds/<code>): another out-of-cascade top-level
         // tree, so it needs the same explicit purge or it orphans a map of
@@ -462,7 +477,16 @@ async function purgeSessions(db, locations) {
         // withdrawal record only where a marker shows its session was purged).
         // In the SAME update as the deletions, so there is never a purged
         // session without one. See purgedMarkers() in lib/session-trees.js.
-        purge[loc.purgedMarkerPath] = Date.now();
+        //
+        // ONLY FOR A SESSION THAT HAD A TIMESTAMP. A node with neither
+        // `created/at` nor `closed/at` is purged defensively above, but it is
+        // not evidence of a session: any signed-in visitor can write
+        // `sessions/<any code>/members/<own uid>` without the session ever
+        // having been created. A marker for that would be this job certifying
+        // a made-up code.
+        if (typeof createdAt === "number" || typeof closedAt === "number") {
+          purge[loc.purgedMarkerPath] = Date.now();
+        }
 
         await db.ref().update(purge);
         requestsKept += records.keptUids.length;

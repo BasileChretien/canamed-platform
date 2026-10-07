@@ -2186,7 +2186,46 @@ test("rules: withdrawal is possible AFTER the session closes, and only by its ow
   await ctx.close();
 });
 
-test("rules: a withdrawal can only name a session that exists or was purged, and cannot be back-dated", async ({ page }) => {
+test("rules: `orgs` cannot be used as a session code", async ({ page }) => {
+  /* Outside `sessions/`, every per-session tree keeps organisation sessions
+   * under a literal `orgs` child — adminSecrets/orgs/<slug>/<code>, roomChat/
+   * orgs/…, certIds/orgs/…, withdrawals/orgs/… — so the paths of a default-tree
+   * session CODED `orgs` are the roots of every organisation's data, and the
+   * nightly purge deletes a session's paths. Nothing reserved the key: this
+   * page is an anonymous visitor, and until 2026-10-07 its one write below was
+   * accepted (tests/reserved-session-key.test.js runs the purge that followed).
+   *
+   * Each denial is the SAME payload that is allowed under an ordinary code. */
+  await page.goto("/");
+  const uid = await waitForUid(page);
+  const stamp = Date.now().toString(36).slice(-5).toUpperCase();
+  const OTHER = "RK" + stamp;
+  const slug = "rk-" + stamp.toLowerCase();
+  const denied = (r) => expect(String(r)).toMatch(/permission[_ ]denied/i);
+  const member = () => ({ at: Date.now() });
+
+  denied(await tryWrite(page, `sessions/orgs/members/${uid}`, member()));
+  expect(await dbReadAsOwner("sessions/orgs"), "the denied write must have left nothing").toBeNull();
+  expect(await tryWrite(page, `sessions/${OTHER}/members/${uid}`, member()),
+    "the same row under an ordinary code").toBe("ALLOWED");
+
+  // Another participant-writable child, so this is the session node's rule
+  // and not something particular to `members`.
+  denied(await tryWrite(page, `sessions/orgs/clientMapping/c${stamp}`, uid));
+  expect(await tryWrite(page, `sessions/${OTHER}/clientMapping/c${stamp}`, uid)).toBe("ALLOWED");
+
+  // Creating it outright is refused too — by the same rule, with the gate open.
+  denied(await tryWrite(page, "sessions/orgs/created", { by: "x", at: Date.now() }));
+  expect(await tryWrite(page, `sessions/${OTHER}/created`, { by: "x", at: Date.now() })).toBe("ALLOWED");
+  expect(await dbReadAsOwner("sessions/orgs")).toBeNull();
+
+  // The organisation tree refuses the key as well (it collides with nothing
+  // there; the two session subtrees are kept the same shape).
+  denied(await tryWrite(page, `orgs/${slug}/sessions/orgs/members/${uid}`, member()));
+  expect(await tryWrite(page, `orgs/${slug}/sessions/${OTHER}/members/${uid}`, member())).toBe("ALLOWED");
+});
+
+test("rules: a withdrawal can only name a session that was created or was purged, and cannot be back-dated", async ({ page }) => {
   /* DPA Annex VI G12. Until 2026-10-07 the write looked at the uid and nothing
    * else: any signed-in visitor — this page is an ANONYMOUS one — could record
    * an erasure request for a code that never existed, with whatever date it
@@ -2238,6 +2277,18 @@ test("rules: a withdrawal can only name a session that exists or was purged, and
     .toBe("ALLOWED");
   denied(await tryWrite(page, `withdrawals/${NEVER}/${uid}`, request()));
 
+  /* Nor is "something exists under this code". The first version of the rule
+     tested the session node itself — and any signed-in visitor can write their
+     own membership row under ANY code, created or not. That write is accepted
+     here (so the next denial is not the node being unwritable), the node now
+     exists, and the withdrawal is still refused: the rule looks at `created`. */
+  expect(await tryWrite(page, `sessions/${NEVER}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
+  expect(await dbReadAsOwner(`sessions/${NEVER}`), "the code now has something under it").not.toBeNull();
+  expect(await dbReadAsOwner(`sessions/${NEVER}/created`)).toBeNull();
+  denied(await tryWrite(page, `withdrawals/${NEVER}/${uid}`, request()));
+  expect(await dbReadAsOwner(`withdrawals/${NEVER}`)).toBeNull();
+
   // ---- the date ----------------------------------------------------------
   const backdated = (ms) => ({ research: false, erasure: true, at: Date.now() - ms });
   denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, { research: false, erasure: true, at: 1 }));
@@ -2250,12 +2301,20 @@ test("rules: a withdrawal can only name a session that exists or was purged, and
   expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(-2000)),
     "a device clock two seconds fast must still be able to withdraw").toBe("ALLOWED");
   denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(-3600000)));
+  /* The date cannot be removed on its own either: the record needs both
+     fields, and a write to one child is judged against the whole record. */
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, null));
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}/at`, 1));
   const stored = await dbReadAsOwner(`withdrawals/${LIVE}/${uid}/at`);
   expect(Math.abs(Date.now() - stored), "the stored date is the last ALLOWED one, not a refused one")
     .toBeLessThan(10 * 60000);
 
   // ---- org tree: the same four facts, and the trees do not vouch for each other
   const orgRecord = (code) => `withdrawals/orgs/${slug}/${code}/${uid}`;
+  denied(await tryWrite(page, orgRecord(NEVER), request()));
+  // The membership row is no more a session here than in the default tree.
+  expect(await tryWrite(page, `orgs/${slug}/sessions/${NEVER}/members/${uid}`, { at: Date.now() }))
+    .toBe("ALLOWED");
   denied(await tryWrite(page, orgRecord(NEVER), request()));
   /* The default tree HAS this session and this marker. If the org rule read
      either, these would be allowed — a mis-copied prefix fails OPEN. */

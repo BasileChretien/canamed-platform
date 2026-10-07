@@ -72,7 +72,8 @@ function initAdmin() {
 /* A key the database could not hold, or that is not shaped like a location,
    is not a session: it came from a file, and a file can contain anything. */
 function isLocationKey(key) {
-  if (typeof key !== "string" || key === "") return false;
+  /* A bare `orgs` is the organisation subtree's own name, never a session. */
+  if (typeof key !== "string" || key === "" || key === "orgs") return false;
   const parts = key.split("/");
   if (!(parts.length === 1 || (parts.length === 3 && parts[0] === "orgs"))) return false;
   if (parts.some((p) => p === "" || /[.#$\[\]]/.test(p))) return false;
@@ -100,6 +101,14 @@ function readSnapshots(files, now) {
     if (sessions === null || typeof sessions !== "object" || Array.isArray(sessions)) {
       throw new Error(`${file} has no \`sessions\` object. This reads the payload ` +
         "scripts/backup-sessions.js writes, not a raw database export.");
+    }
+    /* A snapshot of ANOTHER database names sessions this one never held, and a
+       marker here is a standing permission to record a request about one. The
+       backup payload says which database it is of; it must be this one. */
+    if (payload.databaseUrl !== DB_URL) {
+      throw new Error(`${file} is a snapshot of ${payload.databaseUrl ? "another database" : "no stated database"}, ` +
+        "not of the one this run is pointed at (FIREBASE_DATABASE_URL). Markers are " +
+        "only made from a snapshot of the database they are written to.");
     }
     const takenAt = Date.parse(payload.backupTakenAt);
     if (!Number.isFinite(takenAt) || takenAt > now) {

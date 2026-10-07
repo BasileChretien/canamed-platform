@@ -31,7 +31,32 @@
  *   orgs can legitimately use the same session code, so keying an export by the
  *   bare code would silently overwrite one with the other.
  */
+/* `orgs` IS NOT A SESSION CODE in the default tree. Every per-session tree
+ * outside `sessions/` keeps organisation sessions under a literal `orgs`
+ * child (adminSecrets/orgs/<slug>/<code>, roomChat/orgs/…, certIds/orgs/…,
+ * withdrawals/orgs/…, purgedSessions/orgs/…), so the paths of a default-tree
+ * session coded `orgs` would be the ROOTS of every organisation's data — and
+ * the purge deletes a session's paths. Until 2026-10-07 nothing reserved the
+ * key, and one anonymous write under `sessions/orgs/` was enough to have the
+ * next purge remove all of it. The rules now refuse the key; this is the
+ * second lock: no location is ever built for it. */
+const RESERVED_DEFAULT_CODES = new Set(["orgs"]);
+const isReservedCode = (orgSlug, code) => orgSlug === null && RESERVED_DEFAULT_CODES.has(code);
+
+/* Lists are returned with the number of reserved keys they left out, as a
+ * NON-enumerable property: callers that only want the list are unaffected,
+ * and the purge can say that something is sitting under a key it will not
+ * touch. */
+function withReservedCount(list, skipped) {
+  Object.defineProperty(list, "reservedSkipped", { value: skipped, enumerable: false });
+  return list;
+}
+
 function locationFor(orgSlug, code) {
+  if (isReservedCode(orgSlug, code)) {
+    throw new Error("'" + code + "' is a reserved key, not a session code: its paths " +
+      "would be the roots of every organisation's data");
+  }
   /* THE SINGLE SOURCE OF THE PURGE TARGETS. cleanup-stale-sessions derives
    * every path it DELETES from this object, so the two enumerators below must
    * not each build their own copy — a divergence here deletes the wrong node
@@ -73,8 +98,10 @@ function locationFor(orgSlug, code) {
 
 function sessionLocations(sessionsVal, orgsVal) {
   const out = [];
+  let skipped = 0;
 
   for (const code of Object.keys(sessionsVal || {})) {
+    if (isReservedCode(null, code)) { skipped++; continue; }
     out.push(Object.assign(locationFor(null, code), { data: sessionsVal[code] }));
   }
 
@@ -86,7 +113,7 @@ function sessionLocations(sessionsVal, orgsVal) {
     }
   }
 
-  return out;
+  return withReservedCount(out, skipped);
 }
 
 /**
@@ -102,7 +129,9 @@ function sessionLocations(sessionsVal, orgsVal) {
  */
 function sessionLocationsFromKeys(sessionCodes, orgSessionCodes) {
   const out = [];
+  let skipped = 0;
   for (const code of sessionCodes || []) {
+    if (isReservedCode(null, code)) { skipped++; continue; }
     out.push(Object.assign(locationFor(null, code), { metadataOnly: true }));
   }
   for (const slug of Object.keys(orgSessionCodes || {})) {
@@ -110,7 +139,7 @@ function sessionLocationsFromKeys(sessionCodes, orgSessionCodes) {
       out.push(Object.assign(locationFor(slug, code), { metadataOnly: true }));
     }
   }
-  return out;
+  return withReservedCount(out, skipped);
 }
 
 /**
@@ -147,21 +176,38 @@ function sessionLocationsFromKeys(sessionCodes, orgSessionCodes) {
 function withdrawalLocations(withdrawalsVal) {
   const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
   const out = {};
-  if (!isObj(withdrawalsVal)) return out;
+  const top = asKeyed(withdrawalsVal);
+  if (top === null) return out;
 
-  for (const code of Object.keys(withdrawalsVal)) {
-    if (code === "orgs") continue;
-    if (isObj(withdrawalsVal[code])) out[locationFor(null, code).key] = withdrawalsVal[code];
+  for (const code of Object.keys(top)) {
+    if (isReservedCode(null, code)) continue;
+    if (isObj(top[code])) out[locationFor(null, code).key] = top[code];
   }
 
-  const orgs = isObj(withdrawalsVal.orgs) ? withdrawalsVal.orgs : {};
+  const orgs = asKeyed(top.orgs) || {};
   for (const slug of Object.keys(orgs)) {
-    if (!isObj(orgs[slug])) continue;
-    for (const code of Object.keys(orgs[slug])) {
-      if (isObj(orgs[slug][code])) out[locationFor(slug, code).key] = orgs[slug][code];
+    const codes = asKeyed(orgs[slug]);
+    if (codes === null) continue;
+    for (const code of Object.keys(codes)) {
+      if (isObj(codes[code])) out[locationFor(slug, code).key] = codes[code];
     }
   }
   return out;
+}
+
+/* A node read through the Admin SDK comes back as an ARRAY when its keys are
+ * all small integers (0, 1, 2…), with null in the gaps. A tree keyed by
+ * session code is not normally shaped like that — but a code is chosen by
+ * whoever creates the session, and "an array, so nothing here" is, for the
+ * monitor, the answer that hides requests. Arrays are read as what they are:
+ * a map from index to value. Anything that is not a tree at all is null. */
+function asKeyed(v) {
+  if (Array.isArray(v)) {
+    const out = {};
+    v.forEach((child, i) => { if (child !== null && child !== undefined) out[String(i)] = child; });
+    return out;
+  }
+  return v !== null && typeof v === "object" ? v : null;
 }
 
 /**
@@ -194,8 +240,10 @@ function locationForKey(key) {
  * thing left in the database that shows a session EXISTED. Three things lean
  * on that:
  *   - the rule on `withdrawals/<code>/<uid>` accepts a record only for a
- *     session that is in the database or has a marker, so a request can no
- *     longer be made for a code that never was;
+ *     session whose `created` record exists, or that has a marker, so a
+ *     request can no longer be made under a code where no session was ever
+ *     created (the purge writes a marker only for a session that had a
+ *     timestamp — a node with none is debris anyone could have written);
  *   - the erasure tool writes a suppression record for a session that is gone
  *     only under a marker — `erasures/` is never deleted, so it must not fill
  *     with records for sessions that did not exist;
@@ -210,20 +258,21 @@ function locationForKey(key) {
  * @returns {Object<string, number>} locationKey -> purged-at, epoch ms
  */
 function purgedMarkers(markersVal) {
-  const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
   const out = {};
-  if (!isObj(markersVal)) return out;
+  const top = asKeyed(markersVal);
+  if (top === null) return out;
 
-  for (const code of Object.keys(markersVal)) {
-    if (code === "orgs") continue;
-    if (typeof markersVal[code] === "number") out[locationFor(null, code).key] = markersVal[code];
+  for (const code of Object.keys(top)) {
+    if (isReservedCode(null, code)) continue;
+    if (typeof top[code] === "number") out[locationFor(null, code).key] = top[code];
   }
 
-  const orgs = isObj(markersVal.orgs) ? markersVal.orgs : {};
+  const orgs = asKeyed(top.orgs) || {};
   for (const slug of Object.keys(orgs)) {
-    if (!isObj(orgs[slug])) continue;
-    for (const code of Object.keys(orgs[slug])) {
-      if (typeof orgs[slug][code] === "number") out[locationFor(slug, code).key] = orgs[slug][code];
+    const codes = asKeyed(orgs[slug]);
+    if (codes === null) continue;
+    for (const code of Object.keys(codes)) {
+      if (typeof codes[code] === "number") out[locationFor(slug, code).key] = codes[code];
     }
   }
   return out;

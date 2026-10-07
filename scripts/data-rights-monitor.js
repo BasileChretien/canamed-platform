@@ -158,19 +158,21 @@ async function run(db, opts) {
     err("");
     err(`FAIL: ${overdue.length} erasure request(s) past the ` +
       `${DEADLINE}-day limit in GDPR Art. 12(3).`);
-    err("Run scripts/erase-participant.js for each. Read the open " +
-      "requests from `withdrawals/` in the database — deliberately not printed " +
-      "here, because these logs are public.");
+    err("Run scripts/erase-participant.js for each, with --uid AND --session: a " +
+      "request is about one session, and --uid alone erases the person from " +
+      "every session they are in and deletes their account record. Read the " +
+      "open requests from `withdrawals/` in the database — deliberately not " +
+      "printed here, because these logs are public.");
     /* Said here because "run the tool" alone would send the operator to a run
        that refuses, or to one that reports nothing to erase. */
     const purged = overdue.filter((p) => p.sessionPurged).length;
     if (purged) {
       err("");
       err(`${purged} of them name a session that has been purged. The tool answers ` +
-        "those too, but only with --uid, and it will not write without " +
-        "--research-copy-checked: for a purged session nothing but you takes " +
-        "the participant out of the research copy. Run it without " +
-        "ERASE_CONFIRM first and read what it cannot reach.");
+        "those too, and it will not write without --research-copy-checked: " +
+        "for a purged session nothing but you takes the participant out of " +
+        "the research copy. Run it without ERASE_CONFIRM first and read what " +
+        "it cannot reach.");
     }
     const untraced = overdue.filter((p) => !p.sessionInDatabase && !p.sessionPurged).length;
     if (untraced) {
@@ -181,6 +183,12 @@ async function run(db, opts) {
         "(2026-10-07), rebuild them from the nightly snapshots with " +
         "scripts/backfill-purged-markers.js; otherwise remove the request with " +
         "erase-participant.js --dismiss. See DPA Annex VI, G12.");
+    }
+    if (overdue.some((p) => p.sessionInDatabase)) {
+      err("");
+      err("If the tool answers \"Nothing to erase\" for a session that IS in the " +
+        "database, the person has nothing left in it (already erased and asked " +
+        "again, or never took part): close that request with --dismiss.");
     }
     return 1;
   }
@@ -208,7 +216,13 @@ async function main() {
 
 if (require.main === module) {
   main().then((code) => process.exit(code)).catch((e) => {
-    console.error("FATAL: " + (e && e.message));
+    /* The CODE, never the message. A failed listing's message quotes the path
+       it was listing ("shallow read of 'orgs/<slug>/sessions' failed"), and an
+       Admin read error can quote any path — these logs are public. Same rule as
+       cleanup-stale-sessions.js in CLEANUP_QUIET mode. */
+    console.error("FATAL: the request queue could not be read (" +
+      (e && e.code ? e.code : "no error code") + "). This run says nothing " +
+      "about whether a request is late; it is a failure of the job, not a deadline.");
     process.exit(2);
   });
 }

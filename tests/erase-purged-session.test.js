@@ -137,6 +137,75 @@ test("a request for a purged session is carried out: the record is written, and 
   assert.strictEqual(records(night.tree).length, 1, "the erasure ledger must outlive it");
 });
 
+test("the REAL restore, run on a snapshot that still holds the session, leaves the person out — in both trees", () => {
+  /* The claim that matters most is about scripts/restore-sessions.js, so it is
+     that script which runs here: the erasure tool answers two requests for
+     purged sessions (one in the default tree, one under an organisation), then
+     the restore is given a snapshot from before the purge. */
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const tree = purgedTree();
+  tree.purgedSessions.orgs = { "uni-x": { "GONE-2": ago(40) } };
+  tree.withdrawals.orgs = { "uni-x": { "GONE-2": { uidA: request(45) } } };
+  const erased = erase(tree, ["--uid", "uidA", ATTEST], LIVE);
+  assert.strictEqual(erased.code, 0, erased.out);
+
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "canamed-restore-"));
+  try {
+    const file = path.join(dir, "snapshot.json");
+    fs.writeFileSync(file, JSON.stringify({
+      backupTakenAt: new Date(ago(41)).toISOString(), databaseUrl: "https://fake-rtdb.example.test",
+      sessions: { "GONE-1": sessionAsArchived(), "orgs/uni-x/GONE-2": sessionAsArchived() },
+    }));
+    const restore = (db) => runOpsScript("restore-sessions.js", {
+      tree: db, now: NOW, args: ["--file", file], env: { RESTORE_CONFIRM: "1" },
+    });
+
+    const r = restore(erased.tree);
+    assert.strictEqual(r.code, 0, r.out);
+    for (const where of ["sessions/GONE-1", "orgs/uni-x/sessions/GONE-2"]) {
+      const s = at(r.tree, where);
+      assert.notStrictEqual(s, null, where + " was not restored where the platform reads it");
+      assert.deepStrictEqual(Object.keys(s.pool), ["c3"], where + ": the erased participant came back");
+      assert.deepStrictEqual(s.clientMapping, { c3: "uidB" });
+      assert.deepStrictEqual(s.members, { uidB: true });
+    }
+    assert.strictEqual(at(r.tree, "orgs/orgs"), null,
+      "an organisation's session was restored under a path nothing reads");
+
+    // The control: the same restore with the ledger emptied brings them back.
+    const without = restore(Object.assign({}, erased.tree, { erasures: undefined }));
+    assert.deepStrictEqual(Object.keys(at(without.tree, "sessions/GONE-1/pool")).sort(), ["c1", "c2", "c3"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("two runs leave two ledger entries, and the second request is answered by the second", () => {
+  /* Erased once; asks again later (same person, same purged session, a new
+     date). The first record does not answer the new request, the tool writes a
+     second one, and the ledger keeps both. */
+  const tree = purgedTree();
+  const first = erase(tree, ["--uid", "uidA", "--session", "GONE-1", ATTEST], LIVE);
+  assert.strictEqual(Object.keys(first.tree.erasures).length, 1);
+
+  const later = JSON.parse(JSON.stringify(first.tree));
+  later.withdrawals = { "GONE-1": { uidA: { research: false, erasure: true, at: NOW + 2 * DAY } } };
+  const second = runOpsScript("erase-participant.js", {
+    tree: later, now: NOW + 3 * DAY,
+    args: ["--uid", "uidA", "--session", "GONE-1", ATTEST], env: LIVE,
+  });
+  assert.strictEqual(second.code, 0, second.out);
+  assert.strictEqual(Object.keys(second.tree.erasures).length, 2,
+    "the second run overwrote the first run's ledger entry, or wrote nothing");
+  const q = erasureQueue({
+    withdrawals: second.tree.withdrawals, erasureRecords: records(second.tree),
+    liveLocationKeys: ["LIVE-1"], purgedLocationKeys: ["GONE-1"], now: NOW + 3 * DAY,
+  });
+  assert.deepStrictEqual([q.pending.length, q.handled], [0, 1]);
+});
+
 test("the tool as it stood is what this replaces: no record, exit 0", () => {
   /* Kept as a statement of the old contract so the test above cannot pass for
      a reason other than the fix: for a session that is gone AND has no marker,
@@ -196,7 +265,7 @@ test("without --session it finds every open request the person has for a purged 
 
 test("a request already answered is not answered twice", () => {
   const tree = purgedTree();
-  tree.erasures = { e0: { at: "x", records: [{ locationKey: "GONE-1", uid: "uidA" }] } };
+  tree.erasures = { e0: { at: new Date(ago(1)).toISOString(), records: [{ locationKey: "GONE-1", uid: "uidA" }] } };
   const r = erase(tree, ["--uid", "uidA", ATTEST], LIVE);
   assert.strictEqual(r.code, 0, r.out);
   assert.deepStrictEqual(r.tree, tree);
@@ -239,6 +308,78 @@ test("a purged session can only be addressed by uid", () => {
   const r = erase(tree, ["--client-id", "c1", "--session", "GONE-1", ATTEST], LIVE);
   assert.deepStrictEqual(r.tree, tree);
   assert.match(r.out, /--uid/);
+  assert.strictEqual(r.code, 3, "it could not act on what it was asked; that is not a clean exit");
+});
+
+test("with --uid, a client id the operator supplies goes into the record — the uid alone does not reach every row", () => {
+  /* The record is re-resolved against each snapshot through the session's
+     mapping tables. A browser that dropped out mid-join left a pool row — with
+     the name in it — and NO mapping row, so nothing joins it to the uid, and a
+     uid-only record leaves it in a restored session. The tool cannot find such
+     a row once the session is gone; it can carry the id if the operator has it. */
+  const archived = sessionAsArchived();
+  archived.pool.cOrphan = { name: "Asker", consent: { research: true } };      // no clientMapping row
+  const snapshot = { backupTakenAt: "x", sessions: { "GONE-1": archived } };
+
+  const uidOnly = erase(purgedTree(), ["--uid", "uidA", "--session", "GONE-1", ATTEST], LIVE);
+  const left = applySuppression(snapshot, records(uidOnly.tree)).payload.sessions["GONE-1"];
+  assert.deepStrictEqual(Object.keys(left.pool).sort(), ["c3", "cOrphan"],
+    "the limit, stated: a uid-only record does not reach an unmapped pool row");
+
+  const withCid = erase(purgedTree(),
+    ["--uid", "uidA", "--client-id", "cOrphan", "--session", "GONE-1", ATTEST], LIVE);
+  assert.strictEqual(withCid.code, 0, withCid.out);
+  assert.deepStrictEqual(records(withCid.tree)[0].clientIds, ["cOrphan"]);
+  const clean = applySuppression(snapshot, records(withCid.tree)).payload.sessions["GONE-1"];
+  assert.deepStrictEqual(Object.keys(clean.pool), ["c3"]);
+});
+
+test("--uid without --session means EVERY session, and the tool says so before it acts", () => {
+  /* The request in the queue is for one purged session. The person is also in
+     a session that is still in the database, about which they asked nothing.
+     `--uid` alone has always meant "erase this person everywhere" — so run
+     that way it also deletes their work in the live session and their whole
+     account record. That is the contract, pinned here; what must not happen is
+     an operator meeting it by surprise. */
+  const tree = purgedTree();
+  tree.sessions["LIVE-1"].clientMapping.cA = "uidA";
+  tree.sessions["LIVE-1"].pool.cA = { name: "Asker" };
+
+  const dry = erase(tree, ["--uid", "uidA"]);
+  assert.match(dry.out, /SCOPE/);
+  assert.match(dry.out, /every session/i);
+  assert.match(dry.out, /--session/);
+  assert.deepStrictEqual(dry.tree, tree);
+
+  // Scoped to the request: the live session and the account are untouched.
+  const scoped = erase(tree, ["--uid", "uidA", "--session", "GONE-1", ATTEST], LIVE);
+  assert.strictEqual(scoped.code, 0, scoped.out);
+  assert.doesNotMatch(scoped.out, /SCOPE/);
+  assert.deepStrictEqual(scoped.tree.sessions, tree.sessions);
+  assert.deepStrictEqual(at(scoped.tree, "users/uidA/profile"), tree.users.uidA.profile);
+  assert.deepStrictEqual(records(scoped.tree).map((x) => x.locationKey), ["GONE-1"]);
+
+  // Unscoped: everything, as it says.
+  const all = erase(tree, ["--uid", "uidA", ATTEST], LIVE);
+  assert.strictEqual(all.code, 0, all.out);
+  assert.strictEqual(at(all.tree, "sessions/LIVE-1/pool/cA"), null);
+  assert.strictEqual(at(all.tree, "users/uidA"), null);
+  assert.deepStrictEqual(records(all.tree).map((x) => x.locationKey).sort(), ["GONE-1", "LIVE-1"]);
+});
+
+test("a flag it does not know stops the run", () => {
+  /* `--sesion GONE-1` used to be ignored, and the run went ahead as `--uid`
+     alone — which, per the test above, is every session. */
+  const tree = purgedTree();
+  for (const args of [["--uid", "uidA", "--sesion", "GONE-1", ATTEST],
+                      ["--uid", "uidA", "--session", "GONE-1", "--research-copy-check"],
+                      ["--uid", "uidA", "stray"],
+                      ["--uid", "uidA", "--session", "orgs", ATTEST],
+                      ["--uid", "uid/A"], ["--uid"], ["--uid", "uidA", "--session"]]) {
+    const r = erase(tree, args, LIVE);
+    assert.strictEqual(r.code, 2, JSON.stringify(args) + " was accepted:\n" + r.out);
+    assert.deepStrictEqual(r.tree, tree, JSON.stringify(args) + " wrote something");
+  }
 });
 
 // ------------------------------------------------- the live path, unchanged
@@ -301,6 +442,7 @@ test("--dismiss removes a request that nothing ties to a real session, and only 
      the purge wrote markers. The monitor counts them for ever otherwise. */
   const tree = purgedTree();
   tree.withdrawals["NEVER-WAS"] = { uidA: request(50), uidB: request(50) };
+  tree.users.uidA.history["NEVER-WAS"] = { code: "NEVER-WAS", joinedAt: ago(60) };
   const args = ["--uid", "uidA", "--session", "NEVER-WAS", "--dismiss", "--reason", "no such session"];
 
   const dry = erase(tree, args);
@@ -312,15 +454,51 @@ test("--dismiss removes a request that nothing ties to a real session, and only 
   assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/NEVER-WAS")), ["uidB"]);
   assert.strictEqual(at(r.tree, "erasures"), null, "a dismissal is not an erasure and must not be recorded as one");
   assert.deepStrictEqual(at(r.tree, "withdrawals/GONE-1"), tree.withdrawals["GONE-1"]);
-  assert.deepStrictEqual(r.tree.users, tree.users);
+  /* The row of their history that offered the button goes too: left behind, it
+     invites the same request again, which the rules would now refuse. Nothing
+     else of the account, and nobody else's. */
+  assert.strictEqual(at(r.tree, "users/uidA/history/NEVER-WAS"), null);
+  assert.deepStrictEqual(Object.keys(at(r.tree, "users/uidA/history")).sort(), ["GONE-1", "OTHER-9"]);
+  assert.deepStrictEqual(at(r.tree, "users/uidA/profile"), tree.users.uidA.profile);
+  assert.deepStrictEqual(r.tree.users.uidB, tree.users.uidB);
+});
+
+test("--dismiss closes a request under a LIVE session when the person left nothing in it", () => {
+  /* Someone erased from a session who clicks the button again, or a request
+     filed under a session the requester never joined: there is nothing to
+     erase, the erasure path says so and writes nothing — and until the session
+     was purged (up to 60 days on) nothing could close the request, while the
+     monitor stayed red. */
+  const tree = purgedTree();
+  tree.withdrawals["LIVE-1"] = { uidA: request(35) };
+  const args = ["--uid", "uidA", "--session", "LIVE-1", "--dismiss", "--reason", "already erased"];
+
+  const erasure = erase(tree, ["--uid", "uidA", "--session", "LIVE-1"], LIVE);
+  assert.deepStrictEqual(erasure.tree, tree, "positive control: the erasure path has nothing to do here");
+  assert.match(erasure.out, /Nothing to erase/);
+  assert.match(erasure.out, /--dismiss/, "it must say how such a request is closed");
+
+  const r = erase(tree, args, LIVE);
+  assert.strictEqual(r.code, 0, r.out);
+  assert.strictEqual(at(r.tree, "withdrawals/LIVE-1"), null);
+  assert.deepStrictEqual(r.tree.sessions, tree.sessions);
+  assert.strictEqual(at(r.tree, "erasures"), null);
 });
 
 test("--dismiss refuses anything that could be a real request", () => {
   const tree = Object.assign(purgedTree(), {});
-  tree.withdrawals["LIVE-1"] = { uidA: request(3) };
+  tree.withdrawals["LIVE-1"] = { uidA: request(3), uidR: request(3), uidC: request(3) };
   tree.withdrawals["NEVER-WAS"] = { uidA: request(50) };
+  // Three ways of having left something in a live session.
+  tree.sessions["LIVE-1"].clientMapping.cA = "uidA";
+  tree.sessions["LIVE-1"].pool.cA = { name: "Asker" };
+  tree.rosters = { sessions: { "LIVE-1": { uidR: { name: "On The Roster" } } } };
+  tree.roomChat = { "LIVE-1": { r1: { t1: { role: "user", content: "x", at: 1 } } } };
+  tree.roomChatAuthors = { "LIVE-1": { r1: { t1: "uidC" } } };
   const cases = [
-    ["a session that is in the database", ["--uid", "uidA", "--session", "LIVE-1", "--dismiss", "--reason", "x"]],
+    ["a live session the person has work in", ["--uid", "uidA", "--session", "LIVE-1", "--dismiss", "--reason", "x"]],
+    ["a live session whose roster names them", ["--uid", "uidR", "--session", "LIVE-1", "--dismiss", "--reason", "x"]],
+    ["a live session they wrote chat turns in", ["--uid", "uidC", "--session", "LIVE-1", "--dismiss", "--reason", "x"]],
     ["a session the purge left a marker for", ["--uid", "uidA", "--session", "GONE-1", "--dismiss", "--reason", "x"]],
     ["no reason given", ["--uid", "uidA", "--session", "NEVER-WAS", "--dismiss"]],
     ["no session named", ["--uid", "uidA", "--dismiss", "--reason", "x"]],

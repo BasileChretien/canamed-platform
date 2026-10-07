@@ -97,7 +97,7 @@ const {
 } = require("./lib/session-trees");
 const { resolveIdentity, planSessionErasure } = require("./lib/erasure");
 const { buildRecord } = require("./lib/suppression");
-const { answeredKeys, flattenErasures, requestKey } = require("./lib/data-rights");
+const { answeredIndex, flattenErasures, requestKey } = require("./lib/data-rights");
 const { isOpenRequest } = require("./lib/withdrawal-retention");
 
 const DB_URL = process.env.FIREBASE_DATABASE_URL
@@ -111,21 +111,37 @@ const DAY_MS = 86400000;
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
 
+const VALUE_FLAGS = {
+  "--uid": "uid", "--client-id": "clientId", "--stable-id": "stableId",
+  "--session": "session", "--reason": "reason",
+};
+const SWITCHES = { "--research-copy-checked": "researchCopyChecked", "--dismiss": "dismiss" };
+
+/* An argument this does not recognise STOPS the run. It used to be skipped —
+   so `--sesion <key>` ran as `--uid` alone, which means every session the
+   person is in. A flag given without its value is refused for the same reason:
+   `--session` at the end of the line is not "no session". */
 function parseArgs(argv) {
   const out = {
     uid: null, clientId: null, stableId: null, session: null, reason: null,
-    researchCopyChecked: false, dismiss: false,
+    researchCopyChecked: false, dismiss: false, problems: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    const next = () => argv[++i] || null;
-    if (a === "--uid") out.uid = next();
-    else if (a === "--client-id") out.clientId = next();
-    else if (a === "--stable-id") out.stableId = next();
-    else if (a === "--session") out.session = next();
-    else if (a === "--reason") out.reason = next();
-    else if (a === "--research-copy-checked") out.researchCopyChecked = true;
-    else if (a === "--dismiss") out.dismiss = true;
+    if (Object.prototype.hasOwnProperty.call(VALUE_FLAGS, a)) {
+      const value = argv[++i];
+      if (value === undefined || Object.prototype.hasOwnProperty.call(VALUE_FLAGS, value) ||
+          Object.prototype.hasOwnProperty.call(SWITCHES, value)) {
+        out.problems.push(a + " needs a value");
+        i--;
+      } else {
+        out[VALUE_FLAGS[a]] = value;
+      }
+    } else if (Object.prototype.hasOwnProperty.call(SWITCHES, a)) {
+      out[SWITCHES[a]] = true;
+    } else {
+      out.problems.push("unknown argument: " + a);
+    }
   }
   return out;
 }
@@ -135,7 +151,7 @@ function parseArgs(argv) {
    `users/abc/profile` — and the Admin SDK would do it without complaint. */
 const isKey = (v) => typeof v === "string" && v !== "" && !/[/.#$\[\]]/.test(v);
 function isSessionKey(v) {
-  if (typeof v !== "string") return false;
+  if (typeof v !== "string" || v === "orgs") return false;
   const parts = v.split("/");
   return (parts.length === 1 || (parts.length === 3 && parts[0] === "orgs")) && parts.every(isKey);
 }
@@ -247,7 +263,10 @@ async function planLive(db, locations, args) {
 async function planPurged(db, locations, args) {
   const live = new Set(locations.map((l) => l.key));
   if (!args.uid) {
-    return { closable: [], noMarker: [], needsUid: !!args.session && !live.has(args.session) };
+    return {
+      closable: [], noMarker: [], liveRequests: [],
+      needsUid: !!args.session && !live.has(args.session),
+    };
   }
 
   const [wSnap, mSnap, eSnap] = await Promise.all([
@@ -255,7 +274,7 @@ async function planPurged(db, locations, args) {
   ]);
   const byLocation = withdrawalLocations(wSnap.exists() ? wSnap.val() : {});
   const markers = purgedMarkers(mSnap.exists() ? mSnap.val() : {});
-  const answered = answeredKeys(flattenErasures(eSnap.exists() ? eSnap.val() : {}));
+  const answered = answeredIndex(flattenErasures(eSnap.exists() ? eSnap.val() : {}));
   const marked = (key) => Object.prototype.hasOwnProperty.call(markers, key);
 
   const keys = new Set();
@@ -276,7 +295,13 @@ async function planPurged(db, locations, args) {
     if (marked(key)) closable.push({ locationKey: key, purgedAt: markers[key], requestAt, inQueue: isObj(record) });
     else noMarker.push({ locationKey: key, requestAt });
   }
-  return { closable, noMarker, needsUid: false };
+
+  /* Requests of this person that sit under a session which IS in the database
+     — reported when the erasure path finds nothing of theirs there, so the run
+     does not just say "nothing to erase" about a request the monitor is
+     counting. */
+  const liveRequests = [...keys].filter((key) => live.has(key) && (!args.session || key === args.session));
+  return { closable, noMarker, needsUid: false, liveRequests };
 }
 
 const day = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -344,11 +369,21 @@ function printPurgedPlan(closable) {
   console.log("");
 }
 
-function printNotActedOn(gone) {
+function printNotActedOn(gone, liveNothing) {
   if (gone.needsUid) {
-    console.log("NOTE: that session is not in the database. A session that has " +
-                "been purged can only be addressed with --uid: clientIds and " +
+    console.log("NOT ACTED ON — that session is not in the database. A session that " +
+                "has been purged can only be addressed with --uid: clientIds and " +
                 "stableIds are resolved inside a session, and it is gone.");
+    console.log("");
+  }
+  if (liveNothing.length) {
+    console.log(`NOT ACTED ON — ${liveNothing.length} open request(s) name a session that IS ` +
+                "in the database, in which this person has nothing to erase:");
+    for (const key of liveNothing) console.log(`  ${key}`);
+    console.log("  Already erased and asked again, or never took part. The request " +
+                "stays open, and the monitor keeps counting it, until it is closed " +
+                "with --uid … --session … --dismiss --reason \"…\" (which checks " +
+                "again that nothing of theirs is there).");
     console.log("");
   }
   if (!gone.noMarker.length) return;
@@ -380,23 +415,34 @@ async function dismiss(db, locations, args) {
     return refuse("--dismiss needs --reason. You are setting aside something recorded " +
                   "as a person's request; say why.");
   }
-  if (locations.some((l) => l.key === args.session)) {
-    return refuse("that session is in the database, so a request about it is real. " +
-                  "Run the erasure (without --dismiss).");
-  }
-  const loc = locationForKey(args.session);
-  if ((await db.ref(loc.purgedMarkerPath).get()).exists()) {
+  const liveLoc = locations.find((l) => l.key === args.session);
+  let why;
+  if (liveLoc) {
+    /* In the database: dismissable only if the person left NOTHING in it —
+       then there is nothing to erase, the erasure path writes nothing, and
+       until the session is purged (up to 60 days on) nothing else could close
+       the request. Any trace at all makes it a real request. */
+    if (await hasTraceIn(db, liveLoc, args.uid)) {
+      return refuse("that session is in the database and this person has data in it, " +
+                    "so the request is real. Run the erasure (without --dismiss).");
+    }
+    why = "The session is in the database and this person has nothing in it: no " +
+          "entry, no roster row, no chat turn. There is nothing to erase.";
+  } else if ((await db.ref(locationForKey(args.session).purgedMarkerPath).get()).exists()) {
     return refuse("the purge left a marker for that session: it existed. Answer the " +
                   "request (--research-copy-checked) rather than dismissing it.");
+  } else {
+    why = "The session is not in the database and has no purge marker.";
   }
+  const loc = liveLoc || locationForKey(args.session);
   const path = `${loc.withdrawalsPath}/${args.uid}`;
   if (!(await db.ref(path).get()).exists()) {
     return refuse("there is no withdrawal record for that uid under that session.");
   }
 
   console.log(`DISMISS  the request recorded under ${args.session} — reason: ${args.reason}`);
-  console.log("  The session is not in the database and has no purge marker. The " +
-              "record is deleted; NO suppression record is written, because " +
+  console.log("  " + why + " The record is deleted, with the matching row of the " +
+              "person's session history; NO suppression record is written, because " +
               "nothing is being erased. This leaves no trace in the database: " +
               "note the decision, and the reason, in your own register.");
   console.log("");
@@ -404,13 +450,36 @@ async function dismiss(db, locations, args) {
     console.log("DRY RUN — nothing was written. Re-run with ERASE_CONFIRM=1 to apply.");
     return EXIT_OK;
   }
-  await db.ref(path).remove();
-  console.log("DISMISSED. 1 record deleted.");
+  /* The history row offered the button that made this request. Left behind it
+     invites the same request again — which, for a session with no marker, the
+     rules now refuse. One update, so the two cannot come apart. */
+  await db.ref().update({
+    [path]: null,
+    [`users/${args.uid}/history/${loc.code}`]: null,
+  });
+  console.log("DISMISSED. The request and its history row are deleted.");
   return EXIT_OK;
+}
+
+/** Has this person left anything in a session that is in the database? */
+async function hasTraceIn(db, loc, uid) {
+  const plan = planSessionErasure(loc.data, resolveIdentity(loc.data, { uid }));
+  if (plan.deletes.length || plan.ambiguous.length) return true;
+  if ((await db.ref(`${loc.rosterPath}/${uid}`).get()).exists()) return true;
+  const authorsSnap = await db.ref(loc.roomChatAuthorsPath).get();
+  const rooms = authorsSnap.exists() ? (authorsSnap.val() || {}) : {};
+  return Object.values(rooms).some(
+    (room) => isObj(room) && Object.values(room).some((author) => author === uid));
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.problems.length) {
+    console.error("FATAL: " + args.problems.join("; ") + ".");
+    console.error("Nothing was read or written. A mistyped --session would otherwise " +
+                  "run as --uid alone, which means every session the person is in.");
+    return EXIT_REFUSED;
+  }
   if (!args.uid && !args.clientId && !args.stableId) {
     console.error(
       "FATAL: give at least one of --uid / --client-id / --stable-id.\n" +
@@ -443,20 +512,37 @@ async function main() {
 
   const live = await planLive(db, locations, args);
   const gone = await planPurged(db, locations, args);
-  const leftOpen = gone.noMarker.length ? EXIT_NOT_ACTED_ON : EXIT_OK;
+  /* Requests under a session that is in the database, where the erasure path
+     found nothing of this person's to delete. */
+  const erasedFrom = new Set(live ? live.report.map((r) => r.session) : []);
+  const liveNothing = gone.liveRequests.filter((key) => !erasedFrom.has(key));
+  const leftOpen = (gone.noMarker.length || gone.needsUid || liveNothing.length)
+    ? EXIT_NOT_ACTED_ON : EXIT_OK;
 
   if (!live && !gone.closable.length) {
     console.log("No matching participant found in any session. Nothing to erase.");
     console.log("If that is unexpected, check the identifier — this tool never " +
                 "matches on a display name.");
     console.log("");
-    printNotActedOn(gone);
+    printNotActedOn(gone, liveNothing);
     return leftOpen;
   }
 
+  if (live && !args.session) {
+    /* `--uid` alone has always meant "this person, everywhere". Said out loud,
+       because the request being answered is usually about ONE session, and
+       this also deletes their account record. */
+    console.log(`SCOPE — no --session was given, so this run covers EVERY session ` +
+                `this person is in: ${live.report.length} in the database` +
+                (gone.closable.length ? `, ${gone.closable.length} already purged` : "") +
+                ", and it deletes their whole account record (users/<uid>: profile " +
+                "and session history). To answer one request only, add " +
+                "--session <key>.");
+    console.log("");
+  }
   if (live) printLivePlan(live);
   if (gone.closable.length) printPurgedPlan(gone.closable);
-  printNotActedOn(gone);
+  printNotActedOn(gone, liveNothing);
 
   if (!CONFIRM) {
     console.log("DRY RUN — nothing was written. Re-run with ERASE_CONFIRM=1" +
@@ -481,9 +567,19 @@ async function main() {
   const updates = Object.assign({}, live ? live.updates : {});
   const records = (live ? live.suppressed : []).map((s) =>
     buildRecord({ locationKey: s.locationKey, identity: s.identity, at, reason }));
+  /* The uid reaches everything the session's mapping tables join to it. A
+     browser that dropped out mid-join left a pool row and no mapping row, and
+     nothing here can find that once the session is gone — so an identifier the
+     operator supplies alongside --uid is carried into the record, and the
+     restore will strip that row too. */
+  const purgedIdentity = {
+    uid: args.uid,
+    clientIds: args.clientId ? [args.clientId] : [],
+    stableIds: args.stableId ? [args.stableId] : [],
+  };
   for (const g of gone.closable) {
     records.push(buildRecord({
-      locationKey: g.locationKey, identity: { uid: args.uid }, at, reason,
+      locationKey: g.locationKey, identity: purgedIdentity, at, reason,
       sessionPurged: true, researchCopyChecked: true,
     }));
     /* The history is keyed by the bare code in both trees. Skipped when the

@@ -84,8 +84,8 @@ test("unknown keys are rejected and the timestamp cannot be in the future", () =
 /* The one place the two leaves may differ: each addresses its OWN tree's
    session and its own tree's purge marker. */
 const SESSION_AT = {
-  default: "root.child('sessions').child($sessionId)",
-  orgs: "root.child('orgs').child($orgSlug).child('sessions').child($sessionId)",
+  default: "root.child('sessions').child($sessionId).child('created')",
+  orgs: "root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('created')",
 };
 const MARKER_AT = {
   default: "root.child('purgedSessions').child($sessionId)",
@@ -105,12 +105,20 @@ test("both trees carry the same leaf, each addressing its own tree", () => {
     "show up for whichever tenant is unlucky");
 });
 
-test("a withdrawal can only name a session that is in the database or was purged", () => {
+test("a withdrawal can only name a session that was CREATED, or was purged", () => {
   /* Until 2026-10-07 the write looked at the uid and nothing else, so any
      signed-in visitor — anonymous included — could record an erasure request
      for a code that never existed, and the daily monitor counted it.
-     `users/<uid>/history/<code>` cannot serve as the evidence: that node is
-     writable by its owner. The purge marker can: no client can write it. */
+
+     The evidence is the session's `created` record, not "something exists
+     under this code". The first version of this rule tested the session node
+     itself, and `sessions/<any code>/members/<own uid>` is writable by any
+     signed-in visitor: one extra write, and the code "existed". (Found by an
+     independent review; the same objection had been used to reject
+     `users/<uid>/history/<code>` as the evidence.) `created` is written once,
+     by whoever creates the session, and is the write the facilitator gate
+     governs when it is enforced. The purge marker stands in for it once the
+     session is gone: no client can write that. */
   for (const [label, get] of LEAVES) {
     const w = get()[".write"];
     assert.strictEqual(w,

@@ -38,39 +38,73 @@ const SEP = String.fromCharCode(0);
 /** One request: this person, in this session. */
 const requestKey = (locationKey, uid) => locationKey + SEP + uid;
 
-/** `erasures/<pushId>.records[]`, as one list. */
+/** `erasures/<pushId>.records[]`, as one list. A record with no date of its own
+ *  takes its entry's: `erasures/<id> = { at, records }`, one entry per run. */
 function flattenErasures(node) {
   const out = [];
   for (const id of Object.keys(isObj(node) ? node : {})) {
     const entry = node[id];
     if (!isObj(entry)) continue;
-    for (const rec of Object.values(entry.records || {})) out.push(rec);
+    for (const rec of Object.values(entry.records || {})) {
+      out.push(isObj(rec) && rec.at === undefined && entry.at !== undefined
+        ? Object.assign({ at: entry.at }, rec) : rec);
+    }
   }
   return out;
 }
 
 /**
- * Which requests have been ANSWERED: an erasure record exists for the same
- * person in the same session. Matching on uid AND location, not uid alone:
- * someone may withdraw from one session and not another, and treating any past
- * erasure as covering every future request would mark new requests done on
- * arrival.
+ * When each (session, person) was last ANSWERED: the date of the latest
+ * erasure record for the same person in the same session. Matching on uid AND
+ * location, not uid alone: someone may withdraw from one session and not
+ * another, and treating any past erasure as covering every future request
+ * would mark new requests done on arrival.
  *
- * ONE DEFINITION, SHARED. The monitor uses it to decide what is still open;
- * the nightly purge and sweep use it to decide which withdrawal records may be
- * deleted (scripts/lib/withdrawal-retention.js). If those two ever disagreed,
- * the purge would delete a request the monitor still counted as open — which
- * is the defect this arrangement exists to end.
+ * ONE DEFINITION, SHARED — with isAnswered() below. The monitor uses it to
+ * decide what is still open; the nightly purge and sweep use it to decide
+ * which withdrawal records may be deleted (scripts/lib/withdrawal-retention.js).
+ * If those two ever disagreed, the purge would delete a request the monitor
+ * still counted as open — which is the defect this arrangement exists to end.
  *
  * @param {object[]} erasureRecords flattened `erasures/*.records[]`
- * @returns {Set<string>} of requestKey()s
+ * @returns {Map<string, number>} requestKey() -> epoch ms of the latest record;
+ *   -Infinity for a record whose date cannot be read
  */
-function answeredKeys(erasureRecords) {
-  const done = new Set();
+function answeredIndex(erasureRecords) {
+  const index = new Map();
   for (const rec of erasureRecords || []) {
-    if (rec && rec.uid && rec.locationKey) done.add(requestKey(rec.locationKey, rec.uid));
+    if (!rec || !rec.uid || !rec.locationKey) continue;
+    const key = requestKey(rec.locationKey, rec.uid);
+    const parsed = typeof rec.at === "string" ? Date.parse(rec.at) : NaN;
+    const when = Number.isFinite(parsed) ? parsed : -Infinity;
+    if (!index.has(key) || when > index.get(key)) index.set(key, when);
   }
-  return done;
+  return index;
+}
+
+/**
+ * Has THIS request been answered — is there an erasure record for the same
+ * person and session, dated at or after the request?
+ *
+ * The date matters because `erasures/` is never deleted. Without it, the first
+ * erasure of a person in a session would answer every later request they made
+ * there, for ever: erased, back in the same session on the same account, new
+ * work, a second request — closed on arrival, never shown, and deleted by the
+ * purge as "answered".
+ *
+ * An undated request is answered by any record (nothing could be shown to
+ * post-date it, and it must stay closable); an undated record answers nothing
+ * that has a date.
+ *
+ * @param {Map<string, number>} index from answeredIndex()
+ * @param {string} locationKey
+ * @param {string} uid
+ * @param {*} requestAt the request's `at` (epoch ms)
+ */
+function isAnswered(index, locationKey, uid, requestAt) {
+  const key = requestKey(locationKey, uid);
+  if (!index.has(key)) return false;
+  return typeof requestAt !== "number" || index.get(key) >= requestAt;
 }
 
 /**
@@ -84,7 +118,7 @@ function answeredKeys(erasureRecords) {
  */
 function pendingErasures(withdrawalsByLocation, erasureRecords, now,
                          deadlineDays = DEADLINE_DAYS) {
-  const done = answeredKeys(erasureRecords);
+  const done = answeredIndex(erasureRecords);
 
   const pending = [];
   let handled = 0;
@@ -97,7 +131,7 @@ function pendingErasures(withdrawalsByLocation, erasureRecords, now,
          full effect the moment it is written — the export honours it — so
          listing those as "outstanding" would bury the real ones in noise. */
       if (!isObj(w) || w.erasure !== true) continue;
-      if (done.has(requestKey(locationKey, uid))) { handled++; continue; }
+      if (isAnswered(done, locationKey, uid, w.at)) { handled++; continue; }
       const at = typeof w.at === "number" ? w.at : null;
       const ageDays = at === null ? null : Math.floor((now - at) / DAY_MS);
       pending.push({
@@ -227,7 +261,8 @@ module.exports = {
   ROSTER_FIELDS,
   requestKey,
   flattenErasures,
-  answeredKeys,
+  answeredIndex,
+  isAnswered,
   pendingErasures,
   erasureQueue,
   planRectification,

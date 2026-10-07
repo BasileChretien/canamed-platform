@@ -3403,6 +3403,26 @@ now exists; that is not the same as the duty being discharged.
      session. For a session still in the database the tool deletes the
      certificate; for a purged one it cannot, says so, and the record can be
      deleted by hand only if the participant supplies the id.
+   - **Answering a request about a session still in the database deletes the
+     person's whole account record, even when scoped to that session —
+     found 2026-10-07, older than this change, not altered by it.** For a
+     session that is in the database, `scripts/erase-participant.js` deletes
+     `users/<uid>` — profile and the history of every session — with or without
+     `--session`. For a purged session it removes only that session's history
+     row, which is what was decided for this change. Whether the live path
+     should be as narrow is a decision about an Art. 17 tool that nobody has
+     taken; the two now differ, and the tool's plan shows the path it will
+     delete.
+   - **A session dated in the future is never purged — found 2026-10-07 by
+     running the purge, older than this change.** The purge compares
+     `created/at` and `closed/at` with its cutoffs, and the rules require of
+     both only that they be numbers. A session created (or closed) with a date
+     years ahead stays "within retention" until that date: run with such a
+     session, the purge kept it, and kept it again five years on. Whoever
+     creates a session writes `created`, so the 30- and 90-day limits this
+     platform publishes can be set aside for a session by its own creator. Not
+     fixed here: it is the session-creation rule, which every session passes
+     through.
    - **The history row does not know which organisation's tree a session was
      in — found 2026-10-07 by reading the client, not reproduced.** A history
      entry is keyed by the bare session code, and the withdrawal is written
@@ -3422,10 +3442,11 @@ now exists; that is not the same as the duty being discharged.
      monitor has read withdrawal records and the whole `erasures` tree every
      day since it was added (2026-09-03): the account identifier, the session
      code and the date of people who have asked for erasure or been erased, on
-     a GitHub-hosted runner in the United States. The purge job now reads the
-     same on a night when it purges a session with such records. That is
-     personal data reaching a recipient the notice names, described there as
-     less than it is. Not corrected here: the notice is twelve surfaces in
+     a GitHub-hosted runner in the United States. The purge job now reads
+     them too: the withdrawal records of each session it purges, every night
+     those of sessions already purged, and the erasure ledger whenever one of
+     them holds an erasure request. That is personal data reaching a recipient
+     the notice names, described there as less than it is. Not corrected here: the notice is twelve surfaces in
      eight languages with its own version, and a revision of it (PIS v12) is
      open elsewhere.
    - **Marker lifetime — FIVE YEARS, chosen in code and not yet confirmed by
@@ -3462,33 +3483,64 @@ now exists; that is not the same as the duty being discharged.
      *What changed:* for a session the purge left a marker for, the tool
      writes the suppression record — the session and the uid, marked
      `sessionPurged` — and removes that session's row from the participant's
-     history (`users/<uid>/history/<code>`; not the rest of the account, which
-     the request did not concern). The uid alone is sufficient: on restore the
-     record is re-resolved against each snapshot, which still holds the
-     participant's other identifiers. It finds such requests from the request
-     queue itself, so `--uid` with no `--session` answers every open one the
-     person has; `--session` also records a request that arrived by another
-     route. It requires `--uid`, and `--research-copy-checked` (see the open
-     points above), and refuses the whole run without the second — including
-     any live-session half of it.
+     history (`users/<uid>/history/<code>`). It requires `--uid`, and
+     `--research-copy-checked` (see the open points above), and refuses the
+     whole run without the second — including any live-session half of it.
+     ⚠️ **Scope, which the first draft of this paragraph got wrong.** A request
+     is about one session, and is answered with `--uid` **and** `--session`:
+     then only that session is touched, and nothing else of the account.
+     `--uid` alone has always meant "this person, everywhere": it also erases
+     them from every session still in the database and deletes their whole
+     account record (`users/<uid>`, profile and history), whether or not they
+     asked about those. The tool now says so at the top of its plan, the
+     monitor's failure message and the operator procedure name `--session`,
+     and an argument the tool does not recognise stops the run — a mistyped
+     `--session` used to be ignored, which made it a run on everything.
+     ⚠️ **"The uid alone is sufficient" is true of what the session's mapping
+     tables join to it, and not of everything.** On restore the record is
+     re-resolved against each snapshot through `clientMapping` and
+     `stableIdMapping`. A browser that dropped out mid-join left a row with the
+     participant's name in it and no mapping row; nothing joins that to the
+     uid, and with the session gone the tool cannot find it. If the operator
+     has the client id, `--client-id` alongside `--uid` carries it into the
+     record and the restore strips that row too.
+     *"Answered" has a date.* A request counts as answered only by a record
+     dated at or after it. The ledger is never deleted, so matching on person
+     and session alone meant a second request — erased, back in the same
+     session on the same account, new work, asks again — was answered before
+     it was made: never shown by the monitor, and deleted by the purge.
      *What it will not do:* write a record for a session that has **no**
      marker. `erasures/` is never deleted, so it must not fill with records
      for sessions nothing shows ever existed. It reports such a request and
      exits 3; the operator rebuilds the markers from the snapshots, or removes
-     the request with `--dismiss` — a deletion of the withdrawal record alone,
-     with a mandatory reason, refused for any session that is in the database
-     or carries a marker. ⚠️ A dismissal leaves **no trace in the database**;
-     the reason is printed and the operator's own register is the record of it.
+     the request with `--dismiss`.
+     *`--dismiss`* deletes one withdrawal record and the matching history row,
+     needs a reason, and writes no suppression record. It is allowed in two
+     cases only: the session is not in the database and has no marker; or the
+     session **is** in the database and the person has nothing in it — no
+     entry, no roster row, no chat turn — which is what an erasure followed by
+     a second click looks like, and which nothing could close before (the
+     erasure path finds nothing to do, and the monitor stayed red until the
+     session was purged, up to 60 days on). It is refused under a marker, and
+     for anyone with data in a live session. ⚠️ A dismissal leaves **no trace
+     in the database**; the reason is printed and the operator's own register
+     is the record of it.
      *Found on the way:* the tool never ended after a successful erasure of a
      live session. It set an exit code and returned, and the database
      connection holds the process open; the check meant to catch that reads
      the source and says of itself that it cannot see the final path. The test
      that now runs the tool to completion timed out against the old one.
+     *Found by running the real restore:* `scripts/restore-sessions.js` rebuilt
+     an organisation session's path by splitting its key, took the literal
+     `orgs` for the organisation, and restored to `orgs/orgs/sessions/…`, which
+     nothing reads. No organisation session had ever been restored. It now
+     takes the path from the same builder as everything else.
      `Verify:` `node --test tests/erase-purged-session.test.js` — it runs the
-     tool, then the monitor's queue, the restore's suppression step against a
-     snapshot that still holds the session (with the control: without the
-     record the participant comes back), and the nightly sweep. Eleven of its
-     fourteen cases fail against the tool as it stood.
+     tool, then the monitor's queue, **the real restore script** on a snapshot
+     that still holds the session, in both trees (with the control: with the
+     ledger emptied the participant comes back), and the nightly sweep. Eleven
+     of the first fourteen cases failed against the tool as it stood, one of
+     them by timing out.
    - **A withdrawal record now has an end of life** (2026-10-07). *What was
      wrong:* `withdrawals/<code>` was deleted only in the update that deletes
      its session, so a record written afterwards — which the rules allow, and
@@ -3505,10 +3557,13 @@ now exists; that is not the same as the duty being discharged.
      marker shows the session was purged, and skips a session that is in the
      database again. It never acts because a session merely failed to appear
      in a listing — a `research: false` record under a session that is still
-     there is what keeps that participant out of the research export. It reads
-     the markers, then one branch per purged session, then the erasure ledger
-     only if one of those branches holds a request; never the withdrawal
-     records of a session that is in the database.
+     there is what keeps that participant out of the research export.
+     *What it reads, every night, dry runs included:* the markers; the
+     withdrawal branch of each purged session (account identifiers and dates);
+     and the erasure ledger on any night one of those branches holds an
+     erasure request — which, for a request that is being kept, is every night
+     until it is answered. It never reads the withdrawal records of a session
+     that is in the database.
      *It is not governed by the backup gate.* When the backup is stale the job
      refuses to purge sessions and still runs this sweep, as it still prunes
      the usage metrics, and for the same reason: these are records of sessions
@@ -3535,10 +3590,16 @@ now exists; that is not the same as the duty being discharged.
      | day 70 of a session that was never closed | 0 | deleted |
 
      No erasure record existed in any of them, so the nightly snapshots had
-     nothing telling a restore to leave the participant out. (One narrow
-     exception to "never red": a session closed, and a request made, both
-     between 03:17 and 04:11 UTC gave a single red run the day before the
-     purge.)
+     nothing telling a restore to leave the participant out. The sentence this
+     replaces said such a request "is always younger than the limit when the
+     purge deletes it, and never turns the job red". Both halves were wrong.
+     The purge is a daily batch with a strict cutoff, so a session goes between
+     30 and 31 days after closing: in the first row the request was 29.7 days
+     old at the last monitor run that saw it (green) and 30.7 days old when it
+     was deleted — it passed the one-month limit while still in the database,
+     between two runs, and was never reported. And a session closed, with a
+     request made, both in the 54 minutes between the purge (03:17) and the
+     monitor (04:11) gave one red run the day before the purge, then vanished.
      *What changed:* when the purge removes a session it keeps a withdrawal
      record that carries `erasure: true` and has no matching record under
      `erasures/`, and deletes the rest as before — a withdrawal with no erasure
@@ -3553,15 +3614,37 @@ now exists; that is not the same as the duty being discharged.
      out. The participant's work in the live database is deleted by the purge
      like everyone else's, but until an operator acts there is still no
      suppression record for the snapshots. And the purge job now reads
-     `withdrawals/<code>` for a session it is purging, and the `erasures`
-     ledger — participant identifiers and dates, on the same hosted runner the
-     monitor already reads them on, and only on a night when something is
-     actually purged.
+     `withdrawals/<code>` for each session it purges — account identifiers and
+     dates, on the same hosted runner the monitor already reads them on — and
+     the `erasures` ledger when one of those branches holds an erasure request.
+     (A dry run of the purge reads neither. The sweep described above reads
+     more, and every night.)
      `Verify:` `node --test tests/withdrawal-retention.test.js`, which runs the
      real purge script night after night and then the monitor on what it
      leaves; it was red against the purge as it stood.
-   - **A record can no longer be made for a code that never existed, or
-     back-dated** (2026-10-07). *What was wrong:* the rule on
+   - **`orgs` can no longer be used as a session code** (2026-10-07; found by
+     the independent review of this change, latent, and older than it).
+     Outside `sessions/`, every per-session tree keeps organisation sessions
+     under a literal `orgs` child — `adminSecrets/orgs/<slug>/<code>`,
+     `roomChat/orgs/…`, `certIds/orgs/…`, `withdrawals/orgs/…` — so the paths of
+     a default-tree session coded `orgs` are the roots of every organisation's
+     data. Nothing reserved the key: the rules put no shape on a session code,
+     and `sessions/<any code>/members/<own uid>` is writable by any signed-in
+     visitor. One anonymous write under `sessions/orgs/` produced a "session"
+     with no timestamps, which the nightly purge removes defensively — together
+     with all of those roots. Run against an in-memory database, it did exactly
+     that; this change would have added the purge markers and the organisations'
+     withdrawal records to what was lost. No organisation session exists in
+     production today, so nothing was.
+     Closed three ways: the rules refuse the key (a `.validate` on the session
+     node, both trees); the enumerators build no location for it; and the path
+     builder throws rather than build those paths. If such a node is ever
+     found the purge leaves it and everything beside it alone, says so, and
+     fails the run — it wants a person.
+     `Verify:` `node --test tests/reserved-session-key.test.js`; on the
+     emulator, "`orgs` cannot be used as a session code".
+   - **A record can no longer be made under a code where no session was ever
+     created, or back-dated** (2026-10-07). *What was wrong:* the rule on
      `withdrawals/<code>/<uid>` looked at the uid and nothing else, so any
      signed-in visitor, an anonymous one included, could record an "erasure
      request" under any code, and the monitor — which could not tell a purged
@@ -3572,11 +3655,33 @@ now exists; that is not the same as the duty being discharged.
      by the test below failing against the old rule).
      *What changed:* the nightly purge now writes a **marker**,
      `purgedSessions/<code>` = the time of the purge, in the same update that
-     deletes the session. No client can read or write it. The rule accepts a
-     withdrawal only if the session is in the database **or** carries a marker,
-     in both rule trees, each addressing its own; and `at` must be no more
-     than 24 hours behind the server's clock and no more than 5 seconds ahead
-     of it.
+     deletes the session — for a session that had a `created` or `closed`
+     timestamp, and for nothing else. No client can read or write it. The rule
+     accepts a withdrawal only if the session's **`created` record** exists
+     **or** the code carries a marker, in both rule trees, each addressing its
+     own; and `at` must be no more than 24 hours behind the server's clock and
+     no more than 5 seconds ahead of it.
+     ⚠️ **The first version of this rule did not do what this paragraph said,
+     and the independent review caught it before it left the branch.** It
+     tested whether *anything* existed under the code. Any signed-in visitor
+     can write their own membership row under any code, created or not — one
+     extra write, and the code "existed"; the purge then removed that node as
+     timestamp-less debris and left a marker for it, so the job itself was
+     certifying a made-up code. The rule now looks at `created`, and the purge
+     marks only what had a timestamp.
+     ⚠️ **What `created` is worth — the limit of this whole fix.** `created` is
+     written once, by whoever creates the session, and creating a session is
+     open to any signed-in visitor unless the facilitator gate
+     (`facilitatorGate/enforce`) is switched on; it is off. So a visitor who
+     wants the monitor to count a request can still get there: create a
+     session, then record a request in it. What has changed is what that
+     costs and what it leaves: it can no longer be done under arbitrary codes
+     with nothing behind them, it cannot be back-dated so it takes thirty days
+     to turn the job red, the request then sits under a real session where the
+     erasure tool can answer or dismiss it, and with the gate enforced only an
+     approved facilitator can do it at all. **It is not a boundary against a
+     determined visitor while session creation is open**, and the first draft
+     of this change described it as one.
      *Found while bounding the date:* the rule allowed **no** lead at all
      (`at <= now`), alone among the timestamp rules in the file, which all
      allow five seconds. The product stamps the record with the device's own
@@ -3588,15 +3693,20 @@ now exists; that is not the same as the duty being discharged.
      *What was considered and rejected:* accepting the record when
      `users/<uid>/history/<code>` exists. That node is writable by its owner,
      so it would cost a spoofer one more write and stop nobody; the emulator
-     test writes such a row and shows the withdrawal still refused.
+     test writes such a row, and a membership row, and shows the withdrawal
+     still refused. The same objection applies to `created` wherever session
+     creation is open (above). The differences are that creation is the one
+     write the facilitator gate governs, and that the marker — the evidence
+     once the session is gone — is not client-writable under any setting.
      *What the marker holds, and for how long:* a session code and a date — no
      participant, no content. See "Marker lifetime" under the open points
      above; it is a retention period nobody but the Controller should settle.
      ⚠️ **What this does NOT close.** (i) Anyone who knows the code of a session
-     that really existed, live or purged, can still record a request under
-     their own uid without having taken part. The code is the capability
-     throughout this platform; the noise is now bounded by who holds a real
-     code. (ii) **Sessions purged before the purge wrote markers have none**,
+     that was created, live or purged, can still record a request under their
+     own uid without having taken part — and anyone can create one (above).
+     The code is the capability throughout this platform. Such a request can
+     now always be closed: answered, or dismissed where the person has nothing
+     in the session. (ii) **Sessions purged before the purge wrote markers have none**,
      and a participant returning to one is refused in the product ("Could not
      record your withdrawal — please try again, or contact the facilitator")
      until the markers are rebuilt from the nightly snapshots:
@@ -3611,8 +3721,11 @@ now exists; that is not the same as the duty being discharged.
      tests/withdrawal.test.js` (the first RUNS the purge and the backfill
      against an in-memory database); and on the emulator, `npm run
      test:e2e:rules -- -g "can only name a session"` — every denial there is
-     paired with an allow of the same payload, in both trees, and the test
-     fails against the rule as it stood.
+     paired with an allow of the same payload, in both trees. ⚠️ What was run
+     where: the emulator test failed against the original rule and passed
+     against the first version of the new one; the `created` check, the
+     reserved key and the five-second tolerance were added after that run and
+     are exercised by the pull request's own emulator job, not by a local run.
    ⚠️ **Three conditions on the route itself.** (a) The participant has to be
    signed in to the SAME account: the row is not shown to an anonymous
    visitor, and the history is keyed by the account. (b) Deleting the account

@@ -955,28 +955,30 @@ full account, with what each fix does NOT close, is DPA Annex VI G12 item 2 —
 read that before describing any of this as done.
 
 - **The purge leaves a marker**, `purgedSessions/<code>` = time of the purge
-  (Admin-only node; a code and a date). It is the only thing in the database
-  that tells a purged session from a code that never existed.
-- **The rule accepts a withdrawal only for a session that exists or has a
-  marker**, in both trees, and `at` must be within 24 h behind / 5 s ahead of
-  the server clock. Before, any signed-in visitor could file a request for any
-  code, and one write with `at: 1` turned the daily monitor red on its next
-  run. `users/<uid>/history/<code>` is NOT usable as the evidence — the owner
-  can write it. (The old rule also allowed NO clock lead, `at <= now`, alone
-  in the file: a device a little fast was refused its withdrawal. A unit test
-  now fails on any timestamp rule without the `+ 5000`.)
+  (Admin-only node; a code and a date) — only for a session that had a
+  `created` or `closed` timestamp. It is the only thing in the database that
+  tells a purged session from a code that never was one.
+- **The rule accepts a withdrawal only if the session's `created` record
+  exists, or the code has a marker**, in both trees, and `at` must be within
+  24 h behind / 5 s ahead of the server clock. Before, any signed-in visitor
+  could file a request for any code, and one write with `at: 1` turned the
+  daily monitor red on its next run. (The old rule also allowed NO clock lead,
+  `at <= now`, alone in the file: a device a little fast was refused its
+  withdrawal. A unit test now fails on any timestamp rule without `+ 5000`.)
 - **The purge keeps an erasure request nobody has answered**, with no time
   limit. It used to delete the whole branch with the session: measured on the
   real schedule (purge 03:17, monitor 04:11), a request made from about the
   session's last day onward never turned the monitor red at all.
 - **The nightly job sweeps answered and request-less records of purged
-  sessions** — only under a marker, never because a session is merely absent
-  from a listing (a `research:false` record under a live session is what keeps
-  that participant out of the export).
+  sessions** — a third pass of `runCleanupPasses()`, which a blocked backup
+  gate does not stop. Only under a marker, never because a session is merely
+  absent from a listing (a `research:false` record under a live session is
+  what keeps that participant out of the export).
 - **`scripts/erase-participant.js` answers a request for a purged session**:
   `--uid` required, and it refuses to write without `--research-copy-checked`.
   It writes nothing for a session with no marker (exit 3); `--dismiss` removes
-  such a request. Procedure: `ARCHITECTURE/OPERATOR_POLICY.md` §4.1.
+  such a request, or one under a live session the person left nothing in.
+  Procedure: `ARCHITECTURE/OPERATOR_POLICY.md` §4.1.
 
 ⚠️ **ACTION REQUIRED, not done, cannot be done in code:** sessions purged before
 this change have no marker, so their participants are refused in the product
@@ -990,34 +992,75 @@ BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json
 Run it **before, or in the same hour as, the deploy that carries the rule.**
 It needs the snapshots downloaded from Scaleway and Admin credentials.
 
+**What the independent review of this change found, each of which would have
+shipped — the lessons are general:**
+
+1. **"Exists" is not "was created".** The first rule tested
+   `sessions/<code>.exists()`. `sessions/<any code>/members/<own uid>` is
+   writable by any signed-in visitor, so one extra write made any code "exist"
+   — the same objection that had been used, in the same paragraph, to reject
+   `users/<uid>/history/<code>` as the evidence. **Before a rule leans on a
+   node, list who can write anything underneath it.**
+2. **And `created` is only as strong as the facilitator gate.** Creating a
+   session is open to any signed-in visitor while `facilitatorGate/enforce` is
+   off. So this is NOT a boundary against a visitor who creates a session and
+   files a request in it; it removes arbitrary codes, back-dating, and requests
+   nothing can close. Do not describe it as more.
+3. **`orgs` is a reserved key.** Outside `sessions/`, every per-session tree
+   keeps organisation sessions under a literal `orgs` child, so a default-tree
+   session CODED `orgs` has the roots of every organisation's data as its
+   paths — and the purge deletes a session's paths. One anonymous write under
+   `sessions/orgs/` did that (latent: no org sessions in production; older than
+   this change). Now: a `.validate` on the session node in both trees, the
+   enumerators skip the key, `locationFor()` throws. **A new per-session tree
+   with an `orgs/` branch inherits this for free only because of those three.**
+4. **`--uid` without `--session` is the person, everywhere** — every live
+   session and the whole `users/<uid>` record. The first operator text gave
+   that command for answering one request. The tool prints `SCOPE` and rejects
+   unknown arguments (a mistyped `--session` used to be ignored).
+5. **A ledger that is never deleted needs dates.** "Answered" matched a record
+   of any age, so a second request after an erasure was closed on arrival and
+   deleted by the purge. A record answers only what it post-dates.
+
 ⚠️ **Still open, and not this change's to settle** (all in the DPA paragraph):
 the marker's lifetime is five years by a constant
 (`CLEANUP_RETENTION_PURGED_MARKER_DAYS`) the Controller has not confirmed; "You
 are excluded from the research dataset" is made true for a purged session by
 the operator's `--research-copy-checked` and by nothing the tool can verify; a
-certificate published for a purged session cannot be found from a uid; and
+certificate published for a purged session cannot be found from a uid;
 `privacy.html` §6 does not list what the daily jobs read of withdrawal and
-erasure records (true of the monitor since 2026-09-03).
+erasure records (true of the monitor since 2026-09-03); for a session still in
+the database the tool deletes the whole `users/<uid>` even with `--session`;
+and **a session whose `created/at` or `closed/at` is dated in the future is
+never purged** — the rules bound neither, and the purge was run to confirm it.
 
-**Two traps met on the way:**
+**Three traps met on the way:**
 1. **The ops scripts can be RUN in a test.** `tests/fixtures/run-ops-script.js`
    starts a real script in a child process against an in-memory database whose
    writes are applied and whose clock is fixed, so one job's output can be fed
-   to the next (purge, then monitor). The fake keeps the event loop alive like a
-   real connection, so a path that forgets `process.exit()` times out — that is
-   how `erase-participant.js` was found to hang after every successful live
-   erasure, which the source-reading check could not see.
+   to the next (purge, then monitor; tool, then the real restore). The fake
+   keeps the event loop alive like a real connection, so a path that forgets
+   `process.exit()` times out — that is how `erase-participant.js` was found to
+   hang after every successful live erasure, and running the real
+   `restore-sessions.js` is how it was found to restore an organisation's
+   session to `orgs/orgs/sessions/…`.
 2. **Do not type a backslash into a Bash heredoc that writes JavaScript.** A
-   `\b` meant for a regex arrived as a backspace byte in a test file. Use the
-   Write/Edit tools for anything containing a backslash, and scan changed files
-   for control bytes before committing.
+   `\b` meant for a regex arrived as a backspace byte in a test file, and a
+   `\n` inside a string literal as a real line break. Use the Write/Edit tools
+   for anything containing a backslash, and scan changed files for control
+   bytes before committing.
+3. **The emulator rules suite cannot be run by two sessions at once.**
+   `run-rules-e2e.js` frees whatever it saw on :9000/:9099 during its own run,
+   which under overlap is the OTHER session's emulator. If the hub falls back
+   from port 4400 to 4401, another emulator is alive: stop, do not retry.
 
 `Verify:` `node --test tests/purged-session-marker.test.js
 tests/withdrawal-retention.test.js tests/erase-purged-session.test.js
-tests/withdrawal.test.js tests/data-rights.test.js`, and on the emulator
-`npm run test:e2e:rules -- -g "can only name a session"`. Whether the backfill
-has been run is NOT checkable from the repo: an operator's dry run printing
-`to mark: 0` is the evidence.
+tests/reserved-session-key.test.js tests/withdrawal.test.js
+tests/data-rights.test.js tests/cleanup-passes.test.js`, and on the emulator
+`npm run test:e2e:rules -- -g "session"`. Whether the backfill has been run is
+NOT checkable from the repo: an operator's dry run printing `to mark: 0` is the
+evidence.
 
 ## Scenario characters (facilitator-authored scenarios)
 

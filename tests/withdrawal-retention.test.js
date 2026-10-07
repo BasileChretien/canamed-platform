@@ -27,8 +27,10 @@
 const test = require("node:test");
 const assert = require("node:assert");
 
-const { planPurgedSessionWithdrawals, isOpenRequest } = require("../scripts/lib/withdrawal-retention");
-const { answeredKeys, pendingErasures } = require("../scripts/lib/data-rights");
+const {
+  planPurgedSessionWithdrawals, isOpenRequest, sweepPurgedSessionRecords,
+} = require("../scripts/lib/withdrawal-retention");
+const { answeredIndex, flattenErasures, pendingErasures } = require("../scripts/lib/data-rights");
 const { readSessionLocationsShallow } = require("../scripts/lib/session-trees");
 const { run: runMonitor } = require("../scripts/data-rights-monitor");
 const { runOpsScript, at } = require("./fixtures/run-ops-script");
@@ -39,6 +41,10 @@ const PURGE_AT = 3 * HOUR + 17 * MIN;                  // cleanup-stale-sessions
 const MONITOR_AT = 4 * HOUR + 11 * MIN;                // data-rights-monitor.yml
 
 const request = (when) => ({ research: false, erasure: true, at: when });
+/* An erasure record answers a request only if it is dated at or after it.
+   Every fixture record here is dated after every request in this file. */
+const ANSWERED_AT = new Date(D0 + 400 * DAY).toISOString();
+const answeredBy = (records) => answeredIndex(records.map((r) => Object.assign({ at: ANSWERED_AT }, r)));
 
 /* The purge as its cron runs it: live, quiet. The backup gate is disarmed so
    the session pass runs; the gate has its own tests. */
@@ -97,7 +103,7 @@ test("of a purged session's records, only an unanswered erasure request stays", 
     nothing: null,
   };
   const plan = planPurgedSessionWithdrawals(
-    byUid, "S-1", answeredKeys([{ locationKey: "S-1", uid: "answered" }]));
+    byUid, "S-1", answeredBy([{ locationKey: "S-1", uid: "answered" }]));
   assert.deepStrictEqual(plan.keptUids, ["asked"]);
   assert.deepStrictEqual(plan.deleteUids, ["answered", "debris", "nothing", "saidNo", "withdrewOnly"]);
 });
@@ -106,7 +112,7 @@ test("an erasure record for ANOTHER session, or another person, answers nothing 
   const byUid = { asked: { research: false, erasure: true, at: 1 } };
   for (const rec of [{ locationKey: "OTHER", uid: "asked" }, { locationKey: "S-1", uid: "someoneElse" },
                      { locationKey: "orgs/uni-x/S-1", uid: "asked" }]) {
-    const plan = planPurgedSessionWithdrawals(byUid, "S-1", answeredKeys([rec]));
+    const plan = planPurgedSessionWithdrawals(byUid, "S-1", answeredBy([rec]));
     assert.deepStrictEqual(plan.keptUids, ["asked"], JSON.stringify(rec));
   }
 });
@@ -137,18 +143,18 @@ test("the purge and the monitor agree on what is still open", () => {
       u3: { research: false, erasure: true, at: 5 }, u4: 7, u5: { erasure: true },
     },
   };
-  const records = [{ locationKey: "S-1", uid: "u3" }];
-  const kept = planPurgedSessionWithdrawals(withdrawals["S-1"], "S-1", answeredKeys(records)).keptUids;
+  const records = [{ locationKey: "S-1", uid: "u3", at: ANSWERED_AT }];
+  const kept = planPurgedSessionWithdrawals(withdrawals["S-1"], "S-1", answeredBy(records)).keptUids;
   const open = pendingErasures(withdrawals, records, 1000).pending.map((p) => p.uid).sort();
   assert.deepStrictEqual(kept, open);
   assert.deepStrictEqual(kept, ["u1", "u5"]);
-  assert.strictEqual(isOpenRequest(withdrawals["S-1"].u5, "S-1", "u5", answeredKeys(records)), true,
+  assert.strictEqual(isOpenRequest(withdrawals["S-1"].u5, "S-1", "u5", answeredBy(records)), true,
     "an undated request is still a request");
 });
 
 test("malformed input plans nothing and throws nothing", () => {
   for (const byUid of [null, undefined, "x", 7, []]) {
-    assert.deepStrictEqual(planPurgedSessionWithdrawals(byUid, "S-1", new Set()),
+    assert.deepStrictEqual(planPurgedSessionWithdrawals(byUid, "S-1", answeredBy([])),
       { deleteUids: [], keptUids: [], answeredUids: [] });
   }
 });
@@ -224,7 +230,7 @@ test("everything else about the session still goes — the purge keeps the reque
       "FRESH": { other: request(A) },
       orgs: { "uni-x": { "S-2": { orgAsked: request(A), orgWithdrewOnly: { research: false, at: A } } } },
     },
-    erasures: { e1: { at: "x", records: [{ locationKey: "S-1", uid: "answered" }] } },
+    erasures: { e1: { at: ANSWERED_AT, records: [{ locationKey: "S-1", uid: "answered" }] } },
   }, C + 31 * DAY);
 
   for (const gone of ["sessions/S-1", "orgs/uni-x/sessions/S-2", "adminSecrets/S-1",
@@ -255,7 +261,7 @@ test("an unreadable erasure ledger keeps every request, purges anyway, and fails
     tree: {
       sessions: { "S-1": closedAt(C) },
       withdrawals: { "S-1": { asked: request(A), answered: request(A), withdrewOnly: { research: false, at: A } } },
-      erasures: { e1: { at: "x", records: [{ locationKey: "S-1", uid: "answered" }] } },
+      erasures: { e1: { at: ANSWERED_AT, records: [{ locationKey: "S-1", uid: "answered" }] } },
     },
     now: C + 31 * DAY,
     env: { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0" },
@@ -265,6 +271,54 @@ test("an unreadable erasure ledger keeps every request, purges anyway, and fails
   assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/S-1")).sort(), ["answered", "asked"],
     "with no ledger, both requests must be kept; the bare withdrawal still goes");
   assert.strictEqual(r.code, 1, "an unreadable ledger must not look like a clean run:\n" + r.out);
+});
+
+test("a second request, made after the person was already erased once, is a new request and is kept", async () => {
+  /* The ledger is never deleted, so "an erasure record exists for this person
+     in this session" stays true for ever. Erased, back in the same session on
+     the same account, new work, a second request: on that definition the
+     request was answered before it was made — invisible to the monitor, and
+     deleted by the purge as answered. A record answers only what it post-dates. */
+  const firstErasure = new Date(C + 2 * DAY).toISOString();
+  const tree = {
+    sessions: { "S-1": closedAt(C) },
+    withdrawals: { "S-1": { again: request(C + 10 * DAY), once: request(C + DAY) } },
+    erasures: { e1: { at: firstErasure, records: [
+      { locationKey: "S-1", uid: "again" }, { locationKey: "S-1", uid: "once" },
+    ] } },
+  };
+  const before = await monitor(tree, C + 12 * DAY);
+  assert.deepStrictEqual([before.open, before.code], [1, 0],
+    "the request made after the erasure must be open; the one made before it is answered");
+
+  const r = purge(tree, C + 31 * DAY);
+  assert.strictEqual(at(r.tree, "sessions/S-1"), null, "positive control: purged");
+  assert.deepStrictEqual(Object.keys(at(r.tree, "withdrawals/S-1")), ["again"],
+    "the new request went with the session; or the answered one did not");
+  assert.strictEqual((await monitor(r.tree, C + 41 * DAY)).code, 1, "and it turns late on its own 30th day");
+});
+
+test("the purge reads the erasure ledger only when the session it purges holds a request", () => {
+  /* The ledger is account identifiers and dates, read onto a hosted runner.
+     A session with no erasure request under it gives no reason to read it —
+     shown by making the read fail: a purge that touched it would exit 1. */
+  const base = { sessions: { "S-1": closedAt(C) } };
+  const env = { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0" };
+  for (const withdrawals of [undefined, { "S-1": { u: { research: false, at: C + DAY } } }]) {
+    const r = runOpsScript("cleanup-stale-sessions.js", {
+      tree: Object.assign({}, base, withdrawals ? { withdrawals } : {}),
+      now: C + 31 * DAY, env, throwOn: "erasures",
+    });
+    assert.strictEqual(r.code, 0, "the ledger was read with no request to decide:\n" + r.out);
+    assert.strictEqual(at(r.tree, "sessions/S-1"), null);
+    assert.strictEqual(at(r.tree, "withdrawals"), null);
+  }
+  // Positive control: with a request there, the same failing read is hit.
+  const hit = runOpsScript("cleanup-stale-sessions.js", {
+    tree: Object.assign({}, base, { withdrawals: { "S-1": { u: request(C + DAY) } } }),
+    now: C + 31 * DAY, env, throwOn: "erasures",
+  });
+  assert.strictEqual(hit.code, 1);
 });
 
 test("if the session's withdrawal records cannot be read, the session is NOT purged that night", () => {
@@ -313,7 +367,7 @@ const sweepTree = () => ({
       "ORG-LIVE": { withdrewOnly: { research: false, at: old(2) } },
     } },
   },
-  erasures: { e1: { at: "x", records: [
+  erasures: { e1: { at: ANSWERED_AT, records: [
     { locationKey: "GONE-1", uid: "answered" }, { locationKey: "orgs/uni-x/GONE-2", uid: "answered" },
     { locationKey: "NO-MARKER", uid: "answered" }, { locationKey: "LIVE-1", uid: "answered" },
     { locationKey: "BACK-1", uid: "answered" },
@@ -323,7 +377,7 @@ const sweepTree = () => ({
 test("the plan says which deleted records were answered requests", () => {
   const plan = planPurgedSessionWithdrawals({
     open: request(1), answered: request(1), withdrewOnly: { research: false, at: 1 },
-  }, "S-1", answeredKeys([{ locationKey: "S-1", uid: "answered" }]));
+  }, "S-1", answeredBy([{ locationKey: "S-1", uid: "answered" }]));
   assert.deepStrictEqual(plan.answeredUids, ["answered"]);
   assert.deepStrictEqual(plan.deleteUids, ["answered", "withdrewOnly"]);
 });
@@ -375,7 +429,7 @@ test("a request has its whole life: kept at the purge, red at 30 days, gone the 
 
   // Someone answers it: an erasure record for this person in this session.
   tree = JSON.parse(JSON.stringify(tree));
-  tree.erasures = { e1: { at: "x", records: [{ locationKey: "S-1", uid: "u1" }] } };
+  tree.erasures = { e1: { at: ANSWERED_AT, records: [{ locationKey: "S-1", uid: "u1" }] } };
   const sameDay = await monitor(tree, A + 31 * DAY);
   assert.strictEqual(sameDay.code, 0, "an answered request must stop failing the job at once");
   assert.match(sameDay.text, /Erasure requests done:\s+1\b/);
@@ -451,6 +505,34 @@ test("one unreadable branch does not stop the others being swept", () => {
   assert.strictEqual(r.code, 1, r.out);
 });
 
+test("if the sweep's write fails, its report says nothing was deleted", async () => {
+  /* One update, all or nothing. The counts are what the job prints — "purged
+     2 answered request(s)" — so after a refused write they must be zero, with
+     the failure counted, or the log claims deletions that did not happen. */
+  const tree = sweepTree();
+  const failed = [];
+  const db = {
+    ref: (p) => ({
+      once: async () => ({ val: () => at(tree, p || "") }),
+      update: async () => { throw Object.assign(new Error("write refused"), { code: "UNAVAILABLE" }); },
+    }),
+  };
+  const opts = {
+    liveLocationKeys: ["LIVE-1", "BACK-1", "orgs/uni-x/ORG-LIVE"],
+    answered: async () => answeredIndex(flattenErasures(tree.erasures)),
+    markerCutoffMs: NIGHT, confirm: true, onError: (e) => failed.push(e.code),
+  };
+  const r = await sweepPurgedSessionRecords(db, opts);
+  assert.deepStrictEqual(
+    [r.answered, r.noRequest, r.markersExpired, r.open, r.errors], [0, 0, 0, 2, 1],
+    "a failed update was reported as deletions");
+  assert.deepStrictEqual(failed, ["UNAVAILABLE"]);
+
+  // The control: the same call in a dry run plans the deletions and counts them.
+  const dry = await sweepPurgedSessionRecords(db, Object.assign({}, opts, { confirm: false }));
+  assert.deepStrictEqual([dry.answered, dry.noRequest, dry.errors], [2, 2, 0]);
+});
+
 test("a purge marker expires after its window — unless a request still hangs off it", () => {
   const FIVE_YEARS = 5 * 365;
   const tree = {
@@ -465,7 +547,7 @@ test("a purge marker expires after its window — unless a request still hangs o
       "OLD-OPEN": { u: request(old(40)) },
       "OLD-ANSWERED": { u: request(old(40)) },
     },
-    erasures: { e1: { at: "x", records: [{ locationKey: "OLD-ANSWERED", uid: "u" }] } },
+    erasures: { e1: { at: ANSWERED_AT, records: [{ locationKey: "OLD-ANSWERED", uid: "u" }] } },
   };
   const r = purge(tree, NIGHT);
   assert.deepStrictEqual(Object.keys(r.tree.purgedSessions).sort(), ["OLD-OPEN", "YOUNG"],
@@ -485,6 +567,26 @@ test("a purge marker expires after its window — unless a request still hangs o
     });
     assert.strictEqual(refused.code, 2, "window " + JSON.stringify(bad) + " was accepted");
     assert.deepStrictEqual(refused.tree, tree, "something was deleted under a refused window");
+  }
+});
+
+test("a failed read prints an error code, never the path it failed on", () => {
+  /* The purge's logs are public, and its new reads are of paths that carry a
+     session code. The stand-in database's error message quotes the path, as a
+     real one can. */
+  const tree = {
+    sessions: { "SECRETCODE-1": closedAt(C) },
+    purgedSessions: { "SECRETCODE-9": C },
+    withdrawals: { "SECRETCODE-1": { uidSecret: request(C + DAY) }, "SECRETCODE-9": { uidSecret: request(C + DAY) } },
+  };
+  for (const throwOn of ["withdrawals/SECRETCODE-1", "withdrawals/SECRETCODE-9", "erasures", "purgedSessions"]) {
+    const r = runOpsScript("cleanup-stale-sessions.js", {
+      tree, now: C + 31 * DAY,
+      env: { CLEANUP_CONFIRM: "1", CLEANUP_QUIET: "1", CLEANUP_REQUIRE_BACKUP: "0" }, throwOn,
+    });
+    assert.strictEqual(r.code, 1, throwOn + ":\n" + r.out);
+    assert.match(r.out, /PERMISSION_DENIED/, throwOn);
+    assert.doesNotMatch(r.out, /SECRETCODE|uidSecret|fake read failure/, throwOn + " leaked into the log");
   }
 });
 

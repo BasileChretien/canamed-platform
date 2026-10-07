@@ -27,7 +27,7 @@
  *   an erasure request that has been answered          goes
  *   a record that asks for no erasure                  goes
  *
- * "Answered" is data-rights.js answeredKeys(): the same definition the monitor
+ * "Answered" is data-rights.js isAnswered(): the same definition the monitor
  * uses to decide what is still open. Sharing it is the point — if the two
  * disagreed, the purge would again delete something the monitor was counting.
  *
@@ -37,7 +37,7 @@
 
 "use strict";
 
-const { requestKey } = require("./data-rights");
+const { isAnswered } = require("./data-rights");
 const { purgedMarkers, locationForKey } = require("./session-trees");
 
 const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -47,7 +47,14 @@ const isObj = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
  *  then be shown to be answered, so every request counts as open. */
 function isOpenRequest(record, locationKey, uid, answered) {
   if (!isObj(record) || record.erasure !== true) return false;
-  return answered === null || !answered.has(requestKey(locationKey, uid));
+  return answered === null || !isAnswered(answered, locationKey, uid, record.at);
+}
+
+/** Does this branch (`withdrawals/<code>`) hold an erasure request at all?
+ *  The ledger is only worth reading — it is identifiers and dates, on a hosted
+ *  runner — when the answer is yes. */
+function holdsErasureRequest(byUid) {
+  return Object.values(isObj(byUid) ? byUid : {}).some((r) => isObj(r) && r.erasure === true);
 }
 
 /**
@@ -56,7 +63,7 @@ function isOpenRequest(record, locationKey, uid, answered) {
  *
  * @param {object|null} byUid value of `withdrawals/<code>` ({ uid: record })
  * @param {string} locationKey the session's location key
- * @param {Set<string>|null} answered from answeredKeys(); null = ledger unreadable
+ * @param {Map<string, number>|null} answered from answeredIndex(); null = ledger unreadable
  * @returns {{deleteUids: string[], keptUids: string[], answeredUids: string[]}}
  *   `answeredUids` is the part of `deleteUids` that were erasure requests —
  *   for the report only.
@@ -108,8 +115,8 @@ function planPurgedSessionWithdrawals(byUid, locationKey, answered) {
  * @param {object} db a firebase-admin database() handle (or a stand-in)
  * @param {object} opts
  * @param {string[]} opts.liveLocationKeys sessions in the database
- * @param {function(): Promise<Set<string>|null>} opts.answered resolves to
- *   answeredKeys(), or null when the ledger cannot be read. Called at most
+ * @param {function(): Promise<Map<string, number>|null>} opts.answered resolves to
+ *   answeredIndex(), or null when the ledger cannot be read. Called at most
  *   once, and only if a request is found.
  * @param {number} opts.markerCutoffMs a marker older than this may expire
  * @param {boolean} opts.confirm false = report only
@@ -137,10 +144,8 @@ async function sweepPurgedSessionRecords(db, opts) {
     const loc = locationForKey(key);
     try {
       const byUid = (await db.ref(loc.withdrawalsPath).once("value")).val();
-      const holdsRequest = Object.values(isObj(byUid) ? byUid : {})
-        .some((r) => isObj(r) && r.erasure === true);
       const plan = planPurgedSessionWithdrawals(
-        byUid, key, holdsRequest ? await opts.answered() : new Set());
+        byUid, key, holdsErasureRequest(byUid) ? await opts.answered() : new Map());
       for (const uid of plan.deleteUids) updates[`${loc.withdrawalsPath}/${uid}`] = null;
       out.answered += plan.answeredUids.length;
       out.noRequest += plan.deleteUids.length - plan.answeredUids.length;
@@ -158,10 +163,17 @@ async function sweepPurgedSessionRecords(db, opts) {
     try {
       await db.ref().update(updates);
     } catch (e) {
+      /* One update, all or nothing: if it failed, nothing was deleted, and the
+         report must not say otherwise. */
       fail(e);
+      out.answered = 0;
+      out.noRequest = 0;
+      out.markersExpired = 0;
     }
   }
   return out;
 }
 
-module.exports = { isOpenRequest, planPurgedSessionWithdrawals, sweepPurgedSessionRecords };
+module.exports = {
+  isOpenRequest, holdsErasureRequest, planPurgedSessionWithdrawals, sweepPurgedSessionRecords,
+};

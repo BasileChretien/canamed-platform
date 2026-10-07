@@ -91,6 +91,7 @@
     "sessions": {
       "$sessionId": {
         ".read": "auth != null && data.child('members').hasChild(auth.uid)",
+        ".validate": "$sessionId != 'orgs'",
 
         "members": {
           "$uid": {
@@ -719,7 +720,7 @@
       "$sessionId": {
         "$uid": {
           ".read": "auth != null && auth.uid == $uid",
-          ".write": "auth != null && auth.uid == $uid && (root.child('sessions').child($sessionId).exists() || root.child('purgedSessions').child($sessionId).exists())",
+          ".write": "auth != null && auth.uid == $uid && (root.child('sessions').child($sessionId).child('created').exists() || root.child('purgedSessions').child($sessionId).exists())",
           ".validate": "newData.hasChildren(['research','at'])",
           "research": { ".validate": "newData.isBoolean() && newData.val() === false" },
           "at": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 86400000" },
@@ -732,7 +733,7 @@
           "$sessionId": {
             "$uid": {
               ".read": "auth != null && auth.uid == $uid",
-              ".write": "auth != null && auth.uid == $uid && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).exists() || root.child('purgedSessions').child('orgs').child($orgSlug).child($sessionId).exists())",
+              ".write": "auth != null && auth.uid == $uid && (root.child('orgs').child($orgSlug).child('sessions').child($sessionId).child('created').exists() || root.child('purgedSessions').child('orgs').child($orgSlug).child($sessionId).exists())",
               ".validate": "newData.hasChildren(['research','at'])",
               "research": { ".validate": "newData.isBoolean() && newData.val() === false" },
               "at": { ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 86400000" },
@@ -904,6 +905,7 @@
         "sessions": {
           "$sessionId": {
             ".read": "auth != null && data.child('members').hasChild(auth.uid)",
+            ".validate": "$sessionId != 'orgs'",
 
             "members": {
               "$uid": {
