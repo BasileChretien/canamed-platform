@@ -555,9 +555,20 @@ test("a signal to the runner forwards to the child, and sweeps only after it", (
     "not hang the shell");
   /* A wait, not a sleep: stop() has to RETURN for the child's exit to be seen
      at all, so nothing in it may block. */
-  assert.doesNotMatch(body, /\bwhile\s*\(|\bfor\s*\(|Atomics\.wait|spawnSync\(process\.execPath/,
+  assert.doesNotMatch(body, /\bwhile\s*\(|\bfor\s*\(|Atomics\.wait/,
     "stop() must not loop or sleep synchronously: the child's exit is reported " +
     "by the event loop, which a blocked handler never lets turn");
+  /* Nor run ANYTHING synchronously but the one call that ends the child. The
+     first form of this ban named `spawnSync(process.execPath` only — the
+     exact shape of the old sleep — and a ten-second `spawnSync(process.argv[0],
+     …)` put just before the wait got past it, and past both scenarios that
+     run on Windows (they time the wait as the runner reports it, which starts
+     AFTER that point; found in review). The POSIX scenarios assert wall-clock
+     and would catch it; this is what stands in for that on Windows. */
+  assert.deepStrictEqual(body.match(/\b(?:spawnSync|execSync|execFileSync)\s*\(/g), ["spawnSync("],
+    "stop() may make exactly one synchronous child call");
+  assert.match(body, /spawnSync\("taskkill", \["\/F", "\/T", "\/PID", String\(child\.pid\)\]/,
+    "and it is the tree-kill of the child, on Windows");
   /* After the wait: the only sweep in stop() is the one inside the timer. */
   const sweepAt = body.indexOf("sweep(");
   assert.ok(sweepAt > timerAt,

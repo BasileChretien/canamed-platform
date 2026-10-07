@@ -313,6 +313,62 @@ test("if the table cannot be read at the sweep, nothing is ours", () => {
   assert.deepStrictEqual(sorted.why, ["cannot read the process table (gone)"]);
 });
 
+test("the sweep reads the table once more when the read fails — a verified leftover is still freed", () => {
+  /* The sweep is the LAST look. observe() is asked again on the next poll, so
+     one failed read during the run costs nothing; one failed read at the sweep
+     used to leave this run's own emulator on the port, verdict and all,
+     because without the table it could not be re-identified. A process-table
+     read is PowerShell and WMI on Windows, and those do fail now and then on
+     a machine running several suites. */
+  let rows = TWO_RUNS;
+  let failNext = 0;
+  let reads = 0;
+  const t = lineage.track(ROOT, { selfPid: SELF, snapshot: () => {
+    reads++;
+    if (failNext > 0) { failNext--; throw new Error("cannot read the process table (busy)"); }
+    return table(rows);
+  } });
+  t.observe([220, 930]);
+  rows = AFTER_EXIT;
+
+  reads = 0;
+  failNext = 1;
+  const sorted = t.partition([row(9000, 220), row(9099, 930)]);
+  assert.strictEqual(reads, 2, "one failed read, then one that worked");
+  assert.deepStrictEqual(sorted.mine, [row(9000, 220)],
+    "shown to be ours during the run, and re-identified on the second read");
+  assert.deepStrictEqual(sorted.notMine, [row(9099, 930)],
+    "the stranger is no more ours for the retry than it was before");
+  assert.deepStrictEqual(sorted.unproven, []);
+  assert.deepStrictEqual(sorted.why, []);
+});
+
+test("the retry is ONE: two failed reads end in 'nothing is ours', and a good read is not repeated", () => {
+  let fail = false;
+  let reads = 0;
+  const t = lineage.track(ROOT, { selfPid: SELF, snapshot: () => {
+    reads++;
+    if (fail) throw new Error("cannot read the process table (gone)");
+    return table(TWO_RUNS);
+  } });
+  t.observe([220]);
+
+  reads = 0;
+  assert.deepStrictEqual(t.partition([row(9000, 220)]).mine, [row(9000, 220)]);
+  assert.strictEqual(reads, 1,
+    "a read that works is the answer: a snapshot is 1.5 s of PowerShell at best");
+
+  reads = 0;
+  fail = true;
+  const sorted = t.partition([row(9000, 220)]);
+  assert.strictEqual(reads, 2,
+    "and one that keeps failing is given up on after the second — each costs " +
+    "up to its whole timeout, at the moment the shell is waiting to return");
+  assert.deepStrictEqual(sorted.mine, [],
+    "a failed read never becomes a kill, however often it is tried");
+  assert.deepStrictEqual(sorted.unproven, [row(9000, 220)]);
+});
+
 test("POSIX: a creation time that reads a second apart is still the same process", () => {
   /* procps before 4.0 (Ubuntu 22.04, RHEL 8/9) derives lstart from "now minus
      uptime", recomputed on every call, so the same process can read one second

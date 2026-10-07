@@ -380,7 +380,8 @@ function sweep(failed) {
    interrupted run ends — bounded by a timer, because a wedged child must not
    hang the shell forever. Both need the event loop, so stop() RETURNS: it
    must never wait for the child synchronously. (Windows' taskkill is the one
-   synchronous step left in it; that is what ends the child, and it is brief.)
+   synchronous step left in it: it is what ends the child. Usually a fraction
+   of a second, and many on a busy machine — see toldAt below.)
 
    Until 2026-10-08 it did. It looped on `child.exitCode === null` around a
    synchronous sleep, and exitCode is set by the same turn of the event loop

@@ -71,8 +71,32 @@ const AUTH_PORT = parseInt(process.env.SIM_AUTH_PORT || "9099", 10);
    8765 written into it three times while serve-platform.js, which it starts
    with this environment, read PORT — so `PORT=8771 npm run sim:emulator`
    started the server on 8771, waited for it on 8765 and gave up. */
-const WEB_PORT  = parseInt(process.env.PORT || "8765", 10);
+const WEB_PORT_ASKED = process.env.PORT || "8765";
+const WEB_PORT  = /^\d+$/.test(WEB_PORT_ASKED) ? parseInt(WEB_PORT_ASKED, 10) : NaN;
 const HOST      = "127.0.0.1";
+
+/* PORT is the caller's, so it is refused HERE when it cannot work — before
+   anything is started, and before the handlers below exist, so that there is
+   nothing to tear down. Left to run, a bare parseInt made each of these fail
+   late and say something untrue: `PORT=abc` (or 0) announced a server "on
+   :NaN" and gave up 10 s later; `PORT=9000` put the platform server on the
+   database emulator's port, the emulator then could not bind it, and the run
+   was refused as "ANOTHER RUN HOLDS THE EMULATOR PORTS" — about this run's
+   own node.exe. */
+function webPortProblem() {
+  if (!Number.isInteger(WEB_PORT) || WEB_PORT < 1 || WEB_PORT > 65535) {
+    return "that is not a port (a whole number from 1 to 65535)";
+  }
+  if (WEB_PORT === DB_PORT) return "that is the database emulator's port";
+  if (WEB_PORT === AUTH_PORT) return "that is the auth emulator's port";
+  return null;
+}
+if (webPortProblem()) {
+  console.error("FATAL: PORT=" + JSON.stringify(WEB_PORT_ASKED) + " cannot be the " +
+    "platform server's port — " + webPortProblem() + ".\nNothing was started. " +
+    "Unset PORT to use 8765, or name a free one: PORT=8771 npm run sim:emulator");
+  process.exit(1);
+}
 /* How the readiness check looks at the emulator ports (ownEmulatorOrRefuse).
    Three looks, because lineage.observe() stops asking about a PID after three
    snapshots without an answer: a fourth would only be waiting. */

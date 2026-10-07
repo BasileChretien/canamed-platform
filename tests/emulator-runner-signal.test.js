@@ -131,6 +131,20 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
           "signal to the runner's exit). The wait must end when the child exits; " +
           "one that only ends at its " + BOUND_MS + " ms bound is a fixed sleep.\n" +
           "Runner output:\n" + out);
+        if (!IS_WIN) {
+          /* Wall-clock as well, where it can be trusted. The wait asserted
+             above is the runner's own account, and it starts once the child
+             has been told: a synchronous delay placed BEFORE that point does
+             not show in it (found in review, with a 10 s spawnSync). Here
+             telling the child is a kill() and the look at the ports is lsof,
+             so the whole thing takes a fraction of a second and ten cannot
+             hide. On Windows it cannot be asserted — see PROMPT_MS — and the
+             text check on stop() in tests/emulator-run-hygiene.test.js is
+             what stands in for it. */
+          assert.ok(took < PROMPT_MS,
+            "the runner took " + took + " ms from " + signal + " to its exit, with a " +
+            "child that dies of the signal at once\n" + out);
+        }
         assert.strictEqual(code, exitCode,
           "an interrupted run exits 128 + the signal's number\n" + out);
         assert.strictEqual(run.endedBy(), null,

@@ -129,7 +129,49 @@ async function endedWithoutSim(ctx, run) {
   return ended(run);
 }
 
-describe("the sim launcher, run for real", { concurrency: true }, () => {
+/* All at once everywhere but Windows, where it is four at a time. Each scenario
+   there costs process-table reads and kills that go through WMI, and those
+   slow each other down: beside the unit suite, a read was measured at 2.3 s
+   median and 11 s at worst, a kill at 1.2 s and 10 s (103 of each, none
+   failed). tests/emulator-sweep-lineage.test.js runs in the same minute and
+   has failed once on this machine under load, cause not established — so this
+   file, which brought ten more such scenarios, does not pile them all on at
+   the same instant. It costs this file about 11 s (23 s → 35 s, alone). */
+const AT_ONCE = process.platform === "win32" ? 4 : true;
+
+describe("the sim launcher, run for real", { concurrency: AT_ONCE }, () => {
+  it("refuses a PORT that cannot be the platform server's — before anything is started",
+    { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
+      /* A bare parseInt used to let each of these through to fail late and
+         say something untrue: "starting static platform server on :NaN" and a
+         10 s wait; or, for an emulator's own port, the platform server bound
+         there, the emulator unable to, and the run refused as ANOTHER RUN
+         HOLDS THE EMULATOR PORTS — about this run's own node.exe. */
+      const cases = [
+        ["abc", /that is not a port/],
+        ["0", /that is not a port/],
+        ["70000", /that is not a port/],
+        /* parseInt would read the number and ignore the rest. (This scenario's
+           own spare port, so that a launcher which did just that would bind
+           nothing anyone else is using.) */
+        [ctx.ports.spare + "abc", /that is not a port/],
+        [String(ctx.ports.db), /that is the database emulator's port/],
+        [String(ctx.ports.auth), /that is the auth emulator's port/]
+      ];
+      for (const [port, why] of cases) {
+        const run = ctx.run({ PORT: port, FAKE_EXEC_MODE: "serve" });
+        const { code, out } = await ended(run);
+        assert.strictEqual(code, 1, "PORT=" + port + "\n" + out);
+        assert.ok(out.includes("FATAL: PORT=\"" + port + "\" cannot be the platform server's port"),
+          "PORT=" + port + " must be refused by name\n" + out);
+        assert.match(out, why, "and the reason given must be the right one\n" + out);
+        assert.doesNotMatch(out, /pre-flight checks|starting static platform server|ANOTHER RUN/,
+          "PORT=" + port + ": nothing may have been started, or said about other runs\n" + out);
+        assert.ok(!ctx.exists("started") && !ctx.exists("sim-spawned"),
+          "PORT=" + port + ": the emulator CLI and the sim must not have been spawned");
+      }
+    }));
+
   it("runs the sim against its own emulator, then leaves nothing behind (the allow leg)",
     { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
       const run = ctx.run({ FAKE_EXEC_MODE: "serve" });
