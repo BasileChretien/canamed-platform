@@ -2244,8 +2244,14 @@ test("rules: a withdrawal can only name a session that exists or was purged, and
   denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(2 * 86400000)));
   expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(60000)),
     "a device clock a minute slow must still be able to withdraw").toBe("ALLOWED");
+  /* ...and one a couple of seconds FAST. The rule said `<= now` with no
+     tolerance, alone among the timestamp rules, so this write was refused and
+     the participant was told the withdrawal could not be recorded. */
+  expect(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(-2000)),
+    "a device clock two seconds fast must still be able to withdraw").toBe("ALLOWED");
+  denied(await tryWrite(page, `withdrawals/${LIVE}/${uid}`, backdated(-3600000)));
   const stored = await dbReadAsOwner(`withdrawals/${LIVE}/${uid}/at`);
-  expect(Date.now() - stored, "the stored date is the last ALLOWED one, not a back-dated one")
+  expect(Math.abs(Date.now() - stored), "the stored date is the last ALLOWED one, not a refused one")
     .toBeLessThan(10 * 60000);
 
   // ---- org tree: the same four facts, and the trees do not vouch for each other

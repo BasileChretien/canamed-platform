@@ -946,6 +946,79 @@ estimate; the two together are why Monitor stays.
 
    </details>
 
+### Erasure requests that outlive their session (2026-10-07) — ⚠️ ONE OPERATOR STEP, BEFORE THE RULES DEPLOY
+
+A participant records withdrawal plus an erasure request at
+`withdrawals/<code>/<uid>` (org: `withdrawals/orgs/<slug>/<code>/<uid>`). Four
+things were wrong once the session was purged; all four are fixed in code. The
+full account, with what each fix does NOT close, is DPA Annex VI G12 item 2 —
+read that before describing any of this as done.
+
+- **The purge leaves a marker**, `purgedSessions/<code>` = time of the purge
+  (Admin-only node; a code and a date). It is the only thing in the database
+  that tells a purged session from a code that never existed.
+- **The rule accepts a withdrawal only for a session that exists or has a
+  marker**, in both trees, and `at` must be within 24 h behind / 5 s ahead of
+  the server clock. Before, any signed-in visitor could file a request for any
+  code, and one write with `at: 1` turned the daily monitor red on its next
+  run. `users/<uid>/history/<code>` is NOT usable as the evidence — the owner
+  can write it. (The old rule also allowed NO clock lead, `at <= now`, alone
+  in the file: a device a little fast was refused its withdrawal. A unit test
+  now fails on any timestamp rule without the `+ 5000`.)
+- **The purge keeps an erasure request nobody has answered**, with no time
+  limit. It used to delete the whole branch with the session: measured on the
+  real schedule (purge 03:17, monitor 04:11), a request made from about the
+  session's last day onward never turned the monitor red at all.
+- **The nightly job sweeps answered and request-less records of purged
+  sessions** — only under a marker, never because a session is merely absent
+  from a listing (a `research:false` record under a live session is what keeps
+  that participant out of the export).
+- **`scripts/erase-participant.js` answers a request for a purged session**:
+  `--uid` required, and it refuses to write without `--research-copy-checked`.
+  It writes nothing for a session with no marker (exit 3); `--dismiss` removes
+  such a request. Procedure: `ARCHITECTURE/OPERATOR_POLICY.md` §4.1.
+
+⚠️ **ACTION REQUIRED, not done, cannot be done in code:** sessions purged before
+this change have no marker, so their participants are refused in the product
+until the markers are rebuilt from the nightly snapshots:
+
+```bash
+node scripts/backfill-purged-markers.js --file <snapshot.json> [--file …]
+BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json>
+```
+
+Run it **before, or in the same hour as, the deploy that carries the rule.**
+It needs the snapshots downloaded from Scaleway and Admin credentials.
+
+⚠️ **Still open, and not this change's to settle** (all in the DPA paragraph):
+the marker's lifetime is five years by a constant
+(`CLEANUP_RETENTION_PURGED_MARKER_DAYS`) the Controller has not confirmed; "You
+are excluded from the research dataset" is made true for a purged session by
+the operator's `--research-copy-checked` and by nothing the tool can verify; a
+certificate published for a purged session cannot be found from a uid; and
+`privacy.html` §6 does not list what the daily jobs read of withdrawal and
+erasure records (true of the monitor since 2026-09-03).
+
+**Two traps met on the way:**
+1. **The ops scripts can be RUN in a test.** `tests/fixtures/run-ops-script.js`
+   starts a real script in a child process against an in-memory database whose
+   writes are applied and whose clock is fixed, so one job's output can be fed
+   to the next (purge, then monitor). The fake keeps the event loop alive like a
+   real connection, so a path that forgets `process.exit()` times out — that is
+   how `erase-participant.js` was found to hang after every successful live
+   erasure, which the source-reading check could not see.
+2. **Do not type a backslash into a Bash heredoc that writes JavaScript.** A
+   `\b` meant for a regex arrived as a backspace byte in a test file. Use the
+   Write/Edit tools for anything containing a backslash, and scan changed files
+   for control bytes before committing.
+
+`Verify:` `node --test tests/purged-session-marker.test.js
+tests/withdrawal-retention.test.js tests/erase-purged-session.test.js
+tests/withdrawal.test.js tests/data-rights.test.js`, and on the emulator
+`npm run test:e2e:rules -- -g "can only name a session"`. Whether the backfill
+has been run is NOT checkable from the repo: an operator's dry run printing
+`to mark: 0` is the evidence.
+
 ## Scenario characters (facilitator-authored scenarios)
 
 Design record: [ARCHITECTURE/scenario-characters-design.md](docs/Third_session/PBL_platform/ARCHITECTURE/scenario-characters-design.md).

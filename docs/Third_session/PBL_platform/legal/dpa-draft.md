@@ -3403,6 +3403,17 @@ now exists; that is not the same as the duty being discharged.
      session. For a session still in the database the tool deletes the
      certificate; for a purged one it cannot, says so, and the record can be
      deleted by hand only if the participant supplies the id.
+   - **The history row does not know which organisation's tree a session was
+     in — found 2026-10-07 by reading the client, not reproduced.** A history
+     entry is keyed by the bare session code, and the withdrawal is written
+     under the tree of whichever address the page was opened at. A participant
+     of a session held under an organisation address (`/o/<slug>/`) who opens
+     the account dialog from the plain front page writes to the default tree.
+     Before the rule change that record was accepted and filed under a key no
+     session has — so it kept them out of no export and matched no erasure.
+     Now the write is refused, which at least fails where the participant can
+     see it. No impact today: the one organisation registered maps to the
+     default tree. It becomes real with a second organisation.
    - **The participant notice does not list what the daily jobs read of these
      records — found 2026-10-07, open.** `privacy.html` section 6 (PIS v11,
      EN/FR/JA) says the jobs that run every day read "a list of session
@@ -3563,8 +3574,17 @@ now exists; that is not the same as the duty being discharged.
      `purgedSessions/<code>` = the time of the purge, in the same update that
      deletes the session. No client can read or write it. The rule accepts a
      withdrawal only if the session is in the database **or** carries a marker,
-     in both rule trees, each addressing its own; and `at` must be within 24
-     hours of the server's clock.
+     in both rule trees, each addressing its own; and `at` must be no more
+     than 24 hours behind the server's clock and no more than 5 seconds ahead
+     of it.
+     *Found while bounding the date:* the rule allowed **no** lead at all
+     (`at <= now`), alone among the timestamp rules in the file, which all
+     allow five seconds. The product stamps the record with the device's own
+     clock, so a device running ahead by more than the network delay was told
+     "Could not record your withdrawal" — on the one write that exercises a
+     right, since the control shipped (2026-09-03). How many participants that
+     turned away is not known and cannot be recovered: a refused write leaves
+     nothing behind. It now has the same tolerance as every other rule.
      *What was considered and rejected:* accepting the record when
      `users/<uid>/history/<code>` exists. That node is writable by its owner,
      so it would cost a spoofer one more write and stop nobody; the emulator

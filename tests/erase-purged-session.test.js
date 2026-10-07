@@ -201,6 +201,13 @@ test("a request already answered is not answered twice", () => {
   assert.strictEqual(r.code, 0, r.out);
   assert.deepStrictEqual(r.tree, tree);
   assert.match(r.out, /Nothing to erase/);
+
+  /* Naming the session does not get round it either: --session adds a session
+     with no request in the queue, and must not add one already answered. */
+  const named = erase(tree, ["--uid", "uidA", "--session", "GONE-1", ATTEST], LIVE);
+  assert.strictEqual(named.code, 0, named.out);
+  assert.deepStrictEqual(named.tree, tree, "a second record was written for an answered request");
+  assert.match(named.out, /Nothing to erase/);
 });
 
 test("a request that reached the operator by another route can be recorded, for a session that has a marker", () => {
@@ -214,9 +221,15 @@ test("a request that reached the operator by another route can be recorded, for 
     [["GONE-1", "uidA", true]]);
 
   // ...but never for a session nothing shows existed: `erasures/` is permanent.
+  // And a mistyped code is not "an open request with no marker": nobody asked
+  // anything about it, so the run must not report one or exit as if it had
+  // left a request unanswered.
   const typo = erase(tree, ["--uid", "uidA", "--session", "GONE-1-TYPO", ATTEST], LIVE);
   assert.strictEqual(at(typo.tree, "erasures"), null);
   assert.deepStrictEqual(typo.tree, tree);
+  assert.strictEqual(typo.code, 0, typo.out);
+  assert.match(typo.out, /Nothing to erase/);
+  assert.doesNotMatch(typo.out, /NOT ACTED ON/);
 });
 
 test("a purged session can only be addressed by uid", () => {

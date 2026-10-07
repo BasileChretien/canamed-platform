@@ -131,9 +131,25 @@ test("the request's date is the server's, to within a day", () => {
      client is never further behind than that (TLS fails first). */
   for (const [label, get] of LEAVES) {
     const v = get().at[".validate"];
-    assert.match(v, /newData\.val\(\) <= now\b/, label);
     assert.match(v, /newData\.val\(\) >= now - 86400000\b/, `${label}: the date can be back-dated`);
   }
+});
+
+test("a device clock a few seconds fast does not cost someone their withdrawal", () => {
+  /* The client stamps the record with its own clock. Every other timestamp
+     rule in this file allows five seconds of lead for exactly that reason;
+     this one alone said `<= now`, so a device running ahead by more than the
+     network delay was told "Could not record your withdrawal" — on the one
+     write that exercises a right. Found 2026-10-07 while bounding the other
+     side. The house tolerance, and no more: a date an hour ahead is refused. */
+  for (const [label, get] of LEAVES) {
+    assert.strictEqual(get().at[".validate"],
+      "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 86400000", label);
+  }
+  const text = JSON.stringify(rules);
+  const bare = text.match(/\.val\(\) <= now(?! \+)/g) || [];
+  assert.deepStrictEqual(bare, [],
+    "a timestamp rule somewhere allows no clock lead at all — the same defect");
 });
 
 test("the purge marker is written by the Admin SDK and by nothing else", () => {
