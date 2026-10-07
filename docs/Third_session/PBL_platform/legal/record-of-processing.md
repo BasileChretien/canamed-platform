@@ -55,12 +55,14 @@ contract it records.
 | P7 | **Credential-expiry purge** (daily) | `credentials` records | Retention of certificate records |
 | P9 | **Erasure on request** (on demand, operator-run) | Identifiers only — the `erasures` node records clientId/uid/stableId and the session, never a name and never content | Discharge Art. 17 / Art. 7(3) and APPI Art. 35(5). `scripts/erase-participant.js` removes the participant from the live tree; the record is what stops a restore from the nightly archive bringing them back (`scripts/restore-sessions.js`). ⚠️ The record must OUTLIVE the snapshots it suppresses — deleting it early re-exposes the person it protects |
 | P8 | **Storage/cost monitoring** (daily) | Session identifiers and lifecycle dates only | Keep the deployment inside free-tier limits |
+| P10 | **Anonymous-account retention** (⚠️ **on demand only — NOT scheduled** as of 2026-10-07) | For every Auth account: UID, three timestamps and the names of its sign-in providers — **no e-mail address, no display name**. The member and creator UIDs of each live session. The keys of `users/`, `scenarios/`, `rateLimits/uid/` and `reports/scenarios/`. The chat's rate-limit counters (UID or session code, time bucket, count) | Discharge storage limitation for the anonymous sign-in account every visitor is given, the records keyed by it, and the proxy's usage counters (DPA Annex VI, G13 and G7). `scripts/cleanup-anonymous-accounts.js`. Until it is scheduled this row describes a tool, not a practice: **the identifier is still kept indefinitely** |
 
 Retention: closed sessions purged 30 days after closure, never-closed sessions
 90 days after creation; research dataset up to 5 years after publication;
 certificate records per their own `retentionUntil`. Enforced by
 `scripts/cleanup-stale-sessions.js` and pinned to the published notice by
-`tests/retention-notice-consistency.test.js`.
+`tests/retention-notice-consistency.test.js`. **The anonymous sign-in account
+has no enforced period yet** — see P10.
 
 ---
 
