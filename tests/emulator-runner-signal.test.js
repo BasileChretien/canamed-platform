@@ -60,11 +60,13 @@ const SCENARIO_TIMEOUT_MS = 240000;
 const CLASSIFY_WAIT_MS = 60000;
 /* The runner's own bound on the wait (STOP_WAIT_MS there). */
 const BOUND_MS = 10000;
-/* "Well under the bound." The old handler could not return in less than the
-   full 10 s; the repaired one takes one kill and one look at the ports, well
-   under a second on an idle machine. The gap is left wide because a loaded
-   Windows machine makes each of those slow. */
-const PROMPT_MS = 6000;
+/* "It did not wait out the bound." The old handler could not return in less
+   than the full 10 s, ever; the repaired one takes one kill and one look at
+   the ports — 0.3 s on Linux, 1.6 s on Windows, idle. Anything under the bound
+   tells the two apart, so the threshold sits close to it: a loaded Windows
+   machine makes each of those steps slow, and a tighter one would only buy
+   false failures. */
+const PROMPT_MS = 8000;
 
 const POSIX_ONLY = IS_WIN
   ? "needs a child that receives the signal and outlives it; on Windows the " +
@@ -80,9 +82,9 @@ function send(ctx, run, signal) {
   return Date.now();
 }
 
-async function started(ctx) {
-  await until("the stand-in emulators:exec to start", () => ctx.exists("started"), 30000);
-  return parseInt(ctx.read("started"), 10);
+/* The stand-in emulators:exec is in place: its PID. */
+function started(ctx) {
+  return ctx.pid("started", 30000);
 }
 
 describe("a signal to the rules-e2e runner, run for real", { concurrency: true }, () => {
@@ -161,7 +163,7 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
         FAKE_EXEC_LINGER_MS: "1500"
       });
       await started(ctx);
-      const orphan = ctx.orphanPid();
+      const orphan = await ctx.orphanPid();
       /* Lineage is shown only while the child is alive: without this the sweep
          would have nothing it may free, and "it was freed" could not be asked. */
       await until("the runner to recognise its own listener",
@@ -191,7 +193,7 @@ describe("a signal to the rules-e2e runner, run for real", { concurrency: true }
       assert.match(out, /left 1 listener\(s\) behind; freed them/);
       assert.ok(took >= 1400,
         "the run ended " + took + " ms after the signal, before its child had exited");
-      assert.ok(took < 1500 + PROMPT_MS,
+      assert.ok(took < PROMPT_MS,
         "the run ended " + took + " ms after the signal; its child was gone after 1500\n" + out);
     }));
 });

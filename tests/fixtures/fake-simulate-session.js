@@ -8,6 +8,7 @@
  * which is WRITING for as long as it lives.
  *
  * In FAKE_EXEC_DIR:
+ *   sim-base-url the SIM_BASE_URL it was started with, written before sim.pid
  *   sim.pid      written once, at start
  *   sim-beats    one line every few ms, the time: the last COMPLETE line is
  *                when this process was last alive and "writing". Appended,
@@ -43,6 +44,8 @@ if (process.env.FAKE_SIM_BYSTANDER_PORT) {
   ], { stdio: "ignore", detached: true, windowsHide: true }).unref();
 }
 
+/* Where it was told the platform is served: the launcher's to get right. */
+fs.writeFileSync(file("sim-base-url"), String(process.env.SIM_BASE_URL), "utf8");
 fs.writeFileSync(file("sim.pid"), String(process.pid), "utf8");
 setInterval(() => {
   /* The test has cleaned up and gone, or nobody is ever going to end this. */

@@ -4,8 +4,12 @@
  * What the tests that RUN an emulator-backed entry point share: the real
  * script, in a child process, against real listeners on throwaway ports, with
  * a stand-in for the firebase CLI. It began inside
- * tests/emulator-sweep-lineage.test.js and moved here unchanged when two more
- * files needed it (the runner's signal handler, the sim launcher).
+ * tests/emulator-sweep-lineage.test.js and moved here when two more files
+ * needed it (the runner's signal handler, the sim launcher). What that added:
+ * ports are reserved across test FILES, not only within one; a PID is read
+ * from a file only once the file holds one; a run reports when its process
+ * ended separately from when its output did; a stranger can be started before
+ * it binds.
  *
  * Nothing here touches 9000, 9099, 4400 or 8765: another session may be using
  * them.
@@ -78,7 +82,11 @@ function isListening(port) {
   });
 }
 
+/* Not a PID is not "dead". process.kill(NaN, 0) throws like a missing process
+   does, so a PID that was never read would make every "it has been stopped"
+   assertion pass on nothing. */
 function isAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) throw new TypeError("isAlive: not a PID: " + pid);
   try { process.kill(pid, 0); return true; } catch (e) { return false; }
 }
 
@@ -91,22 +99,51 @@ async function until(what, cond, ms) {
   throw new Error("timed out after " + ms + " ms waiting for " + what);
 }
 
+/* The PID a process wrote into `file`. A writer creates the file and THEN
+   fills it, so "the file exists" comes a moment before "the file holds a PID":
+   read in between, it is empty (measured here: 2 first reads in 1500). */
+async function pidIn(file, ms) {
+  let pid = NaN;
+  await until(path.basename(file) + " to hold a PID", () => {
+    try { pid = parseInt(fs.readFileSync(file, "utf8"), 10); } catch (e) { pid = NaN; }
+    return Number.isInteger(pid) && pid > 0;
+  }, ms);
+  return pid;
+}
+
 /* A listener the TEST starts — so, as far as the script under test is
    concerned, one that somebody else started: another session's live emulator.
    `kind` "http" makes it answer a request, for a caller whose readiness probe
-   is an HTTP one (the sim launcher's). */
-async function startStranger(port, dir, name, kind) {
+   is an HTTP one (the sim launcher's).
+
+   opts.waiting — the process is started now and binds only when bind() is
+   called. That is how a stranger comes to be OLDER than the run it then takes
+   a port from, which is what lets a sweep on POSIX show that it is not the
+   run's own (there a process is judged by its own age alone). */
+async function startStranger(port, dir, name, kind, opts) {
   const pidFile = path.join(dir, name + ".pid");
+  const waitFile = opts && opts.waiting ? path.join(dir, name + ".bind") : null;
   const proc = spawn(process.execPath,
-    [LISTENER, String(port), pidFile].concat(kind ? [kind] : []),
+    [LISTENER, String(port), pidFile, kind || "tcp"].concat(waitFile ? [waitFile] : []),
     { stdio: "ignore", windowsHide: true });
-  try {
-    await until(name + " to listen on :" + port, () => fs.existsSync(pidFile), 15000);
-  } catch (e) {
-    proc.kill();   // or it outlives the failure and holds this process open
-    throw e;
+  const listening = async () => {
+    try {
+      await until(name + " to listen on :" + port, () => fs.existsSync(pidFile), 15000);
+    } catch (e) {
+      proc.kill();   // or it outlives the failure and holds this process open
+      throw e;
+    }
+  };
+  const stranger = { proc, pid: proc.pid, port, startedAt: Date.now() };
+  if (!waitFile) {
+    await listening();
+    return stranger;
   }
-  return { proc, pid: proc.pid, port };
+  stranger.bind = async () => {
+    fs.writeFileSync(waitFile, "", "utf8");
+    await listening();
+  };
+  return stranger;
 }
 
 /* The script under test, as a child process: `node -r <preload> <script>`. */
@@ -150,6 +187,14 @@ function startScript(script, preload, env) {
    nobody's child here (`ctx.leftover`) is ended only while it is still the
    process listening on the port this scenario was given.
 
+   Ending the script under test by its handle also ends what IT started, which
+   matters when a scenario fails with the script still running (the sim
+   launcher has a real static server under it). On POSIX the handle sends
+   SIGTERM, and both scripts tear down on that. On Windows it is
+   TerminateProcess and no handler runs — but an ordinary child of a Node
+   process does not outlive it there (probed 2026-10-08: gone within 100 ms;
+   a DETACHED child survives, which is what `ctx.leftover` is for).
+
    `script` and `preload` say what ctx.run() starts. */
 function scenarios(script, preload) {
   return async function scenario(fn) {
@@ -170,8 +215,8 @@ function scenarios(script, preload) {
         PORT: String(ports.web),
         FAKE_EXEC_DIR: dir
       }, extra),
-      stranger: async (port, name, kind) => {
-        const s = await startStranger(port, dir, name, kind);
+      stranger: async (port, name, kind, opts) => {
+        const s = await startStranger(port, dir, name, kind, opts);
         children.push(s.proc);
         return s;
       },
@@ -191,7 +236,9 @@ function scenarios(script, preload) {
       read: (name) => fs.readFileSync(file(name), "utf8"),
       touch: (name) => fs.writeFileSync(file(name), "", "utf8"),
       release: () => ctx.touch("release"),
-      orphanPid: () => parseInt(ctx.read("orphan.pid"), 10)
+      /* The PID written into `name` — once it is there (see pidIn). */
+      pid: (name, ms) => pidIn(file(name), ms || 30000),
+      orphanPid: () => ctx.pid("orphan.pid")
     };
     try {
       await fn(ctx);
@@ -211,5 +258,5 @@ function scenarios(script, preload) {
 }
 
 module.exports = {
-  ROOT, sleep, freePort, isListening, isAlive, until, startStranger, startScript, scenarios
+  ROOT, sleep, freePort, isListening, isAlive, until, pidIn, startStranger, startScript, scenarios
 };

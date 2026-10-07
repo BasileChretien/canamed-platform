@@ -59,9 +59,9 @@ const SCENARIO_TIMEOUT_MS = 240000;
    ignores its emulator's exit sits there. */
 const REACH_MS = 90000;
 
-async function cliStarted(ctx) {
-  await until("the stand-in firebase CLI to start", () => ctx.exists("started"), REACH_MS);
-  return parseInt(ctx.read("started"), 10);
+/* The stand-in firebase CLI is in place: its PID. */
+function cliStarted(ctx) {
+  return ctx.pid("started", REACH_MS);
 }
 
 /* The launcher's exit code and everything it printed. Bounded: a launcher that
@@ -122,10 +122,13 @@ describe("the sim launcher, run for real", { concurrency: true }, () => {
       const run = ctx.run({ FAKE_EXEC_MODE: "serve" });
       const cli = await cliStarted(ctx);
       await until("the sim to start", () => ctx.exists("sim.pid"), REACH_MS);
-      const sim = parseInt(ctx.read("sim.pid"), 10);
+      const sim = await ctx.pid("sim.pid");
       assert.ok(await isListening(ctx.ports.web),
         "the platform server must be on the port PORT names — not on 8765, which " +
         "this file used to have written into it");
+      assert.strictEqual(ctx.read("sim-base-url"), "http://127.0.0.1:" + ctx.ports.web,
+        "and the sim must be TOLD where that is: left to its default it loads " +
+        "the platform from :8765, whatever is there");
 
       ctx.touch("sim-finish");
       const { code, out } = await ended(run);
@@ -143,6 +146,26 @@ describe("the sim launcher, run for real", { concurrency: true }, () => {
           ":" + port + " must be free again — a leftover makes the NEXT run's " +
           "readiness probe pass against it\n" + out);
       }
+    }));
+
+  it("looks again when a lookup cannot be made — one failed read is not a refusal (the allow leg of A)",
+    { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
+      /* [mutant: one look only] Its own emulator, and a process table that
+         cannot be read the first time: a PowerShell that timed out, on a
+         machine running several sessions' suites. Failing closed must not
+         mean failing on the first hiccup — or the fix for A would trade a sim
+         that runs against a stranger for a sim that seldom runs at all. */
+      const run = ctx.run({ FAKE_EXEC_MODE: "serve", FAKE_PS: "fail-once" });
+      await cliStarted(ctx);
+      await until("the sim to start, or the launcher to give up",
+        () => ctx.exists("sim-spawned") || run.endedAt() !== null, REACH_MS);
+      assert.ok(ctx.exists("sim-spawned"),
+        "the launcher refused its OWN emulator after a single failed lookup\n" + run.output());
+
+      ctx.touch("sim-finish");
+      const { code, out } = await ended(run);
+      assert.match(out, /Sim\/emu: emulator is up/);
+      assert.strictEqual(code, 0, out);
     }));
 
   it("refuses when another run's emulator answers the readiness probe — the sim is never started",
@@ -269,7 +292,7 @@ describe("the sim launcher, run for real", { concurrency: true }, () => {
       await cliStarted(ctx);
       await until("the sim to be running",
         () => ctx.exists("sim-beats") && ctx.exists("bystander.pid"), REACH_MS);
-      const sim = parseInt(ctx.read("sim.pid"), 10);
+      const sim = await ctx.pid("sim.pid");
 
       ctx.release();                      // this run's emulator crashes
       const { code, out } = await ended(run);
@@ -302,35 +325,39 @@ describe("the sim launcher, run for real", { concurrency: true }, () => {
   it("says what happened to the sim when the ports change hands mid-run",
     { timeout: SCENARIO_TIMEOUT_MS }, () => scenario(async (ctx) => {
       /* This run's emulator was up and the sim running; the emulator goes, and
-         by the time the launcher looks, something else answers on its port.
+         by the time the launcher looks, another session's answers on its port.
          The message used to say "the sim is not being run against that
-         listener" here too. The look is slowed so that the stranger can be in
-         place for it. */
-      const run = ctx.run({
-        FAKE_EXEC_MODE: "serve",
-        FAKE_SLOW_READ_AFTER_CLI_EXIT_MS: "8000"
-      });
+         listener" here too.
+
+         Their process is started FIRST, and binds later: with the launcher's
+         own CLI gone there is no lineage left to show, so what shows that a
+         listener is not this run's is that it is OLDER than the run — by more
+         than the 2 s + 1 s a POSIX creation time can be off by. And the
+         launcher's look at the ports is held until that listener is in place,
+         rather than raced. */
+      const theirs = await ctx.stranger(ctx.ports.db, "their-db", "http", { waiting: true });
+      await until("their process to be clearly older than this run",
+        () => Date.now() - theirs.startedAt > 3500, 10000);
+
+      const run = ctx.run({ FAKE_EXEC_MODE: "serve", FAKE_HOLD_READ_AFTER_CLI_EXIT: "1" });
       await cliStarted(ctx);
       await until("the sim to be running", () => ctx.exists("sim-beats"), REACH_MS);
 
-      ctx.release();
+      ctx.release();                      // this run's emulator goes
       await until("the launcher to learn its emulator has gone",
         () => ctx.exists("read-after-cli-exit"), REACH_MS);
-      const theirs = [await ctx.stranger(ctx.ports.db, "their-db", "http")];
+      await theirs.bind();                // and theirs takes the port it left
+      ctx.touch("read-go");
       const { code, out } = await ended(run);
 
-      await assertUntouched(ctx, theirs, out);
+      await assertUntouched(ctx, [theirs], out);
       assert.strictEqual(code, 1, out);
+      assert.match(out, /ANOTHER RUN HOLDS THE EMULATOR PORTS/, out);
+      assert.match(out, /This run's emulator was up, and has gone/,
+        "it lost no race for the ports: its emulator was up, and verified\n" + out);
       assert.match(out, /The sim WAS RUNNING and has been stopped/, out);
       assert.match(out, /may have reached that listener/);
       assert.doesNotMatch(out, /The sim was NOT started|not being run against/,
         "it WAS started, and ran until its emulator went\n" + out);
-      if (process.platform === "win32") {
-        /* Deterministic on Windows, as in tests/emulator-sweep-lineage.test.js:
-           the stranger hangs off this process, which is older than the
-           launcher's CLI. POSIX re-parents, so there it is merely unproven. */
-        assert.match(out, /ANOTHER RUN HOLDS THE EMULATOR PORTS/, out);
-        assert.match(out, /This run's emulator was up, and has gone/, out);
-      }
     }));
 });

@@ -8,8 +8,8 @@
  *   - `npm run test:e2e:rules` shells out to `firebase emulators:exec`, which
  *     signals its child on completion. On Windows the RTDB emulator is a Java
  *     GRANDCHILD reached through npx → node → java, and it survives the signal.
- *   - `scripts/sim/sim-with-emulator.js` does taskkill /F /T on the process it
- *     spawned, which is better, but still only reaches the tree it owns.
+ *   - `scripts/sim/sim-with-emulator.js` does taskkill /F /T on the emulator
+ *     CLI it spawned, which is better, but still only reaches the tree it owns.
  *
  * The leftovers are not harmless. A stale listener on :9000/:9099 makes the
  * NEXT run's readiness probe succeed instantly against the WRONG emulator —

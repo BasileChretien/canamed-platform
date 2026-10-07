@@ -250,8 +250,14 @@ async function ownEmulatorOrRefuse() {
    Playwright, 1.63: three runs, all 7 Chromium processes gone within seconds
    of the driver being ended by its handle). The static server has no children.
 
-   Synchronous either way, so a survey afterwards sees what SURVIVED it rather
-   than what it is still killing (and so it works from the "exit" handler). */
+   The tree kill is synchronous (spawnSync), so the survey that follows it in
+   cleanup() sees what SURVIVED it rather than what it is still killing. A
+   handle kill is a request: the process is gone a moment later, not on
+   return — which is all that is needed of the sim and the server, since
+   nothing afterwards waits on their having gone. (On POSIX the CLI's is a
+   request too, as it always was; the sweep in cleanup() is its backstop.)
+   Both forms work from the process "exit" handler, where nothing
+   asynchronous would. */
 const stopped = new Set();
 function stopChild(p, opts) {
   if (!p || p.killed || p.exitCode !== null || stopped.has(p)) return;
@@ -486,7 +492,8 @@ function check(cmd, args, label) {
     SIM_EMULATOR_HOST: HOST,
     SIM_DB_PORT: String(DB_PORT),
     SIM_AUTH_PORT: String(AUTH_PORT),
-    /* The server this run started, wherever PORT put it. */
+    /* The server this run started, wherever PORT put it — unless the caller
+       has pointed the sim somewhere itself. */
     SIM_BASE_URL: process.env.SIM_BASE_URL || "http://" + HOST + ":" + WEB_PORT
   });
   /* Module-level, so that a run cut short (our emulator gone, see the "exit"

@@ -29,6 +29,9 @@
  *   FAKE_PS=fail
  *       the process table cannot be read (what a machine without ps, or a
  *       PowerShell that times out, looks like to process-lineage.js).
+ *   FAKE_PS=fail-once
+ *       the same, for the first read only: a PowerShell that timed out once,
+ *       on a loaded machine, and answers the next time it is asked.
  *   FAKE_PS=cli-exits-during-read
  *       the emulator CLI is alive in the table that is read, and has exited by
  *       the time the read returns — the lookup takes seconds on Windows, and a
@@ -39,6 +42,10 @@
  *       began, in the file `read-after-cli-exit`). On a loaded machine that
  *       look takes seconds anyway; this makes "was the sim stopped before it,
  *       or left writing throughout?" a question with a definite answer.
+ *   FAKE_HOLD_READ_AFTER_CLI_EXIT=1
+ *       that same first look does not begin until the test writes the file
+ *       `read-go` — so the test can put something on the ports for it to find,
+ *       however long that takes, instead of racing a fixed delay.
  *
  * Files written into FAKE_EXEC_DIR: `sim-spawned`, the moment the launcher
  * spawns the sim — before that process has run a line, so a sim that is
@@ -58,6 +65,7 @@ const BUILD_RULES = path.join(ROOT, "scripts", "sim", "build-emulator-rules.js")
 const DIR = process.env.FAKE_EXEC_DIR;
 const PS = process.env.FAKE_PS || "";
 const SLOW_MS = parseInt(process.env.FAKE_SLOW_READ_AFTER_CLI_EXIT_MS || "0", 10);
+const HOLD = process.env.FAKE_HOLD_READ_AFTER_CLI_EXIT === "1";
 const file = (name) => path.join(DIR, name);
 
 /* A synchronous pause: the lookups being staged are synchronous too, which is
@@ -114,15 +122,21 @@ function isProcessTable(cmd, args) {
 
 let slowed = false;
 let cliReleased = false;
+let tableReads = 0;
 const realExecFileSync = childProcess.execFileSync;
 childProcess.execFileSync = function (cmd, args) {
-  if (SLOW_MS && cliExitSeen && !slowed) {
+  if ((SLOW_MS || HOLD) && cliExitSeen && !slowed) {
     slowed = true;
     fs.writeFileSync(file("read-after-cli-exit"), String(Date.now()), "utf8");
-    block(SLOW_MS);
+    if (SLOW_MS) block(SLOW_MS);
+    const giveUp = Date.now() + 60000;
+    while (HOLD && !fs.existsSync(file("read-go")) && Date.now() < giveUp) block(20);
   }
   if (!isProcessTable(cmd, args)) return realExecFileSync.apply(this, arguments);
-  if (PS === "fail") throw new Error("staged by the test: no process table");
+  tableReads++;
+  if (PS === "fail" || (PS === "fail-once" && tableReads === 1)) {
+    throw new Error("staged by the test: no process table");
+  }
   const table = realExecFileSync.apply(this, arguments);
   if (PS === "cli-exits-during-read" && !cliReleased) {
     cliReleased = true;

@@ -159,7 +159,7 @@ describe("the survivor sweep, run for real", { concurrency: true }, () => {
       });
       await until("the stand-in emulators:exec to start its listener",
         () => fs.existsSync(path.join(ctx.dir, "started")), 30000);
-      const orphan = ctx.orphanPid();
+      const orphan = await ctx.orphanPid();
       assert.ok(isAlive(orphan) && await isListening(ctx.ports.db),
         "fixture: the run's own listener must be up before the child exits");
       const theirs = await ctx.stranger(ctx.ports.auth, "stranger");
