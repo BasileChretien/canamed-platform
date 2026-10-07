@@ -2027,17 +2027,19 @@ function withdrawResearchConsent(code, uid, opts) {
   const payload = { research: false, at: Date.now() };
   if (opts.alsoRequestErasure) payload.erasure = true;
   return db.ref(withdrawalPath(code, uid)).set(payload).then(() => {
+    // A rejoin of `code` reads these copies, whatever session this page is in.
+    const off = c => Object.assign({}, c, { research: false });
+    const low = r => Object.assign({}, r, { consent: off(r.consent) });
+    const mine = r => r && r.consent && r.sessionNum === code;
+    try {
+      const r = JSON.parse(localStorage.getItem(RESUME_KEY));
+      if (mine(sanitizeResume(r))) localStorage.setItem(RESUME_KEY, JSON.stringify(low(r)));
+    } catch (e) {}
+    if (mine(resumeData)) resumeData = low(resumeData);
     /* Best effort, and its failure is expected on a closed session. Only for
        the session this page is IN: sPath() addresses that one, not `code`. */
     if (code !== sessionNum) return null;
-    // A reload rejoins from these two copies: lower them with the pool flag.
-    const off = c => Object.assign({}, c, { research: false });
     if (myConsent) myConsent = off(myConsent);
-    try {
-      const r = JSON.parse(localStorage.getItem(RESUME_KEY));
-      if (r && r.consent && r.sessionNum === code) localStorage.setItem(RESUME_KEY,
-        JSON.stringify(Object.assign(r, { consent: off(r.consent) })));
-    } catch (e) {}
     if (!clientId) return null;
     return db.ref(sPath("pool/" + clientId + "/consent/research")).set(false)
       .catch(() => null);

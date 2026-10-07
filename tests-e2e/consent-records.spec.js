@@ -1,7 +1,7 @@
 /* tests-e2e/consent-records.spec.js
  *
  * A participant's recorded consent must change only when the participant
- * changes it. Three things were rewriting it behind their back:
+ * changes it. Four things were rewriting it behind their back:
  *
  *   1. RELOADING. A reload mid-session resumes seamlessly — the page rejoins
  *      from the join data it saved, and that rejoin writes the consent record
@@ -24,15 +24,35 @@
  *      the withdrawal. The facilitator's in-browser research CSV reads that
  *      flag and nothing else, so a withdrawn participant was back in it.
  *
- * WHAT THIS FILE DOES NOT CLAIM. "A reload does not change the recorded
- * consent" holds for the browser that gave and withdrew it. A SECOND device
- * signed in as the same person keeps its own saved answer and writes it again
- * on its next reload; nothing here covers that, and the fix does not close it
- * (the rejoin would have to read the participant's own withdrawal record
- * first — a separate change).
+ *   4. COMING BACK AFTER A WITHDRAWAL MADE FROM SOMEWHERE ELSE. The account
+ *      dialog is the route for withdrawing from a session one is not in. Used
+ *      from the front page, it recorded the withdrawal and left the join data
+ *      this browser had saved for that session at research:true — and also the
+ *      copy the page had parsed when it loaded. Typing the session's code
+ *      again, on the same page or after a reload, rejoined with the research
+ *      box ticked.
+ *
+ * WHAT HOLDS, EXACTLY, AND WHAT DOES NOT. The consent record is rebuilt from
+ * what one browser tab remembers. What these tests show is that, for ONE tab
+ * of ONE browser:
+ *   - a reload records again the three answers given at the join form;
+ *   - after a withdrawal made in that tab — inside the session, or from the
+ *     front page for a session this browser has join data for — a later
+ *     reload or re-entry in that tab records research:false.
+ * They do NOT show, and the fixes do not provide:
+ *   - a second device signed in as the same person: it keeps its own saved
+ *     answer and writes it again on its next reload;
+ *   - a second tab open in the same session: it keeps its own pool entry at
+ *     true, and it can save `true` back over the lowered copy (each tab saves
+ *     its own in-memory answer to the one shared key), so the tab that
+ *     withdrew is not safe from it either;
+ *   - the pool entry after a withdrawal made from the front page: it is not
+ *     written until this browser rejoins the session.
+ * Closing those needs the join to read the participant's own withdrawal
+ * record first, which is a separate change.
  *
  * Every test reads what is STORED, from the LocalDB's own backing store rather
- * than through the page's code or its checkboxes: (1) and (3) are exactly
+ * than through the page's code or its checkboxes: (1), (3) and (4) are exactly
  * cases where the screen (a waiting room, as expected) and the record
  * disagree.
  *
@@ -123,23 +143,27 @@ async function storedPoolEntry(page) {
   });
 }
 
-/* Reload and wait until the resumed join has REWRITTEN the pool entry. Without
-   this the "after" read could be the record the first join left behind, and a
-   reload that never rejoined would pass every assertion. */
-async function reloadAndRejoin(page, before) {
-  await page.reload();
+/* Wait until a resumed join has REWRITTEN the pool entry, and return it.
+   Without this the "after" read could be the record the first join left
+   behind, and a page that never rejoined would pass every assertion. */
+async function awaitRejoin(page, before) {
   await expect(page.locator("#waiting")).toBeVisible({ timeout: 20_000 });
   await expect.poll(async () => {
     const now = await storedPoolEntry(page);
     return now.entry ? now.entry.at : 0;
   }, {
-    message: "the reload did not write the participant's pool entry again",
+    message: "the page did not write the participant's pool entry again",
     timeout: 20_000
   }).toBeGreaterThan(before.entry.at);
   const after = await storedPoolEntry(page);
-  expect(after.cid, "the reload joined under a different tab identity").toBe(before.cid);
+  expect(after.cid, "the page rejoined under a different tab identity").toBe(before.cid);
   expect(after.code).toBe(before.code);
   return after;
+}
+
+async function reloadAndRejoin(page, before) {
+  await page.reload();
+  return awaitRejoin(page, before);
 }
 
 /* The join data this browser has saved for the next page load, as stored. */
@@ -147,9 +171,9 @@ async function storedResume(page) {
   return page.evaluate(() => JSON.parse(localStorage.getItem("canamed_resume") || "null"));
 }
 
-/* Scope: the three answers given at the join form, in the browser that gave
-   them and with no withdrawal in between. Reloading AFTER a withdrawal is the
-   last block of this file. */
+/* Scope: the three answers given at the join form, in the tab that gave them
+   and with no withdrawal in between. What happens AFTER a withdrawal is the
+   last two blocks of this file. */
 test.describe("A reload keeps the answers given at the join form", () => {
   test("a ticked transcript box is still recorded as true after a reload", async ({ page }) => {
     const code = await createSession(page, "consent records: C kept");
@@ -317,8 +341,7 @@ async function joinAllTicked(page, label) {
   return mine;
 }
 
-/* In THIS browser. See the header for the second-device case this does not
-   cover. */
+/* In the tab that withdrew. See the header for what this does not cover. */
 test.describe("A reload after a withdrawal does not record research consent again", () => {
   test("withdraw on the waiting screen, reload twice: research consent stays off", async ({ page }) => {
     const mine = await joinAllTicked(page, "consent records: withdraw, reload");
@@ -366,6 +389,105 @@ test.describe("A reload after a withdrawal does not record research consent agai
     expect(after.entry.consent).toMatchObject({ workshop: true, research: true, transcript: true });
     const again = await reloadAndRejoin(page, after);
     expect(again.entry.consent).toMatchObject({ workshop: true, research: true, transcript: true });
+    expect((await storedTree(page)).withdrawals, "a withdrawal was recorded for nobody")
+      .toBeUndefined();
+  });
+});
+
+/* Put the participant on the front page, in no session, with the join data for
+   their session still saved in this browser. That is where a browser lands
+   when the session it points at cannot be entered at load (ended, or the
+   database unreachable) or when it follows a link elsewhere; here the pointer
+   to the open session is simply dropped and the join data kept. */
+async function toFrontPage(page) {
+  await page.evaluate(() => localStorage.removeItem("canamed_session"));
+  await page.goto("/");
+  await expect(page.locator("#splash")).toBeVisible({ timeout: 20_000 });
+  await page.waitForFunction(() =>
+    // @ts-ignore — script.js globals
+    typeof openAccountDialog === "function" && typeof dbInit === "function");
+  // @ts-ignore — script.js global
+  expect(await page.evaluate(() => sessionNum), "the page is in a session after all").toBe("");
+  expect((await storedResume(page)).consent.research,
+    "the join data for the session is no longer saved with research ticked").toBe(true);
+}
+
+/* On the front page: open the account dialog (with the user stood in again —
+   the stand-in does not survive a page load) and withdraw from `code`. */
+async function withdrawFromFrontPage(page, code) {
+  await page.evaluate((u) => {
+    // @ts-ignore — script.js globals
+    dbInit();
+    // @ts-ignore
+    currentUser = u;
+    // @ts-ignore
+    openAccountDialog();
+  }, USER);
+  await expect(page.locator("#account-dialog")).toBeVisible();
+  await withdrawFromRow(page, code);
+  await page.locator("#account-dialog-close").click();
+  await expect(page.locator("#account-dialog")).toBeHidden();
+}
+
+/* Type the session's code on the front page. The saved join data takes the
+   participant straight back into the waiting room. */
+async function enterAndRejoin(page, before) {
+  await page.locator("#splash-code").fill(before.code);
+  await page.locator("#splash-enter").click();
+  return awaitRejoin(page, before);
+}
+
+/* In the tab that withdrew, for a session this browser has join data for. */
+test.describe("Coming back after a withdrawal made from the front page does not record research consent again", () => {
+  test("withdraw on the front page, enter the session on the same page: research consent is off", async ({ page }) => {
+    /* No page load between the withdrawal and coming back: what the rejoin
+       reads is the copy the front page parsed when it loaded. */
+    const mine = await joinAllTicked(page, "consent records: front page, same page");
+    await toFrontPage(page);
+    await withdrawFromFrontPage(page, mine.code);
+
+    expect((await storedTree(page)).withdrawals[mine.code][USER.uid])
+      .toEqual({ research: false, erasure: true, at: expect.any(Number) });
+    // Soft, for the same reason as above: go on and show the consequence.
+    expect.soft((await storedResume(page)).consent,
+      "the join data saved for the session withdrawn from still says research:true")
+      .toMatchObject({ workshop: true, research: false, transcript: true });
+
+    const after = await enterAndRejoin(page, mine);
+    expect(after.entry.consent.research,
+      "coming back to the session recorded research consent again, after the withdrawal")
+      .toBe(false);
+    expect(after.entry.consent.transcript).toBe(true);
+    expect(after.entry.consent.workshop).toBe(true);
+  });
+
+  test("withdraw on the front page, reload, then enter the session: research consent is off", async ({ page }) => {
+    /* A page load in between: what the rejoin reads is what was saved. */
+    const mine = await joinAllTicked(page, "consent records: front page, reload");
+    await toFrontPage(page);
+    await withdrawFromFrontPage(page, mine.code);
+
+    await page.reload();
+    await expect(page.locator("#splash")).toBeVisible({ timeout: 20_000 });
+    const after = await enterAndRejoin(page, mine);
+    expect(after.entry.consent.research,
+      "coming back to the session recorded research consent again, after the withdrawal")
+      .toBe(false);
+    expect(after.entry.consent.transcript).toBe(true);
+    expect(after.entry.consent.workshop).toBe(true);
+
+    // And it stays off on the reloads that follow, now that the page is in it.
+    const again = await reloadAndRejoin(page, after);
+    expect(again.entry.consent.research, "it came back on a later reload").toBe(false);
+  });
+
+  test("no withdrawal, back from the front page: research consent is still on", async ({ page }) => {
+    /* The control. The two tests above would pass if coming back from the
+       front page never restored the research answer at all. */
+    const mine = await joinAllTicked(page, "consent records: front page, no withdrawal");
+    await toFrontPage(page);
+    const after = await enterAndRejoin(page, mine);
+    expect(after.entry.consent).toMatchObject({ workshop: true, research: true, transcript: true });
     expect((await storedTree(page)).withdrawals, "a withdrawal was recorded for nobody")
       .toBeUndefined();
   });
