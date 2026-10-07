@@ -3671,6 +3671,8 @@ body.session-ended-shown { overflow: hidden; }
   color: var(--ink);
   font-family: var(--font-mono);
   font-size: 0.86rem;
+  /* An address breaks only after a hyphen; a long one scrolled the dialog. */
+  overflow-wrap: anywhere;
 }
 .account-fieldset {
   border: 1px solid var(--line-strong);
@@ -3678,16 +3680,14 @@ body.session-ended-shown { overflow: hidden; }
   padding: 14px 16px 16px;
   margin: 0 0 14px;
   background: var(--card);
-  /* A fieldset's UA default is min-inline-size: min-content, so it will not
-     shrink below its widest descendant — here the University <select>, as wide
-     as its longest option. On a phone that pushed the profile form out of the
-     dialog, which then scrolled sideways. */
+  /* The UA default, min-inline-size: min-content, keeps a fieldset as wide as
+     its widest descendant — the University <select>, i.e. its longest option —
+     which pushed the profile form out of a phone-width dialog. */
   min-width: 0;
 }
 /* WebKit counts a <select>'s longest option toward its ancestors' scroll width
-   even once the box is sized to fit, and no sizing on the select changes that.
-   Paint containment does; without it the dialog still scrolls sideways in
-   Safari below ~347px. */
+   even once the box fits, whatever sizing the select is given. Paint
+   containment stops that; without it Safari still scrolls below ~347px. */
 .account-fieldset select { contain: paint; }
 .account-fieldset legend {
   padding: 0 6px;
@@ -3695,7 +3695,9 @@ body.session-ended-shown { overflow: hidden; }
   font-size: 0.9rem;
   color: var(--ink);
 }
-.account-fieldset .hint { margin: 0 0 10px; }
+/* Enlarged text on a phone: the role options stack, a bare domain breaks. */
+.account-fieldset .hint { margin: 0 0 10px; overflow-wrap: anywhere; }
+.account-fieldset .splash-role-toggle { flex-wrap: wrap; }
 .account-actions {
   display: flex;
   flex-wrap: wrap;
@@ -3743,10 +3745,8 @@ body.session-ended-shown { overflow: hidden; }
   overflow-y: auto;
 }
 /* Session code, date + scenario name, withdraw button. The row wraps instead of
-   shrinking, and the date + scenario name asks for little and takes what the
-   other two leave: under default flex shrinking a long scenario name squeezed
-   them, breaking the code at its hyphen and the button label over several
-   lines, at every width. */
+   shrinking: under default flex shrinking a long scenario name squeezed the
+   other two, breaking the code at its hyphen and the button label over lines. */
 .account-history-row {
   display: flex;
   flex-wrap: wrap;
@@ -3765,10 +3765,10 @@ body.session-ended-shown { overflow: hidden; }
   font-weight: 800;
 }
 .account-history-meta {
-  /* A floor, not zero: with enlarged text the code and the button leave very
-     little, and at 0 this became a 62px column eleven lines tall. Once less
-     than this is left the button wraps to the next line instead. */
-  flex: 1 1 12ch;
+  /* Takes what the other two leave, down to this floor; below it the button
+     wraps to the next line instead. At 0 enlarged text left a 25px column, and
+     at 12ch a long name still ran to nine lines. */
+  flex: 1 1 20ch;
   /* A scenario name is authored text, up to 80 characters of anything. */
   overflow-wrap: anywhere;
   color: var(--muted);

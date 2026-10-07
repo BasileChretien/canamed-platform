@@ -53,6 +53,7 @@ const { pruneHfPatientMetrics } = require("../scripts/lib/metrics-retention");
 const BLOCKED = { block: true, line: "Backup gate: BLOCKED — test" };
 const OPEN = { block: false, line: "Backup gate: OK — test" };
 const NO_METRICS = { events: 0, usage: 0, sessionUsage: 0, dailyDays: 0, dailyUids: 0, errors: 0 };
+const NO_SWEEP = { changes: 0, errors: 0 };
 
 /* One recorded run. `calls` is the ORDER the passes actually ran in, which is
    the whole subject of this file, so it is recorded rather than inferred from
@@ -69,6 +70,10 @@ async function run(over = {}) {
       calls.push("metrics");
       return Object.assign({}, NO_METRICS, over.metrics);
     },
+    sweepWithdrawals: async () => {
+      calls.push("withdrawals");
+      return Object.assign({}, NO_SWEEP, over.withdrawals);
+    },
     confirm: over.confirm !== false,
     metricsDays: 30,
     sessionCount: 5,
@@ -83,10 +88,11 @@ async function run(over = {}) {
 test("BLOCKED: the session pass never runs, the metrics pass still does, and the run exits 3", async () => {
   const r = await run({ gate: BLOCKED, metrics: { events: 2, usage: 1 } });
 
-  assert.deepStrictEqual(r.calls, ["metrics"],
+  assert.deepStrictEqual(r.calls, ["metrics", "withdrawals"],
     "a blocked gate must skip the session pass and STILL prune the metrics tree — " +
     "the metrics rows are in no archive, so there is nothing for the gate to protect, " +
-    "and skipping them is a second retention gap");
+    "and skipping them is a second retention gap. The same goes for the withdrawal " +
+    "records of sessions that are already gone");
   assert.strictEqual(r.result.exitCode, EXIT_BLOCKED);
   assert.match(r.out, /Metrics \(hfPatient, > 30d\): purged 2 events, 1 uid buckets, /,
     "the metrics summary must still be printed on a blocked run");
@@ -98,7 +104,7 @@ test("NOT blocked: sessions first, then metrics, exit 0 — the control for the 
      well if nothing ever called the session pass at all. */
   const r = await run({ gate: OPEN, metrics: { events: 2, usage: 1 } });
 
-  assert.deepStrictEqual(r.calls, ["sessions", "metrics"]);
+  assert.deepStrictEqual(r.calls, ["sessions", "metrics", "withdrawals"]);
   assert.strictEqual(r.result.exitCode, EXIT_OK);
   assert.match(r.out, /Summary: 4 kept, 1 purged, 0 errors\./);
   assert.strictEqual(r.err, "", "an unblocked run says nothing on stderr");
@@ -130,7 +136,7 @@ test("BLOCKED + a metrics error still exits 3, and the error is counted rather t
 
 test("an error in EITHER pass exits 1, and a session error does not skip the metrics pass", async () => {
   const sessionErr = await run({ sessions: { kept: 3, purged: 0, errors: 2 } });
-  assert.deepStrictEqual(sessionErr.calls, ["sessions", "metrics"],
+  assert.deepStrictEqual(sessionErr.calls, ["sessions", "metrics", "withdrawals"],
     "an unrelated session failure must not silently skip a retention obligation");
   assert.strictEqual(sessionErr.result.exitCode, EXIT_ERRORS);
 
@@ -180,7 +186,8 @@ test("a gate with no usable verdict throws BEFORE either pass — undefined must
       runCleanupPasses({
         gate,
         purgeSessions: async () => { calls.push("sessions"); return { kept: 0, purged: 0, errors: 0 }; },
-        pruneMetrics: async () => { calls.push("metrics"); return NO_METRICS; }
+        pruneMetrics: async () => { calls.push("metrics"); return NO_METRICS; },
+        sweepWithdrawals: async () => { calls.push("withdrawals"); return NO_SWEEP; }
       }),
       /backupGateReport\(\) verdict/,
       "gate=" + JSON.stringify(gate) + " must be refused"
@@ -191,18 +198,58 @@ test("a gate with no usable verdict throws BEFORE either pass — undefined must
     "no options at all is a TypeError with the same message, not a crash on `undefined.gate`");
 });
 
-test("a missing pass is refused before the other one deletes anything", async () => {
+test("a missing pass is refused before the others delete anything", async () => {
   /* Otherwise a forgotten metrics pass is discovered only after the sessions
-     are already gone — one irreversible step too late. */
-  const calls = [];
-  await assert.rejects(
-    runCleanupPasses({
-      gate: OPEN,
-      purgeSessions: async () => { calls.push("sessions"); return { kept: 0, purged: 1, errors: 0 }; }
-    }),
-    /must both be functions/
-  );
-  assert.deepStrictEqual(calls, []);
+     are already gone — one irreversible step too late. Each of the three is
+     left out in turn: a pass that is optional is a pass that can silently stop
+     running. */
+  const passes = {
+    purgeSessions: "sessions", pruneMetrics: "metrics", sweepWithdrawals: "withdrawals"
+  };
+  for (const missing of Object.keys(passes)) {
+    const calls = [];
+    const opts = { gate: OPEN };
+    for (const name of Object.keys(passes)) {
+      if (name === missing) continue;
+      opts[name] = async () => {
+        calls.push(passes[name]);
+        return Object.assign({ kept: 0, purged: 1 }, NO_METRICS, NO_SWEEP);
+      };
+    }
+    await assert.rejects(runCleanupPasses(opts), /must all be functions/, missing + " was optional");
+    assert.deepStrictEqual(calls, [], "a pass ran although " + missing + " was missing");
+  }
+});
+
+/* ── the third pass: withdrawal records of sessions already purged ─────── */
+
+test("BLOCKED: the withdrawal sweep still runs, after the metrics, and its errors are counted", async () => {
+  /* It deletes nothing the session backup holds — these are records of
+     sessions that are already gone — so a stale backup is no reason to stop
+     it, exactly as for the metrics. */
+  const r = await run({ gate: BLOCKED, withdrawals: { changes: 2, errors: 1 } });
+  assert.deepStrictEqual(r.calls, ["metrics", "withdrawals"]);
+  assert.strictEqual(r.result.exitCode, EXIT_BLOCKED);
+  assert.strictEqual(r.result.errors, 1);
+  assert.match(r.out, /left untouched, 1 errors[.]/);
+  assert.match(r.err, /So does the sweep of withdrawal records/);
+});
+
+test("an error in the withdrawal sweep alone exits 1, and the earlier passes still ran", async () => {
+  const r = await run({ withdrawals: { errors: 1 } });
+  assert.deepStrictEqual(r.calls, ["sessions", "metrics", "withdrawals"]);
+  assert.strictEqual(r.result.exitCode, EXIT_ERRORS);
+  assert.match(r.out, /Summary: 4 kept, 1 purged, 1 errors[.]/);
+});
+
+test("dry-run: pending withdrawal records alone are worth confirming", async () => {
+  const hint = /Set CLEANUP_CONFIRM=1/;
+  const quiet = await run({ confirm: false, sessions: { kept: 5, purged: 0, errors: 0 } });
+  assert.ok(!hint.test(quiet.out), "control: nothing pending, no hint");
+  const pending = await run({
+    confirm: false, sessions: { kept: 5, purged: 0, errors: 0 }, withdrawals: { changes: 1 }
+  });
+  assert.match(pending.out, hint);
 });
 
 /* ── the real gate and the real pruner, against one fake database ───────
@@ -252,6 +299,7 @@ async function endToEnd(marker) {
     gate,
     purgeSessions: purgeOneSession(db),
     pruneMetrics: () => pruneHfPatientMetrics(db, { cutoffMs: CUTOFF, confirm: true }),
+    sweepWithdrawals: async () => NO_SWEEP,
     confirm: true, metricsDays: 30, sessionCount: 1,
     log: () => {}, logError: () => {}
   });
@@ -394,13 +442,20 @@ test("REAL SCRIPT, fresh backup: the expired session IS purged, then the metrics
   assert.strictEqual(r.status, 0, r.log);
   assert.deepStrictEqual(r.writes, [
     { op: "update", path: "", keys: [
-      "adminSecrets/EXPIRED1", "certIds/EXPIRED1", "roomChat/EXPIRED1",
-      "roomChatAuthors/EXPIRED1", "rosters/sessions/EXPIRED1", "sessions/EXPIRED1",
-      "withdrawals/EXPIRED1"
+      "adminSecrets/EXPIRED1", "certIds/EXPIRED1", "purgedSessions/EXPIRED1",
+      "recovery/sessions/EXPIRED1", "roomChat/EXPIRED1", "roomChatAuthors/EXPIRED1",
+      "rosters/sessions/EXPIRED1", "sessions/EXPIRED1"
     ] }
   ].concat(METRICS_WRITES),
-    "one atomic root update for the expired session and its six out-of-cascade " +
-    "siblings — the live session untouched — then the metrics." + r.log);
+    "one atomic root update for the expired session and its out-of-cascade " +
+    "siblings — the live session untouched — then the metrics. Three things changed " +
+    "on 2026-10-07 and all are deliberate: the update WRITES the purge marker " +
+    "(purgedSessions/<code>); it no longer deletes withdrawals/<code> whole — " +
+    "each record is decided on its own, and this session has none " +
+    "(tests/withdrawal-retention.test.js has the ones that do); and it deletes " +
+    "the recovery code, the one sibling nothing deleted before. Whether this list " +
+    "is COMPLETE is not decided here — tests/purge-tree-coverage.test.js derives " +
+    "it from database.rules.json." + r.log);
   assert.match(r.stdout, /Backup gate: OK — /);
   assert.match(r.stdout, /Summary: 1 kept, 1 purged, 0 errors\./);
   assert.ok(!/EXPIRED1|LIVE0001/.test(r.stdout + r.stderr),
@@ -461,6 +516,8 @@ test("wiring: main() hands the gate's verdict and BOTH passes to runCleanupPasse
   assert.match(args, /purgeSessions: \(\) => purgeSessions\(db, locations\)/);
   assert.match(args, /pruneMetrics: \(\) => pruneMetrics\(db\)/,
     "declaring the metrics helper is not enough — it must be handed over to be run");
+  assert.match(args, /sweepWithdrawals: [(][)] => sweepWithdrawals[(]db, locations[)]/,
+    "the withdrawal sweep must be handed over too, or it never runs");
   assert.match(args, /confirm: CONFIRM/, "the passes' wording must follow the real mode");
 });
 
@@ -501,7 +558,7 @@ test("wiring: a session can only be deleted from inside the gated pass", () => {
     "the session delete must live in purgeSessions(), the pass a blocked gate skips");
   /* One definition + one call each, the call being the callback asserted
      above. A second call site would be a pass the gate does not govern. */
-  for (const fn of ["purgeSessions", "pruneMetrics"]) {
+  for (const fn of ["purgeSessions", "pruneMetrics", "sweepWithdrawals"]) {
     assert.strictEqual(CODE.split(fn + "(").length - 1, 2,
       fn + "() must be called exactly once — from the runCleanupPasses() hand-off");
   }

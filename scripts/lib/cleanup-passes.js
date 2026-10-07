@@ -27,6 +27,14 @@
  * orchestration out of the script. tests/cleanup-passes.test.js runs it with
  * stand-ins, and then runs the real script end to end in a child process,
  * because moving the ordering here does not by itself prove main() uses it.
+ *
+ * ── A THIRD PASS (2026-10-07) ────────────────────────────────────────────
+ *   withdrawals   the withdrawal records of sessions ALREADY purged, and the
+ *                 purge's own markers (scripts/lib/withdrawal-retention.js).
+ *
+ * It stands where the metrics pass stands, for the same reason: it concerns
+ * sessions that are gone, the session backup holds none of it, and so a
+ * blocked gate must not stop it. It runs last, and always.
  */
 
 /* 2 is the script's own: a bad retention window, or an uncaught failure. */
@@ -49,7 +57,8 @@ function exitCodeFor(blocked, errors) {
 
 /**
  * Run the session pass (unless the gate blocks it), then ALWAYS the metrics
- * pass, print both summaries, and return the code the caller must exit with.
+ * pass and the withdrawal sweep, print the summaries, and return the code the
+ * caller must exit with.
  *
  * It returns the code rather than exiting so that it can be tested; the script
  * still ends in an explicit process.exit() — see
@@ -60,6 +69,9 @@ function exitCodeFor(blocked, errors) {
  * @param {function(): Promise<{kept:number, purged:number, errors:number}>} opts.purgeSessions
  * @param {function(): Promise<object>} opts.pruneMetrics  resolves to the
  *   pruneHfPatientMetrics() counts
+ * @param {function(): Promise<{changes:number, errors:number}>} opts.sweepWithdrawals
+ *   the withdrawal records and markers of sessions already purged. It prints
+ *   its own report; `changes` is how many nodes it deleted, or would in a dry run
  * @param {boolean} [opts.confirm]       true = live run, otherwise dry-run wording
  * @param {number} [opts.metricsDays]    for the summary line only
  * @param {number} [opts.sessionCount]   sessions enumerated, for a blocked summary
@@ -70,16 +82,18 @@ function exitCodeFor(blocked, errors) {
  */
 async function runCleanupPasses(opts) {
   const o = opts || {};
-  const { gate, purgeSessions, pruneMetrics } = o;
-  /* Checked BEFORE either pass runs. A missing metrics pass discovered after
+  const { gate, purgeSessions, pruneMetrics, sweepWithdrawals } = o;
+  /* Checked BEFORE any pass runs. A missing metrics pass discovered after
    * the sessions were already purged would be found one irreversible step too
    * late, and a gate with no usable verdict must not be read as "not blocked":
    * `undefined` is falsy, so a plain `if (gate.block)` would fail OPEN. */
   if (!gate || typeof gate.block !== "boolean") {
     throw new TypeError("runCleanupPasses: `gate` must be the backupGateReport() verdict");
   }
-  if (typeof purgeSessions !== "function" || typeof pruneMetrics !== "function") {
-    throw new TypeError("runCleanupPasses: `purgeSessions` and `pruneMetrics` must both be functions");
+  if (typeof purgeSessions !== "function" || typeof pruneMetrics !== "function" ||
+      typeof sweepWithdrawals !== "function") {
+    throw new TypeError("runCleanupPasses: `purgeSessions`, `pruneMetrics` and " +
+      "`sweepWithdrawals` must all be functions");
   }
   const log = o.log || console.log;
   const logError = o.logError || console.error;
@@ -91,7 +105,8 @@ async function runCleanupPasses(opts) {
     /* The session pass is skipped WHOLE — not run in dry-run, not partially.
      * Nothing has been deleted at this point. */
     logError("BLOCKED: no sessions were purged. Metrics pruning still runs — it has " +
-      "its own clock and the session backup does not cover it.");
+      "its own clock and the session backup does not cover it. So does the sweep of " +
+      "withdrawal records left by sessions already purged.");
   } else {
     const s = await purgeSessions();
     kept = s.kept;
@@ -112,6 +127,13 @@ async function runCleanupPasses(opts) {
     `${m.dailyDays} daily counters, ${m.dailyUids} spent uid nodes. ` +
     "global/<day> aggregates kept (no identifier).");
 
+  // Withdrawal records and purge markers of sessions that are already gone.
+  // Like the metrics, in no archive and on its own clock — so it too runs when
+  // the gate blocked and when an earlier pass had errors. It prints its own
+  // report, before the summary below.
+  const w = await sweepWithdrawals();
+  errors += w.errors;
+
   log("");
   /* A blocked run must not print "0 kept, 0 purged": no session was looked at,
    * and that line is what a clean run on an empty database prints. */
@@ -119,12 +141,12 @@ async function runCleanupPasses(opts) {
     ? `Summary: session purge BLOCKED by the backup gate — ${o.sessionCount} sessions left untouched, ${errors} errors.`
     : `Summary: ${kept} kept, ${purged} ${verb}, ${errors} errors.`);
   const metricsTotal = METRIC_COUNTS.reduce((sum, k) => sum + m[k], 0);
-  if (!confirm && (purged > 0 || metricsTotal > 0)) {
+  if (!confirm && (purged > 0 || metricsTotal > 0 || w.changes > 0)) {
     log("(Set CLEANUP_CONFIRM=1 in the workflow env to actually delete.)");
   }
 
   return {
-    blocked: gate.block, kept, purged, errors, metrics: m,
+    blocked: gate.block, kept, purged, errors, metrics: m, withdrawals: w,
     exitCode: exitCodeFor(gate.block, errors)
   };
 }

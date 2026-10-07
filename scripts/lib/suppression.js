@@ -33,6 +33,53 @@
 
 const { resolveIdentity, planSessionErasure, applyPlan } = require("./erasure");
 
+/* WHY A RECORD WAS WRITTEN — a closed list, code -> the text that is stored.
+ *
+ * The header says a record holds identifiers only. `reason` was the exception
+ * nobody had looked at: the tool stored whatever followed --reason, and an
+ * operator answering a request by e-mail could as easily type "J. Dupont
+ * asked on the phone" as "Art. 17 request". The ledger is never deleted or
+ * rewritten, and two scheduled jobs read all of it every day on a hosted
+ * runner; the participant notice describes what they read as the session's
+ * identifier, the person's technical identifiers, a date and what was asked.
+ * A free-text field cannot be promised to be only that. A fixed list can.
+ *
+ * To add a reason, add it here: it is then accepted by the tool, written by
+ * buildRecord(), and recognised by the monitor's count of older free text. */
+const ERASURE_REASONS = Object.freeze({
+  "erasure-request": "erasure request",
+  "art17": "Art. 17 request",
+  "art7-3": "Art. 7(3) withdrawal",
+  "appi35": "APPI Art. 35(5) request",
+  "controller": "controller instruction",
+});
+const DEFAULT_REASON = ERASURE_REASONS["erasure-request"];
+
+/**
+ * The stored text for a reason given as a code ("art17") or as that text
+ * itself ("Art. 17 request"), case-insensitively. Nothing given -> the default.
+ * Anything else -> null: the caller refuses, it does not guess.
+ */
+function canonicalReason(given) {
+  if (given === undefined || given === null) return DEFAULT_REASON;
+  if (typeof given !== "string") return null;
+  const wanted = given.trim().toLowerCase();
+  for (const code of Object.keys(ERASURE_REASONS)) {
+    if (wanted === code || wanted === ERASURE_REASONS[code].toLowerCase()) return ERASURE_REASONS[code];
+  }
+  return null;
+}
+
+/** Is this stored text one of the listed reasons? (For counting what is not.) */
+function isListedReason(text) {
+  return Object.values(ERASURE_REASONS).includes(text);
+}
+
+/** "code (text), code (text), …" — for a refusal that has to say what is accepted. */
+function describeReasons() {
+  return Object.keys(ERASURE_REASONS).map((code) => `${code} ("${ERASURE_REASONS[code]}")`).join(", ");
+}
+
 /**
  * Build a suppression record. Identifiers only — see the header.
  *
@@ -41,25 +88,80 @@ const { resolveIdentity, planSessionErasure, applyPlan } = require("./erasure");
  * @param {object} args.identity from resolveIdentity()
  * @param {string} args.at ISO timestamp, passed in (this module has no clock,
  *   so a caller cannot get a different plan by running it at a different time)
- * @param {string} [args.reason]
+ * @param {string} [args.reason] a code or text from ERASURE_REASONS; anything
+ *   else throws
+ * @param {number} [args.requestAt] the `at` of the request this answers; 0 or
+ *   omitted when there was none in the queue
+ * @param {boolean} [args.sessionPurged] the session was no longer in the
+ *   database when this was written. Nothing was deleted from the live tree —
+ *   the purge had already done that for everyone — and the record carries the
+ *   uid alone: clientIds are resolved inside a session, and there was none to
+ *   resolve them in. That is enough: applySuppression() re-resolves them
+ *   against each snapshot it is applied to.
+ * @param {boolean} [args.researchCopyChecked] with `sessionPurged`: the
+ *   operator stated that the participant is not in the research copy. The
+ *   record cannot show that it is true, only that it was said.
  */
-function buildRecord({ locationKey, identity, at, reason }) {
+function buildRecord({ locationKey, identity, at, reason, requestAt, sessionPurged, researchCopyChecked }) {
   if (!locationKey) throw new Error("suppression record needs a locationKey");
   if (!at) throw new Error("suppression record needs an explicit `at`");
+  /* WHICH REQUEST THIS ANSWERS: the `at` of the withdrawal record it was
+     written for, copied — not compared. `at` above is the operator's clock;
+     a request's `at` is the participant's device, which the rules let run up
+     to a day behind the server. Deciding "answered" by comparing the two
+     called a second request answered whenever its device was slow enough,
+     and the purge then deleted it. 0 = written with no request in the queue.
+     ALWAYS present, so a record that is matched by this stamp can be told
+     from an older one that can only be compared by date.
+
+     ANY FINITE NUMBER IS A VALID STAMP. It is whatever the request carries,
+     and the rules ask that only to be a number in a window — not a whole one,
+     and before the window existed, not a positive one. This used to demand a
+     non-negative integer; one visitor write of `at: Date.now() + 0.5` then
+     made a request the tool died on, and so could neither answer nor
+     dismiss. The stamp is matched for equality and nothing else, so its
+     shape does not matter. What is still refused is what a request's `at`
+     cannot be (the tool reads it only when it is a number) or what the
+     database cannot hold — a caller's mistake, not a visitor's. */
+  const stamp = requestAt === undefined || requestAt === null ? 0 : requestAt;
+  if (typeof stamp !== "number" || !Number.isFinite(stamp)) {
+    throw new Error("a suppression record's requestAt is the `at` of the request " +
+      "it answers (a number, as stored), or 0 when there is none");
+  }
   const ids = identity || {};
   if (!ids.uid && !(ids.clientIds || []).length && !(ids.stableIds || []).length) {
     throw new Error(
       "suppression record needs at least one identifier — a record that " +
       "identifies nobody would silently suppress nothing on restore");
   }
-  return {
+  if (sessionPurged && !ids.uid) {
+    throw new Error(
+      "a suppression record for a purged session needs the uid — there is no " +
+      "session to resolve a clientId against, and the request it answers is " +
+      "keyed by uid");
+  }
+  const why = canonicalReason(reason);
+  if (why === null) {
+    throw new Error("a suppression record's reason comes from a fixed list — " +
+      describeReasons() + " — and never from free text: the ledger is kept " +
+      "for ever and read by scheduled jobs");
+  }
+  const record = {
     locationKey,
     uid: ids.uid || null,
     clientIds: [...(ids.clientIds || [])].sort(),
     stableIds: [...(ids.stableIds || [])].sort(),
     at,
-    reason: reason || "erasure request",
+    reason: why,
+    requestAt: stamp,
   };
+  /* Added only when true, so an ordinary record keeps exactly the shape it
+     has always had. */
+  if (sessionPurged) {
+    record.sessionPurged = true;
+    if (researchCopyChecked) record.researchCopyChecked = true;
+  }
+  return record;
 }
 
 /**
@@ -130,4 +232,7 @@ function applySuppression(payload, records) {
   return { payload: out, applied, skipped };
 }
 
-module.exports = { buildRecord, applySuppression };
+module.exports = {
+  buildRecord, applySuppression,
+  ERASURE_REASONS, canonicalReason, isListedReason, describeReasons,
+};

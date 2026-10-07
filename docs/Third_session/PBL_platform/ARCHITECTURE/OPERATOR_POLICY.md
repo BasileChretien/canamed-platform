@@ -144,13 +144,33 @@ billing account before flipping to Blaze.
 
 ## 4. Erasure requests (GDPR Art. 17 / Art. 7(3), APPI Art. 35(5))
 
-A participant asking to be erased is an **operator action** today — there is no
-in-product withdrawal button, which is itself an open item (Annex VI **G12**).
+Erasing a participant is an **operator action**. The product has a withdrawal
+button (the waiting screen, and each row of the account's session history), but
+it only **records** the request — under `withdrawals/` — and the daily monitor
+in §6 watches the clock. Nothing is deleted until you run the tool below
+(Annex VI **G12**).
 
 ```bash
 # 1. ALWAYS look first. Dry run is the default; nothing is written.
-node scripts/erase-participant.js --uid <uid>
+#    A request made in the product is about ONE session: name it.
+node scripts/erase-participant.js --uid <uid> --session <code>
 ```
+
+For an organisation's session the key is `orgs/<slug>/<code>`.
+
+⚠️ **Leave `--session` out and the run is the person, everywhere.** It erases
+them from every session in the database and answers every open request they
+have for a purged session (§4.1). That is the right run for "erase me from the
+platform" and the wrong one for a request about one session — which is why
+both commands in this section carry `--session`. (Until 2026-10-07 step 2
+below did not, so copying steps 1 and 2 ran the everywhere run.)
+
+**The account record.** Whenever the tool finds the person in a session that is
+in the database, it deletes `users/<uid>` whole — profile and the history of
+every session — with or without `--session`. When it finds them in none (every
+session of theirs has been purged), the account record stays, apart from the
+history rows of the purged sessions it answers. The plan lists the paths; read
+them rather than this paragraph.
 
 Read the whole report before confirming. It prints three things:
 
@@ -163,8 +183,8 @@ Read the whole report before confirming. It prints three things:
   roommates'. Erasing it means erasing other people's data.
 
 ```bash
-# 2. Then, and only then:
-ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> --reason "Art. 17 request"
+# 2. Then, and only then — the SAME scope as the run you just read:
+ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> --session <code> --reason "Art. 17 request"
 ```
 
 The run writes a **suppression record** at `erasures/`. ⚠️ **Do not delete
@@ -172,6 +192,23 @@ that record.** The nightly snapshots are not rewritten — they expire on their
 own 90-day cycle — and the record is the only thing stopping a restore from
 bringing the participant back. It must outlive the last snapshot that contains
 them, which is up to 90 days after the erasure.
+
+⚠️ **`--reason` is one of a fixed list, never a note.** It is written into that
+record, which is kept for ever and read every day by the scheduled jobs. Give a
+code or the text it stands for; anything else is refused before the tool reads
+or writes:
+
+| code | stored as |
+| --- | --- |
+| `erasure-request` (the default) | erasure request |
+| `art17` | Art. 17 request |
+| `art7-3` | Art. 7(3) withdrawal |
+| `appi35` | APPI Art. 35(5) request |
+| `controller` | controller instruction |
+
+Who asked, how, and anything else about the request belong in your own
+register, not on the command line. (The reason given with `--dismiss`, §4.1, is
+only printed and may say what you like.)
 
 `scripts/restore-sessions.js` applies the list before writing, and refuses to
 run if it cannot read it. Restore is likewise dry-run by default
@@ -181,6 +218,177 @@ run if it cannot read it. Restore is likewise dry-run by default
 the live platform is cleared immediately; backup copies are put beyond use and
 expire within 90 days; and if their room used the simulated-patient chat, that
 conversation cannot be separated out.
+
+### 4.1 When the session has already been purged
+
+Sessions are purged 30 days after closing and 90 after creation, so a request
+that arrives later names a session the tool cannot walk. The purge leaves a
+**marker** for each session it removes (`purgedSessions/<code>`), and the
+request itself is kept until it is answered.
+
+```bash
+# Dry run. --uid is required: a purged session cannot be addressed any other way.
+# --session keeps the run to the ONE session the request is about.
+node scripts/erase-participant.js --uid <uid> --session <code>
+```
+
+⚠️ **`--uid` without `--session` means the person, everywhere**: every purged
+session they have an open request for, **and every session still in the
+database — and, if it finds them in one, their whole account record**
+(`users/<uid>`), whether or not they asked about those (§4, "The account
+record"). That is the right run for "erase me from the platform" and
+the wrong one for a request about one session. The tool prints a `SCOPE` line
+at the top of its plan when it is about to do the first; an argument it does
+not recognise stops it, so a mistyped `--session` cannot turn into that run.
+For an organisation's session the key is `orgs/<slug>/<code>`.
+
+The report lists the purged session(s) the person has an open request for, and
+what the tool **cannot reach**. Read that list; it is your work:
+
+- **The research copy.** The nightly export reads only sessions that are in
+  the database. If the participant had consented, they are in the exports made
+  before the purge and in anything built from them, and nothing automatic will
+  take them out. Remove them, or establish that they were never in it.
+- **Their certificate**, if one was published. It is public for up to five
+  years and cannot be found from a uid once the session is gone. Ask the
+  participant for the certificate id and delete `credentials/<id>` by hand.
+
+```bash
+# Only after that. The flag is your statement that the research copy is dealt with.
+ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> --session <code> \
+    --research-copy-checked --reason "Art. 17 request"
+```
+
+This writes the suppression record (so a restore leaves them out of the
+snapshots that still hold the session) and removes that session's row from
+their history. The tool refuses to write without the flag. It cannot check what
+the flag asserts — the record shows only that you said so.
+
+The record reaches what the session's own tables join to the account. If the
+participant had a browser that dropped out mid-join, its row is joined to
+nothing; if you know that browser's id, add `--client-id <id>` and it goes into
+the record too.
+
+**Exit code 3 means the tool found a request it could not act on.** It says
+which of these it is:
+
+- **"no purge marker"** — nothing in the database shows the session existed,
+  and the tool writes nothing for it.
+
+  - It *was* a session, purged before the purge wrote markers (2026-10-07):
+    download the nightly snapshots and rebuild the markers, then run the tool
+    again. The snapshots must be of this database; the script refuses others.
+
+    ```bash
+    node scripts/backfill-purged-markers.js --file <snapshot.json> [--file …]
+    ```
+
+    ```bash
+    BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <snapshot.json>
+    ```
+
+  - The snapshots do not hold it. Either it never was a session, or it was
+    purged more than 90 days ago — in which case no copy this platform could
+    restore still holds it, and the request can only concern the research copy
+    and a certificate: deal with those by hand, tell the requester, and then
+    remove the request. Removing it is not an erasure and leaves **no trace in
+    the database** — write the decision and the reason in your own register.
+
+    ```bash
+    ERASE_CONFIRM=1 node scripts/erase-participant.js --uid <uid> \
+        --session <code> --dismiss --reason "<why>"
+    ```
+
+- **"a session that IS in the database, in which this person has nothing to
+  erase"** — they were already erased and asked again, or they never took part.
+  The same `--dismiss` command closes it; the tool checks again that nothing of
+  theirs is in the session and refuses if anything is.
+
+  ⚠️ What the tool knows here is that the code carries **no purge marker** —
+  not that the session was never purged. A session purged before the purge
+  wrote markers (2026-10-07) has none until the backfill above has been run,
+  and what sits under its code today may be a visitor's row or another
+  session. So **`--dismiss` refuses to run at all until the backfill has been
+  run once** (it reads the switch the backfill sets, below); after it, a
+  session the snapshots hold that is not the one in the database has its
+  marker, and this heading means what it says.
+
+`--dismiss` also removes that session's row from the person's history, and is
+refused for a session that carries a purge marker: that session existed, so the
+request is answered, not dismissed.
+
+⚠️ **The marker decides, whatever is in the database.** Anyone signed in can
+put a node back under a purged session's code — their own membership row is
+enough — and a facilitator can reuse a code. Neither un-purges the session that
+was purged: it is still in the snapshots, and the request is still answered
+with the command above. The tool and the monitor say "its code is in the
+database again" when they see this; it changes nothing you do. (Until the
+review of 2026-10-07 the tool treated such a code as a live session, found
+nothing of the person's in it, and offered `--dismiss` — which closed a real
+request unanswered.)
+
+#### The backfill is also the switch — read this before confirming one
+
+Until the backfill has been run with `BACKFILL_CONFIRM=1`, the rule that makes
+a withdrawal name a real session is **off**: a withdrawal or erasure request is
+accepted for any code, as it always was, and nothing in this section's
+"exit code 3" list can be dismissed. A confirmed run writes the markers and, in
+the same update, `ops/purgedMarkersBackfilledAt`, which turns the rule **on**.
+Nothing else writes that node, no client can read or change it, and nothing
+turns the rule off again short of deleting it by hand.
+
+That makes confirming a decision about participants, and it is yours:
+
+- A session purged **before the oldest snapshot you give the script** is in
+  none of the files and gets no marker. From then on its participants are
+  refused — "Could not record your withdrawal — please try again, or contact
+  the facilitator" — and trying again cannot work.
+- The script reaches back only as far as the archive holds: 90 days at most,
+  and less while the archive is younger — it moved to its present bucket on
+  2026-09-01, so do not count on 90 days; the dry run prints the oldest date
+  it was given. A session purged before that can never be marked. Every day
+  you wait, one more day of such sessions passes out of reach.
+
+So: download **every** snapshot the archive still holds
+(`backups/canamed-backup-YYYY-MM-DD.json` in the Scaleway bucket), and read the
+dry run. It prints the dates the snapshots span, how many sessions it will
+mark, and what turning the rule on means.
+
+```bash
+# Needs the service-account JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON —
+# default credentials alone are refused (the session listing wants a key).
+node scripts/backfill-purged-markers.js --file <a.json> --file <b.json>
+```
+
+```bash
+BACKFILL_CONFIRM=1 node scripts/backfill-purged-markers.js --file <a.json> --file <b.json>
+```
+
+It refuses a file that is not one of the backup's (exit code 2, nothing
+written): not JSON, another database, no date, a key that is not a session
+location, or a `sessionCount` that does not match what the file holds. Exit
+code 1 is a failed read or write; nothing was applied.
+
+Then run the first command again: it must print `to mark: 0` and
+`Strict withdrawal rule: already ON`. Running it later with newer snapshots
+only adds markers. The snapshot files are identified personal data: delete
+them from your machine when you are done. There is no workflow for this on
+purpose — the snapshots must not be downloaded onto a hosted runner.
+
+**The backfill marks only what was a session**: a node that had a `created` or
+a `closed` timestamp in some snapshot, the same test the purge applies. A
+snapshot also holds whatever visitors wrote under made-up codes; the script
+counts those ("no timestamp, never a session") and leaves them unmarked.
+
+**"Still in the database" means that session, not that key.** For a code that
+is both in a snapshot and in the database, the script reads what is there now
+(`created/at`, `closed/at`, `creatorUid`) and leaves the session unmarked only
+if it is the same one. A visitor's row, a `created` with another date, or a
+new session by another account under the code all mean the snapshot's session
+is gone, and it is marked; the run reports how many ("the code is in use
+again, by something else"). The limit: a snapshot session with no
+`creatorUid` is told apart by its `created` date alone, which somebody who
+read it while the session existed could copy.
 
 ## 5. Rectification requests (GDPR Art. 16, APPI Art. 34)
 
@@ -213,6 +421,23 @@ It warns in the log from day 21, so there is time to act before a breach. Its
 output carries counts and ages only — **never a uid or a session code**, because
 these logs are world-readable. Read the open requests from `withdrawals/` in the
 database.
+
+A request **survives the purge of its session** and stays in this monitor until
+it is answered; there is no date on which it lapses. The failure message says
+how many of the late requests name a purged session (§4.1) and how many name a
+session with no purge marker (§4.1, exit code 3). A request counts as answered
+only by the erasure record written for it: the record carries the request's own
+date (`requestAt`) and is matched on that, not on which is later — so someone
+who asks again after being erased has a new request. (A record written before
+2026-10-07 has no such stamp and answers any request dated at or before it.)
+Once a request for a purged session is answered, the nightly cleanup removes
+the withdrawal record — unless something is in the database under that
+session's code again, in which case the record stays, answered, until that is
+gone. The record under `erasures/` stays in every case, and must.
+
+If the monitor's own last line is `FATAL: the request queue could not be read`,
+that is the job failing (exit code 2), not a deadline: it prints an error code
+and no path, because its log is public.
 
 ## 7. Document version
 
